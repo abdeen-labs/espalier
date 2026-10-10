@@ -20,8 +20,8 @@ public struct BYOKProviderForm: Sendable, Hashable {
     /// Saved for the `azure` type only, when it isn't blank.
     public var azureApiVersion: String
     public var authKind: BYOKAuthKind
-    /// The secret as entered. Empty while editing means "do not change the
-    /// stored secret".
+    /// The secret as entered, saved trimmed. Blank while editing means "do
+    /// not change the stored secret".
     public var secret: String
     /// The request timeout in seconds, as typed. Blank means the default.
     public var requestTimeoutSeconds: String
@@ -112,7 +112,7 @@ public func validateBYOKProviderForm(_ form: BYOKProviderForm, existing: BYOKPro
         return "More than one model uses the identifier \u{201C}\(id)\u{201D}."
     }
 
-    if form.secret.isEmpty, requiresNewBYOKSecret(form.authKind, existing) {
+    if JSCompat.trim(form.secret).isEmpty, requiresNewBYOKSecret(form.authKind, existing) {
         return form.authKind == .bearer ? "Enter a bearer token." : "Enter an API key."
     }
 
@@ -127,10 +127,10 @@ public func validateBYOKProviderForm(_ form: BYOKProviderForm, existing: BYOKPro
 /// The provider to save from a form that passed `validateBYOKProviderForm`,
 /// and what to do with its secret.
 ///
-/// Text fields are trimmed; models without an ID are dropped, and a model
-/// without a name is named after its ID; the API format is kept for OpenAI
-/// providers and the API version (when not blank) for Azure ones; the
-/// timeout is read as JavaScript's `Number` reads it.
+/// Text fields and the secret are trimmed; models without an ID are
+/// dropped, and a model without a name is named after its ID; the API
+/// format is kept for OpenAI providers and the API version (when not blank)
+/// for Azure ones; the timeout is read as JavaScript's `Number` reads it.
 ///
 /// - Parameters:
 ///   - existing: The provider being edited, whose ID is kept, or `nil` when
@@ -148,6 +148,7 @@ public func makeBYOKProvider(
     }
     let azureApiVersion = JSCompat.trim(form.azureApiVersion)
     let timeout = JSCompat.trim(form.requestTimeoutSeconds)
+    let typedSecret = JSCompat.trim(form.secret)
 
     let provider = BYOKProvider(
         id: existing?.id ?? newID(),
@@ -165,8 +166,8 @@ public func makeBYOKProvider(
     let secret: BYOKSecretChange =
         if form.authKind == .none {
             .remove
-        } else if !form.secret.isEmpty {
-            .set(form.secret)
+        } else if !typedSecret.isEmpty {
+            .set(typedSecret)
         } else if existing == nil {
             .remove
         } else {

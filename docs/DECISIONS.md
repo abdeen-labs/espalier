@@ -635,6 +635,9 @@ immediately; importing desktop's repository list and settings (my call).
   `URLSession` uses), so `http://localhost\@evil.com` can't pass as local;
   `http://` only for local hosts; redirects are refused so credentials never
   follow one; the session is ephemeral; credentials print redacted.
+- **A provider's API key or bearer token is saved trimmed** (desktop saves
+  it as typed), so a key pasted with a line break works; a blank one counts
+  as none.
 - **No silent fallback to another model:** a selection resolves only if it is
   valid or exactly one model is configured; otherwise the app asks.
 - **Repository instructions** (`.github/copilot-instructions.md`) go in the

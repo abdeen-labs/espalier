@@ -179,6 +179,27 @@ struct BYOKProviderFormTests {
         #expect(makeBYOKProvider(from: added, existing: nil).secret == .remove)
     }
 
+    @Test("trims the secret: a pasted key's line break is dropped, and a blank one is none")
+    func trimsSecrets() {
+        var added = validForm()
+        added.secret = " sk-test\n"
+        #expect(validateBYOKProviderForm(added, existing: nil) == nil)
+        #expect(makeBYOKProvider(from: added, existing: nil).secret == .set("sk-test"))
+        added.secret = " \n\t"
+        #expect(validateBYOKProviderForm(added, existing: nil) == "Enter an API key.")
+
+        // Editing, a blank secret leaves the stored one alone, unless the
+        // auth kind needs a new one.
+        var editing = BYOKProviderForm(editing: existing)
+        editing.secret = "  \n"
+        #expect(validateBYOKProviderForm(editing, existing: existing) == nil)
+        #expect(makeBYOKProvider(from: editing, existing: existing).secret == .keep)
+        editing.authKind = .apiKey
+        #expect(validateBYOKProviderForm(editing, existing: existing) == "Enter an API key.")
+        editing.secret = "new-key\r\n"
+        #expect(makeBYOKProvider(from: editing, existing: existing).secret == .set("new-key"))
+    }
+
     @Test("never shows the secret when a form or secret change is printed")
     func redactsSecrets() {
         var form = validForm()
