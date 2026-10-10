@@ -268,6 +268,38 @@ struct SimpleHistoryListTests {
         }
     }
 
+    @Test("after a push, the shown rows lose their unpushed marks and rings")
+    func pushClearsUnpushedMarks() async throws {
+        try await withIsolatedGitConfig { _ in
+            let fixture = try await makeSimpleListFixture()
+            let (window, host) = hostInWindow(
+                SimpleHistoryList(repository: fixture.repository).windowEnvironment(fixture.context),
+                size: CGSize(width: 400, height: 640)
+            )
+            defer { window.contentView = nil }
+            let table = try #require(firstView(SimpleNSTableView.self, in: host))
+            let controller = try #require(table.controller)
+            @MainActor func cell(_ summary: String) throws -> SimpleRowCellView {
+                let row = try fixture.tableRow(summary, in: controller)
+                return try #require(table.view(atColumn: 0, row: row, makeIfNecessary: false) as? SimpleRowCellView)
+            }
+            @MainActor func node(_ summary: String) throws -> SimpleRail.Node? {
+                firstView(SimpleRailView.self, in: try cell(summary))?.rail.node
+            }
+            let unpushed = ["Show hourly forecast for the next 24 hours", "Add HourlyRow view"]
+            #expect(try unpushed.allSatisfy { try cell($0).content.isUnpushed })
+            #expect(try node("Add HourlyRow view") == .unpushed)
+
+            _ = try await fixture.repository.sync.push()
+            await fixture.settle()
+            host.layoutSubtreeIfNeeded()
+
+            #expect(try unpushed.allSatisfy { try !cell($0).content.isUnpushed })
+            #expect(try node("Add HourlyRow view") == .pushed)
+            await fixture.settle()
+        }
+    }
+
     @Test("selection both ways; only adjacent commits of the branch's line are contiguous")
     func selection() async throws {
         try await withIsolatedGitConfig { _ in

@@ -156,8 +156,9 @@ public final class HistoryModel: RepositoryFeature {
         didSet { decorationsGeneration &+= 1 }
     }
     /// Counts changes to what rows show besides their commits (`refs(at:)`,
-    /// `isLocalCommit(_:)`), so a table that reads them outside SwiftUI
-    /// draws its rows again: the refs and local commits often land after
+    /// `isLocalCommit(_:)`, the simple list's unpushed marks and merges'
+    /// commits), so a table that reads them outside SwiftUI draws its rows
+    /// again: the refs, local commits, and unpushed counts often land after
     /// the commits do.
     public private(set) var decorationsGeneration: UInt64 = 0
     @ObservationIgnored private var moreLocalCommitSHAs: Set<String> = []
@@ -183,8 +184,12 @@ public final class HistoryModel: RepositoryFeature {
     /// The simple style's list, its frame (unpushed rows, the base's new
     /// commits), and its expanded merges (by SHA).
     @ObservationIgnored var simpleList: SimpleHistoryList?
-    @ObservationIgnored var simpleFrame: SimpleHistoryFrame?
-    @ObservationIgnored var mergeExpansions: [String: MergedCommitsExpansion] = [:]
+    @ObservationIgnored var simpleFrame: SimpleHistoryFrame? {
+        didSet { decorationsGeneration &+= 1 }
+    }
+    @ObservationIgnored var mergeExpansions: [String: MergedCommitsExpansion] = [:] {
+        didSet { decorationsGeneration &+= 1 }
+    }
     @ObservationIgnored var mergeLoads: [String: Task<Void, Never>] = [:]
     @ObservationIgnored let simpleCheckSlot = LatestTask<UInt64>()
     @ObservationIgnored let simpleFrameSlot = LatestTask<UInt64>()

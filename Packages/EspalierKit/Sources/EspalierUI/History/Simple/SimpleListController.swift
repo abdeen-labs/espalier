@@ -23,7 +23,8 @@ struct SimpleListPresentation: Equatable {
     var avatarEndpoint: String?
     /// Whether commits can be dragged out (to cherry-pick).
     var allowsDragging = true
-    /// The history's `decorationsGeneration`: tags drew again.
+    /// The history's `decorationsGeneration`: tags or unpushed marks
+    /// changed.
     var decorations: UInt64 = 0
     /// The rail's colors, and where the branch started.
     var railColors = SimpleRailColors()
