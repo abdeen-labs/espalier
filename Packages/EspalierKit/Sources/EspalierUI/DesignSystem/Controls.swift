@@ -71,6 +71,9 @@ public struct CapsuleSearchField: View {
                 .accessibilityHidden(true)
             TextField(prompt, text: $text, prompt: Text(prompt).foregroundStyle(.text3))
                 .textFieldStyle(.plain)
+                // AppKit's one-line mode: a pasted line break becomes a
+                // space.
+                .lineLimit(1)
                 .font(Typography.row)
                 .foregroundStyle(.text)
                 .focused($isFocused)

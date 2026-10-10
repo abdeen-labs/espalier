@@ -33,6 +33,9 @@ public struct PaletteSearchField: View {
                     .accessibilityHidden(true)
                 TextField(prompt, text: $text, prompt: Text(prompt).foregroundStyle(.text3))
                     .textFieldStyle(.plain)
+                    // AppKit's one-line mode: a pasted line break becomes a
+                    // space.
+                    .lineLimit(1)
                     .font(Typography.paletteField)
                     .foregroundStyle(.text)
                 if let keyCap {

@@ -83,6 +83,9 @@ private struct CapsuleTextFieldBody<Field: View>: View {
             }
             field
                 .textFieldStyle(.plain)
+                // AppKit's one-line mode: a pasted line break becomes a
+                // space.
+                .lineLimit(1)
                 .font(font)
                 .foregroundStyle(.text)
                 .focused($isFocused)
