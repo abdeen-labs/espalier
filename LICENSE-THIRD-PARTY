@@ -1,0 +1,162 @@
+Third-Party Licenses
+====================
+
+This file documents the licenses of third-party code and data included in
+Espalier's source.
+
+The Git, Git LFS, and Git Credential Manager that the app bundles are
+downloaded by scripts/fetch-git.sh and aren't part of this repository. Their
+licenses ship with the app, in the About window's Acknowledgements.
+
+
+1. GitHub Desktop — MIT License
+-------------------------------
+
+Espalier is a port of GitHub Desktop (https://github.com/desktop/desktop).
+Source files that begin with "// Ported from desktop/<path>" are adapted
+from it, and the fixture repositories in
+Packages/EspalierKit/Tests/TestSupport/Resources/fixtures are copied from it.
+
+Copyright (c) GitHub, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+2. dugite — MIT License
+-----------------------
+
+Source files that begin with "// Ported from dugite/<path>" are adapted
+from dugite (https://github.com/desktop/dugite).
+
+MIT License
+
+Copyright (c) 2016 GitHub and contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+3. gemoji — MIT License
+-----------------------
+
+Packages/EspalierKit/Sources/EspalierCore/Text/EmojiData.swift is generated
+from gemoji's emoji table (https://github.com/github/gemoji). Espalier
+includes none of gemoji's images.
+
+octocat, squirrel, shipit
+Copyright (c) 2013 GitHub Inc. All rights reserved.
+
+bowtie, neckbeard, fu
+Copyright (c) 2013 37signals, LLC. All rights reserved.
+
+feelsgood, finnadie, goberserk, godmode, hurtrealbad, rage 1-4, suspect
+Copyright (c) 2013 id Software. All rights reserved.
+
+trollface
+Copyright (c) 2013 whynne@deviantart. All rights reserved.
+
+All other images
+Copyright (c) 2013 Apple Inc. All rights reserved.
+
+Source code:
+
+Copyright (c) 2013 GitHub, Inc.
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+
+4. choosealicense.com — MIT License
+-----------------------------------
+
+The license texts in
+Packages/EspalierKit/Sources/EspalierCore/App/RepositoryTemplateData.swift
+come from choosealicense.com (https://github.com/github/choosealicense.com).
+
+Copyright (c) 2013-2023 GitHub, Inc. and contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+
+5. github/gitignore — CC0 1.0 Universal
+---------------------------------------
+
+The .gitignore templates in
+Packages/EspalierKit/Sources/EspalierCore/App/RepositoryTemplateData.swift
+come from github/gitignore (https://github.com/github/gitignore), which is
+dedicated to the public domain under CC0 1.0.
+
+Full text: https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+
+6. Tree-sitter grammars — MIT License
+-------------------------------------
+
+The five grammars in Packages/EspalierKit/Vendor/Grammars are copied from
+their releases. Each folder keeps its own LICENSE file, and
+Packages/EspalierKit/Vendor/Grammars/README.md lists their sources.

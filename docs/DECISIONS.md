@@ -1,0 +1,877 @@
+# Decisions
+
+Every deviation from desktop and every choice I made, with the
+reason.
+
+## Project
+
+- **Only Git Credential Manager gets JIT entitlements** (`allow-jit`,
+  `allow-unsigned-executable-memory`), which .NET's JIT needs under the
+  hardened runtime. Every other Mach-O is hardened with none; desktop signs
+  every bundled file with those two plus `automation.apple-events`.
+- **Debug builds are `dev.abdeen.espalier.debug`** (my call), so a build from
+  Xcode keeps its own preferences, caches, notification settings, and
+  Launch Services entry apart from an installed release. The repository
+  list and Keychain items are still shared.
+- **Folders are a document type at the `Alternate` rank,** so Open With and
+  Dock drops offer Espalier without it becoming the default for folders.
+- **The app icon** (my design): three frosted panes on navy with a
+  branch whose tip is a leaf, an Icon Composer document rendered in light,
+  dark, and tinted styles. Dark mode has its own colors because the
+  automatic treatment hid the branch.
+
+## Licensing
+
+- **Open source under the MIT license, released by Abdeen Labs** (my call),
+  in the `abdeen-labs` organization. A client that holds users'
+  credentials, tokens, signing keys, and AI keys earns trust by being
+  readable, and desktop, which it ports, is open source too.
+- **`LICENSE-THIRD-PARTY` carries the notices for what the repository takes
+  from other projects** (desktop's and dugite's ports and desktop's
+  fixtures, gemoji, choosealicense.com's licenses, github/gitignore's
+  templates, the vendored grammars): MIT asks for the notice with every
+  copy, and About ▸ Acknowledgements covers only the app.
+
+## No desktop UI
+
+- **None of desktop's UI** (my call). Desktop defines what Espalier can do and
+  how git operations behave (arguments, safety checks, edge cases, errors).
+  Layout, navigation, flows, dialogs, and visual design are designed for
+  macOS.
+- **Copy isn't copied word for word** (my call): desktop's strings are reused
+  where they read well; otherwise Espalier writes clear macOS copy that
+  means the same thing.
+- **Native means written natively** (my call): a native macOS app is one
+  written for macOS, not one that looks like a stock system app. Simple,
+  clean, and modern, with personality; `docs/DESIGN.md` is the look.
+- **History has a simple mode** (my call; desktop has none), the default for a
+  new install: the graph overwhelms anyone who doesn't know what they're
+  looking at.
+- **The diff's "Show check marks" setting is gone** (my call): the tinted
+  gutter already shows inclusion without relying on color, since a line
+  left out is faded and struck through.
+- **The app's typefaces are SF Pro and SF Mono** (my call). Satoshi, Switzer,
+  IBM Plex Sans, and Khand with Hind were tried and turned down.
+
+## GitHub
+
+**Sign-in uses Espalier's own OAuth app and the device flow** (desktop opens
+the browser and receives a callback), with desktop's scopes: `repo`,
+`user`, `workflow`.
+
+## GitKit runner
+
+- **Kept over Node's `execFile`:** standard input is `/dev/null` unless the
+  caller supplies input (an empty open pipe would hang a git command that
+  reads it); output is read for at most 2 s after git exits (a grandchild
+  holding git's pipes would otherwise hang `git()`); writing to a child
+  that stopped reading isn't fatal (`F_SETNOSIGPIPE`).
+
+## GitHub-owned services
+
+Desktop calls some endpoints only its own OAuth app may use. Instead:
+
+- **Live notifications** (the alive channel and its WebSocket): Espalier
+  polls the REST API every 2 minutes (or as `X-Poll-Interval` asks) for the
+  selected repository's pull requests while high-signal notifications are
+  on, with conditional requests, so unchanged ones cost no rate limit.
+- **Avatar tokens:** Espalier uses the API's public `avatar_url`.
+- **Server feature flags:** not used.
+- **Release notes:** part of desktop's updater; Sparkle replaces it.
+- **Copilot:** out of scope; bring-your-own-key providers replace it.
+
+## AI
+
+**No agent loop.** Desktop's Copilot sessions run with no tools, so AIKit
+calls each provider's chat API directly with desktop's prompts, streaming
+where desktop streams (conflict resolution shows the model's reasoning).
+
+## Models
+
+- **Renames:** desktop's `Image` is `DiffImage` and its `Progress` union
+  `AnyProgress`, which would clash with `SwiftUI.Image` and
+  `Foundation.Progress`.
+- **`DiffHunkHeader` equality compares all four fields** (desktop's compares
+  `oldStartLine` twice and never `newLineCount`).
+
+## Markers written into repositories
+
+Espalier names fork remotes `espalier-<owner>` and marks its automatic
+stashes `!!Espalier<branch>`, so nothing in a user's repository carries
+GitHub branding. It also recognizes desktop's `github-desktop-<owner>` and
+`!!GitHub_Desktop<branch>`, so both carry over.
+
+## The user's shell environment
+
+- **Git gets the user's shell environment,** as desktop's `lib/shell.ts`
+  does: launched from the Finder, the Dock, or `open`, Espalier runs
+  `$SHELL -ilc` once at launch and takes its variables.
+- **Deviations:** the variables go into `GitRuntime.processEnvironment`, not
+  the process's own environment, which can't change safely while other
+  threads read it. Operations wait for the load (at most 5 s) and later
+  ones get the variables once they arrive, where desktop gave up after 5 s
+  for the whole session.
+- **Fixed parsing:** a value containing a newline or an empty value no
+  longer loses the next variable; startup files that print are ignored; the
+  shell's own `PWD`, `OLDPWD`, `SHLVL`, and `_` are left out (desktop gave
+  git and binary hooks `PWD=/`).
+
+## Hooks
+
+- **The hooks environment is on by default** (desktop enables it only in
+  beta builds), under desktop's keys `git-hooks-env-enabled` and
+  `git-cache-hooks-env`.
+- **`getRepoHooks` follows symbolic links,** as git does; desktop skipped
+  symlinked hooks, and its `core.hooksPath` redirect then stopped them.
+- **Hooks that aren't intercepted keep running.** Desktop's redirect skipped
+  every hook not in `interceptHooks` (for example `reference-transaction`).
+  Espalier's temporary hooks directory runs executable ones by their own
+  path, so husky and pre-commit's `$0`-relative tools work.
+- **The hooks' login shell starts as a terminal's does,** with launchd's
+  `PATH` and the app's user, home, shell, SSH agent, and locale; desktop
+  started it empty. With no locale set (a Finder launch), hooks and the
+  programs git starts get the UTF-8 locale a new Terminal window would, so
+  Ruby hooks read UTF-8 files and gpg reads a non-ASCII signing key. Git
+  gets it as `LC_CTYPE` only: `LANG` would translate GnuPG's messages,
+  which signing failures are read from.
+- **A hook's progress arrives before git's exit** (desktop could end an
+  operation before its last hook event).
+- **Also:** `core.hooksPath` is read with `--type=path` (`~` expands); abort
+  and cancel kill the hook's process group, where desktop left the hook
+  running; a hook failure falls back to the prompter when the operation
+  passes no `onHookFailure` (except for background work); hooks see
+  `ESPALIER=1` as well as `GITHUB_DESKTOP=1`.
+
+## Refreshing
+
+- **A file watcher adds live updates while the window is visible** (desktop
+  refreshes on focus and after operations only), so Changes stays current
+  beside an editor. It's paused while Espalier's own operation runs, and
+  status runs with `--no-optional-locks`, so a refresh never writes the
+  index and can't trigger itself.
+- **Suggestions and the sync button wait for the repository's state**
+  (status, remotes, and refs): desktop's button reads "Publish repository"
+  whenever it has no remote, so a repository just selected could flash it.
+
+## State layer
+
+- **Repository identity is a UUID,** so alias, GitHub, and path changes
+  keep drafts and selections (desktop's structural hash dropped them).
+- **An unreadable repository list is moved aside** and the user told; a
+  newer version's is used read-only.
+- **Preferences** are UserDefaults under desktop's keys, read with desktop's
+  lenient `getBoolean`; Espalier-only settings get new keys. Not kept: zoom,
+  pane widths, Copilot settings, usage stats, Windows settings, the
+  thank-you card. Defaults live in code; nothing is written at launch.
+- **Commit drafts live in memory** and are lost on quit, as in desktop
+  (my call); quitting with one asks first.
+- **Exclusion:** a local lane (index, working tree, HEAD, local refs) and a
+  network lane, shared by a repository's worktrees; pull and remote
+  configuration take the network lane. Desktop guarded only push, pull,
+  fetch, and double commits. A user operation waits behind background work
+  and fails with `busy` behind another user operation (desktop silently
+  dropped a user fetch during a background fetch).
+- **Writes are never cancelled implicitly:** selection changes, stopping
+  services, and quitting never interrupt a git write; only a user's cancel
+  does (clone, hook abort).
+- **Background services stop by cancelling their loop,** never an operation
+  (fixes desktop's orphaned pruner interval and pull request timer). They
+  start once the selected repository is associated with GitHub (desktop
+  waited for it to be selected again).
+- **`X-Poll-Interval` is read in seconds** (desktop compared it with
+  milliseconds).
+- **Branch pruning keeps desktop's safeguards,** runs as background work,
+  records each deletion with its SHA (restorable), reads the branches itself
+  and keeps one that moved since it was found merged, and writes the last
+  prune date only once a prune runs.
+- **Background errors keep their side effects** (marking a repository
+  missing) but are never presented.
+- **Retrying a push keeps its options** (desktop retried a force push as a
+  normal push). **A force push forgets the rewrite only once it succeeds,**
+  and only pushed tags leave the queue.
+- **Hook aborts are `cancelled(.hookAborted)`,** never an error (desktop's
+  pull showed git's error).
+- **Multi-commit undo is offered only while the tip is the operation's
+  result and the tree is clean;** otherwise it would hard-reset newer work.
+- **Conflict and multi-commit state derive from git state** on every status
+  pass (desktop set the conflicts step in two racing places).
+- **`pull.rebase`** accepts git's boolean spellings; `merges` and
+  `interactive` count as rebase.
+- **Local commits are computed on a detached HEAD** (`HEAD --not
+  --remotes`); desktop kept a stale list.
+- **URL schemes:** `espalier://openRepo/<url>?branch=&pr=&filepath=`
+  (desktop's grammar), with no `oauth` action. URL actions match ignoring
+  case, don't reveal files outside the repository, and check a pull request
+  out.
+- **GitHub Desktop's links** (`x-github-client`, `github-mac`: "Open with
+  GitHub Desktop" on GitHub) open in Espalier when Settings ▸ Integrations ▸
+  "Open GitHub Desktop links in Espalier" is on (`open-github-desktop-links`,
+  off by default; my call). On, Espalier is the default app for both schemes
+  and takes them back at launch and whenever it becomes active, since
+  GitHub Desktop claims them each time it launches (my call); a re-claim
+  macOS refuses or the user declines is logged and waits for the next
+  launch. Off, they go back to GitHub Desktop when it's installed. The
+  setting changes only when the user flips the switch (my call), and is saved
+  once Launch Services has made the change. A link Espalier can't open (any
+  action but `openRepo`, such as GitHub Desktop's `oauth` sign-in) goes to
+  GitHub Desktop when it's installed.
+- **Revert has a conflict flow** (`REVERT_HEAD`, continue, abort); desktop
+  left the repository mid-revert with a generic error.
+- **Rebase's "rewrites published commits" check examines the branch being
+  rebased** (desktop passed the base branch).
+- **Cherry-pick undo records the local branch actually checked out,** and
+  success selects the new commit.
+- **Hiding whitespace keeps partial line selections;** staging always uses
+  the full diff, and editing selections is disabled while whitespace is
+  hidden (desktop discarded partial staging). Whole-file inclusion survives
+  a change of status kind.
+- **No tutorial** (my call): onboarding is signing in and adding repositories.
+- **The default clone folder is `~/Developer`** (my call), Apple's convention;
+  the last folder used is remembered.
+- **Signed-out accounts** (token rejected or expired) stay listed until
+  signed in again or dismissed. Signing in again replaces the account once
+  the new sign-in succeeds.
+- **Fast-forwarding other branches skips branches checked out in other
+  worktrees** (git's refusal stopped them all).
+- **Publishing refuses before creating anything on GitHub when `origin`
+  exists.** An empty `FETCH_HEAD` keeps the last fetched date.
+- **Removing a repository** asks before moving it to the Trash even with
+  confirmations off, is refused while a user operation runs (as is
+  relocating), drops everything kept for it, and selects the most recent
+  repository. Linked worktrees record their main worktree, so they're
+  recovered after `git worktree remove`.
+- **Pull request lists:** an empty answer replaces the list, a list with a
+  failed page is never stored, and fork remotes are pruned only after
+  GitHub answers. **Repository rules:** RE2 patterns are translated to ICU
+  (one that can't compile passes); a required pull request blocks the
+  commit with a message.
+- **Clones can be cancelled** (desktop's can't): Cancel Clone, removing the
+  clone, or quitting stops git's process group and removes what it cloned.
+  Two clones into one folder are refused, and so is a relative path.
+- **Worktrees:** deleting the current worktree deletes first, from the main
+  worktree, then switches, so a failure leaves things as they were; moving
+  onto an existing path is refused; a new worktree's branch name that
+  names a remote branch checks it out (desktop made a local branch named
+  `origin/topic`); new worktrees get their submodules.
+
+## History graph
+
+- **Espalier draws its own graph** (desktop has none): the trunk (the
+  default branch's first parents) is a straight line in lane 0; other lines
+  take the lowest free lane to its right; no line passes through a node;
+  each line keeps its color.
+- **Long edges become stubs** (my call): an edge whose parent is more than 30
+  rows away is two short linked stubs instead of a lane held the whole way,
+  taking desktop's history from 23 lanes on average (max 55) to about 3
+  (max 10). Trunk edges are never cut.
+- **History is in topological order** (`--topo-order`), and pages start from
+  the commits the scope's refs pointed at, so they stay consistent while
+  refs move (desktop's `--skip` paging duplicated or dropped commits when
+  HEAD moved). The scope is remembered per repository.
+- **Espalier writes a commit-graph file when a repository has none**
+  (my call): `git commit-graph write --reachable --split` as background work,
+  as `git gc` would, once per repository. It touches no commits, refs, or
+  files, and operations never wait for it.
+- **History shows all local branches by default** (desktop shows the current
+  branch), and has a commit search (desktop has none).
+
+## Commit signing
+
+- **Signing is git's, with the user's configuration.** `--no-gpg-sign` only
+  for commits that never become history (squash's temporary commit, stash
+  entries).
+- **ssh-keygen's passphrase prompt is answered** (desktop's askpass knew only
+  ssh's), with the same prompt and Keychain entry, once per git command; a
+  stored passphrase ssh-keygen rejects is forgotten.
+- **Signing failures are explained** before git's output: the program
+  missing, a terminal-only pinentry (use pinentry-mac), a cancelled or wrong
+  passphrase, no key, an expired key, no gpg-agent, SSH's key, agent, and
+  file problems. None hang.
+- **A revert that couldn't be committed is put back** with `git reset
+  --merge HEAD`, as `git revert --abort` does; desktop left it staged with
+  nothing to continue or abort.
+
+## External dependencies
+
+**Established packages are allowed and encouraged** (my call) where one does
+the job well. Desktop's logic stays ported; a package replaces only
+infrastructure. Each is recorded here with its purpose and license.
+
+- **Syntax color: SwiftTreeSitter 0.25.0** (BSD 3-Clause) **and 23
+  grammars** (MIT), in `EspalierSyntax`. Five are vendored (`Vendor/Grammars`, see its README).
+  Two Swift patterns are added, as Xcode colors them: a subscript isn't a
+  call, and a called capitalized name is a type.
+- **Sparkle** for updates, once I have a feed and keys.
+
+## The app
+
+**Layout**
+
+- **One window, two columns:** the sidebar and a detail area whose inner
+  split is remembered per place (Changes: files | diff; History: commits |
+  details). Three columns would make Changes and History share one middle
+  width, which suits neither.
+- **The sidebar is the current repository:** places you select (Changes,
+  History, Branches, Pull Requests, Tags, Stashes) and rows that switch the
+  working copy (worktrees, repositories), which aren't selectable, so arrow
+  keys never switch repositories by accident. Repositories also appear in
+  the toolbar's popover (⌘T).
+- **Operations are non-modal:** progress and conflicts show in an operation
+  panel in Changes or a floating capsule elsewhere; outcomes are toasts with
+  Undo where available, also when a recovery (Stash Changes and Continue,
+  Retry, signing in) runs the operation again. Modal UI is kept for
+  confirmations, the branch-switch decision, prompts git is waiting on, and
+  forms.
+- **Closing the window quits Espalier,** as Apple's single-window apps do
+  (desktop keeps running), after the quit guard: operations that write to a
+  repository, running clones, and unfinished commit messages in any
+  repository ask first.
+- **The Debug menu is in Debug builds only** (my call).
+- **A rolling log file** (my call): `~/Library/Logs/Espalier/Espalier.log`
+  (`Espalier Debug` for a Debug build), info and above, private values as
+  `<private>`, at most two files of about 5 MB. **Show Logs in Finder**
+  writes this session's unified log to the same folder.
+
+**My choices**
+
+- **Syntax color in diffs** (tree-sitter).
+- **macOS shortcut conventions win** where desktop's clash: ⌘G and ⇧⌘G are
+  Find Next and Previous, Go to Commit Message is ⌘J, View on GitHub ⌥⇧⌘G,
+  Copy Path ⌥⌘C, and ⌘⌫ deletes the selection. ⌘P and ⇧⌘P stay Push and
+  Pull, since Espalier doesn't print.
+- **The working copy is always the graph's top node,** even with no
+  changes, so rows stay stable as the tree goes from clean to dirty.
+- **The AI sparkle shows before any provider is set up** (it opens setup),
+  and a setting turns AI features off entirely.
+- **A code text size (⌘= / ⌘−) replaces desktop's window zoom.**
+- **Avatars wherever possible,** from every source desktop uses, in its
+  order (`getAvatarUrlCandidates`), and the person's initials on their own
+  color when none can supply one (including GitHub.com's one generated
+  image for emails it doesn't know). **No Gravatar:** it would send
+  authors' emails to a third party.
+
+**Added in Espalier:** the history graph with scope, search, and stub
+navigation (a Go menu); simple mode; a Tags section; every branch's stash
+listed (restoring stays on the current branch's); Restore Pruned Branch;
+toolbar customization; a sidebar filter; a Commit menu; Amend Last Commit in
+the composer's options; the commit inspector; the quit guard; the code text
+size; "Show in Finder" everywhere.
+
+**Dropped from desktop:** zoom; pane-width keys and ⌘8/⌘9 (native split
+views); the `show-changes-filter` toggle; Windows menus and access keys; the
+tutorial, Explore, and the thank-you card; release notes and update banners
+(Sparkle); the unsupported-OS banner; Copilot's handoff, disclaimers,
+call-outs, and nudges; the untrusted-certificate dialog; browser OAuth (the
+device flow); emoji autocomplete (`:shortcode:` emoji still render); links
+to GitHub's help pages; the Test menu; Save/Cancel in Settings, which apply
+immediately; importing desktop's repository list and settings (my call).
+
+**Changes and the diff**
+
+- **Return opens a file in the external editor,** as Finder-like lists do;
+  Space toggles inclusion (desktop's Enter).
+- **An unknown co-author reads "(not found)"** (`NSTokenField` can't color
+  tokens). Hiding co-authors keeps them in the draft, never committed or
+  checked while hidden (desktop cleared them).
+- **"N included" counts every file the next commit includes,** in full or in
+  part, including files the filter hides; the include-all checkbox reflects
+  only the files shown.
+- **Diffs paint before the file's contents load;** expansion and syntax
+  color follow (desktop waited). Find works from anywhere in the window.
+  Copying a diff skips hunk headers. A submodule URL without a host means
+  GitHub.com (desktop showed "null").
+- **Starting to amend sets an unfinished message aside** and brings it back
+  afterwards. Amend works on a detached HEAD, not during a rebase.
+
+**History**
+
+- **Squash, reorder, and Reset to Commit act on the current branch's
+  first-parent line from HEAD down,** with no merge in between (desktop's
+  list indexes pick the wrong commits once all branches show), and rewrite
+  from the oldest moved commit's parent (desktop used the last loaded row,
+  so a paged history could rewrite from the root).
+- **A squash or reorder that would replay a merge commit says why,** and
+  Reorder refuses at once rather than after a location is chosen.
+- **Commits not on the current branch can be cherry-picked onto it,**
+  because History shows other branches. Desktop's "same branch" rule still
+  applies to commits on it.
+- **Squash keeps co-authors in every repository** (desktop only in GitHub
+  repositories); each can be removed in the sheet.
+- **Undo Commit refuses a commit with tags everywhere** (desktop's History
+  menu didn't). Undo needs the latest unpushed commit and no operation in
+  progress; reset needs an ancestor with only unpushed commits after it.
+- **Without a remote, nothing shows as unpushed.**
+
+**Branches**
+
+- **Checkout refuses during any operation in progress,** an interrupted
+  rebase included, as does creating a branch that checks out: with a
+  merge's, cherry-pick's, or revert's conflicts staged, `git checkout`
+  silently drops `MERGE_HEAD`, `CHERRY_PICK_HEAD`, or `REVERT_HEAD` (desktop
+  blocked only during a rebase). Rename and delete refuse during a rebase,
+  squash, or reorder.
+- **A branch row's Rename… and Delete… work on any local branch;** the
+  Branch menu keeps desktop's rules for the current branch.
+- **Delete Branch makes Delete the default button,** as every confirmation
+  does (desktop's made Cancel the default; I agreed).
+
+**Repositories**
+
+- **Creating a repository refuses a repository's own folder** (desktop
+  compared paths as typed, so `name/` committed an existing repository's
+  changes as "Initial commit"); an existing README is overwritten only after
+  a warning.
+- **The .gitignore templates and licenses** come from desktop's static
+  folder (github/gitignore, CC0; choosealicense.com, MIT), credited in
+  Acknowledgements.
+- **A repository's own author never writes an empty value** (desktop's
+  switch back to the global config failed when only one value was local).
+- **Clone shows GitHub Enterprise once an Enterprise account exists,** and so
+  does Publish. Retry Clone runs in the clone flow, so it still gets the Git
+  LFS and fork questions. Publish needs a repository without a remote.
+- **The sidebar's filter matches substrings;** the repository popover and
+  the clone lists match fuzzily, as desktop's did.
+- **Add Worktree refuses what's in the way and an invalid branch name**
+  (desktop silently used the worktree's name).
+- **The command line tool** is `espalier.sh` in the bundle (`espalier`,
+  `espalier open [path]`, `espalier clone [-b branch] <url or owner/name>`),
+  linked at `/usr/local/bin/espalier` as the user or after an administrator
+  prompt.
+- **Move to Applications** isn't offered in Debug builds; as the user it
+  puts an older copy in the Trash, as an administrator it replaces it.
+
+**Settings**
+
+- **A missing editor or shell shows as not installed,** never replaced and
+  saved (desktop replaced it); with no choice, the default is the first
+  installed editor, looked up at each launch.
+
+**GitHub**
+
+- **Descriptions, reviews, and comments are Markdown rendered natively.**
+  Images carry the account's token only to repository assets and
+  Enterprise avatars on the account's own origin, never across a redirect.
+- **Exposing a secret is never the default button.**
+- **A clicked notification** selects its repository and pull request, and a
+  review or comment opens in a sheet.
+- **Pull request links check the pull request out.**
+
+## GitHubKit
+
+- **Device flow requests are form-encoded** (RFC 8628); desktop's token
+  request sends JSON.
+- **Tokens:** Keychain service `Espalier - <endpoint>`, account = login.
+  Refresh tokens are discarded (refreshing needs a client secret, which a
+  device-flow app doesn't have), so expiring tokens mean signing in again.
+  Token revocation needs the secret too, so sign-out removes the local
+  token and points to the OAuth app's settings.
+- **Enterprise (Server and ghe.com) needs an OAuth app with device flow
+  registered on that server;** its client ID is stored per account.
+- **No untrusted-certificate prompt:** the error names the server and says
+  to trust its certificate in Keychain Access. Redirects keep
+  `Authorization` only on the same origin.
+- **Desktop bugs fixed:** `fetchAllOpenPullRequests` throws when a page
+  fails; `fetchIssues` filters on `pull_request`; `getEndpointForRepository`
+  matches Enterprise Server accounts; migrating a ghe.com account moves its
+  token; a failed user fetch at the end of sign-in is an error.
+
+## Reading the repository
+
+- **SHA-256 repositories work** (desktop assumes 40-character IDs).
+- **Commit message diffs use a copy of the index** (an APFS clone through
+  `GIT_INDEX_FILE`), so the repository's index is never written, staged
+  changes survive, and it works while another process holds `index.lock`.
+- **Paths compare exactly,** so paths differing only in Unicode
+  normalization stay apart.
+- **Kept as desktop:** `getGitDescription` reads `<path>/.git/description`,
+  so it's empty for linked worktrees and submodules.
+- **Desktop bugs fixed:** `.gitignore` writes with `core.autocrlf` and
+  `safecrlf`; `splitBuffer` skipping a delimiter's UTF-16 length; a binary
+  rename breaking `getBinaryPaths`; missing `--no-ext-diff` on range diffs;
+  pull request preview image diffs against the wrong base; uppercase image
+  extensions; a detached rebase's `head-name` newline.
+
+## Writing to the repository
+
+- **Discarding is safer than desktop's:** a copy's source keeps its changes;
+  a rename's old path isn't overwritten when an untracked file is there; a
+  Trash failure partway finishes what's in the Trash before offering the
+  rest; discarding lines is refused if the file changed since its diff was
+  shown. Discard All always confirms.
+- **A conflicted stash pop keeps the entry:** `git stash pop --quiet` exits 1
+  with nothing on stderr, which desktop took for success, dropping the
+  entry. A conflicted restore's entry is dropped once its files are
+  resolved with its changes kept.
+- **Revert conflicts are recognized** (`error: could not revert`; dugite's
+  pattern matches only old git's hint).
+- **Finishing a conflicted merge, a squash merge, a rebase, cherry-pick,
+  and revert intercept their hooks,** as a commit does; desktop ran them
+  without the login shell's environment. Abort on a cherry-pick or revert's
+  hook rolls back as git's other errors do.
+- **Three refusals to rebase that desktop shows raw are mapped:** staged
+  changes (`RebaseWithStagedChanges`, also with unstaged ones, which
+  desktop's `RebaseWithLocalChanges` misses) offer Stash Changes and
+  Continue as unstaged changes do; a rebase already in progress
+  (`RebaseAlreadyInProgress`, git's `rebase-merge` or `rebase-apply`
+  directory) and a stopped `git am` (`ApplyingPatchesInProgress`) say what
+  to finish first.
+- **A squash merge with nothing to commit is up to date** (desktop failed
+  with "There are no changes to commit"). Aborting one runs `git reset
+  --merge` (desktop committed, then `reset --hard`, discarding edits in
+  files the merge never touched).
+- **No `--ff` option,** as desktop: the user's `merge.ff` applies.
+- **A merge can be committed with your own message:** once nothing is left
+  to resolve, the operation panel shows git's message (`SQUASH_MSG`, then
+  `MERGE_MSG`) above Commit Merge. Unchanged, it is git's `--no-edit`
+  commit; edited, it is committed as written. The user's draft stays
+  untouched.
+- **Manual conflict resolutions belong to one operation** (desktop's carried
+  over to the next).
+- **Cherry-pick:** a failure aborts what git left and returns to the branch
+  it started on; conflicts git doesn't name (rename/delete) wait for the
+  user; an empty resolution mid-sequence continues with the rest (desktop
+  stopped and reported success).
+- **Operations refuse to start over one git began since the last refresh.**
+- **Squash messages ride in the todo list** (`fixup`, then `fixup -C` with a
+  commit made to carry the message), so no editor runs, `#` lines survive,
+  and the message survives conflicts. Interactive rebases keep commits that
+  become empty; a squash whose changes cancel out is refused and the branch
+  restored. Squash and reorder throw git's errors after aborting the rebase
+  they started.
+- **Conflict detection doesn't depend on git's hints** (rebase forces
+  `advice.mergeConflict=true` and clears `GIT_ADVICE`; so does pull, whose
+  stopped rebase otherwise read as a merge). No editor is ever launched.
+  Continuing strips git's comments when `commit.cleanup` would keep them.
+- **Interrupted rebases are taken over:** one stopped between commits
+  shows as interrupted, to continue or abort, and so does one killed while
+  finishing, which Continue completes with git's own `--continue` (notes
+  and a killed `post-rewrite` hook may then run a second time). A rebase
+  that fails other than on conflicts is aborted.
+- **A rebase's leftover state** (a state directory Espalier can't continue
+  or abort) offers Clear Old Rebase and Continue wherever git or Espalier
+  refuses an operation over it; desktop showed git's error. Clearing runs
+  `git rebase --quit` and deletes the `REBASE_HEAD` it leaves: HEAD, the
+  index, and the working tree stay as they are, and an autostash goes to
+  the stash list. A rebase stopped on conflicts or interrupted between
+  commits keeps its refusal.
+- **`REBASE_HEAD` alone is no rebase,** as git 2.53 treats it: Espalier
+  reads a rebase from its state directory only, so nothing is refused over
+  it.
+- **Desktop bugs fixed:** `createDesktopStashEntry` on exit code 1;
+  `stashEntryCount` one short; `testForInvalidChars`'s stateful regex;
+  `parseCommitSHA` on a first commit or detached HEAD; `tipEquals` ignoring
+  branch names; `determineMergeability` reporting a clean merge when git
+  can't merge; cherry-pick's `-m 1` as one argument; squash dropping `#`
+  lines and losing its message after conflicts; `--continue`/`--skip` with
+  `--no-verify`; "up to date" missed with `rebase.autoStash`.
+
+## Network
+
+- **Proxies are read and applied as Chromium does on macOS,** written as
+  the PAC string it reports and parsed with desktop's `parsePACString`.
+  Differences: a PAC file's `SOCKS` is SOCKS5, and `HTTPS`, `SOCKS4`,
+  `SOCKS5`, and bracketed IPv6 answers are dropped (CFNetwork's reading); a
+  script with a syntax error answers direct instead of falling back to the
+  manual proxies; a PAC script in the settings (`ProxyAutoConfigJavaScript`,
+  set by profiles) runs, where Chromium ignores it; a proxy port outside
+  1–65535 drops the proxy, where Chromium truncates it; a PAC file over
+  http(s) is fetched by Espalier and kept 5 minutes by URL, where Chromium
+  keeps it until its next poll; a PAC file gets 10 s.
+- **The clone destination check covers the account's real home directory,**
+  not only `HOME`.
+- **Desktop bugs fixed:** git 2.53's "Updating files" progress title
+  (checkout progress never moved); the revert parser's 0/0 percentages; a
+  failed LFS progress file made git-lfs write a file named `null` into the
+  repository; `tailByLine` splitting lines across reads; `pull` dropping its
+  hook and output callbacks; `isTrackedByLFS` lacking `--`.
+
+## Trampoline: credentials, SSH, and the hooks proxy
+
+- **One Foundation-only helper** is the credential helper, the SSH askpass
+  program, and the hooks proxy, talking to one server per launch over a
+  Unix socket in a private directory (0700, socket 0600, peers checked with
+  `getpeereid`). Each git invocation gets its own token; revoking it closes
+  its connections and cancels its prompts.
+- **The credential helper is set by absolute path** through
+  `GIT_CONFIG_PARAMETERS`, so nothing is added to the bundled git and
+  filters such as Git LFS see it. External credential helper mode runs the
+  bundled Git Credential Manager.
+- **SSH uses `SSH_ASKPASS_REQUIRE=force`,** so ssh asks through the app even
+  when it was started from a terminal. The host key prompt parser accepts
+  OpenSSH 10's format.
+- **github.com host keys are trusted automatically** only for GitHub's
+  current published fingerprints (desktop trusted only the RSA key GitHub
+  revoked in 2023).
+- **SSH secrets are stored when the operation succeeds,** so a mistyped
+  passphrase can be corrected (desktop stored them at once).
+
+## Editors and shells
+
+- **Desktop bugs fixed:** `%TARGET_PATH%` expands literally (desktop's
+  `replaceAll` read `$&` in paths as a pattern); symbolic links are
+  validated by their target; `findShellOrDefault` returns nil rather than
+  crashing.
+
+## Preferences and integrations
+
+- **Code text size** (`diff-code-text-size`) steps through desktop's zoom
+  factors; `diff-wrap-lines` and `ai-features-enabled` default to on.
+- **The theme** is Settings ▸ Appearance's System, Light, or Dark (`theme`,
+  desktop's values; System by default).
+- **No command works through an open sheet.**
+- **Desktop bugs fixed:** Git LFS 3's "warning: the … attribute" (dugite's
+  pattern missed it, so mismatched global filters were never offered an
+  update); Settings could write an empty `user.name` or `user.email`.
+
+## AIKit
+
+- **Prompts are desktop's, byte for byte,** except that the commit prompt's
+  attribution says "AI".
+- **Providers:** OpenAI-compatible Chat Completions (default) and Responses
+  (`store: false`), Azure (deployment URLs or the v1 routes), and Anthropic
+  Messages (adaptive thinking and effort for current Claude models, budgets
+  for older ones).
+- **Safety:** base URLs are validated with Foundation's parser (what
+  `URLSession` uses), so `http://localhost\@evil.com` can't pass as local;
+  `http://` only for local hosts; redirects are refused so credentials never
+  follow one; the session is ephemeral; credentials print redacted.
+- **No silent fallback to another model:** a selection resolves only if it is
+  valid or exactly one model is configured; otherwise the app asks.
+- **Repository instructions** (`.github/copilot-instructions.md`) go in the
+  system prompt, capped at 32k characters.
+- **Timeouts and retries:** one deadline per call (60 s for commit messages,
+  600 s for conflicts, or the provider's own), shared by every attempt.
+  Retries follow the OpenAI and Anthropic SDKs: at most twice, for 408, 409,
+  429, 5xx, and connection failures, honoring `x-should-retry` and
+  `Retry-After`; only before a stream starts.
+- **Conflict markers:** a file with a marker outside its blocks is skipped,
+  and a reassembled file that still has one fails, so no file with markers
+  is reported resolved.
+- **Consent replaces the disclaimer:** before a feature's first request to a
+  provider host, the disclosure is shown and consent kept, revocable in
+  Settings. Always use AI starts a round only in the selected repository,
+  with consent and an unambiguous model.
+- **Desktop bugs fixed:** AI resolutions are staged as literal paths (a path
+  like `src/[id].ts` also staged `src/i.ts`) and never overwrite files
+  changed since the round; successful chunks are kept and failed files can
+  be retried alone; later batches stop after an auth, quota, rate-limit, or
+  network error; a rebase's conflicts get commit context.
+- **Dropped with Copilot:** built-in models, the "auto" default, quota and
+  billing codes, per-account selections.
+
+## Edge states
+
+- **Leaving commits behind asks.** Checking out from a detached HEAD asks
+  "Leave N Commits Behind?" when HEAD has commits no branch, tag, or remote
+  branch has and the target doesn't contain (desktop switched silently).
+- **`git am` and bisect are shown:** a stopped `git am` or a bisect takes
+  the operation panel's place, says Espalier can't continue or abort it,
+  and offers the commands and Open in Terminal (desktop didn't notice).
+- **No partial edits that can't round-trip:** lines of a diff that isn't
+  UTF-8, or that a `diff=` driver's textconv converts, can't be committed
+  or discarded alone; the whole file can (desktop corrupted such commits).
+- **Literal pathspecs:** every path passed as a pathspec gets `:(literal)`,
+  so git matches exactly that file. Desktop passed paths as they were:
+  discarding `a*.txt` overwrote `ab.txt`'s changes, and `:!x` named every
+  other file. A prefix rather than `GIT_LITERAL_PATHSPECS`, which hooks and
+  submodule commands would inherit.
+- **Ignore rules name only their file:** backslashes and trailing spaces are
+  escaped, names with line breaks are refused, and "Ignore All .ext Files"
+  escapes the extension (desktop's `*.t[x]t` ignored every `.txt` file).
+- **Restoring a stash with files in the way restores nothing,** and lists
+  them; desktop's partial restore of an `--include-untracked` entry would
+  apply the rest twice on a retry.
+- **Discard and Copy Path act on Changes only while it has keyboard focus:**
+  ⌘⌫ typed in a popover's field discarded the selected files when discard
+  confirmation was off.
+- **Discard confirmations:** Discard All Changes… and several files always
+  ask; only the one-file question offers "Do not show this message again".
+- **Switch Branch asks about an existing stash once:** when leaving changes
+  would replace the branch's stash, the question carries that warning
+  (desktop asked "Overwrite Stash?" again).
+- **Stash Changes and Continue** stashes, then runs the operation, as
+  desktop's flow did. Rebase honors `rebase.autoStash`. The branch pruner
+  keeps branches being rebased in any worktree.
+- **Status keeps desktop's arguments,** `--no-optional-locks` included:
+  taking optional locks would mean taking `index.lock`. Nothing (fsmonitor,
+  untracked cache) is turned on for the user.
+- **Desktop bugs fixed:** a rebase with git's apply backend is read from
+  `rebase-apply`; submodules that aren't checked out are listed, so
+  discarding a deleted submodule folder restores it; a submodule with only
+  uncommitted changes inside is never committed; patch headers quote paths
+  with control characters, so partial commits of such files work; `git log`
+  reads `--encoding=UTF-8`; New Branch on an unborn branch refuses clearly,
+  and leaving an unborn branch never tries a stash. No unshallow, as
+  desktop.
+
+## History's simple mode
+
+- **The current branch's first-parent line from HEAD,** one commit after
+  another, grouped by nothing (my call): no day headings, no "Not pushed yet"
+  section, no start marker, and no uncommitted-work row. The style is
+  app-wide, simple when nothing is stored.
+- **The notice above the list** counts the commits the base (the branch
+  Update from <branch> merges) has that this branch doesn't, and shows only
+  when there are some and the two share a merge base; none on a detached
+  HEAD, an unborn branch, or the base itself.
+- **The branch as one line** (my call): a rail in the branch's track color
+  that takes the base's color from the commit where the branch started, so
+  where the branch began shows without a heading. A merge's stub takes the
+  merged branch's color.
+- **Unpushed marks:** a commit the upstream doesn't have; on an unpublished
+  branch, one no remote has; with no remote, none.
+- **A merge is one row** naming the branch and pull request from the
+  messages GitHub, git, GitLab, Bitbucket, and Azure DevOps write. It
+  expands to the commits it brought in (at most 1,000; the rest through
+  Graph). Go to Commit finds a commit inside a merge and expands it.
+
+## The look
+
+`docs/DESIGN.md` is the look; these are the decisions behind it.
+
+- **The flat window stays a `NavigationSplitView`,** so collapsing the
+  sidebar, full screen, the traffic lights, and toolbar customization stay
+  native; its content is opaque over macOS's glass.
+- **Tokens have light, dark, and Increase Contrast values.** Status letters
+  and diff markers keep 4.5:1 contrast.
+- **The toolbar's search capsule shows ⌥⌘F,** the real Search shortcut (⌘F is
+  Find).
+- **The sync button holds still while a push, pull, or fetch runs**
+  (my call: pressing Fetch "jumps between a billion different things"). It
+  keeps its title, color, and count, with the arc in its symbol's place,
+  and takes no clicks; what runs and git's step are its tooltip and what
+  VoiceOver hears. Desktop retitled it at every step, which moved the
+  button and "Fetched just now". An operation the button didn't offer
+  shows that action instead. The progress lasts until the refresh after
+  the operation has loaded, so the button goes straight to the new state.
+- **Branch colors:** every local branch other than the current and default
+  ones takes the palette entry its name hashes to, or the next free one;
+  remote branches take their local branch's color. The sidebar dot, the
+  tag, and the line agree. Creating or deleting a branch can recolor a
+  later-named one (fine by me).
+- **A commit's details show its tags, not branches** (my call; the rows show
+  branches), and keep the "CHANGED FILES" label (my call).
+- **No focus ring over a selection** (my call): History's file chips and
+  rows, and the diff's line cursor, show only their accent tint, focused or
+  not.
+- **The commit message card shows which field has focus with its own
+  tint** (my call, over an accent bar beside the field): a soft accent
+  behind the summary or the description, hidden in an inactive window and
+  while the fields are read-only. A hairline divides the summary from the
+  description (my call).
+- **The description scrolls only when its text is taller than it shows**
+  (my call): a shorter text, or the placeholder, holds still under a scroll
+  instead of bouncing.
+- **No system selection highlight anywhere** (my call): every list's rows
+  draw their own selection in the row's rounded shape, focused or not.
+- **Changes' rows show lines added and removed against HEAD** (desktop has
+  none), staged and unstaged together; binary files, submodules, and
+  conflicted files show none, and none load past 1,000 files.
+- **The Changes column stays beside the no-changes card,** because amending
+  and the Stashed Changes row need it.
+- **A toast's Undo answers ⌘Z** while it shows; typing since then undoes
+  first.
+- **Settings is Espalier's own window** (my call: the restyled stock one was
+  "SO stock").
+- **Git Credential Manager's description is Espalier's own;** desktop's
+  "experimental" was a caution about its own integration.
+- **Progress is Espalier's own** (my call): the arc I picked and the
+  capsule bar replace the system's spinner and bars everywhere, AppKit's
+  included. Both are neutral gray, since color is only for selection,
+  branches, and status, and stand still under Reduce Motion, where the
+  system's spinner turned regardless.
+- **The operation panel shows a running operation only past 300 ms,** so a
+  fast one never flashes; a commit clicked meanwhile is refused as busy.
+- **Sidebar sections draw their own Show/Hide chevron,** just before the
+  header's buttons: the list's own took the header's trailing edge, so
+  hovering the plus moved it.
+- **Switching repositories leaves the sidebar's sections in place**
+  (my call): a repository that hasn't loaded has no branches, tags, or pull
+  requests yet, so Branches vanished and came back, moving the row just
+  clicked. The sections keep the previous repository's rows, which can't
+  be chosen meanwhile, until the selected one has loaded (at most 1 s),
+  then change in one step.
+
+## The app shell
+
+- **File ▸ Close is Espalier's own** (⌘W), without AppKit's hidden Close All
+  (⌥⌘W), which took Show Worktrees' shortcut. ⌘J and ⌥⌘F run in the main
+  window whichever menu item holds them.
+- **⌃⇥ and ⇧⌃⇥ go between Changes and History** (desktop's Ctrl+Tab), as
+  View ▸ Next Place and Previous Place. From any other place, ⌃⇥ shows
+  Changes and ⇧⌃⇥ History (desktop has only the two tabs, and ignores
+  Shift). Both run before a text view or list can take them to move focus.
+- **A click away from a text field ends its editing** (my call), as in
+  desktop's web page: AppKit kept the commit message and the toolbar
+  search focused after a click on the background, a label, or a button. A
+  click anywhere but the focused field and the area that belongs to it
+  unfocuses it; a Control-click, which opens a context menu, leaves it.
+- **With the main window minimized, menus act on it and bring it back;**
+  while Settings or About is key they stay off.
+- **Alerts and sheets shown while Espalier is inactive** beep and bounce the
+  Dock icon.
+- **A link that needs a clone waits** for the sheets and alerts in front of
+  it and for the welcome flow; links queue in order.
+- **`espalier` takes options anywhere,** in minimist's forms; `--` ends them.
+- **An organization's OAuth App access restrictions** show as "Organization
+  Access Restricted" with Request Access on GitHub (not in desktop).
+- **A signed-out account has Remove.**
+- **The Git LFS filters alert's Edit Global Git Config… closes the alert**
+  and opens the file (desktop's link left its dialog open).
+- **Commit messages render emoji and links,** as desktop's text-token
+  parser does: `:shortcode:` emoji (GitHub's custom ones stay text), URLs,
+  and in GitHub repositories `#123` and `@mentions`. An issue reference
+  with no known web address stays text (desktop linked "null/issues/n").
+- **Compare to Branch** shows each branch's behind and ahead counts and date,
+  counted only for rows on screen, without fork remotes' branches.
+- **The toolbar search filters a pull request's files** in its place, as it
+  does Changes' and a stash's, with No Matching Files when none match.
+
+## Accessibility
+
+- **VoiceOver hears how many items a filter matches** ("No results", "1
+  result", "12 results") once its text has been still for 1 s: the branch
+  picker, the repository popover, the sidebar filter, the toolbar search,
+  and Clone's list.
+- **A commit is announced** "Committing" (or "Amending last commit") once
+  git runs, not on the button press, so a cancelled question says nothing;
+  then "Committed to main" ("Committed" on a detached HEAD, "Amended last
+  commit"). A failure speaks through its alert or sheet.
+- **"Push complete", "Fetch complete", and "Pull complete" only when one the
+  user started succeeds.** Desktop announced "push complete" whenever the
+  progress ended, a failure included, and a background fetch said "fetch
+  complete".
+- **⇧F10 opens a list's context menu** at its selected row, in Changes'
+  files, History, a commit's files, and the sidebar; VoiceOver's Show Menu
+  (VO-⇧-M) opens the same menu. No menu item holds it, so Keyboard
+  Shortcuts lists it under Lists.
+- **Setting AXSelected on a Changes file's cell selects that file alone,**
+  as a click does; setting it to false does nothing.
+
+## Copy
+
+Desktop's wording stays where it is true for Espalier and reads well. The
+voice:
+
+- No first person or apology ("We found…", "Sorry, I can't find…"), no
+  "Please"; contractions.
+- Confirmation titles ask the question ("Discard Changes?", "Force Push?"),
+  and buttons name the action ("Force Push", "Undo Anyway", "Delete Anyway",
+  "Sign In…"/"Not Now").
+- Error alert titles in title case ("Clone Failed"); toasts without
+  "Successfully".
+- macOS words: folder, app, "on Your Mac", the Trash, "check out" as a verb,
+  lowercase "internet"; Settings named by pane ("Settings ▸ Integrations");
+  commands that open a sheet end in an ellipsis.
+- GitHub's settings are quoted as GitHub labels them ("Keep my email
+  addresses private").
+- Left as they are: git's own output, strings matched against git's or
+  GitHub's output, AI prompts, logs, GitHub's push-protection bypass
+  wording, and AppKit's "Do not show this message again".
+
+## Tests
+
+- **Fewer, more useful tests** (my call): tests of constants, copied tables,
+  test doubles, and exact duplicates go; cases of one shape are one
+  parameterized test. Tests of repository writes, credentials, and hooks
+  stay.

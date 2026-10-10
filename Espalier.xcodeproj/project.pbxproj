@@ -1,0 +1,503 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 110;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		E4A9C45830738A6C00222D57 /* espalier-askpass in CopyFiles */ = {isa = PBXBuildFile; fileRef = E4A9C44E307389EF00222D57 /* espalier-askpass */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		E4A9C46F30738B9D00222D57 /* EspalierKit in Frameworks */ = {isa = PBXBuildFile; productRef = E4A9C46E30738B9D00222D57 /* EspalierKit */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E4A9C45530738A0E00222D57 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E4A9C434307389C600222D57 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E4A9C44D307389EF00222D57;
+			remoteInfo = "espalier-askpass";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E4A9C44C307389EF00222D57 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolder = None;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		E4A9C45730738A4F00222D57 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = Executables;
+			files = (
+				E4A9C45830738A6C00222D57 /* espalier-askpass in CopyFiles */,
+			);
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		E4A9C43C307389C600222D57 /* Espalier.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Espalier.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E4A9C44E307389EF00222D57 /* espalier-askpass */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "espalier-askpass"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E4A9C47A30738C0000222D57 /* Exceptions for "Espalier" folder in "Espalier" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E4A9C43B307389C600222D57 /* Espalier */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		E4A9C43E307389C600222D57 /* Espalier */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E4A9C47A30738C0000222D57 /* Exceptions for "Espalier" folder in "Espalier" target */,
+			);
+			path = Espalier;
+			sourceTree = "<group>";
+		};
+		E4A9C44F307389EF00222D57 /* espalier-askpass */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "espalier-askpass";
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E4A9C439307389C600222D57 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				E4A9C46F30738B9D00222D57 /* EspalierKit in Frameworks */,
+			);
+		};
+		E4A9C44B307389EF00222D57 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E4A9C433307389C600222D57 = {
+			isa = PBXGroup;
+			children = (
+				E4A9C43E307389C600222D57 /* Espalier */,
+				E4A9C44F307389EF00222D57 /* espalier-askpass */,
+				E4A9C43D307389C600222D57 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E4A9C43D307389C600222D57 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E4A9C43C307389C600222D57 /* Espalier.app */,
+				E4A9C44E307389EF00222D57 /* espalier-askpass */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E4A9C43B307389C600222D57 /* Espalier */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E4A9C447307389C700222D57 /* Build configuration list for PBXNativeTarget "Espalier" */;
+			buildPhases = (
+				E4A9C438307389C600222D57 /* Sources */,
+				E4A9C439307389C600222D57 /* Frameworks */,
+				E4A9C43A307389C600222D57 /* Resources */,
+				E4A9C45730738A4F00222D57 /* CopyFiles */,
+				E4A9C45930738A7400222D57 /* Embed git */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E4A9C45630738A0E00222D57 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E4A9C43E307389C600222D57 /* Espalier */,
+			);
+			name = Espalier;
+			packageProductDependencies = (
+				E4A9C46E30738B9D00222D57 /* EspalierKit */,
+			);
+			productName = Espalier;
+			productReference = E4A9C43C307389C600222D57 /* Espalier.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E4A9C44D307389EF00222D57 /* espalier-askpass */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E4A9C452307389EF00222D57 /* Build configuration list for PBXNativeTarget "espalier-askpass" */;
+			buildPhases = (
+				E4A9C44A307389EF00222D57 /* Sources */,
+				E4A9C44B307389EF00222D57 /* Frameworks */,
+				E4A9C44C307389EF00222D57 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				E4A9C44F307389EF00222D57 /* espalier-askpass */,
+			);
+			name = "espalier-askpass";
+			productName = "espalier-askpass";
+			productReference = E4A9C44E307389EF00222D57 /* espalier-askpass */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E4A9C434307389C600222D57 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					E4A9C43B307389C600222D57 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					E4A9C44D307389EF00222D57 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+				};
+			};
+			buildConfigurationList = E4A9C437307389C600222D57 /* Build configuration list for PBXProject "Espalier" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E4A9C433307389C600222D57;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E4A9C46D30738B9D00222D57 /* XCLocalSwiftPackageReference "Packages/EspalierKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E4A9C43D307389C600222D57 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E4A9C43B307389C600222D57 /* Espalier */,
+				E4A9C44D307389EF00222D57 /* espalier-askpass */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E4A9C43A307389C600222D57 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		E4A9C45930738A7400222D57 /* Embed git */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			name = "Embed git";
+			shellPath = /bin/sh;
+			shellScript = (
+				"if [ -x \"${SRCROOT}/scripts/embed-git.sh\" ]; then \"${SRCROOT}/scripts/embed-git.sh\"; fi",
+				"",
+			);
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E4A9C438307389C600222D57 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+		E4A9C44A307389EF00222D57 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E4A9C45630738A0E00222D57 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E4A9C44D307389EF00222D57 /* espalier-askpass */;
+			targetProxy = E4A9C45530738A0E00222D57 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		E4A9C445307389C700222D57 /* Debug configuration for PBXProject "Espalier" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 38U4X64GHV;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E4A9C446307389C700222D57 /* Release configuration for PBXProject "Espalier" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 38U4X64GHV;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		E4A9C448307389C700222D57 /* Debug configuration for PBXNativeTarget "Espalier" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 38U4X64GHV;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Espalier/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Abdeen Labs";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.abdeen.espalier.debug;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		E4A9C449307389C700222D57 /* Release configuration for PBXNativeTarget "Espalier" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 38U4X64GHV;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Espalier/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Abdeen Labs";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.abdeen.espalier;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		E4A9C453307389EF00222D57 /* Debug configuration for PBXNativeTarget "espalier-askpass" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 38U4X64GHV;
+				ENABLE_HARDENED_RUNTIME = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		E4A9C454307389EF00222D57 /* Release configuration for PBXNativeTarget "espalier-askpass" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 38U4X64GHV;
+				ENABLE_HARDENED_RUNTIME = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E4A9C437307389C600222D57 /* Build configuration list for PBXProject "Espalier" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E4A9C445307389C700222D57 /* Debug configuration for PBXProject "Espalier" */,
+				E4A9C446307389C700222D57 /* Release configuration for PBXProject "Espalier" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		E4A9C447307389C700222D57 /* Build configuration list for PBXNativeTarget "Espalier" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E4A9C448307389C700222D57 /* Debug configuration for PBXNativeTarget "Espalier" */,
+				E4A9C449307389C700222D57 /* Release configuration for PBXNativeTarget "Espalier" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		E4A9C452307389EF00222D57 /* Build configuration list for PBXNativeTarget "espalier-askpass" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E4A9C453307389EF00222D57 /* Debug configuration for PBXNativeTarget "espalier-askpass" */,
+				E4A9C454307389EF00222D57 /* Release configuration for PBXNativeTarget "espalier-askpass" */,
+			);
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		E4A9C46D30738B9D00222D57 /* XCLocalSwiftPackageReference "Packages/EspalierKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/EspalierKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E4A9C46E30738B9D00222D57 /* EspalierKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = EspalierKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E4A9C434307389C600222D57 /* Project object */;
+	validationLevel = 1;
+}

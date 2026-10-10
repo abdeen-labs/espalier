@@ -1,0 +1,2 @@
+# Fixture repositories are byte-exact copies of desktop/app/test/fixtures.
+/Packages/EspalierKit/Tests/TestSupport/Resources/fixtures/** -text

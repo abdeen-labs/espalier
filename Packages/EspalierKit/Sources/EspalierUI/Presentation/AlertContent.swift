@@ -1,0 +1,147 @@
+// One value describes every alert Espalier shows (confirmations, errors,
+// prompts, the quit guard, state notices), so the same builder makes the
+// alert at run time and in snapshots.
+
+import AppKit
+
+/// An alert: a title, a message, buttons, and an optional suppression
+/// checkbox.
+nonisolated public struct AlertContent: Sendable, Equatable {
+    /// How serious the alert is.
+    public enum Severity: Sendable, Equatable {
+        case standard
+        /// Discards, deletions, and force pushes (`.critical`: the caution
+        /// badge).
+        case critical
+    }
+
+    /// A button's role.
+    public enum Role: Sendable, Equatable {
+        /// The default button (Return).
+        case primary
+        /// A destructive action (drawn red).
+        case destructive
+        /// Another action.
+        case secondary
+        /// Dismisses (Escape).
+        case cancel
+    }
+
+    /// A button.
+    public struct Button: Sendable, Equatable {
+        public var title: String
+        public var role: Role
+
+        public init(_ title: String, role: Role) {
+            self.title = title
+            self.role = role
+        }
+    }
+
+    public var title: String
+    public var message: String
+    /// In order: the first is the default button (rightmost), then the
+    /// others leftward. Cancel-role buttons answer Escape.
+    public var buttons: [Button]
+    /// The suppression checkbox's title ("Do not show this message again"),
+    /// or nil for none.
+    public var suppressionTitle: String?
+    public var severity: Severity
+
+    public init(title: String, message: String, buttons: [Button], suppressionTitle: String? = nil, severity: Severity = .standard) {
+        self.title = title
+        self.message = message
+        self.buttons = buttons
+        self.suppressionTitle = suppressionTitle
+        self.severity = severity
+    }
+
+    /// The suppression checkbox's title.
+    public static let doNotShowAgain = "Do not show this message again"
+}
+
+/// What the user chose in an alert.
+nonisolated public struct AlertResponse: Sendable, Equatable {
+    /// The index of the button in `AlertContent.buttons`.
+    public var buttonIndex: Int
+    /// Whether the suppression checkbox was on.
+    public var isSuppressed: Bool
+
+    public init(buttonIndex: Int, isSuppressed: Bool = false) {
+        self.buttonIndex = buttonIndex
+        self.isSuppressed = isSuppressed
+    }
+}
+
+extension AlertContent {
+    /// The alert, ready to show or snapshot.
+    @MainActor
+    public func makeAlert() -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = severity == .critical ? .critical : .warning
+        for button in buttons {
+            let control = alert.addButton(withTitle: button.title)
+            switch button.role {
+            case .destructive:
+                control.hasDestructiveAction = true
+            case .cancel:
+                control.keyEquivalent = "\u{1b}"
+            case .primary, .secondary:
+                break
+            }
+        }
+        // Only the first button answers Return.
+        if buttons.first?.role == .cancel {
+            alert.buttons.first?.keyEquivalent = "\u{1b}"
+        }
+        if let suppressionTitle {
+            alert.showsSuppressionButton = true
+            alert.suppressionButton?.title = suppressionTitle
+        }
+        return alert
+    }
+
+    /// Maps the alert's modal response to a response.
+    @MainActor
+    func response(_ modalResponse: NSApplication.ModalResponse, alert: NSAlert) -> AlertResponse {
+        let index = modalResponse.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
+        let cancel = buttons.firstIndex { $0.role == .cancel } ?? max(buttons.count - 1, 0)
+        let buttonIndex = buttons.indices.contains(index) ? index : cancel
+        return AlertResponse(buttonIndex: buttonIndex, isSuppressed: alert.suppressionButton?.state == .on)
+    }
+
+    /// The index of the cancel button, or the last button.
+    public var cancelIndex: Int {
+        buttons.firstIndex { $0.role == .cancel } ?? max(buttons.count - 1, 0)
+    }
+}
+
+/// Lists in alert messages (files, authors).
+nonisolated enum AlertList {
+    /// At most this many items are listed; the rest are counted.
+    static let maximumItems = 10
+
+    /// The items as lines, at most `maximumItems`, then "and N more".
+    static func lines(_ items: [String]) -> String {
+        var lines = items.prefix(maximumItems).map { "• \($0)" }
+        if items.count > maximumItems {
+            lines.append("and \(items.count - maximumItems) more")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// `message` with `items` listed after its first paragraph, right after
+    /// the question.
+    static func insert(_ items: [String], intoMessage message: String) -> String {
+        guard !items.isEmpty else {
+            return message
+        }
+        let paragraphs = message.components(separatedBy: "\n\n")
+        guard let first = paragraphs.first else {
+            return lines(items)
+        }
+        return ([first, lines(items)] + paragraphs.dropFirst()).joined(separator: "\n\n")
+    }
+}
