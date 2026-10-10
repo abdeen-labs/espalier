@@ -80,6 +80,13 @@ public struct CapsuleSearchField: View {
                 .onExitCommand {
                     text = ""
                 }
+                // The line's inset from the capsule's top, rather than
+                // centered, as in a capsule field: the field draws its text
+                // at its own top, so one measured a little shorter or
+                // taller (as a field can be for a moment) would otherwise
+                // draw its text lower or higher.
+                .padding(.top, (Metrics.ControlHeight.height(for: controlSize) - Metrics.CapsuleField.lineHeight) / 2)
+                .frame(maxHeight: .infinity, alignment: .top)
             trailing
         }
         .motion(Motion.mark, value: trailingKind)

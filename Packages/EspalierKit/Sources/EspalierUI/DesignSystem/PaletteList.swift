@@ -38,6 +38,13 @@ public struct PaletteSearchField: View {
                     .lineLimit(1)
                     .font(Typography.paletteField)
                     .foregroundStyle(.text)
+                    // The line's inset from the row's top, rather than
+                    // centered, as in a capsule field: the field draws its
+                    // text at its own top, so one measured a little shorter
+                    // or taller (as a field can be for a moment) would
+                    // otherwise draw its text lower or higher.
+                    .padding(.top, (Metrics.PaletteList.fieldHeight - Metrics.PaletteList.fieldLineHeight) / 2)
+                    .frame(maxHeight: .infinity, alignment: .top)
                 if let keyCap {
                     KeyCap(keyCap)
                 }
@@ -105,6 +112,8 @@ extension Metrics {
     public enum PaletteList {
         /// The search field's row.
         public static let fieldHeight: CGFloat = 48
+        /// A line of `Typography.paletteField` text, as a field lays it out.
+        public static let fieldLineHeight: CGFloat = CapsuleField.measuredLineHeight(for: .preferredFont(forTextStyle: .title3))
         public static let fieldHorizontalPadding: CGFloat = 16
         public static let fieldSpacing: CGFloat = 10
         /// Rows.
