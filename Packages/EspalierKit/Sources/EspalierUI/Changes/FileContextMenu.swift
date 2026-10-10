@@ -1,6 +1,7 @@
 // The context menus of the Changes list and its header: their items and
-// their order, which items a rebase's conflicts leave, and when items are
-// disabled. `gitIgnoreMenuItems(for:)` builds the ignore items.
+// their order, which items a rebase's conflicts leave, a conflicted file's
+// sides to pick, and when items are disabled. `gitIgnoreMenuItems(for:)`
+// builds the ignore items.
 
 import EspalierCore
 import EspalierSupport
@@ -18,6 +19,8 @@ nonisolated public enum FileMenuCommand: Sendable, Hashable {
     case showInFinder
     case openInEditor
     case openWithDefaultProgram
+    /// Picks a conflicted file's side, or (nil) undoes the choice.
+    case resolve(ManualConflictResolution?)
 }
 
 /// An item of a changed file's context menu.
@@ -113,6 +116,25 @@ nonisolated public enum FileContextMenuContent {
             items += [.separator] + copyOne
         }
         return items + [.separator] + openItems
+    }
+
+    /// A conflicted file's sides to pick while it needs the user, or Undo
+    /// once one was picked, as its row's buttons offer them, after a
+    /// separator; none when there's nothing to pick (a stash restore's
+    /// conflicts, a file resolved in the editor).
+    public static func conflictItems(for conflict: ConflictFileRowContent) -> [FileMenuItem] {
+        var items: [FileMenuItem] = []
+        if conflict.isUnresolved {
+            if let oursLabel = conflict.oursLabel {
+                items.append(FileMenuItem(oursLabel, .resolve(.ours)))
+            }
+            if let theirsLabel = conflict.theirsLabel {
+                items.append(FileMenuItem(theirsLabel, .resolve(.theirs)))
+            }
+        } else if case .resolved(isUndoable: true) = conflict.state {
+            items.append(FileMenuItem("Undo", .resolve(nil)))
+        }
+        return items.isEmpty ? [] : [.separator] + items
     }
 
     /// "Discard Changes", "Discard 3 Selected Changes", with an ellipsis

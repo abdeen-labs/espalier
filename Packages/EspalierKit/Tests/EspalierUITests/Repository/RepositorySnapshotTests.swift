@@ -1,7 +1,7 @@
 // The repository flows' screens, one image per layout: the rows in light
 // and dark, the rest in light. States that differ only in words are
 // RepositoryFlowTests' and Core's, and Add's, Git LFS's, and the quit
-// guard's alerts are native. Leaf views take fixed values; the sheets'
+// guard's alerts are NSAlerts. Leaf views take fixed values; the sheets'
 // forms run on a hermetic app, with real repositories where they read one.
 
 @testable import EspalierCore
@@ -19,7 +19,7 @@ import TestSupport
 struct RepositorySnapshotTests {
     private let area = "Repository"
 
-    // MARK: Rows, section, popover
+    // MARK: Rows, popover
 
     @Test("rows: the current repository, others with status, an owner, missing, cloning, status off")
     func rows() {
@@ -38,11 +38,11 @@ struct RepositorySnapshotTests {
         assertSnapshot(rows, named: "rows", area: area)
     }
 
-    @Test("the popover: worktrees, Recent and owners; no repositories")
+    @Test("the popover: the filter and Add, worktrees with New Worktree…, Recent and owners, a row highlighted; no repositories")
     func popover() {
         let worktrees = [
-            WorktreePopoverRow(path: "/Users/joe/Developer/espalier", name: "espalier", detail: "main", isLocked: false, isCurrent: true),
-            WorktreePopoverRow(path: "/Users/joe/Developer/espalier-login", name: "espalier-login", detail: "feature/login", isLocked: true, isCurrent: false),
+            WorktreeRowContent(path: "/Users/joe/Developer/espalier", detail: "main", isMain: true, isCurrent: true, isLocked: false),
+            WorktreeRowContent(path: "/Users/joe/Developer/espalier-login", detail: "feature/login", isMain: false, isCurrent: false, isLocked: true),
         ]
         let groups = [
             RepositoryPopoverContent.Group(id: "0:recent", title: "Recent", rows: [
@@ -59,14 +59,26 @@ struct RepositorySnapshotTests {
             ]),
         ]
         let content = RepositoryPopoverContent(worktrees: worktrees, groups: groups, hasRepositories: true)
+        let maxHeight = Metrics.Window.defaultHeight - Metrics.Toolbar.height - Metrics.insetLarge * 2
         assertSnapshot(
-            RepositoryPopoverView(content: content, filter: .constant(""), highlighted: .constant(.entry(groups[1].rows[1].id))),
+            RepositoryPopoverView(
+                content: content,
+                filter: .constant(""),
+                highlighted: .constant(.entry(groups[1].rows[1].id)),
+                maxHeight: maxHeight,
+                newWorktree: {}
+            ),
             named: "popover",
             area: area,
             appearances: [.light]
         )
         assertSnapshot(
-            RepositoryPopoverView(content: RepositoryPopoverContent(worktrees: [], groups: [], hasRepositories: false), filter: .constant(""), highlighted: .constant(nil)),
+            RepositoryPopoverView(
+                content: RepositoryPopoverContent(worktrees: [], groups: [], hasRepositories: false),
+                filter: .constant(""),
+                highlighted: .constant(nil),
+                maxHeight: maxHeight
+            ),
             named: "popover-empty",
             area: area,
             appearances: [.light]
@@ -77,7 +89,8 @@ struct RepositorySnapshotTests {
 
     @Test("Get Started: signed out, and signed in with the clone list")
     func getStarted() async throws {
-        assertSnapshot(GetStartedActions().padding(Metrics.insetLarge * 2).frame(width: 440), named: "get-started-actions", area: area, appearances: [.light])
+        // As wide as its widest line: the actions' titles on one line.
+        assertSnapshot(GetStartedActions().padding(Metrics.insetLarge * 2), named: "get-started-actions", area: area, appearances: [.light])
 
         let harness = try AppHarness()
         let account = RepositoryFixtures.dotComAccount
@@ -271,7 +284,7 @@ struct RepositorySnapshotTests {
 
         app.integrations.availableEditors = []
         let custom = OpenWithModel(integrations: app.integrations, path: "/Users/joe/Developer/espalier")
-        #expect(custom.choice == .custom)
+        #expect(custom.choice == .configure)
         custom.customPath = "/nonexistent/editor"
         custom.customArguments = "--wait"
         await custom.validate()

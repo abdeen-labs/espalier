@@ -1,7 +1,8 @@
-// A branch's row in the sidebar's Branches section: the name, the branch's
-// pull request, and how it compares with its upstream ("↑2 ↓3", or not
-// published). Value-driven: `BranchRowContent` is built from the models by
-// `BranchesSectionContent` and snapshotted on its own.
+// A branch's row in the sidebar's Branches section: the name (the current
+// branch's semibold, the one way it's marked), the branch's pull request,
+// and how it compares with its upstream ("↑2 ↓3", not published, or its
+// upstream gone). Value-driven: `BranchRowContent` is built from the models
+// by `BranchesSectionContent` and snapshotted on its own.
 
 import EspalierCore
 import GitHubKit
@@ -153,11 +154,6 @@ nonisolated public struct BranchRowContent: Sendable, Equatable, Identifiable {
         ref
     }
 
-    /// The row's symbol: the current branch's check, else a branch.
-    public var systemImage: String {
-        isCurrent ? "checkmark.circle.fill" : "arrow.trianglehead.branch"
-    }
-
     /// The row as VoiceOver reads it: the name, then what the trailing
     /// glyphs say.
     public var accessibilityLabel: String {
@@ -175,7 +171,7 @@ nonisolated public struct BranchRowContent: Sendable, Equatable, Identifiable {
     }
 }
 
-/// A branch's row: a dot in its track color, its name (the current one
+/// A branch's row: a dot in its branch color, its name (the current one
 /// semibold, a selected one medium), the pull request glyph, and its
 /// comparison with its upstream.
 public struct BranchRow: View {
@@ -195,7 +191,7 @@ public struct BranchRow: View {
             Circle()
                 .fill(Color(nsColor: dotColor ?? content.fallbackColor))
                 .frame(width: Metrics.Sidebar.dotSize, height: Metrics.Sidebar.dotSize)
-                .frame(width: 16)
+                .frame(width: Metrics.Sidebar.symbolWidth)
                 .accessibilityHidden(true)
             Text(content.title)
                 .font(SidebarRowFont.title(isSelected: isSelected, isEmphasized: content.isCurrent))
@@ -223,8 +219,8 @@ public struct BranchRow: View {
 
 /// The trailing comparison: "↑2" in the accent and "↓3" in tertiary text,
 /// in SF Mono; a dashed circle and "Not published" for a branch that isn't
-/// published; the dashed circle alone, with a tooltip, for a branch whose
-/// upstream is gone.
+/// published; a crossed-out cloud, with a tooltip, for a branch whose
+/// upstream is gone from its remote.
 struct BranchTrackingView: View {
     let tracking: BranchTracking
 
@@ -238,7 +234,7 @@ struct BranchTrackingView: View {
             EmptyView()
         case .aheadBehind(let ahead, let behind):
             if tracking.countsText != nil {
-                HStack(spacing: 4) {
+                HStack(spacing: Metrics.grid) {
                     if ahead > 0 {
                         Text("↑\(BranchTracking.formatCount(ahead))")
                             .font(Typography.aheadCount)
@@ -269,7 +265,7 @@ struct BranchTrackingView: View {
             .foregroundStyle(.text3)
             .lineLimit(1)
         case .upstreamGone:
-            Image(systemName: "circle.dashed")
+            Image(systemName: "icloud.slash")
                 .font(Typography.secondary)
                 .foregroundStyle(.text3)
                 .help(tracking.description ?? "")
@@ -277,7 +273,7 @@ struct BranchTrackingView: View {
     }
 }
 
-/// A pull request's glyph, drafts in a secondary tint, with its checks.
+/// A pull request's glyph, drafts in a lighter tint, with its checks.
 struct PullRequestBadgeGlyph: View {
     let badge: BranchPullRequestBadge
 
@@ -286,13 +282,11 @@ struct PullRequestBadgeGlyph: View {
     }
 
     var body: some View {
-        HStack(spacing: 2) {
-            Image(systemName: "arrow.trianglehead.pull")
-                .foregroundStyle(Color(espalier: badge.isDraft ? Palette.text3 : Palette.text2))
-                .imageScale(.small)
+        HStack(spacing: Metrics.grid) {
+            Image(systemName: PullRequestGlyph.systemImage)
+                .foregroundStyle(badge.isDraft ? Color.text3 : .text2)
             if let checks = badge.checks {
                 ChecksGlyph(checks)
-                    .imageScale(.small)
             }
         }
         .font(Typography.secondary)

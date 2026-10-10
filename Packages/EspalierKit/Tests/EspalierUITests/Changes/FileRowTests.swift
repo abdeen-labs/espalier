@@ -1,6 +1,7 @@
 // The Changes list's rows: what each status, rename, and checkbox state
-// shows, what VoiceOver reads, and snapshots of every status, inclusion,
-// and the selection, light and dark.
+// shows, a conflicted file's state and buttons, a stash's rows without
+// checkboxes, what VoiceOver reads, and snapshots of every status,
+// inclusion, and the selection, light and dark.
 
 import AppKit
 @testable import EspalierCore
@@ -89,6 +90,61 @@ struct FileRowTests {
         #expect(received == [true])
     }
 
+    @Test("a conflicted file's row says what's left and offers its buttons to VoiceOver")
+    func conflictCell() {
+        let conflict = ConflictFileRowContent(
+            path: "Sources/App/Loader.swift",
+            state: .markers(conflicts: 2),
+            status: "2 conflicts",
+            oursLabel: "Use the modified file from main",
+            theirsLabel: "Use the modified file from feature"
+        )
+        let content = FileRowContent(id: "1", path: "Sources/App/Loader.swift", status: .conflicted, inclusion: true, conflict: conflict)
+        #expect(content.accessibilityLabel == "Loader.swift, Conflicted, in Sources/App, 2 conflicts")
+        #expect(conflict.help == "2 conflicts. \(OperationPanelContent.hint)")
+        let deleted = ConflictFileRowContent(path: "old.txt", state: .manual, status: "File does not exist on main.")
+        #expect(deleted.help == "File does not exist on main. \(OperationPanelContent.hint)")
+        #expect(ConflictFileRowContent(path: "a.txt", state: .resolved(isUndoable: false), status: "No conflicts remaining").help == "No conflicts remaining")
+
+        var opened = 0
+        var chosen: [ManualConflictResolution?] = []
+        let actions = ConflictFileRowActions(
+            editorName: "Xcode",
+            isEditorAvailable: true,
+            openInEditor: { opened += 1 },
+            choose: { chosen.append($0) }
+        )
+        let cell = FileRowView(frame: CGRect(x: 0, y: 0, width: 320, height: Metrics.FileList.rowHeight))
+        cell.configure(content, conflictActions: actions)
+        let custom = cell.accessibilityCustomActions() ?? []
+        #expect(custom.map(\.name) == ["Exclude", "Open in Xcode", "Use the modified file from main", "Use the modified file from feature"])
+        _ = custom[1].handler?()
+        _ = custom[3].handler?()
+        #expect(opened == 1)
+        #expect(chosen == [.theirs])
+
+        // Picked, it offers Undo.
+        let picked = ConflictFileRowContent(path: "logo.png", state: .resolved(isUndoable: true), status: "Using the modified file from main")
+        cell.configure(FileRowContent(id: "2", path: "logo.png", status: .conflicted, inclusion: true, conflict: picked), conflictActions: actions)
+        let undo = cell.accessibilityCustomActions() ?? []
+        #expect(undo.map(\.name) == ["Exclude", "Undo"])
+        _ = undo[1].handler?()
+        #expect(chosen == [.theirs, nil])
+    }
+
+    @Test("a stash's row has no checkbox: nothing to include, and VoiceOver hears no inclusion")
+    func readOnlyCell() {
+        let file = CommittedFileChange(path: "Sources/App/Loader.swift", status: .modified(), commitish: "a1b2c3d", parentCommitish: "a1b2c3d^")
+        let content = FileRowContent(readOnly: file)
+        #expect(!content.showsCheckbox)
+        let cell = FileRowView(frame: CGRect(x: 0, y: 0, width: 320, height: Metrics.FileList.rowHeight))
+        cell.configure(content)
+        #expect(cell.checkbox.isHidden)
+        #expect(cell.textField?.stringValue == "Loader.swift")
+        #expect(cell.accessibilityValue() == nil)
+        #expect(cell.accessibilityCustomActions()?.isEmpty ?? true)
+    }
+
     @Test("rows snapshot: every status, inclusion, line counts, and the selection")
     func snapshots() {
         func file(_ path: String, _ status: AppFileStatus, _ selection: DiffSelectionType = .all) -> WorkingDirectoryFileChange {
@@ -130,7 +186,7 @@ struct FileRowTests {
             8: FileLineCount(added: 1_204, deleted: 317),
         ]
         let lineCounts = Dictionary(uniqueKeysWithValues: counts.map { (ExactString(files[$0.key].id), $0.value) })
-        let table = FileTable(files: files, selectedIDs: [files[1].id], inclusion: inclusion, lineCounts: lineCounts)
+        let table = FileTable(files: .changes(files), selectedIDs: [files[1].id], inclusion: inclusion, lineCounts: lineCounts)
         assertSnapshot(table, named: "rows", area: "Changes", size: CGSize(width: Metrics.Column.changesFileList.ideal, height: 290))
     }
 }

@@ -1,6 +1,7 @@
 // The Changes list's header: the include-all checkbox with the file count,
-// and the filter options. `ChangesModel.visibleIncludeAll` decides the
-// checkbox.
+// what the commit includes, and the filter options; "0 changed files" over
+// an empty list. `ChangesModel.visibleIncludeAll` decides the checkbox.
+// Counts change at once.
 
 import AppKit
 import EspalierCore
@@ -12,18 +13,15 @@ nonisolated public struct ChangesHeaderContent: Sendable, Equatable {
     /// "3 changed files", or "2 of 5 changed files" while the filter hides some.
     public var title: String
     /// "6 included": the files the next commit includes, in full or in
-    /// part, shown or not.
+    /// part, shown or not; empty without changes.
     public var included: String
     /// The include-all checkbox: every file shown included (true), none
     /// (false), or some (nil).
     public var includeAll: Bool?
     public var isIncludeAllEnabled: Bool
     public var filter: FilterMenuContent
-    /// Every changed file, shown or not: the title's count changes with
-    /// it (animated), and with the filter (at once, as the user types).
-    public var fileCount: Int
-    /// The repository the header is for: its checkbox and count animate
-    /// only within one (choosing another repository is instant).
+    /// The repository the header is for: its checkbox animates only within
+    /// one (choosing another repository is instant).
     public var repository: ObjectIdentifier?
 
     public init(
@@ -32,7 +30,6 @@ nonisolated public struct ChangesHeaderContent: Sendable, Equatable {
         includeAll: Bool?,
         isIncludeAllEnabled: Bool,
         filter: FilterMenuContent,
-        fileCount: Int = 0,
         repository: ObjectIdentifier? = nil
     ) {
         self.title = title
@@ -40,12 +37,11 @@ nonisolated public struct ChangesHeaderContent: Sendable, Equatable {
         self.includeAll = includeAll
         self.isIncludeAllEnabled = isIncludeAllEnabled
         self.filter = filter
-        self.fileCount = fileCount
         self.repository = repository
     }
 
-    /// The count line: "1 changed file", "3 changed files", "2 of 5
-    /// changed files" (numbers in the user's format).
+    /// The count line: "0 changed files", "1 changed file", "3 changed
+    /// files", "2 of 5 changed files" (numbers in the user's format).
     public static func title(fileCount: Int, visibleCount: Int, numberFormat: NumberFormat) -> String {
         let total = "\(formatNumber(Double(fileCount), numberFormat)) changed \(fileCount == 1 ? "file" : "files")"
         guard visibleCount != fileCount else {
@@ -62,7 +58,8 @@ nonisolated public struct ChangesHeaderContent: Sendable, Equatable {
 
 extension ChangesHeaderContent {
     /// The header for a repository's changes. The checkbox can't change
-    /// while a commit runs or a rebase waits on conflicts.
+    /// without files, while a commit runs, or while a rebase waits on
+    /// conflicts.
     @MainActor
     public static func make(_ repository: RepositoryModel, numberFormat: NumberFormat) -> ChangesHeaderContent {
         let changes = repository.changes
@@ -75,17 +72,16 @@ extension ChangesHeaderContent {
         let includedCount = files.count { $0.selection.getSelectionType() != .none }
         return ChangesHeaderContent(
             title: title(fileCount: files.count, visibleCount: changes.visibleFiles.count, numberFormat: numberFormat),
-            included: included(count: includedCount, numberFormat: numberFormat),
+            included: files.isEmpty ? "" : included(count: includedCount, numberFormat: numberFormat),
             includeAll: changes.visibleIncludeAll,
             isIncludeAllEnabled: !files.isEmpty && !isCommitting && !isRebaseConflicts,
             filter: FilterMenuContent(filter: changes.filter, visibleFiles: changes.visibleFiles),
-            fileCount: files.count,
             repository: ObjectIdentifier(repository)
         )
     }
 }
 
-/// The header above the changed files.
+/// The header above the changed files, as high as the diff's.
 public struct ChangesHeader: View {
     private let content: ChangesHeaderContent
     private let onIncludeAll: (Bool) -> Void
@@ -115,7 +111,6 @@ public struct ChangesHeader: View {
                 isEnabled: content.isIncludeAllEnabled,
                 title: content.title,
                 titleFont: Self.titleFont,
-                titleCount: content.fileCount,
                 scope: content.repository,
                 onChange: onIncludeAll
             )
@@ -123,24 +118,18 @@ public struct ChangesHeader: View {
             .accessibilityValue(content.title)
             .layoutPriority(1)
             if !content.included.isEmpty {
-                // The count rolls as checkboxes change it (0.2 s).
                 Text(content.included)
                     .font(Typography.secondary)
                     .foregroundStyle(.text3)
                     .lineLimit(1)
-                    .contentTransition(.numericText())
-                    .motion(Motion.kindChange, value: content.included)
             }
             Spacer(minLength: Metrics.insetSmall)
             FilterMenu(content.filter, onChange: onFilterChange, onClear: onClearFilters)
         }
         .padding(.leading, FileRowMetrics.contentInset)
         .padding(.trailing, Metrics.insetSmall)
-        .frame(height: ChangesHeader.height)
+        .frame(height: Metrics.PaneHeader.height)
     }
-
-    /// The header row's height: a compact header row atop each column.
-    static let height: CGFloat = 40
 
     /// The count's font: the row font, semibold.
     static var titleFont: NSFont {

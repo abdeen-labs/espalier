@@ -14,7 +14,7 @@ pass.
      focus, and Settings' titlebar (no band or flash; the window buttons
      level with the pane name).
    - Motion: the sync button's width while it crossfades and its spinner
-     turning into the ring; the branch name fading in; Changes' hover layer,
+     turning into the ring; the branch name fading in; Changes' row hover,
      rows departing and arriving, the footer's bars moving the list, the
      operation bar (and a fast rebase never showing it); the diff's
      expansion, Unified ↔ Split, the staging crossfade; Simple ↔ Graph, a

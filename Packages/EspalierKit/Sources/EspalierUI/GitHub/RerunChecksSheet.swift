@@ -179,7 +179,7 @@ struct RerunChecksView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !content.rerunnable.isEmpty {
-                    VStack(alignment: .leading, spacing: Metrics.grid + 2) {
+                    VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
                         ForEach(content.rerunnable) { check in
                             HStack(spacing: Metrics.insetSmall) {
                                 CheckGlyph(kind: check.glyph)

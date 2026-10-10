@@ -1,10 +1,10 @@
 // History's simple list on a real repository: how it looks, in light and
 // dark, collapsed and with a merge expanded; its rows (merges' titles, the
-// "Not pushed" mark, file counts, tags, the time); the rail (the branch's
-// line, where it started, merges' stubs); selection both ways and which
-// selections are contiguous; expanding and collapsing a merge with the
-// keyboard, its chevron, and VoiceOver; the commit menu of a merge's
-// commit, from a right-click and ⇧F10; and where drops go.
+// unpushed arrow, file counts, tags, the time); the rail (the branch's line
+// with the graph's nodes, where it started, merges' stubs); selection both
+// ways and which selections are contiguous; expanding and collapsing a merge
+// with the keyboard, its chevron, and VoiceOver; the commit menu of a
+// merge's commit, from a right-click and ⇧F10; and where drops go.
 
 import AppKit
 @testable import EspalierCore
@@ -219,7 +219,7 @@ struct SimpleHistoryListTests {
         }
     }
 
-    @Test("the rail: the tip, unpushed rings and pushed dots in the branch's color, the base's color from where the branch started, and merges' stubs")
+    @Test("the rail: the graph's nodes (HEAD's bold ring, commits' rings, merges' small rings) in the branch's color, the base's color from where the branch started, and merges' stubs")
     func rail() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await makeSimpleListFixture()
@@ -233,14 +233,16 @@ struct SimpleHistoryListTests {
             }
 
             let tip = try rail("Show hourly forecast for the next 24 hours")
-            #expect(tip.node == .tip && tip.nodeColor == colors.line && tip.top == nil && tip.bottom == colors.line)
-            #expect(try rail("Add HourlyRow view").node == .unpushed)
+            #expect(tip.node == .head && tip.nodeColor == colors.line && tip.top == nil && tip.bottom == colors.line)
+            // Pushed or not, a commit is a ring: its title has the arrow.
+            #expect(try rail("Add HourlyRow view").node == .commit)
             let pushed = try rail("Add HourlyForecast model")
-            #expect(pushed.node == .pushed && pushed.top == colors.line && pushed.bottom == colors.line)
+            #expect(pushed.node == .commit && pushed.top == colors.line && pushed.bottom == colors.line)
 
             // The branch started at the merge of #209: the line runs into it
             // in the branch's color and leaves in main's.
             let start = try rail("Merge pull request #209 from jonas/widget-refresh")
+            #expect(start.node == .merge)
             #expect(start.top == colors.line && start.nodeColor == TrackPalette.trunk && start.bottom == TrackPalette.trunk)
             let widget = colors.mergedColor(branch: "jonas/widget-refresh", isPullRequest: true, merge: fixture.shas["Merge pull request #209 from jonas/widget-refresh"]!)
             #expect(start.stub == SimpleRail.SideLine(color: widget, fades: true))
@@ -257,7 +259,7 @@ struct SimpleHistoryListTests {
             fixture.update(controller)
             #expect(try rail("Merge pull request #209 from jonas/widget-refresh").stub?.fades == false)
             let first = try rail("Use the new widget sizes")
-            #expect(first.node == .merged(isUnpushed: false) && first.nodeColor == widget)
+            #expect(first.node == .merged && first.nodeColor == widget)
             #expect(first.top == TrackPalette.trunk && first.bottom == TrackPalette.trunk)
             #expect(first.side == SimpleRail.SideLine(color: widget, fades: false))
             #expect(try rail("Refresh the widget's timeline").side == SimpleRail.SideLine(color: widget, fades: true))
@@ -268,7 +270,7 @@ struct SimpleHistoryListTests {
         }
     }
 
-    @Test("after a push, the shown rows lose their unpushed marks and rings")
+    @Test("after a push, the shown rows lose their unpushed marks; their nodes stay rings")
     func pushClearsUnpushedMarks() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await makeSimpleListFixture()
@@ -288,14 +290,14 @@ struct SimpleHistoryListTests {
             }
             let unpushed = ["Show hourly forecast for the next 24 hours", "Add HourlyRow view"]
             #expect(try unpushed.allSatisfy { try cell($0).content.isUnpushed })
-            #expect(try node("Add HourlyRow view") == .unpushed)
+            #expect(try node("Add HourlyRow view") == .commit)
 
             _ = try await fixture.repository.sync.push()
             await fixture.settle()
             host.layoutSubtreeIfNeeded()
 
             #expect(try unpushed.allSatisfy { try !cell($0).content.isUnpushed })
-            #expect(try node("Add HourlyRow view") == .pushed)
+            #expect(try node("Add HourlyRow view") == .commit)
             await fixture.settle()
         }
     }
@@ -371,7 +373,7 @@ struct SimpleHistoryListTests {
 
             // The chevron: a click at the row's trailing end.
             let rect = controller.tableView.rect(ofRow: mergeRow)
-            #expect(controller.click(at: CGPoint(x: rect.maxX - Metrics.SimpleList.rowInset - 8, y: rect.midY)))
+            #expect(controller.click(at: CGPoint(x: rect.maxX - Metrics.CommitRow.selectionInset - Metrics.insetSmall, y: rect.midY)))
             fixture.update(controller)
             #expect(fixture.history.simpleRow(atRow: historyRow)?.merge?.isExpanded == true)
             // Elsewhere in the row, a click selects as usual.

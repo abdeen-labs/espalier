@@ -80,7 +80,7 @@ public struct AIModelPopover: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(choice.modelName), \(choice.providerName)")
                     if choice.id != choices.last?.id {
-                        Divider()
+                        Hairline()
                     }
                 }
             }

@@ -58,7 +58,7 @@ struct AmendUndoResetTests {
         let error = await #expect(throws: OperationError.self) { try await fixture.commit.startAmending() }
         let asked = try #require(confirmation(of: error))
         #expect(asked.kind == .rewritePublishedCommits)
-        #expect(asked.title == "Amend Requires a Force Push")
+        #expect(asked.title == "Amend Pushed Commit?")
         #expect(asked.confirmButton == "Amend Anyway")
         #expect(fixture.commit.amending == nil)
 

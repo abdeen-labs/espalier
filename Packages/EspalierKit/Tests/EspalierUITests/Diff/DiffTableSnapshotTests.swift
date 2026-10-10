@@ -1,9 +1,10 @@
 // Snapshots of the diff table: unified and split, included and excluded
-// lines with tinted numbers, wrapping, intra-line ranges, expansion
-// buttons, a missing newline, a conflicted file, text selection, and the
-// line cursor (syntax color is TreeSitterHighlighterSnapshotTests'). The
-// table draws its own colors: unified, split, and staging in light and
-// dark, the rest in light.
+// lines with tinted numbers and the handle, wrapping with a hanging indent,
+// unwrapped lines scrolled sideways, intra-line ranges, hunk headers with
+// their expansion buttons and checkbox, a missing newline, a conflicted
+// file, text selection, and the line cursor (syntax color is
+// TreeSitterHighlighterSnapshotTests'). The table draws its own colors:
+// unified, split, and staging in light and dark, the rest in light.
 
 import AppKit
 import EspalierCore
@@ -89,6 +90,15 @@ struct DiffTableSnapshotTests {
         }
     }
 
+    @Test("unwrapped lines scrolled sideways: the numbers stay")
+    func scrolledSideways() {
+        snapshot("table-scrolled", size: CGSize(width: 480, height: 160), {
+            DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: false)
+        }, configure: { controller in
+            controller.scrollText(by: controller.font.characterWidth * 12)
+        })
+    }
+
     @Test("expansion buttons")
     func expansion() {
         snapshot("table-expansion", size: CGSize(width: 720, height: 340)) {
@@ -103,28 +113,27 @@ struct DiffTableSnapshotTests {
         }
     }
 
-    @Test("conflict markers")
+    @Test("conflict markers, and ours, the common ancestor's, and theirs between them")
     func conflict() {
-        snapshot("table-conflict", size: CGSize(width: 520, height: 200)) {
-            DiffTableContent(fileID: "a", diff: DiffFixtures.conflict, detectsConflictMarkers: true)
+        snapshot("table-conflict", size: CGSize(width: 520, height: 240)) {
+            DiffTableContent(fileID: "a", diff: DiffFixtures.conflictWithBase, detectsConflictMarkers: true)
         }
     }
 
-    @Test("text selection and the line cursor")
+    @Test("text selected with the mouse: the line cursor doesn't show")
     func selection() {
         snapshot("table-selection", {
             DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange)
         }, configure: { controller in
-            controller.textSelection = DiffTextSelection(
-                column: .before,
-                anchor: DiffTextPosition(row: 3, offset: 12),
-                head: DiffTextPosition(row: 5, offset: 20)
-            )
-            controller.setCursor(row: 8, extending: false)
+            let start = controller.geometry.x(ofColumn: 12, side: .before, scrollX: 0)
+            let end = controller.geometry.x(ofColumn: 20, side: .before, scrollX: 0)
+            let drag = controller.mouseDown(at: point(controller, row: 3, x: start), clickCount: 1, extendsSelection: false)
+            controller.mouseDragged(to: point(controller, row: 5, x: end), drag: drag)
+            controller.mouseUp(drag: drag)
         })
     }
 
-    @Test("the focused table: the block handle under the pointer, a hovered button, the line cursor")
+    @Test("the focused table: a block under the pointer on its handle, a hovered expansion button, the line cursor")
     func focusedAndHovered() {
         for appearance in [SnapshotAppearance.light] {
             let size = CGSize(width: 720, height: 300)

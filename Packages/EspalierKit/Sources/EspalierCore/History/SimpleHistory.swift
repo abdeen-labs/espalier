@@ -1,7 +1,8 @@
 // History's simple mode.
 //
-// The simple list is the current branch's history following first parents, one
-// commit after another, ungrouped, so a merged branch is one row. Its commits
+// The simple list is the current branch's history following first parents (or,
+// in another branch's place, that branch's), one commit after another,
+// ungrouped, so a merged branch is one row. Its commits
 // are the history's rows, as the graph's are in Graph mode
 // (`HistoryModel.commit(atRow:)`; there's no uncommitted-work row). A merge's
 // row can expand to the commits it brought in, loaded on demand; the outline
@@ -167,14 +168,20 @@ enum SimpleUnpushedReference: Sendable, Hashable {
 /// What a simple list is loaded from, captured on the main actor from the
 /// refresh's state.
 struct SimpleHistorySource: Sendable, Equatable {
-    /// HEAD's commit; nil on an unborn branch.
+    /// The commit the line starts from: HEAD's, or the tip of the branch
+    /// shown instead (`HistoryModel.showBranch(ref:)`); nil on an unborn
+    /// branch.
     var head: String?
     /// The base branch with its commit; nil on a detached HEAD, an unborn
     /// branch, the base itself, or when there's no base.
     var base: Branch?
-    /// What rows are marked unpushed against; nil on a detached HEAD or an
-    /// unborn branch, or without a remote.
+    /// What rows are marked unpushed against; nil on a detached HEAD, an
+    /// unborn branch, a remote branch, or without a remote.
     var unpushedReference: SimpleUnpushedReference?
+    /// Whether the line is HEAD's. Another branch's line shows where it
+    /// started, but not the base's notice: Update merges into the current
+    /// branch.
+    var isHead = true
 }
 
 /// What the simple list knows besides its commits, counted with git.
@@ -192,10 +199,10 @@ struct SimpleHistoryFrame: Sendable, Equatable {
     /// when git couldn't count them.
     var ownCommitCount: Int?
 
-    /// The base's new commits, when there are any and the branch shares
-    /// history with it.
+    /// The base's new commits, when the line is HEAD's, the base has any,
+    /// and the branch shares history with it.
     var baseStatus: SimpleHistoryBaseStatus? {
-        guard let base = source.base, behindCount > 0, sharesHistoryWithBase else {
+        guard source.isHead, let base = source.base, behindCount > 0, sharesHistoryWithBase else {
             return nil
         }
         return SimpleHistoryBaseStatus(branch: base, newCommitCount: behindCount)

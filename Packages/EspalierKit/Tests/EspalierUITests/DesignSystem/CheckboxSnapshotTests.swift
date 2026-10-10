@@ -1,6 +1,7 @@
 // The checkbox and the centered message, in light and dark: the checkbox
 // off, on, and mixed, enabled, disabled, and titled, as AppKit draws it and
-// as SwiftUI does; and the centered message at a place's size and a pane's.
+// as SwiftUI does, and a SwiftUI toggle as one; and the centered message at
+// a place's size and a pane's.
 
 import AppKit
 import SwiftUI
@@ -38,6 +39,24 @@ struct CheckboxSnapshotTests {
         .padding(Metrics.insetLarge)
         .background(Color(espalier: Palette.background))
         assertSnapshot(view, named: "checkboxes", area: area)
+    }
+
+    @Test("toggles as checkboxes: off, on, disabled, a smaller font, and a title that wraps")
+    func checkboxToggles() {
+        let view = VStack(alignment: .leading, spacing: Metrics.insetMedium) {
+            Toggle("Initialize this repository with a README", isOn: .constant(false))
+            Toggle("Keep this code private", isOn: .constant(true))
+            Toggle("Delete it on the remote too", isOn: .constant(true))
+                .disabled(true)
+            Toggle("Always use AI when conflicts are detected", isOn: .constant(false))
+                .font(Typography.secondary)
+            Toggle("Also move the folder to the Trash, along with everything in it", isOn: .constant(false))
+                .frame(width: 220, alignment: .leading)
+        }
+        .toggleStyle(.checkboxMark)
+        .padding(Metrics.insetLarge)
+        .background(Color(espalier: Palette.background))
+        assertSnapshot(view, named: "checkboxToggles", area: area)
     }
 
     @Test("the centered message: a place's, with actions, and a pane's")

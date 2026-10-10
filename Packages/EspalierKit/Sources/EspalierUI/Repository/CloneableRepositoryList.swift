@@ -160,9 +160,9 @@ struct CloneableRepositoryListView: View {
             }
             .padding(.vertical, Metrics.SheetList.inset)
             .background(Color(espalier: Palette.background))
-            .clipShape(RoundedRectangle(cornerRadius: Metrics.SheetList.cornerRadius, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: Metrics.SheetList.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
                     .strokeBorder(.line, lineWidth: 1)
             )
         }

@@ -95,7 +95,7 @@ public enum ApplicationTheme: String, Sendable, Hashable, CaseIterable {
 ///
 /// Each property loads from its key when the model is made and writes its
 /// key when it changes; nothing is written until then, so a setting the user
-/// never changed follows the default. Values are written as native types.
+/// never changed follows the default. Values are written as property-list types.
 /// Settings that GitKit and the trampoline read themselves (the hooks
 /// environment, the external credential helper) go through their own
 /// functions, so a change takes effect at the next git command.

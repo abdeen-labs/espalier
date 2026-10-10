@@ -15,7 +15,7 @@ private func storedKeys(_ temporary: TemporaryDefaults) -> Set<String> {
 }
 
 /// Whether `value` is a Core Foundation Boolean rather than a number.
-private func isNativeBoolean(_ value: Any?) -> Bool {
+private func isPropertyListBoolean(_ value: Any?) -> Bool {
     guard let value else { return false }
     return CFGetTypeID(value as CFTypeRef) == CFBooleanGetTypeID()
 }
@@ -209,7 +209,7 @@ struct PreferencesTests {
             #expect(CodeTextSize(factor: 0.8) < .actual)
         }
 
-        @Test("grows, shrinks, and resets the stored size, as a native number under Espalier's key")
+        @Test("grows, shrinks, and resets the stored size, as a property-list number under Espalier's key")
         func preference() throws {
             let temporary = try TemporaryDefaults()
             defer { temporary.remove() }
@@ -220,7 +220,7 @@ struct PreferencesTests {
             #expect(preferences.codeTextSize.factor == 1.25)
             let stored = temporary.defaults.object(forKey: "diff-code-text-size")
             #expect(stored as? Double == 1.25)
-            #expect(!isNativeBoolean(stored))
+            #expect(!isPropertyListBoolean(stored))
             #expect(Preferences(store: PreferenceStore(temporary.defaults)).codeTextSize.factor == 1.25)
 
             preferences.decreaseCodeTextSize()
@@ -319,7 +319,7 @@ struct PreferencesTests {
             preferences.integrations.useCustomEditor = true
             preferences.integrations.selectedExternalEditor = "Zed"
             #expect(storedKeys(temporary) == ["shell", "custom-editor", "use-custom-editor", "externalEditor"])
-            #expect(isNativeBoolean(temporary.defaults.object(forKey: "use-custom-editor")))
+            #expect(isPropertyListBoolean(temporary.defaults.object(forKey: "use-custom-editor")))
             #expect(temporary.defaults.object(forKey: "externalEditor") as? String == "Zed")
             let stored = try #require(temporary.defaults.object(forKey: "custom-editor") as? String)
             #expect(try JSONDecoder().decode(CustomIntegration.self, from: Data(stored.utf8)) == editor)

@@ -1,6 +1,7 @@
-// The author's avatar in the summary field and its popover: who the commit is
-// by, and a warning when the email won't link the commit to the GitHub
-// account, or when the branch's rules don't allow it.
+// The author's avatar at the end of the commit message card's footer, and
+// its popover: who the commit is by, and a warning when the email won't
+// link the commit to the GitHub account, or when the branch's rules don't
+// allow it.
 
 import EspalierCore
 import GitHubKit
@@ -298,12 +299,11 @@ public struct AuthorIdentityPopover: View {
                 .font(Typography.secondary)
                 .foregroundStyle(.secondary)
             // The whole width: a private address is long.
-            Picker(Self.accountEmailsLabel, selection: $accountEmail) {
+            CapsulePopUp(Self.accountEmailsLabel, selection: $accountEmail, title: accountEmail) {
                 ForEach(content.accountEmails, id: \.self) { email in
                     Text(email).tag(email)
                 }
             }
-            .labelsHidden()
             .frame(maxWidth: .infinity)
             HStack {
                 Spacer(minLength: 0)

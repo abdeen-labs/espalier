@@ -126,12 +126,13 @@ enum CommitContextMenus {
     static func menuContent(shas: [String], clicked: Commit, repository: RepositoryModel) -> CommitMenuContent {
         let history = repository.history
         let isHead = repository.gitState.tip.sha == clicked.sha
-        let isHistory = history.mode == .history
+        // Amend and Undo rewrite the current branch: only in its history.
+        let isCurrentBranch = history.showsCurrentBranchHistory
         return CommitMenuContent(
             shas: shas.isEmpty ? [clicked.sha] : shas,
             clickedSHA: clicked.sha,
-            canAmend: isHead && isHistory && repository.commit.canStartAmending,
-            canUndo: isHistory && repository.commit.undoableCommitSHA == clicked.sha,
+            canAmend: isHead && isCurrentBranch && repository.commit.canStartAmending,
+            canUndo: isCurrentBranch && repository.commit.undoableCommitSHA == clicked.sha,
             tags: history.refs(at: clicked.sha).filter { $0.kind == .tag }.map(\.name)
         )
     }

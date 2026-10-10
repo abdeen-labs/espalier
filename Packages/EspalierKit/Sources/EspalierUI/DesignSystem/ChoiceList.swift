@@ -1,8 +1,9 @@
 // A choice between a few options, each with a line about it: rows with
-// radius 11, the chosen one in `accent soft` with a filled radio mark.
+// radius 9, the chosen one in `accent soft` with a filled radio mark.
 // Sheets use it where a radio group would list choices with descriptions
 // (Switch Branch's decision, New Branch's base). The up and down arrows move
-// the choice, and VoiceOver sees a native radio group.
+// the choice, and VoiceOver sees a radio group whose buttons have the lines
+// as their hints.
 
 import AppKit
 import SwiftUI
@@ -30,6 +31,12 @@ public struct ChoiceListItem<Value: Hashable>: Identifiable {
     }
 
     public var id: Value { value }
+
+    /// The line under the title as plain text, VoiceOver's hint for the
+    /// choice; empty without one.
+    var accessibilityHint: String {
+        description.map { String($0.characters) } ?? ""
+    }
 }
 
 /// Choices as rows: a radio mark, the title, and the line under it; the
@@ -48,12 +55,16 @@ public struct ChoiceList<Value: Hashable>: View {
     }
 
     public var body: some View {
+        let markOffset = Metrics.RadioList.markBaselineOffset
         VStack(alignment: .leading, spacing: Metrics.ChoiceList.spacing) {
             ForEach(choices) { choice in
                 let isSelected = choice.value == selection
-                HStack(alignment: .top, spacing: Metrics.ChoiceList.markSpacing) {
+                HStack(alignment: .firstTextBaseline, spacing: Metrics.ChoiceList.markSpacing) {
                     RadioMark(isSelected: isSelected)
-                        .padding(.top, 1)
+                        .alignmentGuide(.firstTextBaseline) { dimensions in
+                            // The mark's center on the title's middle.
+                            dimensions[VerticalAlignment.center] + markOffset
+                        }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(choice.title)
                             .font(Typography.row.weight(.medium))
@@ -70,14 +81,14 @@ public struct ChoiceList<Value: Hashable>: View {
                 .padding(.horizontal, Metrics.ChoiceList.horizontalPadding)
                 .padding(.vertical, Metrics.ChoiceList.verticalPadding)
                 .background(
-                    RoundedRectangle(cornerRadius: Metrics.Radius.pickerRow, style: .continuous)
+                    RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
                         .fill(isSelected ? AnyShapeStyle(.accentSoft) : AnyShapeStyle(.clear))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: Metrics.Radius.pickerRow, style: .continuous)
+                    RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
                         .strokeBorder(isSelected ? AnyShapeStyle(Color.accentColor.opacity(0.35)) : AnyShapeStyle(.line), lineWidth: 1)
                 )
-                .contentShape(RoundedRectangle(cornerRadius: Metrics.Radius.pickerRow, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
                 .onTapGesture {
                     if isEnabled {
                         selection = choice.value
@@ -85,10 +96,10 @@ public struct ChoiceList<Value: Hashable>: View {
                 }
             }
         }
-        .opacity(isEnabled ? 1 : 0.45)
-        // Focus only with keyboard navigation on, as native radio buttons,
-        // with a ring in the rows' shape.
-        .contentShape(.focusEffect, RoundedRectangle(cornerRadius: Metrics.Radius.pickerRow, style: .continuous))
+        .opacity(isEnabled ? 1 : Palette.disabledOpacity)
+        // Focus only with keyboard navigation on, with a ring in the rows'
+        // shape.
+        .contentShape(.focusEffect, RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
         .focusable(interactions: .activate)
         .onKeyPress(.upArrow) {
             move(by: -1)
@@ -99,7 +110,9 @@ public struct ChoiceList<Value: Hashable>: View {
         .accessibilityRepresentation {
             Picker(label, selection: $selection) {
                 ForEach(choices) { choice in
-                    Text(choice.title).tag(choice.value)
+                    Text(choice.title)
+                        .accessibilityHint(choice.accessibilityHint)
+                        .tag(choice.value)
                 }
             }
             .pickerStyle(.radioGroup)
@@ -130,8 +143,8 @@ public struct RadioMark: View {
 
     public var body: some View {
         ZStack {
-            // As a native radio button's: the fill crossfades and the dot
-            // fades and scales in over 0.15 s.
+            // The fill crossfades and the dot fades and scales in over
+            // 0.15 s.
             Circle()
                 .fill(isSelected ? Color.accentColor : Color.quiet)
             if isSelected {

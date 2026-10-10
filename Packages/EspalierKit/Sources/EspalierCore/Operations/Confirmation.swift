@@ -70,7 +70,7 @@ extension Confirmation {
         Confirmation(
             kind: .removeRepository,
             details: .repository(name: name, path: path),
-            title: "Remove Repository",
+            title: "Remove Repository?",
             message: "Remove \u{201C}\(name)\u{201D} from Espalier?",
             confirmButton: "Remove"
         )
@@ -169,10 +169,12 @@ extension Confirmation {
     ///   "Reorder", or "Amend".
     public static func rewritePublishedCommits(operation: String) -> Confirmation {
         let lowercased = operation.lowercased()
+        // Amending rewrites one commit; the others, several.
+        let commits = operation == "Amend" ? "Commit" : "Commits"
         return Confirmation(
             kind: .rewritePublishedCommits,
             details: .operation(operation),
-            title: "\(operation) Requires a Force Push",
+            title: "\(operation) Pushed \(commits)?",
             message: "This branch has already been pushed. After the \(lowercased), you'll need to force push it, which rewrites its history on the remote and may cause problems for others working on it.",
             confirmButton: "\(operation) Anyway"
         )
@@ -242,7 +244,7 @@ extension Confirmation {
         return Confirmation(
             kind: .commitWithUnknownCoAuthors,
             details: .authors(usernames),
-            title: "Unknown Co-Authors",
+            title: "Commit Without Unknown Co-Authors?",
             message: message,
             confirmButton: "Commit Anyway"
         )
@@ -253,7 +255,7 @@ extension Confirmation {
         Confirmation(
             kind: .commitOversizedFiles,
             details: .files(paths),
-            title: "Files Too Large",
+            title: "Commit Large Files?",
             message: "These files are larger than 100 MB:\n\nIf you commit them, you won't be able to push this repository to GitHub.com. Leave them out of the commit, or store large files with Git LFS.",
             confirmButton: "Commit Anyway"
         )
@@ -285,7 +287,7 @@ extension Confirmation {
         Confirmation(
             kind: .removeWorktree,
             details: .worktree(name: name, path: path),
-            title: "Delete Worktree",
+            title: "Delete Worktree?",
             message: "Are you sure you want to delete the worktree \(name)?",
             confirmButton: "Delete"
         )
@@ -316,7 +318,7 @@ extension Confirmation {
         return Confirmation(
             kind: .deleteBranch,
             details: .deleteBranch(name: name, existsOnRemote: existsOnRemote),
-            title: "Delete Branch",
+            title: "Delete Branch?",
             message: "Delete the branch \(name)?\n\nThis can't be undone.\(remote)",
             confirmButton: "Delete"
         )
@@ -327,7 +329,7 @@ extension Confirmation {
         Confirmation(
             kind: .deleteRemoteBranch,
             details: .branch(name),
-            title: "Delete Remote Branch",
+            title: "Delete Remote Branch?",
             message: "Delete the remote branch \(name)?\n\nThis can't be undone. The branch doesn't exist on this Mac, and deleting it may affect others working on it.",
             confirmButton: "Delete"
         )
@@ -338,7 +340,7 @@ extension Confirmation {
         Confirmation(
             kind: .deleteTag,
             details: .tag(name),
-            title: "Delete Tag",
+            title: "Delete Tag?",
             message: "Are you sure you want to delete the tag \(name)?",
             confirmButton: "Delete"
         )

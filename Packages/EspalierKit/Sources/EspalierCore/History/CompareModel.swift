@@ -11,11 +11,16 @@ import os
 
 private let logger = Log.logger(category: "history")
 
-/// How the compared branch's commits come into the current branch.
-public enum CompareMethod: Sendable, Hashable, CaseIterable {
+/// How another branch's commits come into the current branch: Compare's
+/// call to action and the Integrate sheet.
+public enum CompareMethod: String, Sendable, Hashable, CaseIterable, Identifiable {
     case merge
     case squashMerge
     case rebase
+
+    public var id: String {
+        rawValue
+    }
 
     /// The option's label.
     public var label: String {
@@ -97,16 +102,6 @@ public final class CompareModel {
     init() {}
 
     // MARK: Copy
-
-    /// The Behind tab's title ("Behind (n)").
-    public var behindTitle: String {
-        "Behind (\(formatNumber(Double(aheadBehind?.behind ?? 0))))"
-    }
-
-    /// The Ahead tab's title ("Ahead (n)").
-    public var aheadTitle: String {
-        "Ahead (\(formatNumber(Double(aheadBehind?.ahead ?? 0))))"
-    }
 
     /// The message for an empty list of commits in the current direction.
     public var emptyListMessage: String? {

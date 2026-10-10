@@ -1,8 +1,8 @@
 // Espalier's capsule buttons. Three styles at four heights, from the control
-// size: quiet (the quiet fill and shadow, medium weight), prominent (the
-// deeper accent, white semibold; one per area), and secondary (the soft
-// fill, no shadow: Cancel in sheets, Undo). The sync button's split variant
-// adds a chevron menu.
+// size: quiet (the quiet fill, ring, and small shadow, medium weight),
+// prominent (the deeper accent, white semibold; one per area), and
+// secondary (the soft fill, no shadow: Cancel in sheets, Undo). The sync
+// button's split variant adds a chevron menu.
 
 import AppKit
 import SwiftUI
@@ -27,7 +27,7 @@ public struct CapsuleButtonStyle: ButtonStyle {
 }
 
 extension ButtonStyle where Self == CapsuleButtonStyle {
-    /// The quiet fill and shadow, medium weight.
+    /// The quiet fill, ring, and small shadow, medium weight.
     public static var quiet: CapsuleButtonStyle { CapsuleButtonStyle(.quiet) }
     /// The deeper accent with white semibold text: one per area.
     public static var prominent: CapsuleButtonStyle { CapsuleButtonStyle(.prominent) }
@@ -70,7 +70,7 @@ struct CapsuleButtonAppearance {
         kind == .prominent ? .white : .text
     }
 
-    /// The symbol's color: secondary on quiet and secondary capsules.
+    /// The symbol's color: secondary text on quiet and secondary capsules.
     var symbolColor: Color {
         kind == .prominent ? .white : .text2
     }
@@ -100,9 +100,9 @@ struct CapsuleButtonAppearance {
         }
     }
 
-    /// A disabled capsule fades to 45%.
-    var opacity: Double {
-        isEnabled ? 1 : 0.45
+    /// A disabled capsule fades, as every disabled control does.
+    var opacity: CGFloat {
+        isEnabled ? 1 : Palette.disabledOpacity
     }
 }
 
@@ -141,13 +141,19 @@ struct CapsuleButtonBody<Label: View>: View {
     }
 }
 
+extension Metrics.ControlHeight {
+    /// Between a capsule's symbol and its title (buttons, fields, the
+    /// location control).
+    public static let symbolSpacing: CGFloat = 7
+}
+
 /// A capsule's label: the symbol (in the capsule's symbol color) 7 points
 /// before the title.
 struct CapsuleLabelStyle: LabelStyle {
     let symbolColor: Color
 
     func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 7) {
+        HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
             configuration.icon
                 .foregroundStyle(symbolColor)
                 .imageScale(.small)
@@ -288,7 +294,7 @@ private struct IconButtonBody<Label: View>: View {
                     .hoverMotion(isHovered)
             )
             .contentShape(Rectangle())
-            .opacity(isEnabled ? 1 : 0.45)
+            .opacity(isEnabled ? 1 : Palette.disabledOpacity)
             .onHover { isHovered = $0 }
     }
 }

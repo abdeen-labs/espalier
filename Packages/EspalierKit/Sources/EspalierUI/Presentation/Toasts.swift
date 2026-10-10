@@ -1,7 +1,8 @@
 // Success outcomes as toasts. Their copy is the state layer's; they last 5 s,
-// or 15 s with Undo, counted once the pointer leaves the toast. While a
-// toast with Undo shows, Edit ▸ Undo (⌘Z) runs it too, and its button shows
-// the key (the window's undo manager; WindowPresenter).
+// or 15 s with Undo, counted once the pointer leaves the toast, and the
+// close button dismisses one at once. While a toast with Undo shows, Edit ▸
+// Undo (⌘Z) runs it too, and its button shows the key (the window's undo
+// manager; WindowPresenter).
 
 import AppKit
 import SwiftUI
@@ -72,7 +73,8 @@ enum ToastAnnouncer {
     }
 }
 
-/// One toast's capsule.
+/// One toast's capsule: the symbol, the message, Undo when there is one,
+/// and the close button, spaced as the operation capsule.
 public struct ToastView: View {
     private let content: ToastContent
     private let onUndo: () -> Void
@@ -85,9 +87,10 @@ public struct ToastView: View {
     }
 
     public var body: some View {
-        HStack(spacing: Metrics.insetMedium) {
+        HStack(spacing: Metrics.insetSmall) {
             Image(systemName: content.systemImage)
-                .font(.system(size: 15))
+                .font(Typography.row)
+                .imageScale(.large)
                 .foregroundStyle(Color(espalier: Palette.success))
                 .accessibilityHidden(true)
             Text(content.message)
@@ -97,7 +100,7 @@ public struct ToastView: View {
                 .fixedSize(horizontal: false, vertical: true)
             if let undoTitle = content.undoTitle {
                 Button(action: onUndo) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: Metrics.insetSmall) {
                         Label(undoTitle, systemImage: "arrow.uturn.backward")
                         if let shortcut = content.undoShortcut {
                             KeyCap(shortcut)
@@ -107,15 +110,20 @@ public struct ToastView: View {
                 .buttonStyle(.secondary)
                 .controlSize(.regular)
             }
+            Button(action: onClose) {
+                Label("Close", systemImage: "xmark")
+            }
+            .buttonStyle(.icon)
+            .help("Close")
         }
-        .padding(.leading, Metrics.insetMedium + 2)
-        .padding(.trailing, content.undoTitle == nil ? Metrics.insetMedium + 2 : Metrics.insetSmall)
+        .padding(.leading, Metrics.insetMedium)
+        .padding(.trailing, Metrics.insetSmall)
         .padding(.vertical, Metrics.insetSmall)
         .frame(minHeight: Metrics.Floating.height)
         .frame(maxWidth: Metrics.Floating.maximumWidth)
         .floatingSurface()
+        // One element: the message, with Undo and Close as its actions.
         .accessibilityElement(children: .combine)
-        .accessibilityAction(named: "Dismiss", onClose)
     }
 }
 

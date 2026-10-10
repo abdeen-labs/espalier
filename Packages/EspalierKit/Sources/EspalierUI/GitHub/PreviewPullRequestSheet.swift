@@ -1,6 +1,7 @@
-// Preview Pull Request (⌥⌘P), a large sheet that `pullRequestPreview` loads:
-// "Merge 3 commits into <base> from <branch>." with the base branch to
-// choose (`BranchPicker`, limited to branches on the pull request's remote),
+// Preview Pull Request (⌥⌘P), a large resizable sheet that
+// `pullRequestPreview` loads: "Merge 3 commits into <base> from <branch>."
+// with the base branch to choose (`BranchPicker`, limited to branches on
+// the pull request's remote),
 // the lines added and removed, the files beside the selected file's diff
 // from the merge base (with the pull request diff's own Hide Whitespace
 // setting), whether it merges cleanly, and Create Pull Request (or View Pull
@@ -89,7 +90,14 @@ struct PreviewPullRequestSheet: View {
             .padding(.horizontal, Metrics.Sheet.padding)
             .padding(.vertical, Metrics.insetMedium)
         }
-        .frame(width: 960, height: 640)
+        .frame(
+            minWidth: Metrics.Sheet.previewPullRequestMinimumSize.width,
+            idealWidth: Metrics.Sheet.previewPullRequestSize.width,
+            maxWidth: .infinity,
+            minHeight: Metrics.Sheet.previewPullRequestMinimumSize.height,
+            idealHeight: Metrics.Sheet.previewPullRequestSize.height,
+            maxHeight: .infinity
+        )
         .background(Color(espalier: Palette.background))
         .task {
             await repository.history.previewPullRequest()
@@ -123,20 +131,14 @@ struct PreviewPullRequestSheet: View {
                 .font(Typography.sheetTitle)
                 .foregroundStyle(.text)
                 .accessibilityAddTraits(.isHeader)
-            HStack(spacing: Metrics.grid + 2) {
+            HStack(spacing: Metrics.insetSmall) {
                 Text("Merge \(content.commits) into")
                     .foregroundStyle(.text2)
                 Button {
                     isPickingBase = true
                 } label: {
-                    HStack(spacing: Metrics.CapsuleMenu.chevronSpacing) {
-                        Text("base: \(content.baseBranch ?? "Choose…")")
-                            .font(Typography.secondary.monospaced())
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: Metrics.CapsuleMenu.chevronSize, weight: .semibold))
-                            .opacity(0.6)
-                            .accessibilityHidden(true)
-                    }
+                    MenuCapsuleLabel("base: \(content.baseBranch ?? "Choose…")")
+                        .font(Typography.secondary.monospaced())
                 }
                 .buttonStyle(.quiet)
                 .controlSize(.small)
@@ -269,6 +271,12 @@ struct PreviewPullRequestSheet: View {
             PreviewPullRequestSheet(repository: repository)
         }
     }
+}
+
+extension Metrics.Sheet {
+    /// Preview Pull Request: as it opens, and the smallest it resizes to.
+    public static let previewPullRequestSize = CGSize(width: 960, height: 640)
+    public static let previewPullRequestMinimumSize = CGSize(width: 760, height: 480)
 }
 
 /// The footer: whether it merges cleanly, then the buttons.

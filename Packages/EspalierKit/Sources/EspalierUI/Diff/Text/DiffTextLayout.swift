@@ -2,12 +2,14 @@
 // counted in columns: tabs advance to the next tab stop, East Asian wide
 // characters count as 2, combining marks and other zero-width characters as
 // 0, and everything else as 1. Wrapping breaks at exactly the columns that
-// fit, so a row's height is ⌈columns ÷ columns per line⌉ × line height,
-// computed for every row on a width change without measuring any text. Lines
-// with tabs or wide characters that need wrapping are laid out scalar by
-// scalar (a wide character that doesn't fit moves to the next line; a tab
-// stops at the end of a line). Offsets are UTF-16 code units, as NSString's
-// are.
+// fit, and a wrapped line's continuation lines hang under its first
+// character that isn't a space or tab, two columns further in (at most
+// halfway across), so a row's height is 1 + ⌈(columns − columns per line) ÷
+// (columns per line − indent)⌉ lines, computed for every row on a width
+// change without measuring any text. Lines with tabs or wide characters
+// that need wrapping are laid out scalar by scalar (a wide character that
+// doesn't fit moves to the next line; a tab stops at the end of a line).
+// Offsets are UTF-16 code units, as NSString's are.
 
 import Foundation
 import GitKit
@@ -80,36 +82,54 @@ nonisolated struct LineTextInfo: Sendable, Equatable {
     /// Whether every scalar is printable ASCII (one column, one code unit),
     /// so columns and offsets are the same.
     var isSimple: Bool
+    /// The columns of the content's leading spaces and tabs.
+    var leadingColumns: Int
+
+    /// How much further in than the leading spaces and tabs a wrapped
+    /// line's continuation lines start.
+    static let continuationIndent = 2
 
     static let empty = LineTextInfo(utf16Count: 0, columns: 0, isSimple: true)
 
-    init(utf16Count: Int, columns: Int, isSimple: Bool) {
+    init(utf16Count: Int, columns: Int, isSimple: Bool, leadingColumns: Int = 0) {
         self.utf16Count = utf16Count
         self.columns = columns
         self.isSimple = isSimple
+        self.leadingColumns = leadingColumns
     }
 
     /// Measures `text`, skipping its first scalar (a diff line's marker)
     /// when asked.
     init(_ text: String, skippingFirstScalar: Bool, tabSize: Int) {
         // The fast path: printable ASCII, one byte per column.
-        let fast = text.utf8.withContiguousStorageIfAvailable { bytes -> Int? in
+        let fast = text.utf8.withContiguousStorageIfAvailable { bytes -> (count: Int, leading: Int)? in
             let start = skippingFirstScalar && !bytes.isEmpty ? 1 : 0
+            var leading = 0
+            var isLeading = true
             for index in start..<bytes.count {
                 let byte = bytes[index]
                 if byte >= 0x7F || byte < 0x20 {
                     return nil
                 }
+                if isLeading {
+                    if byte == 0x20 {
+                        leading += 1
+                    } else {
+                        isLeading = false
+                    }
+                }
             }
-            return bytes.count - start
+            return (bytes.count - start, leading)
         }
-        if let count = fast ?? nil {
-            self.init(utf16Count: count, columns: count, isSimple: true)
+        if let measured = fast ?? nil {
+            self.init(utf16Count: measured.count, columns: measured.count, isSimple: true, leadingColumns: measured.leading)
             return
         }
         var utf16Count = 0
         var columns = 0
         var isSimple = true
+        var leadingColumns = 0
+        var isLeading = true
         var isFirst = skippingFirstScalar
         for scalar in text.unicodeScalars {
             if isFirst {
@@ -120,14 +140,28 @@ nonisolated struct LineTextInfo: Sendable, Equatable {
             if scalar == "\t" {
                 isSimple = false
                 columns += tabSize - columns % tabSize
-                continue
+            } else {
+                if scalar.value < 0x20 || scalar.value >= 0x7F {
+                    isSimple = false
+                }
+                columns += DisplayColumns.width(of: scalar)
             }
-            if scalar.value < 0x20 || scalar.value >= 0x7F {
-                isSimple = false
+            if isLeading {
+                if scalar == " " || scalar == "\t" {
+                    leadingColumns = columns
+                } else {
+                    isLeading = false
+                }
             }
-            columns += DisplayColumns.width(of: scalar)
         }
-        self.init(utf16Count: utf16Count, columns: columns, isSimple: isSimple)
+        self.init(utf16Count: utf16Count, columns: columns, isSimple: isSimple, leadingColumns: leadingColumns)
+    }
+
+    /// The column a wrapped line's continuation lines start at: under its
+    /// first character that isn't a space or tab, `continuationIndent`
+    /// further in, and no more than halfway across.
+    func hangingIndent(columnsPerLine: Int) -> Int {
+        min(leadingColumns + Self.continuationIndent, max(columnsPerLine, 1) / 2)
     }
 
     /// The number of visual lines at `columnsPerLine` columns, when that
@@ -141,7 +175,8 @@ nonisolated struct LineTextInfo: Sendable, Equatable {
         guard isSimple else {
             return nil
         }
-        return (columns + columnsPerLine - 1) / columnsPerLine
+        let rest = columnsPerLine - hangingIndent(columnsPerLine: columnsPerLine)
+        return 1 + (columns - columnsPerLine + rest - 1) / rest
     }
 }
 
@@ -151,7 +186,8 @@ nonisolated struct LineLayout: Sendable {
     struct Run: Sendable, Equatable {
         /// The code units, in the content.
         var range: Range<Int>
-        /// The run's first column in its visual line.
+        /// The run's first column in its visual line (a continuation line's
+        /// count from the line's left edge, past the hanging indent).
         var column: Int
         /// Whether every scalar of the run is printable ASCII, so it can be
         /// drawn as one line of text (each code unit one column).
@@ -159,6 +195,9 @@ nonisolated struct LineLayout: Sendable {
     }
 
     let columnsPerLine: Int
+    /// The column continuation lines start at: the line's hanging indent
+    /// (0 when it doesn't wrap).
+    let indent: Int
     let utf16Count: Int
     let isSimple: Bool
     /// The first code unit of each visual line.
@@ -166,9 +205,9 @@ nonisolated struct LineLayout: Sendable {
     /// The column after the last character of each visual line (laid-out
     /// lines only).
     private var lineEndColumns: [Int] = []
-    /// Each code unit's column in its visual line (a trailing surrogate
-    /// repeats its lead's) and its width (0 for a trailing surrogate);
-    /// laid-out lines only.
+    /// Each code unit's column in its visual line, from its left edge (a
+    /// trailing surrogate repeats its lead's), and its width (0 for a
+    /// trailing surrogate); laid-out lines only.
     private var columnOfUnit: [Int32] = []
     private var widthOfUnit: [Int8] = []
     /// The code units that are tabs.
@@ -180,10 +219,13 @@ nonisolated struct LineLayout: Sendable {
     }
 
     /// Lays out `text` (skipping a diff line's marker when asked) at
-    /// `columnsPerLine` columns per visual line (`Int.max` not to wrap).
+    /// `columnsPerLine` columns per visual line (`Int.max` not to wrap),
+    /// its continuation lines starting at its hanging indent.
     init(_ text: String, skippingFirstScalar: Bool, info: LineTextInfo, tabSize: Int, columnsPerLine: Int) {
         let columnsPerLine = max(columnsPerLine, 1)
         self.columnsPerLine = columnsPerLine
+        let indent = info.columns > columnsPerLine ? info.hangingIndent(columnsPerLine: columnsPerLine) : 0
+        self.indent = indent
         utf16Count = info.utf16Count
         isSimple = info.isSimple
         if info.isSimple {
@@ -191,7 +233,7 @@ nonisolated struct LineLayout: Sendable {
             var start = columnsPerLine
             while start < info.utf16Count {
                 starts.append(start)
-                start += columnsPerLine
+                start += columnsPerLine - indent
             }
             lineStarts = starts
             return
@@ -203,6 +245,8 @@ nonisolated struct LineLayout: Sendable {
         var starts = [0]
         var endColumns: [Int] = []
         var column = 0
+        // The column the visual line being laid out starts at.
+        var lineStart = 0
         var offset = 0
         var isFirst = skippingFirstScalar
         for scalar in text.unicodeScalars {
@@ -212,16 +256,17 @@ nonisolated struct LineLayout: Sendable {
             }
             let isTab = scalar == "\t"
             var width = isTab ? tabSize - column % tabSize : DisplayColumns.width(of: scalar)
-            if width > 0, column > 0, column + width > columnsPerLine {
+            if width > 0, column > lineStart, column + width > columnsPerLine {
                 if isTab, column < columnsPerLine {
                     // A tab stops at the end of the line.
                     width = columnsPerLine - column
                 } else {
                     endColumns.append(column)
                     starts.append(offset)
-                    column = 0
+                    column = indent
+                    lineStart = indent
                     if isTab {
-                        width = min(tabSize, columnsPerLine)
+                        width = max(min(tabSize - column % tabSize, columnsPerLine - column), 1)
                     }
                 }
             }
@@ -253,6 +298,12 @@ nonisolated struct LineLayout: Sendable {
         return lineStarts[line]..<end
     }
 
+    /// The column a visual line starts at: 0 for the first, the hanging
+    /// indent for the rest.
+    func startColumn(ofVisualLine line: Int) -> Int {
+        line > 0 ? indent : 0
+    }
+
     /// The visual line holding a code unit offset; the end of the content is
     /// on the last line, and an offset where a line wraps starts the next.
     func visualLine(of offset: Int) -> Int {
@@ -260,7 +311,11 @@ nonisolated struct LineLayout: Sendable {
             return lineStarts.count - 1
         }
         if isSimple {
-            return min(max(offset, 0) / columnsPerLine, lineStarts.count - 1)
+            let offset = max(offset, 0)
+            guard offset >= columnsPerLine else {
+                return 0
+            }
+            return min(1 + (offset - columnsPerLine) / (columnsPerLine - indent), lineStarts.count - 1)
         }
         var low = 0
         var high = lineStarts.count - 1
@@ -280,7 +335,7 @@ nonisolated struct LineLayout: Sendable {
     func column(of offset: Int) -> Int {
         let line = visualLine(of: offset)
         if isSimple {
-            return min(offset, utf16Count) - lineStarts[line]
+            return min(offset, utf16Count) - lineStarts[line] + startColumn(ofVisualLine: line)
         }
         if offset >= utf16Count {
             return lineEndColumns[lineEndColumns.count - 1]
@@ -291,7 +346,10 @@ nonisolated struct LineLayout: Sendable {
     /// The column after the last character of a visual line.
     func endColumn(ofVisualLine line: Int) -> Int {
         if isSimple {
-            return range(ofVisualLine: line).count
+            guard line >= 0, line < lineStarts.count else {
+                return 0
+            }
+            return range(ofVisualLine: line).count + startColumn(ofVisualLine: line)
         }
         guard line >= 0, line < lineEndColumns.count else {
             return 0
@@ -306,7 +364,9 @@ nonisolated struct LineLayout: Sendable {
         let line = min(max(line, 0), lineStarts.count - 1)
         let range = range(ofVisualLine: line)
         if isSimple {
-            let target = rounding ? Int(max(column, 0).rounded()) : Int(max(column, 0).rounded(.down))
+            // Columns in the hanging indent are the line's start.
+            let column = max(column - Double(startColumn(ofVisualLine: line)), 0)
+            let target = rounding ? Int(column.rounded()) : Int(column.rounded(.down))
             return min(range.lowerBound + target, range.upperBound)
         }
         var offset = range.lowerBound
@@ -338,7 +398,7 @@ nonisolated struct LineLayout: Sendable {
             return []
         }
         if isSimple {
-            return [Run(range: range, column: 0, isSimple: true)]
+            return [Run(range: range, column: startColumn(ofVisualLine: line), isSimple: true)]
         }
         var runs: [Run] = []
         var runStart = range.lowerBound

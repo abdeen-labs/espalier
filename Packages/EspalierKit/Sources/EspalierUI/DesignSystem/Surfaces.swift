@@ -1,15 +1,20 @@
 // Espalier's flat surfaces and shadows. Surfaces are opaque; only things
-// that float (toasts, the operation capsule, cards over content) cast a
-// shadow. No glass or materials of Espalier's own.
+// that float (toasts, the operation capsule, popovers, sheets) cast a
+// shadow, and quiet capsule buttons a small one, as push buttons do. Cards
+// in a pane have the ring alone. No glass or materials of Espalier's own.
 
 import AppKit
 import SwiftUI
 
 /// How far a surface stands off what's behind it.
 nonisolated public enum Elevation: Sendable, CaseIterable {
-    /// Quiet controls and cards: a 1-point ring and a small shadow.
+    /// Cards in a pane: the 1-point ring, no shadow.
+    case card
+    /// Quiet capsule controls: the ring and a small shadow, as push
+    /// buttons have.
     case quiet
-    /// Floating cards and toasts: the ring and a soft, wide shadow.
+    /// Things that float (toasts, the operation capsule): the ring and a
+    /// soft, wide shadow.
     case floating
     /// Sheets.
     case sheet
@@ -17,7 +22,7 @@ nonisolated public enum Elevation: Sendable, CaseIterable {
     /// The 1-point ring around the shape: black 8% (white 9% in dark).
     public var ring: NSColor? {
         switch self {
-        case .quiet, .floating:
+        case .card, .quiet, .floating:
             .espalierDynamic(
                 light: NSColor.black.withAlphaComponent(0.08), dark: NSColor.white.withAlphaComponent(0.09),
                 highContrastLight: NSColor.black.withAlphaComponent(0.3), highContrastDark: NSColor.white.withAlphaComponent(0.35)
@@ -27,9 +32,11 @@ nonisolated public enum Elevation: Sendable, CaseIterable {
         }
     }
 
-    /// The shadow's color.
-    public var shadowColor: NSColor {
+    /// The shadow's color; nil for none.
+    public var shadowColor: NSColor? {
         switch self {
+        case .card:
+            nil
         case .quiet:
             .espalierDynamic(light: NSColor.black.withAlphaComponent(0.08), dark: NSColor.black.withAlphaComponent(0.4))
         case .floating:
@@ -42,6 +49,7 @@ nonisolated public enum Elevation: Sendable, CaseIterable {
     /// The shadow's blur (CSS's blur radius, so SwiftUI's radius is half).
     public func blur(dark: Bool) -> CGFloat {
         switch self {
+        case .card: 0
         case .quiet: 3
         case .floating: dark ? 28 : 24
         case .sheet: 60
@@ -51,6 +59,7 @@ nonisolated public enum Elevation: Sendable, CaseIterable {
     /// The shadow's offset downward.
     public func offset(dark: Bool) -> CGFloat {
         switch self {
+        case .card: 0
         case .quiet: 1
         case .floating: dark ? 10 : 8
         case .sheet: 24
@@ -69,11 +78,11 @@ struct SurfaceModifier<S: InsettableShape>: ViewModifier {
         let dark = colorScheme == .dark
         content
             .background {
-                if let elevation {
+                if let elevation, let shadowColor = elevation.shadowColor {
                     shape
                         .fill(fill)
                         .shadow(
-                            color: Color(nsColor: elevation.shadowColor),
+                            color: Color(nsColor: shadowColor),
                             radius: elevation.blur(dark: dark) / 2,
                             y: elevation.offset(dark: dark)
                         )
@@ -105,9 +114,10 @@ extension View {
         surface(.quiet, elevation: .floating, in: shape)
     }
 
-    /// A card: the quiet fill with the quiet ring, radius 14.
+    /// A card in a pane: the quiet fill with the ring and no shadow, radius
+    /// 14.
     public func cardSurface(cornerRadius: CGFloat = Metrics.Radius.card) -> some View {
-        surface(.quiet, elevation: .quiet, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        surface(.quiet, elevation: .card, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 

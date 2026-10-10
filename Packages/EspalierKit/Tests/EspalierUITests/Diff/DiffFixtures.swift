@@ -120,8 +120,8 @@ enum DiffFixtures {
     +++ b/README.md
     @@ -1,3 +1,3 @@
      # Espalier
-    -Espalier is a native macOS client for Git and GitHub, written in Swift with SwiftUI and AppKit, that trains your branches along a wall.
-    +Espalier is a native macOS app for Git and GitHub, written in Swift with SwiftUI and AppKit, that trains your branches neatly along a wall.
+    -Espalier is a modern macOS client for Git and GitHub, written in Swift with SwiftUI and AppKit, that trains your branches along a wall.
+    +Espalier is a modern macOS app for Git and GitHub, written in Swift with SwiftUI and AppKit, that trains your branches neatly along a wall.
      \tIndented with a tab, then \u{65E5}\u{672C}\u{8A9E}\u{306E}\u{30C6}\u{30AD}\u{30B9}\u{30C8} and more text after it to wrap.
     """
 
@@ -148,6 +148,30 @@ enum DiffFixtures {
 
     static var conflict: TextDiff {
         textDiff(conflictPatch)
+    }
+
+    /// The conflict with the common ancestor's side too (`diff3`): ours,
+    /// base, and theirs.
+    static let conflictWithBasePatch = """
+    diff --git a/Sources/App/Config.swift b/Sources/App/Config.swift
+    index 1111111..2222222 100644
+    --- a/Sources/App/Config.swift
+    +++ b/Sources/App/Config.swift
+    @@ -1,4 +1,10 @@
+     let name = "espalier"
+    +<<<<<<< HEAD
+     let timeout = 30
+    +||||||| base
+    +let timeout = 10
+    +=======
+    +let timeout = 60
+    +>>>>>>> feature/longer-timeout
+     let retries = 3
+     let verbose = false
+    """
+
+    static var conflictWithBase: TextDiff {
+        textDiff(conflictWithBasePatch)
     }
 
     /// A last line without a newline, changed to have one.

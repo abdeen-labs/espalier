@@ -1,9 +1,11 @@
-// The pull request surfaces, one image per layout: sidebar rows (drafts,
-// the current branch's in bold, each checks state, a drop target), the
-// toolbar chip, the checks popover, the pull request's overview, a Markdown
-// description (with an image as a link, and loaded), and the Re-run sheet. The rows, chip, popover, and Markdown draw
-// their own colors, in light and dark; the rest in light. The other states
-// differ only in words (GitHubContentTests).
+// The pull request surfaces, one image per layout: sidebar rows (drafts
+// marked Draft, the current branch's semibold, each checks state, a drop
+// target), the toolbar chip, the checks popover, the pull request's
+// overview (a draft, and the current branch's "Checked Out" in a narrow
+// column), a Markdown description (with an image as a link, and loaded),
+// and the Re-run sheet. The rows, chip, popover, and Markdown draw their
+// own colors, in light and dark; the rest in light. The other states differ
+// only in words (GitHubContentTests).
 
 import AppKit
 import EspalierCore
@@ -114,19 +116,33 @@ struct PullRequestSnapshotTests {
 
     // MARK: The pull request's place
 
-    @Test("the overview: a draft with failing checks and a description")
+    @Test("the overview: a draft with Check Out, failing checks, and a description; the current branch's, Checked Out, in the narrowest column")
     func overview() {
         let draft = PullRequestOverviewContent(GitHubFixtures.pullRequest(142, headRepository: GitHubFixtures.hubotFork, draft: true), isCurrentBranch: false)
+        let actions = PullRequestOverviewActions(checkOut: {}, checkOutInNewWorktree: {}, open: { _ in }, checks: .none)
         assertSnapshot(
             PullRequestOverviewView(
                 content: draft,
                 checks: GitHubFixtures.checksContent(GitHubFixtures.failingChecks),
                 description: MarkdownDocument.parse(GitHubFixtures.description),
-                actions: .none
+                actions: actions
             ),
             named: "overview-draft",
             area: area,
             size: CGSize(width: 460, height: 1_180),
+            appearances: [.light]
+        )
+        let checkedOut = PullRequestOverviewContent(GitHubFixtures.pullRequest(141), isCurrentBranch: true)
+        assertSnapshot(
+            PullRequestOverviewView(
+                content: checkedOut,
+                checks: GitHubFixtures.checksContent(GitHubFixtures.failingChecks),
+                description: MarkdownDocument.parse(""),
+                actions: actions
+            ),
+            named: "overview-checkedOut",
+            area: area,
+            size: CGSize(width: Metrics.Column.pullRequestOverview.min, height: 260),
             appearances: [.light]
         )
     }

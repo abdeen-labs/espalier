@@ -327,7 +327,7 @@ struct WorktreesModelTests {
             return
         }
         #expect(confirmation.kind == .removeWorktree)
-        #expect(confirmation.title == "Delete Worktree")
+        #expect(confirmation.title == "Delete Worktree?")
         #expect(confirmation.message == "Are you sure you want to delete the worktree feature-tree?")
         #expect(confirmation.confirmButton == "Delete")
         #expect(FileManager.default.fileExists(atPath: linked.path))

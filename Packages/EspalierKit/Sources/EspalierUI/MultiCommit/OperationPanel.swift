@@ -2,10 +2,10 @@
 //
 // The operation panel: a bar across the top of Changes while an operation
 // runs, waits on conflicts, or a stash restore conflicted, with the
-// operation and its step, the resolved count, "Untracked files will be
-// excluded" for a rebase, a step indicator, Abort (quiet), and Continue
-// (prominent). Once a merge has nothing left to resolve, the merge's
-// message shows in the composer's place to edit before Commit Merge.
+// operation, the commit it stopped at and the resolved count (or its
+// progress), Resolve with AI, and Abort (quiet). What finishes the
+// operation is in the commit form's place (OperationSlot.swift): Commit
+// Merge under the merge's message, or Continue.
 
 import AIKit
 import EspalierCore
@@ -13,7 +13,8 @@ import EspalierSupport
 import GitKit
 import SwiftUI
 
-/// What the operation panel shows.
+/// What the operation panel shows, and what the commit form's place needs
+/// to finish the operation.
 nonisolated public struct OperationPanelContent: Sendable, Equatable {
     /// The panel's state.
     public enum State: Sendable, Equatable {
@@ -34,14 +35,14 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
     public var state: State
     /// "Abort Rebase"; nil when there's nothing to abort.
     public var abortTitle: String?
-    /// "Continue Rebase", "Commit Merge"; nil when there's nothing to
-    /// continue.
+    /// "Continue Rebase", "Commit Merge": the commit form's button while the
+    /// operation waits; nil when there's nothing to continue.
     public var continueTitle: String?
     public var canContinue: Bool
     /// Continue's tooltip while it's disabled.
     public var continueHelp: String?
-    /// Whether "Untracked files will be excluded" shows (a rebase with
-    /// untracked files).
+    /// Whether "Untracked files will be excluded" shows under Continue (a
+    /// rebase with untracked files).
     public var notesUntrackedFiles: Bool
     /// Whether Resolve with AI shows (AI is on and files need the user).
     public var showsResolveWithAI: Bool
@@ -49,17 +50,8 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
     public var canResolveWithAI: Bool
     /// Whether no conflicted file needs the user any more.
     public var isResolved: Bool
-    /// Whether the merge's message shows, to edit before Commit Merge (a
-    /// merge with nothing left to resolve, once git's message is loaded).
-    public var editsMessage: Bool
     /// Whether Open in Terminal shows (an operation only git can finish).
     public var opensTerminal: Bool
-    /// The step indicator: the commits of a running operation or of one
-    /// stopped on conflicts, else the conflicted files, resolved and not;
-    /// empty for none.
-    public var steps: [StepState]
-    /// What VoiceOver says about the steps ("Commit 2 of 5").
-    public var stepsLabel: String
     /// Which commit a rebase or cherry-pick stopped at: "Stopped at commit
     /// 2 of 4", first on the line under the title.
     public var stoppedAt: String?
@@ -75,10 +67,7 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         showsResolveWithAI: Bool = false,
         canResolveWithAI: Bool = false,
         isResolved: Bool = false,
-        editsMessage: Bool = false,
         opensTerminal: Bool = false,
-        steps: [StepState] = [],
-        stepsLabel: String = "",
         stoppedAt: String? = nil
     ) {
         self.title = title
@@ -91,14 +80,12 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         self.showsResolveWithAI = showsResolveWithAI
         self.canResolveWithAI = canResolveWithAI
         self.isResolved = isResolved
-        self.editsMessage = editsMessage
         self.opensTerminal = opensTerminal
-        self.steps = steps
-        self.stepsLabel = stepsLabel
         self.stoppedAt = stoppedAt
     }
 
-    /// The hint under the conflicted files while files need the user.
+    /// What a conflicted file still needing the user says about resolving
+    /// it, as its tooltip.
     public static let hint = "Resolve in your editor or in Terminal; Espalier picks up your changes as you save."
 
     /// Continue's tooltip while files need the user.
@@ -128,16 +115,25 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         return operation.kind.rawValue
     }
 
+    /// The display name of the operation conflicts belong to, when there's
+    /// no operation to name it.
+    static func name(of conflictState: ConflictState) -> String {
+        switch conflictState {
+        case .merge: "Merge"
+        case .rebase: "Rebase"
+        case .cherryPick: "Cherry-pick"
+        case .revert: "Revert"
+        }
+    }
+
     /// The panel for an operation waiting on conflicts.
     ///
     /// - Parameters:
-    ///   - mergeMessage: A merge's message, once loaded: with nothing left
-    ///     to resolve, the panel shows it to edit, and Commit Merge waits
+    ///   - mergeMessage: A merge's message, once loaded: Commit Merge waits
     ///     for a summary.
     ///   - step: Which commit a rebase or cherry-pick stopped at
-    ///     (`operations.stoppedStep`): with more than one, the indicator
-    ///     shows the commits and the line says which it stopped at;
-    ///     otherwise the indicator counts the conflicted files.
+    ///     (`operations.stoppedStep`): with more than one, the line under
+    ///     the title says which.
     public static func conflicts(
         operation: String,
         isMerge: Bool,
@@ -152,10 +148,8 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         mergeMessage: MergeMessage? = nil,
         step: OperationStep? = nil
     ) -> OperationPanelContent {
-        let editsMessage = isMerge && unresolved == 0 && mergeMessage != nil
-        let lacksSummary = editsMessage && (mergeMessage?.summary ?? "").unicodeScalars.allSatisfy(JSCompat.isWhitespace)
-        let commitStep = step.flatMap { $0.total > 1 ? $0 : nil }
-        let stoppedAt = commitStep.map { "Stopped at commit \($0.position) of \($0.total)" }
+        let lacksSummary = isMerge && (mergeMessage.map { $0.summary.unicodeScalars.allSatisfy(JSCompat.isWhitespace) } ?? false)
+        let stoppedAt = step.flatMap { $0.total > 1 ? "Stopped at commit \($0.position) of \($0.total)" : nil }
         return OperationPanelContent(
             title: unresolved > 0 ? "Resolve conflicts before \(operation)" : "All conflicts resolved",
             state: .conflicts(summary: summary(resolved: resolved, total: total)),
@@ -167,30 +161,8 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
             showsResolveWithAI: showsResolveWithAI && unresolved > 0,
             canResolveWithAI: canResolveWithAI,
             isResolved: unresolved == 0,
-            editsMessage: editsMessage,
-            steps: commitStep.map { commitSteps($0, isResolved: unresolved == 0) } ?? fileSteps(resolved: resolved, total: total),
-            stepsLabel: stoppedAt ?? summary(resolved: resolved, total: total),
             stoppedAt: stoppedAt
         )
-    }
-
-    /// The conflicted files as steps: the resolved ones done, the rest
-    /// stopped for the user.
-    static func fileSteps(resolved: Int, total: Int) -> [StepState] {
-        guard total > 0 else {
-            return []
-        }
-        let done = min(max(resolved, 0), total)
-        return Array(repeating: .done, count: done) + Array(repeating: .stopped, count: total - done)
-    }
-
-    /// The commits as steps: those before the one it stopped at done, that
-    /// one stopped for the user (done once its conflicts are resolved), the
-    /// rest to come.
-    static func commitSteps(_ step: OperationStep, isResolved: Bool) -> [StepState] {
-        StepIndicator.steps(position: step.position, total: step.total, isStopped: true).map { state in
-            isResolved && state == .stopped ? .done : state
-        }
     }
 
     /// The panel for a repository, or nil when nothing runs, nothing waits
@@ -235,16 +207,10 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
             }
         }
         if let conflictState = operations.conflictState {
-            let name: String = switch conflictState {
-            case .merge: "Merge"
-            case .rebase: "Rebase"
-            case .cherryPick: "Cherry-pick"
-            case .revert: "Revert"
-            }
             let isMerge: Bool = if case .merge = conflictState { true } else { false }
             let isRebase: Bool = if case .rebase = conflictState { true } else { false }
             return conflicts(
-                operation: name,
+                operation: name(of: conflictState),
                 isMerge: isMerge,
                 resolved: max(unmerged.count - unresolvedCount, 0),
                 total: unmerged.count,
@@ -291,9 +257,7 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         }
         return OperationPanelContent(
             title: "\(name) in progress",
-            state: .running(detail: detail, progress: progress.value),
-            steps: StepIndicator.steps(position: progress.position, total: progress.totalCommitCount),
-            stepsLabel: progress.totalCommitCount > 0 ? "Commit \(progress.position) of \(progress.totalCommitCount)" : ""
+            state: .running(detail: detail, progress: progress.value)
         )
     }
 
@@ -334,7 +298,6 @@ public struct OperationPanel: View {
                 content: content,
                 aiError: AIConflictFlow.state(in: context).startError(for: repository.id),
                 onAbort: abort,
-                onContinue: continueOperation,
                 onOpenTerminal: { context.actions.perform(.openInTerminal(path: nil)) },
                 onResolveWithAI: { AIConflictFlow.start(in: context, repository: repository) }
             )
@@ -362,25 +325,14 @@ public struct OperationPanel: View {
             await MultiCommitActions.abortOperation(in: context, repository: repository)
         }
     }
-
-    private func continueOperation() {
-        let repository = repository
-        Task { [weak context] in
-            guard let context else {
-                return
-            }
-            await MultiCommitActions.continueOperation(in: context, repository: repository)
-        }
-    }
 }
 
 /// The bar's look, value-driven: the state's glyph, the title and the line
-/// under it, the step indicator, and the buttons.
+/// under it, a running operation's progress, and the buttons.
 struct OperationPanelView: View {
     let content: OperationPanelContent
     var aiError: String?
     var onAbort: () -> Void = {}
-    var onContinue: () -> Void = {}
     var onOpenTerminal: () -> Void = {}
     var onResolveWithAI: () -> Void = {}
 
@@ -388,7 +340,7 @@ struct OperationPanelView: View {
         StatusBar(tone: tone, title: content.title, subtitle: subtitle, help: subtitleHelp) {
             glyph
         } trailing: {
-            indicator
+            progress
             buttons
         }
     }
@@ -421,8 +373,9 @@ struct OperationPanelView: View {
         }
     }
 
-    /// The line under the title: the step, the files left, or the state's
-    /// message; AI's error in its place when Resolve with AI failed.
+    /// The line under the title: the commit it stopped at and the files
+    /// left, a running operation's commit, or the state's message; AI's
+    /// error in its place when Resolve with AI failed.
     private var subtitle: Text? {
         if let aiError {
             return Text(aiError).foregroundStyle(Color(espalier: Palette.error))
@@ -449,22 +402,15 @@ struct OperationPanelView: View {
         case .interrupted(let message), .stashConflicts(let message), .unsupported(let message):
             parts.append(message)
         }
-        if content.notesUntrackedFiles {
-            parts.append("Untracked files will be excluded")
-        }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    /// The steps, when there's more than one (a single step says nothing
-    /// the title doesn't).
+    /// A running operation's progress bar, when it knows how far it got.
     @ViewBuilder
-    private var indicator: some View {
-        if content.steps.count > 1 {
-            StepIndicator(content.steps, label: content.stepsLabel)
-                .padding(.trailing, Metrics.grid)
-        } else if case .running(_, let progress?) = content.state {
+    private var progress: some View {
+        if case .running(_, let progress?) = content.state {
             CapsuleProgressBar(value: progress)
-                .frame(width: Metrics.StepIndicator.barWidth)
+                .frame(width: Metrics.OperationPanel.progressWidth)
                 .padding(.trailing, Metrics.grid)
                 .accessibilityLabel("Progress")
         }
@@ -487,99 +433,13 @@ struct OperationPanelView: View {
             Button(abortTitle, action: onAbort)
                 .buttonStyle(.quiet)
         }
-        if let continueTitle = content.continueTitle {
-            Button(continueTitle, action: onContinue)
-                .buttonStyle(.prominent)
-                .disabled(!content.canContinue)
-                .help(content.canContinue ? "" : (content.continueHelp ?? ""))
-        }
     }
 }
 
-/// A resolved merge's message, in the composer's place while the bar
-/// waits for Commit Merge.
-public struct MergeMessagePanel: View {
-    private let repository: RepositoryModel
-    @Environment(WindowContext.self) private var context
-
-    public init(repository: RepositoryModel) {
-        self.repository = repository
-    }
-
-    /// Whether a merge's message shows for `repository`.
-    @MainActor
-    public static func isShown(for repository: RepositoryModel) -> Bool {
-        OperationPanelContent.make(repository, aiEnabled: false)?.editsMessage == true
-    }
-
-    public var body: some View {
-        if Self.isShown(for: repository) {
-            let operations = repository.operations
-            let preferences = context.app.preferences
-            MergeMessagePanelView(
-                message: Binding(
-                    get: { operations.mergeMessage ?? MergeMessage() },
-                    set: { operations.mergeMessage = $0 }
-                ),
-                isSpellCheckingEnabled: preferences.commitSpellcheckEnabled,
-                onSpellCheckingChange: { preferences.commitSpellcheckEnabled = $0 }
-            )
-        }
+extension Metrics {
+    /// The operation panel.
+    enum OperationPanel {
+        /// A running operation's progress bar.
+        static let progressWidth: CGFloat = 120
     }
 }
-
-/// The merge message's look: a label over the fields' card.
-struct MergeMessagePanelView: View {
-    @Binding var message: MergeMessage
-    var isSpellCheckingEnabled = true
-    var onSpellCheckingChange: (Bool) -> Void = { _ in }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-            FieldLabel("Merge commit message")
-            MergeMessageFields(
-                message: $message,
-                isSpellCheckingEnabled: isSpellCheckingEnabled,
-                onSpellCheckingChange: onSpellCheckingChange
-            )
-        }
-        .padding(Metrics.insetMedium)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// A merge's message before Commit Merge: the summary and the description
-/// in one card, as the composer's.
-struct MergeMessageFields: View {
-    @Binding var message: MergeMessage
-    var isSpellCheckingEnabled = true
-    var onSpellCheckingChange: (Bool) -> Void = { _ in }
-    @State private var focusBridge = ComposerFocusBridge()
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SummaryTextField(
-                text: $message.summary,
-                placeholder: ComposerContent.defaultPlaceholder,
-                accessibilityLabel: "Merge commit summary",
-                isSpellCheckingEnabled: isSpellCheckingEnabled,
-                onSpellCheckingChange: onSpellCheckingChange,
-                onSubmit: { focusBridge.focusDescription() },
-                focusBridge: focusBridge
-            )
-            .padding(.horizontal, Metrics.insetMedium)
-            .padding(.vertical, Metrics.insetSmall)
-            Hairline()
-                .padding(.horizontal, Metrics.insetMedium)
-            DescriptionEditor(
-                text: $message.description,
-                isSpellCheckingEnabled: isSpellCheckingEnabled,
-                onSpellCheckingChange: onSpellCheckingChange,
-                focusBridge: focusBridge
-            )
-            .padding(.horizontal, Metrics.insetSmall)
-        }
-        .cardSurface()
-    }
-}
-

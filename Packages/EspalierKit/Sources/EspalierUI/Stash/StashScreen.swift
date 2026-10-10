@@ -1,51 +1,20 @@
-// A stash's place: the header with Restore and Discard… and what Restore
-// does, the stash's files, and the selected file's read-only diff. Any
-// branch's stash shows; another branch's can be discarded but not restored
-// ("Switch to <branch> to restore these changes.", `StashModel`'s
-// precondition). The toolbar search filters the files.
+// A stash's place: a header as high as the diff's with the title, Restore,
+// and Discard…; the stash's files in the Changes table's rows, without
+// checkboxes; under them the branch, the count, and what Restore does; and
+// the selected file's read-only diff. Any branch's stash shows; another
+// branch's can be discarded but not restored ("Switch to <branch> to
+// restore these changes.", `StashModel`'s precondition). The toolbar search
+// filters the files.
 //
 // The stash shows through `StashModel` (`stash.show`, which also takes the
 // Changes list's selection to the stash), and leaving the place goes back
 // to the working directory (`stash.hide`).
 
+import AppKit
 import EspalierCore
 import EspalierSupport
 import GitKit
 import SwiftUI
-
-/// A stashed file's row.
-nonisolated struct StashedFileRowContent: Sendable, Equatable, Identifiable {
-    var id: String
-    var path: String
-    /// A rename's or copy's old path.
-    var oldPath: String?
-    var status: FileStatusKind
-
-    init(id: String, path: String, oldPath: String? = nil, status: FileStatusKind) {
-        self.id = id
-        self.path = path
-        self.oldPath = oldPath
-        self.status = status
-    }
-
-    init(_ file: CommittedFileChange) {
-        self.init(id: file.id, path: file.path, oldPath: file.status.oldPath, status: FileStatusKind(file.status))
-    }
-
-    var fileName: String {
-        POSIXPath.basename(path)
-    }
-
-    var directory: String {
-        let directory = POSIXPath.dirname(path)
-        return directory == "." ? "" : directory
-    }
-
-    /// The path, or "old → new" for a rename.
-    var tooltip: String {
-        oldPath.map { "\($0) → \(path)" } ?? path
-    }
-}
 
 /// How many files, in words.
 nonisolated enum StashFilesSummary {
@@ -61,7 +30,7 @@ nonisolated struct StashColumnContent: Sendable, Equatable {
     enum Files: Sendable, Equatable {
         case loading
         /// The files matching the filter, and how many the stash has.
-        case loaded([StashedFileRowContent], total: Int)
+        case loaded([CommittedFileChange], total: Int)
         case failed(title: String, message: String)
     }
 
@@ -95,104 +64,73 @@ nonisolated struct StashColumnContent: Sendable, Equatable {
     }
 
     /// The stash's files matching `filter` (its path, ignoring case).
-    static func files(_ files: [CommittedFileChange], filter: String) -> [StashedFileRowContent] {
-        files.filter { filter.isEmpty || $0.path.localizedCaseInsensitiveContains(filter) }.map(StashedFileRowContent.init)
+    static func files(_ files: [CommittedFileChange], filter: String) -> [CommittedFileChange] {
+        files.filter { filter.isEmpty || $0.path.localizedCaseInsensitiveContains(filter) }
     }
 }
 
-/// One stashed file, as Changes shows a file: the status badge, the name,
-/// and the folder in tertiary text.
-struct StashedFileRow: View {
-    let content: StashedFileRowContent
-
-    var body: some View {
-        HStack(spacing: FileRowMetrics.spacing) {
-            StatusGlyph(content.status)
-            HStack(alignment: .firstTextBaseline, spacing: FileRowMetrics.labelSpacing) {
-                Text(content.fileName)
-                    .font(Typography.row.weight(.medium))
-                    .foregroundStyle(.text)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .layoutPriority(1)
-                if !content.directory.isEmpty {
-                    Text(content.directory)
-                        .font(Typography.secondary)
-                        .foregroundStyle(.text3)
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                }
-            }
-        }
-        .frame(minHeight: Metrics.FileList.rowHeight - 8, alignment: .leading)
-        .help(content.tooltip)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/// A stashed file's row background: the soft selection Changes' rows have.
-/// The row's own selection drawing goes off, so it doesn't draw solid over
-/// this.
-struct StashedFileRowBackground: View {
-    let isSelected: Bool
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-            .fill(isSelected ? Color.accentSoft : .clear)
-            .padding(.horizontal, FileRowMetrics.inset)
-            .turnsRowHighlightOff()
-    }
-}
-
-/// The stash's header: the title, the branch and count, Restore and
-/// Discard…, and what Restore does.
+/// The stash's header, as high as the diff's: the title, then Restore and
+/// Discard….
 struct StashHeader: View {
     let content: StashColumnContent
     var restore: @MainActor () -> Void = {}
     var discard: @MainActor () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.insetMedium) {
-            HStack(spacing: Metrics.insetMedium) {
-                IconCircle("tray.full", size: 32)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: Metrics.grid / 2) {
-                    Text("Stashed Changes")
-                        .font(Typography.row.weight(.semibold))
-                        .foregroundStyle(.text)
-                        .accessibilityAddTraits(.isHeader)
-                    Text(content.subtitle)
-                        .font(Typography.meta)
-                        .foregroundStyle(.text3)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+        HStack(spacing: Metrics.insetSmall) {
+            Text("Stashed Changes")
+                .font(Typography.row.weight(.semibold))
+                .foregroundStyle(.text)
+                .lineLimit(1)
+                .layoutPriority(1)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: Metrics.insetSmall)
+            if content.isBusy {
+                ArcProgress(.small)
+                    .accessibilityLabel("Working")
             }
-            HStack(spacing: Metrics.insetSmall) {
-                Button("Restore", action: restore)
-                    .buttonStyle(.prominent)
-                    .disabled(!content.canRestore)
-                Button("Discard…", action: discard)
-                    .buttonStyle(.quiet)
-                    .disabled(!content.canDiscard)
-                if content.isBusy {
-                    ArcProgress(.small)
-                        .accessibilityLabel("Working")
-                }
-            }
-            .controlSize(.small)
+            Button("Restore", action: restore)
+                .buttonStyle(.prominent)
+                .disabled(!content.canRestore)
+                .help(content.explanation)
+                .fixedSize()
+            Button("Discard…", action: discard)
+                .buttonStyle(.quiet)
+                .disabled(!content.canDiscard)
+                .fixedSize()
+        }
+        .controlSize(.small)
+        .padding(.leading, FileRowMetrics.contentInset)
+        .padding(.trailing, Metrics.insetSmall)
+        .frame(height: Metrics.PaneHeader.height)
+    }
+}
+
+/// Under the stash's files: the branch and the count, and what Restore
+/// does or why it can't.
+struct StashFooter: View {
+    let content: StashColumnContent
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.grid / 2) {
+            Text(content.subtitle)
+                .font(Typography.meta)
+                .foregroundStyle(.text2)
+                .lineLimit(1)
+                .truncationMode(.middle)
             Text(content.explanation)
                 .font(Typography.meta)
                 .foregroundStyle(.text3)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, FileRowMetrics.contentInset)
-        .padding(.vertical, Metrics.insetLarge)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, FileRowMetrics.contentInset)
+        .padding(.vertical, Metrics.insetSmall)
+        .accessibilityElement(children: .combine)
     }
 }
 
-/// The stash's column: the header over its files.
+/// The stash's column: the header over its files, and the footer.
 struct StashColumn: View {
     let content: StashColumnContent
     var restore: @MainActor () -> Void = {}
@@ -206,6 +144,8 @@ struct StashColumn: View {
             Hairline()
             files
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Hairline()
+            StashFooter(content: content)
         }
         .background(Color(espalier: Palette.background))
         .frame(maxHeight: .infinity, alignment: .top)
@@ -221,26 +161,32 @@ struct StashColumn: View {
         case .loaded(let rows, _) where rows.isEmpty && !content.filter.isEmpty:
             CenteredMessage("No Matching Files", systemImage: "magnifyingglass", description: "No stashed files match “\(content.filter)”.")
         case .loaded(let rows, _):
-            List(selection: Binding(get: { content.selectedFileID }, set: select)) {
-                ForEach(rows) { row in
-                    StashedFileRow(content: row)
-                        .tag(row.id)
-                        .listRowInsets(EdgeInsets(top: 0, leading: FileRowMetrics.contentInset, bottom: 0, trailing: FileRowMetrics.contentInset))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(StashedFileRowBackground(isSelected: row.id == content.selectedFileID))
-                }
-            }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .environment(\.defaultMinListRowHeight, Metrics.FileList.rowHeight)
-            .contextMenu(forSelectionType: String.self) { _ in
-                EmptyView()
-            } primaryAction: { ids in
-                if let id = ids.first, let row = rows.first(where: { $0.id == id }) {
-                    open(row.path)
-                }
-            }
+            // The Changes table's rows, read-only: one file selected at a
+            // time, Return or a double-click opens it, ⌘C copies its path.
+            FileTable(
+                files: .readOnly(rows),
+                selectedIDs: content.selectedFileID.map { [$0] } ?? [],
+                allowsMultipleSelection: false,
+                tableLabel: "Stashed files",
+                scope: FileTableScope(filter: FileListFilter(text: content.filter), source: content.branch),
+                actions: FileTableActions(
+                    select: { ids in select(ids.first) },
+                    open: { ids in
+                        if let id = ids.first, let row = rows.first(where: { $0.id == id }) {
+                            open(row.path)
+                        }
+                    },
+                    copy: { ids in Self.copyPaths(of: rows.filter { ids.contains($0.id) }) }
+                )
+            )
         }
+    }
+
+    /// Copies the files' paths in the repository, one per line.
+    private static func copyPaths(of files: [CommittedFileChange]) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(files.map { POSIXPath.normalize($0.path) }.joined(separator: "\n"), forType: .string)
     }
 }
 

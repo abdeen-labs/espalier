@@ -1,7 +1,8 @@
 // The diff table's behavior: row heights from monospace arithmetic,
-// hit-testing, drag ranges, keyboard staging and navigation, copying, text
-// selection with the mouse, the context menus, find, and VoiceOver's
-// labels, actions, and rotors.
+// hit-testing (unified, split while lines can be staged, and scrolled
+// sideways), drag ranges, keyboard staging and navigation, the line
+// cursor, copying, text selection with the mouse, the context menus, find,
+// and VoiceOver's labels, actions, and rotors.
 
 import AppKit
 import EspalierCore
@@ -27,37 +28,25 @@ struct DiffTableControllerTests {
         String(Character(Unicode.Scalar(UInt32(key))!))
     }
 
-    // MARK: Hunk headers
-
-    @Test("a hunk header row shows the range with a minus sign, and the enclosing context", arguments: [
-        NamedCase("a range and a context", ("@@ -24,9 +24,13 @@ final class ForecastService {", "\u{2212}24,9 +24,13", "final class ForecastService {")),
-        NamedCase("counts left out, no context", ("@@ -1 +1,3 @@", "\u{2212}1 +1,3", "")),
-        NamedCase("text that isn't a header shows whole", ("Binary files differ", nil, "Binary files differ")),
-    ] as [NamedCase<(String, String?, String)>])
-    func hunkHeaderText(_ testCase: NamedCase<(String, String?, String)>) {
-        let (text, range, context) = testCase.value
-        let header = DiffHunkHeaderText(text)
-        #expect(header.range == range)
-        #expect(header.context == context)
-    }
-
     // MARK: Heights
 
-    @Test("unwrapped rows are one line high; hunk headers a little taller")
+    @Test("unwrapped rows and hunk headers are one line high")
     func unwrappedHeights() {
         let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: false))
         let line = controller.font.lineHeight
         #expect(line == Metrics.Diff.lineHeight)
-        #expect(controller.rowHeights == [line + DiffTableMetrics.hunkRowExtraHeight, line, line, line, line])
+        #expect(controller.rowHeights == [line, line, line, line, line])
     }
 
-    @Test("wrapped rows are ⌈columns ÷ columns per line⌉ lines high, the taller half when split")
+    @Test("wrapped rows are as many lines high as the text needs, continuation lines hanging two columns in; the taller half when split")
     func wrappedHeights() {
         let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping), size: CGSize(width: 480, height: 300))
         let columns = controller.geometry.columnsPerLine(.before)
         let deleted = controller.document.lines[controller.document.rows[2].before.asInt]
-        let expected = CGFloat((deleted.info.columns + columns - 1) / columns) * controller.font.lineHeight
-        #expect(controller.rowHeights[2] == expected)
+        // The first line takes `columns`; the rest start two columns in.
+        let rest = columns - 2
+        let lines = 1 + (deleted.info.columns - columns + rest - 1) / rest
+        #expect(controller.rowHeights[2] == CGFloat(lines) * controller.font.lineHeight)
         #expect(controller.rowHeights[2] > controller.font.lineHeight)
 
         let split = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, isSplit: true), size: CGSize(width: 480, height: 300))
@@ -84,7 +73,7 @@ struct DiffTableControllerTests {
 
     // MARK: Hit-testing and drags
 
-    @Test("hit-testing: the handle, gutter, text, hunk checkbox, and buttons")
+    @Test("hit-testing: the handle, gutter, text, hunk checkbox, and buttons in the numbers' gutter")
     func hitTesting() {
         let controller = DiffTables.controller(DiffTableContent(
             fileID: "a", diff: DiffFixtures.swiftChangeWithBottomHunk, canExpand: true, staging: staging()
@@ -96,10 +85,60 @@ struct DiffTableControllerTests {
         let textX = geometry.before.text.lowerBound + controller.font.characterWidth * 8.2
         #expect(controller.hit(at: point(controller, row: 3, x: textX)) == .text(row: 3, column: .before, offset: 8))
         #expect(controller.hit(at: point(controller, row: 0, x: middle(geometry.hunkCheckbox!))) == .hunkCheckbox(hunk: 0))
+        #expect(controller.hit(at: point(controller, row: 0, x: geometry.hunkText + 20)) == .hunkHeader(hunk: 0))
         let buttons = geometry.expansionButtonRects(count: 2, rowHeight: controller.tableView.rect(ofRow: 12).height)
+        #expect(buttons[0].minX == geometry.before.gutter.lowerBound)
+        #expect(buttons[1].maxX <= geometry.before.gutter.upperBound)
         #expect(controller.hit(at: point(controller, row: 12, x: buttons[0].midX)) == .expansion(hunk: 1, kind: .expandUp))
         #expect(controller.hit(at: point(controller, row: 12, x: buttons[1].midX)) == .expansion(hunk: 1, kind: .expandDown))
         #expect(controller.hit(at: CGPoint(x: 10, y: 100_000)) == .none)
+    }
+
+    @Test("split while lines can be staged: the handle between the halves, the old half's numbers beside it")
+    func splitStagingHitTesting() {
+        let controller = DiffTables.controller(DiffTableContent(
+            fileID: "a", diff: DiffFixtures.swiftChange, isSplit: true, staging: staging()
+        ))
+        let geometry = controller.geometry
+        let handle = try! #require(geometry.handle)
+        let after = try! #require(geometry.after)
+        let oldNumber = try! #require(geometry.before.oldNumber)
+        // Text, then numbers, handle, numbers, text.
+        #expect(geometry.before.text.upperBound < oldNumber.lowerBound)
+        #expect(oldNumber.upperBound == handle.lowerBound)
+        #expect(after.newNumber?.lowerBound == handle.upperBound)
+        #expect(controller.hit(at: point(controller, row: 3, x: middle(handle))) == .handle(row: 3, block: 0))
+        #expect(controller.hit(at: point(controller, row: 3, x: middle(oldNumber))) == .gutter(row: 3, column: .before))
+        #expect(controller.hit(at: point(controller, row: 3, x: middle(after.newNumber!))) == .gutter(row: 3, column: .after))
+        #expect(controller.hit(at: point(controller, row: 1, x: middle(oldNumber))) == .inertGutter(row: 1))
+        let textX = geometry.before.text.lowerBound + controller.font.characterWidth * 8.2
+        #expect(controller.hit(at: point(controller, row: 3, x: textX)) == .text(row: 3, column: .before, offset: 8))
+    }
+
+    @Test("unwrapped lines make the table wider than the pane; scrolled sideways, only the text moves")
+    func sidewaysScrolling() {
+        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: false), size: CGSize(width: 480, height: 300))
+        let clip = controller.scrollView.contentView
+        #expect(controller.tableView.frame.width > clip.bounds.width)
+        let characterWidth = controller.font.characterWidth
+        controller.scrollText(by: characterWidth * 3)
+        let scrolled = controller.textScrollX
+        #expect(scrolled > 0)
+        #expect(clip.bounds.origin.x == scrolled)
+
+        // The numbers stay where they were; the text under a point moved.
+        let geometry = controller.geometry
+        #expect(controller.hit(at: point(controller, row: 1, x: scrolled + middle(geometry.before.oldNumber!))) == .inertGutter(row: 1))
+        let column8 = geometry.x(ofColumn: 8, side: .before, scrollX: scrolled) + scrolled + characterWidth * 0.2
+        #expect(controller.hit(at: point(controller, row: 1, x: column8)) == .text(row: 1, column: .before, offset: 8))
+        let rects = controller.textRects(row: 1, side: .before, range: 8..<9)
+        #expect(abs((rects.first?.minX ?? 0) - (column8 - characterWidth * 0.2)) < 0.5)
+
+        // Wrapping fits the table to the pane again.
+        controller.apply(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: true))
+        controller.scrollView.layoutSubtreeIfNeeded()
+        #expect(controller.tableView.frame.width == clip.bounds.width)
+        #expect(controller.textScrollX == 0)
     }
 
     @Test("a drag down the gutter sets every line it passes to the first line's opposite")
@@ -156,6 +195,26 @@ struct DiffTableControllerTests {
         _ = controller.mouseDown(at: point(controller, row: dummyRow, x: single[0].midX), clickCount: 1, extendsSelection: false)
         #expect(recorder.expanded.map(\.0) == [0, 1])
         #expect(recorder.expanded.map(\.1) == [.down, .down])
+    }
+
+    // MARK: The line cursor
+
+    @Test("a click in the text moves the line cursor without showing it; the arrows and a click in the gutter show it")
+    func cursorVisibility() {
+        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
+        let textX = controller.geometry.before.text.lowerBound + controller.font.characterWidth * 4.2
+        _ = controller.mouseDown(at: point(controller, row: 3, x: textX), clickCount: 1, extendsSelection: false)
+        #expect(controller.cursorRows == nil)
+        // Nothing selected and no cursor: nothing to copy.
+        #expect(!controller.canCopy)
+        // The arrows go on from the clicked row.
+        #expect(controller.keyDown(key(arrow(NSDownArrowFunctionKey))))
+        #expect(controller.cursorRows == 4...4)
+        // Another click in the text hides it again; one in the gutter shows it.
+        _ = controller.mouseDown(at: point(controller, row: 5, x: textX), clickCount: 1, extendsSelection: false)
+        #expect(controller.cursorRows == nil)
+        _ = controller.mouseDown(at: point(controller, row: 1, x: middle(controller.geometry.before.oldNumber!)), clickCount: 1, extendsSelection: false)
+        #expect(controller.cursorRows == 1...1)
     }
 
     // MARK: Keyboard

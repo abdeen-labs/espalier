@@ -40,9 +40,9 @@ extension Acknowledgement {
     /// Everything acknowledged, in the list's order.
     static let all: [Acknowledgement] = basedOn + bundled + syntax
 
-    /// The bundled git's release (scripts/git-version, dugite-native's tag).
+    /// The bundled git's release (scripts/git-version, its build's tag).
     static let gitVersion = "2.53.0"
-    static let dugiteNativeTag = "v2.53.0-4"
+    static let bundledGitTag = "v2.53.0-4"
 
     static let basedOn: [Acknowledgement] = [
         Acknowledgement(
@@ -51,7 +51,7 @@ extension Acknowledgement {
             version: "3.6.7-beta2",
             license: "MIT License",
             url: URL(string: "https://github.com/desktop/desktop")!,
-            note: "Espalier is a native macOS app based on GitHub Desktop: its features, its Git behavior, and much of its wording.",
+            note: "Espalier is a Mac app based on GitHub Desktop: its features, its Git behavior, and much of its wording.",
             text: AcknowledgementTexts.desktop,
             group: .basedOn
         ),
@@ -74,7 +74,7 @@ extension Acknowledgement {
             version: gitVersion,
             license: "GNU General Public License, version 2",
             url: URL(string: "https://git-scm.com")!,
-            note: "Espalier includes Git \(gitVersion), built by dugite-native \(dugiteNativeTag). Git's source code is at https://github.com/git/git/tree/v\(gitVersion), and the build's at https://github.com/desktop/dugite-native/tree/\(dugiteNativeTag).",
+            note: "Espalier includes Git \(gitVersion), built by dugite-native \(bundledGitTag). Git's source code is at https://github.com/git/git/tree/v\(gitVersion), and the build's at https://github.com/desktop/dugite-native/tree/\(bundledGitTag).",
             text: AcknowledgementTexts.gpl2,
             group: .bundled
         ),

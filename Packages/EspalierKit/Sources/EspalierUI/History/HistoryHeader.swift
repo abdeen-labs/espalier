@@ -7,10 +7,11 @@ import GitKit
 import SwiftUI
 
 extension Metrics {
-    /// The compact header row a History column starts with.
+    /// The compact header row a History column starts with, and the inset
+    /// of a commit's details, which line up with it.
     enum HistoryHeader {
-        static let height: CGFloat = 40
-        static let horizontalPadding: CGFloat = 14
+        static let height: CGFloat = PaneHeader.height
+        static let horizontalPadding: CGFloat = Metrics.insetLarge
         /// Between the header's controls.
         static let spacing: CGFloat = 10
     }
@@ -66,23 +67,24 @@ struct HistoryHeader: View {
                 .help("Show the current branch simply, or every branch as a graph")
                 switch content.style {
                 case .graph:
-                    scopeMenu
+                    scopePicker
                     Spacer(minLength: 0)
                     if content.search == nil {
-                        Text(content.count)
-                            .font(Typography.secondaryCount)
-                            .foregroundStyle(.text3)
-                            .lineLimit(1)
+                        // Shown whole or not at all: a narrow list leaves
+                        // the room to the scope.
+                        ViewThatFits(in: .horizontal) {
+                            Text(content.count)
+                                .font(Typography.secondaryCount)
+                                .foregroundStyle(.text3)
+                                .lineLimit(1)
+                                .fixedSize()
+                            Color.clear
+                                .frame(width: 0, height: 0)
+                        }
                     }
                 case .simple:
                     if let branch = content.branchName {
-                        Label(branch, systemImage: "arrow.trianglehead.branch")
-                            .labelStyle(HeaderLabelStyle())
-                            .font(Typography.meta)
-                            .foregroundStyle(.text3)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .help(branch)
+                        BranchNameLabel(name: branch)
                     }
                     Spacer(minLength: 0)
                 }
@@ -96,8 +98,9 @@ struct HistoryHeader: View {
         .padding(.horizontal, Metrics.HistoryHeader.horizontalPadding)
     }
 
-    /// The scope pop-up: a small quiet capsule with the scope's name.
-    private var scopeMenu: some View {
+    /// The scope pop-up: a small quiet capsule with the scope's name and the
+    /// capsule menus' up-and-down chevron.
+    private var scopePicker: some View {
         Menu {
             Picker("Branches", selection: Binding(get: { content.scope }, set: { setScope($0) })) {
                 ForEach(HistoryScope.allCases, id: \.self) { scope in
@@ -107,11 +110,12 @@ struct HistoryHeader: View {
             .pickerStyle(.inline)
             .labelsHidden()
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: Metrics.CapsuleMenu.chevronSpacing) {
                 Text(content.scope.title)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.system(size: Metrics.CapsuleMenu.chevronSize, weight: .semibold))
                     .foregroundStyle(.text3)
+                    .accessibilityHidden(true)
             }
         }
         .menuStyle(.button)
@@ -125,14 +129,25 @@ struct HistoryHeader: View {
     }
 }
 
-/// A symbol 5 points before its title, the symbol a touch smaller.
-private struct HeaderLabelStyle: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 5) {
-            configuration.icon
+/// A branch's name in History's headers: the branch symbol, then the name
+/// (13 semibold), its middle cut when it's long.
+struct BranchNameLabel: View {
+    let name: String
+
+    var body: some View {
+        HStack(spacing: Metrics.grid) {
+            Image(systemName: "arrow.trianglehead.branch")
                 .imageScale(.small)
-            configuration.title
+                .foregroundStyle(.text3)
+            Text(name)
+                .font(Typography.row.weight(.semibold))
+                .foregroundStyle(.text)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
+        .help(name)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(name)
     }
 }
 

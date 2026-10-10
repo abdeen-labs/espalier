@@ -67,7 +67,7 @@ struct CommitGateTests {
         let asked = try #require(confirmation(of: error))
         #expect(asked.kind == .commitOversizedFiles)
         #expect(asked.details == .files(["big.bin"]))
-        #expect(asked.title == "Files Too Large")
+        #expect(asked.title == "Commit Large Files?")
 
         // Excluded, it's not asked about.
         fixture.changes.setIncluded([try fixture.file("big.bin").id], false)

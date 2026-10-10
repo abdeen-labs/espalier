@@ -26,9 +26,9 @@ public struct AmendBanner: View {
                     return .handled
                 })
         }
-        .padding(.horizontal, Metrics.insetSmall + 2)
+        .padding(.horizontal, Metrics.Composer.cardPadding)
         .padding(.vertical, Metrics.insetSmall)
-        .surface(.quiet, elevation: .quiet, in: RoundedRectangle(cornerRadius: Metrics.Radius.banner, style: .continuous))
+        .surface(.quiet, elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityAction(named: "Stop Amending", onStopAmending)
     }

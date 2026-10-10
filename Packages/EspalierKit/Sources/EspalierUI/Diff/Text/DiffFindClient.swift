@@ -168,7 +168,7 @@ final class DiffFindClient: NSObject, NSTextFinderClient {
         guard let controller, let segment = segment(at: range.location) else {
             return
         }
-        controller.tableView.scrollRowToVisible(segment.row)
+        controller.scrollRowIntoView(segment.row)
     }
 
     var visibleCharacterRanges: [NSValue] {

@@ -13,8 +13,8 @@ struct DugiteConfigTests {
     // This runs in a temporary directory: the tests' `HOME` is empty, and
     // `--system` doesn't depend on the working directory.
 
-    @Test("uses the custom system config from dugite-native")
-    func usesTheCustomSystemConfigFromDugiteNative() async throws {
+    @Test("uses the custom system config from desktop's git build")
+    func usesTheBuildsCustomSystemConfig() async throws {
         let directory = try createTestDir("desktop-git-test-config")
         let result = try await Dugite.exec(
             ["config", "--show-origin", "--system", "include.path"],

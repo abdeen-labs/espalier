@@ -51,7 +51,7 @@ private struct MarkdownBlockView: View {
                 .accessibilityAddTraits(level == nil ? [] : .isHeader)
 
         case .listItem(let marker, let text):
-            HStack(alignment: .firstTextBaseline, spacing: Metrics.grid + 2) {
+            HStack(alignment: .firstTextBaseline, spacing: Metrics.bulletSpacing) {
                 MarkdownListMarker(marker: marker)
                 Text(text)
                     .fixedSize(horizontal: false, vertical: true)
@@ -125,7 +125,7 @@ private struct MarkdownTable: View {
                         .fontWeight(.semibold)
                 }
             }
-            Divider()
+            Hairline()
                 .gridCellUnsizedAxes(.horizontal)
             ForEach(rows.indices, id: \.self) { row in
                 GridRow {
@@ -216,4 +216,10 @@ extension EnvironmentValues {
     /// Parses pull request descriptions on the main actor, so a snapshot
     /// renders them at once (they're parsed off it otherwise).
     @Entry var markdownParsesSynchronously = false
+}
+
+extension Metrics {
+    /// Between a bulleted line's marker and its text: Markdown's lists and
+    /// the GitHub sheets' bullets.
+    public static let bulletSpacing: CGFloat = 6
 }

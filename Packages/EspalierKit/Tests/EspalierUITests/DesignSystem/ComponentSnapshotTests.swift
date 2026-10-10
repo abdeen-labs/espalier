@@ -135,15 +135,9 @@ struct ComponentSnapshotTests {
 
     // MARK: Chips and badges
 
-    @Test("chips, key caps, status badges, icon circles, and repository badges")
+    @Test("status badges, key caps, the ID chip, icon circles, and repository badges")
     func chips() {
         let view = VStack(alignment: .leading, spacing: Metrics.insetMedium) {
-            HStack(spacing: 6) {
-                FileChip(FileChipContent(name: "UnitFormatter.swift", status: .modified, added: 6, deleted: 1), isSelected: true)
-                FileChip(FileChipContent(name: "TemperatureLabel.swift", status: .modified, added: 3, deleted: 3))
-                FileChip(FileChipContent(name: "HourlyRow.swift", status: .new, added: 58))
-                FileChip(FileChipContent(name: "legacy.md", status: .deleted, deleted: 34))
-            }
             HStack(spacing: Metrics.insetSmall) {
                 ForEach(FileStatusKind.allCases, id: \.self) { kind in
                     StatusGlyph(kind)
@@ -220,7 +214,7 @@ struct ComponentSnapshotTests {
         assertSnapshot(view, named: "progress", area: area)
     }
 
-    @Test("flat surfaces: a floating capsule, a card, and quiet and sheet shadows")
+    @Test("flat surfaces: a floating capsule with its shadow, and a card with its ring alone")
     func surfaces() {
         let view = VStack(alignment: .leading, spacing: Metrics.insetLarge + 4) {
             HStack(spacing: Metrics.insetMedium) {
@@ -293,30 +287,16 @@ struct ComponentSnapshotTests {
             } header: {
                 SidebarSectionHeader("Stashes")
             }
-            Section {
-                RepositoryRow(content: RepositoryFixtures.row("meridian", icon: .current))
-                    .sidebarRow(nil, id: "meridian", isHighlighted: true)
-                RepositoryRow(content: RepositoryFixtures.row("meridian-api"))
-                    .sidebarRow(nil, id: "meridian-api")
-                RepositoryRow(content: RepositoryFixtures.row("design-tokens", behind: 3))
-                    .sidebarRow(nil, id: "design-tokens")
-                RepositoryRow(content: RepositoryFixtures.row("forecast-kit", changed: 4))
-                    .sidebarRow(nil, id: "forecast-kit")
-            } header: {
-                SidebarSectionHeader("Repositories") {
-                    Image(systemName: "plus")
-                }
-            }
         }
         .sidebarListStyle()
         .environment(\.sidebarSelection, selection)
         .overlay(alignment: .trailing) {
             Hairline(.vertical)
         }
-        .frame(width: Metrics.Column.sidebar.ideal, height: 700)
+        .frame(width: Metrics.Column.sidebar.ideal, height: 560)
     }
 
-    @Test("the sidebar: places, branches in their colors, pull requests, tags, stashes, and repositories")
+    @Test("the sidebar: places, branches in their colors, pull requests, tags, and stashes")
     func sidebar() {
         assertSnapshot(sidebar(selection: .changes), named: "sidebar", area: area)
     }

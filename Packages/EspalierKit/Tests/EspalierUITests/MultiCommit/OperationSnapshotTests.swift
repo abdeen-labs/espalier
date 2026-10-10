@@ -1,7 +1,7 @@
-// The operations' sheets, the conflicts section, the operation panel, and
-// the AI conflict sheet, one image per layout: the conflicts, the running
-// panel, and the AI sheet's results in light and dark, the rest in light.
-// The states that differ only in words or a disabled control are
+// The operations' sheets, the conflicted files' rows, the operation panel,
+// and the AI conflict sheet, one image per layout: the conflicts, the
+// running panel, and the AI sheet's results in light and dark, the rest in
+// light. The states that differ only in words or a disabled control are
 // OperationContentTests'. Leaf views take values; the Integrate and
 // Cherry-pick sheets and the AI gate popover use a repository with a remote.
 
@@ -9,6 +9,7 @@ import AIKit
 import AppKit
 @testable import EspalierCore
 import EspalierCoreTestSupport
+import EspalierSupport
 import Foundation
 import GitKit
 import SwiftUI
@@ -159,20 +160,19 @@ struct OperationSnapshotTests {
         ConflictFileRowContent(path: "Assets/icon.png", state: .resolved(isUndoable: true), status: "Using the modified file from main"),
     ]
 
-    private func conflicts(_ rows: [ConflictFileRowContent], height: CGFloat) -> some View {
+    @Test("conflicted files in the Changes table: every row state")
+    func conflictedFiles() {
         let actions = ConflictFileRowActions(editorName: "Visual Studio Code", isEditorAvailable: true)
-        // As the Changes column shows it, above the changed files.
-        return VStack(alignment: .leading, spacing: 0) {
-            ConflictsSectionView(content: ConflictsSectionContent(rows: rows), actions: { _ in actions })
-        }
-        .padding(.horizontal, Metrics.insetMedium)
-        .padding(.vertical, Metrics.insetSmall)
-        .frame(width: changesWidth, height: height, alignment: .top)
-    }
-
-    @Test("the conflicts section: every row state")
-    func conflictsSection() {
-        assertSnapshot(conflicts(Self.conflictRows, height: 350), named: "conflicts", area: area)
+        let files = Self.conflictRows.map { conflictedFile($0.path) }
+        let rows = Dictionary(uniqueKeysWithValues: Self.conflictRows.map { (ExactString($0.path), $0) })
+        let table = FileTable(
+            files: .changes(files),
+            selectedIDs: [],
+            inclusion: { _ in FileInclusionState(value: true, isEnabled: true, help: nil) },
+            conflicts: rows,
+            conflictActions: { _ in actions }
+        )
+        assertSnapshot(table, named: "conflicts", area: area, size: CGSize(width: changesWidth, height: 240))
     }
 
     // MARK: The operation panel
@@ -182,9 +182,7 @@ struct OperationSnapshotTests {
         let panels: [(name: String, content: OperationPanelContent, aiError: String?, appearances: [SnapshotAppearance])] = [
             ("running", OperationPanelContent(
                 title: "Rebase in progress",
-                state: .running(detail: "Commit 2 of 5 · Fix crash when opening an empty repository", progress: 0.4),
-                steps: StepIndicator.steps(position: 2, total: 5),
-                stepsLabel: "Commit 2 of 5"
+                state: .running(detail: "Commit 2 of 5 · Fix crash when opening an empty repository", progress: 0.4)
             ), nil, SnapshotAppearance.allCases),
             ("conflicts", .conflicts(
                 operation: "Rebase", isMerge: false, resolved: 1, total: 3, unresolved: 2, isContinuing: false,
@@ -217,26 +215,6 @@ struct OperationSnapshotTests {
                 named: "panel-\(panel.name)", area: area, appearances: panel.appearances
             )
         }
-    }
-
-    @Test("the operation panel: a resolved merge's message, edited")
-    func panelMergeMessage() {
-        let message = MergeMessage(
-            summary: "Merge feature/login, keeping main's loader",
-            description: "RepositoryLoader.swift keeps main's validation; the rest comes from feature/login."
-        )
-        let content = OperationPanelContent.conflicts(
-            operation: "Merge", isMerge: true, resolved: 2, total: 2, unresolved: 0, isContinuing: false,
-            hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: true, canResolveWithAI: true,
-            mergeMessage: message
-        )
-        let view = VStack(alignment: .leading, spacing: 0) {
-            OperationPanelView(content: content)
-                .frame(width: placeWidth)
-            MergeMessagePanelView(message: .constant(message))
-                .frame(width: changesWidth)
-        }
-        assertSnapshot(view, named: "panel-conflicts-merge-message-edited", area: area, appearances: [.light])
     }
 
     // MARK: The AI conflict sheet

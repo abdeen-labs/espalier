@@ -1,7 +1,7 @@
 // Ported in part from desktop/app/src/ui/branches/branch-list.tsx
 //
-// The branch popover, the Integrate and Cherry-pick sheets, and Preview Pull
-// Request's base-branch picker use the picker.
+// The branch popover, the Integrate and Cherry-pick sheets, Go to Commit,
+// and Preview Pull Request's base-branch picker use the picker.
 
 import EspalierCore
 import EspalierSupport
@@ -182,14 +182,17 @@ public struct BranchPicker: View {
     private let candidates: [Branch]?
     private let comparesWithCurrentBranch: Bool
     private let style: BranchPickerStyle
+    private let filterAccessory: AnyView?
     @State private var filter = ""
     @State private var dates: [String: Date] = [:]
 
     /// - Parameters:
     ///   - repository: Whose branches.
-    ///   - selection: The chosen branch.
+    ///   - selection: The chosen branch (in the popover, the highlighted
+    ///     one).
     ///   - includesRemoteBranches: Whether remote-only branches are listed.
-    ///   - onActivate: Return or a double-click on a branch.
+    ///   - onActivate: Return, or a double-click on a branch (a click in the
+    ///     popover).
     ///   - onCreateBranch: "Create New Branch" for a filter that matches
     ///     nothing, with the filter's text; nil offers none.
     ///   - onFilterChange: The filter's text as it changes.
@@ -198,8 +201,10 @@ public struct BranchPicker: View {
     ///     branches.
     ///   - comparesWithCurrentBranch: Whether each row shows how far the
     ///     current branch is behind and ahead of it (Compare's list).
-    ///   - style: The palette's look in the branch popover, else a capsule
-    ///     filter over a bordered list (inside sheets).
+    ///   - style: The branch popover's, else a capsule filter over a
+    ///     bordered list (inside sheets).
+    ///   - filterAccessory: What sits beside the filter (the popover's New
+    ///     Branch…).
     public init(
         repository: RepositoryModel,
         selection: Binding<Branch?>,
@@ -209,9 +214,11 @@ public struct BranchPicker: View {
         onFilterChange: ((String) -> Void)? = nil,
         candidates: [Branch]? = nil,
         comparesWithCurrentBranch: Bool = false,
-        style: BranchPickerStyle = .embedded
+        style: BranchPickerStyle = .embedded,
+        filterAccessory: AnyView? = nil
     ) {
         self.style = style
+        self.filterAccessory = filterAccessory
         self.comparesWithCurrentBranch = comparesWithCurrentBranch
         self.repository = repository
         _selection = selection
@@ -247,7 +254,8 @@ public struct BranchPicker: View {
             style: style,
             dotColor: { [repository] branch in
                 BranchPicker.dotColor(of: branch, in: repository)
-            }
+            },
+            filterAccessory: filterAccessory
         )
         .task(id: listed.map(\.tip.sha)) {
             dates = await repository.branches.tipDates(for: listed)
@@ -280,15 +288,17 @@ public struct BranchPicker: View {
 
 /// How a branch picker looks.
 nonisolated public enum BranchPickerStyle: Sendable, Equatable {
-    /// The branch popover: the palette's search field across the top.
-    case palette
-    /// Inside a sheet: a capsule filter over a bordered list.
+    /// The branch popover: the filter across the top, a hairline under it,
+    /// and rows a click activates.
+    case popover
+    /// Inside a sheet: the filter over a bordered list whose rows a click
+    /// selects.
     case embedded
 }
 
 /// The picker's look, value-driven: the filter field, the grouped list,
-/// and the empty state. Rows draw their own highlight, filled with the
-/// accent (the list's own selection drawing is off).
+/// and the empty state. Rows draw their own selection in the soft accent
+/// (the list's own selection drawing is off).
 struct BranchPickerList: View {
     let content: BranchPickerContent
     let currentBranch: String?
@@ -303,6 +313,8 @@ struct BranchPickerList: View {
     var style: BranchPickerStyle
     /// A branch's dot color; nil uses its color by name.
     var dotColor: ((Branch) -> NSColor)?
+    /// What sits beside the filter.
+    var filterAccessory: AnyView?
     @FocusState private var isFilterFocused: Bool
 
     init(
@@ -315,7 +327,8 @@ struct BranchPickerList: View {
         onCreateBranch: ((String) -> Void)? = nil,
         comparison: BranchComparison? = nil,
         style: BranchPickerStyle = .embedded,
-        dotColor: ((Branch) -> NSColor)? = nil
+        dotColor: ((Branch) -> NSColor)? = nil,
+        filterAccessory: AnyView? = nil
     ) {
         self.content = content
         self.currentBranch = currentBranch
@@ -327,32 +340,27 @@ struct BranchPickerList: View {
         self.comparison = comparison
         self.style = style
         self.dotColor = dotColor
+        self.filterAccessory = filterAccessory
     }
 
     var body: some View {
-        VStack(spacing: style == .palette ? 0 : Metrics.insetSmall) {
-            filterField
-                .focused($isFilterFocused)
-                .onKeyPress(.downArrow) {
-                    moveSelection(by: 1)
-                    return .handled
-                }
-                .onKeyPress(.upArrow) {
-                    moveSelection(by: -1)
-                    return .handled
-                }
-                .onSubmit {
-                    if let selection {
-                        onActivate?(selection)
-                    } else if content.isEmpty, !content.filter.isEmpty {
-                        onCreateBranch?(content.filter)
-                    }
-                }
+        VStack(spacing: style == .popover ? 0 : Metrics.insetSmall) {
+            HStack(spacing: Metrics.insetSmall) {
+                filterField
+                filterAccessory
+            }
+            .padding(style == .popover ? Metrics.insetMedium : 0)
+            if style == .popover {
+                Hairline()
+            }
             Group {
                 if content.isEmpty {
                     noBranches
                 } else {
-                    list
+                    switch style {
+                    case .popover: popoverList
+                    case .embedded: embeddedList
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -366,55 +374,120 @@ struct BranchPickerList: View {
         }
     }
 
-    @ViewBuilder
+    /// The filter: the arrow keys move the highlight, and Return activates
+    /// it or, matching nothing, creates the branch.
     private var filterField: some View {
-        switch style {
-        case .palette:
-            PaletteSearchField(onCreateBranch == nil ? "Filter branches" : "Filter branches, or type a new name", text: $filter, systemImage: "arrow.trianglehead.branch")
-        case .embedded:
-            TextField("Filter", text: $filter, prompt: Text("Filter"))
-                .textFieldStyle(.capsule(systemImage: "magnifyingglass"))
+        TextField("Filter", text: $filter, prompt: Text("Filter"))
+            .textFieldStyle(.capsule(systemImage: "magnifyingglass"))
+            .focused($isFilterFocused)
+            .onKeyPress(.downArrow) {
+                moveSelection(by: 1)
+                return .handled
+            }
+            .onKeyPress(.upArrow) {
+                moveSelection(by: -1)
+                return .handled
+            }
+            .onSubmit {
+                if let selection {
+                    onActivate?(selection)
+                } else if content.isEmpty, !content.filter.isEmpty {
+                    onCreateBranch?(content.filter)
+                }
+            }
+    }
+
+    /// A branch's row, with how the current branch compares with it where
+    /// the list shows that.
+    @ViewBuilder
+    private func row(_ branch: Branch) -> some View {
+        if let comparison, branch.name != currentBranch {
+            ComparedBranchPickerRow(branch: branch, date: dates[branch.tip.sha], comparison: comparison, dotColor: dotColor?(branch))
+        } else {
+            BranchPickerRow(
+                branch: branch,
+                isCurrent: branch.name == currentBranch,
+                date: dates[branch.tip.sha],
+                dotColor: dotColor?(branch)
+            )
         }
     }
 
-    private var list: some View {
+    /// The popover's rows, as a menu's: a click activates a branch, and the
+    /// pointer highlights the row it's on.
+    private var popoverList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(content.groups) { group in
+                        ListGroupLabel(group.title)
+                            .padding(.horizontal, Metrics.ListRow.inset)
+                        ForEach(group.branches, id: \.ref) { branch in
+                            popoverRow(branch)
+                        }
+                    }
+                }
+                .padding(.bottom, Metrics.ListRow.inset)
+            }
+            .onChange(of: selection?.ref) {
+                if let ref = selection?.ref {
+                    proxy.scrollTo(ref)
+                }
+            }
+            .onAppear {
+                if let ref = selection?.ref {
+                    proxy.scrollTo(ref)
+                }
+            }
+        }
+    }
+
+    private func popoverRow(_ branch: Branch) -> some View {
+        let isHighlighted = branch.ref == selection?.ref
+        return Button {
+            onActivate?(branch)
+        } label: {
+            row(branch)
+                .selectableRow(isSelected: isHighlighted)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, Metrics.ListRow.inset)
+        .padding(.vertical, 1)
+        .id(branch.ref)
+        .onHover { isHovering in
+            if isHovering {
+                selection = branch
+            }
+        }
+        .accessibilityAddTraits(isHighlighted ? .isSelected : [])
+    }
+
+    /// A sheet's list: a click selects a branch, Return or a double-click
+    /// activates it.
+    private var embeddedList: some View {
         ScrollViewReader { proxy in
             List(selection: selectedRef) {
                 ForEach(content.groups) { group in
                     // The group's label is a row of its own, not a section
                     // header: a plain list's floating header draws a line.
-                    SectionLabel(group.title)
-                        .padding(.horizontal, Metrics.PaletteList.rowHorizontalPadding)
-                        .padding(.top, Metrics.PaletteList.sectionTopPadding)
-                        .padding(.bottom, Metrics.PaletteList.sectionBottomPadding)
-                        .listRowInsets(EdgeInsets(top: 0, leading: Metrics.PaletteList.inset, bottom: 0, trailing: Metrics.PaletteList.inset))
+                    ListGroupLabel(group.title)
+                        .listRowInsets(EdgeInsets(top: 0, leading: Metrics.ListRow.inset, bottom: 0, trailing: Metrics.ListRow.inset))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                     ForEach(group.branches, id: \.ref) { branch in
-                        Group {
-                            if let comparison, branch.name != currentBranch {
-                                ComparedBranchPickerRow(branch: branch, date: dates[branch.tip.sha], comparison: comparison, dotColor: dotColor?(branch))
-                            } else {
-                                BranchPickerRow(
-                                    branch: branch,
-                                    isCurrent: branch.name == currentBranch,
-                                    date: dates[branch.tip.sha],
-                                    dotColor: dotColor?(branch)
-                                )
-                            }
-                        }
-                        .paletteRow(isHighlighted: branch.ref == selection?.ref)
-                        .tag(branch.ref)
-                        .id(branch.ref)
-                        .listRowInsets(EdgeInsets(top: 1, leading: Metrics.PaletteList.inset, bottom: 1, trailing: Metrics.PaletteList.inset))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+                        row(branch)
+                            .selectableRow(isSelected: branch.ref == selection?.ref)
+                            .tag(branch.ref)
+                            .id(branch.ref)
+                            .listRowInsets(EdgeInsets(top: 1, leading: Metrics.ListRow.inset, bottom: 1, trailing: Metrics.ListRow.inset))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                     }
                 }
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            // The rows draw the highlight; the table's own is off.
+            // The rows draw the selection; the table's own is off.
             .rowsDrawSelection()
             .contextMenu(forSelectionType: String.self) { _ in
                 EmptyView()
@@ -431,29 +504,23 @@ struct BranchPickerList: View {
         }
     }
 
-    /// "No Matching Branches", and Create New Branch when the
-    /// picker offers it.
-    @ViewBuilder
+    /// "No Matching Branches", and Create New Branch… when the picker
+    /// offers it.
     private var noBranches: some View {
-        VStack(spacing: Metrics.insetSmall) {
-            IconCircle("magnifyingglass", size: 32)
-            Text("No Matching Branches")
-                .font(Typography.heading)
-                .foregroundStyle(.text)
-            if let onCreateBranch, !content.filter.isEmpty {
-                Text("Do you want to create a new branch instead?")
-                    .font(Typography.secondary)
-                    .foregroundStyle(.text2)
+        let offersCreate = onCreateBranch != nil && !content.filter.isEmpty
+        return CenteredMessage(
+            "No Matching Branches",
+            systemImage: "magnifyingglass",
+            description: offersCreate ? "Do you want to create a new branch instead?" : nil
+        ) {
+            if offersCreate {
                 Button("Create New Branch…") {
-                    onCreateBranch(content.filter)
+                    onCreateBranch?(content.filter)
                 }
                 .buttonStyle(.quiet)
-                .padding(.top, Metrics.grid)
             }
         }
-        .multilineTextAlignment(.center)
-        .padding(Metrics.insetLarge)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .fillingSpace()
     }
 
     private var selectedRef: Binding<String?> {
@@ -486,9 +553,9 @@ private struct EmbeddedListChrome: ViewModifier {
         if isEmbedded {
             content
                 .padding(.vertical, Metrics.SheetList.inset)
-                .clipShape(RoundedRectangle(cornerRadius: Metrics.SheetList.cornerRadius, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: Metrics.SheetList.cornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
                         .strokeBorder(.line, lineWidth: 1)
                 )
         } else {
@@ -497,9 +564,9 @@ private struct EmbeddedListChrome: ViewModifier {
     }
 }
 
-/// A branch in the picker: its dot, its name (the current one tagged), how
-/// the current branch compares with it (Compare's list), and the date of
-/// its last commit. White on the accent while highlighted.
+/// A branch in the picker: its dot, its name (the current one semibold),
+/// how the current branch compares with it (Compare's list), and the date
+/// of its last commit.
 struct BranchPickerRow: View {
     let branch: Branch
     let isCurrent: Bool
@@ -507,35 +574,24 @@ struct BranchPickerRow: View {
     var counts: BranchComparisonCounts?
     /// The dot's color; nil uses its color by name.
     var dotColor: NSColor?
-    @Environment(\.backgroundProminence) private var prominence
 
     var body: some View {
-        let colors = PaletteRowColors(prominence)
         HStack(spacing: Metrics.insetSmall) {
             Circle()
-                .fill(colors.mark(Color(nsColor: dotColor ?? TrackPalette.color(forBranch: branch.name, isCurrent: isCurrent, isDefault: false))))
+                .fill(Color(nsColor: dotColor ?? TrackPalette.color(forBranch: branch.name, isCurrent: isCurrent, isDefault: false)))
                 .frame(width: Metrics.Sidebar.dotSize, height: Metrics.Sidebar.dotSize)
                 .accessibilityHidden(true)
             Text(branch.name)
-                .font(Typography.row.weight(isCurrent ? .semibold : .medium))
-                .foregroundStyle(colors.primary)
+                .font(isCurrent ? Typography.row.weight(.semibold) : Typography.row)
+                .foregroundStyle(.text)
                 .lineLimit(1)
                 .truncationMode(.middle)
-            if isCurrent {
-                Text("current")
-                    .font(Typography.tinyCount)
-                    .foregroundStyle(colors.secondary)
-                    .padding(.horizontal, Metrics.BranchPicker.currentTagPadding)
-                    .frame(height: Metrics.BranchPicker.currentTagHeight)
-                    .background(Capsule(style: .circular).fill(colors.tagFill))
-                    .fixedSize()
-                    .accessibilityLabel("Current branch")
-            }
+                .accessibilityLabel(isCurrent ? "\(branch.name), current branch" : branch.name)
             Spacer(minLength: Metrics.insetSmall)
             if let counts {
                 Text(counts.text)
                     .font(Typography.secondaryCount)
-                    .foregroundStyle(colors.secondary)
+                    .foregroundStyle(.text2)
                     .lineLimit(1)
                     .fixedSize()
                     .help(counts.description)
@@ -544,7 +600,7 @@ struct BranchPickerRow: View {
             if let date {
                 RelativeTimeText(date)
                     .font(Typography.meta)
-                    .foregroundStyle(colors.tertiary)
+                    .foregroundStyle(.text3)
                     .lineLimit(1)
             }
         }

@@ -1,7 +1,8 @@
 // History's simple mode in the history model (SimpleHistory.swift describes the
-// list). The simple list loads from the refresh's state: HEAD, the base branch
+// list). The simple list loads from the refresh's state: HEAD (or the tip of
+// the branch shown instead), the base branch
 // (`findContributionTargetDefaultBranch`, which Update from <branch> merges),
-// the upstream, and the remotes. It reloads when HEAD moves, keeping as many
+// the upstream, and the remotes. It reloads when its tip moves, keeping as many
 // commits as were loaded, and counts its unpushed rows and the base's new
 // commits again when only the base, the upstream, or the remotes moved.
 
@@ -152,14 +153,21 @@ extension HistoryModel {
 
     // MARK: Loading
 
-    /// What the simple list loads from, from the refresh's state; nil until
-    /// the first status.
-    private func simpleSource() -> SimpleHistorySource? {
+    /// What the simple list loads from, from the refresh's state: HEAD's
+    /// line, or the shown branch's (`shownBranch`); nil until the first
+    /// status.
+    func simpleSource() -> SimpleHistorySource? {
         guard let repository else {
             return nil
         }
-        let state = repository.gitState
-        switch state.tip {
+        let tip = repository.gitState.tip
+        if case .unknown = tip {
+            return nil
+        }
+        if let branch = shownBranch {
+            return simpleSource(for: branch, isHead: false, in: repository)
+        }
+        switch tip {
         case .unknown:
             return nil
         case .unborn:
@@ -167,20 +175,29 @@ extension HistoryModel {
         case .detached(let sha):
             return SimpleHistorySource(head: sha)
         case .valid(let branch):
-            var source = SimpleHistorySource(head: branch.tip.sha)
-            if let base = findContributionTargetDefaultBranch(repository.record, state.branches),
-               !JSCompat.strictEquals(base.name, branch.name) {
-                source.base = base
-            }
-            if !state.remotes.all.isEmpty {
-                if let upstream = state.branches.upstreams[ExactString(branch.ref)] {
-                    source.unpushedReference = .upstream(sha: upstream.tip.sha)
-                } else {
-                    source.unpushedReference = .remotes
-                }
-            }
-            return source
+            return simpleSource(for: branch, isHead: true, in: repository)
         }
+    }
+
+    /// The line from `branch`'s tip: the base unless it's the branch
+    /// itself, and the unpushed marks against a local branch's upstream (or
+    /// every remote, before it's published). A remote branch has no
+    /// unpushed marks.
+    private func simpleSource(for branch: Branch, isHead: Bool, in repository: RepositoryModel) -> SimpleHistorySource {
+        let state = repository.gitState
+        var source = SimpleHistorySource(head: branch.tip.sha, isHead: isHead)
+        if let base = findContributionTargetDefaultBranch(repository.record, state.branches),
+           !JSCompat.strictEquals(base.name, branch.name) {
+            source.base = base
+        }
+        if !state.remotes.all.isEmpty, branch.type == .local {
+            if let upstream = state.branches.upstreams[ExactString(branch.ref)] {
+                source.unpushedReference = .upstream(sha: upstream.tip.sha)
+            } else {
+                source.unpushedReference = .remotes
+            }
+        }
+        return source
     }
 
     /// Loads the simple list when HEAD moved (or it isn't loaded), keeping

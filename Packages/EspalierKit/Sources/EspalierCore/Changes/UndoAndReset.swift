@@ -89,7 +89,7 @@ extension CommitModel {
     /// amending stops or the amend is committed.
     ///
     /// - Throws: `.confirmationRequired(.rewritePublishedCommits)` ("Amend
-    ///   Requires a Force Push") when the commit was pushed, HEAD is on a
+    ///   Pushed Commit?") when the commit was pushed, HEAD is on a
     ///   branch, and `confirmForcePush` is on; `.precondition` when there's
     ///   no commit to amend.
     public func startAmending(confirmed: Set<ConfirmationKind> = []) async throws(OperationError) {

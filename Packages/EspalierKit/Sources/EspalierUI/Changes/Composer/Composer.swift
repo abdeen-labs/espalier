@@ -1,9 +1,16 @@
 // The composer under the Changes list, top to bottom: the last commit with
-// Undo, the amend note, the summary (the author's avatar, the sparkle) and
-// description with a divider between them and a faint accent tint behind
-// the one that has focus, an AI failure, the co-authors, one warning,
-// Co-Authors and Options (or the hook line), and the commit button.
-// `CommitModel` commits, and the window's presenter shows its gates.
+// Undo, the amend note, the commit message card, an AI failure, one
+// warning, the hook line, and the commit button. The card holds the
+// summary (with its hints) and the description, the co-authors under them
+// while they show, dividers between, a faint accent tint behind the one
+// that has focus, and a footer: the AI button, Co-Authors, and Options,
+// then the author's avatar. `CommitModel` commits, and the window's
+// presenter shows its gates.
+//
+// While a merge waits on its conflicts, the form shows the merge's message
+// (git's, which the user may edit) and its button is Commit Merge; the
+// user's draft is set aside, untouched, and shows again once the merge
+// ends.
 
 import AIKit
 import EspalierCore
@@ -32,6 +39,8 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
     public var showsCoAuthorsToggle: Bool
     public var isCoAuthorsToggleEnabled: Bool
     public var warning: CommitWarning?
+    /// Whether the Options menu shows (not for a merge's commit).
+    public var showsCommitOptions: Bool
     public var options: CommitOptionsContent
     public var hook: HookActivityContent?
     public var button: CommitButtonContent
@@ -56,6 +65,7 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
         showsCoAuthorsToggle: Bool = false,
         isCoAuthorsToggleEnabled: Bool = true,
         warning: CommitWarning? = nil,
+        showsCommitOptions: Bool = true,
         options: CommitOptionsContent = CommitOptionsContent(),
         hook: HookActivityContent? = nil,
         button: CommitButtonContent,
@@ -76,6 +86,7 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
         self.showsCoAuthorsToggle = showsCoAuthorsToggle
         self.isCoAuthorsToggleEnabled = isCoAuthorsToggleEnabled
         self.warning = warning
+        self.showsCommitOptions = showsCommitOptions
         self.options = options
         self.hook = hook
         self.button = button
@@ -123,7 +134,8 @@ nonisolated public struct AIFailureContent: Sendable, Equatable {
 }
 
 extension ComposerContent {
-    /// The composer for a repository.
+    /// The composer for a repository: the merge's while a merge waits on
+    /// its conflicts (`merge(_:app:actions:button:)`).
     ///
     /// - Parameters:
     ///   - aiFailure: The window's last generation failure.
@@ -137,6 +149,9 @@ extension ComposerContent {
         aiFailure: OperationError? = nil,
         messageRuleFailures: MessageRuleFailures? = nil
     ) -> ComposerContent {
+        if let slot = OperationSlotContent.make(repository), slot.kind == .merge {
+            return merge(repository, app: app, actions: actions, button: slot.button)
+        }
         let commit = repository.commit
         let draft = commit.draft
         let state = repository.gitState
@@ -240,6 +255,33 @@ extension ComposerContent {
         )
     }
 
+    /// The composer while a merge waits on its conflicts: the merge's
+    /// message in the fields (`Composer.draft(for:)`), the author, and
+    /// Commit Merge; no AI, co-authors, options, last commit, or warnings.
+    /// The fields can't change while the merge is committed.
+    @MainActor
+    static func merge(_ repository: RepositoryModel, app: AppModel, actions: WindowActions?, button: CommitButtonContent) -> ComposerContent {
+        let isCommitting = button.isCommitting
+        let hook: HookActivityContent? = if isCommitting, let activity = repository.localOperation?.hook {
+            HookActivityContent(
+                hookName: activity.name,
+                status: activity.status,
+                canShowOutput: repository.localOperation?.terminalOutput != nil
+            )
+        } else {
+            nil
+        }
+        return ComposerContent(
+            author: AuthorIdentityContent.make(repository, app: app),
+            showsCommitOptions: false,
+            hook: hook,
+            button: button,
+            isReadOnly: isCommitting,
+            isSpellCheckingEnabled: app.preferences.commitSpellcheckEnabled,
+            canOpenRepositorySettings: actions?.canPerform(.repositorySettings) ?? false
+        )
+    }
+
     /// Whether the co-authors field shows for `draft`.
     public func showsCoAuthors(_ draft: CommitDraft) -> Bool {
         showsCoAuthorsToggle && draft.showCoAuthoredBy
@@ -335,11 +377,6 @@ public struct ComposerView: View {
             if let failure = content.aiFailure {
                 AIFailureLine(failure, onTryAgain: actions.generate, onOpenSettings: actions.openAISettings)
             }
-            if content.showsCoAuthors(draft) {
-                // Opens and closes as a bar does (`coAuthorsBinding`).
-                CoAuthorsField(authors: $draft.coAuthors, isEditable: !content.isReadOnly, completions: completions)
-                    .barTransition()
-            }
             if let warning = content.warning {
                 CommitWarningView(warning, onLink: actions.openLink)
             }
@@ -348,9 +385,9 @@ public struct ComposerView: View {
             }
             CommitButton(content.button, action: actions.commit)
         }
-        .padding(.horizontal, ComposerMetrics.horizontalPadding)
+        .padding(.horizontal, Metrics.Composer.horizontalPadding)
         .padding(.top, Metrics.insetMedium)
-        .padding(.bottom, ComposerMetrics.horizontalPadding)
+        .padding(.bottom, Metrics.Composer.horizontalPadding)
         .onChange(of: focusRequest) {
             focusBridge.focusSummary()
         }
@@ -364,9 +401,9 @@ public struct ComposerView: View {
     }
 
     /// The commit message card: the summary (semibold), a divider, and the
-    /// description, then a footer with the AI button, co-authors, the commit
-    /// options, and on the right the author and the branch the commit goes
-    /// on.
+    /// description; the co-authors under another divider while they show;
+    /// then a footer with the AI button, co-authors, and the commit options
+    /// on the left and the author on the right.
     private var card: some View {
         VStack(spacing: 0) {
             HStack(spacing: Metrics.insetSmall) {
@@ -382,7 +419,7 @@ public struct ComposerView: View {
                     onSubmit: { focusBridge.focusDescription() },
                     onEscape: cancelGeneration,
                     focusBridge: focusBridge,
-                    font: ComposerMetrics.summaryFont
+                    font: Self.summaryFont
                 )
                 if let failures = content.messageRuleFailures {
                     MessageRulesHint(failures: failures, onLink: actions.openLink)
@@ -391,15 +428,15 @@ public struct ComposerView: View {
                     SummaryLengthHint()
                 }
             }
-            .padding(.horizontal, ComposerMetrics.cardPadding)
-            .padding(.top, ComposerMetrics.cardPadding - 2)
+            .padding(.horizontal, Metrics.Composer.cardPadding)
+            .padding(.top, Metrics.Composer.summaryTopPadding)
             .padding(.bottom, Metrics.insetSmall)
             .background {
                 focusTint(behind: .summary)
             }
             .fieldRegion()
             Hairline()
-                .padding(.horizontal, ComposerMetrics.cardPadding)
+                .padding(.horizontal, Metrics.Composer.cardPadding)
             DescriptionEditor(
                 text: descriptionBinding,
                 isEditable: !content.isReadOnly,
@@ -411,16 +448,36 @@ public struct ComposerView: View {
                 focusBridge: focusBridge,
                 textColor: Palette.text2
             )
-            .padding(.horizontal, ComposerMetrics.cardPadding)
+            .padding(.horizontal, Metrics.Composer.cardPadding)
             .padding(.vertical, Metrics.grid)
             .background {
                 focusTint(behind: .description)
             }
             .fieldRegion()
+            if content.showsCoAuthors(draft) {
+                // Opens and closes as a bar does (`coAuthorsBinding`).
+                VStack(spacing: 0) {
+                    Hairline()
+                        .padding(.horizontal, Metrics.Composer.cardPadding)
+                    CoAuthorsField(
+                        authors: $draft.coAuthors,
+                        isEditable: !content.isReadOnly,
+                        completions: completions,
+                        focusBridge: focusBridge
+                    )
+                    .padding(.horizontal, Metrics.Composer.cardPadding)
+                    .padding(.vertical, Metrics.grid)
+                    .background {
+                        focusTint(behind: .coAuthors)
+                    }
+                    .fieldRegion()
+                }
+                .barTransition()
+            }
             Hairline()
             footer
         }
-        .surface(Color(espalier: Palette.background), elevation: .quiet, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+        .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
         .contextMenu {
             ForEach(Array(menuItems.enumerated()), id: \.offset) { _, item in
                 Button(item.title, action: item.action)
@@ -457,9 +514,10 @@ public struct ComposerView: View {
     }
 
     /// The card's footer: the AI button, co-authors, and the options on the
-    /// left; the author and the branch on the right.
+    /// left, as icon buttons; the author on the right. The commit button
+    /// names the branch.
     private var footer: some View {
-        HStack(spacing: ComposerMetrics.footerSpacing) {
+        HStack(spacing: 0) {
             SparkleButton(content.sparkle, action: actions.generate)
                 .popover(item: $sparklePopover, arrowEdge: .bottom) { popover in
                     switch popover {
@@ -470,18 +528,24 @@ public struct ComposerView: View {
                     }
                 }
             if content.showsCoAuthorsToggle {
+                // On, the symbol fills in the accent.
                 Toggle(isOn: coAuthorsBinding) {
-                    IconCircle("person.2", size: ComposerMetrics.footerButtonSize, tint: draft.showCoAuthoredBy ? Color.accentColor : nil)
-                        .motion(Motion.leave, value: draft.showCoAuthoredBy)
+                    Label {
+                        Text("Co-Authors")
+                    } icon: {
+                        Image(systemName: draft.showCoAuthoredBy ? "person.2.fill" : "person.2")
+                            .foregroundStyle(draft.showCoAuthoredBy ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.text2))
+                    }
                 }
                 .toggleStyle(.button)
-                .buttonStyle(.plain)
+                .buttonStyle(.icon)
                 .disabled(!content.isCoAuthorsToggleEnabled)
-                .opacity(content.isCoAuthorsToggleEnabled ? 1 : CheckboxDrawing.disabledOpacity)
                 .help(draft.showCoAuthoredBy ? "Remove Co-Authors" : "Add Co-Authors")
                 .accessibilityLabel("Co-Authors")
             }
-            CommitOptionsMenu(content.options, onToggleAmend: actions.toggleAmend) { options = $0 }
+            if content.showsCommitOptions {
+                CommitOptionsMenu(content.options, onToggleAmend: actions.toggleAmend) { options = $0 }
+            }
             Spacer(minLength: Metrics.insetSmall)
             AuthorAvatarButton(
                 content.author,
@@ -490,25 +554,10 @@ public struct ComposerView: View {
                 onOpenRepositorySettings: actions.openRepositorySettings,
                 onUpdateEmail: actions.updateEmail
             )
-            if let branch = content.button.branch {
-                HStack(spacing: Metrics.grid + 1) {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(.text3)
-                    Text(branch)
-                        .font(Typography.meta.weight(.medium))
-                        .foregroundStyle(.text2)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .help("Commits go on \(branch)")
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("On \(branch)")
-            }
         }
-        .padding(.leading, ComposerMetrics.footerPadding)
-        .padding(.trailing, ComposerMetrics.cardPadding)
-        .frame(height: ComposerMetrics.footerHeight)
+        .padding(.leading, Metrics.Composer.footerPadding)
+        .padding(.trailing, Metrics.Composer.cardPadding)
+        .frame(height: Metrics.Composer.footerHeight)
     }
 
     /// The fields' context menu items: co-authors, and generating a message.
@@ -583,23 +632,9 @@ public struct ComposerView: View {
         actions.cancelGeneration()
         return true
     }
-}
-
-/// The composer's sizes.
-enum ComposerMetrics {
-    /// Space around the composer, beside and below it.
-    static let horizontalPadding: CGFloat = 14
-    /// Space inside the card around the summary and description.
-    static let cardPadding: CGFloat = 11
-    /// The card's footer row.
-    static let footerHeight: CGFloat = 34
-    static let footerPadding: CGFloat = 8
-    static let footerSpacing: CGFloat = 6
-    /// The footer's round buttons (the AI button, co-authors, options).
-    static let footerButtonSize: CGFloat = 24
 
     /// The summary's font: the row font, semibold.
-    static var summaryFont: NSFont {
+    private static var summaryFont: NSFont {
         .systemFont(ofSize: AppKitTypography.row.pointSize, weight: .semibold)
     }
 }
@@ -647,7 +682,8 @@ struct AIFailureLine: View {
 // MARK: - The composer for a repository
 
 /// The composer for a repository: its content from the models, its actions
-/// through the window.
+/// through the window. While a merge waits on its conflicts it edits the
+/// merge's message, and its button commits the merge.
 struct Composer: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
@@ -658,17 +694,54 @@ struct Composer: View {
         let commit = repository.commit
         ComposerView(
             windowState.composerContent(repository, context: context),
-            draft: Binding(get: { commit.draft }, set: { commit.draft = $0 }),
+            draft: Self.draft(for: repository),
             options: Binding(get: { commit.options }, set: { commit.options = $0 }),
             sparklePopover: Binding(get: { windowState.sparklePopover }, set: { windowState.sparklePopover = $0 }),
             hookOutput: repository.localOperation?.terminalOutput,
             completions: ComposerCompletions.make(repository, app: context.app),
             focusRequest: context.state.commitMessageFocusRequest,
-            actions: controller.actions
+            actions: Self.isMerging(repository) ? controller.mergeActions : controller.actions
         )
         .task(id: MessageRuleCheck.of(repository)) {
             await windowState.checkMessageRules(repository)
         }
+    }
+
+    /// Whether a merge waits on its conflicts: the form is the merge's.
+    static func isMerging(_ repository: RepositoryModel) -> Bool {
+        if case .merge? = repository.operations.conflictState {
+            return true
+        }
+        return false
+    }
+
+    /// The message the composer edits: the user's draft, or while a merge
+    /// waits on its conflicts, the merge's message (`mergeMessage`, git's
+    /// until edited), which Commit Merge commits. The user's draft is set
+    /// aside meanwhile, untouched, and shows again once the merge ends.
+    static func draft(for repository: RepositoryModel) -> Binding<CommitDraft> {
+        let commit = repository.commit
+        let operations = repository.operations
+        guard isMerging(repository) else {
+            return Binding(get: { commit.draft }, set: { commit.draft = $0 })
+        }
+        return Binding(
+            get: {
+                let message = operations.mergeMessage ?? MergeMessage()
+                return CommitDraft(summary: message.summary, description: message.description)
+            },
+            set: { draft in
+                // Before git's message loads, an empty one stays unset, so
+                // the load fills it.
+                let current = operations.mergeMessage ?? MergeMessage()
+                var message = current
+                message.summary = draft.summary
+                message.description = draft.description
+                if message != current {
+                    operations.mergeMessage = message
+                }
+            }
+        )
     }
 }
 
@@ -745,6 +818,21 @@ struct ComposerController {
         actions.openLink = { url in openLink(url) }
         actions.setSpellChecking = { [context] isOn in context.app.preferences.commitSpellcheckEnabled = isOn }
         return actions
+    }
+
+    /// The composer's actions while a merge waits on its conflicts: the
+    /// button commits the merge.
+    var mergeActions: ComposerActions {
+        var actions = self.actions
+        actions.commit = { Task { await commitMerge() } }
+        return actions
+    }
+
+    /// Commits the merge waiting on its conflicts with the message the form
+    /// shows: the operation's continue, through the presenter, with its
+    /// toast.
+    func commitMerge() async {
+        await MultiCommitActions.continueOperation(in: context, repository: repository)
     }
 
     // MARK: Committing

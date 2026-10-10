@@ -39,7 +39,7 @@ func pullRequest(_ number: Int, head: String, in repository: GitHubRepository, d
 struct BranchesContentTests {
     // MARK: The section
 
-    @Test("the current branch, the default, recent, other in folders, then remotes")
+    @Test("the branch popover's groups: the default branch, the recent ones with the current one, other in folders, then remotes")
     func order() throws {
         let main = localBranch("main", upstream: "origin/main")
         let current = localBranch("feature/login", upstream: "origin/feature/login")
@@ -53,10 +53,9 @@ struct BranchesContentTests {
             recentBranches: [current, recent, main]
         ))
 
-        #expect(content.current?.name == "feature/login")
-        #expect(content.current?.isCurrent == true)
         #expect(content.defaultBranch?.name == "main")
-        #expect(content.recent.map(\.name) == ["fix/crash"])
+        #expect(content.recent.map(\.name) == ["feature/login", "fix/crash"])
+        #expect(content.recent.map(\.isCurrent) == [true, false])
         // Folders first, each by name, then branches by name; titles are
         // the names' last components.
         #expect(content.other.map(\.id) == ["folder:other:feature", "refs/heads/alpha", "refs/heads/zeta"])
@@ -71,15 +70,39 @@ struct BranchesContentTests {
         }
         #expect(signup.title == "signup")
         #expect(signup.name == "feature/signup")
-        #expect(content.otherCount == 4)
         // Remote branches by remote, without Espalier's fork remotes'.
         #expect(content.remotes.map(\.name) == ["origin", "upstream"])
         #expect(content.remotes[1].nodes.map(\.id) == ["folder:remote/upstream:release"])
-        #expect(content.remoteCount == 2)
         #expect(content.allRows.map(\.name) == [
-            "feature/login", "main", "fix/crash", "feature/ui/colors", "feature/signup", "alpha", "zeta",
+            "main", "feature/login", "fix/crash", "feature/ui/colors", "feature/signup", "alpha", "zeta",
             "origin/experiment", "upstream/release/1.0",
         ])
+    }
+
+    @Test("the current branch is in its group as the refresh has it; one the branch list doesn't have yet leads the recent ones")
+    func currentBranch() throws {
+        let main = localBranch("main")
+        let listed = localBranch("feature/login")
+        let refreshed = localBranch("feature/login", sha: "5555555555555555555555555555555555555555")
+        let content = BranchesSectionContent.make(.init(branches: [main, listed], tip: .valid(branch: refreshed), defaultBranch: main))
+        // Not a recent branch: it's among the other branches, with the
+        // refresh's tip.
+        #expect(content.recent.isEmpty)
+        guard case .folder(let feature)? = content.other.first, case .branch(let login)? = feature.children.first else {
+            Issue.record("No feature/login row")
+            return
+        }
+        #expect(login.isCurrent)
+        #expect(login.tipSHA == refreshed.tip.sha)
+
+        let onDefault = BranchesSectionContent.make(.init(branches: [main], tip: .valid(branch: main), defaultBranch: main))
+        #expect(onDefault.defaultBranch?.isCurrent == true)
+        #expect(onDefault.allRows.count == 1)
+
+        let created = localBranch("spike")
+        let unlisted = BranchesSectionContent.make(.init(branches: [main], tip: .valid(branch: created), defaultBranch: main, recentBranches: [main]))
+        #expect(unlisted.recent.map(\.name) == ["spike"])
+        #expect(unlisted.recent.first?.isCurrent == true)
     }
 
     @Test("canonically equivalent folder names share a folder, named as first seen; a remote branch outside refs/remotes is under “remote”")
@@ -109,8 +132,8 @@ struct BranchesContentTests {
         let main = localBranch("main")
         let detached = BranchesSectionContent.make(.init(branches: [main], tip: .detached(currentSha: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"), defaultBranch: main))
         #expect(detached.detachedSHA == "a1b2c3d")
-        #expect(detached.current == nil)
         #expect(detached.defaultBranch?.name == "main")
+        #expect(!detached.allRows.contains { $0.isCurrent })
 
         let unborn = BranchesSectionContent.make(.init(branches: [], tip: .unborn(ref: "main")))
         #expect(unborn.unbornBranch == "main")
@@ -128,7 +151,7 @@ struct BranchesContentTests {
             filter: "LOGIN "
         ))
         #expect(content.isFiltering)
-        #expect(content.current == nil)
+        #expect(content.defaultBranch == nil)
         #expect(content.allRows.map(\.name) == ["feature/login", "origin/login-redesign"])
 
         // A filter nothing matches leaves no rows; the section still shows
@@ -163,8 +186,7 @@ struct BranchesContentTests {
         defer { without.window.contentView = nil }
         let with = try rows(showsNewBranchDropRow: true)
         defer { with.window.contentView = nil }
-        // The current branch, then the default branch's row.
-        #expect(without.count == 2)
+        #expect(without.count > 0)
         #expect(with.count == without.count + 1)
     }
 

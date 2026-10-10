@@ -1,6 +1,6 @@
-// Lists whose rows draw their own selection (rows have generous corners, a
-// selected row is `accent soft`, and the branch picker's highlighted row is
-// the accent). A SwiftUI `List` on macOS is a table that paints its own
+// Lists whose rows draw their own selection (rows have generous corners,
+// and a selected row is `accent soft`, the popovers' highlighted row too).
+// A SwiftUI `List` on macOS is a table that paints its own
 // highlight across the row; `rowsDrawSelection()` turns the table's off, as
 // the sidebar's `SidebarListStyler` does, and `turnsRowHighlightOff()` (in
 // every `selectableRow`) turns off the row's it's in, keeping the table's
@@ -11,8 +11,7 @@ import SwiftUI
 
 extension View {
     /// Turns the enclosing list's own selection drawing off: its rows draw
-    /// theirs (`selectableRow(isSelected:)`, `paletteRow(isHighlighted:)`).
-    /// Apply it to the `List`.
+    /// theirs (`selectableRow(isSelected:)`). Apply it to the `List`.
     public func rowsDrawSelection() -> some View {
         background {
             ListHighlightStyler()

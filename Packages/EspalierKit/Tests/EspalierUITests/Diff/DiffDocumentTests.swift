@@ -63,7 +63,7 @@ struct DiffDocumentTests {
         #expect(wrapping.lines[deleted].partner == added)
         #expect(wrapping.lines[added].partner == deleted)
         let change = try! #require(intraLineChange(deleted: wrapping.lines[deleted], added: wrapping.lines[added]))
-        // "client" → "app" after "Espalier is a native macOS ".
+        // "client" → "app" after "Espalier is a modern macOS ".
         #expect(change.before.location == 27)
         #expect(change.after.location == 27)
     }
@@ -178,12 +178,12 @@ struct DiffDocumentTests {
         #expect(document.blocks.map(\.diffLines) == [3...8, 15...15])
     }
 
-    @Test("line text info: ASCII, tabs, wide and zero-width characters")
+    @Test("line text info: ASCII, tabs (and the indentation they make), wide and zero-width characters")
     func lineTextInfo() {
         let ascii = LineTextInfo("+let x = 1", skippingFirstScalar: true, tabSize: 4)
         #expect(ascii == LineTextInfo(utf16Count: 9, columns: 9, isSimple: true))
         let tab = LineTextInfo(" \tx", skippingFirstScalar: true, tabSize: 4)
-        #expect(tab == LineTextInfo(utf16Count: 2, columns: 5, isSimple: false))
+        #expect(tab == LineTextInfo(utf16Count: 2, columns: 5, isSimple: false, leadingColumns: 4))
         let wide = LineTextInfo("+\u{65E5}\u{672C}a", skippingFirstScalar: true, tabSize: 4)
         #expect(wide == LineTextInfo(utf16Count: 3, columns: 5, isSimple: false))
         let combining = LineTextInfo("+e\u{301}", skippingFirstScalar: true, tabSize: 4)

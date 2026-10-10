@@ -41,7 +41,7 @@ struct AboutView: View {
                 .foregroundStyle(.text)
             MonoChip(content.versionLine)
                 .textSelection(.enabled)
-            Text("Espalier is a native macOS app based on GitHub Desktop.")
+            Text("Espalier is a Mac app based on GitHub Desktop.")
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)
                 .multilineTextAlignment(.center)

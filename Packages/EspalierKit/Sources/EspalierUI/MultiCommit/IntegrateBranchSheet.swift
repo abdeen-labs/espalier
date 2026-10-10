@@ -11,47 +11,21 @@ import EspalierSupport
 import GitKit
 import SwiftUI
 
-/// How a branch comes into the current one.
-nonisolated public enum IntegrateMethod: String, Sendable, CaseIterable, Identifiable {
-    case merge
-    case squashMerge
-    case rebase
+/// How a branch comes into the current one: Compare's methods, with their
+/// labels and descriptions, which the sheet and Compare's call to action
+/// pick with the same button (`IntegrateMethodButton`).
+public typealias IntegrateMethod = CompareMethod
 
-    public var id: String {
-        rawValue
-    }
-
-    /// The split button's label.
-    public var label: String {
-        switch self {
-        case .merge: "Create a merge commit"
-        case .squashMerge: "Squash and merge"
-        case .rebase: "Rebase"
-        }
-    }
-
-    /// The option's description in the split button's menu.
-    public var description: String {
-        switch self {
-        case .merge: "Adds the selected branch's commits to the current branch with a merge commit."
-        case .squashMerge: "Combines the selected branch's commits into one commit on the current branch."
-        case .rebase: "Replays the current branch's commits on top of the selected branch."
-        }
-    }
-
+extension CompareMethod {
     /// "Merge into main", "Squash and Merge into main", "Rebase main".
-    public func title(currentBranch: String) -> String {
-        let name = truncate(currentBranch)
+    nonisolated public func title(currentBranch: String) -> String {
+        // Cut to 40 characters with an ellipsis.
+        let name = currentBranch.count <= 40 ? currentBranch : "\(currentBranch.prefix(39))…"
         switch self {
         case .merge: return "Merge into \(name)"
         case .squashMerge: return "Squash and Merge into \(name)"
         case .rebase: return "Rebase \(name)"
         }
-    }
-
-    /// `name`, cut to 40 characters with an ellipsis.
-    private func truncate(_ name: String) -> String {
-        name.count <= 40 ? name : "\(name.prefix(39))…"
     }
 }
 
@@ -287,7 +261,8 @@ private struct PreviewKey: Equatable {
     }
 }
 
-/// The status line: its symbol and message.
+/// The status line: its symbol and message. The sheet and Compare's call
+/// to action show it alike.
 struct IntegrateStatusLine: View {
     let status: IntegrateStatus
 
@@ -306,7 +281,7 @@ struct IntegrateStatusLine: View {
     }
 }
 
-/// The status line's symbol: a dot while checking, then a check, a
+/// The status line's symbol: the arc while checking, then a check, a
 /// warning, or a cross.
 struct IntegrateStatusIcon: View {
     let icon: IntegrateStatus.Icon
@@ -314,37 +289,40 @@ struct IntegrateStatusIcon: View {
     var body: some View {
         switch icon {
         case .loading:
-            Image(systemName: "circle.fill")
-                .imageScale(.small)
-                .foregroundStyle(.text3)
+            ArcProgress(.mini)
                 .accessibilityLabel("Checking")
         case .clean:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(Color(espalier: Palette.success))
-                .accessibilityLabel("Clean")
+                .accessibilityLabel("Ready")
         case .conflicts:
             WarningGlyph()
         case .invalid:
             Image(systemName: "xmark.circle.fill")
                 .foregroundStyle(Color(espalier: Palette.error))
-                .accessibilityLabel("Unable")
+                .accessibilityLabel("Unavailable")
         }
     }
 }
 
-/// The split button: its main part starts the method; its menu switches
-/// the method, each with its description. While the method can't start,
-/// the whole button opens the menu, so the method can still be switched.
+/// The method's split button, in the sheet and Compare's call to action:
+/// its main part starts the method; its menu switches the method, each
+/// with its description, the current one checked. While the method can't
+/// start, the whole button opens the menu, so the method can still be
+/// switched.
 struct IntegrateMethodButton: View {
     @Binding var method: IntegrateMethod
     let canStart: Bool
+    /// The tooltip; the method's description when nil.
     let help: String?
+    /// The main part's shortcut: Return in the sheet, whose default button
+    /// it is.
+    var shortcut: KeyboardShortcut? = .defaultAction
     let start: () -> Void
 
     var body: some View {
         if canStart {
-            // Return starts the method, as the sheet's default button.
-            SplitCapsuleButton(.prominent, menuLabel: "Merge Options", shortcut: .defaultAction, action: start) {
+            SplitCapsuleButton(.prominent, menuLabel: "Merge Options", shortcut: shortcut, action: start) {
                 Text(method.label)
             } menu: {
                 options
@@ -362,6 +340,8 @@ struct IntegrateMethodButton: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .help(help ?? method.description)
+            .accessibilityLabel("Merge Options")
+            .accessibilityValue(method.label)
         }
     }
 

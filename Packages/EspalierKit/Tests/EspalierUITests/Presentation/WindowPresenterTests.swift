@@ -278,34 +278,51 @@ struct WindowPresenterTests {
     @Test("confirmations become alerts or compact sheets with the right roles")
     func confirmationPresentation() throws {
         for (name, confirmation) in UIFixtures.confirmations {
+            #expect(confirmation.title.hasSuffix("?"), "\(name)")
             switch confirmation.presentation {
             case .alert(let content):
                 #expect(![.removeRepository, .deleteBranch].contains(confirmation.kind), "\(name)")
+                #expect(content.title == confirmation.title, "\(name)")
                 #expect(content.buttons.first?.title == confirmation.confirmButton)
                 #expect(content.buttons.last == AlertContent.Button("Cancel", role: .cancel))
                 #expect((content.suppressionTitle != nil) == (confirmation.suppressionSetting != nil), "\(name)")
             case .compactSheet(let compact):
                 #expect([.removeRepository, .deleteBranch].contains(confirmation.kind), "\(name)")
+                #expect(compact.title == confirmation.title, "\(name)")
                 #expect(compact.confirmButton == confirmation.confirmButton)
+                #expect(compact.isDestructive, "\(name)")
             }
         }
         // The discard list is shown up to ten files.
-        guard case .alert(let few) = EspalierCore.Confirmation.discardChanges(UIFixtures.files).presentation,
-              case .alert(let many) = EspalierCore.Confirmation.discardChanges(UIFixtures.manyFiles).presentation else {
-            Issue.record("discards aren't alerts")
-            return
-        }
+        let few = EspalierCore.Confirmation.discardChanges(UIFixtures.files).alertContent
+        let many = EspalierCore.Confirmation.discardChanges(UIFixtures.manyFiles).alertContent
         #expect(few.message.contains("• README.md"))
         #expect(!many.message.contains("•"))
         #expect(few.severity == .critical)
-        // The delete sheet offers the remote only when the branch is there.
+
+        // An alert's checkbox is "Do not show this message again", and
+        // counts only when confirmed.
+        let stash = EspalierCore.Confirmation.discardStash()
+        #expect(stash.response(to: AlertResponse(buttonIndex: 0, isSuppressed: true)) == ConfirmationResponse(isConfirmed: true, suppressesFutureConfirmations: true))
+        #expect(stash.response(to: AlertResponse(buttonIndex: 1, isSuppressed: true)) == .cancelled)
+    }
+
+    @Test("Delete Branch and Remove Repository are compact sheets with their option as the checkbox")
+    func compactSheets() throws {
         guard case .compactSheet(let local) = EspalierCore.Confirmation.deleteBranch("x", existsOnRemote: false).presentation,
-              case .compactSheet(let remote) = EspalierCore.Confirmation.deleteBranch("x", existsOnRemote: true).presentation else {
-            Issue.record("deleting a branch isn't a compact sheet")
+              case .compactSheet(let remote) = EspalierCore.Confirmation.deleteBranch("x", existsOnRemote: true).presentation,
+              case .compactSheet(let repository) = EspalierCore.Confirmation.removeRepository(name: "espalier", path: "/Users/joe/Developer/espalier").presentation else {
+            Issue.record("Delete Branch or Remove Repository isn't a compact sheet")
             return
         }
+        // The remote is offered only when the branch is there.
         #expect(local.optionTitle == nil)
         #expect(remote.optionTitle == "Delete it on the remote too")
+        #expect(remote.paragraphs == ["Delete the branch x?", "This can't be undone.", "The branch also exists on the remote."])
+        // The folder that stays is shown on its own.
+        #expect(repository.optionTitle == "Also move the folder to the Trash")
+        #expect(repository.paragraphs.last == "Its folder stays on your Mac:")
+        #expect(repository.path == "/Users/joe/Developer/espalier")
     }
 
     @Test("errors map to their presentations and recoveries")

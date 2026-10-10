@@ -304,6 +304,8 @@ nonisolated public enum Palette {
         light: .hex(0xEDEDF0), dark: .hex(0x2E2E34),
         highContrastLight: .hex(0xDCDCE1), highContrastDark: .hex(0x3A3A41)
     )
+    /// A disabled control, whole, fades to this opacity.
+    public static let disabledOpacity: CGFloat = 0.45
 
     // MARK: Status
 

@@ -249,6 +249,7 @@ struct IntegrationsForm: View {
                         }
                         actions?.chooseEditor(choice)
                     })
+                    .settingsControlWidth()
                     .id(editorRevision)
                 }
                 if let custom = content.editor.custom, content.editor.selection == .custom {
@@ -279,6 +280,7 @@ struct IntegrationsForm: View {
                         }
                         actions?.chooseShell(choice)
                     })
+                    .settingsControlWidth()
                     .id(shellRevision)
                 }
                 if let custom = content.shell.custom, content.shell.selection == .custom {
@@ -305,7 +307,8 @@ struct IntegrationsForm: View {
 }
 
 /// An editor or shell pop-up: the installed ones, a choice that isn't
-/// installed, the saved custom one, and "Configure Custom…".
+/// installed, the saved custom one, and "Configure Custom…". Settings ▸
+/// Integrations and Open With show the editors in it.
 struct IntegrationPicker: View {
     let title: String
     let popUp: IntegrationPopUp
@@ -323,20 +326,25 @@ struct IntegrationPicker: View {
             if let missing = popUp.missing, let title = popUp.missingTitle {
                 Text(title).tag(IntegrationChoice.named(missing))
             }
-            Divider()
+            if popUp.selection == .none || !popUp.installed.isEmpty || popUp.missing != nil {
+                Divider()
+            }
             if let customTitle = popUp.customTitle {
                 Text("Custom: \(customTitle)").tag(IntegrationChoice.custom)
+            } else if popUp.selection == .custom {
+                Text("Custom").tag(IntegrationChoice.custom)
             }
             Text(configureTitle).tag(IntegrationChoice.configure)
         }
-        .settingsControlWidth()
     }
 
     /// The chosen item's title.
     private var selectionTitle: String {
-        switch popUp.selection {
-        case .none, .configure:
+        switch selection {
+        case .none:
             "None"
+        case .configure:
+            configureTitle
         case .custom:
             popUp.customTitle.map { "Custom: \($0)" } ?? "Custom"
         case .named(let name):

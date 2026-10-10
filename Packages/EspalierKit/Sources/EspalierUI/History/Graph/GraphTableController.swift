@@ -39,7 +39,6 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             guard dateFormatting != oldValue else {
                 return
             }
-            style.dateWidth = GraphRowStyle.dateWidth(for: dateFormatting)
             dates = DateTextCache(capacity: dates.capacity)
             reconfigureVisibleRows()
         }
@@ -121,8 +120,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             palette: palette,
             avatars: nil,
             monograms: MonogramCache(),
-            scale: 2,
-            dateWidth: GraphRowStyle.dateWidth(for: DateTimeFormatting())
+            scale: 2
         )
         super.init()
         configureTable()
@@ -135,7 +133,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         column.resizingMask = .autoresizingMask
         tableView.addTableColumn(column)
         tableView.headerView = nil
-        // Rows draw their own selection, flush with the graph's edge
+        // Rows draw their own selection, in the row's rounded shape
         // (`GraphRowView`).
         tableView.style = .plain
         tableView.rowHeight = Metrics.Graph.rowHeight
@@ -536,7 +534,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             return .workingCopy(presentation.workingCopy)
         }
         let now = fixedNow ?? Date()
-        let date = dates.text(for: commit.sha, date: commit.author.date, now: now, formatting: dateFormatting, timeZone: timeZone)
+        let date = dates.entry(for: commit.sha, date: commit.author.date, now: now, formatting: dateFormatting, timeZone: timeZone)
         let track = source.graph[row].track
         let refs = refCapsules(source.refs(at: commit.sha), sha: commit.sha, track: track)
         var unpushed: String?
@@ -544,7 +542,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             // Nowhere to push to.
             unpushed = nil
         } else if source.isLocalCommit(commit.sha) {
-            unpushed = "This commit has not been pushed to the remote repository"
+            unpushed = CommitRowContent.notPushedTooltip
         } else {
             let tags = source.refs(at: commit.sha).filter { $0.kind == .tag && presentation.tagsToPush.contains($0.name) }.count
             if tags > 0 {
@@ -557,6 +555,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             authorName: commit.author.name,
             authorEmail: commit.author.email,
             date: date.text,
+            shortDate: date.short,
             dateTooltip: date.tooltip,
             refs: refs,
             unpushedTooltip: unpushed,
@@ -1143,8 +1142,8 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
                   let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? CommitRowCellView else {
                 continue
             }
-            let date = dates.text(for: commit.sha, date: commit.author.date, now: now, formatting: dateFormatting, timeZone: timeZone)
-            cell.updateDate(date.text, tooltip: date.tooltip)
+            let date = dates.entry(for: commit.sha, date: commit.author.date, now: now, formatting: dateFormatting, timeZone: timeZone)
+            cell.updateDate(date.text, short: date.short, tooltip: date.tooltip)
         }
     }
 
@@ -1198,13 +1197,15 @@ struct GraphSelection: Equatable {
     }
 }
 
-/// Relative dates by commit, for the rows shown, refreshed once a minute;
-/// with `abbreviates`, also their short form (`RelativeTime.abbreviated`).
+/// Relative dates by commit, for the rows shown, refreshed once a minute: in
+/// words, as History's rows show them (`RelativeTime.abbreviated`), and in
+/// full.
 struct DateTextCache {
     struct Text {
+        /// In words, as VoiceOver reads it ("12 minutes ago").
         var text: String
         var tooltip: String
-        /// The short form, when the cache makes it ("" otherwise).
+        /// As the rows show it ("12m", "Oct 5").
         var short: String
         /// The minute the text was made for.
         var minute: Int
@@ -1214,18 +1215,9 @@ struct DateTextCache {
     private var entries: [String: Text] = [:]
     private var counter: UInt64 = 0
     let capacity: Int
-    let abbreviates: Bool
 
-    init(capacity: Int, abbreviates: Bool = false) {
+    init(capacity: Int) {
         self.capacity = capacity
-        self.abbreviates = abbreviates
-    }
-
-    /// The date of `sha` in words, from the cache when it was made this
-    /// minute.
-    mutating func text(for sha: String, date: Date, now: Date, formatting: DateTimeFormatting, timeZone: TimeZone) -> (text: String, tooltip: String) {
-        let entry = entry(for: sha, date: date, now: now, formatting: formatting, timeZone: timeZone)
-        return (entry.text, entry.tooltip)
     }
 
     /// The date of `sha` in words, short and in full, from the cache when
@@ -1241,7 +1233,7 @@ struct DateTextCache {
         let entry = Text(
             text: RelativeTime.describe(date, now: now, formatting: formatting, timeZone: timeZone),
             tooltip: RelativeTime.formatDate(date, formatting: formatting, timeZone: timeZone),
-            short: abbreviates ? RelativeTime.abbreviated(date, now: now, formatting: formatting, timeZone: timeZone) : "",
+            short: RelativeTime.abbreviated(date, now: now, formatting: formatting, timeZone: timeZone),
             minute: minute,
             stamp: counter
         )

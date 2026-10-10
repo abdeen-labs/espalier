@@ -1,4 +1,4 @@
-// What the conflicts section, the operation panel, the Integrate,
+// What the conflicted files, the operation panel, the Integrate,
 // cherry-pick, and squash sheets, the AI conflict sheet, and the outcome
 // toasts show, from their content values.
 
@@ -81,8 +81,7 @@ struct OperationContentTests {
         )
         #expect(content.rows.map(\.path) == ["a.txt", "b.png", "c.txt"])
         #expect(content.unresolvedCount == 1)
-        #expect(content.header == "Conflicts · 1 conflicted file")
-        #expect(ConflictsSectionContent(rows: []).header == "Conflicts · All resolved")
+        #expect(ConflictsSectionContent(rows: []).unresolvedCount == 0)
     }
 
     // MARK: The panel
@@ -127,10 +126,9 @@ struct OperationContentTests {
         #expect(!aiOff.showsResolveWithAI)
         // Before its message loads, a merge commits git's.
         #expect(merge.isResolved)
-        #expect(!merge.editsMessage)
     }
 
-    @Test("a rebase or cherry-pick stopped at a commit says which, and its indicator shows the commits")
+    @Test("a rebase or cherry-pick stopped at one of several commits says which")
     func stoppedAt() {
         func rebase(resolved: Int, unresolved: Int, step: OperationStep?) -> OperationPanelContent {
             .conflicts(
@@ -139,21 +137,13 @@ struct OperationContentTests {
                 step: step
             )
         }
-        let stopped = rebase(resolved: 1, unresolved: 2, step: OperationStep(position: 2, total: 4))
-        #expect(stopped.stoppedAt == "Stopped at commit 2 of 4")
-        #expect(stopped.stepsLabel == "Stopped at commit 2 of 4")
-        #expect(stopped.steps == [.done, .stopped, .pending, .pending])
-        // Once its conflicts are resolved, the commit it stopped at is done.
-        #expect(rebase(resolved: 3, unresolved: 0, step: OperationStep(position: 2, total: 4)).steps == [.done, .done, .pending, .pending])
-        // One commit, or none known: the conflicted files, as before.
-        let single = rebase(resolved: 1, unresolved: 2, step: OperationStep(position: 1, total: 1))
-        #expect(single.stoppedAt == nil)
-        #expect(single.steps == [.done, .stopped, .stopped])
-        #expect(single.stepsLabel == "1 of 3 conflicted files has been resolved.")
-        #expect(rebase(resolved: 1, unresolved: 2, step: nil).steps == [.done, .stopped, .stopped])
+        #expect(rebase(resolved: 1, unresolved: 2, step: OperationStep(position: 2, total: 4)).stoppedAt == "Stopped at commit 2 of 4")
+        // One commit, or none known: the conflicted files say it.
+        #expect(rebase(resolved: 1, unresolved: 2, step: OperationStep(position: 1, total: 1)).stoppedAt == nil)
+        #expect(rebase(resolved: 1, unresolved: 2, step: nil).stoppedAt == nil)
     }
 
-    @Test("a merge with nothing left to resolve shows its message; Commit Merge waits for a summary")
+    @Test("Commit Merge waits for nothing left to resolve, then for a summary; other operations' Continue never does")
     func panelMergeMessage() {
         func merge(unresolved: Int, message: MergeMessage?, isMerge: Bool = true) -> OperationPanelContent {
             .conflicts(
@@ -163,23 +153,21 @@ struct OperationContentTests {
             )
         }
         let ready = merge(unresolved: 0, message: MergeMessage(summary: "Merge branch 'feature'"))
-        #expect(ready.editsMessage)
         #expect(ready.canContinue)
         #expect(ready.continueHelp == nil)
         #expect(ready.continueTitle == "Commit Merge")
 
         let blank = merge(unresolved: 0, message: MergeMessage(summary: " \t", description: "Only a description."))
-        #expect(blank.editsMessage)
         #expect(!blank.canContinue)
         #expect(blank.continueHelp == "Enter a summary to commit")
         #expect(blank.isResolved)
         #expect(blank.title == "All conflicts resolved")
 
-        // Not while a file needs the user, and never for other operations.
-        let waiting = merge(unresolved: 1, message: MergeMessage(summary: "Merge branch 'feature'"))
-        #expect(!waiting.editsMessage)
+        // While a file needs the user, that's what it waits for.
+        let waiting = merge(unresolved: 1, message: MergeMessage(summary: " "))
+        #expect(!waiting.canContinue)
         #expect(waiting.continueHelp == "Resolve all conflicts before continuing")
-        #expect(!merge(unresolved: 0, message: MergeMessage(summary: "x"), isMerge: false).editsMessage)
+        #expect(merge(unresolved: 0, message: MergeMessage(summary: " "), isMerge: false).canContinue)
     }
 
     // MARK: Integrate

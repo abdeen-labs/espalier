@@ -1,8 +1,9 @@
 // The worktree actions, on `WorktreesModel`: New Worktree… (⇧⌘W, and a
 // branch's or pull request's "Check Out in New Worktree…"), Show Worktrees
-// (⌥⌘W), switching to a worktree, Rename…, and Delete… ("Delete Worktree"
-// with its suppression toggle; when git refuses, "Delete Worktree Failed"
-// offers Delete Anyway, the model's retry).
+// (⌥⌘W, which opens the repository popover at its worktrees), switching to
+// a worktree, Rename…, and Delete… ("Delete Worktree?" with its suppression
+// toggle; when git refuses, "Delete Worktree Failed" offers Delete Anyway,
+// the model's retry).
 
 import AppKit
 import EspalierCore
@@ -14,10 +15,6 @@ import SwiftUI
 /// Registers the worktree actions.
 @MainActor
 enum WorktreeActions {
-    /// The sidebar section's identifier (its remembered expansion is
-    /// `sidebar.expanded.<id>`, `SidebarSection`'s key).
-    static let sectionID = "worktrees"
-
     static func register(into actions: WindowActions, context: WindowContext) {
         actions.register(.switchToWorktree, isEnabled: { [weak context] action in
             guard case .switchToWorktree(let path) = action, let repository = context?.repository else {
@@ -89,13 +86,13 @@ enum WorktreeActions {
         repository.worktrees.entries.first { $0.path == path }
     }
 
-    /// Show Worktrees: the sidebar shows, with the worktree list expanded,
-    /// even when the repository has only its main worktree.
+    /// Show Worktrees: the repository popover opens, listing the
+    /// repository's worktrees above its repositories even when it has only
+    /// its main worktree, the window's highlighted.
     static func reveal(_ repository: RepositoryModel, in context: WindowContext) {
         let state = context.state.featureState(WorktreesWindowState.self) { WorktreesWindowState() }
         state.revealedRepository = repository.id
-        context.state.columnVisibility = .all
-        context.uiDefaults.set(true, forKey: "sidebar.expanded.\(sectionID)")
+        context.state.isRepositoryPopoverPresented = true
     }
 
     /// Copy Worktree Name, Copy Worktree Path.

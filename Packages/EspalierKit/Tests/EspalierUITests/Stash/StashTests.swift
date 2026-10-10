@@ -128,9 +128,8 @@ struct StashTests {
         content.files = .loading
         #expect(content.subtitle == "On main")
         #expect(StashColumnContent.files(files, filter: "loader").map(\.path) == ["Sources/App/Loader.swift"])
-        #expect(StashColumnContent.files(files, filter: "loader")[0].fileName == "Loader.swift")
-        #expect(StashColumnContent.files(files, filter: "loader")[0].directory == "Sources/App")
-        #expect(StashColumnContent.files(files, filter: "")[1].directory == "")
+        #expect(StashColumnContent.files(files, filter: "LOADER").map(\.path) == ["Sources/App/Loader.swift"])
+        #expect(StashColumnContent.files(files, filter: "").map(\.path) == ["Sources/App/Loader.swift", "README.md"])
     }
 
     @Test("Restore is the current branch's only; Discard is any branch's")
@@ -192,10 +191,7 @@ struct StashTests {
 
         let pending = await fixture.confirmation()
         #expect(pending.confirmation.kind == .discardStash)
-        guard case .alert(let alert) = pending.confirmation.presentation else {
-            Issue.record("Expected an alert")
-            return
-        }
+        let alert = pending.confirmation.alertContent
         #expect(alert.title == "Discard Stash?")
         #expect(alert.buttons.map(\.title) == ["Discard", "Cancel"])
         #expect(alert.suppressionTitle == "Do not show this message again")

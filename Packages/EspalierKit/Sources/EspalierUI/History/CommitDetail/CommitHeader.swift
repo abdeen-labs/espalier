@@ -75,17 +75,18 @@ extension CommitHeaderContent {
 }
 
 extension Metrics {
-    /// The top of a commit's details.
+    /// The top of a commit's details, inset as the list's header is.
     enum CommitDetail {
-        static let horizontalPadding: CGFloat = 18
-        static let topPadding: CGFloat = 16
+        static let horizontalPadding: CGFloat = Metrics.HistoryHeader.horizontalPadding
+        static let topPadding: CGFloat = Metrics.insetLarge
         static let bottomPadding: CGFloat = 14
-        /// Between the title, the author line, the body, and the files.
-        static let titleSpacing: CGFloat = 8
+        /// Between the title, the author line, and the body.
+        static let titleSpacing: CGFloat = Metrics.insetSmall
         static let bodySpacing: CGFloat = 10
-        static let filesSpacing: CGFloat = 14
         /// The body's extra space between lines (18-point lines at 12).
         static let bodyLineSpacing: CGFloat = 3
+        /// The author's avatar, beside the secondary text.
+        static let avatarSize: CGFloat = 18
         /// The symbol's circle when the details can't show changes.
         static let placeholderSymbolSize: CGFloat = 44
     }
@@ -123,7 +124,7 @@ struct CommitHeader: View {
 
     private var metadata: some View {
         HStack(spacing: Metrics.insetSmall) {
-            Avatar(content.avatarUser, size: Metrics.CommitRow.graphAvatarSize)
+            Avatar(content.avatarUser, size: Metrics.CommitDetail.avatarSize)
             Text(content.authorName)
                 .fontWeight(.medium)
                 .foregroundStyle(.text)

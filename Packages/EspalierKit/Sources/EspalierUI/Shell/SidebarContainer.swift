@@ -1,9 +1,9 @@
-// The sidebar. It shows the current repository: the places you select
-// (Changes, History, branches, pull requests, tags, stashes), then the rows
-// that switch the working copy (worktrees, repositories), and a filter field
-// at the bottom, as in Xcode's navigators. Each section after the first is a
-// feature's view. After a switch, the repository's sections keep showing the
-// previous repository until the selected one has loaded
+// The sidebar. It shows the current repository's places you select
+// (Changes, History, branches, pull requests, tags, stashes), and a filter
+// field at the bottom, as in Xcode's navigators; the repository popover
+// switches repositories and worktrees. Each section after the first is a
+// feature's view. After a switch, the repository's sections keep showing
+// the previous repository until the selected one has loaded
 // (`SidebarSectionsHold`).
 //
 // The sidebar is flat: the `sidebar` color with a hairline on its trailing
@@ -45,9 +45,7 @@ struct SidebarContainer: View {
                     PullRequestsSection(repository: shown)
                     TagsSection(repository: shown)
                     StashesSection(repository: shown)
-                    WorktreesSection(repository: shown)
                 }
-                RepositoriesSection()
             }
         }
         .sidebarListStyle()
@@ -112,8 +110,8 @@ struct SidebarContainer: View {
     /// The selected place; choosing one remembers it for the repository.
     /// Without places (a missing or unsafe repository) nothing is selected:
     /// a selection whose row goes away with its section would stay drawn
-    /// over the Repositories header. While the sections still show the
-    /// previous repository, their rows can't be chosen.
+    /// where the row was. While the sections still show the previous
+    /// repository, their rows can't be chosen.
     private func placeSelection(isHolding: Bool) -> Binding<SidebarPlace?> {
         Binding(
             get: { context.repository?.isUsable == true ? context.state.place : nil },
@@ -127,9 +125,9 @@ struct SidebarContainer: View {
 }
 
 /// Which repository the sidebar's repository sections show (Branches, Pull
-/// Requests, Tags, Stashes, Worktrees): the selected one's, except just
-/// after a switch. Then they keep showing the repository they showed until
-/// the selected one has loaded what they show
+/// Requests, Tags, Stashes): the selected one's, except just after a
+/// switch. Then they keep showing the repository they showed until the
+/// selected one has loaded what they show
 /// (`hasLoadedSidebarSections(accounts:)`), for at most
 /// `Timing.sidebarHold`, and change in one step. A repository that hasn't
 /// loaded has none of it: its sections would vanish and come back, moving
@@ -174,8 +172,8 @@ final class SidebarSectionsHold {
 
 extension RepositoryModel {
     /// Whether the repository has loaded what its sidebar sections show: a
-    /// refresh pass's status, remotes, and refs (branches, tags, stashes,
-    /// worktrees), and its open pull requests where Pull Requests shows.
+    /// refresh pass's status, remotes, and refs (branches, tags, stashes),
+    /// and its open pull requests where Pull Requests shows.
     func hasLoadedSidebarSections(accounts: AccountsModel) -> Bool {
         gitState.loaded.isSuperset(of: [.status, .remotes, .refs])
             && (gitHub.hasLoadedPullRequests || !PullRequestsSection.isShown(self, accounts: accounts))
@@ -306,8 +304,7 @@ struct SidebarRowLabel<Trailing: View>: View {
     /// - Parameters:
     ///   - isSelected: Draws the row as selected; a row that selects a
     ///     place (`sidebarRow(_:)`) is also selected while its place is.
-    ///   - isEmphasized: Semibold, as the current branch and repository
-    ///     are.
+    ///   - isEmphasized: Semibold, as the current branch is.
     init(_ title: String, systemImage: String, isSelected: Bool = false, isEmphasized: Bool = false, @ViewBuilder trailing: () -> Trailing = { EmptyView() }) {
         self.title = title
         self.systemImage = systemImage
@@ -320,9 +317,9 @@ struct SidebarRowLabel<Trailing: View>: View {
         let isSelected = isSelected || isRowSelected
         HStack(spacing: Metrics.insetSmall) {
             Image(systemName: systemImage)
-                .font(.system(size: 13))
+                .font(Typography.row)
                 .foregroundStyle(isSelected ? Color.accentColor : .text2)
-                .frame(width: 16)
+                .frame(width: Metrics.Sidebar.symbolWidth)
                 .accessibilityHidden(true)
             Text(title)
                 .font(SidebarRowFont.title(isSelected: isSelected, isEmphasized: isEmphasized))
@@ -336,9 +333,9 @@ struct SidebarRowLabel<Trailing: View>: View {
     }
 }
 
-/// A sidebar row title's weight: semibold for the current branch, pull
-/// request, and repository; medium while the row is selected; regular
-/// otherwise.
+/// A sidebar row title's weight: semibold for the current branch and its
+/// pull request (the one way the sidebar marks what's current); medium
+/// while the row is selected; regular otherwise.
 enum SidebarRowFont {
     static func title(isSelected: Bool, isEmphasized: Bool = false) -> Font {
         if isEmphasized {
@@ -363,20 +360,22 @@ final class SidebarHover {
     var row: AnyHashable?
 }
 
+extension Metrics.Sidebar {
+    /// The column a row's symbol or dot sits in, so titles line up.
+    public static let symbolWidth: CGFloat = 16
+}
+
 extension View {
-    /// A sidebar row: 28 high, its background the selection's neutral wash,
-    /// the hover wash, or a highlight, inset 10 from the sidebar's edges
-    /// with radius 9.
+    /// A sidebar row: 28 high, its background the selection's neutral wash
+    /// or the hover wash, inset 10 from the sidebar's edges with radius 9.
     ///
     /// - Parameters:
     ///   - place: The place the row selects, if any.
     ///   - id: What identifies a row that isn't a place, for the hover.
-    ///   - isHighlighted: Shows the hover wash for good (the current
-    ///     repository).
     ///   - isDropTarget: Dragged commits are over the row and it takes
     ///     them: the row fills with the soft accent, in its own shape.
-    func sidebarRow(_ place: SidebarPlace?, id: AnyHashable? = nil, isHighlighted: Bool = false, isDropTarget: Bool = false) -> some View {
-        modifier(SidebarRowModifier(place: place, id: id ?? place.map(AnyHashable.init), isHighlighted: isHighlighted, isDropTarget: isDropTarget))
+    func sidebarRow(_ place: SidebarPlace?, id: AnyHashable? = nil, isDropTarget: Bool = false) -> some View {
+        modifier(SidebarRowModifier(place: place, id: id ?? place.map(AnyHashable.init), isDropTarget: isDropTarget))
     }
 
     /// The sidebar's list: the sidebar style, opaque on the `sidebar`
@@ -411,7 +410,6 @@ private struct SidebarHoverProvider: ViewModifier {
 private struct SidebarRowModifier: ViewModifier {
     let place: SidebarPlace?
     let id: AnyHashable?
-    let isHighlighted: Bool
     let isDropTarget: Bool
     @Environment(SidebarHover.self) private var hover: SidebarHover?
     @Environment(\.sidebarSelection) private var selection
@@ -430,7 +428,7 @@ private struct SidebarRowModifier: ViewModifier {
                     .accessibilityHidden(true)
             }
             .frame(minHeight: Metrics.RowHeight.sidebar - 8)
-            .listRowBackground(SidebarRowBackground(place: place, id: id, isHighlighted: isHighlighted, isDropTarget: isDropTarget))
+            .listRowBackground(SidebarRowBackground(place: place, id: id, isDropTarget: isDropTarget))
             .onHover { isInside in
                 guard let id, let hover else {
                     return
@@ -468,7 +466,6 @@ private struct SidebarPlaceShowMenu: ViewModifier {
 struct SidebarRowBackground: View {
     let place: SidebarPlace?
     let id: AnyHashable?
-    let isHighlighted: Bool
     var isDropTarget = false
     @Environment(\.sidebarSelection) private var selection
     @Environment(SidebarHover.self) private var hover: SidebarHover?
@@ -497,7 +494,7 @@ struct SidebarRowBackground: View {
         if isSelected {
             return Color(espalier: Palette.sidebarSelection)
         }
-        if isHighlighted || (id != nil && hover?.row == id) {
+        if isHovered {
             return Color(espalier: Palette.hover)
         }
         return .clear
@@ -640,9 +637,8 @@ struct SidebarListStyler: NSViewRepresentable {
 /// The rows follow the expansion the chevron sets, a state change it makes
 /// inside its animation, so the list animates them in and out; the
 /// remembered expansion, in user defaults, follows it once that change has
-/// drawn. A change made elsewhere (Show Worktrees, the section in another
-/// window) reaches the remembered expansion first, and the shown one
-/// follows it.
+/// drawn. A change made elsewhere (the section in another window) reaches
+/// the remembered expansion first, and the shown one follows it.
 public struct SidebarSection<Content: View, Header: View>: View {
     private let content: Content
     private let header: Header
@@ -712,18 +708,18 @@ struct SidebarSectionHeader<Accessory: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Metrics.grid) {
             SectionLabel(title)
             Spacer(minLength: Metrics.grid)
             if let expansion {
                 SidebarSectionChevron(title: title, isExpanded: expansion, isHeaderHovered: isHovered)
             }
             accessory
-                .font(.system(size: 11, weight: .semibold))
+                .font(Typography.subheadline.weight(.semibold))
                 .foregroundStyle(.text3)
         }
         // Aligned with the rows' symbols and their trailing counts.
-        .padding(.leading, 4)
+        .padding(.leading, Metrics.grid)
         .padding(.trailing, Metrics.Sidebar.rowInset)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
@@ -749,7 +745,7 @@ private struct SidebarSectionChevron: View {
             // The list's own chevron's size and weight. Hidden by color,
             // not opacity, so VoiceOver still finds it.
             Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
+                .font(Typography.row.weight(.semibold))
                 .imageScale(.small)
                 .foregroundStyle(isShown ? Color.text3 : Color.clear)
                 .rotationEffect(.degrees(isExpanded ? 90 : 0))
@@ -767,13 +763,14 @@ private struct SidebarSectionChevron: View {
     }
 }
 
-/// A header's symbol button (New Branch's plus, the add menu).
+/// A header's symbol button (New Branch's plus, the More menu, the
+/// repository popover's New Worktree…).
 struct SidebarHeaderButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 11, weight: .semibold))
+            .font(Typography.subheadline.weight(.semibold))
             .foregroundStyle(.text3)
-            .frame(width: 18, height: 18)
+            .frame(width: Metrics.Sidebar.badgeSize, height: Metrics.Sidebar.badgeSize)
             .contentShape(Rectangle())
             .opacity(configuration.isPressed ? 0.6 : 1)
     }
@@ -805,17 +802,13 @@ struct SidebarFilterField: View {
     /// section lists them (collapsed sections included).
     static func resultCount(in context: WindowContext) -> Int {
         let app = context.app
-        guard app.loadState == .ready else {
+        guard app.loadState == .ready, let repository = context.repository, repository.isUsable else {
             return 0
         }
         let filter = context.state.sidebarFilter
-        var count = RepositoriesSection.rows(in: app, filter: filter).count
-        guard let repository = context.repository, repository.isUsable else {
-            return count
-        }
         let state = repository.gitState
         let branches = BranchesSectionContent.make(repository, upstreamStates: repository.branches.upstreamStates, filter: filter)
-        count += branches.allRows.count + (branches.detachedSHA == nil ? 0 : 1) + (branches.unbornBranch == nil ? 0 : 1)
+        var count = branches.allRows.count + (branches.detachedSHA == nil ? 0 : 1) + (branches.unbornBranch == nil ? 0 : 1)
         if PullRequestsSection.isShown(repository, accounts: app.accounts) {
             count += PullRequestsSection.filtered(repository.gitHub.openPullRequests, by: filter).count
         }
@@ -823,12 +816,6 @@ struct SidebarFilterField: View {
             count += TagRowContent.rows(tags: Array(tags.keys), tagsToPush: [], filter: filter).count
         }
         count += StashRowContent.rows(repository, filter: filter).count
-        let worktrees = repository.worktrees
-        let isWorktreesRevealed = context.state.featureState(WorktreesWindowState.self) { WorktreesWindowState() }
-            .revealedRepository == repository.id
-        if worktrees.isListVisible || isWorktreesRevealed {
-            count += WorktreeRowContent.rows(worktrees.entries, currentPath: worktrees.current?.path, filter: filter).count
-        }
         return count
     }
 }

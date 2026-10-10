@@ -1,7 +1,7 @@
-// The Worktrees section's rows (in light and dark), and the Add and Rename
-// Worktree sheets (in light), one image per layout. The sheets' other
-// states differ only in words or a disabled button (WorktreeTests), and the
-// delete failure is the raw output sheet Errors' clone draws.
+// The repository popover's worktree rows (in light and dark), and the Add
+// and Rename Worktree sheets (in light), one image per layout. The sheets'
+// other states differ only in words or a disabled button (WorktreeTests),
+// and the delete failure is the raw output sheet Errors' clone draws.
 
 import AppKit
 import EspalierCore
@@ -16,7 +16,7 @@ import TestSupport
 struct WorktreeSnapshotTests {
     private let area = "Worktrees"
 
-    @Test("rows: the current worktree, another on a branch, a locked one, and a detached one")
+    @Test("rows: the main worktree highlighted, the window's worktree (semibold), a locked one, and a detached one")
     func rows() {
         let rows = [
             WorktreeRowContent(path: "/Users/joe/Developer/espalier", detail: "main", isMain: true, isCurrent: false, isLocked: false),
@@ -24,20 +24,15 @@ struct WorktreeSnapshotTests {
             WorktreeRowContent(path: "/Users/joe/Developer/espalier-release", detail: "release/2.0", isMain: false, isCurrent: false, isLocked: true),
             WorktreeRowContent(path: "/Users/joe/Developer/espalier-bisect", detail: "a1b2c3d", isMain: false, isCurrent: false, isLocked: false),
         ]
-        let list = List {
-            Section {
-                ForEach(rows) { row in
-                    WorktreeRow(content: row)
-                        .sidebarRow(nil, id: row.path, isHighlighted: row.isCurrent)
-                }
-            } header: {
-                SidebarSectionHeader("Worktrees") {
-                    Image(systemName: "plus")
-                }
+        let list = VStack(alignment: .leading, spacing: 2) {
+            ListGroupLabel("Worktrees")
+            ForEach(rows) { row in
+                WorktreeRow(content: row)
+                    .selectableRow(isSelected: row.path == rows[0].path)
             }
         }
-        .sidebarListStyle()
-        .frame(width: Metrics.Column.sidebar.ideal, height: 150)
+        .padding(Metrics.ListRow.inset)
+        .frame(width: Metrics.RepositoryPopover.width)
         assertSnapshot(list, named: "rows", area: area)
     }
 

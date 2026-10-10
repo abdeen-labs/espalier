@@ -126,7 +126,7 @@ struct CommitOperationTests {
         }
         #expect(confirmation.kind == .commitWithUnknownCoAuthors)
         #expect(confirmation.details == .authors(["ghost"]))
-        #expect(confirmation.title == "Unknown Co-Authors")
+        #expect(confirmation.title == "Commit Without Unknown Co-Authors?")
         #expect(try await commitCount(local) == 1)
 
         _ = try await repository.commit.commit(confirmed: [.commitWithUnknownCoAuthors])

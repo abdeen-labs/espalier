@@ -1,5 +1,6 @@
 // The detail area's inner split. A divider AppKit restores from a bad save
 // would leave the Changes column 0 wide for good; the split puts it back.
+// History's lists leave a commit's files and diff their room.
 
 import AppKit
 import SwiftUI
@@ -33,9 +34,13 @@ enum RestoredPane: Sendable {
 struct SplitViewTests {
     /// A split as `SplitView` builds it, with the leading pane `leadingWidth`
     /// wide, as AppKit leaves it after restoring a saved divider.
-    private func split(width: CGFloat, leadingWidth: CGFloat, column: Metrics.ColumnWidth)
-        -> (NSSplitView, NSView, SplitView<EmptyView, EmptyView>.Coordinator) {
-        let coordinator = SplitView<EmptyView, EmptyView>.Coordinator(column: column)
+    private func split(
+        width: CGFloat,
+        leadingWidth: CGFloat,
+        column: Metrics.ColumnWidth,
+        trailingMinimum: CGFloat = Metrics.Column.diffMinimum
+    ) -> (NSSplitView, NSView, SplitView<EmptyView, EmptyView>.Coordinator) {
+        let coordinator = SplitView<EmptyView, EmptyView>.Coordinator(column: column, trailingMinimum: trailingMinimum)
         let splitView = NSSplitView(frame: CGRect(x: 0, y: 0, width: width, height: 600))
         splitView.isVertical = true
         splitView.dividerStyle = .thin
@@ -87,6 +92,30 @@ struct SplitViewTests {
         didResize(splitView, coordinator)
         #expect(leading.frame.width == column.ideal)
         #expect(!coordinator.needsInitialPosition)
+    }
+
+    @Test("at the default window, History's list leaves a commit's files and diff their room", arguments: [
+        NamedCase("the simple list leaves a commit's files and diff their room", PlaceKind.simpleHistory),
+        NamedCase("the graph leaves a commit's files and diff their room", PlaceKind.graphHistory),
+    ])
+    func historyDetailsFit(_ testCase: NamedCase<PlaceKind>) {
+        let kind = testCase.value
+        // The detail area beside the sidebar at its ideal width.
+        let width = Metrics.Window.defaultWidth - Metrics.Column.sidebar.ideal - 1
+        let (splitView, leading, coordinator) = split(
+            width: width,
+            leadingWidth: 0,
+            column: kind.leadingColumn,
+            trailingMinimum: kind.trailingMinimum
+        )
+        coordinator.needsInitialPosition = true
+        didResize(splitView, coordinator)
+        #expect(leading.frame.width == kind.leadingColumn.ideal)
+        let details = width - leading.frame.width - splitView.dividerThickness
+        #expect(details >= Metrics.Column.commitFileList.ideal + splitView.dividerThickness + Metrics.Column.diffMinimum)
+        // Dragging the divider leaves the details their files and diff.
+        let maximum = coordinator.splitView(splitView, constrainMaxCoordinate: width, ofSubviewAt: 0)
+        #expect(width - maximum - splitView.dividerThickness >= Metrics.Column.commitDetailMinimum)
     }
 
     @Test("a split too narrow for the leading pane's minimum is left as it is, without looping")

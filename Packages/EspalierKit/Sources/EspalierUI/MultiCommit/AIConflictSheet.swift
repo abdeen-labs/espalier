@@ -1053,7 +1053,7 @@ struct AIConflictResultsView: View {
     private var footer: some View {
         HStack(spacing: Metrics.insetSmall) {
             Toggle("Always use AI when conflicts are detected", isOn: $alwaysUseAI)
-                .toggleStyle(.checkbox)
+                .toggleStyle(.checkboxMark)
                 .font(Typography.secondary)
             Spacer()
             Button("Switch to Manual") {
@@ -1220,7 +1220,7 @@ struct AIConflictFailureView: View {
             Spacer()
             HStack(spacing: Metrics.insetSmall) {
                 Toggle("Always use AI when conflicts are detected", isOn: $alwaysUseAI)
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(.checkboxMark)
                     .font(Typography.secondary)
                 Spacer()
                 Button("Switch to Manual", action: onSwitchToManual)

@@ -1,8 +1,8 @@
 // Espalier's switch: a capsule 32 by 19, the accent when on and `line2` when
-// off, with a white knob. It replaces the system's switch, which draws its
-// own colors and, in an inactive window, grey. The switch is a button, so it
-// joins the key view loop as the system's does (with keyboard navigation on)
-// and Space toggles it; VoiceOver sees a native switch.
+// off, with a white knob, in every window, active or not. Every switch in
+// Espalier is one (Settings' rows). The switch is a button, so it joins the
+// key view loop with keyboard navigation on and Space toggles it;
+// VoiceOver sees a switch.
 
 import AppKit
 import SwiftUI
@@ -90,13 +90,12 @@ struct CapsuleSwitchDrawing: View {
                     .fill(.black.opacity(size.pressedOpacity))
             }
         }
-        // As the system's switch: the knob slides and the track's color
-        // crossfades over 0.22 s.
+        // The knob slides and the track's color crossfades over 0.22 s.
         .motion(Motion.arrive, value: isOn)
         .frame(width: size.width, height: size.height)
         .contentShape(Capsule(style: .circular))
         .contentShape(.focusEffect, Capsule(style: .circular))
-        .opacity(isEnabled ? 1 : CheckboxDrawing.disabledOpacity)
+        .opacity(isEnabled ? 1 : Palette.disabledOpacity)
     }
 }
 

@@ -81,7 +81,7 @@ struct MainToolbar: CustomizableToolbarContent {
         .defaultCustomization(.hidden)
         .sharedBackgroundVisibility(.hidden)
         ToolbarItem(id: "espalier.createPullRequest", placement: .primaryAction) {
-            ActionToolbarButton(.createPullRequest, systemImage: "arrow.trianglehead.pull")
+            ActionToolbarButton(.createPullRequest, systemImage: PullRequestGlyph.systemImage)
         }
         .defaultCustomization(.hidden)
         .sharedBackgroundVisibility(.hidden)

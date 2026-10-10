@@ -14,14 +14,12 @@ struct OneLineFieldTests {
         case capsule
         case capsuleSecure
         case search
-        case palette
     }
 
     @Test("a pasted line break becomes a space", arguments: [
         NamedCase("a capsule text field", Field.capsule),
         NamedCase("a capsule secure field", Field.capsuleSecure),
         NamedCase("a search field", Field.search),
-        NamedCase("a palette's search field", Field.palette),
     ])
     func pastedLineBreak(_ field: NamedCase<Field>) throws {
         let box = TextBox()
@@ -30,7 +28,6 @@ struct OneLineFieldTests {
         case .capsule: AnyView(TextField("Base URL", text: text).textFieldStyle(.capsule))
         case .capsuleSecure: AnyView(SecureField("API Key", text: text).textFieldStyle(.capsule))
         case .search: AnyView(CapsuleSearchField("Filter", text: text))
-        case .palette: AnyView(PaletteSearchField("Filter", text: text))
         }
         let (window, host) = hostInWindow(view.frame(width: 240), size: CGSize(width: 240, height: 80))
         defer { window.contentView = nil }

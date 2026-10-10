@@ -1,11 +1,12 @@
 // The pull request place. Left: the overview (title, Draft, "#142 opened 2
 // days ago by octo", the branches, Check Out through the uncommitted changes
-// decision, View on GitHub, the checks with their steps, and the description
-// in Markdown). Right: the changes since the merge base when the pull
-// request's head is in the repository (`pullRequestChanges`), else "Changes
-// Not Available" with Check Out. A link's pull request is the one GitHub
-// returned for it; another that isn't open (a notification's) loads from
-// GitHub.
+// decision or "Checked Out" for the current branch's, View on GitHub, Check
+// Out in New Worktree…, the checks with their steps, and the description in
+// Markdown). Right: the changes since the merge base when the pull request's
+// head is in the repository (`pullRequestChanges`), else "Changes Not
+// Available" with a quiet Check Out (the overview's is the prominent one).
+// A link's pull request is the one GitHub returned for it; another that
+// isn't open (a notification's) loads from GitHub.
 
 import EspalierCore
 import EspalierSupport
@@ -117,8 +118,8 @@ nonisolated struct PullRequestOverviewContent: Sendable, Equatable {
     /// The branch it comes from: "octo:feature/sign-in" from a fork,
     /// "feature/sign-in" from the same repository.
     var head: String
-    /// Whether it's the current branch's pull request: Check Out reads
-    /// "Current Branch" and is off.
+    /// Whether it's the current branch's pull request: "Checked Out" shows
+    /// in Check Out's place.
     var isCurrentBranch: Bool
     /// The pull request's page.
     var url: URL?
@@ -352,43 +353,60 @@ struct PullRequestOverviewView: View {
         }
     }
 
+    /// Check Out (or "Checked Out"), View on GitHub, and Check Out in New
+    /// Worktree…, on a second line when the column is too narrow for them.
     private var buttons: some View {
-        HStack(spacing: Metrics.insetSmall) {
-            Button(content.isCurrentBranch ? "Current Branch" : "Check Out", action: actions.checkOut)
-                .buttonStyle(.prominent)
-                .disabled(content.isCurrentBranch)
-            if let url = content.url {
-                Button(content.viewOnGitHubTitle) {
-                    actions.open(url)
-                }
-                .buttonStyle(.quiet)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Metrics.insetSmall) {
+                checkOutButtons
+                worktreeButton
             }
-            if let checkOutInNewWorktree = actions.checkOutInNewWorktree {
-                Menu {
-                    Button("Check Out in New Worktree…", action: checkOutInNewWorktree)
-                } label: {
-                    Label("More", systemImage: "ellipsis.circle")
+            VStack(alignment: .leading, spacing: Metrics.insetSmall) {
+                HStack(spacing: Metrics.insetSmall) {
+                    checkOutButtons
                 }
-                .menuStyle(.button)
-                .buttonStyle(.icon)
-                .menuIndicator(.hidden)
+                worktreeButton
+            }
+        }
+    }
+
+    /// Check Out, the area's prominent button, or the plain "Checked Out"
+    /// when it's the current branch's pull request; and View on GitHub.
+    @ViewBuilder
+    private var checkOutButtons: some View {
+        if content.isCurrentBranch {
+            Text("Checked Out")
+                .font(Typography.row)
+                .foregroundStyle(.text2)
                 .fixedSize()
-                .accessibilityLabel("More")
+        } else {
+            Button("Check Out", action: actions.checkOut)
+                .buttonStyle(.prominent)
+                .fixedSize()
+        }
+        if let url = content.url {
+            Button(content.viewOnGitHubTitle) {
+                actions.open(url)
             }
+            .buttonStyle(.quiet)
+            .fixedSize()
+        }
+    }
+
+    @ViewBuilder
+    private var worktreeButton: some View {
+        if let checkOutInNewWorktree = actions.checkOutInNewWorktree {
+            Button("Check Out in New Worktree…", action: checkOutInNewWorktree)
+                .buttonStyle(.quiet)
+                .fixedSize()
         }
     }
 
     private var checksSection: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-            HStack {
-                SectionLabel("Checks")
-                Spacer()
-                ChecksRerunButton(options: checks.rerun, isEnabled: checks.canRerun) { failedOnly in
-                    actions.checks.rerun(failedOnly, nil)
-                }
-            }
+            SectionLabel("Checks")
             if !checks.isEmpty, !(checks.isLoading && checks.overall == nil) {
-                ChecksHeader(content: checks, actions: actions.checks, showsRerun: false)
+                ChecksHeader(content: checks, actions: actions.checks)
             }
             ChecksList(content: checks, actions: actions.checks)
         }
@@ -459,7 +477,7 @@ struct PullRequestChangesView: View {
                         Button("Check Out") {
                             context.actions.perform(.checkoutPullRequest(number: pullRequest.pullRequestNumber))
                         }
-                        .buttonStyle(.prominent)
+                        .buttonStyle(.quiet)
                     }
                 case .failed(let error):
                     CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
@@ -685,7 +703,7 @@ struct ChangedFileRow: View {
     let content: ChangedFileRowContent
 
     var body: some View {
-        HStack(spacing: Metrics.grid + 2) {
+        HStack(spacing: Metrics.insetSmall) {
             StatusGlyph(content.status)
             Text(content.fileName)
                 .foregroundStyle(.text)

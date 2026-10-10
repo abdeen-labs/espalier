@@ -1,5 +1,5 @@
 // The repository flows' logic against a hermetic app and real repositories:
-// the sidebar's rows and the popover's groups, Add's results, the Clone
+// the popover's rows and groups, Add's results, the Clone
 // sheet's fields and checks, cloning with its follow-ups and Retry, links
 // that wait for their clone, Create, Publish, Repository Settings, Open
 // With, and the quit guard's clones. Flows that would show an alert are
@@ -19,10 +19,10 @@ import TestSupport
 
 @Suite("Repository flows", .offline, .hangGuard(minutes: 5)) @MainActor
 struct RepositoryFlowTests {
-    // MARK: The sidebar and the popover
+    // MARK: The popover
 
-    @Test("the sidebar's rows: by title, the owner or folder where titles repeat, the filter, status when it's on")
-    func sidebarRows() async throws {
+    @Test("the popover's rows: by title in their groups, the filter, status when it's on, the tooltip, a clone in progress")
+    func popoverRows() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
         let octo = RepositoryRecord(path: "/Users/joe/Developer/website", gitHubRepository: gitHubRepoFixture(owner: "octo-org", name: "website"))
@@ -35,24 +35,28 @@ struct RepositoryFlowTests {
         app.setIndicator(RepositoryIndicator(aheadBehind: AheadBehind(ahead: 2, behind: 0), changedFilesCount: 3), for: plain.id)
 
         app.preferences.repositoryIndicatorsEnabled = true
-        let rows = RepositoriesSection.rows(in: app, filter: "")
-        #expect(rows.map(\.title) == ["Alpha", "beta", "website", "website"])
-        #expect(rows.map(\.subtitle) == [nil, nil, "octo-org", "/Users/joe/forks"])
-        #expect(rows[1].showsStatus && rows[1].changedFileCount == 3 && rows[1].ahead == 2)
-        #expect(rows[1].accessibilityLabel == "beta, 3 changed files, 2 ahead")
-        #expect(rows[2].tooltip == "octo-org/website\n/Users/joe/Developer/website")
-        #expect(rows[0].tooltip == "zeta (Alpha)\n/Users/joe/Developer/zeta")
+        func rows(_ filter: String = "") -> [RepositoryRowContent] {
+            RepositoryPopoverContent.make(app, filter: filter).groups.flatMap(\.rows)
+        }
+        let content = RepositoryPopoverContent.make(app, filter: "")
+        #expect(content.groups.map(\.title) == ["octo-org", "Other"])
+        #expect(rows().map(\.title) == ["website", "Alpha", "beta", "website"])
+        let beta = rows()[2]
+        #expect(beta.showsStatus && beta.changedFileCount == 3 && beta.ahead == 2)
+        #expect(beta.accessibilityLabel == "beta, 3 changed files, 2 ahead")
+        #expect(rows()[0].tooltip == "octo-org/website\n/Users/joe/Developer/website")
+        #expect(rows()[1].tooltip == "zeta (Alpha)\n/Users/joe/Developer/zeta")
 
         // The filter matches titles, owners, and names, ignoring case.
-        #expect(RepositoriesSection.rows(in: app, filter: "OCTO").map(\.title) == ["website"])
-        #expect(RepositoriesSection.rows(in: app, filter: "zeta").map(\.title) == ["Alpha"])
+        #expect(rows("OCTO").map(\.title) == ["website"])
+        #expect(rows("zeta").map(\.title) == ["Alpha"])
 
         app.preferences.repositoryIndicatorsEnabled = false
-        #expect(!RepositoriesSection.rows(in: app, filter: "")[1].showsStatus)
+        #expect(!rows()[2].showsStatus)
 
         // A clone in progress is listed, with its ring.
         app.clones.clones.append(CloneTask(url: "https://github.com/joe/swift.git", path: "/Users/joe/Developer/swift"))
-        let cloning = try #require(RepositoriesSection.rows(in: app, filter: "").first { $0.title == "swift" })
+        let cloning = try #require(rows().first { $0.title == "swift" })
         #expect(cloning.icon == .cloning(progress: 0))
         app.clones.clones.removeAll()
     }
@@ -88,7 +92,17 @@ struct RepositoryFlowTests {
             #expect(RepositoryPopoverContent.make(app, filter: "rpo8").groups.flatMap(\.rows).map(\.title) == ["repository-8"])
             #expect(RepositoryPopoverContent.make(app, filter: "octo").groups.map(\.title) == ["octo-org"])
 
-            // A repository with a linked worktree lists both.
+            // A repository with one worktree lists none, unless Show
+            // Worktrees revealed it; the popover opens on the selected
+            // repository's row.
+            let single = try await harness.addAndSelect(try await setupTwoCommitRepo(), to: app)
+            let selected = RepositoryPopoverContent.make(app, filter: "")
+            #expect(selected.worktrees.isEmpty)
+            #expect(selected.currentRowID == .entry(.repository(single.id)))
+            #expect(RepositoryPopoverContent.make(app, filter: "", revealingWorktreesOf: single.id).worktrees.map(\.isCurrent) == [true])
+
+            // A repository with a linked worktree lists both, and the
+            // popover opens on the window's worktree.
             let main = try await setupTwoCommitRepo()
             let linked = POSIXPath.join(try createTempDirectory(), "feature")
             _ = try await runGit(["worktree", "add", "-b", "feature", linked], main)
@@ -97,6 +111,8 @@ struct RepositoryFlowTests {
             #expect(withWorktrees.worktrees.map(\.name) == [POSIXPath.basename(main.path), "feature"])
             #expect(withWorktrees.worktrees.map(\.detail) == ["master", "feature"])
             #expect(withWorktrees.worktrees.map(\.isCurrent) == [true, false])
+            let window = try #require(withWorktrees.worktrees.first)
+            #expect(withWorktrees.currentRowID == .worktree(path: window.path))
             await app.idle()
         }
     }
@@ -485,6 +501,48 @@ struct RepositoryFlowTests {
         }
     }
 
+    @Test("Repository Settings' email offers the account's addresses; Other keeps the address for the field and checks it")
+    func settingsEmail() async throws {
+        try await withIsolatedGitConfig { _ in
+            let harness = try AppHarness()
+            let app = await harness.loadedApp()
+            let fixture = try await setupTwoCommitRepo()
+            let repository = try await harness.addAndSelect(fixture, to: app)
+            try await harness.signIn([RepositoryFixtures.dotComAccount], to: app)
+            app.updateRecord(repository.id) { $0.gitHubRepository = gitHubRepoFixture(owner: "joe", name: "espalier") }
+
+            let model = RepositorySettingsModel(repository: repository, app: app)
+            await model.load()
+            model.gitConfigLocation = .local
+            #expect(model.authorEmailChoices.map(\.email) == ["joe@example.com", "1234+joe@users.noreply.github.com"])
+
+            // An account's address, matched without regard to case.
+            model.authorEmail = "JOE@example.com"
+            #expect(model.authorEmailSelection == .account("joe@example.com"))
+            model.selectAuthorEmail(.account("1234+joe@users.noreply.github.com"))
+            #expect(model.authorEmail == "1234+joe@users.noreply.github.com")
+            #expect(model.authorEmailAttribution == nil)
+
+            // Other keeps the address until another is typed, then checks it.
+            model.selectAuthorEmail(.other)
+            #expect(model.authorEmailSelection == .other)
+            #expect(model.authorEmail == "1234+joe@users.noreply.github.com")
+            #expect(model.authorEmailAttribution?.isAttributable == true)
+            model.authorEmail = "joe@elsewhere.example.com"
+            #expect(model.authorEmailAttribution?.isAttributable == false)
+
+            // Picking an account's address leaves Other.
+            model.selectAuthorEmail(.account("joe@example.com"))
+            #expect(model.authorEmailSelection == .account("joe@example.com"))
+
+            // The global config's values aren't checked.
+            model.gitConfigLocation = .global
+            #expect(model.authorEmailAttribution == nil)
+            await app.idle()
+            await app.accounts.idle()
+        }
+    }
+
     // MARK: Open With, the quit guard
 
     @Test("Open With opens the chosen editor once, and a custom one only when it's valid")
@@ -494,10 +552,10 @@ struct RepositoryFlowTests {
         let context = RepositoryFixtures.context(app)
         app.integrations.availableEditors = [FoundEditor(editor: "Xcode", path: "/Applications/Xcode.app")]
         let model = OpenWithModel(integrations: app.integrations, path: "/Users/joe/Developer/espalier")
-        #expect(model.choice == .editor("Xcode"))
+        #expect(model.choice == .named("Xcode"))
         #expect(model.canOpen)
 
-        model.choice = .custom
+        model.choice = .configure
         #expect(!model.canOpen)
         model.customPath = "/bin/cat"
         await model.validate()

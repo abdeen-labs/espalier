@@ -1,12 +1,12 @@
 // A row's context menu from the keyboard and VoiceOver. ⇧F10 in the main
 // window pops up the menu a right-click on the focused table's selected row
-// shows, at that row: Changes' files, History's graph and list, and the
-// sidebar are tables, and a key monitor handles the key for them
-// (`handle(_:in:present:)`). With nothing selected the key does nothing. A
-// commit's files are SwiftUI and take the key themselves (`HistoryFiles`),
-// through a `KeyboardMenuAnchor` on the selected file. VoiceOver's Show Menu
-// (VO-⇧-M) on a table row's cell, or on a sidebar row, pops up that row's
-// menu the same way (`showMenu(of:present:)`).
+// shows, at that row: Changes' files, History's graph and list, a commit's
+// files, and the sidebar are tables, and a key monitor handles the key for
+// them (`handle(_:in:present:)`). With nothing selected the key does
+// nothing. A SwiftUI view that isn't a table row takes the key itself,
+// through a `KeyboardMenuAnchor`. VoiceOver's Show Menu (VO-⇧-M) on a table
+// row's cell, or on a sidebar row, pops up that row's menu the same way
+// (`showMenu(of:present:)`).
 //
 // The menu is the one a right-click gets: a right mouse down made at the
 // row's middle asks the table for its menu (`menu(for:)`), as a click asks,

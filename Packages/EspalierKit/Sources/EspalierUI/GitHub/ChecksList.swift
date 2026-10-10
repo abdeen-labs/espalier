@@ -1,7 +1,8 @@
 // A pull request's checks, as the pull request's place and the checks
-// popover list them: the summary's title and line, workflow groups, a check
-// expanding to its steps (the first failed one already open), "View <step>
-// on GitHub", and "There are no steps to display for this check.". Shapes
+// popover list them: the summary's title and line with Re-run, workflow
+// groups, a check expanding to its steps (the first failed one already
+// open) with its own Re-run and View on GitHub, steps a click opens on
+// GitHub, and "There are no steps to display for this check.". Shapes
 // differ per state, so color never stands alone.
 
 import EspalierCore
@@ -269,9 +270,6 @@ struct ChecksListActions {
 struct ChecksHeader: View {
     let content: ChecksContent
     let actions: ChecksListActions
-    /// Whether Re-run shows here (the pull request's place shows it on the
-    /// section's heading instead).
-    var showsRerun = true
 
     var body: some View {
         HStack(alignment: .top, spacing: Metrics.insetSmall) {
@@ -295,10 +293,8 @@ struct ChecksHeader: View {
             .fixedSize(horizontal: false, vertical: true)
             .layoutPriority(1)
             Spacer(minLength: Metrics.insetSmall)
-            if showsRerun {
-                ChecksRerunButton(options: content.rerun, isEnabled: content.canRerun) { failedOnly in
-                    actions.rerun(failedOnly, nil)
-                }
+            ChecksRerunButton(options: content.rerun, isEnabled: content.canRerun) { failedOnly in
+                actions.rerun(failedOnly, nil)
             }
         }
         .accessibilityElement(children: .contain)
@@ -455,8 +451,9 @@ private struct CheckRunRow: View {
     }
 }
 
-/// An expanded check: its steps' summary, rerun and View on GitHub, then
-/// its steps or the note that it has none.
+/// An expanded check: its steps' summary, Re-run and View on GitHub as
+/// symbol buttons, then its steps or the note that it has none with View
+/// Check Details.
 private struct CheckStepsView: View {
     let check: CheckRunContent
     let actions: ChecksListActions
@@ -475,51 +472,26 @@ private struct CheckStepsView: View {
                         Button {
                             actions.rerun(false, check.id)
                         } label: {
-                            Image(systemName: "arrow.clockwise")
+                            Label("Re-run \(check.name)", systemImage: "arrow.clockwise")
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.icon)
                         .help("Re-run \(check.name)")
-                        .accessibilityLabel("Re-run \(check.name)")
                     }
                     if let url = check.url {
                         Button {
                             actions.open(url)
                         } label: {
-                            Image(systemName: "arrow.up.forward.square")
+                            Label("View \(check.name) on GitHub", systemImage: "arrow.up.forward.square")
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.icon)
                         .help("View \(check.name) on GitHub")
-                        .accessibilityLabel("View \(check.name) on GitHub")
                     }
                 }
                 ForEach(steps) { step in
-                    HStack(spacing: Metrics.insetSmall) {
-                        CheckGlyph(kind: step.glyph)
-                            .font(Typography.subheadline)
-                        Text(step.name)
-                            .font(Typography.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .help(step.name)
-                        Spacer(minLength: Metrics.grid)
-                        Text(step.duration)
-                            .font(Typography.subheadline.monospacedDigit())
-                            .foregroundStyle(.text2)
-                        if let url = step.url {
-                            Button {
-                                actions.open(url)
-                            } label: {
-                                Image(systemName: "arrow.up.forward.square")
-                            }
-                            .buttonStyle(.borderless)
-                            .help("View \(step.name) on GitHub")
-                            .accessibilityLabel("View \(step.name) on GitHub")
-                        }
-                    }
-                    .accessibilityElement(children: .combine)
+                    CheckStepRow(step: step, open: actions.open)
                 }
             } else {
-                HStack(spacing: Metrics.grid) {
+                VStack(alignment: .leading, spacing: Metrics.insetSmall) {
                     Text("There are no steps to display for this check.")
                         .font(Typography.secondary)
                         .foregroundStyle(.text2)
@@ -528,10 +500,65 @@ private struct CheckStepsView: View {
                         Button("View Check Details") {
                             actions.open(url)
                         }
-                        .buttonStyle(.link)
+                        .buttonStyle(.quiet)
+                        .controlSize(.small)
                     }
                 }
             }
         }
+    }
+}
+
+/// A step: its glyph, name, and duration. A step with a page opens it on a
+/// click, the row taking the hover wash and showing ↗ while the pointer is
+/// on it.
+private struct CheckStepRow: View {
+    let step: CheckStepContent
+    let open: (URL) -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        if let url = step.url {
+            Button {
+                open(url)
+            } label: {
+                row(showsLink: isHovered)
+            }
+            .buttonStyle(.plain)
+            .background(
+                RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .continuous)
+                    .fill(isHovered ? Color(espalier: Palette.hover) : .clear)
+                    .hoverMotion(isHovered)
+                    .padding(.horizontal, -Metrics.grid)
+            )
+            .onHover { isHovered = $0 }
+            .help("View \(step.name) on GitHub")
+            .accessibilityHint("Opens the step on GitHub")
+        } else {
+            row(showsLink: false)
+                .help(step.name)
+        }
+    }
+
+    private func row(showsLink: Bool) -> some View {
+        HStack(spacing: Metrics.insetSmall) {
+            CheckGlyph(kind: step.glyph)
+                .font(Typography.subheadline)
+            Text(step.name)
+                .font(Typography.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: Metrics.grid)
+            Text(step.duration)
+                .font(Typography.subheadline.monospacedDigit())
+                .foregroundStyle(.text2)
+            Image(systemName: "arrow.up.forward")
+                .font(Typography.subheadline)
+                .foregroundStyle(.text3)
+                .opacity(showsLink ? 1 : 0)
+                .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }

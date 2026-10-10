@@ -1,8 +1,8 @@
 // Snapshots of the diff container's layouts: the header, a text diff with
-// its warnings, a large diff, a submodule's change, a failed diff, an empty
-// state, and the image modes; a text diff and the two-up image in light and
-// dark, the rest in light. Which state shows when is
-// DiffContainerContentTests'.
+// its warnings, a large diff, a submodule's change, a failed diff, empty
+// states, and the image modes with their picker; a text diff and the
+// two-up image in light and dark, the rest in light. Which state shows when
+// is DiffContainerContentTests'.
 
 import AppKit
 import EspalierCore
@@ -115,6 +115,15 @@ struct DiffContainerSnapshotTests {
         snapshot(NoHunksView(status: .modified(), hidesWhitespace: true), named: "empty-whitespace", size: CGSize(width: 480, height: 200))
     }
 
+    @Test("a text diff with no hunks: a rename with changes")
+    func renamedWithChanges() {
+        snapshot(
+            NoHunksView(status: .renamed(oldPath: "Sources/Old.swift", renameIncludesModifications: true), hidesWhitespace: false),
+            named: "empty-renamed",
+            size: CGSize(width: 480, height: 200)
+        )
+    }
+
     @Test("a failed diff")
     func failed() {
         let error = OperationError(.other("Could not read the file."), operation: .loadDiff)
@@ -137,7 +146,7 @@ struct DiffContainerSnapshotTests {
         }
     }
 
-    @Test("an image diff's header has the mode picker")
+    @Test("an image diff shows its mode picker above the images")
     func imageHeader() {
         let file = DiffFileInfo(path: "Assets/icon.png", status: .modified)
         let diff = ImageDiff(previous: ImageFixtures.previous, current: ImageFixtures.current)

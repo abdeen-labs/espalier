@@ -1,7 +1,7 @@
-// A repository's row in the sidebar's Repositories section and the
-// repository popover: the alias or name, the owner where the name is
-// ambiguous, the status indicators with their tooltips, the hover tooltip
-// (full name, alias, path), and the cloning and missing states.
+// A repository's row in the repository popover: the alias or name (the
+// selected repository's semibold), the owner where the name is ambiguous,
+// the status indicators with their tooltips, the hover tooltip (full name,
+// alias, path), and the cloning and missing states.
 
 import EspalierCore
 import EspalierSupport
@@ -13,7 +13,7 @@ import SwiftUI
 nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
     /// The row's glyph.
     enum Icon: Sendable, Equatable {
-        /// The selected repository: `folder.fill` in the accent color.
+        /// The selected repository: its badge, and its title semibold.
         case current
         case other
         /// The folder is gone, or git won't work in it.
@@ -168,23 +168,20 @@ extension RepositoryRowContent {
 /// and the status indicators.
 struct RepositoryRow: View {
     let content: RepositoryRowContent
-    /// Increased on the repository popover's highlighted row (the accent).
-    @Environment(\.backgroundProminence) private var prominence
 
     var body: some View {
-        let colors = PaletteRowColors(prominence)
         HStack(spacing: Metrics.insetSmall) {
             RepositoryRowIcon(icon: content.icon, title: content.title)
             VStack(alignment: .leading, spacing: 0) {
                 Text(content.title)
                     .font(content.icon == .current ? Typography.row.weight(.semibold) : Typography.row)
-                    .foregroundStyle(colors.primary)
+                    .foregroundStyle(.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if let subtitle = content.subtitle {
                     Text(subtitle)
                         .font(Typography.subheadline)
-                        .foregroundStyle(colors.tertiary)
+                        .foregroundStyle(.text3)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -226,32 +223,30 @@ struct RepositoryRowIcon: View {
 /// tooltips.
 struct RepositoryStatusIndicators: View {
     let content: RepositoryRowContent
-    @Environment(\.backgroundProminence) private var prominence
 
     var body: some View {
-        let colors = PaletteRowColors(prominence)
         if content.showsStatus {
             HStack(spacing: Metrics.grid) {
                 if content.changedFileCount > 0 {
                     Text(content.changedFileCount > 999 ? "999+" : "\(content.changedFileCount)")
                         .font(Typography.tinyCount)
-                        .foregroundStyle(colors.secondary)
+                        .foregroundStyle(.text2)
                         .padding(.horizontal, Metrics.grid + 1)
                         .padding(.vertical, 1)
-                        .background(Capsule(style: .circular).fill(colors.tagFill))
+                        .background(Capsule(style: .circular).fill(.field))
                         .help(RepositoryRowContent.changesTooltip)
                 }
                 if let tooltip = content.aheadBehindTooltip {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Metrics.grid) {
                         if content.ahead > 0 {
                             Text("↑\(content.ahead)")
                                 .font(Typography.aheadCount)
-                                .foregroundStyle(colors.mark(.accentColor))
+                                .foregroundStyle(Color.accentColor)
                         }
                         if content.behind > 0 {
                             Text("↓\(content.behind)")
                                 .font(Typography.secondaryCount)
-                                .foregroundStyle(colors.tertiary)
+                                .foregroundStyle(.text3)
                         }
                     }
                     .help(tooltip)

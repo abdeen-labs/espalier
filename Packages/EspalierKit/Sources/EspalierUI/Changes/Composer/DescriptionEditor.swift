@@ -1,6 +1,6 @@
 // The commit description, an `NSTextView` that shows 3 to 8 lines and then
 // scrolls (a shorter text, or the placeholder, doesn't move under a
-// scroll), with a placeholder, `@` and `#` completion (native text
+// scroll), with a placeholder, `@` and `#` completion (NSTextView's
 // completion), the composer's items at the top of its context menu, and
 // spell checking that remembers its setting (`commit-spellcheck-enabled`).
 // Tab moves to the next field, as in a form. The summary and the
@@ -385,15 +385,16 @@ final class MenuItemAction: NSObject {
     }
 }
 
-/// One of the commit message's two fields.
+/// One of the commit message card's fields.
 nonisolated enum ComposerField: Hashable, Sendable {
     case summary
     case description
+    case coAuthors
 }
 
 /// Lets the composer move focus to the summary (Go to Commit Message) and
-/// the description (Return in the summary), and know which of them has
-/// focus.
+/// the description (Return in the summary), and know which of the card's
+/// fields has focus.
 @MainActor @Observable
 final class ComposerFocusBridge {
     @ObservationIgnored weak var summaryView: NSTextField?

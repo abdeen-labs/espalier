@@ -62,9 +62,11 @@ struct RoutingTests {
                 shown.append((screen, png))
             }
 
-            // The kinds name the inner split's saved width.
-            #expect(SidebarPlace.branch(ref: current.ref).kind(currentBranchRef: current.ref) == .history)
-            #expect(SidebarPlace.branch(ref: "refs/heads/other").kind(currentBranchRef: current.ref) == .compare)
+            // The kinds name the inner split's saved width: History's places
+            // have the simple list's or the graph's.
+            #expect(SidebarPlace.branch(ref: current.ref).kind(style: .simple) == .simpleHistory)
+            #expect(SidebarPlace.branch(ref: "refs/heads/other").kind(style: .graph) == .graphHistory)
+            #expect(SidebarPlace.tag(name: "v1.0").kind(style: .graph) == .graphHistory)
             #expect(Set(PlaceKind.allCases.map(\.splitAutosaveName)).count == PlaceKind.allCases.count)
             #expect(SidebarPlace.history.showsCommits && !SidebarPlace.changes.showsCommits)
             #expect(SidebarPlace.changes.searchPrompt == "Filter Changed Files")

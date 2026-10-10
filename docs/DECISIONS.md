@@ -32,24 +32,26 @@ reason.
   templates, the vendored grammars): MIT asks for the notice with every
   copy, and About ▸ Acknowledgements covers only the app.
 
-## No desktop UI
+## Desktop's layout, Espalier's look
 
-- **None of desktop's UI** (my call). Desktop defines what Espalier can do and
-  how git operations behave (arguments, safety checks, edge cases, errors).
-  Layout, navigation, flows, dialogs, and visual design are designed for
-  macOS.
+- **Desktop's layout, not its look** (my call). Desktop defines what Espalier
+  can do, how git operations behave (arguments, safety checks, edge cases,
+  errors), and where things are: the window's arrangement, what each screen
+  shows together, and its flows. Its visual style isn't used; Espalier draws
+  its own for macOS. A layout that departs from desktop's needs a better
+  result and is recorded here.
 - **Copy isn't copied word for word** (my call): desktop's strings are reused
   where they read well; otherwise Espalier writes clear macOS copy that
   means the same thing.
-- **Native means written natively** (my call): a native macOS app is one
-  written for macOS, not one that looks like a stock system app. Simple,
+- **Espalier draws its own UI** (my call): every control, list, and surface
+  is Espalier's own design, never a stock SwiftUI or AppKit look. Simple,
   clean, and modern, with personality; `docs/DESIGN.md` is the look.
 - **History has a simple mode** (my call; desktop has none), the default for a
   new install: the graph overwhelms anyone who doesn't know what they're
   looking at.
 - **The diff's "Show check marks" setting is gone** (my call): the tinted
   gutter already shows inclusion without relying on color, since a line
-  left out is faded and struck through.
+  left out is faded.
 - **The app's typefaces are SF Pro and SF Mono** (my call). Satoshi, Switzer,
   IBM Plex Sans, and Khand with Hind were tried and turned down.
 
@@ -309,13 +311,12 @@ infrastructure. Each is recorded here with its purpose and license.
 
 - **One window, two columns:** the sidebar and a detail area whose inner
   split is remembered per place (Changes: files | diff; History: commits |
-  details). Three columns would make Changes and History share one middle
-  width, which suits neither.
-- **The sidebar is the current repository:** places you select (Changes,
-  History, Branches, Pull Requests, Tags, Stashes) and rows that switch the
-  working copy (worktrees, repositories), which aren't selectable, so arrow
-  keys never switch repositories by accident. Repositories also appear in
-  the toolbar's popover (⌘T).
+  details, Simple and Graph each with its own width). Three columns would
+  make Changes and History share one middle width, which suits neither.
+- **The sidebar is the current repository's places:** Changes, History,
+  Branches, Pull Requests, Tags, and Stashes. Switching the working copy is
+  desktop's: the repository popover (⌘T) lists worktrees and repositories;
+  the sidebar doesn't.
 - **Operations are non-modal:** progress and conflicts show in an operation
   panel in Changes or a floating capsule elsewhere; outcomes are toasts with
   Undo where available, also when a recovery (Stash Changes and Continue,
@@ -357,8 +358,8 @@ toolbar customization; a sidebar filter; a Commit menu; Amend Last Commit in
 the composer's options; the commit inspector; the quit guard; the code text
 size; "Show in Finder" everywhere.
 
-**Dropped from desktop:** zoom; pane-width keys and ⌘8/⌘9 (native split
-views); the `show-changes-filter` toggle; Windows menus and access keys; the
+**Dropped from desktop:** zoom; pane-width keys and ⌘8/⌘9 (the split views
+resize by dragging); the `show-changes-filter` toggle; Windows menus and access keys; the
 tutorial, Explore, and the thank-you card; release notes and update banners
 (Sparkle); the unsupported-OS banner; Copilot's handoff, disclaimers,
 call-outs, and nudges; the untrusted-certificate dialog; browser OAuth (the
@@ -370,8 +371,8 @@ immediately; importing desktop's repository list and settings (my call).
 
 - **Return opens a file in the external editor,** as Finder-like lists do;
   Space toggles inclusion (desktop's Enter).
-- **An unknown co-author reads "(not found)"** (`NSTokenField` can't color
-  tokens). Hiding co-authors keeps them in the draft, never committed or
+- **An unknown co-author's token is drawn in the warning color.** The
+  co-authors are a region of the commit message card. Hiding co-authors keeps them in the draft, never committed or
   checked while hidden (desktop cleared them).
 - **"N included" counts every file the next commit includes,** in full or in
   part, including files the filter hides; the include-all checkbox reflects
@@ -382,6 +383,36 @@ immediately; importing desktop's repository list and settings (my call).
   GitHub.com (desktop showed "null").
 - **Starting to amend sets an unfinished message aside** and brings it back
   afterwards. Amend works on a detached HEAD, not during a rebase.
+- **The commit button names the branch** ("Commit 3 Files to main"), as
+  desktop's does; a long name is cut in the middle.
+- **One commit form through a merge or rebase,** as desktop's: during a
+  merge the commit form shows git's message and Commit Merge, enabled once
+  nothing is left to resolve; a stopped rebase, cherry-pick, or revert shows
+  Continue in its place. The operation bar keeps the title, progress,
+  Resolve with AI, and Abort. ⌘↩ doesn't commit a merge or continue.
+- **Conflicted files are rows of the one list,** as desktop's, with their
+  actions in the row and in its context menu.
+- **With no changes the header stays** ("0 changed files") over the empty
+  list; "No Local Changes" shows only beside it.
+- **A stash's files are the Changes rows, read-only,** under a header with
+  Restore and Discard….
+- **The diff is laid out as desktop's:** the expansion buttons in the hunk
+  header's gutter (side by side where desktop stacks them), the `@@` line as
+  git writes it in the code font, one bar per line that is both the
+  inclusion mark and its block's handle (colored per line), and in Split
+  the handle between the halves. Unified/Split is in the diff's options
+  menu, which holds only view settings; an image's modes sit above it.
+  Espalier keeps a checkbox in each hunk header.
+- **A left-out line keeps a faint add or delete tint and fades its text,**
+  without a strikethrough: a struck-through deletion read as deleted when it
+  stays. Included lines' numbers aren't bold.
+- **The diff's line cursor shows after the arrow keys or a gutter click,**
+  not after a click in the text.
+- **Conflict regions:** ours mint, the common ancestor gray, theirs orange.
+- **Lines that don't wrap scroll sideways under a scroller,** the line
+  numbers fixed. A wrapped line continues at its indent plus two columns.
+- **A large diff shows no counts until it's shown.** The whitespace hint's
+  buttons are Cancel and Show Whitespace (desktop: No and Yes).
 
 **History**
 
@@ -401,6 +432,21 @@ immediately; importing desktop's repository list and settings (my call).
   menu didn't). Undo needs the latest unpushed commit and no operation in
   progress; reset needs an ancestor with only unpushed commits after it.
 - **Without a remote, nothing shows as unpushed.**
+- **A commit's files sit beside its diff,** as desktop's, in a list with
+  each file's name and folder.
+- **A branch's row shows that branch's history** (desktop compares): its
+  first-parent line in Simple, the graph at its tip in Graph, with History,
+  Behind, and Ahead in the header and the merge call to action on Behind.
+  Nothing rewrites there (squash, reorder, Reset, Undo, amend);
+  cherry-picking onto the current branch still works.
+- **Simple and Graph share their rows' look:** the font, short times
+  ("12m", "Oct 5"), the avatar and tags before the title, the unpushed
+  arrow, and the selection. The simple rail draws the graph's nodes.
+- **Commit Info shows what the header doesn't:** dates, the committer,
+  parents, branches, co-authors, and trailers.
+- **A tag off the simple line, or a ref outside the graph's scope,** says so
+  above the list, with Show in Graph or Show All Branches.
+- **The squash sheet's message is a commit message card.**
 
 **Branches**
 
@@ -414,6 +460,13 @@ immediately; importing desktop's repository list and settings (my call).
   Branch menu keeps desktop's rules for the current branch.
 - **Delete Branch makes Delete the default button,** as every confirmation
   does (desktop's made Cancel the default; I agreed).
+- **The branch popover is desktop's branch switcher:** a click or Return
+  checks a branch out, and "Choose a branch to merge into <current>" sits
+  beside New Branch…. The sidebar's branches use its groups (Default,
+  Recent, Other, Remote), Other open at first.
+- **The current branch, worktree, repository, or pull request has a
+  semibold title,** and nothing else marks it; a checked-out pull request
+  says "Checked Out".
 
 **Repositories**
 
@@ -433,6 +486,10 @@ immediately; importing desktop's repository list and settings (my call).
   the clone lists match fuzzily, as desktop's did.
 - **Add Worktree refuses what's in the way and an invalid branch name**
   (desktop silently used the worktree's name).
+- **The repository popover is desktop's repository list:** the filter and
+  Add at the top, then worktrees (with New Worktree…), then repositories by
+  group, with desktop's context menus. Its height follows its rows, up to
+  the window's. Worktrees live here (desktop has a dropdown of their own).
 - **The command line tool** is `espalier.sh` in the bundle (`espalier`,
   `espalier open [path]`, `espalier clone [-b branch] <url or owner/name>`),
   linked at `/usr/local/bin/espalier` as the user or after an administrator
@@ -445,16 +502,31 @@ immediately; importing desktop's repository list and settings (my call).
 - **A missing editor or shell shows as not installed,** never replaced and
   saved (desktop replaced it); with no choice, the default is the first
   installed editor, looked up at each launch.
+- **One author form** (desktop's `GitConfigUserForm`) in Settings ▸ Git,
+  Repository Settings, and Configure Git. Open With and Settings choose an
+  editor with the same pop-up.
+- **Sheets label their fields in a column beside them** (Clone's is
+  "Repository URL"); a plain choice of two is a radio list, choices with
+  descriptions are cards.
+- **The Settings window is 720 wide.** Tabs in sheets are centered. The
+  welcome flow has no step indicator.
+- **Git's output in an error shows in a box as tall as it,** up to 260
+  points, then scrolls. Toasts have a close button.
+- **The SSH host prompt's buttons are Connect and Cancel** (desktop: Yes
+  and No); the Open With sheet's title has no ellipsis.
 
 **GitHub**
 
-- **Descriptions, reviews, and comments are Markdown rendered natively.**
+- **Descriptions, reviews, and comments are Markdown Espalier renders.**
   Images carry the account's token only to repository assets and
   Enterprise avatars on the account's own origin, never across a redirect.
 - **Exposing a secret is never the default button.**
 - **A clicked notification** selects its repository and pull request, and a
   review or comment opens in a sheet.
 - **Pull request links check the pull request out.**
+- **Pull requests have their own symbol** (desktop's reads as a figure at
+  small sizes) and drafts a Draft tag. A check's step row opens the step.
+  Preview Pull Request resizes, from 760 × 480.
 
 ## GitHubKit
 
@@ -520,11 +592,11 @@ immediately; importing desktop's repository list and settings (my call).
   --merge` (desktop committed, then `reset --hard`, discarding edits in
   files the merge never touched).
 - **No `--ff` option,** as desktop: the user's `merge.ff` applies.
-- **A merge can be committed with your own message:** once nothing is left
-  to resolve, the operation panel shows git's message (`SQUASH_MSG`, then
-  `MERGE_MSG`) above Commit Merge. Unchanged, it is git's `--no-edit`
-  commit; edited, it is committed as written. The user's draft stays
-  untouched.
+- **A merge can be committed with your own message:** the commit form shows
+  git's message (`SQUASH_MSG`, then `MERGE_MSG`) with Commit Merge, enabled
+  once nothing is left to resolve. Unchanged, it is git's `--no-edit`
+  commit; edited, it is committed as written. The user's draft comes back
+  afterwards.
 - **Manual conflict resolutions belong to one operation** (desktop's carried
   over to the next).
 - **Cherry-pick:** a failure aborts what git left and returns to the branch
@@ -709,7 +781,8 @@ immediately; importing desktop's repository list and settings (my call).
 
 ## History's simple mode
 
-- **The current branch's first-parent line from HEAD,** one commit after
+- **A branch's first-parent line,** the current branch's from HEAD in
+  History and another branch's in its row's place, one commit after
   another, grouped by nothing (my call): no day headings, no "Not pushed yet"
   section, no start marker, and no uncommitted-work row. The style is
   app-wide, simple when nothing is stored.
@@ -733,8 +806,8 @@ immediately; importing desktop's repository list and settings (my call).
 `docs/DESIGN.md` is the look; these are the decisions behind it.
 
 - **The flat window stays a `NavigationSplitView`,** so collapsing the
-  sidebar, full screen, the traffic lights, and toolbar customization stay
-  native; its content is opaque over macOS's glass.
+  sidebar, full screen, the traffic lights, and toolbar customization work
+  as AppKit makes them; its content is opaque over macOS's glass.
 - **Tokens have light, dark, and Increase Contrast values.** Status letters
   and diff markers keep 4.5:1 contrast.
 - **The toolbar's search capsule shows ⌥⌘F,** the real Search shortcut (⌘F is
@@ -754,7 +827,7 @@ immediately; importing desktop's repository list and settings (my call).
   later-named one (fine by me).
 - **A commit's details show its tags, not branches** (my call; the rows show
   branches), and keep the "CHANGED FILES" label (my call).
-- **No focus ring over a selection** (my call): History's file chips and
+- **No focus ring over a selection** (my call): History's commit and file
   rows, and the diff's line cursor, show only their accent tint, focused or
   not.
 - **The commit message card shows which field has focus with its own
@@ -768,6 +841,15 @@ immediately; importing desktop's repository list and settings (my call).
   instead of bouncing.
 - **No system selection highlight anywhere** (my call): every list's rows
   draw their own selection in the row's rounded shape, focused or not.
+- **Four corner radii:** 5 for checkboxes and key caps, 9 for rows, 14 for
+  cards, 22 for sheets and popovers.
+- **A card in a pane has a ring and no shadow;** only what floats casts
+  one.
+- **Type sizes are the system's** (10, 11, 12, 13, 15); SF Mono's roles in
+  fixed-height capsules keep fixed sizes.
+- **A disabled control fades to 45%.**
+- **Every checkbox, pop-up, switch, and button is Espalier's,** sheets and
+  forms included.
 - **Changes' rows show lines added and removed against HEAD** (desktop has
   none), staged and unstaged together; binary files, submodules, and
   conflicted files show none, and none load past 1,000 files.
@@ -849,6 +931,8 @@ immediately; importing desktop's repository list and settings (my call).
   files, History, a commit's files, and the sidebar; VoiceOver's Show Menu
   (VO-⇧-M) opens the same menu. No menu item holds it, so Keyboard
   Shortcuts lists it under Lists.
+- **A choice's description is its VoiceOver hint** in radio lists and
+  choice cards.
 - **Setting AXSelected on a Changes file's cell selects that file alone,**
   as a click does; setting it to false does nothing.
 

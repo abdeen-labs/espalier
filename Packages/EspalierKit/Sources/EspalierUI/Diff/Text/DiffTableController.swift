@@ -2,7 +2,9 @@
 // `DiffDocument` off the main actor whenever the diff or a setting that
 // shapes rows changes, computes row heights with monospace arithmetic, and
 // handles the mouse and keyboard. While a new document builds, the previous
-// one stays on screen.
+// one stays on screen. When lines don't wrap, the table is as wide as the
+// longest line needs, so the scroll view shows its horizontal scroller and
+// scrolls sideways; rows draw at the visible part, only their text moved.
 
 import AppKit
 import EspalierCore
@@ -155,16 +157,25 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             }
         }
     }
-    /// The keyboard's line cursor: the rows from `anchor` to `head`.
+    /// The line cursor: the rows from `anchor` to `head`. A click in the
+    /// text moves it without showing it; the keyboard and a click in the
+    /// gutter show it.
     private(set) var cursor: (anchor: Int, head: Int)?
+    /// Whether the line cursor shows (and Space, Option-Space, and Copy
+    /// act on it).
+    private(set) var showsCursor = false
     /// The block whose handle the pointer is over.
     private(set) var hoveredBlock: Int?
+    /// The changed line whose numbers the pointer is over, while lines can
+    /// be staged.
+    private(set) var hoveredLine: (row: Int, column: DiffColumn)?
     /// The hunk header button the pointer is over.
     private(set) var hoveredButton: (hunk: Int, button: DiffHunkButton)?
     /// A drag down the gutter: the original diff's indexes from and to,
     /// and whether it includes or excludes them.
     private(set) var gutterDrag: (column: DiffColumn, from: Int, to: Int, include: Bool)?
-    /// How far the text is scrolled sideways when lines don't wrap.
+    /// How far the text is scrolled sideways when lines don't wrap: the
+    /// clip view's horizontal scroll.
     private(set) var textScrollX: CGFloat = 0
     /// The longest line's width, for sideways scrolling.
     private var maximumTextWidth: CGFloat = 0
@@ -201,6 +212,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("diff"))
         column.resizingMask = .autoresizingMask
+        column.minWidth = 0
+        column.maxWidth = CGFloat(Float.greatestFiniteMagnitude)
         tableView.addTableColumn(column)
         tableView.headerView = nil
         tableView.style = .plain
@@ -223,7 +236,10 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
 
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
+        // Shown while lines don't wrap and one is wider than the pane.
+        scrollView.hasHorizontalScroller = true
+        // Bouncing past the edges would pull the numbers off the pane.
+        scrollView.horizontalScrollElasticity = .none
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
         scrollView.backgroundColor = Palette.background
@@ -233,6 +249,10 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         NotificationCenter.default.addObserver(
             self, selector: #selector(clipViewFrameDidChange(_:)),
             name: NSView.frameDidChangeNotification, object: scrollView.contentView
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(clipViewBoundsDidChange(_:)),
+            name: NSView.boundsDidChangeNotification, object: scrollView.contentView
         )
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(displayOptionsDidChange(_:)),
@@ -301,7 +321,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             redrawVisibleRows()
         }
         if shown.wrapsLines != content.wrapsLines {
-            textScrollX = 0
+            scrollText(toX: 0)
         }
     }
 
@@ -351,12 +371,13 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         intraLineChanges.removeAll()
         intraLineMisses.removeAll()
         hoveredBlock = nil
+        hoveredLine = nil
         hoveredButton = nil
         gutterDrag = nil
         if isNewFile {
             textSelection = nil
             cursor = nil
-            textScrollX = 0
+            showsCursor = false
         } else {
             clampInteractionState()
         }
@@ -458,6 +479,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         lineLayouts.removeAll()
         textCache.reset()
         computeRowHeights(wraps: shownContent?.wrapsLines ?? true)
+        updateDocumentWidth()
         Motion.run(Motion.arrive, in: tableView) { animates in
             tableView.beginUpdates()
             if !change.removed.isEmpty {
@@ -481,6 +503,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
         if let cursor, max(cursor.anchor, cursor.head) >= count {
             self.cursor = nil
+            showsCursor = false
         }
     }
 
@@ -488,6 +511,15 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
 
     @objc private func clipViewFrameDidChange(_ notification: Notification) {
         scheduleRelayout()
+    }
+
+    @objc private func clipViewBoundsDidChange(_ notification: Notification) {
+        let x = max(scrollView.contentView.bounds.origin.x, 0)
+        guard x != textScrollX else {
+            return
+        }
+        textScrollX = x
+        redrawVisibleRows()
     }
 
     @objc private func displayOptionsDidChange(_ notification: Notification) {
@@ -553,6 +585,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         if heightsChange {
             computeRowHeights(wraps: wraps)
         }
+        updateDocumentWidth()
         if reload {
             tableView.reloadData()
             tableView.layoutSubtreeIfNeeded()
@@ -566,7 +599,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     }
 
     /// Every row's height: one visual line per row unless lines wrap, then
-    /// ⌈columns ÷ columns per line⌉ lines (the taller half, split).
+    /// the line's visual lines (the taller half, split).
     private func computeRowHeights(wraps: Bool) {
         let lineHeight = font.lineHeight
         let columnsBefore = geometry.columnsPerLine(.before)
@@ -575,9 +608,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         var widest = 0
         for (index, row) in document.rows.enumerated() {
             switch row.kind {
-            case .hunk:
-                heights[index] = lineHeight + DiffTableMetrics.hunkRowExtraHeight
-            case .noNewline:
+            case .hunk, .noNewline:
                 continue
             case .context, .added, .deleted, .modified:
                 var lines = 1
@@ -605,9 +636,6 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
         rowHeights = heights
         maximumTextWidth = CGFloat(widest) * font.characterWidth
-        if !wraps {
-            clampTextScroll()
-        }
     }
 
     private func visualLineCount(_ line: Int, columnsPerLine: Int) -> Int {
@@ -677,23 +705,76 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
 
     // MARK: Sideways scrolling (lines that don't wrap)
 
+    /// While lines don't wrap, makes the table wider than the pane by as
+    /// much as the longest line overflows its side (and two characters
+    /// more), so the scroll view shows its horizontal scroller; otherwise
+    /// as wide as the pane.
+    private func updateDocumentWidth() {
+        guard let column = tableView.tableColumns.first else {
+            return
+        }
+        let clipWidth = scrollView.contentView.bounds.width
+        let text = geometry.half(.before).text
+        let overflow = (shownContent?.wrapsLines ?? true)
+            ? 0
+            : max(maximumTextWidth - (text.upperBound - text.lowerBound) + font.characterWidth * 2, 0)
+        let minimum = overflow > 0 ? (clipWidth + overflow).rounded(.up) : 0
+        guard column.minWidth != minimum else {
+            return
+        }
+        // A table that resizes its column keeps itself as wide as the pane,
+        // so one wider than the pane doesn't. A wider column takes its width
+        // before its minimum (a minimum above the column's width leaves the
+        // table's geometry at the old width), a narrower one after (the old
+        // minimum would hold the width up).
+        tableView.columnAutoresizingStyle = overflow > 0 ? .noColumnAutoresizing : .uniformColumnAutoresizingStyle
+        if minimum > column.minWidth {
+            column.width = max(minimum, clipWidth)
+            column.minWidth = minimum
+        } else {
+            column.minWidth = minimum
+            column.width = max(minimum, clipWidth)
+        }
+        if overflow == 0, tableView.frame.width != clipWidth {
+            tableView.setFrameSize(NSSize(width: clipWidth, height: tableView.frame.height))
+        }
+        tableView.sizeLastColumnToFit()
+        tableView.tile()
+        let maximumScroll = max(tableView.frame.width - clipWidth, 0)
+        if scrollView.contentView.bounds.origin.x > maximumScroll {
+            scrollText(toX: maximumScroll)
+        }
+    }
+
+    /// Scrolls up or down just enough to show a row, keeping the sideways
+    /// scroll.
+    func scrollRowIntoView(_ row: Int) {
+        guard document.rows.indices.contains(row) else {
+            return
+        }
+        let rect = tableView.rect(ofRow: row)
+        let visible = tableView.visibleRect
+        tableView.scrollToVisible(CGRect(x: visible.minX, y: rect.minY, width: visible.width, height: rect.height))
+    }
+
     /// Scrolls the text sideways by `delta` points.
     func scrollText(by delta: CGFloat) {
         guard shownContent?.wrapsLines == false else {
             return
         }
-        let previous = textScrollX
-        textScrollX += delta
-        clampTextScroll()
-        if textScrollX != previous {
-            redrawVisibleRows()
-        }
+        scrollText(toX: scrollView.contentView.bounds.origin.x + delta)
     }
 
-    private func clampTextScroll() {
-        let visible = geometry.half(.before).text.upperBound - geometry.half(.before).text.lowerBound
-        let maximum = max(maximumTextWidth - visible + font.characterWidth * 2, 0)
-        textScrollX = min(max(textScrollX, 0), maximum)
+    /// Scrolls the text sideways to `x`, within the table.
+    private func scrollText(toX x: CGFloat) {
+        let clip = scrollView.contentView
+        let maximum = max(tableView.frame.width - clip.bounds.width, 0)
+        let target = min(max(x, 0), maximum)
+        guard target != clip.bounds.origin.x else {
+            return
+        }
+        clip.scroll(to: CGPoint(x: target, y: clip.bounds.origin.y))
+        scrollView.reflectScrolledClipView(clip)
     }
 
     // MARK: Data source and delegate
@@ -791,12 +872,15 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
     }
 
-    /// The rows the pointer's hover draws on: a block's handle, a hunk
-    /// header's button.
-    private func hoverRows(block: Int?, buttonHunk: Int?) -> [Int] {
+    /// The rows the pointer's hover draws on: a block (its handle and
+    /// numbers), a line's numbers, a hunk header's button.
+    private func hoverRows(block: Int?, line: Int?, buttonHunk: Int?) -> [Int] {
         var rows: [Int] = []
         if let block, document.blocks.indices.contains(block) {
             rows.append(contentsOf: document.blocks[block].rows)
+        }
+        if let line, document.rows.indices.contains(line) {
+            rows.append(line)
         }
         if let buttonHunk, document.hunks.indices.contains(buttonHunk) {
             rows.append(document.hunks[buttonHunk].row)
@@ -872,7 +956,9 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
         let rect = tableView.rect(ofRow: row)
         let documentRow = document.rows[row]
-        let x = point.x
+        // Rows draw from the pane's left edge, however far the table is
+        // scrolled sideways.
+        let x = point.x - textScrollX
         if documentRow.kind == .hunk {
             let hunk = Int(documentRow.hunk)
             let documentHunk = document.hunks[hunk]
@@ -883,7 +969,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
                 }
             }
             if documentHunk.changedDiffLines != nil, let checkbox = geometry.hunkCheckbox,
-               x >= (geometry.handle?.lowerBound ?? checkbox.lowerBound), x < checkbox.upperBound {
+               x >= geometry.hunkGutter.upperBound, x < checkbox.upperBound + DiffTableMetrics.textInset {
                 return .hunkCheckbox(hunk: hunk)
             }
             return .hunkHeader(hunk: hunk)
@@ -891,12 +977,17 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         if documentRow.kind == .noNewline {
             return .none
         }
-        if let handle = geometry.handle, x >= handle.lowerBound, x < handle.upperBound, documentRow.block >= 0 {
+        if let handle = geometry.handleHitArea, handle.contains(x), documentRow.block >= 0 {
             return .handle(row: row, block: Int(documentRow.block))
         }
         let side = geometry.column(atX: x)
         let half = geometry.half(side)
-        if x < half.marker.lowerBound {
+        // The gutter is left of the marker, but a split diff's old half,
+        // turned around while lines can be staged, has it on its right.
+        let isInGutter = document.isSplit && side == .before && geometry.handle != nil
+            ? x >= half.gutter.lowerBound
+            : x < half.marker.lowerBound
+        if isInGutter {
             let gutterSide: DiffColumn = document.isSplit ? side : .before
             if document.changedLine(ofRow: row, column: gutterSide) != nil {
                 return .gutter(row: row, column: gutterSide)
@@ -943,7 +1034,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         let rect = tableView.rect(ofRow: row)
         let layout = layout(ofLine: line, side: column)
         let visualLine = Int(((point.y - rect.minY) / font.lineHeight).rounded(.down))
-        let textColumn = geometry.textColumn(atX: point.x, side: column, scrollX: textScrollX)
+        let textColumn = geometry.textColumn(atX: point.x - textScrollX, side: column, scrollX: textScrollX)
         return DiffTextPosition(row: row, offset: layout.offset(atVisualLine: visualLine, column: textColumn))
     }
 
@@ -1002,7 +1093,9 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             return beginCursorClick(row: row)
         case .text(let row, let column, let offset):
             tableView.window?.makeFirstResponder(tableView)
-            setCursor(row: row, extending: false, redraw: false)
+            // The cursor moves here for the keyboard to go on from, but a
+            // click in the text selects text: it doesn't show.
+            setCursor(row: row, extending: false, shows: false)
             if clickCount >= 3 {
                 textSelection = document.lineSelection(row: row, column: column)
             } else if clickCount == 2 {
@@ -1038,7 +1131,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             }
             let row = self.row(at: point) ?? (point.y < 0 ? 0 : document.rowCount - 1)
             // Split, the side under the pointer.
-            let column = document.isSplit ? geometry.column(atX: point.x) : current.column
+            let column = document.isSplit ? geometry.column(atX: point.x - textScrollX) : current.column
             if let line = document.changedLine(ofRow: row, column: column) {
                 let number = document.lines[line].diffLineNumber
                 if number >= 0, number != current.to {
@@ -1053,9 +1146,10 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             }
             if !(shownContent?.wrapsLines ?? true) {
                 let text = geometry.half(column).text
-                if point.x > text.upperBound {
+                let x = point.x - textScrollX
+                if x > text.upperBound {
                     scrollText(by: font.characterWidth)
-                } else if point.x < text.lowerBound, textScrollX > 0 {
+                } else if x < text.lowerBound, textScrollX > 0 {
                     scrollText(by: -font.characterWidth)
                 }
             }
@@ -1079,19 +1173,18 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         redrawVisibleRows()
     }
 
-    /// The pointer moved: updates the hovered block and button.
+    /// The pointer moved: updates the hovered block, line, and button.
     func mouseMoved(to point: CGPoint?) {
         var block: Int?
+        var line: (row: Int, column: DiffColumn)?
         var button: (hunk: Int, button: DiffHunkButton)?
         var toolTip: String?
         if let point {
             switch hit(at: point) {
             case .handle(_, let hovered):
                 block = hovered
-            case .gutter(let row, _):
-                if shownContent?.staging != nil, document.rows[row].block >= 0 {
-                    block = Int(document.rows[row].block)
-                }
+            case .gutter(let row, let column):
+                line = (row, column)
             case .expansion(let hunk, let kind):
                 button = (hunk, kind)
                 toolTip = kind.title
@@ -1101,13 +1194,16 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
         if shownContent?.staging == nil || gutterDrag != nil {
             block = nil
+            line = nil
         }
-        let changed = block != hoveredBlock || button?.hunk != hoveredButton?.hunk || button?.button != hoveredButton?.button
-        // The handle and a hunk button's hover fade out over 0.15 s and in
-        // over 0.08 s.
+        let changed = block != hoveredBlock || line?.row != hoveredLine?.row || line?.column != hoveredLine?.column
+            || button?.hunk != hoveredButton?.hunk || button?.button != hoveredButton?.button
+        // The gutter's and a hunk button's hover fade out over 0.15 s and
+        // in over 0.08 s.
         let fadesHover = changed && Motion.animates(tableView)
-        let leaving = fadesHover ? hoverRows(block: hoveredBlock, buttonHunk: hoveredButton?.hunk) : []
+        let leaving = fadesHover ? hoverRows(block: hoveredBlock, line: hoveredLine?.row, buttonHunk: hoveredButton?.hunk) : []
         hoveredBlock = block
+        hoveredLine = line
         hoveredButton = button
         if tableView.toolTip != toolTip {
             tableView.toolTip = toolTip
@@ -1117,7 +1213,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
         if fadesHover {
             crossfade(rows: leaving, duration: Motion.hoverOut)
-            crossfade(rows: hoverRows(block: block, buttonHunk: button?.hunk), duration: Motion.hoverIn)
+            crossfade(rows: hoverRows(block: block, line: line?.row, buttonHunk: button?.hunk), duration: Motion.hoverIn)
         }
     }
 
@@ -1181,8 +1277,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         let popover = NSPopover()
         popover.behavior = .transient
         let host = NSHostingController(rootView: WhitespaceHintView(
-            onNo: { [weak popover] in popover?.close() },
-            onYes: { [weak self, weak popover] in
+            onCancel: { [weak popover] in popover?.close() },
+            onShow: { [weak self, weak popover] in
                 popover?.close()
                 self?.actions.staging?.showWhitespaceChanges()
             }
@@ -1196,8 +1292,9 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
 
     // MARK: Keyboard
 
-    /// Moves the line cursor to `row` (extending the range with Shift).
-    func setCursor(row: Int, extending: Bool, redraw: Bool = true) {
+    /// Moves the line cursor to `row` (extending the range with Shift),
+    /// showing it or not.
+    func setCursor(row: Int, extending: Bool, shows: Bool = true) {
         guard document.rows.indices.contains(row) else {
             return
         }
@@ -1206,18 +1303,24 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         } else {
             cursor = (row, row)
         }
-        tableView.scrollRowToVisible(row)
-        if redraw {
-            redrawVisibleRows()
+        let wasShown = showsCursor
+        showsCursor = shows
+        guard shows else {
+            if wasShown {
+                redrawVisibleRows()
+            }
+            return
         }
+        scrollRowIntoView(row)
+        redrawVisibleRows()
         if let rowView = tableView.rowView(atRow: row, makeIfNecessary: false) {
             NSAccessibility.post(element: rowView, notification: .focusedUIElementChanged)
         }
     }
 
-    /// The rows under the cursor.
+    /// The rows under the cursor, while it shows.
     var cursorRows: ClosedRange<Int>? {
-        guard let cursor else {
+        guard showsCursor, let cursor else {
             return nil
         }
         return min(cursor.anchor, cursor.head)...max(cursor.anchor, cursor.head)
@@ -1285,7 +1388,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
         textSelection = nil
         setCursor(row: row, extending: false)
-        tableView.scrollRowToVisible(target)
+        scrollRowIntoView(target)
     }
 
     /// Space: toggles the lines under the cursor.
@@ -1298,7 +1401,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
         if staging.hidesWhitespace {
             let rect = tableView.rect(ofRow: rows.lowerBound)
-            showWhitespaceHint(at: CGPoint(x: geometry.before.gutter.upperBound, y: rect.midY))
+            showWhitespaceHint(at: CGPoint(x: geometry.before.gutter.upperBound + textScrollX, y: rect.midY))
             return
         }
         guard staging.canSelectLines else {
@@ -1313,12 +1416,12 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
 
     /// Option-Space: toggles the block under the cursor.
     private func toggleCursorBlock() {
-        guard let row = cursor?.head, let block = document.block(ofRow: row), let staging = shownContent?.staging else {
+        guard showsCursor, let row = cursor?.head, let block = document.block(ofRow: row), let staging = shownContent?.staging else {
             return
         }
         if staging.hidesWhitespace {
             let rect = tableView.rect(ofRow: row)
-            showWhitespaceHint(at: CGPoint(x: geometry.before.gutter.upperBound, y: rect.midY))
+            showWhitespaceHint(at: CGPoint(x: geometry.before.gutter.upperBound + textScrollX, y: rect.midY))
             return
         }
         guard staging.canSelectLines else {

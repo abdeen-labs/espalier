@@ -120,7 +120,7 @@ struct CustomIntegrationSheet: View {
         SheetScaffold(editor.kind.title, message: "Espalier replaces \(TargetPathArgument) with the path to open.") {
             Form {
                 LabeledContent("Path") {
-                    VStack(alignment: .leading, spacing: Metrics.SettingsWindow.messageSpacing) {
+                    VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
                         HStack(spacing: Metrics.insetSmall) {
                             TextField("Path", text: $editor.path, prompt: Text("Path to executable"))
                                 .labelsHidden()
@@ -128,16 +128,16 @@ struct CustomIntegrationSheet: View {
                                 .buttonStyle(.quiet)
                         }
                         if let error = editor.pathError {
-                            InlineMessage(error, kind: .error)
+                            FieldMessage(error, kind: .error)
                         }
                     }
                 }
                 LabeledContent("Arguments") {
-                    VStack(alignment: .leading, spacing: Metrics.SettingsWindow.messageSpacing) {
+                    VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
                         TextField("Arguments", text: $editor.arguments, prompt: Text("Command line arguments"))
                             .labelsHidden()
                         if let error = editor.argumentsError {
-                            InlineMessage(error, kind: .error)
+                            FieldMessage(error, kind: .error)
                         }
                     }
                 }

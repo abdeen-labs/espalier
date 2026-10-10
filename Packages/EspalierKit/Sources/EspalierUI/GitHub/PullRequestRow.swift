@@ -1,12 +1,19 @@
-// A pull request's sidebar row: the number and title, drafts set apart, the
-// checks' glyph with its tooltip ("Checks: Successful"), "#142 opened 2 days
-// ago by octo • Draft", and dropping commits on it to cherry-pick them onto
-// its branch. The current branch's pull request is bold.
+// A pull request's sidebar row: the number and title, drafts marked Draft,
+// the checks' glyph with its tooltip ("Checks: Successful"), "#142 opened 2
+// days ago by octo • Draft", and dropping commits on it to cherry-pick them
+// onto its branch. The current branch's pull request is semibold.
 
 import EspalierCore
 import GitHubKit
 import GitKit
 import SwiftUI
+
+/// A pull request's symbol where it's drawn small (rows, the chip, a
+/// toolbar button): two points joined by a path. `arrow.trianglehead.pull`
+/// reads as a stick figure that small.
+nonisolated enum PullRequestGlyph {
+    static let systemImage = "point.topleft.down.to.point.bottomright.curvepath"
+}
 
 /// What a pull request's row shows.
 nonisolated struct PullRequestRowContent: Sendable, Equatable {
@@ -68,8 +75,8 @@ nonisolated struct PullRequestRowContent: Sendable, Equatable {
 }
 
 /// A pull request in the sidebar: its checks (or the pull request symbol,
-/// in the accent while selected), its number, and its title (the current
-/// branch's semibold, a selected one medium).
+/// in the accent while selected), its number, its title (the current
+/// branch's semibold, a selected one medium), and Draft for a draft.
 struct PullRequestRow: View {
     let content: PullRequestRowContent
     @Environment(\.fixedNow) private var fixedNow
@@ -84,12 +91,12 @@ struct PullRequestRow: View {
                     ChecksGlyph(checks)
                         .help(content.checksTooltip ?? "")
                 } else {
-                    Image(systemName: "arrow.trianglehead.pull")
-                        .foregroundStyle(isSelected ? Color.accentColor : content.isDraft ? Color.text3 : .text2)
+                    Image(systemName: PullRequestGlyph.systemImage)
+                        .foregroundStyle(isSelected ? Color.accentColor : .text2)
                 }
             }
-            .font(.system(size: 12))
-            .frame(width: 16)
+            .font(Typography.secondary)
+            .frame(width: Metrics.Sidebar.symbolWidth)
             Text("#\(content.number)")
                 .font(Typography.count)
                 .foregroundStyle(.text3)
@@ -99,6 +106,10 @@ struct PullRequestRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 0)
+            if content.isDraft {
+                QuietCapsule("Draft")
+                    .fixedSize()
+            }
         }
         .help(content.subtitle(now: fixedNow ?? Date(), formatting: formatting, timeZone: timeZone))
         .accessibilityElement(children: .combine)

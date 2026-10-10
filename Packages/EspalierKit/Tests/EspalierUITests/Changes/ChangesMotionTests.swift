@@ -34,7 +34,7 @@ private final class TableFixture {
     var selected: [[String]] = []
 
     init(files: [WorkingDirectoryFileChange], selectedIDs: [String] = [], animates: Bool) {
-        table = FileTable(files: files, selectedIDs: selectedIDs, inclusion: BenchmarkList.inclusion)
+        table = FileTable(files: .changes(files), selectedIDs: selectedIDs, inclusion: BenchmarkList.inclusion)
         coordinator = FileTableCoordinator(table)
         window = SnapshotWindow(contentRect: CGRect(x: 0, y: 0, width: 320, height: 400), styleMask: [.borderless], backing: .buffered, defer: false)
         window.motionOverride = animates
@@ -54,7 +54,7 @@ private final class TableFixture {
 
     /// Shows a new status: `files`, with `selectedIDs` selected.
     func show(_ files: [WorkingDirectoryFileChange], selectedIDs: [String]) {
-        table.files = files
+        table.files = .changes(files)
         table.selectedIDs = selectedIDs
         coordinator.update(table)
         tableView.layoutSubtreeIfNeeded()

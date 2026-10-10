@@ -223,6 +223,7 @@ struct ProviderSheet: View {
                             Text(ProviderCopy.typeTitle(type)).tag(type)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 LabeledContent("Base URL") {
                     TextField("Base URL", text: $editor.form.baseUrl, prompt: Text(ProviderCopy.baseURLPlaceholder(editor.form.type)))
@@ -235,6 +236,7 @@ struct ProviderSheet: View {
                                 Text(ProviderCopy.wireApiTitle(wireApi)).tag(wireApi)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 if editor.form.type == .azure {
@@ -260,6 +262,7 @@ struct ProviderSheet: View {
                             Text(ProviderCopy.authTitle(kind)).tag(kind)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if editor.form.authKind == .none {
                     LabeledContent {
@@ -303,7 +306,7 @@ struct ProviderSheet: View {
             }
 
             if let problem = editor.problem {
-                InlineMessage(problem, kind: .error)
+                FieldMessage(problem, kind: .error)
             }
         } buttons: {
             SheetButtons(editor.saveTitle, cancel: { dismiss() }) {

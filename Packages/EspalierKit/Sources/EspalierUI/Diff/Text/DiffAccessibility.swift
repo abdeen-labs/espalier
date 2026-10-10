@@ -177,7 +177,7 @@ extension DiffTableController {
 
     /// A row's view, scrolled into view, as a rotor's target.
     func rotorTarget(row: Int) -> NSView? {
-        tableView.scrollRowToVisible(row)
+        scrollRowIntoView(row)
         return tableView.rowView(atRow: row, makeIfNecessary: true)
     }
 }

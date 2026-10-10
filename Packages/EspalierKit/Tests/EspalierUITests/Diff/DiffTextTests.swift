@@ -1,6 +1,7 @@
-// The diff's text arithmetic: display columns, wrapping at exact columns,
-// hit-testing offsets, drawing runs, changed ranges, and text selection and
-// copying (one-column selection and whole-diff copy).
+// The diff's text arithmetic: display columns, wrapping at exact columns
+// with a hanging indent, hit-testing offsets, drawing runs, changed ranges,
+// and text selection and copying (one-column selection and whole-diff
+// copy).
 
 import GitKit
 import Testing
@@ -23,7 +24,7 @@ struct DiffTextTests {
         #expect(DisplayColumns.width(of: "\u{E9}") == 1)
     }
 
-    @Test("visual lines: ⌈columns ÷ columns per line⌉ for simple lines, laid out for the rest")
+    @Test("visual lines: counted for simple lines (continuation lines two columns in), laid out for the rest")
     func visualLineCounts() {
         let simple = LineTextInfo(utf16Count: 25, columns: 25, isSimple: true)
         #expect(simple.visualLineCount(columnsPerLine: 10) == 3)
@@ -34,43 +35,78 @@ struct DiffTextTests {
         #expect(complex.visualLineCount(columnsPerLine: 10) == nil)
     }
 
-    @Test("a simple line wraps at exactly the columns that fit")
+    @Test("a simple line wraps at exactly the columns that fit, continuing two columns in")
     func simpleWrapping() {
         let text = "+" + String(repeating: "abcdefghij", count: 3)
         let info = LineTextInfo(text, skippingFirstScalar: true, tabSize: 4)
         let layout = LineLayout(text, skippingFirstScalar: true, info: info, tabSize: 4, columnsPerLine: 12)
+        #expect(layout.indent == 2)
         #expect(layout.visualLineCount == 3)
+        #expect(info.visualLineCount(columnsPerLine: 12) == 3)
         #expect(layout.range(ofVisualLine: 0) == 0..<12)
-        #expect(layout.range(ofVisualLine: 1) == 12..<24)
-        #expect(layout.range(ofVisualLine: 2) == 24..<30)
+        #expect(layout.range(ofVisualLine: 1) == 12..<22)
+        #expect(layout.range(ofVisualLine: 2) == 22..<30)
         #expect(layout.visualLine(of: 12) == 1)
+        #expect(layout.visualLine(of: 22) == 2)
         #expect(layout.visualLine(of: 30) == 2)
-        #expect(layout.column(of: 13) == 1)
-        #expect(layout.column(of: 30) == 6)
-        #expect(layout.endColumn(ofVisualLine: 2) == 6)
-        #expect(layout.offset(atVisualLine: 1, column: 2.4) == 14)
-        #expect(layout.offset(atVisualLine: 1, column: 2.6) == 15)
+        #expect(layout.column(of: 11) == 11)
+        #expect(layout.column(of: 13) == 3)
+        #expect(layout.column(of: 30) == 10)
+        #expect(layout.endColumn(ofVisualLine: 2) == 10)
+        #expect(layout.offset(atVisualLine: 1, column: 4.4) == 14)
+        #expect(layout.offset(atVisualLine: 1, column: 4.6) == 15)
+        // A click in the indent is the line's start.
+        #expect(layout.offset(atVisualLine: 1, column: 1) == 12)
         #expect(layout.offset(atVisualLine: 2, column: 50) == 30)
-        #expect(layout.runs(ofVisualLine: 1, units: Array(text.utf16.dropFirst())) == [LineLayout.Run(range: 12..<24, column: 0, isSimple: true)])
+        #expect(layout.runs(ofVisualLine: 0, units: Array(text.utf16.dropFirst())) == [LineLayout.Run(range: 0..<12, column: 0, isSimple: true)])
+        #expect(layout.runs(ofVisualLine: 1, units: Array(text.utf16.dropFirst())) == [LineLayout.Run(range: 12..<22, column: 2, isSimple: true)])
+    }
+
+    @Test("continuation lines hang under the first character after the indentation, two columns in, at most halfway across")
+    func hangingIndent() {
+        // Four spaces, then 21 characters: continuation lines start at 6.
+        let indented = "+    let x = foo(bar, baz)"
+        let info = LineTextInfo(indented, skippingFirstScalar: true, tabSize: 4)
+        #expect(info.leadingColumns == 4)
+        let layout = LineLayout(indented, skippingFirstScalar: true, info: info, tabSize: 4, columnsPerLine: 14)
+        #expect(layout.indent == 6)
+        #expect(layout.range(ofVisualLine: 1) == 14..<22)
+        #expect(layout.column(of: 14) == 6)
+        #expect(layout.visualLineCount == info.visualLineCount(columnsPerLine: 14))
+
+        // A tab indents as far as its tab stop.
+        let tabbed = LineTextInfo("+\tlet x = foo(bar, baz)", skippingFirstScalar: true, tabSize: 4)
+        #expect(tabbed.leadingColumns == 4)
+
+        // Deep indentation stops halfway across.
+        let deep = LineTextInfo("+" + String(repeating: " ", count: 20) + "x", skippingFirstScalar: true, tabSize: 4)
+        #expect(deep.hangingIndent(columnsPerLine: 12) == 6)
+
+        // A line that fits doesn't indent.
+        let short = LineLayout(indented, skippingFirstScalar: true, info: info, tabSize: 4, columnsPerLine: 40)
+        #expect(short.indent == 0)
+        #expect(short.visualLineCount == 1)
     }
 
     @Test("a wide character that doesn't fit moves to the next line")
     func wideCharacterWraps() {
-        // "abc" then two wide characters at 4 columns per line: "abc" fits,
-        // the first wide character would straddle, so it starts line 2.
+        // "abc" then two wide characters at 4 columns per line: "abc" fits;
+        // each wide character would straddle the end of its line, so each
+        // starts the next, two columns in.
         let text = " abc\u{65E5}\u{672C}"
         let info = LineTextInfo(text, skippingFirstScalar: true, tabSize: 4)
         #expect(info.columns == 7)
         let layout = LineLayout(text, skippingFirstScalar: true, info: info, tabSize: 4, columnsPerLine: 4)
-        #expect(layout.visualLineCount == 2)
+        #expect(layout.visualLineCount == 3)
         #expect(layout.range(ofVisualLine: 0) == 0..<3)
-        #expect(layout.range(ofVisualLine: 1) == 3..<5)
-        #expect(layout.placement(of: 3) == (0, 2))
+        #expect(layout.range(ofVisualLine: 1) == 3..<4)
+        #expect(layout.range(ofVisualLine: 2) == 4..<5)
+        #expect(layout.placement(of: 3) == (2, 2))
         #expect(layout.placement(of: 4) == (2, 2))
         #expect(layout.endColumn(ofVisualLine: 1) == 4)
         // Hit-testing: the middle of a wide character rounds.
-        #expect(layout.offset(atVisualLine: 1, column: 0.9) == 3)
-        #expect(layout.offset(atVisualLine: 1, column: 1.1) == 4)
+        #expect(layout.offset(atVisualLine: 1, column: 2.9) == 3)
+        #expect(layout.offset(atVisualLine: 1, column: 3.1) == 4)
     }
 
     @Test("tabs advance to the next stop and stop at the end of a line")
@@ -85,11 +121,13 @@ struct DiffTextTests {
             LineLayout.Run(range: 0..<1, column: 0, isSimple: true),
             LineLayout.Run(range: 2..<3, column: 4, isSimple: true),
         ])
-        // At 3 columns the tab fills the line's last two columns.
+        // At 3 columns the tab fills the line's last two columns; "b"
+        // continues a column in.
         let wrapped = LineLayout(text, skippingFirstScalar: true, info: info, tabSize: 4, columnsPerLine: 3)
         #expect(wrapped.visualLineCount == 2)
         #expect(wrapped.placement(of: 1) == (1, 2))
         #expect(wrapped.range(ofVisualLine: 1) == 2..<3)
+        #expect(wrapped.placement(of: 2) == (1, 1))
     }
 
     @Test("combining marks stay with their character, and a surrogate pair is one character")

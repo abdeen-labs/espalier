@@ -515,7 +515,7 @@ public struct SyncButtonView: View {
     /// title, and its counts in SF Mono ("Push origin ↑2").
     private func label(kind: CapsuleButtonKind, detail: String, drawsArc: Bool) -> some View {
         let symbolColor: NSColor = kind == .prominent ? .white : Palette.text2
-        return HStack(spacing: 7) {
+        return HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
             symbol(color: symbolColor, drawsArc: drawsArc)
             Text(state.title)
                 .lineLimit(1)

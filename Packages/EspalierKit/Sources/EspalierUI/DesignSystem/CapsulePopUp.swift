@@ -1,7 +1,9 @@
-// A pop-up drawn as a capsule field. A `field` capsule 28 high with the
-// chosen item's title and an up-and-down chevron, in place of the system's
-// pop-up button. The menu stays as macOS draws it, with a check beside the
-// chosen item; VoiceOver sees a native pop-up button.
+// A pop-up drawn as a capsule field: a `field` capsule 28 high with the
+// chosen item's title and an up-and-down chevron. Settings' rows, sheets'
+// forms, and popovers show their choices in it; in a form it fills the
+// column, as the capsule text fields beside it do. The menu stays as macOS
+// draws it, with a check beside the chosen item; VoiceOver sees a pop-up
+// button.
 
 import SwiftUI
 
@@ -89,7 +91,7 @@ private struct FieldCapsuleButtonBody<Label: View>: View {
             )
             .contentShape(Capsule(style: .circular))
             .contentShape(.focusEffect, Capsule(style: .circular))
-            .opacity(isEnabled ? 1 : 0.45)
+            .opacity(isEnabled ? 1 : Palette.disabledOpacity)
             .onHover { isHovered = $0 }
     }
 

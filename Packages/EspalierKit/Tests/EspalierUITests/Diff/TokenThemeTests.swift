@@ -1,6 +1,6 @@
-// The syntax token colors' contrast: every style reads at 4.5:1 on a row and
-// on the added and deleted lines' stronger (changed range) tints, in light
-// and dark.
+// The syntax token colors' contrast: every style reads at 4.5:1 on a row, on
+// the added and deleted lines' stronger (changed range) tints, and on a
+// conflict's ours, base, and theirs, in light and dark.
 
 import AppKit
 import Testing
@@ -8,10 +8,14 @@ import Testing
 
 @Suite("Token theme") @MainActor
 struct TokenThemeTests {
-    @Test("token colors are 4.5:1 on rows and on change tints", arguments: [AppearanceVariant.light, .dark])
+    @Test("token colors are 4.5:1 on rows, change tints, and conflict regions", arguments: [AppearanceVariant.light, .dark])
     func contrast(variant: AppearanceVariant) {
         let base = Palette.background.resolved(in: variant)
-        let backgrounds = [DiffColors.addedLine, DiffColors.deletedLine, DiffColors.addedChange, DiffColors.deletedChange].map { tint -> NSColor in
+        let tints = [
+            DiffColors.addedLine, DiffColors.deletedLine, DiffColors.addedChange, DiffColors.deletedChange,
+            DiffColors.ours, DiffColors.base, DiffColors.theirs,
+        ]
+        let backgrounds = tints.map { tint -> NSColor in
             let fill = tint.resolved(in: variant)
             return base.blended(withFraction: fill.alphaComponent, of: fill.withAlphaComponent(1)) ?? base
         } + [base]

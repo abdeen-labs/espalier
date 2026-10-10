@@ -65,7 +65,7 @@ struct AboutTests {
     @Test("Git's release is the bundled one, and the bundled notices match")
     func bundledGit() throws {
         let pinned = try #require(read(POSIXPath.join(repositoryRoot, "scripts/git-version"))).trimmingCharacters(in: .whitespacesAndNewlines)
-        #expect(pinned == Acknowledgement.dugiteNativeTag)
+        #expect(pinned == Acknowledgement.bundledGitTag)
         #expect(pinned.hasPrefix("v\(Acknowledgement.gitVersion)-"))
         if let notice = read(POSIXPath.join(repositoryRoot, "Vendor/git/libexec/git-core/NOTICE")) {
             #expect(normalized(AcknowledgementTexts.gitCredentialManagerNotice) == normalized(notice))

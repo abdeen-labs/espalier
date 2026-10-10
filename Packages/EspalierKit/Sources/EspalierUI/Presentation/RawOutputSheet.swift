@@ -1,29 +1,34 @@
-// Git's raw output, shown monospaced and scrolled to the end.
+// Git's raw output, shown monospaced and scrolled to the end, in a box as
+// tall as the output up to `Metrics.Sheet.terminalHeight`, then scrolling.
 
 import AppKit
 import SwiftUI
 
-/// Terminal output: SF Mono, selectable, scrolled to the end.
+/// Terminal output: SF Mono, selectable, scrolled to the end. The box is as
+/// tall as the output, at most `maximumHeight`; longer output scrolls.
 public struct TerminalOutputView: View {
     private let text: String
+    private let maximumHeight: CGFloat
 
-    public init(_ text: String) {
+    public init(_ text: String, maximumHeight: CGFloat = Metrics.Sheet.terminalHeight) {
         self.text = text
+        self.maximumHeight = maximumHeight
     }
 
     public var body: some View {
-        ScrollView(.vertical) {
-            Text(text.isEmpty ? " " : text)
-                .font(Typography.terminal)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(Metrics.insetSmall)
+        CappedHeightLayout(maximumHeight: maximumHeight) {
+            // Measures the output's height; the scroll view shows it.
+            output
+                .hidden()
+            ScrollView(.vertical) {
+                output
+            }
+            // Scrolled to the end, and kept there as output arrives.
+            .defaultScrollAnchor(.bottom, for: .initialOffset)
+            .defaultScrollAnchor(.bottom, for: .sizeChanges)
+            .accessibilityLabel("Terminal output")
+            .accessibilityValue(text)
         }
-        // Scrolled to the end, and kept there as output arrives; short
-        // output sits at the top.
-        .defaultScrollAnchor(.bottom, for: .initialOffset)
-        .defaultScrollAnchor(.bottom, for: .sizeChanges)
         .foregroundStyle(.text)
         .background(Color(espalier: Palette.hunk))
         .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
@@ -31,8 +36,36 @@ public struct TerminalOutputView: View {
             RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
                 .strokeBorder(.line, lineWidth: 1)
         )
-        .accessibilityLabel("Terminal output")
-        .accessibilityValue(text)
+    }
+
+    private var output: some View {
+        Text(text.isEmpty ? " " : text)
+            .font(Typography.terminal)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(Metrics.insetSmall)
+    }
+}
+
+/// Two views on top of each other, as tall as the first is at the width
+/// given, at most `maximumHeight`: the first measures, the second fills
+/// the space.
+private struct CappedHeightLayout: Layout {
+    let maximumHeight: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let measure = subviews.first else {
+            return .zero
+        }
+        let natural = measure.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(width: proposal.width ?? natural.width, height: min(natural.height, maximumHeight))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for subview in subviews {
+            subview.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+        }
     }
 }
 
@@ -79,7 +112,6 @@ public struct RawOutputSheet: View {
     public var body: some View {
         SheetScaffold(content.title, message: content.message, width: Metrics.Sheet.terminalWidth) {
             TerminalOutputView(content.output)
-                .frame(height: Metrics.Sheet.terminalHeight)
             if let note = content.note {
                 Text(note)
                     .font(Typography.row)

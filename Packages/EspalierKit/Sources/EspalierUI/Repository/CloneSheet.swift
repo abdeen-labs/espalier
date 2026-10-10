@@ -304,28 +304,23 @@ struct CloneForm: View {
 
     var body: some View {
         SheetScaffold("Clone a Repository") {
+            // The sources' tabs, centered, as a tab view's.
             CapsuleSegmentedControl(
                 "Source",
                 selection: $model.source,
                 segments: model.sources.map { CapsuleSegment($0.title, value: $0) }
             )
+            .frame(maxWidth: .infinity)
 
             // The source's content and the local path under it, in an area
             // of one height whichever source shows, so switching sources
             // never resizes the sheet: the content crossfades (0.15 s).
             VStack(alignment: .leading, spacing: Metrics.Sheet.spacing) {
-                sourceContent
+                if model.source != .url {
+                    accountRepositories
+                }
                 if model.showsLocalPath {
-                    VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                        FolderField(label: "Local Path", path: Binding(get: { model.current.path }, set: { model.setPath($0) })) {
-                            FolderChooser.chooseCloneDestination(model.current.path) { path in
-                                model.setPath(path)
-                            }
-                        }
-                        if let problem = model.current.problem {
-                            SheetMessage(problem, kind: .error)
-                        }
-                    }
+                    fields
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -344,66 +339,81 @@ struct CloneForm: View {
         }
     }
 
+    /// GitHub.com's or GitHub Enterprise's repositories: the accounts'
+    /// pop-up among two or more accounts, and the list; without an account,
+    /// the call to action.
     @ViewBuilder
-    private var sourceContent: some View {
-        switch model.source {
-        case .gitHub, .enterprise:
-            if let account = model.account(for: model.source) {
-                let accounts = model.accounts(for: model.source)
-                if accounts.count > 1 {
-                    Picker("Account", selection: Binding(
-                        get: { AccountKey(account) },
-                        set: { key in
-                            if let chosen = accounts.first(where: { AccountKey($0) == key }) {
-                                model.chooseAccount(chosen)
-                            }
+    private var accountRepositories: some View {
+        if let account = model.account(for: model.source) {
+            let accounts = model.accounts(for: model.source)
+            if accounts.count > 1 {
+                CapsulePopUp("Account", selection: Binding(
+                    get: { AccountKey(account) },
+                    set: { key in
+                        if let chosen = accounts.first(where: { AccountKey($0) == key }) {
+                            model.chooseAccount(chosen)
                         }
-                    )) {
-                        ForEach(accounts, id: \.self) { account in
-                            Text("@\(account.login) – \(account.friendlyEndpoint)").tag(AccountKey(account))
-                        }
+                    }
+                ), title: "@\(account.login) – \(account.friendlyEndpoint)") {
+                    ForEach(accounts, id: \.self) { account in
+                        Text("@\(account.login) – \(account.friendlyEndpoint)").tag(AccountKey(account))
                     }
                 }
-                AccountRepositoryList(
-                    account: account,
-                    filter: Binding(get: { model.current.filter }, set: { model.setFilter($0) }),
-                    selection: Binding(
-                        get: { model.current.selection },
-                        set: { id in
-                            let url = CloneableListContent(
-                                account: account,
-                                repositories: model.app.accounts.apiRepositories.repositories(for: account),
-                                filter: model.current.filter
-                            ).item(id)?.url
-                            model.select(id, url: url)
-                        }
-                    ),
-                    activate: { _ in
-                        if model.canClone {
-                            clone()
-                        }
-                    }
-                )
-                .frame(maxHeight: .infinity)
-            } else {
-                RepositorySignInPrompt(isEnterprise: model.source == .enterprise, endpoint: model.signInEndpoint(for: model.source))
-                    .frame(maxHeight: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-        case .url:
-            VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                Text("Repository URL or GitHub username and repository (\(Text("hubot/cool-repo").font(Typography.sha)))")
-                    .font(Typography.fieldLabel)
-                    .foregroundStyle(.text2)
-                TextField("Repository URL", text: Binding(get: { model.current.url }, set: { model.setURL($0) }), prompt: Text("URL or username/repository"))
-                    .textFieldStyle(.capsule)
-                    .labelsHidden()
+            AccountRepositoryList(
+                account: account,
+                filter: Binding(get: { model.current.filter }, set: { model.setFilter($0) }),
+                selection: Binding(
+                    get: { model.current.selection },
+                    set: { id in
+                        let url = CloneableListContent(
+                            account: account,
+                            repositories: model.app.accounts.apiRepositories.repositories(for: account),
+                            filter: model.current.filter
+                        ).item(id)?.url
+                        model.select(id, url: url)
+                    }
+                ),
+                activate: { _ in
+                    if model.canClone {
+                        clone()
+                    }
+                }
+            )
+            .frame(maxHeight: .infinity)
+        } else {
+            RepositorySignInPrompt(isEnterprise: model.source == .enterprise, endpoint: model.signInEndpoint(for: model.source))
+                .frame(maxHeight: .infinity)
+        }
+    }
+
+    /// The URL (for URL) and the local path, with the problem under them.
+    private var fields: some View {
+        Form {
+            // The labels in the form's column; the fields are capsules.
+            if model.source == .url {
+                LabeledContent("Repository URL") {
+                    TextField("Repository URL", text: Binding(get: { model.current.url }, set: { model.setURL($0) }), prompt: Text("URL or username/repository"))
+                        .labelsHidden()
+                }
+            }
+            FolderField(label: "Local Path", path: Binding(get: { model.current.path }, set: { model.setPath($0) })) {
+                FolderChooser.chooseCloneDestination(model.current.path) { path in
+                    model.setPath(path)
+                }
+            }
+            if let problem = model.current.problem {
+                FieldMessage(problem, kind: .error)
             }
         }
+        .formStyle(.columns)
+        .textFieldStyle(.capsule)
     }
 }
 
 extension Metrics.Sheet {
-    /// The Clone sheet's area under its sources: a repository list 240
-    /// high and the local path under it. Every source shows in it.
-    public static let cloneSourceHeight: CGFloat = 284
+    /// The Clone sheet's area under its sources: a repository list and the
+    /// local path under it. Every source shows in it.
+    public static let cloneSourceHeight: CGFloat = listHeight + spacing + Metrics.ControlHeight.regular
 }

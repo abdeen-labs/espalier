@@ -1,8 +1,7 @@
-// The selected commits' changed files, as chips over the diff or, for many
-// files, rows beside it (HistoryFiles.swift): the count, the lines added
-// and removed, and a context menu with Show in Finder, Open in the editor,
-// Open with Default App, the two Copy items, and View on GitHub, or "File
-// Does Not Exist on Disk".
+// The selected commits' changed files, beside the diff (HistoryFiles.swift):
+// the count, the lines added and removed, and a context menu with Show in
+// Finder, Open in the editor, Open with Default App, the two Copy items, and
+// View on GitHub, or "File Does Not Exist on Disk".
 
 import AppKit
 import EspalierCore
@@ -11,7 +10,7 @@ import GitHubKit
 import GitKit
 import SwiftUI
 
-/// A changed file of a commit, as its chip or row shows it.
+/// A changed file of a commit, as its row shows it.
 nonisolated struct CommittedFileRowContent: Sendable, Equatable, Identifiable {
     var id: String
     var path: String
@@ -57,63 +56,60 @@ nonisolated struct CommitFilesSummary: Sendable, Equatable {
     }
 }
 
-/// The selected commits' changed files: their label and chips, or rows
-/// (`style`). The chips' layout and the diff below them are
-/// `CommitDetailView`'s.
+/// The selected commits' changed files, the column beside the diff: their
+/// label, then the list (HistoryFiles.swift), or why it isn't there yet.
 struct CommitFiles: View {
     let repository: RepositoryModel
-    let style: HistoryFilesStyle
     @Environment(WindowContext.self) private var context
 
     var body: some View {
         let history = repository.history
         let selection = history.selection
         if let changeset = selection.changeset.value {
-            let summary = CommitFilesSummary(fileCount: changeset.files.count, linesAdded: changeset.linesAdded, linesDeleted: changeset.linesDeleted)
-            VStack(alignment: .leading, spacing: style == .chips ? Metrics.insetSmall : 0) {
-                CommitFilesHeader(summary: summary)
-                    .padding(.horizontal, style == .rows ? Metrics.HistoryHeader.horizontalPadding : 0)
-                    .frame(height: style == .rows ? Metrics.HistoryHeader.height : nil)
-                if style == .rows {
-                    Hairline()
-                }
-                if !changeset.files.isEmpty {
-                    HistoryFiles(
-                        files: changeset.files.map { HistoryFileContent($0, in: changeset) },
-                        selection: selection.file?.id,
-                        style: style,
-                        actions: HistoryFilesActions(
-                            select: { id in
-                                history.selectFile(id.flatMap { id in changeset.files.first { $0.id == id } })
-                            },
-                            open: { id in
-                                if let file = changeset.files.first(where: { $0.id == id }) {
-                                    context.actions.perform(.openInEditor(path: POSIXPath.join(repository.record.path, file.path)))
-                                }
-                            }
-                        ),
-                        focusRequest: context.state.history.fileListFocusRequest
-                    ) { file in
-                        if let change = changeset.files.first(where: { $0.id == file.id }) {
-                            CommittedFileContextMenu(content: menuContent(for: change))
-                        }
-                    }
-                }
+            VStack(spacing: 0) {
+                CommitFilesHeader(summary: CommitFilesSummary(
+                    fileCount: changeset.files.count,
+                    linesAdded: changeset.linesAdded,
+                    linesDeleted: changeset.linesDeleted
+                ))
+                Hairline()
+                HistoryFileList(
+                    files: changeset.files.map { HistoryFileContent($0, in: changeset) },
+                    selection: selection.file?.id,
+                    actions: actions(changeset),
+                    focusRequest: context.state.history.fileListFocusRequest
+                )
             }
         } else if let error = selection.changeset.failure {
-            Label {
-                Text(error.title)
-                    .foregroundStyle(.text2)
-            } icon: {
-                WarningGlyph()
-            }
-            .font(Typography.secondary)
-            .help(error.message)
-        } else if selection.changeset.isLoading {
+            CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
+                .fillingSpace()
+        } else {
             DelayedProgressView()
-                .controlSize(.small)
-                .frame(height: Metrics.ControlHeight.regular)
         }
+    }
+
+    /// Selecting a file shows its diff; opening it opens it in the editor.
+    private func actions(_ changeset: ChangesetData) -> HistoryFilesActions {
+        let history = repository.history
+        func change(_ id: String) -> CommittedFileChange? {
+            changeset.files.first { $0.id == id }
+        }
+        return HistoryFilesActions(
+            select: { id in
+                history.selectFile(id.flatMap(change))
+            },
+            open: { id in
+                if let file = change(id) {
+                    context.actions.perform(.openInEditor(path: POSIXPath.join(repository.record.path, file.path)))
+                }
+            },
+            menu: { id in
+                guard let file = change(id) else {
+                    return nil
+                }
+                return NSHostingMenu(rootView: CommittedFileContextMenu(content: menuContent(for: file)).windowEnvironment(context))
+            }
+        )
     }
 
     private func menuContent(for file: CommittedFileChange) -> CommittedFileMenuContent {

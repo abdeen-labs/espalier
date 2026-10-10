@@ -1,6 +1,7 @@
 // The sheets for the prompts git waits on: an SSH key's passphrase, an SSH
 // user's password, credentials for a host that isn't GitHub, a failed hook,
-// and an unknown SSH host.
+// and an unknown SSH host. Their fields are a form's rows, labeled in the
+// form's column.
 
 import SwiftUI
 
@@ -10,7 +11,7 @@ nonisolated public enum SSHHostPrompt {
         AlertContent(
             title: "SSH Host",
             message: "The authenticity of host '\(host) (\(ip))' can't be established. \(keyType) key fingerprint is \(fingerprint).\n\nAre you sure you want to continue connecting?",
-            buttons: [AlertContent.Button("Yes", role: .primary), AlertContent.Button("No", role: .cancel)]
+            buttons: [AlertContent.Button("Connect", role: .primary), AlertContent.Button("Cancel", role: .cancel)]
         )
     }
 }
@@ -21,32 +22,32 @@ public struct SecretPromptAnswer: Equatable {
     public var remember: Bool
 }
 
-/// A secure field with a label and a "Remember" checkbox: the SSH key
+/// A secure field and a "Remember" checkbox under the question: the SSH key
 /// passphrase and SSH user password prompts.
 struct SecretPrompt: View {
     let title: String
-    let label: String
-    /// The empty field's placeholder ("Passphrase"), so the label above
-    /// isn't repeated inside it.
-    let placeholder: String
+    /// The question, under the title.
+    let message: String
+    /// The field's label ("Passphrase").
+    let fieldLabel: String
     let rememberTitle: String
     let onAnswer: (SecretPromptAnswer?) -> Void
     @State private var secret = ""
     @State private var remember = false
 
     var body: some View {
-        SheetScaffold(title, width: Metrics.Sheet.compactWidth) {
-            VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                Text(label)
-                    .font(Typography.row)
-                    .foregroundStyle(.text2)
-                    .fixedSize(horizontal: false, vertical: true)
-                SecureField(label, text: $secret, prompt: Text(placeholder))
-                    .labelsHidden()
-                    .textFieldStyle(.capsule)
+        SheetScaffold(title, message: message, width: Metrics.Sheet.compactWidth) {
+            Form {
+                // The label in the form's column; the field is a capsule.
+                LabeledContent(fieldLabel) {
+                    SecureField(fieldLabel, text: $secret)
+                        .labelsHidden()
+                }
+                Toggle(rememberTitle, isOn: $remember)
+                    .toggleStyle(.checkboxMark)
             }
-            Toggle(rememberTitle, isOn: $remember)
-                .toggleStyle(.checkbox)
+            .formStyle(.columns)
+            .textFieldStyle(.capsule)
         } buttons: {
             SheetButtons("OK", isConfirmDisabled: secret.isEmpty, cancel: { onAnswer(nil) }) {
                 onAnswer(SecretPromptAnswer(secret: secret, remember: remember))
@@ -68,8 +69,8 @@ public struct PassphrasePrompt: View {
     public var body: some View {
         SecretPrompt(
             title: "SSH Key Passphrase",
-            label: "Enter passphrase for key '\(keyPath)':",
-            placeholder: "Passphrase",
+            message: "Enter passphrase for key '\(keyPath)':",
+            fieldLabel: "Passphrase",
             rememberTitle: "Remember passphrase",
             onAnswer: onAnswer
         )
@@ -89,8 +90,8 @@ public struct PasswordPrompt: View {
     public var body: some View {
         SecretPrompt(
             title: "SSH User Password",
-            label: "Enter password for '\(username)':",
-            placeholder: "Password",
+            message: "Enter password for '\(username)':",
+            fieldLabel: "Password",
             rememberTitle: "Remember password",
             onAnswer: onAnswer
         )
@@ -121,40 +122,40 @@ public struct GenericAuthPrompt: View {
 
     public var body: some View {
         SheetScaffold("Authentication Failed", message: explanation) {
-            if knownUsername == nil {
-                VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                    FieldLabel("Username")
-                    TextField("Username", text: $username)
-                        .labelsHidden()
-                        .textFieldStyle(.capsule)
+            Form {
+                // The labels in the form's column; the fields are capsules.
+                if knownUsername == nil {
+                    LabeledContent("Username") {
+                        TextField("Username", text: $username)
+                            .labelsHidden()
+                    }
                 }
-            }
-            VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                FieldLabel("Password")
-                HStack(spacing: Metrics.grid) {
-                    Group {
-                        if showsPassword {
-                            TextField("Password", text: $password)
-                        } else {
-                            SecureField("Password", text: $password)
+                LabeledContent("Password") {
+                    VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
+                        HStack(spacing: Metrics.grid) {
+                            Group {
+                                if showsPassword {
+                                    TextField("Password", text: $password)
+                                } else {
+                                    SecureField("Password", text: $password)
+                                }
+                            }
+                            .labelsHidden()
+                            Button {
+                                showsPassword.toggle()
+                            } label: {
+                                Label(showsPassword ? "Hide Password" : "Show Password", systemImage: showsPassword ? "eye.slash" : "eye")
+                            }
+                            .buttonStyle(.icon)
+                            .help(showsPassword ? "Hide Password" : "Show Password")
+                            .accessibilityLabel(showsPassword ? "Hide Password" : "Show Password")
                         }
+                        FieldMessage("Your hosting service may need a personal access token instead of your password.", kind: .note)
                     }
-                    .labelsHidden()
-                    .textFieldStyle(.capsule)
-                    Button {
-                        showsPassword.toggle()
-                    } label: {
-                        Label(showsPassword ? "Hide Password" : "Show Password", systemImage: showsPassword ? "eye.slash" : "eye")
-                    }
-                    .buttonStyle(.icon)
-                    .help(showsPassword ? "Hide Password" : "Show Password")
-                    .accessibilityLabel(showsPassword ? "Hide Password" : "Show Password")
                 }
             }
-            Text("Your hosting service may need a personal access token instead of your password.")
-                .font(Typography.meta)
-                .foregroundStyle(.text3)
-                .fixedSize(horizontal: false, vertical: true)
+            .formStyle(.columns)
+            .textFieldStyle(.capsule)
         } buttons: {
             SheetButtons("OK", isConfirmDisabled: password.isEmpty || (knownUsername ?? username).isEmpty, cancel: { onAnswer(nil) }) {
                 onAnswer(Self.answer(knownUsername: knownUsername, enteredUsername: username, password: password))
@@ -176,7 +177,8 @@ public struct GenericAuthPrompt: View {
     }
 }
 
-/// "<hook> Failed": the hook's output, Abort, and Ignore and Continue.
+/// "<hook> Failed": the hook's output, as tall as it is up to the terminal
+/// height, Abort, and Ignore and Continue.
 public struct HookFailedPrompt: View {
     /// What to do about the failed hook.
     public enum Answer: Equatable {
@@ -196,7 +198,6 @@ public struct HookFailedPrompt: View {
     public var body: some View {
         SheetScaffold("\(hookName) Failed", message: "The \(hookName) hook failed. What would you like to do?", width: Metrics.Sheet.terminalWidth) {
             TerminalOutputView(terminalOutput)
-                .frame(height: Metrics.Sheet.terminalHeight)
         } buttons: {
             SheetButtons("Ignore and Continue", confirmRole: .destructive, cancelTitle: "Abort", cancel: { onAnswer(.abort) }) {
                 onAnswer(.ignore)

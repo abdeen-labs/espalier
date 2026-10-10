@@ -150,7 +150,7 @@ struct RebaseOperationTests {
             return
         }
         #expect(confirmation.kind == .rewritePublishedCommits)
-        #expect(confirmation.title == "Rebase Requires a Force Push")
+        #expect(confirmation.title == "Rebase Pushed Commits?")
         #expect(confirmation.confirmButton == "Rebase Anyway")
         #expect(confirmation.message.hasPrefix("This branch has already been pushed. After the rebase,"))
         #expect(try await fixture.head() == original)

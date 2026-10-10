@@ -155,7 +155,7 @@ struct SquashReorderOperationTests {
             try await operations.squash([c], into: a, lastRetainedCommitRef: base.sha, message: message)
         }
         #expect(error?.reason == .confirmationRequired(.rewritePublishedCommits(operation: "Squash")))
-        #expect(error?.title == "Squash Requires a Force Push")
+        #expect(error?.title == "Squash Pushed Commits?")
 
         // From the root, a published branch always asks.
         let fromRoot = await #expect(throws: OperationError.self) {

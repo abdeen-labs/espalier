@@ -1,9 +1,9 @@
 // One image per layout of the confirmations, decisions, prompts, and errors
-// that aren't native alerts, the toast, and the operation capsule, through
-// the same mappings the hosts use. Native alerts get no pixels: an
-// `NSAlert` shows only their strings, which WindowPresenterTests,
+// that Espalier draws as sheets, the toast, and the operation capsule,
+// through the same mappings the hosts use. Alerts get no pixels: they're
+// NSAlerts, which show only their strings, and WindowPresenterTests,
 // PromptPresentationTests, StateNoticesTests, and the features' content
-// tests check. Dark only where the view draws its own colors.
+// tests check those. Dark only where the view draws its own colors.
 
 import AppKit
 import EspalierCore
@@ -50,7 +50,7 @@ struct PresentationSnapshotTests {
     }
 
     /// Git's raw output with a note and a recovery, and the explanation
-    /// above it.
+    /// above it: one line, and a few, each in a box as tall as it is.
     @Test("the raw output sheets render", arguments: ["clone", "signing-pinentry"])
     func error(name: String) throws {
         let error = try #require(UIFixtures.errors.first { $0.name == name }?.error)
@@ -61,11 +61,22 @@ struct PresentationSnapshotTests {
         assertSnapshot(RawOutputSheet(content), named: name, area: "Errors", appearances: [.light])
     }
 
-    @Test("the toast renders, with Undo")
-    func toast() throws {
-        let name = "cherryPick-undo"
+    @Test("output longer than the terminal height scrolls, scrolled to its end")
+    func longOutput() {
+        let output = (1...40).map { "remote: Counting objects: \($0)% (\($0)/40)" }.joined(separator: "\n")
+        assertSnapshot(
+            TerminalOutputView(output).frame(width: Metrics.Sheet.terminalWidth - 2 * Metrics.Sheet.padding).padding(Metrics.insetLarge),
+            named: "terminal-long",
+            area: "Errors",
+            appearances: [.light]
+        )
+    }
+
+    /// With Undo and its key, and without: the close button either way.
+    @Test("the toast renders, with its close button", arguments: ["cherryPick-undo", "merged"])
+    func toast(name: String) throws {
         let content = try #require(UIFixtures.toasts.first { $0.name == name }?.content)
-        assertSnapshot(ToastView(content).padding(Metrics.insetLarge), named: name, area: "Toasts")
+        assertSnapshot(ToastView(content).padding(Metrics.insetLarge), named: name, area: "Toasts", appearances: name == "merged" ? [.light] : SnapshotAppearance.allCases)
     }
 
     /// Running, with its progress; waiting on the user, with its button.

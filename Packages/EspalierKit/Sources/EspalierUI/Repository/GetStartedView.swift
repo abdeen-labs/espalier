@@ -27,29 +27,29 @@ public struct GetStartedView: View {
                 create: { context.actions.perform(.newRepository(path: nil)) },
                 add: { context.actions.perform(.addLocalRepository) }
             )
-            .frame(maxWidth: Metrics.GetStarted.actionsWidth, alignment: .leading)
 
             if let account {
                 VStack(alignment: .leading, spacing: Metrics.insetSmall) {
                     SectionLabel("Your Repositories")
                         .padding(.leading, Metrics.grid)
                     if accounts.count > 1 {
-                        Picker("Account", selection: Binding(
+                        CapsulePopUp("Account", selection: Binding(
                             get: { AccountKey(account) },
                             set: { key in
                                 accountKey = key
                                 selection = nil
                             }
-                        )) {
+                        ), title: "@\(account.login) – \(account.friendlyEndpoint)") {
                             ForEach(accounts, id: \.self) { account in
                                 Text("@\(account.login) – \(account.friendlyEndpoint)").tag(AccountKey(account))
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     AccountRepositoryList(account: account, filter: $filter, selection: $selection) { item in
                         clone(item.url)
                     }
-                    .frame(minHeight: 240)
+                    .frame(minHeight: Metrics.Sheet.listHeight)
                     HStack {
                         Spacer()
                         let selected = listContent(for: account).item(selection)
@@ -81,7 +81,8 @@ public struct GetStartedView: View {
 }
 
 /// Get Started's left column: the heading, the three actions with their
-/// keys, and the hint about dropping folders.
+/// keys, and the hint about dropping folders. It's as wide as its widest
+/// line, so the actions' titles stay on one line.
 struct GetStartedActions: View {
     var clone: () -> Void = {}
     var create: () -> Void = {}
@@ -122,5 +123,6 @@ struct GetStartedActions: View {
                 .font(Typography.meta)
                 .foregroundStyle(.text3)
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }

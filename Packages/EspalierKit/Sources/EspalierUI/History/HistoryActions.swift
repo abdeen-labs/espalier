@@ -38,12 +38,12 @@ enum HistoryActions {
         }
 
         // Reset to Commit…: below HEAD, with only unpushed commits after
-        // it; the model checks again.
+        // it, in the current branch's history; the model checks again.
         actions.register(.resetToCommit, isEnabled: { [weak context] action in
             guard case .resetToCommit(let sha) = action, let context, case let (repository, commit)? = target(sha, context) else {
                 return false
             }
-            return repository.history.mode == .history && isResettable(commit, in: repository)
+            return repository.history.showsCurrentBranchHistory && isResettable(commit, in: repository)
         }) { [weak context] action in
             guard case .resetToCommit(let sha) = action, let context, case let (repository, commit)? = target(sha, context) else {
                 return
@@ -325,7 +325,7 @@ enum HistoryActions {
             guard let branch = repository.gitState.branches.all.first(where: { $0.name == name }) else {
                 return
             }
-            context.select(.branch(ref: branch.ref))
+            HistoryPlaces.showComparison(of: branch, in: context)
         }
 
         // The history's scope, remembered per repository.

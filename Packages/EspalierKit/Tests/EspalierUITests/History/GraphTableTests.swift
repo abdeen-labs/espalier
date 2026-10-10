@@ -379,13 +379,14 @@ struct GraphTableTests {
         #expect(harness.controller.emphasis(forRow: 4).nodeOpacity == Metrics.Graph.searchDimming)
     }
 
-    @Test("narrow rows hide the short ID, then the avatar, then the date")
+    @Test("narrow rows hide the short ID, then the avatar, then the time; at the graph's ideal width the short ID gives its room to the titles")
     func narrowColumns() throws {
         let expected: [(width: CGFloat, shown: Set<CommitRowCellView.TrailingColumn>)] = [
-            (640, [.avatar, .date, .shortID]),
-            (500, [.avatar, .date]),
-            (420, [.date]),
-            (360, []),
+            (Metrics.CommitRow.hidesShortIDBelow, [.avatar, .date, .shortID]),
+            (Metrics.Column.graphList.ideal, [.avatar, .date]),
+            (360, [.avatar, .date]),
+            (320, [.date]),
+            (280, []),
         ]
         for (width, shown) in expected {
             let history = featureHistory()

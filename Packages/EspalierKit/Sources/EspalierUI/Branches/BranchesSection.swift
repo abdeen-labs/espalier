@@ -1,9 +1,10 @@
-// The sidebar's Branches section: the current branch first, then the default
-// branch, the recent ones, the other local branches in `/` folders, and the
-// remote branches no local branch tracks under Remote, one group per remote.
-// Rows show each branch's pull request and how it compares with its
-// upstream; the header has New Branch… and, after the branch pruner deleted
-// branches this session, Restore Pruned Branch.
+// The sidebar's Branches section, in the branch popover's groups: Default
+// Branch, Recent Branches, Other Branches (the other local branches, in `/`
+// folders), and Remote Branches (those no local branch tracks, one group
+// per remote), each collapsible, the current branch in its group. Rows show
+// each branch's pull request and how it compares with its upstream; the
+// header has New Branch… and, after the branch pruner deleted branches this
+// session, Restore Pruned Branch.
 
 import EspalierCore
 import EspalierSupport
@@ -24,14 +25,6 @@ nonisolated public indirect enum BranchNode: Sendable, Equatable, Identifiable {
         case .branch(let row): row.ref
         }
     }
-
-    /// The branches in the node.
-    public var branchCount: Int {
-        switch self {
-        case .folder(let folder): folder.branchCount
-        case .branch: 1
-        }
-    }
 }
 
 /// A folder: the branches whose names start with `path/`.
@@ -48,10 +41,6 @@ nonisolated public struct BranchFolder: Sendable, Equatable, Identifiable {
         self.name = name
         self.children = children
     }
-
-    public var branchCount: Int {
-        children.reduce(0) { $0 + $1.branchCount }
-    }
 }
 
 /// A remote's branches that no local branch tracks.
@@ -67,10 +56,6 @@ nonisolated public struct RemoteBranchGroup: Sendable, Equatable, Identifiable {
     public var id: String {
         name
     }
-
-    public var branchCount: Int {
-        nodes.reduce(0) { $0 + $1.branchCount }
-    }
 }
 
 /// What the Branches section shows.
@@ -79,10 +64,10 @@ nonisolated public struct BranchesSectionContent: Sendable, Equatable {
     public var detachedSHA: String?
     /// The unborn branch HEAD is on, by name.
     public var unbornBranch: String?
-    public var current: BranchRowContent?
-    /// The default branch, when it isn't the current one.
+    /// The default branch, the current one or not.
     public var defaultBranch: BranchRowContent?
-    /// The recently checked out branches (at most five).
+    /// The recently checked out branches (at most five) but the default
+    /// one, after a current branch the branch list doesn't have yet.
     public var recent: [BranchRowContent] = []
     /// Every other local branch, in `/` folders.
     public var other: [BranchNode] = []
@@ -93,27 +78,16 @@ nonisolated public struct BranchesSectionContent: Sendable, Equatable {
 
     public init() {}
 
-    public var otherCount: Int {
-        other.reduce(0) { $0 + $1.branchCount }
-    }
-
-    public var remoteCount: Int {
-        remotes.reduce(0) { $0 + $1.branchCount }
-    }
-
     /// Whether there's nothing to show.
     public var isEmpty: Bool {
-        detachedSHA == nil && unbornBranch == nil && current == nil && defaultBranch == nil
+        detachedSHA == nil && unbornBranch == nil && defaultBranch == nil
             && recent.isEmpty && other.isEmpty && remotes.isEmpty
     }
 
-    /// Every branch row, in the order the section shows them (folders
-    /// open).
+    /// Every branch row, in the order the section shows them (groups and
+    /// folders open).
     public var allRows: [BranchRowContent] {
         var rows: [BranchRowContent] = []
-        if let current {
-            rows.append(current)
-        }
         if let defaultBranch {
             rows.append(defaultBranch)
         }
@@ -203,27 +177,40 @@ nonisolated extension BranchesSectionContent {
         }
 
         let rows = BranchRowBuilder(inputs: inputs, current: currentBranch)
+        let currentRef = currentBranch.map { ExactString($0.ref) }
         var shown = Set<ExactString>(minimumCapacity: inputs.branches.count + inputs.recentBranches.count + 2)
+        /// The branch to show for `listed`: the current branch as the
+        /// refresh has it (its tip may be newer than the branch list's).
+        func fresh(_ listed: Branch, ref: ExactString) -> Branch {
+            ref == currentRef ? currentBranch ?? listed : listed
+        }
         func take(_ branch: Branch?) -> BranchRowContent? {
-            guard let branch, !branch.isDesktopForkRemoteBranch, shown.insert(ExactString(branch.ref)).inserted else {
+            guard let branch, !branch.isDesktopForkRemoteBranch else {
                 return nil
             }
-            return nameFilter.matches(branch.name) ? rows.row(branch) : nil
+            let ref = ExactString(branch.ref)
+            guard shown.insert(ref).inserted else {
+                return nil
+            }
+            let shownBranch = fresh(branch, ref: ref)
+            return nameFilter.matches(shownBranch.name) ? rows.row(shownBranch) : nil
         }
 
-        // The current branch as the refresh has it (its tip may be newer
-        // than the branch list's).
-        content.current = take(currentBranch)
         content.defaultBranch = take(inputs.defaultBranch)
         content.recent = inputs.recentBranches.prefix(5).compactMap(take)
 
         var others: [PathRow] = []
         var remoteBranches: [String: [PathRow]] = [:]
         var remoteOrder: [String] = []
-        for branch in inputs.branches {
+        for listed in inputs.branches {
             // Branches hidden or shown above are left out; a branch that
             // doesn't match the filter is still marked shown.
-            guard !branch.isDesktopForkRemoteBranch, shown.insert(ExactString(branch.ref)).inserted, nameFilter.matches(branch.name) else {
+            let ref = ExactString(listed.ref)
+            guard !listed.isDesktopForkRemoteBranch, shown.insert(ref).inserted else {
+                continue
+            }
+            let branch = fresh(listed, ref: ref)
+            guard nameFilter.matches(branch.name) else {
                 continue
             }
             switch branch.type {
@@ -241,6 +228,11 @@ nonisolated extension BranchesSectionContent {
         content.other = tree(others, scope: "other")
         content.remotes = NameOrder.sorted(remoteOrder, by: { $0 }).map { remote in
             RemoteBranchGroup(name: remote, nodes: tree(remoteBranches[remote] ?? [], scope: "remote/\(remote)"))
+        }
+        // A current branch the branch list doesn't have yet leads the
+        // recent ones, which it's the latest of.
+        if let currentRef, !shown.contains(currentRef), let current = take(currentBranch) {
+            content.recent.insert(current, at: 0)
         }
         return content
     }
@@ -767,20 +759,33 @@ struct BranchesSectionRows: View {
                 .help("Current branch is \(unborn)")
                 .sidebarRow(nil, id: "unborn")
         }
-        if let current = content.current {
-            BranchSidebarRow(content: current, repository: repository)
-        }
         if let defaultBranch = content.defaultBranch {
-            BranchSidebarRow(content: defaultBranch, repository: repository)
+            BranchGroupDisclosure(
+                id: "branches.default",
+                title: "Default Branch",
+                isExpandedByDefault: true,
+                isFiltering: content.isFiltering
+            ) {
+                BranchSidebarRow(content: defaultBranch, repository: repository)
+            }
         }
-        ForEach(content.recent) { row in
-            BranchSidebarRow(content: row, repository: repository)
+        if !content.recent.isEmpty {
+            BranchGroupDisclosure(
+                id: "branches.recent",
+                title: "Recent Branches",
+                isExpandedByDefault: true,
+                isFiltering: content.isFiltering
+            ) {
+                ForEach(content.recent) { row in
+                    BranchSidebarRow(content: row, repository: repository)
+                }
+            }
         }
         if !content.other.isEmpty {
             BranchGroupDisclosure(
                 id: "branches.other",
-                title: "Other Branches (\(content.otherCount))",
-                systemImage: "folder",
+                title: "Other Branches",
+                isExpandedByDefault: true,
                 isFiltering: content.isFiltering
             ) {
                 BranchNodeList(nodes: content.other, repository: repository, isFiltering: content.isFiltering)
@@ -789,8 +794,7 @@ struct BranchesSectionRows: View {
         if !content.remotes.isEmpty {
             BranchGroupDisclosure(
                 id: "branches.remote",
-                title: "Remote",
-                systemImage: "network",
+                title: "Remote Branches",
                 isFiltering: content.isFiltering
             ) {
                 ForEach(content.remotes) { remote in
@@ -892,27 +896,42 @@ struct BranchNodeList: View {
 }
 
 /// A group of rows whose expansion is remembered; open while the sidebar
-/// filter shows matches.
+/// filter shows matches. The section's own groups (Default Branch, Recent
+/// Branches, ...) are labeled by name alone, in secondary text; a remote
+/// and a folder have their symbol.
 struct BranchGroupDisclosure<Content: View>: View {
     let title: String
-    let systemImage: String
+    let systemImage: String?
     let isFiltering: Bool
     let content: Content
     @AppStorage private var isExpanded: Bool
 
-    init(id: String, title: String, systemImage: String, isFiltering: Bool, @ViewBuilder content: () -> Content) {
+    /// - Parameters:
+    ///   - id: Names the remembered expansion (`sidebar.expanded.<id>`).
+    ///   - systemImage: The row's symbol; nil for one of the section's
+    ///     groups.
+    ///   - isExpandedByDefault: The expansion before the user changes it.
+    init(id: String, title: String, systemImage: String? = nil, isExpandedByDefault: Bool = false, isFiltering: Bool, @ViewBuilder content: () -> Content) {
         self.title = title
         self.systemImage = systemImage
         self.isFiltering = isFiltering
         self.content = content()
-        _isExpanded = AppStorage(wrappedValue: false, "sidebar.expanded.\(id)")
+        _isExpanded = AppStorage(wrappedValue: isExpandedByDefault, "sidebar.expanded.\(id)")
     }
 
     var body: some View {
         DisclosureGroup(isExpanded: isFiltering ? .constant(true) : $isExpanded) {
             content
         } label: {
-            SidebarRowLabel(title, systemImage: systemImage)
+            if let systemImage {
+                SidebarRowLabel(title, systemImage: systemImage)
+            } else {
+                Text(title)
+                    .font(Typography.row.weight(.medium))
+                    .foregroundStyle(.text2)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+            }
         }
         .sidebarRow(nil, id: "group:\(title)")
     }

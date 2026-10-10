@@ -18,29 +18,17 @@ public enum Metrics {
     /// Large inset: around a pane's content.
     public static let insetLarge: CGFloat = 16
 
-    /// Corner radii: rows and cards are generously rounded; controls are
-    /// capsules.
+    /// Corner radii, four of them; controls are capsules.
     public enum Radius {
-        /// Sidebar items and file rows.
+        /// Checkboxes and key caps.
+        public static let small: CGFloat = 5
+        /// Every list row: sidebar items, file rows, picker rows, and
+        /// History's simple rows.
         public static let row: CGFloat = 9
-        /// The branch picker's rows.
-        public static let pickerRow: CGFloat = 11
-        /// History's simple mode rows.
-        public static let simpleRow: CGFloat = 12
-        /// The commit message card.
+        /// Cards, banners, action lists, and lists in sheets.
         public static let card: CGFloat = 14
-        /// Banners.
-        public static let banner: CGFloat = 14
-        /// The empty state's action list.
-        public static let actionList: CGFloat = 16
-        /// Sheets.
+        /// Sheets and popovers.
         public static let sheet: CGFloat = 22
-        /// The branch picker.
-        public static let picker: CGFloat = 22
-        /// Checkboxes.
-        public static let checkbox: CGFloat = 5
-        /// Key caps.
-        public static let keyCap: CGFloat = 5
     }
 
     /// Capsule control heights, by SwiftUI control size: small 26, regular
@@ -175,10 +163,18 @@ public enum Metrics {
         public static let sidebar = ColumnWidth(min: 200, ideal: 240, max: 320)
         /// The Changes column (file list and composer), left of the diff.
         public static let changesFileList = ColumnWidth(min: 260, ideal: 320, max: 480)
-        /// The graph list in History and Compare.
-        public static let graphList = ColumnWidth(min: 340, ideal: 560, max: 900)
+        /// History's simple list (and a branch's comparison in the simple
+        /// style): narrow, as desktop's history list is.
+        public static let simpleList = ColumnWidth(min: 260, ideal: 320, max: 480)
+        /// History's graph (and a branch's comparison in the graph style).
+        /// At the default window its ideal leaves a commit's files and diff
+        /// their room.
+        public static let graphList = ColumnWidth(min: 320, ideal: 420, max: 900)
         /// The file list inside a commit's detail.
-        public static let commitFileList = ColumnWidth(min: 180, ideal: 220, max: 320)
+        public static let commitFileList = ColumnWidth(min: 180, ideal: 200, max: 320)
+        /// A commit's details never get narrower than their files at their
+        /// narrowest beside the diff at its narrowest.
+        public static let commitDetailMinimum: CGFloat = commitFileList.min + 1 + diffMinimum
         /// The PR overview, left of the PR's changes (same limits as the graph).
         public static let pullRequestOverview = ColumnWidth(min: 340, ideal: 440, max: 700)
         /// The stash column, left of the stash's diff.
@@ -259,35 +255,39 @@ public enum Metrics {
         }
     }
 
-    /// Commit rows: the graph, the ref tags, the summary, the avatar, the
-    /// time, and the short ID.
+    /// History's commit rows, the graph's and the simple list's alike: the
+    /// avatar, the ref tags before the title, the unpushed arrow after it,
+    /// and the time ("12m", "Oct 5") in its column; the graph adds the short
+    /// ID. Rows draw their selection inset from the list's sides.
     public enum CommitRow {
         /// The default avatar size of `Avatar`.
         public static let avatarSize: CGFloat = 16
-        /// The avatar in History's rows and a commit's details.
-        public static let graphAvatarSize: CGFloat = 18
+        /// The avatar in History's rows.
+        public static let rowAvatarSize: CGFloat = 20
         /// The space between a row's parts.
         public static let spacing: CGFloat = 10
-        /// Space after the last part, and the selection's inset from the
-        /// row's trailing edge (a selected row is flush with the graph's
-        /// edge and rounded on the other side).
+        /// Space after the last part.
         public static let trailingPadding: CGFloat = 12
+        /// The selection's inset from the list's sides.
         public static let selectionInset: CGFloat = 6
-        public static let dateWidth: CGFloat = 76
+        /// The time's column, its text right-aligned.
+        public static let timeWidth: CGFloat = 44
         /// The short ID's column (7 characters of SF Mono 11).
         public static let shortIDWidth: CGFloat = 58
-        /// Below these column widths the short ID, avatar, and date hide.
-        public static let hidesShortIDBelow: CGFloat = 520
-        public static let hidesAvatarBelow: CGFloat = 440
-        public static let hidesDateBelow: CGFloat = 380
+        /// Below these column widths the graph's short ID, avatar, and time
+        /// hide.
+        public static let hidesShortIDBelow: CGFloat = 460
+        public static let hidesAvatarBelow: CGFloat = 340
+        public static let hidesDateBelow: CGFloat = 300
         /// The unpushed arrow's point size.
         public static let unpushedGlyphSize: CGFloat = 10
+        /// The most of a title line the ref tags take.
+        public static let refsWidthFraction: CGFloat = 0.6
     }
 
     /// Ref capsules.
     public enum RefCapsule {
         public static let height: CGFloat = 18
-        public static let cornerRadius: CGFloat = 9
         public static let horizontalPadding: CGFloat = 7
         public static let spacing: CGFloat = 4
         /// At most this many capsules, then "+N".
@@ -299,8 +299,6 @@ public enum Metrics {
     public enum Diff {
         public static let codeFontSize: CGFloat = 11.5
         public static let lineHeight: CGFloat = 20
-        public static let stagingColumnWidth: CGFloat = 16
-        public static let minimumLineNumberDigits = 3
         /// Code text size limits (⌘= / ⌘− / ⌘0).
         public static let minimumCodeFontSize: CGFloat = 9
         public static let maximumCodeFontSize: CGFloat = 24
@@ -315,21 +313,41 @@ public enum Metrics {
             ceil(NSLayoutManager().defaultLineHeight(for: NSFont.preferredFont(forTextStyle: .body)) * 1.875)
         }
 
-        /// The status letter's square.
+        /// The status letter's square, and a conflicted file's symbol.
         public static let statusGlyphSize: CGFloat = StatusBadge.size
-        /// The conflicts section above the table grows to this height, then
-        /// scrolls.
-        public static let conflictsMaximumHeight: CGFloat = 240
     }
 
-    /// The Changes column and its composer.
+    /// The header row atop a column (Changes, the stash, History) and atop
+    /// the diff: one height, so their hairlines line up.
+    public enum PaneHeader {
+        public static let height: CGFloat = 40
+    }
+
+    /// The Changes column's composer: the commit message card and the
+    /// commit button under it.
     public enum Composer {
-        /// The rounded box around the summary and the description.
-        public static let fieldCornerRadius: CGFloat = 8
-        /// The author's avatar, leading in the summary row.
+        /// Space around the composer, beside and below it.
+        public static let horizontalPadding: CGFloat = 14
+        /// Space inside the card around the summary, the description, and
+        /// the co-authors.
+        public static let cardPadding: CGFloat = 11
+        /// Space above the summary, inside the card's top edge.
+        public static let summaryTopPadding: CGFloat = 9
+        /// The card's footer row: the AI button, co-authors, and the
+        /// options, then the author's avatar.
+        public static let footerHeight: CGFloat = 34
+        /// Space before the footer's first button: its symbol lines up with
+        /// the text above, the button's own room making up the rest.
+        public static let footerPadding: CGFloat = 4
+        /// The author's avatar, last in the card's footer.
         public static let avatarSize: CGFloat = 20
-        /// The sparkle and the summary's other trailing symbols.
-        public static let sparkleSize: CGFloat = 16
+        /// The hints after the summary (the lightbulb).
+        public static let summaryHintSize: CGFloat = 16
+        /// A co-author's token in the card.
+        public static let coAuthorTokenHeight: CGFloat = 22
+        /// The co-authors' field shares the tokens' last row while it has
+        /// this much room.
+        public static let coAuthorFieldMinimumWidth: CGFloat = 120
         /// The description shows this many lines at least, and grows up to
         /// `descriptionMaximumLines` before it scrolls.
         public static let descriptionMinimumLines = 3
@@ -357,7 +375,13 @@ public enum Metrics {
         public static let compactWidth: CGFloat = 420
         public static let standardWidth: CGFloat = 520
         public static let terminalWidth: CGFloat = 620
+        /// The tallest terminal output gets before it scrolls; shorter
+        /// output takes its own height.
         public static let terminalHeight: CGFloat = 260
+        /// A list's height in a sheet or a window (the repositories to
+        /// clone, at least that in Get Started), and the area Repository
+        /// Settings' panes share.
+        public static let listHeight: CGFloat = 240
     }
 
     /// The welcome flow.
@@ -391,16 +415,16 @@ public enum Metrics {
     /// header band.
     public enum SettingsWindow {
         /// The window's size; a pane taller than the window scrolls.
-        public static let width: CGFloat = 900
+        public static let width: CGFloat = 720
         public static let height: CGFloat = 680
         /// The sidebar's width.
-        public static let sidebarWidth: CGFloat = 210
+        public static let sidebarWidth: CGFloat = 180
         /// The band at the sidebar's top, where the window's buttons sit,
         /// and the pane's header band: both as high as the main window's
         /// toolbar.
         public static let headerHeight: CGFloat = 52
         /// The pane's content and header inset from its sides.
-        public static let contentInset: CGFloat = 22
+        public static let contentInset: CGFloat = 20
         /// Space above the pane's first section and below its last.
         public static let contentTopInset: CGFloat = 6
         public static let contentBottomInset: CGFloat = 20
@@ -419,7 +443,7 @@ public enum Metrics {
         public static let descriptionSpacing: CGFloat = 2
         public static let messageSpacing: CGFloat = 6
         /// Fields and pop-ups in rows.
-        public static let controlWidth: CGFloat = 210
+        public static let controlWidth: CGFloat = 200
         /// A narrow field (a number of seconds).
         public static let narrowControlWidth: CGFloat = 90
         /// An account's avatar.

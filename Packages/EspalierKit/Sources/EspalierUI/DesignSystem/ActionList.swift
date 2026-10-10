@@ -1,7 +1,7 @@
-// A list of actions in one card (radius 16): each row a symbol in a soft
+// A list of actions in one card (radius 14): each row a symbol in a soft
 // circle, a title and an optional line under it, and its key cap or a
-// chevron, with hairlines between rows and a hover wash. Get Started and the
-// welcome flow use it.
+// chevron, with hairlines between rows and a hover wash. Get Started uses
+// it.
 
 import AppKit
 import SwiftUI
@@ -45,7 +45,7 @@ public struct ActionList: View {
             }
         }
         .padding(Metrics.ActionList.inset)
-        .cardSurface(cornerRadius: Metrics.Radius.actionList)
+        .cardSurface()
     }
 }
 
@@ -57,6 +57,7 @@ private struct ActionListRow: View {
         Button(action: item.action) {
             HStack(spacing: Metrics.insetMedium) {
                 IconCircle(item.systemImage, size: Metrics.ActionList.iconSize, tint: .accentColor)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(item.title)
                         .font(Typography.row.weight(.medium))
@@ -73,7 +74,7 @@ private struct ActionListRow: View {
                     KeyCap(keyCap)
                 } else {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: Metrics.ActionList.chevronSize, weight: .semibold))
                         .foregroundStyle(.text3)
                         .accessibilityHidden(true)
                 }
@@ -82,7 +83,7 @@ private struct ActionListRow: View {
             .frame(minHeight: Metrics.ActionList.rowHeight)
             .contentShape(Rectangle())
             .background(
-                RoundedRectangle(cornerRadius: Metrics.Radius.pickerRow, style: .continuous)
+                RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
                     .fill(isHovered ? AnyShapeStyle(Color(espalier: Palette.hover)) : AnyShapeStyle(.clear))
                     .hoverMotion(isHovered)
             )
@@ -100,8 +101,11 @@ extension Metrics {
         public static let inset: CGFloat = 6
         public static let rowHeight: CGFloat = 52
         public static let rowPadding: CGFloat = 10
+        /// The soft circle's diameter.
         public static let iconSize: CGFloat = 30
-        /// Hairlines start after the symbol.
-        public static let dividerInset: CGFloat = 52
+        /// A row's chevron without a shortcut.
+        public static let chevronSize: CGFloat = 11
+        /// Hairlines start where the titles do.
+        public static let dividerInset: CGFloat = rowPadding + iconSize + Metrics.insetMedium
     }
 }

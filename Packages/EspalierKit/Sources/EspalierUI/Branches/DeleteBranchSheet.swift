@@ -3,9 +3,9 @@
 // Deleting a branch that may have an open pull request deletes only the
 // local branch, and says so. Branches without a pull request ask through
 // the state layer's `deleteBranch` confirmation, which the presenter shows
-// as a compact sheet with "Yes, delete this branch on the remote" when the
-// branch exists there. This sheet looks and answers like that one: Delete
-// is the default button, as in the presenter's other confirmations.
+// as a compact sheet with "Delete it on the remote too" when the branch
+// exists there. This sheet looks and answers like that one: Delete is the
+// default button.
 
 import EspalierCore
 import GitKit
@@ -22,7 +22,7 @@ nonisolated public struct DeleteBranchSheetContent: Sendable, Equatable {
     }
 
     public var title: String {
-        "Delete Branch"
+        "Delete Branch?"
     }
 
     public var message: String {
@@ -56,7 +56,6 @@ public struct DeleteBranchSheet: View {
     }
 
     public var body: some View {
-        // `CompactConfirmationSheet`'s layout.
         SheetScaffold(content.title, message: content.message, width: Metrics.Sheet.compactWidth) {
             // The number is a link inside the sentence, so the sentence
             // wraps as one.

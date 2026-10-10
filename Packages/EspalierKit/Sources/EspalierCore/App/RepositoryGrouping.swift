@@ -273,30 +273,6 @@ private func compareCodeUnits(_ x: [UInt16], _ y: [UInt16]) -> Int {
     return x.count == y.count ? 0 : (x.count < y.count ? -1 : 1)
 }
 
-/// The repository list as one list, for the sidebar: every repository, then
-/// the clones in progress, sorted by title as a group's items are. A title
-/// that repeats anywhere in the list needs disambiguating (the sidebar
-/// shows the owner, or the folder).
-public func flatRepositoryList(
-    _ repositories: [RepositoryListEntry],
-    _ localRepositoryStateLookup: [RepositoryID: RepositoryIndicator]
-) -> [RepositoryListItem] {
-    let titles = repositories.map(\.displayTitle)
-    var titleCounts: [ExactString: Int] = [:]
-    for title in titles {
-        titleCounts[ExactString(title), default: 0] += 1
-    }
-    let items = zip(repositories, titles).map { repository, title in
-        listItem(
-            repository,
-            title: title,
-            localRepositoryStateLookup,
-            needsDisambiguation: (titleCounts[ExactString(title)] ?? 0) > 1
-        )
-    }
-    return sortedByTitle(items)
-}
-
 /// Sorts as JavaScript's `Array.prototype.sort` does with `compare`:
 /// stably, keeping the order of items that compare equal.
 func stableSorted<Element>(_ elements: [Element], by compare: (Element, Element) -> Int) -> [Element] {
@@ -309,23 +285,14 @@ func stableSorted<Element>(_ elements: [Element], by compare: (Element, Element)
 }
 
 extension AppModel {
-    /// The repository list as the sidebar and the repository popover group
-    /// it: the repositories, then the clones in progress, with their badges
-    /// and the recent group (`groupRepositories`).
+    /// The repository list as the repository popover groups it: the
+    /// repositories, then the clones in progress, with their badges and the
+    /// recent group (`groupRepositories`).
     public var repositoryListGroups: [RepositoryListGroupItems] {
         groupRepositories(
             repositories.map(RepositoryListEntry.repository) + clones.clones.map(RepositoryListEntry.clone),
             indicators,
             recentRepositoryIDs
-        )
-    }
-
-    /// The repository list as the sidebar lists it, in one list
-    /// (`flatRepositoryList`).
-    public var repositoryListItems: [RepositoryListItem] {
-        flatRepositoryList(
-            repositories.map(RepositoryListEntry.repository) + clones.clones.map(RepositoryListEntry.clone),
-            indicators
         )
     }
 

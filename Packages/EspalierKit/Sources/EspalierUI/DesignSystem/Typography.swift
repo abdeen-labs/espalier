@@ -1,7 +1,9 @@
-// Espalier's type roles. SF Pro and SF Mono at the system's sizes: body 13,
-// secondary 12, meta 11.5; SF Mono 11 for code, commit IDs, counts, and
-// ahead and behind arrows. Roles at a system text style's size use the
-// style, so the macOS Text Size setting applies.
+// Espalier's type roles. SF Pro and SF Mono at the sizes of the system's
+// text styles: body 13, secondary 12, meta 11, section labels 10; SF Mono
+// 11 for commit IDs, counts, and ahead and behind arrows, 10 in ref tags,
+// and code at the user's code text size. SF Pro roles use the text style
+// of their size, so the macOS Text Size setting applies; SF Mono roles keep
+// a fixed size, but for a section label's count, which follows its label.
 
 import AppKit
 import SwiftUI
@@ -14,27 +16,28 @@ public enum Typography {
     public static let secondary: Font = .callout
     /// Smaller secondary text (11).
     public static let subheadline: Font = .subheadline
-    /// Meta lines: "Maya Chen · 12 min ago · 4 files" (11.5).
-    public static let meta: Font = .system(size: 11.5)
+    /// Meta lines: "Maya Chen · 12 min ago · 4 files" (11).
+    public static let meta: Font = .subheadline
     /// A commit's title in its details (15, semibold).
     public static let commitSummary: Font = .title3.weight(.semibold)
     /// Headings inside panes and sheets.
     public static let heading: Font = .headline
-    /// A Settings pane's name in its header band (13.5, semibold).
-    public static let paneTitle: Font = .system(size: 13.5, weight: .semibold)
+    /// A Settings pane's name in its header band (13, bold: the headline).
+    public static let paneTitle: Font = .headline
     /// A Settings row's title (13, medium).
     public static let rowTitle: Font = .body.weight(.medium)
-    /// Sidebar section labels (10.5, semibold): use `SectionLabel`, which
+    /// Sidebar section labels (10, semibold): use `SectionLabel`, which
     /// adds the uppercase and the tracking.
-    public static let sectionLabel: Font = .system(size: 10.5, weight: .semibold)
-    /// A section label's count ("BRANCHES 5"), in SF Mono.
-    public static let sectionCount: Font = .system(size: 10.5, weight: .medium, design: .monospaced)
-    /// The tracking of section labels: 0.07 em.
-    public static let sectionLabelTracking: CGFloat = 10.5 * 0.07
-    /// Ref tags: SF Mono 10.5, semibold.
-    public static let refCapsule: Font = .system(size: 10.5, weight: .semibold, design: .monospaced)
-    /// "+N" and other tiny counts.
-    public static let tinyCount: Font = .system(size: 10.5, weight: .medium, design: .monospaced)
+    public static let sectionLabel: Font = .caption.weight(.semibold)
+    /// A section label's count ("BRANCHES 5"), in SF Mono at the label's
+    /// size.
+    public static let sectionCount: Font = .system(.caption, design: .monospaced, weight: .medium)
+    /// The tracking of section labels: 0.07 em of their 10 points.
+    public static let sectionLabelTracking: CGFloat = 10 * 0.07
+    /// Ref tags: SF Mono 10, semibold.
+    public static let refCapsule: Font = .system(size: 10, weight: .semibold, design: .monospaced)
+    /// "+N" and other tiny counts (SF Mono 10).
+    public static let tinyCount: Font = .system(size: 10, weight: .medium, design: .monospaced)
     /// Counts in rows and headers (SF Mono 11).
     public static let count: Font = .system(size: 11, weight: .medium, design: .monospaced)
     /// Secondary counts ("↑2 ↓3"), in SF Mono.
@@ -45,8 +48,8 @@ public enum Typography {
     public static let sha: Font = .system(size: 11, design: .monospaced)
     /// Terminal output (hooks, raw git errors).
     public static let terminal: Font = .system(size: 11, design: .monospaced)
-    /// Key caps' text (10.5).
-    public static let keyCap: Font = .system(size: 10.5, weight: .medium)
+    /// Key caps' text (10, medium).
+    public static let keyCap: Font = .caption.weight(.medium)
     /// Quiet and secondary buttons' titles (13, medium; 12 when small).
     public static let button: Font = .body.weight(.medium)
     /// Prominent buttons' titles (13, semibold).
@@ -74,14 +77,14 @@ public enum AppKitTypography {
         .preferredFont(forTextStyle: .callout)
     }
 
-    /// Ref tags: SF Mono 10.5, semibold.
+    /// Ref tags: SF Mono 10, semibold.
     public static var refCapsule: NSFont {
-        .monospacedSystemFont(ofSize: 10.5, weight: .semibold)
+        .monospacedSystemFont(ofSize: 10, weight: .semibold)
     }
 
-    /// "+N" counts.
+    /// "+N" counts (SF Mono 10).
     public static var tinyCount: NSFont {
-        .monospacedSystemFont(ofSize: 10.5, weight: .medium)
+        .monospacedSystemFont(ofSize: 10, weight: .medium)
     }
 
     /// Code at a size.
@@ -101,8 +104,8 @@ public enum AppKitTypography {
     }
 }
 
-/// A sidebar section label: uppercase, 10.5 semibold with 0.07 em
-/// tracking, and its count in SF Mono ("BRANCHES 5").
+/// A sidebar section label: uppercase, 10 semibold with 0.07 em tracking,
+/// and its count in SF Mono ("BRANCHES 5").
 public struct SectionLabel: View {
     private let title: String
     private let count: Int?

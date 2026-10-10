@@ -1,8 +1,9 @@
-// The Worktrees section, the Add and Rename sheets' rules, and the worktree
-// actions, on real repositories: rows with their branch or SHA, the current
-// one and locked ones; the sheets' hints; a name with "/" refused;
-// switching; Delete… asking, and when git refuses, "Couldn't delete the
-// worktree <name>." with Cancel and Delete Anyway.
+// The repository popover's worktree rows, the Add and Rename sheets' rules,
+// and the worktree actions, on real repositories: rows with their branch or
+// SHA, the current one and locked ones; Show Worktrees opening the popover;
+// the sheets' hints; a name with "/" refused; switching; Delete… asking,
+// and when git refuses, "Couldn't delete the worktree <name>." with Cancel
+// and Delete Anyway.
 
 import EspalierCore
 import EspalierCoreTestSupport
@@ -81,12 +82,10 @@ struct WorktreeTests {
         #expect(rows.count == 3)
         #expect(rows[0].isMain && rows[0].isCurrent)
         #expect(rows[0].detail == "master")
-        #expect(rows[0].symbol == "checkmark.circle.fill")
         #expect(!rows[0].canRenameOrDelete)
         let featureRow = try #require(rows.first { $0.path == feature.path })
         #expect(featureRow.name == "feature-tree")
         #expect(featureRow.detail == "feature")
-        #expect(featureRow.symbol == "rectangle.stack")
         #expect(featureRow.canRenameOrDelete)
         let detachedRow = try #require(rows.first { $0.path == detached.path })
         #expect(detachedRow.isLocked)
@@ -99,17 +98,21 @@ struct WorktreeTests {
         #expect(filtered.map(\.path) == [feature.path])
     }
 
-    @Test("the list shows with two worktrees, with the setting, or after Show Worktrees")
+    @Test("the list shows with two worktrees, with the setting, or after Show Worktrees, which opens the repository popover")
     func visibility() async throws {
         let fixture = try await WorktreeUIFixture.make()
         let state = fixture.context.state.featureState(WorktreesWindowState.self) { WorktreesWindowState() }
         #expect(!fixture.repository.worktrees.isListVisible)
         #expect(state.revealedRepository == nil)
+        #expect(RepositoryPopoverContent.make(fixture.app, filter: "").worktrees.isEmpty)
 
-        fixture.context.state.columnVisibility = .detailOnly
         await fixture.context.actions.performAndWait(.showWorktrees)
         #expect(state.revealedRepository == fixture.repository.id)
-        #expect(fixture.context.state.columnVisibility == .all)
+        #expect(fixture.context.state.isRepositoryPopoverPresented)
+        let revealed = RepositoryPopoverContent.make(fixture.app, filter: "", revealingWorktreesOf: state.revealedRepository)
+        let window = try #require(revealed.worktrees.first)
+        #expect(revealed.worktrees.count == 1 && window.isCurrent)
+        #expect(revealed.currentRowID == .worktree(path: window.path))
 
         fixture.app.preferences.alwaysShowWorktreeList = true
         #expect(fixture.repository.worktrees.isListVisible)
@@ -275,11 +278,8 @@ struct WorktreeTests {
         let feature = try await fixture.linked()
         let task = Task { await fixture.context.actions.performAndWait(.deleteWorktree(path: feature.path)) }
         let pending = await fixture.confirmation()
-        guard case .alert(let alert) = pending.confirmation.presentation else {
-            Issue.record("Expected an alert")
-            return
-        }
-        #expect(alert.title == "Delete Worktree")
+        let alert = pending.confirmation.alertContent
+        #expect(alert.title == "Delete Worktree?")
         #expect(alert.message == "Are you sure you want to delete the worktree feature-tree?")
         #expect(alert.buttons.map(\.title) == ["Delete", "Cancel"])
         #expect(alert.suppressionTitle == "Do not show this message again")

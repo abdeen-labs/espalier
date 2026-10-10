@@ -22,14 +22,14 @@ struct PromptPresentationTests {
         return (PromptPresentation.make(prompt, finish: { answers.received.append($0) }), answers)
     }
 
-    @Test("the SSH host alert's Yes trusts the host, and No doesn't")
+    @Test("the SSH host alert's Connect trusts the host, and Cancel doesn't")
     func sshHost() throws {
         let (presentation, answers) = make(.addSSHHost(host: "example.com", ip: "192.0.2.1", keyType: "ED25519", fingerprint: "SHA256:abc"))
         guard case .alert(let content, let answer) = presentation else {
             Issue.record("Expected an alert, got \(presentation)")
             return
         }
-        #expect(content.buttons.map(\.title) == ["Yes", "No"])
+        #expect(content.buttons.map(\.title) == ["Connect", "Cancel"])
         #expect(answer(AlertResponse(buttonIndex: 0)) == .addSSHHost(true))
         #expect(answer(AlertResponse(buttonIndex: 1)) == .addSSHHost(false))
         #expect(answers.received.isEmpty)

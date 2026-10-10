@@ -1,7 +1,8 @@
-// One row of the history graph: the graph, the ref tags, the summary with
-// the unpushed arrow, the author's avatar, the time, and the short ID, laid
-// out with manual frames (no Auto Layout in cells). The working copy's row
-// shows its changes instead.
+// One row of the history graph: the graph, the author's avatar, the ref tags,
+// the title with the unpushed arrow, the time, and the short ID, laid out with
+// manual frames (no Auto Layout in cells). The simple list's rows use the same
+// parts (`CommitRowParts`), on two lines and beside a rail instead of lanes.
+// The working copy's row shows its changes instead.
 
 import AppKit
 import EspalierCore
@@ -58,9 +59,10 @@ nonisolated public struct CommitRowContent: Sendable, Equatable {
     public var summary: String
     public var authorName: String
     public var authorEmail: String
-    /// The date as the list shows it ("2 hours ago"), and in full for the
-    /// tooltip.
+    /// The date in words (VoiceOver reads it), as the time column shows it
+    /// ("12m", "Oct 5"), and in full for the tooltip.
     public var date: String
+    public var shortDate: String
     public var dateTooltip: String
     /// The branches and tags on the commit.
     public var refs: [RefCapsuleContent]
@@ -82,6 +84,7 @@ nonisolated public struct CommitRowContent: Sendable, Equatable {
         authorName: String = "",
         authorEmail: String = "",
         date: String = "",
+        shortDate: String = "",
         dateTooltip: String = "",
         refs: [RefCapsuleContent] = [],
         unpushedTooltip: String? = nil,
@@ -96,6 +99,7 @@ nonisolated public struct CommitRowContent: Sendable, Equatable {
         self.authorName = authorName
         self.authorEmail = authorEmail
         self.date = date
+        self.shortDate = shortDate
         self.dateTooltip = dateTooltip
         self.refs = refs
         self.unpushedTooltip = unpushedTooltip
@@ -128,6 +132,9 @@ nonisolated public struct CommitRowContent: Sendable, Equatable {
     /// The text for a commit without a message.
     public static let emptySummary = "Empty commit message"
 
+    /// The tooltip of an unpushed commit's arrow.
+    public static let notPushedTooltip = "This commit has not been pushed to the remote repository"
+
     /// The author as avatars see them.
     var avatarUser: AvatarUser {
         AvatarUser(email: authorEmail, avatarURL: nil, name: authorName, endpoint: avatarEndpoint)
@@ -139,32 +146,112 @@ nonisolated func formatCount(_ count: Int) -> String {
     count.formatted(.number.locale(Locale(identifier: "en_US")))
 }
 
-/// One row of the history graph: the graph, then the commit's refs,
-/// summary, avatar, time, and short ID.
+/// The parts History's commit rows share, so the graph's and the simple
+/// list's look alike: their labels, the unpushed arrow, and the title
+/// line's layout.
+@MainActor
+enum CommitRowParts {
+    /// A one-line label.
+    static func label(font: NSFont, color: NSColor, alignment: NSTextAlignment = .left, sample: Bool = false) -> NSTextField {
+        let label = NSTextField(labelWithString: sample ? "Xg" : "")
+        label.font = font
+        label.textColor = color
+        label.alignment = alignment
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        label.cell?.truncatesLastVisibleLine = true
+        label.setAccessibilityElement(false)
+        return label
+    }
+
+    /// The width a label needs to show its text untruncated: its cell's
+    /// size, which includes the cell's padding.
+    static func fittingWidth(_ label: NSTextField) -> CGFloat {
+        ceil(label.cell?.cellSize.width ?? label.intrinsicContentSize.width)
+    }
+
+    /// The height of one line of `font` in a label.
+    static func lineHeight(_ font: NSFont) -> CGFloat {
+        ceil(label(font: font, color: .labelColor, sample: true).intrinsicContentSize.height)
+    }
+
+    /// A title's font: the row's, semibold for HEAD's commit.
+    static func titleFont(isCurrentTip: Bool) -> NSFont {
+        isCurrentTip ? .systemFont(ofSize: AppKitTypography.row.pointSize, weight: .semibold) : AppKitTypography.row
+    }
+
+    /// The time label: secondary text, right-aligned in its column.
+    static func timeLabel() -> NSTextField {
+        label(font: AppKitTypography.secondary, color: Palette.text3, alignment: .right)
+    }
+
+    /// The unpushed arrow: an accent arrow after the title.
+    static func unpushedArrow() -> NSImageView {
+        let view = NSImageView()
+        view.imageScaling = .scaleProportionallyDown
+        view.image = NSImage(systemSymbolName: "arrow.up", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: Metrics.CommitRow.unpushedGlyphSize, weight: .semibold))
+        view.contentTintColor = Palette.accent
+        view.setAccessibilityElement(false)
+        return view
+    }
+
+    /// Lays a title line out from `leading` to `trailing`, centered on
+    /// `midY`: the ref tags (at most `refsWidthFraction` of the line), the
+    /// title, and the unpushed arrow right after it, when it shows.
+    static func layoutTitleLine(
+        refs: RefCapsulesView,
+        title: NSTextField,
+        titleWidth: CGFloat,
+        titleHeight: CGFloat,
+        unpushed: NSImageView,
+        leading: CGFloat,
+        trailing: CGFloat,
+        midY: CGFloat
+    ) {
+        var leading = leading
+        let available = max(trailing - leading, 0)
+        let refsWidth = refs.layoutCapsules(maximumWidth: available * Metrics.CommitRow.refsWidthFraction)
+        refs.frame = CGRect(x: leading, y: (midY - Metrics.RefCapsule.height / 2).rounded(), width: refsWidth, height: Metrics.RefCapsule.height)
+        if refsWidth > 0 {
+            leading += refsWidth + Metrics.insetSmall
+        }
+        let glyph = Metrics.CommitRow.unpushedGlyphSize
+        let arrowWidth: CGFloat = unpushed.isHidden ? 0 : glyph + Metrics.grid
+        let titleSpace = max(trailing - leading - arrowWidth, 0)
+        title.frame = CGRect(x: leading, y: (midY - titleHeight / 2).rounded(), width: min(titleWidth, titleSpace), height: titleHeight)
+        if !unpushed.isHidden {
+            // The symbol's frame is a little larger than its point size.
+            let side = glyph + Metrics.grid / 2
+            unpushed.frame = CGRect(x: title.frame.maxX + Metrics.grid / 2, y: (midY - side / 2).rounded(), width: side, height: side)
+        }
+    }
+}
+
+/// One row of the history graph: the graph, then the commit's avatar,
+/// refs, summary, time, and short ID.
 final class CommitRowCellView: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("CommitRow")
 
     let graphView = GraphCellView(frame: .zero)
     private let refsView = RefCapsulesView(frame: .zero)
-    private let summaryLabel = CommitRowCellView.label(font: AppKitTypography.row, color: Palette.text)
-    private let detailLabel = CommitRowCellView.label(font: AppKitTypography.secondary, color: Palette.text3)
+    private let summaryLabel = CommitRowParts.label(font: AppKitTypography.row, color: Palette.text)
+    private let detailLabel = CommitRowParts.label(font: AppKitTypography.secondary, color: Palette.text3)
     private let warningView = NSImageView()
-    private let unpushedView = NSImageView()
+    private let unpushedView = CommitRowParts.unpushedArrow()
     private let avatarView = RowAvatarView(frame: .zero)
-    private let dateLabel = CommitRowCellView.label(font: AppKitTypography.secondary, color: Palette.text3, alignment: .right)
-    private let shortIDLabel = CommitRowCellView.label(font: AppKitTypography.code(size: 11), color: Palette.text3, alignment: .right)
+    private let dateLabel = CommitRowParts.timeLabel()
+    private let shortIDLabel = CommitRowParts.label(font: AppKitTypography.code(size: 11), color: Palette.text3, alignment: .right)
 
     /// What the row shows.
     private(set) var content = CommitRowContent()
     private var summaryWidth: CGFloat = 0
     private var isDimmed = false
-    /// The date column's width, the same in every row.
-    private var dateWidth = Metrics.CommitRow.dateWidth
 
     /// The heights of one line of the row's fonts, measured once.
-    private static let rowLabelHeight = ceil(CommitRowCellView.label(font: AppKitTypography.row, color: .labelColor, sample: true).intrinsicContentSize.height)
-    private static let secondaryLabelHeight = ceil(CommitRowCellView.label(font: AppKitTypography.secondary, color: .labelColor, sample: true).intrinsicContentSize.height)
-    private static let shortIDHeight = ceil(CommitRowCellView.label(font: AppKitTypography.code(size: 11), color: .labelColor, sample: true).intrinsicContentSize.height)
+    private static let rowLabelHeight = CommitRowParts.lineHeight(AppKitTypography.row)
+    private static let secondaryLabelHeight = CommitRowParts.lineHeight(AppKitTypography.secondary)
+    private static let shortIDHeight = CommitRowParts.lineHeight(AppKitTypography.code(size: 11))
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -173,16 +260,12 @@ final class CommitRowCellView: NSTableCellView {
         addSubview(refsView)
         addSubview(summaryLabel)
         addSubview(detailLabel)
-        for imageView in [warningView, unpushedView] {
-            imageView.imageScaling = .scaleProportionallyDown
-            imageView.setAccessibilityElement(false)
-            addSubview(imageView)
-        }
-        let unpushedConfiguration = NSImage.SymbolConfiguration(pointSize: Metrics.CommitRow.unpushedGlyphSize, weight: .semibold)
-        unpushedView.image = NSImage(systemSymbolName: "arrow.up", accessibilityDescription: nil)?.withSymbolConfiguration(unpushedConfiguration)
-        unpushedView.contentTintColor = Palette.accent
+        warningView.imageScaling = .scaleProportionallyDown
+        warningView.setAccessibilityElement(false)
         warningView.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)?
             .withSymbolConfiguration(.preferringMulticolor())
+        addSubview(warningView)
+        addSubview(unpushedView)
         avatarView.fadesIn = true
         addSubview(avatarView)
         addSubview(dateLabel)
@@ -201,31 +284,12 @@ final class CommitRowCellView: NSTableCellView {
         true
     }
 
-    /// The width a label needs to show its text untruncated: its cell's
-    /// size, which includes the cell's padding.
-    static func fittingWidth(_ label: NSTextField) -> CGFloat {
-        ceil(label.cell?.cellSize.width ?? label.intrinsicContentSize.width)
-    }
-
-    private static func label(font: NSFont, color: NSColor, alignment: NSTextAlignment = .left, sample: Bool = false) -> NSTextField {
-        let label = NSTextField(labelWithString: sample ? "Xg" : "")
-        label.font = font
-        label.textColor = color
-        label.alignment = alignment
-        label.lineBreakMode = .byTruncatingTail
-        label.maximumNumberOfLines = 1
-        label.cell?.truncatesLastVisibleLine = true
-        label.setAccessibilityElement(false)
-        return label
-    }
-
     // MARK: Configuring
 
     /// Shows `content` with the graph's `drawing`, styled by `style`.
     func configure(_ content: CommitRowContent, drawing: GraphRowDrawing, emphasis: GraphEmphasis, style: GraphRowStyle) {
-        if graphView.geometry != style.geometry || dateWidth != style.dateWidth {
+        if graphView.geometry != style.geometry {
             graphView.geometry = style.geometry
-            dateWidth = style.dateWidth
             needsLayout = true
         }
         graphView.colors = style.colors
@@ -260,10 +324,10 @@ final class CommitRowCellView: NSTableCellView {
             avatarView.toolTip = nil
             dateLabel.isHidden = true
             shortIDLabel.isHidden = true
-            avatarView.show(nil, pointSize: Metrics.CommitRow.graphAvatarSize, avatars: nil, monograms: monograms, scale: scale)
+            avatarView.show(nil, pointSize: Metrics.CommitRow.rowAvatarSize, avatars: nil, monograms: monograms, scale: scale)
         case .commit:
             summaryLabel.stringValue = content.displaySummary
-            summaryLabel.font = content.isCurrentTip ? Self.currentTipFont : AppKitTypography.row
+            summaryLabel.font = CommitRowParts.titleFont(isCurrentTip: content.isCurrentTip)
             summaryLabel.textColor = content.summary.isEmpty || content.isMerge ? Palette.text3 : Palette.text
             summaryLabel.toolTip = content.displaySummary
             detailLabel.isHidden = true
@@ -272,16 +336,16 @@ final class CommitRowCellView: NSTableCellView {
             unpushedView.isHidden = content.unpushedTooltip == nil
             unpushedView.toolTip = content.unpushedTooltip
             avatarView.toolTip = content.authorTooltip
-            dateLabel.stringValue = content.date
+            dateLabel.stringValue = content.shortDate
             dateLabel.toolTip = content.dateTooltip
             shortIDLabel.stringValue = content.shortSHA
             shortIDLabel.toolTip = content.sha
             avatarView.isHidden = false
             dateLabel.isHidden = false
             shortIDLabel.isHidden = false
-            avatarView.show(content.avatarUser, pointSize: Metrics.CommitRow.graphAvatarSize, avatars: avatars, monograms: monograms, scale: scale)
+            avatarView.show(content.avatarUser, pointSize: Metrics.CommitRow.rowAvatarSize, avatars: avatars, monograms: monograms, scale: scale)
         }
-        summaryWidth = Self.fittingWidth(summaryLabel)
+        summaryWidth = CommitRowParts.fittingWidth(summaryLabel)
         if content.isDimmed != isDimmed {
             isDimmed = content.isDimmed
             for view in [summaryLabel, detailLabel, refsView, unpushedView, avatarView, dateLabel, shortIDLabel, warningView] as [NSView] {
@@ -290,19 +354,15 @@ final class CommitRowCellView: NSTableCellView {
         }
     }
 
-    /// The current tip's summary: the row's font, semibold.
-    private static var currentTipFont: NSFont {
-        .systemFont(ofSize: AppKitTypography.row.pointSize, weight: .semibold)
-    }
-
     /// Updates the date (the once-a-minute refresh).
-    func updateDate(_ date: String, tooltip: String) {
-        guard date != content.date || tooltip != content.dateTooltip else {
+    func updateDate(_ date: String, short: String, tooltip: String) {
+        guard date != content.date || short != content.shortDate || tooltip != content.dateTooltip else {
             return
         }
         content.date = date
+        content.shortDate = short
         content.dateTooltip = tooltip
-        dateLabel.stringValue = date
+        dateLabel.stringValue = short
         dateLabel.toolTip = tooltip
     }
 
@@ -343,8 +403,10 @@ final class CommitRowCellView: NSTableCellView {
 
         if case .workingCopy = content.kind {
             if !warningView.isHidden {
-                warningView.frame = centered(CGSize(width: 14, height: 14), x: leading)
-                leading += 14 + Metrics.grid
+                // The symbol at the row's text size.
+                let side: CGFloat = 14
+                warningView.frame = centered(CGSize(width: side, height: side), x: leading)
+                leading += side + Metrics.grid
             }
             summaryLabel.frame = centered(CGSize(width: min(summaryWidth, max(trailing - leading, 0)), height: Self.rowLabelHeight), x: leading)
             leading = summaryLabel.frame.maxX + Metrics.insetSmall
@@ -353,7 +415,7 @@ final class CommitRowCellView: NSTableCellView {
             return
         }
 
-        // Right to left: the short ID, the time, the avatar.
+        // Right to left: the short ID, then the time.
         shortIDLabel.isHidden = !showsShortID
         if showsShortID {
             let size = CGSize(width: Metrics.CommitRow.shortIDWidth, height: Self.shortIDHeight)
@@ -362,31 +424,28 @@ final class CommitRowCellView: NSTableCellView {
         }
         dateLabel.isHidden = !showsDate
         if showsDate {
-            let size = CGSize(width: dateWidth, height: Self.secondaryLabelHeight)
+            let size = CGSize(width: Metrics.CommitRow.timeWidth, height: Self.secondaryLabelHeight)
             dateLabel.frame = centered(size, x: trailing - size.width)
             trailing = dateLabel.frame.minX - spacing
         }
+
+        // Left to right: the avatar, then the title line.
         avatarView.isHidden = !showsAvatar
         if showsAvatar {
-            let size = Metrics.CommitRow.graphAvatarSize
-            avatarView.frame = centered(CGSize(width: size, height: size), x: trailing - size)
-            trailing = avatarView.frame.minX - spacing
+            let size = Metrics.CommitRow.rowAvatarSize
+            avatarView.frame = centered(CGSize(width: size, height: size), x: leading)
+            leading = avatarView.frame.maxX + spacing
         }
-
-        // Left to right: the refs, the summary, the unpushed arrow.
-        let available = max(trailing - leading, 0)
-        let refsWidth = refsView.layoutCapsules(maximumWidth: available * 0.6)
-        refsView.frame = CGRect(x: leading, y: ((height - Metrics.RefCapsule.height) / 2).rounded(), width: refsWidth, height: Metrics.RefCapsule.height)
-        if refsWidth > 0 {
-            leading += refsWidth + Metrics.RefCapsule.horizontalPadding
-        }
-        let arrowWidth: CGFloat = unpushedView.isHidden ? 0 : Metrics.CommitRow.unpushedGlyphSize + Metrics.grid
-        let summarySpace = max(trailing - leading - arrowWidth, 0)
-        summaryLabel.frame = centered(CGSize(width: min(summaryWidth, summarySpace), height: Self.rowLabelHeight), x: leading)
-        if !unpushedView.isHidden {
-            let size = CGSize(width: Metrics.CommitRow.unpushedGlyphSize + 2, height: Metrics.CommitRow.unpushedGlyphSize + 2)
-            unpushedView.frame = centered(size, x: summaryLabel.frame.maxX + Metrics.grid / 2)
-        }
+        CommitRowParts.layoutTitleLine(
+            refs: refsView,
+            title: summaryLabel,
+            titleWidth: summaryWidth,
+            titleHeight: Self.rowLabelHeight,
+            unpushed: unpushedView,
+            leading: leading,
+            trailing: trailing,
+            midY: height / 2
+        )
     }
 
     // MARK: Accessibility
@@ -440,25 +499,6 @@ struct GraphRowStyle {
     var monograms: MonogramCache
     /// The backing scale avatars are drawn at.
     var scale: CGFloat
-    /// The date column's width: wide enough for the dates the formatting
-    /// makes (76 points fit short relative dates).
-    var dateWidth = Metrics.CommitRow.dateWidth
-
-    /// The date column's width for `formatting`: the widest of a few long
-    /// dates in it.
-    static func dateWidth(for formatting: DateTimeFormatting) -> CGFloat {
-        let samples: [String]
-        if formatting.preferAbsoluteDates {
-            // A long month, day, and hour.
-            let sample = Date(timeIntervalSince1970: 1_758_027_300)
-            samples = [RelativeTime.formatDate(sample, formatting: formatting, timeZone: TimeZone(identifier: "UTC")!)]
-        } else {
-            samples = ["55 minutes ago", "23 hours ago", "29 days ago", "11 months ago", "18 years ago"]
-        }
-        let font = AppKitTypography.secondary
-        let widest = samples.map { ceil(NSAttributedString(string: $0, attributes: [.font: font]).size().width) + 4 }.max() ?? 0
-        return max(Metrics.CommitRow.dateWidth, widest)
-    }
 }
 
 extension CommitRowCellView {
@@ -467,8 +507,8 @@ extension CommitRowCellView {
         case avatar, date, shortID
     }
 
-    /// The trailing columns the last layout shows: narrow rows hide the
-    /// short ID, then the avatar, then the date.
+    /// The columns the last layout shows besides the title: narrow rows
+    /// hide the short ID, then the avatar, then the time.
     var shownTrailingColumns: Set<TrailingColumn> {
         var shown: Set<TrailingColumn> = []
         if !avatarView.isHidden {

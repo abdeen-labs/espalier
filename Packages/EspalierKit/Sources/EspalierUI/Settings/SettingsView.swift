@@ -116,8 +116,8 @@ struct SettingsLayout<Pane: View>: View {
     }
 }
 
-/// The pane's header band: its name (13.5 semibold) and a hairline, as
-/// high as the main window's toolbar.
+/// The pane's header band: its name (13 bold, the headline) and a
+/// hairline, as high as the main window's toolbar.
 struct SettingsHeader: View {
     let title: String
 

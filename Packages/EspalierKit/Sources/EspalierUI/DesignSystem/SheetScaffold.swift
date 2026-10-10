@@ -166,10 +166,10 @@ extension View {
             .presentationBackground(Color(espalier: Palette.background))
     }
 
-    /// A popover with Espalier's look: the flat `background` and the
-    /// picker radius (22), where macOS lets the presentation choose them.
+    /// A popover with Espalier's look: the flat `background` and the sheet
+    /// radius (22), where macOS lets the presentation choose them.
     public func flatPopoverPresentation() -> some View {
-        presentationCornerRadius(Metrics.Radius.picker)
+        presentationCornerRadius(Metrics.Radius.sheet)
             .presentationBackground(Color(espalier: Palette.background))
     }
 }

@@ -2,7 +2,8 @@
 // the pane's header; sections with an uppercase label; flat rows split by
 // hairlines, each with its title and an optional description on the left
 // and its control on the right; rows for a message or for buttons alone;
-// inline messages; the "Local" badge; and a row's "⋯" menu.
+// the "Local" badge; and a row's "⋯" menu. Messages under a control are
+// `FieldMessage`s, as in sheets.
 
 import EspalierCore
 import SwiftUI
@@ -224,62 +225,7 @@ struct SettingsNote: View {
     }
 }
 
-// MARK: - Messages and badges
-
-/// A line under a control: a problem with what was typed, a warning, or a
-/// check that passed. Never color alone: each kind has its own symbol.
-struct InlineMessage: View {
-    nonisolated enum Kind: Equatable, Sendable {
-        /// What was typed can't be saved.
-        case error
-        /// It can be saved, but something deserves attention.
-        case warning
-        /// A check passed.
-        case success
-        /// Neutral information.
-        case note
-    }
-
-    private let text: String
-    private let kind: Kind
-
-    init(_ text: String, kind: Kind) {
-        self.text = text
-        self.kind = kind
-    }
-
-    var body: some View {
-        Label {
-            Text(text)
-                .foregroundStyle(kind == .error ? Color(espalier: Palette.error) : .text2)
-                .fixedSize(horizontal: false, vertical: true)
-        } icon: {
-            icon
-        }
-        .font(Typography.secondary)
-        .accessibilityElement(children: .combine)
-    }
-
-    @ViewBuilder
-    private var icon: some View {
-        switch kind {
-        case .error:
-            Image(systemName: "xmark.octagon.fill")
-                .foregroundStyle(Color(espalier: Palette.error))
-                .accessibilityLabel("Error")
-        case .warning:
-            WarningGlyph()
-        case .success:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(Color(espalier: Palette.success))
-                .accessibilityLabel("OK")
-        case .note:
-            Image(systemName: "info.circle")
-                .foregroundStyle(.text2)
-                .accessibilityHidden(true)
-        }
-    }
-}
+// MARK: - Badges and menus
 
 /// The "Local" badge: a provider whose server is this Mac.
 struct LocalBadge: View {

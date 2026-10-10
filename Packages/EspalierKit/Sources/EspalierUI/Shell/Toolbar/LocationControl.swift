@@ -199,9 +199,9 @@ public struct LocationControlView: View {
     public var body: some View {
         HStack(spacing: 0) {
             LocationSegment(action: onRepository) {
-                HStack(spacing: 7) {
+                HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
                     Image(systemName: "folder")
-                        .font(.system(size: 13))
+                        .font(Typography.row)
                         .foregroundStyle(.text2)
                     Text(state.repositoryTitle)
                         .lineLimit(1)
@@ -212,18 +212,18 @@ public struct LocationControlView: View {
 
             if let branchTitle = state.branchTitle {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: Metrics.CapsuleMenu.chevronSize, weight: .semibold))
                     .foregroundStyle(.text3)
                     .padding(.horizontal, -1)
                     .accessibilityHidden(true)
                 LocationSegment(action: onBranch) {
-                    HStack(spacing: 7) {
+                    HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
                         if case .checkingOut(_, _, let progress) = state.branch {
                             // It turns until git reports how far it has got.
                             ArcProgress(.mini, value: progress > 0 ? progress : nil)
                         } else {
                             Image(systemName: state.branchSystemImage)
-                                .font(.system(size: 13))
+                                .font(Typography.row)
                                 .foregroundStyle(branchSymbolColor)
                         }
                         Text(branchTitle)
@@ -238,7 +238,7 @@ public struct LocationControlView: View {
                             }
                         if state.isBranchEnabled {
                             Image(systemName: "chevron.down")
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(.system(size: Metrics.CapsuleMenu.chevronSize, weight: .semibold))
                                 .foregroundStyle(.text3)
                         }
                     }
@@ -250,7 +250,7 @@ public struct LocationControlView: View {
         }
         .font(Typography.button)
         .foregroundStyle(.text)
-        .padding(.horizontal, 4)
+        .padding(.horizontal, Metrics.grid)
         .frame(height: Metrics.ControlHeight.toolbar)
         .surface(.quiet, elevation: .quiet)
     }
@@ -283,7 +283,7 @@ private struct LocationSegment<Label: View>: View {
                         .padding(.vertical, 3)
                 }
                 .contentShape(Capsule(style: .circular))
-                .opacity(isEnabled ? 1 : 0.6)
+                .opacity(isEnabled ? 1 : Palette.disabledOpacity)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
@@ -355,17 +355,18 @@ struct LocationControl: View {
     }
 }
 
-/// The location control's toolbar item: its content's width rounded up to a
-/// whole point, the content at its leading edge. The toolbar rounds the
-/// width it measures, and a title even a fraction of a point short of its
-/// width truncates, often to its first letter ("ma…" is wider than "main",
-/// so "main" shows "m…"); a whole-point width has nothing to round away.
-private struct WholePointWidth: Layout {
+/// The location control's toolbar item: its content at its ideal width,
+/// whatever width the toolbar proposes, and that width rounded up to a
+/// whole point, the content at its leading edge. A title given a width,
+/// even one a little wider than it needs, can truncate ("ui-audit" given
+/// 215 points of the 214.5 it needs showed "ui-…"), and the toolbar rounds
+/// the width it measures, which would cut a fraction of a point off.
+struct WholePointWidth: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         guard let content = subviews.first else {
             return .zero
         }
-        let size = content.sizeThatFits(proposal)
+        let size = content.sizeThatFits(ProposedViewSize(width: nil, height: proposal.height))
         return CGSize(width: size.width.rounded(.up), height: size.height)
     }
 
@@ -373,7 +374,7 @@ private struct WholePointWidth: Layout {
         subviews.first?.place(
             at: CGPoint(x: bounds.minX, y: bounds.midY),
             anchor: .leading,
-            proposal: ProposedViewSize(bounds.size)
+            proposal: ProposedViewSize(width: nil, height: bounds.height)
         )
     }
 }

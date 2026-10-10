@@ -1,10 +1,11 @@
 // Ported in part from desktop/app/src/ui/lib/conflicts/unmerged-file.tsx
 //
-// A conflicted file's row in the Changes list's conflicts section: its
-// status ("3 conflicts", "Manual conflict", "File does not exist on
-// <branch>.", "No conflicts remaining", "Using the modified file from
-// <branch>"), its actions (Open in <Editor>, disabled without an editor; the
-// manual resolution menu; Undo), and their copy.
+// A conflicted file in the Changes list: its state ("3 conflicts", "Manual
+// conflict", "File does not exist on <branch>.", "No conflicts remaining",
+// "Using the modified file from <branch>"), its buttons at the end of its
+// row (Open in <Editor>, disabled without an editor, and the file's menu;
+// the manual resolution menu; Undo), and their copy. The row is the
+// Changes table's (FileRow.swift).
 
 import EspalierCore
 import EspalierSupport
@@ -27,7 +28,7 @@ nonisolated public struct ConflictFileRowContent: Sendable, Equatable, Identifia
 
     public var path: String
     public var state: State
-    /// The line under the name.
+    /// What's left, at the end of the row.
     public var status: String
     /// The manual resolution menu's items, ours then theirs (nil while
     /// resolved, and for a stash restore, which has no sides to pick).
@@ -63,6 +64,16 @@ nonisolated public struct ConflictFileRowContent: Sendable, Equatable, Identifia
         case .markers, .manual: true
         case .resolved: false
         }
+    }
+
+    /// The state's tooltip: what's left, and while anything is, how to
+    /// resolve it.
+    public var help: String {
+        guard isUnresolved else {
+            return status
+        }
+        let sentence = status.hasSuffix(".") ? status : "\(status)."
+        return "\(sentence) \(OperationPanelContent.hint)"
     }
 
     /// The row for a conflicted file; nil for a file that isn't conflicted.
@@ -152,75 +163,52 @@ struct ConflictFileRowActions {
     var choose: (ManualConflictResolution?) -> Void = { _ in }
 }
 
-/// A conflicted file in the Changes list's conflicts section: its name,
-/// folder and status, and what can be done with it.
-struct ConflictFileRow: View {
+/// One of a conflicted file's actions, as VoiceOver offers it.
+struct ConflictFileAction {
+    let name: String
+    let perform: () -> Void
+}
+
+extension ConflictFileRowContent {
+    /// The file's buttons as VoiceOver's actions: Open in <Editor> (with an
+    /// editor), the sides to pick while it needs the user, or Undo.
+    func accessibilityActions(_ actions: ConflictFileRowActions) -> [ConflictFileAction] {
+        var items: [ConflictFileAction] = []
+        if case .markers = state, actions.isEditorAvailable {
+            items.append(ConflictFileAction(name: actions.editorTitle, perform: actions.openInEditor))
+        }
+        if isUnresolved {
+            if let oursLabel {
+                items.append(ConflictFileAction(name: oursLabel) { actions.choose(.ours) })
+            }
+            if let theirsLabel {
+                items.append(ConflictFileAction(name: theirsLabel) { actions.choose(.theirs) })
+            }
+        } else if case .resolved(isUndoable: true) = state {
+            items.append(ConflictFileAction(name: "Undo") { actions.choose(nil) })
+        }
+        return items
+    }
+}
+
+extension ConflictFileRowActions {
+    /// "Open in Xcode", or "Open in External Editor".
+    var editorTitle: String {
+        "Open in \(editorName ?? "External Editor")"
+    }
+}
+
+/// A conflicted file's buttons at the end of its row in the Changes list:
+/// Open in <Editor> and the file's menu while it has conflict markers,
+/// Resolve (pick a side) for a conflict without them, Undo once a side was
+/// picked.
+struct ConflictFileButtons: View {
     let content: ConflictFileRowContent
     let actions: ConflictFileRowActions
 
     var body: some View {
-        // The name and the buttons on the first line; the folder and the
-        // status under the name, across the whole row, so a long status
-        // isn't cut short by the buttons.
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: Metrics.insetSmall) {
-                glyph
-                Text(content.fileName)
-                    .font(Typography.row.weight(content.isUnresolved ? .medium : .regular))
-                    .foregroundStyle(.text)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .layoutPriority(1)
-                Spacer(minLength: Metrics.grid)
-                trailing
-                    .fixedSize()
-            }
-            HStack(spacing: Metrics.insetSmall) {
-                // The glyph's width, so the line starts under the name.
-                glyph
-                    .hidden()
-                    .frame(height: 0)
-                    .accessibilityHidden(true)
-                secondaryLine
-                    .font(Typography.meta)
-                    .foregroundStyle(.text3)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Metrics.ConflictRow.horizontalPadding)
-        .padding(.vertical, Metrics.ConflictRow.verticalPadding)
-        .help(content.path)
-        .contextMenu {
-            menuItems
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(content.path), \(content.status)")
-    }
-
-    /// "Sources/App · 3 conflicts": the folder gives way to the status.
-    private var secondaryLine: some View {
-        HStack(spacing: 0) {
-            if let directory = content.directory {
-                Text(directory)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(verbatim: " · ")
-                    .layoutPriority(1)
-            }
-            Text(content.status)
-                .lineLimit(1)
-                .layoutPriority(1)
-        }
-    }
-
-    /// The warning, or once resolved the check: one symbol that turns into
-    /// the other (a symbol replace).
-    private var glyph: some View {
-        Image(systemName: content.isUnresolved ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-            .foregroundStyle(Color(espalier: content.isUnresolved ? Palette.warningMark : Palette.success))
-            .contentTransition(.symbolEffect(.replace))
-            .motion(Motion.arrive, value: content.isUnresolved)
-            .accessibilityLabel(content.isUnresolved ? "Warning" : "Resolved")
+        trailing
+            .fixedSize()
     }
 
     @ViewBuilder
@@ -231,11 +219,11 @@ struct ConflictFileRow: View {
                 // The column is narrow: the editor's name is the button's
                 // label for VoiceOver and its tooltip, and the menus say it.
                 Button(action: actions.openInEditor) {
-                    Label(editorTitle, systemImage: "arrow.up.forward.app")
+                    Label(actions.editorTitle, systemImage: "arrow.up.forward.app")
                 }
                 .buttonStyle(.icon)
                 .disabled(!actions.isEditorAvailable)
-                .help(actions.isEditorAvailable ? editorTitle : "No editor configured in Settings ▸ Integrations")
+                .help(actions.isEditorAvailable ? actions.editorTitle : "No editor configured in Settings ▸ Integrations")
                 Menu {
                     menuItems
                 } label: {
@@ -271,15 +259,11 @@ struct ConflictFileRow: View {
         }
     }
 
-    private var editorTitle: String {
-        "Open in \(actions.editorName ?? "External Editor")"
-    }
-
     /// The file's menu: open it, show it, pick a side.
     @ViewBuilder
     private var menuItems: some View {
         if case .markers = content.state {
-            Button(editorTitle, action: actions.openInEditor)
+            Button(actions.editorTitle, action: actions.openInEditor)
                 .disabled(!actions.isEditorAvailable)
         }
         Button("Open with Default App", action: actions.openWithDefaultProgram)

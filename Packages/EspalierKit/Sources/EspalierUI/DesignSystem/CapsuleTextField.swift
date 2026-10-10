@@ -74,7 +74,7 @@ private struct CapsuleTextFieldBody<Field: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
             if let systemImage {
                 Image(systemName: systemImage)
                     .font(.system(size: 12, weight: .semibold))
@@ -107,7 +107,7 @@ private struct CapsuleTextFieldBody<Field: View>: View {
         .onTapGesture {
             isFocused = true
         }
-        .opacity(isEnabled ? 1 : 0.55)
+        .opacity(isEnabled ? 1 : Palette.disabledOpacity)
     }
 }
 

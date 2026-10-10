@@ -1,5 +1,6 @@
 // Repository Settings' Ignored Files pane: the root .gitignore in a
-// monospaced editor, and the link to git's documentation.
+// monospaced editor that fills the pane under the line about it, and the
+// link to git's documentation.
 
 import EspalierCore
 import SwiftUI
@@ -30,7 +31,7 @@ struct IgnoredFilesPane: View {
                             .allowsHitTesting(false)
                     }
                 }
-                .frame(height: 200)
+                .frame(maxHeight: .infinity)
                 .disabled(!isLoaded)
                 .accessibilityLabel("Ignored files")
                 .autocorrectionDisabled(true)

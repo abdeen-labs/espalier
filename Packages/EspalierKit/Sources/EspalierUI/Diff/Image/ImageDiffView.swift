@@ -1,9 +1,9 @@
 // Ported in part from desktop/app/src/ui/diff/image-diffs/
 //
-// Image diffs. A modified image shows in the mode chosen in the header
-// (2-Up, Swipe, Onion Skin, Difference; the `image-diff-type` preference),
-// an added or deleted one in a single pane. Images sit on a checkerboard so
-// transparency shows.
+// Image diffs. A modified image shows in the mode chosen above it (2-Up,
+// Swipe, Onion Skin, Difference; the `image-diff-type` preference, also in
+// the View menu), an added or deleted one in a single pane. Images sit on a
+// checkerboard so transparency shows.
 
 import AppKit
 import GitKit
@@ -33,34 +33,46 @@ struct ImageDiffContent {
     }
 }
 
-/// An image diff: one of the four modes, or one pane.
+/// An image diff: the mode picker above one of the four modes, or one
+/// pane.
 struct ImageDiffView: View {
     let content: ImageDiffContent
     let status: FileStatusKind
     let mode: ImageDiffType
+    let setMode: @MainActor (ImageDiffType) -> Void
 
-    init(content: ImageDiffContent, status: FileStatusKind, mode: ImageDiffType) {
+    init(content: ImageDiffContent, status: FileStatusKind, mode: ImageDiffType, setMode: @escaping @MainActor (ImageDiffType) -> Void = { _ in }) {
         self.content = content
         self.status = status
         self.mode = mode
+        self.setMode = setMode
     }
 
-    init(diff: ImageDiff, status: FileStatusKind, mode: ImageDiffType) {
-        self.init(content: ImageDiffContent(diff), status: status, mode: mode)
+    init(diff: ImageDiff, status: FileStatusKind, mode: ImageDiffType, setMode: @escaping @MainActor (ImageDiffType) -> Void = { _ in }) {
+        self.init(content: ImageDiffContent(diff), status: status, mode: mode, setMode: setMode)
     }
 
     var body: some View {
         Group {
             if let previous = content.previous, let current = content.current {
-                switch mode {
-                case .twoUp:
-                    TwoUpView(previous: previous, current: current)
-                case .swipe:
-                    SwipeView(previous: previous, current: current)
-                case .onionSkin:
-                    OnionSkinView(previous: previous, current: current)
-                case .difference:
-                    DifferenceView(previous: previous, current: current)
+                VStack(spacing: 0) {
+                    CapsuleSegmentedControl(
+                        "Image Diff",
+                        selection: Binding(get: { mode }, set: setMode),
+                        segments: ImageDiffType.allModes.map { CapsuleSegment($0.title, value: $0) }
+                    )
+                    .fixedSize()
+                    .padding(.top, Metrics.insetLarge)
+                    switch mode {
+                    case .twoUp:
+                        TwoUpView(previous: previous, current: current)
+                    case .swipe:
+                        SwipeView(previous: previous, current: current)
+                    case .onionSkin:
+                        OnionSkinView(previous: previous, current: current)
+                    case .difference:
+                        DifferenceView(previous: previous, current: current)
+                    }
                 }
             } else if let current = content.current, status == .new || status == .untracked {
                 SingleImagePane(title: "Added", image: current)
@@ -77,7 +89,7 @@ struct ImageDiffView: View {
     }
 }
 
-/// The modes, in the order the header shows them (their titles are the
+/// The modes, in the order the picker shows them (their titles are the
 /// View menu's).
 nonisolated extension ImageDiffType {
     static let allModes: [ImageDiffType] = [.twoUp, .swipe, .onionSkin, .difference]

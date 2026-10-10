@@ -65,7 +65,7 @@ struct TwoUpView: View {
     /// the new size relative to the old).
     private var summary: some View {
         let diffBytes = current.bytes - previous.bytes
-        return HStack(spacing: 4) {
+        return HStack(spacing: Metrics.grid) {
             Text("Diff:")
             if diffBytes != 0 {
                 Text(sizeDifference)

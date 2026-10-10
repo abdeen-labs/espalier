@@ -209,7 +209,7 @@ struct MergeOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("finishing commits the merge with the chosen side, kept across refreshes, and clears the message")
+    @Test("finishing commits the merge with the chosen side, kept across refreshes, and leaves the user's draft")
     func finishes() async throws {
         let fixture = try await makeRepository(conflicting: true)
         let operations = fixture.model.operations
@@ -223,7 +223,7 @@ struct MergeOperationTests {
         #expect(operations.resolvedFiles.map(\.path) == ["README.md"])
         #expect(operations.canContinue)
 
-        fixture.model.commit.draft.summary = "Typed during the merge"
+        fixture.model.commit.draft.summary = "Unfinished"
         let outcome = try await operations.continueOperation()
 
         #expect(outcome == .merge(.merged(ours: "main", theirs: "feature")))
@@ -237,7 +237,7 @@ struct MergeOperationTests {
         #expect(operations.current == nil)
         #expect(operations.conflictState == nil)
         #expect(fixture.model.changes.workingDirectory.files.isEmpty)
-        #expect(fixture.model.commit.draft.summary == "")
+        #expect(fixture.model.commit.draft.summary == "Unfinished")
         await fixture.app.idle()
     }
 

@@ -45,6 +45,7 @@ struct CloningForm: View {
     var body: some View {
         VStack(spacing: Metrics.insetMedium) {
             IconCircle("arrow.down", size: Metrics.StateIcon.size, tint: .accentColor)
+                .accessibilityHidden(true)
             Text("Cloning \(content.name)")
                 .font(Typography.sheetTitle)
                 .foregroundStyle(.text)
@@ -65,7 +66,7 @@ struct CloningForm: View {
                 .padding(.top, Metrics.grid)
         }
         .padding(Metrics.insetLarge * 2)
-        .frame(maxWidth: 440)
+        .frame(maxWidth: CenteredMessageMetrics.maximumWidth)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

@@ -322,7 +322,7 @@ private struct InvalidatedAccountRow: View {
             Button("Sign In Again…", action: signInAgain)
                 .settingsButton()
         } footer: {
-            InlineMessage("Your account token is no longer valid, so you were signed out.", kind: .warning)
+            FieldMessage("Your account token is no longer valid, so you were signed out.", kind: .warning)
         }
     }
 }

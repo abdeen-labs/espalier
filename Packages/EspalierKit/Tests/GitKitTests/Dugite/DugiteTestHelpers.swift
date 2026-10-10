@@ -6,7 +6,7 @@ import GitKit
 import Testing
 import TestSupport
 
-/// The version of the bundled git: the one in the dugite-native release that
+/// The version of the bundled git: the one in desktop's git build that
 /// scripts/git-version pins ("v2.53.0-4" is a build of git 2.53.0). Reading
 /// it from the pin means bumping git needs no change here.
 let gitVersion: String = {

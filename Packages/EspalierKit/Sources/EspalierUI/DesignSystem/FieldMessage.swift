@@ -1,13 +1,14 @@
-// The line under a form field: a problem with what was typed, a warning, a
-// check that passed, or what will happen. Settings has its own
-// `InlineMessage`.
+// The line under a field or a row's control, in sheets and in Settings
+// alike: a problem with what was typed, a warning, a check that passed, or
+// what will happen. It takes the width it's given, so a long message wraps
+// in a form's column instead of running past it.
 
 import SwiftUI
 
 /// A line under a field. Never color alone: each kind has its own symbol.
 public struct FieldMessage: View {
     /// What the line says.
-    public enum Kind: Sendable, Equatable {
+    nonisolated public enum Kind: Sendable, Equatable {
         /// What was typed can't be used.
         case error
         /// It can be used, but deserves attention.
@@ -29,12 +30,13 @@ public struct FieldMessage: View {
     public var body: some View {
         Label {
             Text(text)
-                .foregroundStyle(kind == .error ? Color(espalier: Palette.error) : .secondary)
+                .foregroundStyle(kind == .error ? Color(espalier: Palette.error) : .text2)
                 .fixedSize(horizontal: false, vertical: true)
         } icon: {
             icon
         }
-        .font(Typography.subheadline)
+        .font(Typography.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 
@@ -53,7 +55,7 @@ public struct FieldMessage: View {
                 .accessibilityLabel("OK")
         case .note:
             Image(systemName: "info.circle")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.text2)
                 .accessibilityHidden(true)
         }
     }

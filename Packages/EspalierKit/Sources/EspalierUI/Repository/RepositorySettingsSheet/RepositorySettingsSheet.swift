@@ -71,6 +71,8 @@ final class RepositorySettingsModel {
     /// The local name and email being edited.
     var authorName = ""
     var authorEmail = ""
+    /// Whether Other was picked in the email pop-up, whatever the address.
+    private var choosesOtherEmail = false
 
     // MARK: Fork behavior
 
@@ -108,6 +110,40 @@ final class RepositorySettingsModel {
         gitConfigLocation == .local && !gitAuthorNameIsValid(authorName) ? invalidGitAuthorNameMessage : nil
     }
 
+    /// The account's addresses the email pop-up offers.
+    var authorEmailChoices: [GitAuthorEmailChoice] {
+        gitAuthorEmailChoices(for: account.map { [$0] } ?? [])
+    }
+
+    /// The email pop-up's choice for the local email: Other once picked, or
+    /// for an address that isn't the account's.
+    var authorEmailSelection: GitAuthorEmailSelection {
+        choosesOtherEmail ? .other : .showing(authorEmail, choices: authorEmailChoices)
+    }
+
+    /// Picks from the email pop-up: an account's address becomes the email;
+    /// Other keeps the email for the field to edit.
+    func selectAuthorEmail(_ selection: GitAuthorEmailSelection) {
+        switch selection {
+        case .account(let email):
+            choosesOtherEmail = false
+            authorEmail = email
+        case .other:
+            choosesOtherEmail = true
+        case .none:
+            break
+        }
+    }
+
+    /// Whether commits with the typed local email are attributed to the
+    /// account, shown under the email field.
+    var authorEmailAttribution: GitEmailAttribution? {
+        guard gitConfigLocation == .local, authorEmailChoices.isEmpty || authorEmailSelection == .other else {
+            return nil
+        }
+        return gitEmailAttribution(authorEmail, accounts: account.map { [$0] } ?? [])
+    }
+
     var canSave: Bool {
         isLoaded && !isSaving && authorNameProblem == nil
     }
@@ -126,6 +162,7 @@ final class RepositorySettingsModel {
             gitConfigLocation = author.location
             authorName = author.name(for: .local)
             authorEmail = author.email(for: .local)
+            choosesOtherEmail = false
         } catch {
             errors.append(error.message)
         }
@@ -226,20 +263,24 @@ struct RepositorySettingsForm: View {
 
     var body: some View {
         SheetScaffold("Repository Settings", width: Metrics.Sheet.terminalWidth) {
+            // The panes' tabs, centered, as a tab view's.
             CapsuleSegmentedControl(
                 "Pane",
                 selection: $model.pane,
                 segments: model.panes.map { CapsuleSegment($0.title, value: $0) }
             )
+            .frame(maxWidth: .infinity)
 
             // Every pane fits the area's height, so choosing another never
-            // resizes the sheet; the panes crossfade (0.15 s).
+            // resizes the sheet; the panes crossfade (0.15 s). The ignored
+            // files' editor fills it.
             Group {
                 switch model.pane {
                 case .remote:
                     RemotePane(remote: model.remote, url: $model.remoteURL, publish: publish)
                 case .ignoredFiles:
                     IgnoredFilesPane(text: Binding(get: { model.ignoreText ?? "" }, set: { model.ignoreText = $0 }), isLoaded: model.isLoaded)
+                        .frame(height: Metrics.Sheet.listHeight)
                 case .gitConfig:
                     GitConfigPane(model: model)
                 case .forkBehavior:
@@ -251,11 +292,11 @@ struct RepositorySettingsForm: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .id(model.pane)
             .transition(.opacity)
-            .frame(minHeight: 240, alignment: .top)
+            .frame(minHeight: Metrics.Sheet.listHeight, alignment: .top)
             .motion(Motion.leave, value: model.pane)
 
             ForEach(model.errors, id: \.self) { error in
-                SheetMessage(error, kind: .error)
+                FieldMessage(error, kind: .error)
             }
         } buttons: {
             SheetButtons(

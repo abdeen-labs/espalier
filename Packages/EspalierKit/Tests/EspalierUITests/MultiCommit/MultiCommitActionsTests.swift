@@ -163,9 +163,8 @@ struct MultiCommitActionsTests {
             section = try #require(ConflictsSectionContent.make(repository))
             #expect(section.rows.first?.status == "Using the modified file from feature")
 
-            // Resolved, the panel shows git's message to edit; Commit Merge
-            // waits for a summary.
-            #expect(panel.editsMessage)
+            // Git's message is there to edit; Commit Merge waits for a
+            // summary.
             #expect(repository.operations.mergeMessage == MergeMessage(summary: "Merge branch 'feature'"))
             repository.operations.mergeMessage?.summary = ""
             panel = try #require(OperationPanelContent.make(repository, aiEnabled: false))

@@ -166,7 +166,7 @@ struct BranchOperationsTests {
             try await fixture.model.branches.delete(try fixture.branch("feature"), includingRemote: false)
         }
         #expect(error?.reason == .confirmationRequired(.deleteBranch("feature", existsOnRemote: false)))
-        #expect(error?.title == "Delete Branch")
+        #expect(error?.title == "Delete Branch?")
 
         try await runGit(["push", "-q", "-u", "origin", "feature"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)

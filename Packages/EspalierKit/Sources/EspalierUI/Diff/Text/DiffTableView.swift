@@ -2,8 +2,9 @@
 // `NSTableView` with one row per diff row and no cell views: each row view
 // draws its row. The table takes the mouse (staging, text selection, hunk
 // headers), the keyboard (the line cursor, Space, ⌥Space, ⌥↑ and ⌥↓, copy,
-// select all), the find bar (`NSTextFinder`), context menus, and sideways
-// scrolling when lines don't wrap.
+// select all), the find bar (`NSTextFinder`), and context menus. When lines
+// don't wrap, it's wider than the pane and the scroll view scrolls it
+// sideways.
 
 import AppKit
 import EspalierCore
@@ -143,14 +144,13 @@ final class DiffTableView: NSTableView {
         return controller.menu(at: convert(event.locationInWindow, from: nil))
     }
 
-    // MARK: Sideways scrolling
+    // MARK: Scrolling
 
-    override func scrollWheel(with event: NSEvent) {
-        if let controller, controller.shownContent?.wrapsLines == false, event.scrollingDeltaX != 0 {
-            let delta = event.hasPreciseScrollingDeltas ? event.scrollingDeltaX : event.scrollingDeltaX * (controller.font.characterWidth * 3)
-            controller.scrollText(by: -delta)
-        }
-        super.scrollWheel(with: event)
+    /// Rows draw at the visible part of the table, so they redraw as it
+    /// scrolls sideways: scrolling stays on the main thread, in step with
+    /// them.
+    override class var isCompatibleWithResponsiveScrolling: Bool {
+        false
     }
 
     // MARK: Keyboard

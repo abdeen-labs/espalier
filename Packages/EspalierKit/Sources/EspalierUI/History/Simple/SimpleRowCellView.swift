@@ -1,9 +1,9 @@
-// A row of History's simple list: the rail, the avatar (or a merge's
-// symbol in a soft circle), the title at 14 semibold with the commit's
-// tags, a meta line at 12 ("Maya Chen · 4 files", then "↑ Not pushed" in
-// the accent), and the time in SF Mono 11 in a 44-wide column ("12m",
-// "Oct 5"). A merge reads "Merged #209" with its branch in text3, and ends
-// with a chevron that expands it; the commits it brought in are indented
+// A row of History's simple list: the rail, then the parts of every History
+// row (`CommitRowParts`): the avatar (or a merge's symbol in a soft circle),
+// the commit's tags before its title and the unpushed arrow after it, and the
+// time in its column ("12m", "Oct 5"); under the title, a meta line ("Maya
+// Chen · 4 files"). A merge reads "Merged #209" with its branch in text3, and
+// ends with a chevron that expands it; the commits it brought in are indented
 // under it, on its stub. Manual frames, no Auto Layout, as in the graph's
 // rows.
 
@@ -44,6 +44,8 @@ nonisolated struct SimpleRowContent: Sendable, Equatable {
     var changedFileCount = 0
     var tags: [String] = []
     var isUnpushed = false
+    /// HEAD's commit: its title is semibold, as in the graph.
+    var isCurrentTip = false
     /// The row doesn't match the search.
     var isDimmed = false
     /// The GitHub endpoint avatars load from.
@@ -129,12 +131,11 @@ final class SimpleRowCellView: NSTableCellView {
     private let railView = SimpleRailView(frame: .zero)
     private let avatarView = RowAvatarView(frame: .zero)
     private let mergeSymbol = NSImageView()
-    private let summaryLabel = SimpleRowCellView.label(font: AppKitTypography.simpleTitle, color: Palette.text)
+    private let summaryLabel = CommitRowParts.label(font: AppKitTypography.row, color: Palette.text)
     private let refsView = RefCapsulesView(frame: .zero)
-    private let metaLabel = SimpleRowCellView.label(font: AppKitTypography.simpleMeta, color: Palette.text3)
-    private let unpushedArrow = NSImageView()
-    private let unpushedLabel = SimpleRowCellView.label(font: AppKitTypography.simpleMeta, color: Palette.accent)
-    private let timeLabel = SimpleRowCellView.label(font: AppKitTypography.simpleTime, color: Palette.text3, alignment: .right)
+    private let unpushedArrow = CommitRowParts.unpushedArrow()
+    private let metaLabel = CommitRowParts.label(font: AppKitTypography.simpleMeta, color: Palette.text3)
+    private let timeLabel = CommitRowParts.timeLabel()
     private let disclosure = NSImageView()
 
     private(set) var content = SimpleRowContent()
@@ -143,16 +144,15 @@ final class SimpleRowCellView: NSTableCellView {
     private(set) var keepsDisclosureColumn = false
     private var summaryWidth: CGFloat = 0
     private var metaWidth: CGFloat = 0
-    private var unpushedWidth: CGFloat = 0
 
-    private static let summaryHeight = ceil(SimpleRowCellView.label(font: AppKitTypography.simpleTitle, color: Palette.text, sample: true).intrinsicContentSize.height)
-    private static let metaHeight = ceil(SimpleRowCellView.label(font: AppKitTypography.simpleMeta, color: Palette.text, sample: true).intrinsicContentSize.height)
-    private static let timeHeight = ceil(SimpleRowCellView.label(font: AppKitTypography.simpleTime, color: Palette.text, sample: true).intrinsicContentSize.height)
+    private static let summaryHeight = CommitRowParts.lineHeight(AppKitTypography.row)
+    private static let metaHeight = CommitRowParts.lineHeight(AppKitTypography.simpleMeta)
+    private static let timeHeight = CommitRowParts.lineHeight(AppKitTypography.secondary)
 
     /// The views that dim when the row doesn't match the search (the
     /// rail dims its node).
     private var dimmableViews: [NSView] {
-        [avatarView, mergeSymbol, summaryLabel, refsView, metaLabel, unpushedArrow, unpushedLabel, timeLabel, disclosure]
+        [avatarView, mergeSymbol, summaryLabel, refsView, unpushedArrow, metaLabel, timeLabel, disclosure]
     }
 
     override init(frame frameRect: NSRect) {
@@ -163,13 +163,10 @@ final class SimpleRowCellView: NSTableCellView {
         mergeSymbol.contentTintColor = Palette.text2
         mergeSymbol.imageAlignment = .alignCenter
         mergeSymbol.wantsLayer = true
-        unpushedArrow.image = NSImage(systemSymbolName: "arrow.up", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: Metrics.SimpleList.unpushedGlyphSize, weight: .semibold))
-        unpushedArrow.contentTintColor = Palette.accent
-        unpushedLabel.stringValue = "Not pushed"
+        unpushedArrow.toolTip = CommitRowContent.notPushedTooltip
         disclosure.contentTintColor = Palette.text3
         disclosure.imageAlignment = .alignCenter
-        for view in [railView, avatarView, mergeSymbol, summaryLabel, refsView, metaLabel, unpushedArrow, unpushedLabel, timeLabel, disclosure] {
+        for view in [railView, avatarView, mergeSymbol, summaryLabel, refsView, unpushedArrow, metaLabel, timeLabel, disclosure] {
             view.setAccessibilityElement(false)
             addSubview(view)
         }
@@ -185,18 +182,6 @@ final class SimpleRowCellView: NSTableCellView {
 
     override var isFlipped: Bool {
         true
-    }
-
-    private static func label(font: NSFont, color: NSColor, alignment: NSTextAlignment = .left, sample: Bool = false) -> NSTextField {
-        let label = NSTextField(labelWithString: sample ? "Xg" : "")
-        label.font = font
-        label.textColor = color
-        label.alignment = alignment
-        label.lineBreakMode = .byTruncatingTail
-        label.maximumNumberOfLines = 1
-        label.cell?.truncatesLastVisibleLine = true
-        label.setAccessibilityElement(false)
-        return label
     }
 
     // MARK: Configuring
@@ -221,33 +206,31 @@ final class SimpleRowCellView: NSTableCellView {
         }
         let previous = self.content
         self.content = content
+        let titleFont = CommitRowParts.titleFont(isCurrentTip: content.isCurrentTip)
         if let title = content.mergeTitle {
             let text = NSMutableAttributedString(string: title.title, attributes: [
-                .font: AppKitTypography.simpleTitle,
+                .font: titleFont,
                 .foregroundColor: Palette.text,
             ])
             if let branch = title.branch {
                 text.append(NSAttributedString(string: " \(branch)", attributes: [
-                    .font: AppKitTypography.simpleTitleDetail,
+                    .font: titleFont,
                     .foregroundColor: Palette.text3,
                 ]))
             }
             summaryLabel.attributedStringValue = text
         } else {
-            summaryLabel.font = AppKitTypography.simpleTitle
+            summaryLabel.font = titleFont
             summaryLabel.textColor = content.summary.isEmpty ? Palette.text3 : Palette.text
             summaryLabel.stringValue = content.displaySummary
         }
         summaryLabel.toolTip = content.displaySummary
-        summaryWidth = CommitRowCellView.fittingWidth(summaryLabel)
+        summaryWidth = CommitRowParts.fittingWidth(summaryLabel)
         refsView.refs = content.tags.map { RefCapsuleContent(name: $0, kind: .tag) }
-        // "Maya Chen · 4 files ·", then "↑ Not pushed".
-        metaLabel.stringValue = content.isUnpushed ? "\(content.metaText) \u{00B7}" : content.metaText
-        metaLabel.toolTip = content.authorEmail.isEmpty ? content.authorName : "\(content.authorName) <\(content.authorEmail)>"
-        metaWidth = CommitRowCellView.fittingWidth(metaLabel)
         unpushedArrow.isHidden = !content.isUnpushed
-        unpushedLabel.isHidden = !content.isUnpushed
-        unpushedWidth = content.isUnpushed ? CommitRowCellView.fittingWidth(unpushedLabel) : 0
+        metaLabel.stringValue = content.metaText
+        metaLabel.toolTip = content.authorEmail.isEmpty ? content.authorName : "\(content.authorName) <\(content.authorEmail)>"
+        metaWidth = CommitRowParts.fittingWidth(metaLabel)
         timeLabel.stringValue = content.shortDate
         timeLabel.toolTip = content.dateTooltip
         let isMerge = content.isMerge
@@ -262,9 +245,9 @@ final class SimpleRowCellView: NSTableCellView {
             if previous.isMerge, previous.sha == content.sha, previous.isExpanded != content.isExpanded {
                 turnDisclosure(expanding: content.isExpanded)
             }
-            avatarView.show(nil, pointSize: avatarSize, avatars: nil, monograms: monograms, scale: scale)
+            avatarView.show(nil, pointSize: Metrics.CommitRow.rowAvatarSize, avatars: nil, monograms: monograms, scale: scale)
         } else {
-            avatarView.show(content.avatarUser, pointSize: avatarSize, avatars: avatars, monograms: monograms, scale: scale)
+            avatarView.show(content.avatarUser, pointSize: Metrics.CommitRow.rowAvatarSize, avatars: avatars, monograms: monograms, scale: scale)
         }
         let alpha: CGFloat = content.isDimmed ? Metrics.Graph.searchDimming : 1
         for view in dimmableViews {
@@ -297,11 +280,6 @@ final class SimpleRowCellView: NSTableCellView {
         layer.add(turn, forKey: "turn")
     }
 
-    /// The avatar's size: smaller for a merge's commits.
-    private var avatarSize: CGFloat {
-        content.isIndented ? Metrics.SimpleList.mergedAvatarSize : Metrics.SimpleList.avatarSize
-    }
-
     /// Whether the row is selected (`SimpleRowView` says): the rail's
     /// nodes fill with the selection's tint.
     var isSelectedRow: Bool {
@@ -313,9 +291,8 @@ final class SimpleRowCellView: NSTableCellView {
 
     /// The chevron's frame, in the cell's coordinates.
     private var disclosureFrame: CGRect {
-        let metrics = Metrics.SimpleList.self
-        let size = metrics.disclosureWidth
-        let trailing = bounds.width - metrics.rowInset - metrics.trailingPadding
+        let size = Metrics.SimpleList.disclosureWidth
+        let trailing = bounds.width - Metrics.CommitRow.selectionInset - Metrics.CommitRow.trailingPadding
         return CGRect(x: trailing - size, y: ((bounds.height - size) / 2).rounded(), width: size, height: size)
     }
 
@@ -332,67 +309,49 @@ final class SimpleRowCellView: NSTableCellView {
     override func layout() {
         super.layout()
         let metrics = Metrics.SimpleList.self
+        let row = Metrics.CommitRow.self
         let height = bounds.height
-        railView.frame = CGRect(x: metrics.rowInset, y: 0, width: metrics.railWidth, height: height)
+        railView.frame = CGRect(x: row.selectionInset, y: 0, width: metrics.railWidth, height: height)
 
         // The avatar, or a merge's symbol in its circle.
-        let avatar = avatarSize
-        let avatarX = metrics.rowInset + metrics.railWidth + metrics.spacing + (content.isIndented ? metrics.mergedIndent : 0)
+        let avatar = row.rowAvatarSize
+        let avatarX = railView.frame.maxX + row.spacing + (content.isIndented ? metrics.mergedIndent : 0)
         let avatarFrame = CGRect(x: avatarX, y: ((height - avatar) / 2).rounded(), width: avatar, height: avatar)
         avatarView.frame = avatarFrame
         mergeSymbol.frame = avatarFrame
         mergeSymbol.layer?.cornerRadius = avatar / 2
         mergeSymbol.layer?.backgroundColor = Palette.field.resolved(in: AppearanceVariant.of(effectiveAppearance)).cgColor
-        let leading = avatarFrame.maxX + metrics.spacing
+        let leading = avatarFrame.maxX + row.spacing
 
         // Right to left: the chevron's column, then the time.
-        var trailing = bounds.width - metrics.rowInset - metrics.trailingPadding
+        var trailing = bounds.width - row.selectionInset - row.trailingPadding
         if content.isMerge || keepsDisclosureColumn {
             disclosure.frame = disclosureFrame
-            trailing -= metrics.disclosureWidth + metrics.spacing
+            trailing -= metrics.disclosureWidth + row.spacing
         }
         timeLabel.frame = CGRect(
-            x: trailing - metrics.timeWidth,
+            x: trailing - row.timeWidth,
             y: ((height - Self.timeHeight) / 2).rounded(),
-            width: metrics.timeWidth,
+            width: row.timeWidth,
             height: Self.timeHeight
         )
-        trailing = timeLabel.frame.minX - metrics.spacing
+        trailing = timeLabel.frame.minX - row.spacing
 
-        let available = max(trailing - leading, 0)
+        // The title line (the tags, the title, the unpushed arrow), then
+        // the meta line under it.
         let textTop = ((height - Self.summaryHeight - metrics.lineSpacing - Self.metaHeight) / 2).rounded()
-
-        // The title, then its tags.
-        let refsWidth = refsView.layoutCapsules(maximumWidth: available * 0.5)
-        let refsSpacing = Metrics.RefCapsule.spacing * 2
-        let summarySpace = max(available - (refsWidth > 0 ? refsWidth + refsSpacing : 0), 0)
-        summaryLabel.frame = CGRect(x: leading, y: textTop, width: min(summaryWidth, summarySpace), height: Self.summaryHeight)
-        refsView.frame = CGRect(
-            x: summaryLabel.frame.maxX + refsSpacing,
-            y: (summaryLabel.frame.midY - Metrics.RefCapsule.height / 2).rounded(),
-            width: refsWidth,
-            height: Metrics.RefCapsule.height
+        CommitRowParts.layoutTitleLine(
+            refs: refsView,
+            title: summaryLabel,
+            titleWidth: summaryWidth,
+            titleHeight: Self.summaryHeight,
+            unpushed: unpushedArrow,
+            leading: leading,
+            trailing: trailing,
+            midY: textTop + Self.summaryHeight / 2
         )
-
-        // The meta line, then "↑ Not pushed".
         let metaTop = textTop + Self.summaryHeight + metrics.lineSpacing
-        let unpushedSpace = content.isUnpushed ? metrics.unpushedGlyphSize + Metrics.grid + unpushedWidth + Metrics.grid : 0
-        metaLabel.frame = CGRect(x: leading, y: metaTop, width: min(metaWidth, max(available - unpushedSpace, 0)), height: Self.metaHeight)
-        if content.isUnpushed {
-            let glyph = metrics.unpushedGlyphSize + 2
-            unpushedArrow.frame = CGRect(
-                x: metaLabel.frame.maxX + Metrics.grid / 2,
-                y: (metaLabel.frame.midY - glyph / 2).rounded(),
-                width: glyph,
-                height: glyph
-            )
-            unpushedLabel.frame = CGRect(
-                x: unpushedArrow.frame.maxX + 1,
-                y: metaTop,
-                width: min(unpushedWidth, max(trailing - unpushedArrow.frame.maxX - 1, 0)),
-                height: Self.metaHeight
-            )
-        }
+        metaLabel.frame = CGRect(x: leading, y: metaTop, width: min(metaWidth, max(trailing - leading, 0)), height: Self.metaHeight)
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -483,14 +442,15 @@ final class SimpleStatusCellView: NSTableCellView {
     override func layout() {
         super.layout()
         let metrics = Metrics.SimpleList.self
-        railView.frame = CGRect(x: metrics.rowInset, y: 0, width: metrics.railWidth, height: bounds.height)
+        let row = Metrics.CommitRow.self
+        railView.frame = CGRect(x: row.selectionInset, y: 0, width: metrics.railWidth, height: bounds.height)
         // Lined up with the merge's commits' titles.
-        let leading = metrics.rowInset + metrics.railWidth + metrics.spacing + metrics.mergedIndent + metrics.mergedAvatarSize + metrics.spacing
+        let leading = railView.frame.maxX + row.spacing + metrics.mergedIndent + row.rowAvatarSize + row.spacing
         let height = ceil(label.intrinsicContentSize.height)
         label.frame = CGRect(
             x: leading,
             y: ((bounds.height - height) / 2).rounded(),
-            width: max(bounds.width - leading - metrics.rowInset - metrics.trailingPadding, 0),
+            width: max(bounds.width - leading - row.selectionInset - row.trailingPadding, 0),
             height: height
         )
     }

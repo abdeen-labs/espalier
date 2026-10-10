@@ -133,7 +133,7 @@ struct PushProtectionView: View {
                 Text("Exposing this secret can allow someone to:")
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Self.risks, id: \.self) { risk in
-                        HStack(alignment: .firstTextBaseline, spacing: Metrics.grid + 2) {
+                        HStack(alignment: .firstTextBaseline, spacing: Metrics.bulletSpacing) {
                             Text("•")
                                 .foregroundStyle(.text3)
                             Text(risk)
@@ -188,7 +188,7 @@ private struct DetectedSecretRow: View {
     @State private var showsMoreLocations = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.grid + 2) {
+        VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
             HStack(spacing: Metrics.insetSmall) {
                 Image(systemName: "key.fill")
                     .foregroundStyle(.text2)

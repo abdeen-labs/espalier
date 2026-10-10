@@ -1,9 +1,9 @@
 // The Changes place with real repositories: the toolbar's text filters the
 // list; Space includes and excludes; the context menus' items, from a
 // right-click and ⇧F10; selecting a file through AXSelected; the detail
-// for one, several, and no files; the conflicts section and the operation
-// panel; the stashed changes row; the menu actions through the presenter;
-// and snapshots of the whole place.
+// for one, several, and no files; the header without changes; conflicted
+// files in the list and the operation panel; the stashed changes row; the
+// menu actions through the presenter; and snapshots of the whole place.
 
 import AppKit
 @testable import EspalierCore
@@ -523,15 +523,37 @@ struct ChangesScreenTests {
         }
     }
 
-    @Test("place snapshots: a merge's conflicts and its panel")
+    @Test("place snapshots: a merge's conflicts in the list, its panel, and the merge's commit form")
     func conflictSnapshots() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await ChangesWindowFixture.make(try await setupConflictedRepo())
             await fixture.settle()
-            #expect(FileList.showsConflictsSection(fixture.repository))
-            #expect(FileList.listedFiles(fixture.repository).isEmpty)
+            // The conflicted file is a row of the one list, with its state;
+            // the header counts it.
+            let listed = FileList.listedFiles(fixture.repository)
+            #expect(listed.map(\.path) == ["foo"])
+            #expect(FileList.conflictRows(fixture.repository)[ExactString("foo")]?.state == .markers(conflicts: 1))
+            #expect(ChangesHeaderContent.make(fixture.repository, numberFormat: defaultNumberFormat).title == "1 changed file")
             #expect(OperationCapsuleContent.make(fixture.repository) != nil)
+            #expect(ChangesFooterLayout.make(fixture.repository, showsOperationPanel: true).bottom == .merge)
             assertPlace(fixture, named: "place-conflicts", appearances: SnapshotAppearance.allCases)
+            await fixture.app.idle()
+        }
+    }
+
+    @Test("without changes, the header says \"0 changed files\" over the empty list, and its checkbox can't change")
+    func noChangesHeader() async throws {
+        try await withIsolatedGitConfig { _ in
+            let (local, _) = try await setupRepositoryWithChanges()
+            let fixture = try await ChangesWindowFixture.make(local)
+            try await fixture.repository.stash.stashAllChanges()
+            await fixture.settle()
+            let header = ChangesHeaderContent.make(fixture.repository, numberFormat: defaultNumberFormat)
+            #expect(header.title == "0 changed files")
+            #expect(header.included.isEmpty)
+            #expect(!header.isIncludeAllEnabled)
+            #expect(FileList.listedFiles(fixture.repository).isEmpty)
+            #expect(ChangesDetailKind.make(fixture.repository) == .suggestions)
             await fixture.app.idle()
         }
     }

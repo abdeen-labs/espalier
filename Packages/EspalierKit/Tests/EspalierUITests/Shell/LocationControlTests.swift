@@ -123,6 +123,41 @@ struct LocationControlTests {
         "noRepositories": [.light],
     ]
 
+    @Test("in the toolbar, a branch's name shows whole at any width proposed", arguments: [
+        NamedCase("main", "main"),
+        NamedCase("a hyphenated name", "ui-audit"),
+        NamedCase("a path", "fix/ui-audit-2"),
+    ])
+    func toolbarWidth(_ testCase: NamedCase<String>) {
+        let state = LocationControlState(repository: .repository(name: "Espalier", path: "/p"), branch: .branch(name: testCase.value))
+        let ideal = Self.controlWidth(state, in: 600, inToolbarItem: false)
+        // The toolbar proposes the item's measured width, rounded up; a
+        // width just over what the control needs truncated "ui-audit" to
+        // "ui-…".
+        for proposed in [ideal.rounded(.up), ideal - 20] {
+            #expect(Self.controlWidth(state, in: proposed, inToolbarItem: true) == ideal, "\(proposed) points proposed")
+        }
+    }
+
+    /// The width the control takes in a window `width` wide, alone or in
+    /// its toolbar item's layout.
+    private static func controlWidth(_ state: LocationControlState, in width: CGFloat, inToolbarItem: Bool) -> CGFloat {
+        var laidOut: CGFloat = 0
+        let control = LocationControlView(state)
+            .onGeometryChange(for: CGFloat.self, of: \.size.width) { laidOut = $0 }
+        let view = Group {
+            if inToolbarItem {
+                WholePointWidth { control }
+            } else {
+                control
+            }
+        }
+        .frame(width: width, alignment: .leading)
+        let (window, _) = hostInWindow(view, size: CGSize(width: width, height: Metrics.ControlHeight.toolbar))
+        window.contentView = nil
+        return laidOut
+    }
+
     @Test("each layout renders", arguments: LocationControlTests.snapshotStates.keys.sorted())
     func snapshot(name: String) throws {
         let state = try #require(UIFixtures.locationStates.first { $0.name == name }?.state)

@@ -2,7 +2,7 @@
 //
 // macOS 27 draws a `NavigationSplitView`'s sidebar on Liquid Glass, gives
 // every toolbar item a glass platter, and paints the titlebar over the
-// detail column. Espalier keeps the native split view (collapsing the
+// detail column. Espalier keeps AppKit's split view (collapsing the
 // sidebar, its toolbar toggle and tracking separator, full screen, the
 // traffic lights, toolbar customization) and makes each piece opaque:
 //

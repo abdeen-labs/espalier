@@ -91,6 +91,7 @@ struct ModelSheet: View {
                             Text(formatReasoningEffort(effort)).tag(Optional(effort))
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 LabeledContent {
                     SettingsNote("Reasoning models, such as o3 or GPT-5, think before they answer. Higher levels are slower but do better on complex tasks. Leave it on Default for other models, or to let the provider choose.")
@@ -102,7 +103,7 @@ struct ModelSheet: View {
             .textFieldStyle(.capsule)
 
             if let problem = editor.problem {
-                InlineMessage(problem, kind: .error)
+                FieldMessage(problem, kind: .error)
             }
         } buttons: {
             SheetButtons(editor.saveTitle, cancel: { dismiss() }) {

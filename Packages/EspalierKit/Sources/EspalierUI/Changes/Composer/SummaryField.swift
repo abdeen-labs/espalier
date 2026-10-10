@@ -403,7 +403,7 @@ struct SummaryLengthHint: View {
         } label: {
             Image(systemName: "lightbulb")
                 .foregroundStyle(.secondary)
-                .frame(width: Metrics.Composer.sparkleSize, height: Metrics.Composer.sparkleSize)
+                .frame(width: Metrics.Composer.summaryHintSize, height: Metrics.Composer.summaryHintSize)
         }
         .buttonStyle(.borderless)
         .help("\(Self.title). \(Self.detail)")

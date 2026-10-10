@@ -65,9 +65,9 @@ struct PullRequestChipLabel: View {
     let content: PullRequestChipContent
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "arrow.trianglehead.pull")
-                .font(.system(size: 12))
+        HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
+            Image(systemName: PullRequestGlyph.systemImage)
+                .font(Typography.secondary)
                 .foregroundStyle(.text2)
             Text("#\(content.number)")
                 .font(Typography.count)

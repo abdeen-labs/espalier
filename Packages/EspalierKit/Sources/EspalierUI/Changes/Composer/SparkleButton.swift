@@ -1,7 +1,8 @@
-// The sparkle in the summary field, which generates a commit message with
-// the user's AI provider. Its states: ready, no files, no provider (opens
-// setup), several models and none chosen (asks), generating (cancels), done
-// (stays tinted until edited), and hidden while AI is turned off.
+// The sparkle in the commit message card's footer, which generates a commit
+// message with the user's AI provider. Its states: ready, no files, no
+// provider (opens setup), several models and none chosen (asks), generating
+// (cancels), done (stays tinted until edited), and hidden while AI is
+// turned off.
 // `app.ai.status(for:)`, the repository's `commitMessageGeneration`, and
 // `hasChangesToDescribe` decide the state.
 
@@ -106,14 +107,14 @@ nonisolated public struct SparkleModelChoice: Sendable, Equatable, Identifiable 
     }
 }
 
-/// The sparkle button, first in the commit message card's footer: the
-/// sparkles symbol in an accent-tinted circle, filled with the accent while
-/// the message it generated is unedited.
+/// The sparkle button, first in the commit message card's footer: an icon
+/// button whose sparkles are neutral, like the footer's other symbols, and
+/// take the accent while a message is generated (a spinner, a stop on
+/// hover) and while the message it generated is unedited.
 public struct SparkleButton: View {
     private let state: SparkleState
     private let action: () -> Void
     @State private var isHovering = false
-    @Environment(\.colorSchemeContrast) private var contrast
 
     public init(_ state: SparkleState, action: @escaping () -> Void = {}) {
         self.state = state
@@ -123,14 +124,14 @@ public struct SparkleButton: View {
     public var body: some View {
         if state != .hidden {
             Button(action: action) {
-                icon
-                    .frame(width: ComposerMetrics.footerButtonSize, height: ComposerMetrics.footerButtonSize)
-                    .background(Circle().fill(fill).hoverMotion(isHovering))
-                    .contentShape(Circle())
+                Label {
+                    Text(state.help)
+                } icon: {
+                    icon
+                }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.icon)
             .disabled(!state.isEnabled)
-            .opacity(state.isEnabled ? 1 : CheckboxDrawing.disabledOpacity)
             .onHover { isHovering = $0 }
             .help(state.help)
             .accessibilityLabel(state.help)
@@ -139,35 +140,20 @@ public struct SparkleButton: View {
 
     @ViewBuilder
     private var icon: some View {
-        if state == .generating {
+        switch state {
+        case .generating:
             if isHovering {
                 Image(systemName: "stop.fill")
-                    .font(.system(size: 9))
                     .foregroundStyle(Color.accentColor)
+                    .imageScale(.small)
             } else {
-                ArcProgress(.mini)
+                ArcProgress(.mini, tint: Palette.accent)
             }
-        } else {
+        case .generated:
             Image(systemName: "sparkles")
-                .font(.system(size: ComposerMetrics.footerButtonSize / 2))
-                .foregroundStyle(isGenerated ? Color.white : Color.accentColor)
+                .foregroundStyle(Color.accentColor)
+        default:
+            Image(systemName: "sparkles")
         }
-    }
-
-    private var isGenerated: Bool {
-        if case .generated = state {
-            return true
-        }
-        return false
-    }
-
-    /// The circle: the accent's soft wash (deeper on hover), or the accent
-    /// itself for a generated message.
-    private var fill: Color {
-        if isGenerated {
-            return Color(espalier: Palette.button)
-        }
-        let alpha = contrast == .increased ? 0.2 : 0.12
-        return Color.accentColor.opacity(isHovering && state.isEnabled ? alpha * 1.8 : alpha)
     }
 }

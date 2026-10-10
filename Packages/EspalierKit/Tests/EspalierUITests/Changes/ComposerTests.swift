@@ -34,23 +34,36 @@ struct ComposerTests {
         #expect(CommitButtonContent(isAmending: true, fileCount: 2, branch: "main", isCommitting: true, isEnabled: false).title == "Amending Last Commit…")
         #expect(CommitButtonContent(fileCount: 2, branch: "main", isGenerating: true, isEnabled: false).title == "Generating Commit Details…")
 
-        // The capsule leaves the branch to the card's footer; VoiceOver and
-        // the tooltip still name it.
-        #expect(CommitButtonContent(fileCount: 2, branch: "main", isEnabled: true).shownTitle == "Commit 2 Files")
-        #expect(CommitButtonContent(fileCount: 0, branch: "main", isEnabled: true).shownTitle == "Commit")
-        #expect(CommitButtonContent(fileCount: 2, branch: nil, isEnabled: true).shownTitle == "Commit 2 Files")
-        #expect(CommitButtonContent(fileCount: 2, branch: "main", isCommitting: true, isEnabled: false).shownTitle == "Committing 2 Files…")
-        #expect(CommitButtonContent(isAmending: true, fileCount: 2, branch: "main", isEnabled: true).shownTitle == "Amend Last Commit")
-        #expect(CommitButtonContent(fileCount: 2, branch: "main", isGenerating: true, isEnabled: false).shownTitle == "Generating Commit Details…")
-
+        // The capsule shows the branch apart, so a long one gives way in
+        // the middle while the words keep their room.
         let parts = CommitButtonContent(fileCount: 2, branch: "feature/login", isCommitting: true, isEnabled: false).titleParts
         #expect(parts.lead == "Committing 2 Files to")
         #expect(parts.branch == "feature/login")
         #expect(parts.trail == "…")
+        let idle = CommitButtonContent(fileCount: 2, branch: "main", isEnabled: true).titleParts
+        #expect(idle.lead == "Commit 2 Files to")
+        #expect(idle.branch == "main")
+        #expect(idle.trail.isEmpty)
+        #expect(CommitButtonContent(fileCount: 2, branch: "main", isGenerating: true, isEnabled: false).titleParts.branch == nil)
 
         let disabled = CommitButtonContent(fileCount: 2, branch: "main", isEnabled: false, disabledReason: "Enter a summary to commit")
         #expect(disabled.help == "Enter a summary to commit")
         #expect(CommitButtonContent(fileCount: 2, branch: "main", isEnabled: true).help == "Commit 2 Files to main")
+        #expect(CommitButtonContent(fileCount: 2, branch: "main", isEnabled: true).showsShortcut)
+
+        // A waiting merge's and other operations' buttons: no branch, no
+        // ⌘↩, and why they wait.
+        let merge = CommitButtonContent(kind: .merge, fileCount: 0, branch: nil, isEnabled: false, disabledReason: "Resolve all conflicts before continuing")
+        #expect(merge.title == "Commit Merge")
+        #expect(merge.help == "Resolve all conflicts before continuing")
+        #expect(!merge.showsShortcut)
+        #expect(CommitButtonContent(kind: .merge, fileCount: 0, branch: nil, isCommitting: true, isEnabled: false).title == "Committing Merge…")
+        let rebase = CommitButtonContent(kind: .continueOperation(name: "Rebase"), fileCount: 0, branch: nil, isEnabled: true)
+        #expect(rebase.title == "Continue Rebase")
+        #expect(rebase.help == "Continue Rebase")
+        #expect(!rebase.showsShortcut)
+        #expect(CommitButtonContent(kind: .continueOperation(name: "Cherry-pick"), fileCount: 0, branch: nil, isCommitting: true, isEnabled: false).title
+            == "Continuing Cherry-pick…")
     }
 
     @Test("the composer follows the repository: files, summary, placeholder, empty commits")
@@ -562,6 +575,47 @@ struct ComposerTests {
     func snapshotsBasic() {
         let base = ComposerContent(author: ChangesFixtures.author, sparkle: .ready(model: "GPT-5"), button: ChangesFixtures.button(enabled: false))
         assertSnapshot(ChangesFixtures.composer(base), named: "composer-idle", area: "Changes")
+    }
+
+    @Test("composer snapshots: a long branch gives way in the middle, at the narrowest column")
+    func snapshotsLongBranch() {
+        let button = CommitButtonContent(fileCount: 12, branch: "feature/sign-in-with-device-flow-and-enterprise-servers", isEnabled: true)
+        let view = CommitButton(button)
+            .frame(width: Metrics.Column.changesFileList.min - 2 * Metrics.Composer.horizontalPadding)
+            .padding(Metrics.Composer.horizontalPadding)
+        assertSnapshot(view, named: "commit-button-long-branch", area: "Changes", appearances: [.light])
+    }
+
+    @Test("composer snapshots: a merge's message with Commit Merge, and Continue for a rebase")
+    func snapshotsOperations() {
+        let merge = ComposerContent(
+            author: ChangesFixtures.author,
+            showsCommitOptions: false,
+            button: CommitButtonContent(kind: .merge, fileCount: 0, branch: nil, isEnabled: true)
+        )
+        assertSnapshot(
+            ChangesFixtures.composer(merge, draft: CommitDraft(summary: "Merge branch 'feature/login'", description: "* feature/login:\n  Add the login screen")),
+            named: "composer-merge",
+            area: "Changes",
+            appearances: [.light]
+        )
+        let rebase = OperationSlotContent(
+            kind: .continueOperation,
+            button: CommitButtonContent(
+                kind: .continueOperation(name: "Rebase"),
+                fileCount: 0,
+                branch: nil,
+                isEnabled: false,
+                disabledReason: OperationPanelContent.continueDisabledHelp
+            ),
+            notesUntrackedFiles: true
+        )
+        assertSnapshot(
+            ContinueOperationView(content: rebase).frame(width: Metrics.Column.changesFileList.ideal),
+            named: "composer-continue",
+            area: "Changes",
+            appearances: [.light]
+        )
     }
 
     @Test("composer snapshots: the tint behind the summary or the description while it has focus")

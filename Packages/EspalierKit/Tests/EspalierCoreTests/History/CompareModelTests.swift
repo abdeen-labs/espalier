@@ -51,8 +51,6 @@ struct CompareModelTests {
         #expect(history.graphChange.kind == .reload)
         #expect(history.selection.shas == [feature.tip.sha])
         #expect(history.comparison.mergeStatus == .clean)
-        #expect(history.comparison.behindTitle == "Behind (3)")
-        #expect(history.comparison.aheadTitle == "Ahead (2)")
         #expect(history.comparison.statusMessage == "This will merge 3 commits from feature into main")
         #expect(history.comparison.canStart)
 

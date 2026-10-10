@@ -144,13 +144,7 @@ public struct DiffContainer: View {
 
     private func header(_ file: DiffFileInfo, settings: DiffSettings) -> some View {
         DiffHeader(
-            content: headerContent(file, settings: settings),
-            setSplit: { isSplit in
-                window?.app.preferences.showSideBySideDiff = isSplit
-            },
-            setImageMode: { mode in
-                window?.app.preferences.imageDiffType = mode
-            },
+            content: headerContent(file),
             openInEditor: {
                 guard let path = fullPath(file) else {
                     return
@@ -158,26 +152,23 @@ public struct DiffContainer: View {
                 window?.actions.perform(.openInEditor(path: path))
             },
             options: {
-                DiffOptionsMenu(content: optionsContent(file, settings: settings), actions: optionsActions(file))
+                DiffOptionsMenu(content: optionsContent(settings: settings), actions: optionsActions)
             }
         )
     }
 
-    private func headerContent(_ file: DiffFileInfo, settings: DiffSettings) -> DiffHeaderContent {
-        var content = DiffHeaderContent(path: file.path, oldPath: file.oldPath, status: file.status, mode: .none)
+    private func headerContent(_ file: DiffFileInfo) -> DiffHeaderContent {
+        var content = DiffHeaderContent(path: file.path, oldPath: file.oldPath, status: file.status)
         switch diff.value {
         case .text(let text)?:
             let (added, deleted) = lineCounts(text.hunks)
             content.addedLines = added
             content.deletedLines = deleted
-            content.mode = .text(isSplit: settings.isSplit)
-        case .largeText(let text)?:
+        case .largeText(let text)? where session.forceShowLargeDiff:
+            // Counted only once the diff shows.
             let (added, deleted) = lineCounts(text.hunks)
             content.addedLines = added
             content.deletedLines = deleted
-            content.mode = .text(isSplit: settings.isSplit)
-        case .image(let image)? where image.previous != nil && image.current != nil:
-            content.mode = .image(settings.imageDiffType)
         default:
             break
         }
@@ -188,13 +179,12 @@ public struct DiffContainer: View {
         return content
     }
 
-    private func optionsContent(_ file: DiffFileInfo, settings: DiffSettings) -> DiffOptionsContent {
+    private func optionsContent(settings: DiffSettings) -> DiffOptionsContent {
         var content = DiffOptionsContent(
+            isSplit: settings.isSplit,
             hidesWhitespace: settings.hidesWhitespace,
             wrapsLines: settings.wrapsLines,
-            expansion: nil,
-            fileExists: fileExistsOnDisk(file),
-            canDiscard: context == .changes && workingDirectoryFile(file) != nil
+            expansion: nil
         )
         if let (text, isLarge) = textDiff {
             if session.hasExpandedLines {
@@ -204,14 +194,14 @@ public struct DiffContainer: View {
                 content.expansion = .expand(isEnabled: shown.hunks.count != 1 || shown.hunks[0].expansionType != .none)
             }
         }
-        if let preferences = window?.app.preferences {
-            content.discardTitle = preferences.confirmDiscardChanges ? "Discard Changes…" : "Discard Changes"
-        }
         return content
     }
 
-    private func optionsActions(_ file: DiffFileInfo) -> DiffOptionsActions {
+    private var optionsActions: DiffOptionsActions {
         DiffOptionsActions(
+            setSplit: { isSplit in
+                window?.app.preferences.showSideBySideDiff = isSplit
+            },
             setHidesWhitespace: { hide in
                 DiffWhitespace.set(hide, context: context, repository: window?.repository, preferences: window?.app.preferences)
             },
@@ -219,33 +209,7 @@ public struct DiffContainer: View {
                 window?.app.preferences.wrapDiffLines = wrap
             },
             expandWholeFile: { session.expandWholeFile() },
-            collapseExpandedLines: { session.collapseExpandedLines() },
-            openWithDefaultProgram: {
-                if let path = fullPath(file) {
-                    window?.actions.perform(.openWithDefaultProgram(path: path))
-                }
-            },
-            showInFinder: {
-                if let path = fullPath(file) {
-                    window?.actions.perform(.showInFinder(path: path))
-                }
-            },
-            copyFilePath: {
-                copyToPasteboard(fullPath(file) ?? file.path)
-            },
-            copyRelativeFilePath: {
-                copyToPasteboard(file.path)
-            },
-            discardChanges: {
-                guard let window, let repository = window.repository, let working = workingDirectoryFile(file) else {
-                    return
-                }
-                Task {
-                    await window.presenter.perform { answers throws(OperationError) in
-                        try await repository.changes.discard([working], confirmed: answers.confirmed)
-                    }
-                }
-            }
+            collapseExpandedLines: { session.collapseExpandedLines() }
         )
     }
 
@@ -313,7 +277,10 @@ public struct DiffContainer: View {
             ImageDiffView(
                 content: session.images.flatMap { $0.diff == image ? $0.content : nil } ?? ImageDiffContent(image),
                 status: file?.status ?? .modified,
-                mode: settings.imageDiffType
+                mode: settings.imageDiffType,
+                setMode: { mode in
+                    window?.app.preferences.imageDiffType = mode
+                }
             )
         case .submodule(let submodule):
             SubmoduleDiffView(
@@ -412,19 +379,6 @@ public struct DiffContainer: View {
             return false
         }
         return FileManager.default.fileExists(atPath: path)
-    }
-
-    private func workingDirectoryFile(_ file: DiffFileInfo) -> WorkingDirectoryFileChange? {
-        if case .workingDirectory(let working)? = file.change {
-            return working
-        }
-        return nil
-    }
-
-    private func copyToPasteboard(_ string: String) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(string, forType: .string)
     }
 }
 
@@ -591,11 +545,11 @@ struct NoHunksView: View {
             case .emptyFile:
                 CenteredMessage("The file is empty", systemImage: "doc")
             case .renamedWithChanges:
-                CenteredMessage("The file was renamed and includes changes.", systemImage: "exclamationmark.triangle")
+                CenteredMessage("The file was renamed and includes changes", systemImage: "rectangle.and.pencil.and.ellipsis")
             case .renamed:
-                CenteredMessage("The file was renamed but not changed", systemImage: "arrow.right.doc.on.clipboard")
+                CenteredMessage("The file was renamed but not changed", systemImage: "rectangle.and.pencil.and.ellipsis")
             case .manualConflict:
-                CenteredMessage("This file has a conflict that must be resolved on the command line.", systemImage: "exclamationmark.triangle", tint: Color(espalier: Palette.warningMark))
+                CenteredMessage("This file has a conflict that must be resolved on the command line", systemImage: "exclamationmark.triangle", tint: Color(espalier: Palette.warningMark))
             case .onlyWhitespace:
                 CenteredMessage("Only whitespace changes found", systemImage: "text.alignleft")
             case .noContentChanges:

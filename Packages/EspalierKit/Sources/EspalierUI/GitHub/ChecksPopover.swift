@@ -1,9 +1,9 @@
 // The checks popover the toolbar's pull request chip opens: the header's
 // state ("All checks have passed", "Some checks haven't completed yet", ...)
-// and summary, Re-run Checks or Re-run ⌄, workflow groups, steps with "View
-// <step> on GitHub", and "Stand By" / "Check runs incoming!" while the
-// workflows load, then Show Pull Request, which opens the pull request's
-// place.
+// and summary, Re-run Checks or Re-run ⌄ (in the header, as in the pull
+// request's place), workflow groups, steps that open on GitHub, and "Stand
+// By" / "Check runs incoming!" while the workflows load, then Show Pull
+// Request, which opens the pull request's place.
 
 import EspalierCore
 import GitHubKit
@@ -80,7 +80,7 @@ struct ChecksPopoverView: View {
                     .controlSize(.small)
             }
             .padding(.horizontal, Metrics.insetMedium)
-            .padding(.vertical, Metrics.insetSmall + 2)
+            .padding(.vertical, Metrics.insetSmall)
         }
         .frame(width: 400)
         .background(Color(espalier: Palette.background))

@@ -9,17 +9,25 @@ import SwiftUI
 ///
 /// The leading pane keeps its width as the window resizes, within its
 /// column's limits; the trailing pane takes the rest and is never narrower
-/// than the diff's minimum. Each pane is hosted in its own `NSHostingView`
-/// with the window's environment (`WindowContext`, dates, avatars).
+/// than its minimum (the diff's, or a commit's files and diff). Each pane is
+/// hosted in its own `NSHostingView` with the window's environment
+/// (`WindowContext`, dates, avatars).
 public struct SplitView<Leading: View, Trailing: View>: NSViewRepresentable {
     private let autosaveName: String
     private let column: Metrics.ColumnWidth
+    private let trailingMinimum: CGFloat
     private let leading: Leading
     private let trailing: Trailing
     @Environment(WindowContext.self) private var windowContext: WindowContext?
 
     public init(_ kind: PlaceKind, @ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing) {
-        self.init(autosaveName: kind.splitAutosaveName, leadingColumn: kind.leadingColumn, leading: leading, trailing: trailing)
+        self.init(
+            autosaveName: kind.splitAutosaveName,
+            leadingColumn: kind.leadingColumn,
+            trailingMinimum: kind.trailingMinimum,
+            leading: leading,
+            trailing: trailing
+        )
     }
 
     /// A split inside a place (History's commit file list beside its diff),
@@ -27,17 +35,19 @@ public struct SplitView<Leading: View, Trailing: View>: NSViewRepresentable {
     public init(
         autosaveName: String,
         leadingColumn: Metrics.ColumnWidth,
+        trailingMinimum: CGFloat = Metrics.Column.diffMinimum,
         @ViewBuilder leading: () -> Leading,
         @ViewBuilder trailing: () -> Trailing
     ) {
         self.autosaveName = autosaveName
         column = leadingColumn
+        self.trailingMinimum = trailingMinimum
         self.leading = leading()
         self.trailing = trailing()
     }
 
     public func makeCoordinator() -> Coordinator {
-        Coordinator(column: column)
+        Coordinator(column: column, trailingMinimum: trailingMinimum)
     }
 
     public func makeNSView(context: Context) -> NSSplitView {
@@ -54,7 +64,7 @@ public struct SplitView<Leading: View, Trailing: View>: NSViewRepresentable {
         }
         let width = column.ideal
         leadingHost.frame = CGRect(x: 0, y: 0, width: width, height: 400)
-        trailingHost.frame = CGRect(x: width + 1, y: 0, width: Metrics.Column.diffMinimum, height: 400)
+        trailingHost.frame = CGRect(x: width + 1, y: 0, width: trailingMinimum, height: 400)
         splitView.addArrangedSubview(leadingHost)
         splitView.addArrangedSubview(trailingHost)
         context.coordinator.leadingHost = leadingHost
@@ -86,6 +96,8 @@ public struct SplitView<Leading: View, Trailing: View>: NSViewRepresentable {
     /// Keeps the panes within their limits.
     public final class Coordinator: NSObject, NSSplitViewDelegate {
         let column: Metrics.ColumnWidth
+        /// The narrowest the trailing pane gets.
+        let trailingMinimum: CGFloat
         weak var leadingHost: NSHostingView<AnyView>?
         weak var trailingHost: NSHostingView<AnyView>?
         var needsInitialPosition = false
@@ -93,8 +105,9 @@ public struct SplitView<Leading: View, Trailing: View>: NSViewRepresentable {
         /// comes back here.
         private var isPlacingDivider = false
 
-        init(column: Metrics.ColumnWidth) {
+        init(column: Metrics.ColumnWidth, trailingMinimum: CGFloat = Metrics.Column.diffMinimum) {
             self.column = column
+            self.trailingMinimum = trailingMinimum
         }
 
         public func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
@@ -102,7 +115,7 @@ public struct SplitView<Leading: View, Trailing: View>: NSViewRepresentable {
         }
 
         public func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-            let available = splitView.bounds.width - Metrics.Column.diffMinimum - splitView.dividerThickness
+            let available = splitView.bounds.width - trailingMinimum - splitView.dividerThickness
             let maximum = column.max.map { min($0, available) } ?? available
             return max(min(proposedMaximumPosition, maximum), column.min)
         }
@@ -135,7 +148,7 @@ public struct SplitView<Leading: View, Trailing: View>: NSViewRepresentable {
             needsInitialPosition = false
             isPlacingDivider = true
             defer { isPlacingDivider = false }
-            let available = splitView.bounds.width - Metrics.Column.diffMinimum - splitView.dividerThickness
+            let available = splitView.bounds.width - trailingMinimum - splitView.dividerThickness
             splitView.setPosition(max(min(column.ideal, available), column.min), ofDividerAt: 0)
         }
     }

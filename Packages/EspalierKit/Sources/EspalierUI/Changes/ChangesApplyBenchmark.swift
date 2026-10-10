@@ -166,7 +166,7 @@ struct BenchmarkList: View {
     let box: BenchmarkFiles
 
     var body: some View {
-        FileTable(files: box.files, selectedIDs: [], inclusion: Self.inclusion)
+        FileTable(files: .changes(box.files), selectedIDs: [], inclusion: Self.inclusion)
     }
 
     /// A file's checkbox from its selection alone.

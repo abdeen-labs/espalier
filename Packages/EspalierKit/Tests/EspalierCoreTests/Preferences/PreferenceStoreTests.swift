@@ -1,7 +1,7 @@
 // Ported from desktop/app/test/unit/local-storage-test.ts
 // The "local storage" suite, less the cases the parameterized tests below
 // cover, plus tests of the rest of PreferenceStore, which reads UserDefaults
-// holding native values as well as strings.
+// holding property-list values as well as strings.
 
 @testable import EspalierCore
 import CoreFoundation
@@ -21,7 +21,7 @@ private func makeStore() throws -> (store: PreferenceStore, temporary: Temporary
 }
 
 /// Whether `value` is a Core Foundation Boolean rather than a number.
-private func isNativeBoolean(_ value: Any?) -> Bool {
+private func isPropertyListBoolean(_ value: Any?) -> Bool {
     guard let value else { return false }
     return CFGetTypeID(value as CFTypeRef) == CFBooleanGetTypeID()
 }
@@ -50,18 +50,18 @@ struct PreferenceStoreTests {
 
     @Suite("Booleans")
     struct Booleans {
-        @Test("are written as native Booleans")
-        func nativeWrites() throws {
+        @Test("are written as property-list Booleans")
+        func propertyListWrites() throws {
             let (store, temporary) = try makeStore()
             defer { temporary.remove() }
 
             store.setBoolean(booleanKey, true)
-            #expect(isNativeBoolean(temporary.defaults.object(forKey: booleanKey)))
+            #expect(isPropertyListBoolean(temporary.defaults.object(forKey: booleanKey)))
             #expect(temporary.defaults.object(forKey: booleanKey) as? Bool == true)
         }
 
         @Test(
-            "read desktop's strings and native Booleans",
+            "read desktop's strings and property-list Booleans",
             arguments: [("1", true), ("true", true), ("0", false), ("false", false)]
         )
         func stored(string: String, expected: Bool) throws {
@@ -103,14 +103,14 @@ struct PreferenceStoreTests {
 
     @Suite("Numbers")
     struct Numbers {
-        @Test("are written as native integers")
-        func nativeWrites() throws {
+        @Test("are written as property-list integers")
+        func propertyListWrites() throws {
             let (store, temporary) = try makeStore()
             defer { temporary.remove() }
 
             store.setNumber(numberKey, -42)
             #expect(temporary.defaults.object(forKey: numberKey) as? Int == -42)
-            #expect(!isNativeBoolean(temporary.defaults.object(forKey: numberKey)))
+            #expect(!isPropertyListBoolean(temporary.defaults.object(forKey: numberKey)))
         }
 
         @Test(
@@ -139,8 +139,8 @@ struct PreferenceStoreTests {
             #expect(store.getNumber(numberKey, 3456) == 3456)
         }
 
-        @Test("native numbers read as their integer part")
-        func nativeNumbers() throws {
+        @Test("property-list numbers read as their integer part")
+        func propertyListNumbers() throws {
             let (store, temporary) = try makeStore()
             defer { temporary.remove() }
 
@@ -206,7 +206,7 @@ struct PreferenceStoreTests {
 
     @Suite("Arrays and objects")
     struct ArraysAndObjects {
-        @Test("string arrays are written as native arrays")
+        @Test("string arrays are written as property-list arrays")
         func arrayWrites() throws {
             let (store, temporary) = try makeStore()
             defer { temporary.remove() }
@@ -239,7 +239,7 @@ struct PreferenceStoreTests {
             #expect(store.getStringArray("list") == [])
         }
 
-        @Test("a missing key, or a native array with something other than strings, reads as empty")
+        @Test("a missing key, or a property-list array with something other than strings, reads as empty")
         func arrayOtherValues() throws {
             let (store, temporary) = try makeStore()
             defer { temporary.remove() }

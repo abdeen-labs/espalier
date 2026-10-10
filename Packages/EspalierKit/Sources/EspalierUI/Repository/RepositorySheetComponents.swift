@@ -1,28 +1,12 @@
-// Small views the repository sheets share: a line under a field, the buttons
-// row, a folder field with Choose…, and a sign-in call to action.
+// Small views the repository sheets share: a folder field with Choose…, a
+// call to action (a symbol, a line, and a button), and the sign-in call to
+// action.
 
 import AppKit
 import EspalierCore
 import EspalierSupport
 import GitHubKit
 import SwiftUI
-
-/// The design system's line under a field, taking the width it's given, so a
-/// long message wraps in a form's column instead of running past it.
-struct SheetMessage: View {
-    private let text: String
-    private let kind: FieldMessage.Kind
-
-    init(_ text: String, kind: FieldMessage.Kind) {
-        self.text = text
-        self.kind = kind
-    }
-
-    var body: some View {
-        FieldMessage(text, kind: kind)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
 
 /// A folder's path with Choose…
 struct FolderField: View {
@@ -62,15 +46,30 @@ struct RepositorySignInPrompt: View {
     }
 
     var body: some View {
+        SheetCallToAction(systemImage: "person.crop.circle", message: Self.message(forEnterprise: isEnterprise)) {
+            ActionButton(.signIn(endpoint: endpoint, then: nil), title: "Sign In…")
+                .buttonStyle(.quiet)
+        }
+    }
+}
+
+/// A call to action in a sheet's area: a symbol in a soft circle, a line,
+/// and a button (signing in, publishing).
+struct SheetCallToAction<Action: View>: View {
+    let systemImage: String
+    let message: String
+    @ViewBuilder let action: Action
+
+    var body: some View {
         VStack(spacing: Metrics.insetMedium) {
-            IconCircle("person.crop.circle", size: 36)
-            Text(Self.message(forEnterprise: isEnterprise))
+            IconCircle(systemImage, size: Metrics.StateIcon.callToActionSize)
+                .accessibilityHidden(true)
+            Text(message)
                 .font(Typography.row)
                 .foregroundStyle(.text2)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-            ActionButton(.signIn(endpoint: endpoint, then: nil), title: "Sign In…")
-                .buttonStyle(.quiet)
+            action
         }
         .frame(maxWidth: .infinity)
         .padding(Metrics.insetLarge)

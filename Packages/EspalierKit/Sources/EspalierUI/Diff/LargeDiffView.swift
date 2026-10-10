@@ -11,7 +11,7 @@ struct LargeDiffView: View {
 
     var body: some View {
         CenteredMessage(
-            "This diff is too large to show automatically.",
+            "This diff is too large to show automatically",
             systemImage: "doc.text.magnifyingglass",
             description: "You can show it anyway, but Espalier may slow down."
         ) {
@@ -25,7 +25,7 @@ struct LargeDiffView: View {
 /// A diff too large to show (over 70 MB).
 struct UnrenderableDiffView: View {
     var body: some View {
-        CenteredMessage("This diff is too large to show.", systemImage: "doc.text.magnifyingglass")
+        CenteredMessage("This diff is too large to show", systemImage: "doc.text.magnifyingglass")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

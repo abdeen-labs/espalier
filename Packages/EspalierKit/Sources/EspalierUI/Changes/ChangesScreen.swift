@@ -1,9 +1,11 @@
-// The Changes place: the Changes column (the header, the changed files with
-// the conflicts section, the "Stashed Changes" row, and the composer, or the
-// operation panel while an operation runs or waits on conflicts) and, on the
-// right, the selected file's diff, several files' actions, or Suggestions
-// when there are no changes. The toolbar's search field is the list's filter
-// text.
+// The Changes place: the Changes column (the header, the changed files,
+// conflicted ones with their state and buttons, the "Stashed Changes" row,
+// and the composer, which commits a waiting merge, or Continue while a
+// rebase, cherry-pick, or revert waits) under the operation panel while an
+// operation runs or waits on conflicts, and on the right the selected
+// file's diff, several files' actions, or "No Local Changes" and
+// Suggestions when there are no changes. The toolbar's search field is the
+// list's filter text.
 
 import EspalierCore
 import GitKit
@@ -62,11 +64,12 @@ public struct ChangesScreen: View {
     }
 }
 
-/// The Changes column: the header, the files, and the composer. The
+/// The Changes column: the header, the files, and the composer; without
+/// changes, the header ("0 changed files") over the empty list. The
 /// footer's bars (the hidden-changes note, the Stashed Changes row, the
-/// amend banner, the composer or the merge's message) grow in over 0.22 s
-/// and leave over 0.15 s, the files moving with them: the motion is set
-/// here, over the whole column, so the list above moves too.
+/// amend banner, the composer or Continue) grow in over 0.22 s and leave
+/// over 0.15 s, the files moving with them: the motion is set here, over
+/// the whole column, so the list above moves too.
 struct ChangesColumn: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
@@ -77,32 +80,23 @@ struct ChangesColumn: View {
         let hasFiles = !repository.changes.workingDirectory.files.isEmpty
         let controller = ChangesController(context: context, repository: repository)
         let footer = ChangesFooterLayout.make(repository, showsOperationPanel: showsOperationPanel)
-        Group {
-            if hasFiles {
-                FileList(repository: repository)
-            } else {
-                PlaceholderNote("No Local Changes")
-                    .accessibilityAddTraits(.isStaticText)
-            }
-        }
+        FileList(repository: repository)
         .safeAreaBar(edge: .top, spacing: 0) {
-            if hasFiles {
-                VStack(spacing: 0) {
-                    ChangesHeader(
-                        ChangesHeaderContent.make(repository, numberFormat: context.app.preferences.numberFormat),
-                        onIncludeAll: { include in
-                            repository.changes.setVisibleFilesIncluded(include)
-                        },
-                        onFilterChange: { filter in
-                            repository.changes.filter = filter
-                        },
-                        onClearFilters: controller.clearFilters
-                    )
-                    .contextMenu {
-                        ChangesHeaderMenu(repository: repository)
-                    }
-                    Hairline()
+            VStack(spacing: 0) {
+                ChangesHeader(
+                    ChangesHeaderContent.make(repository, numberFormat: context.app.preferences.numberFormat),
+                    onIncludeAll: { include in
+                        repository.changes.setVisibleFilesIncluded(include)
+                    },
+                    onFilterChange: { filter in
+                        repository.changes.filter = filter
+                    },
+                    onClearFilters: controller.clearFilters
+                )
+                .contextMenu {
+                    ChangesHeaderMenu(repository: repository)
                 }
+                Hairline()
             }
         }
         .safeAreaBar(edge: .bottom, spacing: 0) {
@@ -121,9 +115,18 @@ struct ChangesColumn: View {
 
 /// What the Changes column's footer shows: the keys of its motion.
 struct ChangesFooterLayout: Equatable {
-    /// What takes the composer's place.
+    /// What the commit form's place shows.
     enum Bottom: Equatable {
-        case composer, mergeMessage, none
+        /// The composer, for the user's commit.
+        case composer
+        /// The composer with the merge's message, for Commit Merge.
+        case merge
+        /// Continue, for a rebase, cherry-pick, or revert waiting on the
+        /// user.
+        case continueOperation
+        /// Nothing: an operation runs, a stash restore conflicted, or only
+        /// git can finish what's in progress.
+        case none
     }
 
     var showsHiddenNote: Bool
@@ -138,8 +141,16 @@ struct ChangesFooterLayout: Equatable {
     /// passes as `showsOperationPanel`).
     @MainActor
     static func make(_ repository: RepositoryModel, showsOperationPanel: Bool?) -> ChangesFooterLayout {
-        let hasOperation = OperationCapsuleContent.make(repository) != nil && showsOperationPanel != false
-        let bottom: Bottom = !hasOperation ? .composer : (MergeMessagePanel.isShown(for: repository) ? .mergeMessage : .none)
+        let bottom: Bottom
+        switch OperationSlotContent.make(repository)?.kind {
+        case .merge?:
+            bottom = .merge
+        case .continueOperation?:
+            bottom = .continueOperation
+        case nil:
+            let hasOperation = OperationCapsuleContent.make(repository) != nil && showsOperationPanel != false
+            bottom = hasOperation ? .none : .composer
+        }
         // `LastCommitContent.make`'s rule, without reading what the row
         // shows.
         let commit = repository.commit
@@ -175,8 +186,9 @@ struct ChangesHeaderMenu: View {
 }
 
 /// Under the files: the hidden-changes note, the "Stashed Changes" row, and
-/// the composer (or the operation panel). Each comes and goes as a bar
-/// does (the column sets the motion).
+/// the composer (Commit Merge's too) or Continue. Each comes and goes as a
+/// bar does (the column sets the motion); the composer stays from a merge's
+/// conflicts through its commit, its fields and button changing in place.
 struct ChangesFooter: View {
     let repository: RepositoryModel
     let layout: ChangesFooterLayout
@@ -207,18 +219,16 @@ struct ChangesFooter: View {
                 .barTransition()
             }
             switch layout.bottom {
-            case .composer:
+            case .composer, .merge:
                 VStack(spacing: 0) {
                     Hairline()
                     Composer(repository: repository)
                 }
                 .barTransition()
-            case .mergeMessage:
-                // The operation's bar is at the top of the place; a resolved
-                // merge's message takes the composer's place.
+            case .continueOperation:
                 VStack(spacing: 0) {
                     Hairline()
-                    MergeMessagePanel(repository: repository)
+                    ContinueOperation(repository: repository)
                 }
                 .barTransition()
             case .none:

@@ -1,7 +1,7 @@
-// The repository list's cost with many repositories. The sidebar's rows and
-// the popover's groups are rebuilt whenever the list or its indicators
-// change, so they're held to one frame at 120 Hz (8 ms) for 2,000
-// repositories. Opt-in, like the other performance tests:
+// The repository list's cost with many repositories. The popover's groups
+// are rebuilt whenever the list or its indicators change, so they're held
+// to one frame at 120 Hz (8 ms) for 2,000 repositories. Opt-in, like the
+// other performance tests:
 //
 //     ESPALIER_PERF_REPO=/path/to/repository swift test -c release \
 //         --filter RepositoryPerformanceTests
@@ -19,7 +19,7 @@ private let perfRepository = ProcessInfo.processInfo.environment["ESPALIER_PERF_
 
 @Suite("Repository performance", .serialized, .enabled(if: perfRepository != nil)) @MainActor
 struct RepositoryPerformanceTests {
-    @Test("2,000 repositories: the sidebar's rows and the popover's groups each take under 8 ms")
+    @Test("2,000 repositories: the popover's groups take under 8 ms")
     func repositoryList() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
@@ -34,17 +34,17 @@ struct RepositoryPerformanceTests {
         app.preferences.repositoryIndicatorsEnabled = true
 
         let clock = ContinuousClock()
-        var sidebar: [Double] = []
-        var popover: [Double] = []
+        var unfiltered: [Double] = []
+        var filtered: [Double] = []
         for _ in 0..<20 {
-            sidebar.append(milliseconds(clock.measure { _ = RepositoriesSection.rows(in: app, filter: "") }))
-            popover.append(milliseconds(clock.measure { _ = RepositoryPopoverContent.make(app, filter: "rep") }))
+            unfiltered.append(milliseconds(clock.measure { _ = RepositoryPopoverContent.make(app, filter: "") }))
+            filtered.append(milliseconds(clock.measure { _ = RepositoryPopoverContent.make(app, filter: "rep") }))
         }
-        let sidebarMedian = sidebar.sorted()[sidebar.count / 2]
-        let popoverMedian = popover.sorted()[popover.count / 2]
-        print("Repository list, 2,000 repositories: sidebar rows \(sidebarMedian) ms, popover groups (filtered) \(popoverMedian) ms (medians)")
-        #expect(sidebarMedian < 8)
-        #expect(popoverMedian < 8)
+        let unfilteredMedian = unfiltered.sorted()[unfiltered.count / 2]
+        let filteredMedian = filtered.sorted()[filtered.count / 2]
+        print("Repository list, 2,000 repositories: popover groups \(unfilteredMedian) ms, filtered \(filteredMedian) ms (medians)")
+        #expect(unfilteredMedian < 8)
+        #expect(filteredMedian < 8)
     }
 
     private func milliseconds(_ duration: Duration) -> Double {

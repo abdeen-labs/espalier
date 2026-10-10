@@ -1,8 +1,9 @@
 // Ported in part from desktop/app/src/ui/history/compare.tsx
 //
-// The squash sheet: the summary from the commit squashed onto, the
-// description from `getSquashedCommitDescription`, the co-authors of every
-// commit, and the "Squash N Commits" title and button.
+// The squash sheet: the summary from the commit squashed onto and the
+// description from `getSquashedCommitDescription`, on a message card shaped
+// as the composer's, the co-authors of every commit, and the "Squash N
+// Commits" title and button.
 
 import EspalierCore
 import EspalierSupport
@@ -66,11 +67,8 @@ public struct SquashSheet: View {
     @State private var summary: String
     @State private var description: String
     @State private var coAuthors: [KnownAuthor]
-    @FocusState private var isSummaryFocused: Bool
+    @FocusState private var focusedField: SquashMessageField?
     @Environment(\.dismissModal) private var dismissModal
-
-    /// The description editor's height.
-    private static let descriptionHeight: CGFloat = 140
 
     public init(_ content: SquashSheetContent, onSquash: @escaping (CommitContext) -> Void) {
         self.content = content
@@ -85,15 +83,7 @@ public struct SquashSheet: View {
         SheetScaffold(content.title) {
             VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
                 FieldLabel("Message")
-                TextField("Summary", text: $summary, prompt: Text("Summary (required)"))
-                    .textFieldStyle(.capsule)
-                    .focused($isSummaryFocused)
-                TextEditor(text: $description)
-                    .font(Typography.row)
-                    .scrollContentBackground(.hidden)
-                    .textAreaSurface()
-                    .frame(height: Self.descriptionHeight)
-                    .accessibilityLabel("Description")
+                SquashMessageCard(summary: $summary, description: $description, focusedField: $focusedField)
             }
             if !coAuthors.isEmpty {
                 VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
@@ -107,7 +97,7 @@ public struct SquashSheet: View {
             }
         }
         .onAppear {
-            isSummaryFocused = true
+            focusedField = .summary
         }
     }
 
@@ -133,6 +123,98 @@ public struct SquashSheet: View {
                 }
             }
         }
+    }
+}
+
+/// A field of the squashed commit's message.
+enum SquashMessageField: Hashable {
+    case summary, description
+}
+
+/// The squashed commit's message as the composer's card shows a commit's:
+/// the summary (semibold), a hairline, and the description, on one card,
+/// the field with keyboard focus tinted from the card's edges to the
+/// hairline while the window is active.
+struct SquashMessageCard: View {
+    @Binding var summary: String
+    @Binding var description: String
+    var focusedField: FocusState<SquashMessageField?>.Binding
+    @Environment(\.appearsActive) private var appearsActive
+    @Environment(\.motion) private var motion
+
+    /// The description's height.
+    private static let descriptionHeight: CGFloat = 140
+    /// NSTextView's line fragment padding, where the description's
+    /// placeholder lines up with its text.
+    private static let textInset: CGFloat = 5
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TextField("Summary", text: $summary, prompt: Text("Summary (required)").foregroundStyle(.text3))
+                .textFieldStyle(.plain)
+                // AppKit's one-line mode: a pasted line break becomes a
+                // space.
+                .lineLimit(1)
+                .font(Typography.row.weight(.semibold))
+                .foregroundStyle(.text)
+                .focused(focusedField, equals: .summary)
+                .padding(.horizontal, Metrics.insetMedium)
+                .padding(.vertical, Metrics.insetSmall)
+                .background {
+                    tint(behind: .summary)
+                }
+            Hairline()
+                .padding(.horizontal, Metrics.insetMedium)
+            TextEditor(text: $description)
+                .font(Typography.row)
+                .foregroundStyle(.text2)
+                .scrollContentBackground(.hidden)
+                .focused(focusedField, equals: .description)
+                .overlay(alignment: .topLeading) {
+                    if description.isEmpty {
+                        Text("Description")
+                            .font(Typography.row)
+                            .foregroundStyle(.text3)
+                            .padding(.leading, Self.textInset)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .frame(height: Self.descriptionHeight)
+                .padding(.horizontal, Metrics.insetMedium - Self.textInset)
+                .padding(.vertical, Metrics.grid)
+                .background {
+                    tint(behind: .description)
+                }
+                .accessibilityLabel("Description")
+        }
+        .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+    }
+
+    /// The field the tint shows behind: the one with focus, while the
+    /// window is active.
+    private var markedField: SquashMessageField? {
+        appearsActive ? focusedField.wrappedValue : nil
+    }
+
+    /// The faint accent tint over `field`'s part of the card while it has
+    /// focus; the summary's top corners and the description's bottom ones
+    /// are the card's. It fades in over 0.15 s and out over 0.1 s.
+    private func tint(behind field: SquashMessageField) -> some View {
+        let corner = Metrics.Radius.card
+        let shape = field == .summary
+            ? UnevenRoundedRectangle(topLeadingRadius: corner, topTrailingRadius: corner, style: .continuous)
+            : UnevenRoundedRectangle(bottomLeadingRadius: corner, bottomTrailingRadius: corner, style: .continuous)
+        return ZStack {
+            if markedField == field {
+                shape
+                    .fill(Color(espalier: Palette.accentFaint))
+                    .transition(.opacity)
+            }
+        }
+        .animation(motion.animation(markedField == nil ? Motion.focusOut : Motion.leave), value: markedField)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

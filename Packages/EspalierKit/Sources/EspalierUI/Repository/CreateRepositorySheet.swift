@@ -208,35 +208,43 @@ struct CreateRepositoryForm: View {
                 }
                 warnings
                 Toggle("Initialize this repository with a README", isOn: $model.createsReadme)
+                    .toggleStyle(.checkboxMark)
                 if model.createsReadme, model.currentDestination.readmeExists {
-                    SheetMessage(
+                    FieldMessage(
                         "This folder already has a README.md file, which will be overwritten.",
                         kind: .warning
                     )
                 }
-                Picker("Git Ignore", selection: $model.gitIgnore) {
-                    Text("None").tag(String?.none)
-                    Divider()
-                    ForEach(RepositoryTemplates.gitIgnoreNames, id: \.self) { name in
-                        Text(name).tag(Optional(name))
+                // The pop-ups as wide as the fields.
+                LabeledContent("Git Ignore") {
+                    CapsulePopUp("Git Ignore", selection: $model.gitIgnore, title: model.gitIgnore ?? "None") {
+                        Text("None").tag(String?.none)
+                        Divider()
+                        ForEach(RepositoryTemplates.gitIgnoreNames, id: \.self) { name in
+                            Text(name).tag(Optional(name))
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Picker("License", selection: $model.license) {
-                    Text("None").tag(String?.none)
-                    ForEach(RepositoryTemplates.featuredLicenses) { license in
-                        Text(license.name).tag(Optional(license.name))
+                LabeledContent("License") {
+                    CapsulePopUp("License", selection: $model.license, title: model.license ?? "None") {
+                        Text("None").tag(String?.none)
+                        ForEach(RepositoryTemplates.featuredLicenses) { license in
+                            Text(license.name).tag(Optional(license.name))
+                        }
+                        Divider()
+                        ForEach(RepositoryTemplates.otherLicenses) { license in
+                            Text(license.name).tag(Optional(license.name))
+                        }
                     }
-                    Divider()
-                    ForEach(RepositoryTemplates.otherLicenses) { license in
-                        Text(license.name).tag(Optional(license.name))
-                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .formStyle(.columns)
             .textFieldStyle(.capsule)
 
             if let problem = model.problem {
-                SheetMessage(problem, kind: .error)
+                FieldMessage(problem, kind: .error)
             }
             if let fullPath = model.fullPath, !model.currentDestination.isRepository {
                 Text("The repository will be created at \(Text(fullPath).font(Typography.sha)).")
@@ -264,13 +272,13 @@ struct CreateRepositoryForm: View {
             let destination = model.currentDestination
             if destination.isRepository {
                 VStack(alignment: .leading, spacing: Metrics.grid) {
-                    SheetMessage("\(fullPath) is already a Git repository.", kind: .error)
+                    FieldMessage("\(fullPath) is already a Git repository.", kind: .error)
                     Button("Add This Repository Instead", action: addInstead)
                         .buttonStyle(.link)
                 }
             } else if destination.isSubfolderOfRepository {
                 VStack(alignment: .leading, spacing: Metrics.grid) {
-                    SheetMessage("\(fullPath) is inside another Git repository.", kind: .warning)
+                    FieldMessage("\(fullPath) is inside another Git repository.", kind: .warning)
                     Link("Learn about submodules.", destination: Self.submodulesURL)
                         .font(Typography.subheadline)
                 }

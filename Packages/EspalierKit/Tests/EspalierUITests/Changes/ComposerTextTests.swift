@@ -346,11 +346,27 @@ struct ComposerTextTests {
         let missing = Author.unknown(UnknownAuthor(username: "hubot", state: .error))
         #expect(AuthorToken.displayText(missing) == "@hubot")
         #expect(AuthorToken.fullText(missing) == "@hubot (not found)")
-        // The field says a login wasn't found.
-        #expect(AuthorToken(missing).fieldText == "@hubot (not found)")
+        // The token says a login wasn't found, or is being looked up.
         #expect(AuthorToken(missing).isNotFound)
-        #expect(AuthorToken(known).fieldText == "@octocat")
-        #expect(!AuthorToken(.unknown(UnknownAuthor(username: "hubot", state: .searching))).isNotFound)
+        #expect(!AuthorToken(missing).isSearching)
+        #expect(!AuthorToken(known).isNotFound)
+        let searching = AuthorToken(.unknown(UnknownAuthor(username: "hubot", state: .searching)))
+        #expect(!searching.isNotFound)
+        #expect(searching.isSearching)
+    }
+
+    @Test("a comma makes a co-author of what's typed before it; Delete in the empty field removes the last one")
+    func coAuthorEntry() {
+        let box = AuthorsBox()
+        let entry = CoAuthorEntry(authors: Binding(get: { box.authors }, set: { box.authors = $0 }), completions: .none)
+        let coordinator = entry.makeCoordinator()
+        #expect(coordinator.commitCompleted("Mona Lisa <mona@example.com>, @mo") == " @mo")
+        #expect(box.authors == [.known(KnownAuthor(name: "Mona Lisa", email: "mona@example.com", username: nil))])
+        #expect(coordinator.commitCompleted("@mo") == "@mo")
+        #expect(box.authors.count == 1)
+        #expect(coordinator.removeLast())
+        #expect(box.authors.isEmpty)
+        #expect(!coordinator.removeLast())
     }
 
     @Test("an unknown login is looked up: found, it's known; else it's marked not found")
@@ -361,17 +377,13 @@ struct ComposerTextTests {
             issues: { _ in [] },
             author: { login in login == "octocat" ? KnownAuthor(name: "Mona Lisa", email: "mona@example.com", username: "octocat") : nil }
         )
-        let field = CoAuthorsField(authors: Binding(get: { box.authors }, set: { box.authors = $0 }), completions: completions)
-        let coordinator = field.makeCoordinator()
-        let tokenField = NSTokenField()
-        tokenField.delegate = coordinator
-        coordinator.field = tokenField
+        let entry = CoAuthorEntry(authors: Binding(get: { box.authors }, set: { box.authors = $0 }), completions: completions)
+        let coordinator = entry.makeCoordinator()
 
-        let octocat = try #require(coordinator.tokenField(tokenField, representedObjectForEditing: "@octocat") as? AuthorToken)
-        let hubot = try #require(coordinator.tokenField(tokenField, representedObjectForEditing: "@hubot") as? AuthorToken)
-        tokenField.objectValue = [octocat, hubot]
-        coordinator.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
+        coordinator.commit("@octocat")
+        coordinator.commit("hubot")
         #expect(box.authors.count == 2)
+        #expect(box.authors.allSatisfy { AuthorToken($0).isSearching })
 
         await waitUntil {
             box.authors.allSatisfy { author in
@@ -395,11 +407,10 @@ struct ComposerTextTests {
             issues: { _ in [] },
             author: { _ in nil }
         )
-        let field = CoAuthorsField(authors: Binding(get: { box.authors }, set: { box.authors = $0 }), completions: completions)
-        let coordinator = field.makeCoordinator()
-        let tokenField = NSTokenField()
-        func complete(_ substring: String) -> [String]? {
-            coordinator.tokenField(tokenField, completionsForSubstring: substring, indexOfToken: 1, indexOfSelectedItem: nil) as? [String]
+        let entry = CoAuthorEntry(authors: Binding(get: { box.authors }, set: { box.authors = $0 }), completions: completions)
+        let coordinator = entry.makeCoordinator()
+        func complete(_ text: String) -> [String] {
+            coordinator.completions(for: text)
         }
         // The first ask looks the users up.
         #expect(complete("@mo") == [])

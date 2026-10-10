@@ -1,6 +1,7 @@
 // Where a range of a row's text is in the diff table, for the find bar's
 // highlights and indicator, from the same monospace layout the rows draw
-// with.
+// with. In the table's coordinates, text is where it would be unscrolled:
+// a table scrolled sideways draws its rows that much further along.
 
 import AppKit
 import EspalierCore
@@ -26,8 +27,8 @@ extension DiffTableController {
             }
             let startColumn = layout.column(of: lower)
             let endColumn = upper >= lineRange.upperBound ? layout.endColumn(ofVisualLine: visualLine) : layout.column(of: upper)
-            let x0 = geometry.x(ofColumn: startColumn, side: side, scrollX: textScrollX)
-            let x1 = geometry.x(ofColumn: max(endColumn, startColumn), side: side, scrollX: textScrollX)
+            let x0 = geometry.x(ofColumn: startColumn, side: side, scrollX: 0)
+            let x1 = geometry.x(ofColumn: max(endColumn, startColumn), side: side, scrollX: 0)
             rects.append(CGRect(
                 x: x0,
                 y: rowRect.minY + CGFloat(visualLine) * font.lineHeight,
@@ -58,7 +59,7 @@ extension DiffTableController {
                 .font: font.font,
                 DiffRowRenderer.foregroundKey: NSColor.black.cgColor,
             ])
-            let x = geometry.x(ofColumn: layout.column(of: lower), side: side, scrollX: textScrollX)
+            let x = geometry.x(ofColumn: layout.column(of: lower), side: side, scrollX: 0)
             let baseline = rowRect.minY + CGFloat(visualLine) * font.lineHeight + font.baseline
             context.saveGState()
             context.textMatrix = .identity

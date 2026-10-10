@@ -200,7 +200,7 @@ struct RepositoryListTests {
             return
         }
         #expect(confirmation.kind == .removeRepository)
-        #expect(confirmation.title == "Remove Repository")
+        #expect(confirmation.title == "Remove Repository?")
         #expect(confirmation.message == "Remove \u{201C}\(name)\u{201D} from Espalier?")
         #expect(confirmation.confirmButton == "Remove")
         #expect(app.record(id) != nil)

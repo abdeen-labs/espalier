@@ -1,7 +1,8 @@
-// A pop-up or pull-down menu drawn as a capsule button. The menu itself
-// stays as macOS draws it; its button is a `Menu` with
-// `.menuStyle(.button)`, a capsule button style, the menu indicator hidden,
-// and this label: the title and a small chevron.
+// A pull-down menu drawn as a capsule button. The menu itself stays as
+// macOS draws it; its button is a `Menu` with `.menuStyle(.button)`, a
+// capsule button style, the menu indicator hidden, and this label: the
+// title and a small chevron. Pop-ups, which show a choice, are
+// `CapsulePopUp`s.
 
 import SwiftUI
 

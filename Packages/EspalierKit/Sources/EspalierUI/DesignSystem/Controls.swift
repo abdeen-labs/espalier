@@ -1,12 +1,13 @@
 // Espalier's small controls: key caps, the capsule search field, the
-// capsule segmented control, and file chips.
+// capsule segmented control, the ID chip, icon circles, repository badges,
+// and the progress bar.
 
 import AppKit
 import SwiftUI
 
 // MARK: - Key cap
 
-/// A visible keyboard shortcut: 10.5-point text in a rounded rectangle
+/// A visible keyboard shortcut: 10-point text in a rounded rectangle
 /// (radius 5) with a 1-point `line2` border.
 public struct KeyCap: View {
     private let keys: String
@@ -28,7 +29,7 @@ public struct KeyCap: View {
             .padding(.horizontal, 4)
             .frame(minWidth: 17, minHeight: 17)
             .overlay(
-                RoundedRectangle(cornerRadius: Metrics.Radius.keyCap, style: .continuous)
+                RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .continuous)
                     .strokeBorder(color?.opacity(0.5) ?? .line2, lineWidth: 1)
             )
             .fixedSize()
@@ -64,7 +65,7 @@ public struct CapsuleSearchField: View {
     }
 
     public var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.text3)
@@ -190,10 +191,9 @@ public struct CapsuleSegment<Value: Hashable>: Identifiable {
 /// A capsule segmented control (Simple | Graph, Unified | Split): a `field`
 /// track 28 high with the selected segment raised on a quiet capsule. The
 /// raised capsule slides to a new choice over 0.22 s, the labels' colors
-/// crossfading with it, as the native control's does. Like the native
-/// control, it takes focus only with keyboard navigation on (System
-/// Settings › Keyboard), and then shows a capsule field's ring; the left
-/// and right arrows move the selection. VoiceOver sees a native segmented
+/// crossfading with it. It takes focus only with keyboard navigation on
+/// (System Settings › Keyboard), and then shows a capsule field's ring; the
+/// left and right arrows move the selection. VoiceOver sees a segmented
 /// control.
 public struct CapsuleSegmentedControl<Value: Hashable>: View {
     private let label: String
@@ -247,7 +247,7 @@ public struct CapsuleSegmentedControl<Value: Hashable>: View {
         .overlay {
             CapsuleFocusRing(isFocused: isFocused)
         }
-        .opacity(isEnabled ? 1 : 0.45)
+        .opacity(isEnabled ? 1 : Palette.disabledOpacity)
         .focusable(interactions: .activate)
         .focused($isFocused)
         .focusEffectDisabled()
@@ -282,80 +282,6 @@ public struct CapsuleSegmentedControl<Value: Hashable>: View {
 
 // MARK: - Chips
 
-/// What a file chip shows: the status badge, the name, and the counts.
-nonisolated public struct FileChipContent: Sendable, Equatable {
-    public var name: String
-    public var status: FileStatusKind
-    /// Lines added and deleted; nil when unknown (binary files).
-    public var added: Int?
-    public var deleted: Int?
-
-    public init(name: String, status: FileStatusKind, added: Int? = nil, deleted: Int? = nil) {
-        self.name = name
-        self.status = status
-        self.added = added
-        self.deleted = deleted
-    }
-
-    /// "+6 −1", leaving out zero counts.
-    public var countsText: String? {
-        var parts: [String] = []
-        if let added, added > 0 {
-            parts.append("+\(added)")
-        }
-        if let deleted, deleted > 0 {
-            parts.append("−\(deleted)")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " ")
-    }
-}
-
-/// A file chip: a quiet capsule with the status badge, the name, and its
-/// counts in SF Mono; the selected one tinted with the accent.
-public struct FileChip: View {
-    private let content: FileChipContent
-    private let isSelected: Bool
-
-    public init(_ content: FileChipContent, isSelected: Bool = false) {
-        self.content = content
-        self.isSelected = isSelected
-    }
-
-    public var body: some View {
-        HStack(spacing: 6) {
-            StatusGlyph(content.status)
-            Text(content.name)
-                .font(Typography.smallButton)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            if let counts = content.countsText {
-                Text(counts)
-                    .font(Typography.tinyCount)
-                    .foregroundStyle(isSelected ? AnyShapeStyle(Color.accentColor.opacity(0.75)) : AnyShapeStyle(.text3))
-            }
-        }
-        .foregroundStyle(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.text))
-        .padding(.leading, 6)
-        .padding(.trailing, 11)
-        .frame(height: Metrics.ControlHeight.regular)
-        .background {
-            if isSelected {
-                Capsule(style: .circular).fill(.accentSoft)
-            } else {
-                Capsule(style: .circular).fill(.clear).surface(.quiet, elevation: .quiet)
-            }
-        }
-        .overlay {
-            if isSelected {
-                Capsule(style: .circular).inset(by: -0.5).stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel([content.name, content.status.title, content.countsText].compactMap { $0 }.joined(separator: ", "))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
 /// A neutral chip: SF Mono text on the `field` fill (commit IDs).
 public struct MonoChip<Accessory: View>: View {
     private let text: String
@@ -381,8 +307,10 @@ public struct MonoChip<Accessory: View>: View {
 
 // MARK: - Icon circles
 
-/// A symbol in a soft circle (the AI and co-author buttons, the empty
-/// state's check, simple mode's merge rows).
+/// A symbol in a soft circle: the action list's rows, a sheet's call to
+/// action, the cloning and push protection states, History's banners, and
+/// small headings and lists (the AI conflict sheet's phase, a squash's
+/// co-authors, a submodule's diff).
 public struct IconCircle: View {
     private let systemImage: String
     private let size: CGFloat

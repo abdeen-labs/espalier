@@ -134,7 +134,7 @@ nonisolated struct NotificationStatusLine: Equatable {
     }
 
     let message: String
-    let kind: InlineMessage.Kind
+    let kind: FieldMessage.Kind
     let action: Action
 
     /// The line for `permission`, or nil when there's nothing to say: the
@@ -246,7 +246,7 @@ struct NotificationsPaneContent: View {
                 )
                 if let line = settings.statusLine {
                     SettingsMessageRow {
-                        InlineMessage(line.message, kind: line.kind)
+                        FieldMessage(line.message, kind: line.kind)
                     } trailing: {
                         Button(line.buttonTitle) {
                             Task { await settings.perform(line.action) }

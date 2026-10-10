@@ -1,8 +1,10 @@
 # Espalier
 
-A native macOS Git client in Swift 6, SwiftUI, and AppKit, ported from GitHub
-Desktop (MIT). Desktop's source is the reference for git behavior and edge
-cases. None of its UI is used, and its copy only where it reads well.
+A macOS Git client in Swift 6, SwiftUI, and AppKit, ported from GitHub
+Desktop (MIT). Desktop's source is the reference for git behavior, edge
+cases, and layout: where things are, what each screen shows together, and
+its flows. Its look isn't used: Espalier draws its own UI, never stock
+controls. Its copy is used only where it reads well.
 
 - `docs/PROGRESS.md`: what's left.
 - `docs/DECISIONS.md`: every decision and every deviation from desktop.

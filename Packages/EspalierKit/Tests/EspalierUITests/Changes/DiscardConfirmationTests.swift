@@ -24,11 +24,7 @@ struct DiscardConfirmationTests {
 
     /// The alert's "Do not show this message again", if it has one.
     private func suppressionTitle(_ pending: PendingConfirmation) -> String? {
-        guard case .alert(let alert) = pending.confirmation.presentation else {
-            Issue.record("Not an alert: \(pending.confirmation.kind)")
-            return nil
-        }
-        return alert.suppressionTitle
+        pending.confirmation.alertContent.suppressionTitle
     }
 
     private func paths(_ fixture: ChangesWindowFixture) -> [String] {

@@ -1,9 +1,10 @@
-// The Changes list: the changed files the filter shows, with the conflicts
-// section above them while an operation waits on conflicts; multiple
-// selection; Space to include or exclude; ⌘C and ⌥⌘C to copy paths; ⌘⌫ to
-// discard; Return or a double-click to open in the editor; type-select; and
-// the context menu. `ChangesModel` holds the files, the selection, and the
-// filter.
+// The Changes list: the changed files the filter shows, a conflicted file's
+// state and buttons in its row while an operation or a stash restore waits
+// on its conflicts; multiple selection; Space to include or exclude; ⌘C and
+// ⌥⌘C to copy paths; ⌘⌫ to discard; Return or a double-click to open in the
+// editor; type-select; and the context menu. `ChangesModel` holds the
+// files, the selection, and the filter. The stash's files show in the same
+// table, without checkboxes.
 //
 // The files are an AppKit table with fixed row heights: a SwiftUI `List`
 // measures every row when a status replaces them (hundreds of milliseconds
@@ -24,61 +25,37 @@ struct FileList: View {
 
     var body: some View {
         let changes = repository.changes
-        let showsConflicts = FileList.showsConflictsSection(repository)
         let files = FileList.listedFiles(repository)
         let controller = ChangesController(context: context, repository: repository)
-        VStack(alignment: .leading, spacing: 0) {
-            if showsConflicts {
-                // The conflicts section: its rows select their files through
-                // the changes model, as the table's do. It grows in over
-                // 0.22 s and leaves over 0.15 s, the files moving with it.
-                VStack(alignment: .leading, spacing: 0) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 0) {
-                            ConflictsSection(repository: repository)
-                        }
-                        .padding(.horizontal, Metrics.insetMedium)
-                        .padding(.vertical, Metrics.insetSmall)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .scrollBounceBehavior(.basedOnSize)
-                    .frame(maxHeight: Metrics.FileList.conflictsMaximumHeight)
-                    .fixedSize(horizontal: false, vertical: true)
-                    if !files.isEmpty {
-                        SectionLabel("Changes", count: files.count)
-                            .padding(.horizontal, FileRowMetrics.contentInset)
-                            .padding(.top, Metrics.insetSmall)
-                    }
-                }
-                .barTransition()
-            }
-            FileTable(
-                files: files,
-                selectedIDs: controller.selectedIDs,
-                inclusion: changes.inclusionState(of:),
-                isInclusionLocked: controller.isCommitting || controller.isRebaseConflicts,
-                lineCounts: changes.lineCounts,
-                scope: FileTableScope(repository: ObjectIdentifier(repository), filter: changes.filter, listsConflictsApart: showsConflicts),
-                actions: FileTableActions(
-                    select: { ids in changes.select(fileIDs: ids) },
-                    setIncluded: { ids, include in changes.setIncluded(ids, include) },
-                    toggle: { ids in controller.toggleInclusion(of: ids) },
-                    open: { ids in controller.openInEditor(Set(ids)) },
-                    menuItems: { ids in controller.menuItems(for: Set(ids)) },
-                    run: { command, ids in controller.run(command, on: Set(ids)) },
-                    copy: { ids in controller.copy(controller.relativePaths(controller.files(ids))) },
-                    focusChanged: { table in publishFocusedSelection(controller, table: table) }
-                )
+        FileTable(
+            files: .changes(files),
+            selectedIDs: controller.selectedIDs,
+            inclusion: changes.inclusionState(of:),
+            isInclusionLocked: controller.isCommitting || controller.isRebaseConflicts,
+            lineCounts: changes.lineCounts,
+            conflicts: FileList.conflictRows(repository),
+            conflictActions: { row in controller.conflictActions(for: row) },
+            scope: FileTableScope(repository: ObjectIdentifier(repository), filter: changes.filter),
+            actions: FileTableActions(
+                select: { ids in changes.select(fileIDs: ids) },
+                setIncluded: { ids, include in changes.setIncluded(ids, include) },
+                toggle: { ids in controller.toggleInclusion(of: ids) },
+                open: { ids in controller.openInEditor(Set(ids)) },
+                menuItems: { ids in controller.menuItems(for: Set(ids)) },
+                run: { command, ids in controller.run(command, on: Set(ids)) },
+                copy: { ids in controller.copy(controller.relativePaths(controller.files(ids))) },
+                focusChanged: { table in publishFocusedSelection(controller, table: table) }
             )
-            .overlay {
-                if files.isEmpty, !showsConflicts, let message = NoMatchingFiles.message(for: changes.filter) {
-                    NoMatchingFiles(message: message) {
-                        controller.clearFilters()
-                    }
+        )
+        .overlay {
+            // While the filter hides every file; without changes, the
+            // right side says so.
+            if files.isEmpty, !changes.workingDirectory.files.isEmpty, let message = NoMatchingFiles.message(for: changes.filter) {
+                NoMatchingFiles(message: message) {
+                    controller.clearFilters()
                 }
             }
         }
-        .barMotion(showsConflicts)
         .onDisappear {
             context.state.setFocusedSelection(nil, owner: FileList.focusOwner)
         }
@@ -115,20 +92,25 @@ struct FileList: View {
 
     static let focusOwner = "changes"
 
-    /// Whether the conflicts section shows: while an operation waits on
-    /// conflicts, or a stash restore left some.
-    static func showsConflictsSection(_ repository: RepositoryModel) -> Bool {
-        repository.operations.conflictState != nil || repository.stash.conflictedRestore != nil
+    /// The conflicted files' states and buttons, by path: while an
+    /// operation waits on conflicts, or a stash restore left some; empty
+    /// otherwise.
+    static func conflictRows(_ repository: RepositoryModel) -> [ExactString: ConflictFileRowContent] {
+        guard repository.operations.conflictState != nil || repository.stash.conflictedRestore != nil,
+              let content = ConflictsSectionContent.make(repository)
+        else {
+            return [:]
+        }
+        var rows: [ExactString: ConflictFileRowContent] = [:]
+        for row in content.rows {
+            rows[ExactString(row.path)] = row
+        }
+        return rows
     }
 
-    /// The files the table lists: the filter's, without the conflicted files
-    /// while the conflicts section lists them.
+    /// The files the table lists: the filter's, conflicted ones included.
     static func listedFiles(_ repository: RepositoryModel) -> [WorkingDirectoryFileChange] {
-        let visible = repository.changes.visibleFiles
-        guard showsConflictsSection(repository) else {
-            return visible
-        }
-        return visible.filter { $0.status.kind != .conflicted }
+        repository.changes.visibleFiles
     }
 }
 
@@ -153,28 +135,95 @@ struct FileTableActions {
 }
 
 /// What the table's rows are a list of. When it changes (another
-/// repository, the filter, the conflicts section listing conflicted files
-/// apart) the rows change at once; within it, a status's departing and
-/// arriving rows animate (`FileTableCoordinator.RowChange`).
+/// repository, the filter, another stash) the rows change at once; within
+/// it, a status's departing and arriving rows animate
+/// (`FileTableCoordinator.RowChange`).
 struct FileTableScope: Equatable {
     var repository: ObjectIdentifier?
     var filter: FileListFilter?
-    var listsConflictsApart = false
+    /// What else the files belong to (the stash shown).
+    var source: String?
 }
 
-/// The changed files in an AppKit table with fixed rows.
+/// The files a file table lists.
+enum FileTableFiles {
+    /// The working directory's changed files, each with its checkbox.
+    case changes([WorkingDirectoryFileChange])
+    /// Files that can only be looked at (a stash's): no checkboxes.
+    case readOnly([CommittedFileChange])
+
+    var count: Int {
+        switch self {
+        case .changes(let files): files.count
+        case .readOnly(let files): files.count
+        }
+    }
+
+    var isEmpty: Bool {
+        count == 0
+    }
+
+    /// The ID of the file in `row`.
+    func id(at row: Int) -> String {
+        switch self {
+        case .changes(let files): files[row].id
+        case .readOnly(let files): files[row].id
+        }
+    }
+
+    /// The path of the file in `row`.
+    func path(at row: Int) -> String {
+        switch self {
+        case .changes(let files): files[row].path
+        case .readOnly(let files): files[row].path
+        }
+    }
+
+    /// Every file's ID, in order.
+    var exactIDs: [ExactString] {
+        switch self {
+        case .changes(let files): files.map { ExactString($0.id) }
+        case .readOnly(let files): files.map { ExactString($0.id) }
+        }
+    }
+
+    /// The rows of the files with `ids`.
+    func rows(of ids: Set<ExactString>) -> IndexSet {
+        var rows = IndexSet()
+        switch self {
+        case .changes(let files):
+            for (index, file) in files.enumerated() where ids.contains(ExactString(file.id)) {
+                rows.insert(index)
+            }
+        case .readOnly(let files):
+            for (index, file) in files.enumerated() where ids.contains(ExactString(file.id)) {
+                rows.insert(index)
+            }
+        }
+        return rows
+    }
+}
+
+/// The changed files (or a stash's) in an AppKit table with fixed rows.
 struct FileTable: NSViewRepresentable {
-    var files: [WorkingDirectoryFileChange]
+    var files: FileTableFiles
     /// The selected files' IDs.
     var selectedIDs: [String]
-    /// A file's checkbox, as the changes model decides it.
-    var inclusion: (WorkingDirectoryFileChange) -> FileInclusionState
+    /// A changed file's checkbox, as the changes model decides it.
+    var inclusion: (WorkingDirectoryFileChange) -> FileInclusionState = { _ in FileInclusionState(value: nil, isEnabled: false, help: nil) }
     /// Whether checkboxes can't change now (a commit runs, a rebase waits on
     /// conflicts); a change reconfigures the rows.
     var isInclusionLocked = false
     /// The files' lines added and removed, by file ID, as loaded
     /// (`ChangesModel.lineCounts`); new counts reconfigure the rows.
     var lineCounts: [ExactString: FileLineCount] = [:]
+    /// The conflicted files' states, by path (`FileList.conflictRows`).
+    var conflicts: [ExactString: ConflictFileRowContent] = [:]
+    /// What a conflicted file's buttons do.
+    var conflictActions: (ConflictFileRowContent) -> ConflictFileRowActions = { _ in ConflictFileRowActions(isEditorAvailable: false) }
+    var allowsMultipleSelection = true
+    /// What VoiceOver calls the table.
+    var tableLabel = "Changed files"
     var scope = FileTableScope()
     var actions = FileTableActions()
 
@@ -200,11 +249,11 @@ struct FileTable: NSViewRepresentable {
         tableView.rowHeight = Metrics.FileList.rowHeight
         tableView.usesAutomaticRowHeights = false
         tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
-        tableView.allowsMultipleSelection = true
+        tableView.allowsMultipleSelection = table.allowsMultipleSelection
         tableView.allowsEmptySelection = true
         tableView.allowsTypeSelect = true
         tableView.backgroundColor = Palette.background
-        tableView.setAccessibilityLabel("Changed files")
+        tableView.setAccessibilityLabel(table.tableLabel)
         tableView.dataSource = coordinator
         tableView.delegate = coordinator
         tableView.coordinator = coordinator
@@ -247,7 +296,7 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         self.parent = parent
     }
 
-    var files: [WorkingDirectoryFileChange] {
+    var files: FileTableFiles {
         parent.files
     }
 
@@ -263,9 +312,15 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         guard let tableView else {
             return
         }
+        if tableView.allowsMultipleSelection != table.allowsMultipleSelection {
+            tableView.allowsMultipleSelection = table.allowsMultipleSelection
+        }
+        if tableView.accessibilityLabel() != table.tableLabel {
+            tableView.setAccessibilityLabel(table.tableLabel)
+        }
         // Only a list short enough to animate keeps its IDs (a long one
         // costs nothing more to update).
-        let ids = files.count <= Self.animatedFileLimit ? files.map { ExactString($0.id) } : nil
+        let ids = files.count <= Self.animatedFileLimit ? files.exactIDs : nil
         if previousScope == table.scope, let ids, let shownIDs, tableView.numberOfRows == shownIDs.count,
            Motion.animates(tableView), let change = Self.rowChange(from: shownIDs, to: ids) {
             applyAnimated(change, to: tableView)
@@ -355,15 +410,23 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         guard row < files.count else {
             return
         }
-        let file = files[row]
         cell.isDeparting = false
-        cell.configure(
-            FileRowContent(file, inclusion: parent.inclusion(file), lineCount: parent.lineCounts[ExactString(file.id)]),
-            repository: parent.scope.repository
-        )
-        let id = file.id
-        cell.onIncludeChanged = { [weak self] include in
-            self?.parent.actions.setIncluded([id], include)
+        switch files {
+        case .changes(let changes):
+            let file = changes[row]
+            let conflict = parent.conflicts.isEmpty ? nil : parent.conflicts[ExactString(file.path)]
+            cell.configure(
+                FileRowContent(file, inclusion: parent.inclusion(file), lineCount: parent.lineCounts[ExactString(file.id)], conflict: conflict),
+                repository: parent.scope.repository,
+                conflictActions: conflict.map(parent.conflictActions)
+            )
+            let id = file.id
+            cell.onIncludeChanged = { [weak self] include in
+                self?.parent.actions.setIncluded([id], include)
+            }
+        case .readOnly(let committed):
+            cell.configure(FileRowContent(readOnly: committed[row]), repository: parent.scope.repository)
+            cell.onIncludeChanged = nil
         }
     }
 
@@ -371,15 +434,11 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         let wanted = Set(parent.selectedIDs.map(ExactString.init))
         // The rows still selected hold the wanted files: nothing to do.
         let current = tableView.selectedRowIndexes
-        if current.count == wanted.count, current.allSatisfy({ $0 < files.count && wanted.contains(ExactString(files[$0].id)) }) {
+        let count = files.count
+        if current.count == wanted.count, current.allSatisfy({ $0 < count && wanted.contains(ExactString(files.id(at: $0))) }) {
             return
         }
-        var rows = IndexSet()
-        if !wanted.isEmpty {
-            for (index, file) in files.enumerated() where wanted.contains(ExactString(file.id)) {
-                rows.insert(index)
-            }
-        }
+        let rows = wanted.isEmpty ? IndexSet() : files.rows(of: wanted)
         isApplyingSelection = true
         tableView.selectRowIndexes(rows, byExtendingSelection: false)
         isApplyingSelection = false
@@ -397,14 +456,15 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         if tableView.selectedRowIndexes.contains(row) {
             return selectedIDs
         }
-        return [files[row].id]
+        return [files.id(at: row)]
     }
 
     var selectedIDs: [String] {
         guard let tableView else {
             return []
         }
-        return tableView.selectedRowIndexes.compactMap { $0 < files.count ? files[$0].id : nil }
+        let count = files.count
+        return tableView.selectedRowIndexes.compactMap { $0 < count ? files.id(at: $0) : nil }
     }
 
     // MARK: Data source and delegate
@@ -426,6 +486,12 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         tableView.makeView(withIdentifier: FileTableRowView.identifier, owner: nil) as? FileTableRowView ?? FileTableRowView()
     }
 
+    /// A row scrolling in under the pointer shows its hover at once.
+    func tableView(_ tableView: NSTableView, didAdd rowView: NSTableRowView, forRow row: Int) {
+        let isHovered = row == self.tableView?.hoveredRow && !tableView.isRowSelected(row)
+        (rowView as? FileTableRowView)?.setHovered(isHovered, animated: false)
+    }
+
     func tableViewSelectionDidChange(_ notification: Notification) {
         // A selected row draws no hover.
         tableView?.refreshHover()
@@ -436,7 +502,7 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
     }
 
     func tableView(_ tableView: NSTableView, typeSelectStringFor tableColumn: NSTableColumn?, row: Int) -> String? {
-        row < files.count ? POSIXPath.basename(files[row].path) : nil
+        row < files.count ? POSIXPath.basename(files.path(at: row)) : nil
     }
 
     @objc func doubleClicked(_ sender: NSTableView) {
@@ -492,10 +558,21 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
 /// one shape. Overriding `drawBackground(in:)` makes AppKit draw the row,
 /// selection included, through `draw(_:)`, which offscreen captures (the
 /// snapshots) include. The row draws no background of its own: the table's
-/// shows through, with the table's one hover layer under the rows
-/// (`ChangesTableView`).
+/// shows through. Its hover is a wash of its own, in the selection's shape,
+/// that fades in and out where the pointer is.
 final class FileTableRowView: NSTableRowView {
     static let identifier = NSUserInterfaceItemIdentifier("Espalier.FileTableRow")
+
+    /// The hover wash, under the cells: in over 0.08 s, out over 0.15 s.
+    private let hoverLayer: CALayer = {
+        let layer = CALayer()
+        layer.cornerRadius = Metrics.Radius.row
+        layer.opacity = 0
+        return layer
+    }()
+
+    /// Whether the row shows its hover.
+    private(set) var isHovered = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -558,80 +635,40 @@ final class FileTableRowView: NSTableRowView {
             needsDisplay = true
         }
     }
-}
-
-/// The table: Space includes or excludes, Return opens, ⌘C copies paths,
-/// and focus is published for Edit ▸ Delete.
-final class ChangesTableView: NSTableView {
-    weak var coordinator: FileTableCoordinator?
 
     // MARK: Hover
 
-    private var hoverArea: NSTrackingArea?
-
-    /// The hover wash: one layer for the whole table, under the rows (not
-    /// one per row). It fades in over 0.08 s, moves from row to row over
-    /// 0.08 s, and fades out over 0.15 s; a selected row shows none.
-    let hoverLayer: CALayer = {
-        let layer = CALayer()
-        layer.cornerRadius = Metrics.Radius.row
-        layer.opacity = 0
-        return layer
-    }()
-
-    /// The row under the pointer, or -1.
-    private(set) var hoveredRow = -1
-
-    /// Hovers `row` (-1: none), moving or fading the hover layer; at once
-    /// when `animated` is false (rows scrolling under the pointer).
-    private func setHoveredRow(_ row: Int, animated: Bool) {
-        guard row != hoveredRow else {
+    /// Shows or hides the hover: fading, or at once when `animated` is
+    /// false (rows scrolling under the pointer, a row reused).
+    func setHovered(_ hovered: Bool, animated: Bool) {
+        guard hovered != isHovered else {
             return
         }
-        hoveredRow = row
-        updateHoverLayer(animated: animated)
-    }
-
-    /// Places the hover layer on the hovered row, or hides it.
-    func updateHoverLayer(animated: Bool) {
-        guard let layer else {
-            return
-        }
-        if hoverLayer.superlayer !== layer {
-            layer.insertSublayer(hoverLayer, at: 0)
-            updateHoverColor()
-        }
-        let row = hoveredRow
-        let shows = row >= 0 && row < numberOfRows && !isRowSelected(row)
-        let animates = animated && Motion.animates(self)
-        if shows {
-            let isMoving = hoverLayer.opacity > 0
-            CATransaction.begin()
-            CATransaction.setDisableActions(!(animates && isMoving))
-            CATransaction.setAnimationDuration(Motion.hoverIn)
-            CATransaction.setAnimationTimingFunction(Motion.timingFunction)
-            hoverLayer.frame = rect(ofRow: row).insetBy(dx: FileRowMetrics.inset, dy: 0)
-            CATransaction.commit()
-        }
+        isHovered = hovered
+        installHoverLayer()
         CATransaction.begin()
-        CATransaction.setDisableActions(!animates)
-        CATransaction.setAnimationDuration(shows ? Motion.hoverIn : Motion.hoverOut)
+        CATransaction.setDisableActions(!(animated && Motion.animates(self)))
+        CATransaction.setAnimationDuration(hovered ? Motion.hoverIn : Motion.hoverOut)
         CATransaction.setAnimationTimingFunction(Motion.timingFunction)
-        hoverLayer.opacity = shows ? 1 : 0
+        hoverLayer.opacity = hovered ? 1 : 0
         CATransaction.commit()
     }
 
-    /// Finds the row under the pointer again and places the hover on it at
-    /// once: rows arrived, departed, or were selected.
-    func refreshHover() {
-        guard hoveredRow >= 0 else {
+    /// Puts the hover under the row's cells the first time it shows.
+    private func installHoverLayer() {
+        guard let layer, hoverLayer.superlayer !== layer else {
             return
         }
-        if let window {
-            let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
-            hoveredRow = visibleRect.contains(point) ? row(at: point) : -1
-        }
-        updateHoverLayer(animated: false)
+        layer.insertSublayer(hoverLayer, at: 0)
+        updateHoverColor()
+        layoutHoverLayer()
+    }
+
+    private func layoutHoverLayer() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        hoverLayer.frame = bounds.insetBy(dx: FileRowMetrics.inset, dy: 0)
+        CATransaction.commit()
     }
 
     private func updateHoverColor() {
@@ -645,17 +682,67 @@ final class ChangesTableView: NSTableView {
         CATransaction.commit()
     }
 
+    override func layout() {
+        super.layout()
+        if hoverLayer.superlayer != nil {
+            layoutHoverLayer()
+        }
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateHoverColor()
     }
 
-    override func layout() {
-        super.layout()
-        // The column's width changed: the hover follows its row.
-        if hoveredRow >= 0 {
-            updateHoverLayer(animated: false)
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        setHovered(false, animated: false)
+    }
+}
+
+/// The table: Space includes or excludes, Return opens, ⌘C copies paths,
+/// and focus is published for Edit ▸ Delete.
+final class ChangesTableView: NSTableView {
+    weak var coordinator: FileTableCoordinator?
+
+    // MARK: Hover
+
+    private var hoverArea: NSTrackingArea?
+
+    /// The row under the pointer, or -1. Its row view shows its hover,
+    /// unless it's selected.
+    private(set) var hoveredRow = -1
+
+    /// Hovers `row` (-1: none): the row it leaves fades its hover out and
+    /// the row it enters fades its in, or at once when `animated` is false
+    /// (rows scrolling under the pointer).
+    private func setHoveredRow(_ row: Int, animated: Bool) {
+        guard row != hoveredRow else {
+            return
         }
+        hoveredRow = row
+        updateHoveredRows(animated: animated)
+    }
+
+    /// Shows the hover on the hovered row's view alone, unless it's
+    /// selected.
+    private func updateHoveredRows(animated: Bool) {
+        enumerateAvailableRowViews { rowView, row in
+            (rowView as? FileTableRowView)?.setHovered(row == hoveredRow && !isRowSelected(row), animated: animated)
+        }
+    }
+
+    /// Finds the row under the pointer again and shows its hover at once:
+    /// rows arrived, departed, or were selected.
+    func refreshHover() {
+        guard hoveredRow >= 0 else {
+            return
+        }
+        if let window {
+            let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+            hoveredRow = visibleRect.contains(point) ? row(at: point) : -1
+        }
+        updateHoveredRows(animated: false)
     }
 
     override func updateTrackingAreas() {
@@ -814,7 +901,7 @@ struct HiddenChangesNote: View {
 // MARK: - Acting on changed files
 
 /// The Changes list's intents, through the window: include and exclude,
-/// discard, ignore, copy paths, open.
+/// discard, ignore, copy paths, open, and a conflicted file's side.
 @MainActor
 struct ChangesController {
     let context: WindowContext
@@ -873,18 +960,24 @@ struct ChangesController {
 
     // MARK: The context menu
 
+    /// The items for the files a click applies to; for one conflicted
+    /// file, its sides to pick (or Undo) after them.
     func menuItems(for ids: Set<String>) -> [FileMenuItem] {
         guard !isCommitting else {
             return []
         }
         let files = files(ids)
-        return FileContextMenuContent.items(
+        var items = FileContextMenuContent.items(
             for: files,
             ignoreItems: repository.gitIgnoreMenuItems(for: files.map(\.path)),
             editorTitle: context.app.integrations.editorLabel.map { "Open in \($0)" },
             asksBeforeDiscarding: context.app.preferences.confirmDiscardChanges,
             isRebaseConflicts: isRebaseConflicts
         )
+        if files.count == 1, let file = files.first, let conflict = FileList.conflictRows(repository)[ExactString(file.path)] {
+            items += FileContextMenuContent.conflictItems(for: conflict)
+        }
+        return items
     }
 
     func run(_ command: FileMenuCommand, on ids: Set<String>) {
@@ -915,6 +1008,8 @@ struct ChangesController {
             context.actions.perform(.openInEditor(path: absolutePath(first)))
         case .openWithDefaultProgram:
             context.actions.perform(.openWithDefaultProgram(path: absolutePath(first)))
+        case .resolve(let resolution):
+            repository.operations.setManualResolution(resolution, forPath: first.path)
         }
     }
 
@@ -925,6 +1020,24 @@ struct ChangesController {
             return
         }
         context.actions.perform(.openInEditor(path: absolutePath(file)))
+    }
+
+    // MARK: Conflicts
+
+    /// What a conflicted file's buttons do: open it, show it, pick a side.
+    func conflictActions(for row: ConflictFileRowContent) -> ConflictFileRowActions {
+        let integrations = context.app.integrations
+        let path = POSIXPath.join(repository.record.path, row.path)
+        let actions = context.actions
+        let operations = repository.operations
+        return ConflictFileRowActions(
+            editorName: integrations.editorLabel,
+            isEditorAvailable: integrations.isEditorAvailable,
+            openInEditor: { actions.perform(.openInEditor(path: path)) },
+            openWithDefaultProgram: { actions.perform(.openWithDefaultProgram(path: path)) },
+            showInFinder: { actions.perform(.showInFinder(path: path)) },
+            choose: { resolution in operations.setManualResolution(resolution, forPath: row.path) }
+        )
     }
 
     // MARK: Discarding

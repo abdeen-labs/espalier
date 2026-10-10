@@ -62,10 +62,10 @@ nonisolated public struct FilterMenuContent: Sendable, Equatable {
         activeOptionCount > 0 ? "Filter Options (\(activeOptionCount) Applied)" : "Filter Options"
     }
 
-    /// The button's symbol: plain, and filled in a circle while options
-    /// are on.
+    /// The button's symbol: in a circle, filled while options are on (one
+    /// size either way).
     public var systemImage: String {
-        activeOptionCount > 0 ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease"
+        activeOptionCount > 0 ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle"
     }
 
     /// The menu's options, in order, with their titles.
@@ -122,12 +122,12 @@ public struct FilterMenu: View {
                 Button("Clear Filters", action: onClear)
             }
         } label: {
+            // While options are on, the symbol fills in the accent.
             Label {
                 Text("Filter Options")
             } icon: {
                 Image(systemName: content.systemImage)
-                    .font(.system(size: content.activeOptionCount > 0 ? 15 : 13))
-                    .foregroundStyle(content.activeOptionCount > 0 ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.text3))
+                    .foregroundStyle(content.activeOptionCount > 0 ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.text2))
             }
         }
         .menuStyle(.button)

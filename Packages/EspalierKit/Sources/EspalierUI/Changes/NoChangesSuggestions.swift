@@ -328,9 +328,9 @@ extension SuggestionsContent {
     }
 }
 
-/// The Suggestions: a check in a soft circle, "No Local Changes", a line
-/// about what's left to do, then the suggestions as rows in one card: the
-/// primary one with its prominent action, then the editor, Finder, and
+/// The Suggestions: a green check in a soft circle, "No Local Changes", a
+/// line about what's left to do, then the suggestions as rows in one card:
+/// the primary one with its prominent action, then the editor, Finder, and
 /// GitHub, each with its shortcut as a key cap.
 public struct NoChangesSuggestions: View {
     private let content: SuggestionsContent
@@ -396,8 +396,8 @@ public struct NoChangesSuggestions: View {
                 }
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.actionList, style: .continuous))
-        .surface(.quiet, elevation: .quiet, in: RoundedRectangle(cornerRadius: Metrics.Radius.actionList, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+        .surface(.quiet, elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
     }
 
     /// The editor, Finder, and GitHub, with whether each can run.
@@ -458,6 +458,8 @@ enum SuggestionMetrics {
     static let listWidth: CGFloat = 440
     /// A row's height on one line.
     static let rowHeight: CGFloat = 48
+    /// Space inside a row before its symbol and after its shortcut.
+    static let rowPadding: CGFloat = 14
     /// Space above the check.
     static let topInset: CGFloat = 80
     /// A row's symbol column.
@@ -547,10 +549,10 @@ struct SuggestionRow<Control: View>: View {
                     .allowsHitTesting(false)
             }
         }
-        .padding(.horizontal, Metrics.insetMedium + 2)
+        .padding(.horizontal, SuggestionMetrics.rowPadding)
         .padding(.vertical, Metrics.insetSmall)
         .frame(minHeight: SuggestionMetrics.rowHeight)
-        .opacity(isProminent || isEnabled ? 1 : CheckboxDrawing.disabledOpacity)
+        .opacity(isProminent || isEnabled ? 1 : Palette.disabledOpacity)
     }
 
     /// The description, with "Settings" as a link when the card links it.

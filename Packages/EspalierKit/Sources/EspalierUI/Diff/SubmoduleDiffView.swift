@@ -161,7 +161,7 @@ struct SubmoduleDiffView: View {
             Button("Open Repository", action: open)
                 .buttonStyle(.prominent)
         }
-        .padding(Metrics.insetMedium + 2)
+        .padding(Metrics.insetMedium)
         .cardSurface()
         .padding(.top, Metrics.insetSmall)
     }

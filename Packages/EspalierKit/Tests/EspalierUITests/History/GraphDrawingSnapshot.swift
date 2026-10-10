@@ -97,7 +97,7 @@ enum GraphDrawingSnapshot {
                 context.clip(to: CGRect(x: 0, y: 0, width: width, height: geometry.rowHeight))
                 var emphasis = row.emphasis
                 if row.isSelected {
-                    // The soft selection, as `GraphRowView` draws it.
+                    // The selection's soft tint behind the row (the rings fill with it).
                     Palette.accentSoft.setFill()
                     CGRect(x: 0, y: 0, width: width, height: geometry.rowHeight).fill()
                     emphasis.isSelected = true

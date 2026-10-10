@@ -125,7 +125,7 @@ struct BranchesSnapshotTests {
         .windowEnvironment(context)
     }
 
-    @Test("the section: groups collapsed, then open, with a branch selected")
+    @Test("the section: as it first shows (Remote Branches and the folders collapsed), then open, with a branch selected")
     func section() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await makeOperationsFixture()
@@ -133,16 +133,16 @@ struct BranchesSnapshotTests {
             let content = BranchesSectionContent.make(Self.sectionInputs())
             let pruned = [PrunedBranch(name: "old-cleanup", sha: Self.sha(1), date: UIFixtures.minutesAgo(30))]
 
-            let collapsed = try TemporaryDefaults()
-            defer { collapsed.remove() }
+            let firstShown = try TemporaryDefaults()
+            defer { firstShown.remove() }
             assertSnapshot(
-                section(content, context: context, defaults: collapsed.defaults, prunedBranches: pruned, height: 220),
-                named: "section-collapsed", area: area, appearances: [.light]
+                section(content, context: context, defaults: firstShown.defaults, prunedBranches: pruned, height: 330),
+                named: "section-default", area: area, appearances: [.light]
             )
 
             let expanded = try TemporaryDefaults()
             defer { expanded.remove() }
-            for group in ["branches.other", "branches.folder.other:feature", "branches.folder.other:feature/ui", "branches.remote", "branches.remote.origin", "branches.folder.remote/origin:release"] {
+            for group in ["branches.folder.other:feature", "branches.folder.other:feature/ui", "branches.remote", "branches.remote.origin", "branches.folder.remote/origin:release"] {
                 expanded.defaults.set(true, forKey: "sidebar.expanded.\(group)")
             }
             assertSnapshot(
@@ -239,7 +239,7 @@ struct BranchesSnapshotTests {
         #expect(BranchComparisonCounts(counts["spike"]!, currentBranch: "main").text == "↓37 ↑1,204")
     }
 
-    @Test("the branch popover: the picker, New Branch…, and Check Out")
+    @Test("the branch popover: the picker with the current branch highlighted, New Branch…, and Choose a branch to merge into")
     func popover() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await makeOperationsFixture { local in

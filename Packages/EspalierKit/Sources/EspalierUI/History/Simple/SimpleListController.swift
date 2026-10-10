@@ -19,6 +19,8 @@ struct SimpleListPresentation: Equatable {
     var hasRemote = true
     /// The search, while there is a query: rows that don't match dim.
     var search: HistorySearch?
+    /// HEAD's commit: its node is the bold ring and its title semibold.
+    var headSHA: String?
     /// The GitHub endpoint avatars load from.
     var avatarEndpoint: String?
     /// Whether commits can be dragged out (to cherry-pick).
@@ -89,7 +91,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     var dateFormatting = DateTimeFormatting() {
         didSet {
             if dateFormatting != oldValue {
-                dates = DateTextCache(capacity: dates.capacity, abbreviates: true)
+                dates = DateTextCache(capacity: dates.capacity)
             }
         }
     }
@@ -97,7 +99,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     var timeZone = TimeZone.current {
         didSet {
             if timeZone != oldValue {
-                dates = DateTextCache(capacity: dates.capacity, abbreviates: true)
+                dates = DateTextCache(capacity: dates.capacity)
             }
         }
     }
@@ -114,7 +116,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     private(set) var reorderInsertionRow: Int?
     /// Where commits dragged over the list would go, and what that shows.
     private var currentDrop: Drop?
-    private var dates = DateTextCache(capacity: 2_000, abbreviates: true)
+    private var dates = DateTextCache(capacity: 2_000)
     private let monograms = MonogramCache()
     /// A commit's row height, measured once.
     private let rowHeight = Metrics.SimpleList.rowHeight
@@ -515,7 +517,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         let simpleRow: SimpleHistoryRow?
         var kind = SimpleRowContent.Kind.commit
         var isDimmed = false
-        var rail: (_ isUnpushed: Bool) -> SimpleRail
+        let rail: SimpleRail
         switch items[row] {
         case .commit(let historyRow):
             simpleRow = history.simpleRow(atRow: historyRow)
@@ -529,18 +531,14 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
                     (color: mergedColor(merge, sha: row.commit.sha), isExpanded: merge.isExpanded)
                 }
             }
-            rail = { [isDimmed] isUnpushed in
-                colors.rail(row: historyRow, isUnpushed: isUnpushed, isLast: isLast, merge: merge, isDimmed: isDimmed)
-            }
+            let isHead = simpleRow.map { $0.commit.sha == presentation.headSHA } ?? false
+            rail = colors.rail(row: historyRow, isHead: isHead, isLast: isLast, merge: merge, isDimmed: isDimmed)
         case .mergedCommit(let mergeRow, let index):
             simpleRow = history.simpleMergedRow(mergeRow: mergeRow, index: index)
             kind = .mergedCommit
             isDimmed = presentation.search != nil
-            let color = mergedColor(ofRow: mergeRow)
             let isLast = !isUnderMerge(mergeRow, tableRow: row + 1)
-            rail = { [isDimmed] isUnpushed in
-                colors.mergedRail(mergeRow: mergeRow, color: color, isUnpushed: isUnpushed, isLast: isLast, isDimmed: isDimmed)
-            }
+            rail = colors.mergedRail(mergeRow: mergeRow, color: mergedColor(ofRow: mergeRow), isLast: isLast, isDimmed: isDimmed)
         case .mergedCommitsStatus:
             return nil
         }
@@ -549,7 +547,6 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         }
         let commit = simpleRow.commit
         let date = dates.entry(for: commit.sha, date: commit.author.date, now: fixedNow ?? Date(), formatting: dateFormatting, timeZone: timeZone)
-        let isUnpushed = presentation.hasRemote && simpleRow.isUnpushed
         let content = SimpleRowContent(
             kind: kind,
             sha: commit.sha,
@@ -561,11 +558,12 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
             dateTooltip: date.tooltip,
             changedFileCount: simpleRow.changedFileCount,
             tags: simpleRow.tags,
-            isUnpushed: isUnpushed,
+            isUnpushed: presentation.hasRemote && simpleRow.isUnpushed,
+            isCurrentTip: commit.sha == presentation.headSHA,
             isDimmed: isDimmed,
             avatarEndpoint: presentation.avatarEndpoint
         )
-        return (content, rail(isUnpushed), kind == .mergedCommit)
+        return (content, rail, kind == .mergedCommit)
     }
 
     /// The color of the branch a merge brought in.

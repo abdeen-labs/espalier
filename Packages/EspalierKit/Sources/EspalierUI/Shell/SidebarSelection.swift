@@ -1,6 +1,7 @@
 // The sidebar's places: what you select in the current repository's
 // sidebar.
 
+import EspalierCore
 import Foundation
 
 /// A place in the selected repository: what the detail area shows.
@@ -13,8 +14,9 @@ nonisolated public enum SidebarPlace: Hashable, Sendable {
     /// The history graph.
     case history
     /// A branch, by its full ref (`refs/heads/main`,
-    /// `refs/remotes/origin/feature`). The current branch shows History
-    /// focused on HEAD; any other branch shows Compare.
+    /// `refs/remotes/origin/feature`): its history, focused on its tip,
+    /// and for a branch other than the current one, how it compares with
+    /// the current branch.
     case branch(ref: String)
     /// An open pull request.
     case pullRequest(number: Int)
@@ -23,13 +25,13 @@ nonisolated public enum SidebarPlace: Hashable, Sendable {
     /// A branch's stash, by the branch's name.
     case stash(branch: String)
 
-    /// The kind of place, which names the inner split's autosave and picks
-    /// the screen. `currentBranchRef` is the checked-out branch's ref, if any.
-    public func kind(currentBranchRef: String?) -> PlaceKind {
+    /// The kind of place, which names the inner split's autosave and sets
+    /// its widths. History's places take History's `style`: the simple list
+    /// and the graph each have their own width.
+    public func kind(style: HistoryStyle) -> PlaceKind {
         switch self {
         case .changes: .changes
-        case .history, .tag: .history
-        case .branch(let ref): ref == currentBranchRef ? .history : .compare
+        case .history, .branch, .tag: style == .simple ? .simpleHistory : .graphHistory
         case .pullRequest: .pullRequest
         case .stash: .stash
         }
@@ -57,7 +59,7 @@ nonisolated public enum SidebarPlace: Hashable, Sendable {
 
 /// The kinds of places, each with its own inner split.
 nonisolated public enum PlaceKind: String, CaseIterable, Sendable {
-    case changes, history, compare, pullRequest, stash
+    case changes, simpleHistory, graphHistory, pullRequest, stash
 
     /// The name the inner split's divider position is saved under.
     public var splitAutosaveName: String {
@@ -68,9 +70,19 @@ nonisolated public enum PlaceKind: String, CaseIterable, Sendable {
     @MainActor public var leadingColumn: Metrics.ColumnWidth {
         switch self {
         case .changes: Metrics.Column.changesFileList
-        case .history, .compare: Metrics.Column.graphList
+        case .simpleHistory: Metrics.Column.simpleList
+        case .graphHistory: Metrics.Column.graphList
         case .pullRequest: Metrics.Column.pullRequestOverview
         case .stash: Metrics.Column.stashColumn
+        }
+    }
+
+    /// The narrowest the inner split's trailing pane gets: History's
+    /// details hold a commit's files beside its diff.
+    @MainActor public var trailingMinimum: CGFloat {
+        switch self {
+        case .simpleHistory, .graphHistory: Metrics.Column.commitDetailMinimum
+        case .changes, .pullRequest, .stash: Metrics.Column.diffMinimum
         }
     }
 }

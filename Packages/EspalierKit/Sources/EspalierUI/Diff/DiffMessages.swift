@@ -59,8 +59,8 @@ struct DiffMessages: View {
                     .font(Typography.secondary)
                 }
             }
-            .padding(.horizontal, Metrics.insetMedium + 2)
-            .padding(.vertical, Metrics.insetSmall + 2)
+            .padding(.horizontal, Metrics.insetMedium)
+            .padding(.vertical, Metrics.insetSmall)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(nsColor: DiffMessages.background))
             .overlay(alignment: .bottom) {
@@ -73,8 +73,8 @@ struct DiffMessages: View {
 /// "Show whitespace changes?": offered when the gutter of a diff hiding
 /// whitespace changes is clicked, since lines can't be selected then.
 struct WhitespaceHintView: View {
-    let onNo: () -> Void
-    let onYes: () -> Void
+    let onCancel: () -> Void
+    let onShow: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
@@ -86,10 +86,10 @@ struct WhitespaceHintView: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
-                Button("No", action: onNo)
+                Button("Cancel", action: onCancel)
                     .buttonStyle(.secondary)
                     .keyboardShortcut(.cancelAction)
-                Button("Yes", action: onYes)
+                Button("Show Whitespace", action: onShow)
                     .buttonStyle(.prominent)
                     .keyboardShortcut(.defaultAction)
             }

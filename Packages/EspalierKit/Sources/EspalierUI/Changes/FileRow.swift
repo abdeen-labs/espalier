@@ -1,6 +1,9 @@
 // A changed file's row in the Changes list: its checkbox (included,
-// excluded, or partly), its name and folder, a rename's old path, its status
-// badge, and the lines it adds and removes ("+10 −2").
+// excluded, or partly), its status badge, its name and folder, a rename's
+// old path, and the lines it adds and removes ("+10 −2"). A conflicted
+// file's row has the warning (or, resolved, the check) for its badge, and
+// at its end what's left to resolve and the conflict's buttons. A stash's
+// files use the same row without the checkbox.
 
 import AppKit
 import EspalierCore
@@ -29,6 +32,11 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
     /// they load and for a file without counts (binary, a submodule,
     /// conflicted).
     public var lineCount: FileLineCount?
+    /// Whether the row has a checkbox (a stash's files have none).
+    public var showsCheckbox: Bool
+    /// A conflicted file's state and what can be done with it, while an
+    /// operation or a stash restore waits on its conflicts.
+    public var conflict: ConflictFileRowContent?
 
     public init(
         id: String,
@@ -38,7 +46,9 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
         inclusion: Bool?,
         isInclusionEnabled: Bool = true,
         inclusionHelp: String? = nil,
-        lineCount: FileLineCount? = nil
+        lineCount: FileLineCount? = nil,
+        showsCheckbox: Bool = true,
+        conflict: ConflictFileRowContent? = nil
     ) {
         self.id = id
         self.path = path
@@ -48,6 +58,8 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
         self.isInclusionEnabled = isInclusionEnabled
         self.inclusionHelp = inclusionHelp
         self.lineCount = lineCount
+        self.showsCheckbox = showsCheckbox
+        self.conflict = conflict
     }
 
     /// The file's name.
@@ -95,7 +107,7 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
     }
 
     /// The row as VoiceOver reads it: the name, the status, the folder, a
-    /// rename's source, and the lines added and removed.
+    /// rename's source, the lines added and removed, and a conflict's state.
     public var accessibilityLabel: String {
         var label = "\(fileName), \(status.title)"
         if !directory.isEmpty {
@@ -107,6 +119,9 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
         if countParts != nil, let added = lineCount?.added, let deleted = lineCount?.deleted {
             label += ", \(added) added lines, \(deleted) removed lines"
         }
+        if let conflict {
+            label += ", \(conflict.status)"
+        }
         return label
     }
 
@@ -117,9 +132,15 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
 }
 
 extension FileRowContent {
-    /// The row for `file`, with its checkbox as the changes model shows it
-    /// and its line counts once they've loaded.
-    public init(_ file: WorkingDirectoryFileChange, inclusion: FileInclusionState, lineCount: FileLineCount? = nil) {
+    /// The row for `file`, with its checkbox as the changes model shows it,
+    /// its line counts once they've loaded, and its conflict while it's
+    /// conflicted.
+    public init(
+        _ file: WorkingDirectoryFileChange,
+        inclusion: FileInclusionState,
+        lineCount: FileLineCount? = nil,
+        conflict: ConflictFileRowContent? = nil
+    ) {
         self.init(
             id: file.id,
             path: file.path,
@@ -128,7 +149,22 @@ extension FileRowContent {
             inclusion: inclusion.value,
             isInclusionEnabled: inclusion.isEnabled,
             inclusionHelp: inclusion.help,
-            lineCount: lineCount
+            lineCount: lineCount,
+            conflict: conflict
+        )
+    }
+
+    /// The row for a file that can only be looked at (a stash's): no
+    /// checkbox.
+    public init(readOnly file: CommittedFileChange) {
+        self.init(
+            id: file.id,
+            path: file.path,
+            oldPath: file.status.oldPath,
+            status: FileStatusKind(file.status),
+            inclusion: nil,
+            isInclusionEnabled: false,
+            showsCheckbox: false
         )
     }
 }
@@ -144,19 +180,29 @@ enum FileRowMetrics {
     static let spacing: CGFloat = 9
     /// Space between the name, a rename's source, and the folder.
     static let labelSpacing: CGFloat = 6
-    /// Space before the line counts.
+    /// Space before the line counts, and before a conflict's buttons.
     static let countsSpacing: CGFloat = 8
+    /// The share of the room after the badge a conflict's state may take
+    /// before it gives way; the name keeps the rest.
+    static let conflictStatusShare: CGFloat = 0.5
     /// The row's leading content edge: the checkbox's x.
     static var contentInset: CGFloat {
         inset + padding
+    }
+
+    /// A conflict's buttons' trailing edge, from the row's: icon buttons
+    /// carry their own room, so their symbols line up with the text.
+    static var actionsInset: CGFloat {
+        inset + Metrics.grid
     }
 }
 
 /// A changed file's row in the Changes table: the checkbox, the status
 /// badge, the name, then a rename's source and the folder in tertiary
 /// text (which give way first), and the line counts at the trailing edge
-/// in SF Mono. AppKit, so a table of 50,000 files configures only the rows
-/// on screen.
+/// in SF Mono; for a conflicted file, its state and buttons at the
+/// trailing edge instead. AppKit, so a table of 50,000 files configures
+/// only the rows on screen.
 final class FileRowView: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("Espalier.FileRow")
 
@@ -166,10 +212,20 @@ final class FileRowView: NSTableCellView {
     private let directoryLabel = FileRowView.label(font: AppKitTypography.secondary, color: Palette.text3)
     private let countsLabel = FileRowView.label(font: AppKitTypography.count(), color: Palette.text3)
     private let glyph = StatusGlyphView()
+    /// A conflicted file's warning, or its check once resolved, in the
+    /// badge's place.
+    private let conflictGlyph = NSImageView()
+    /// A conflicted file's state: "3 conflicts", "Manual conflict".
+    private let conflictLabel = FileRowView.label(font: AppKitTypography.secondary, color: Palette.text3)
+    /// A conflicted file's buttons, made for the first conflict the row
+    /// shows.
+    private var conflictButtons: NSHostingView<ConflictFileButtons>?
 
     private(set) var content: FileRowContent?
     /// Includes (true) or excludes (false) the row's file.
     var onIncludeChanged: ((Bool) -> Void)?
+    /// What a conflicted file's buttons do.
+    private var conflictActions: ConflictFileRowActions?
     /// The row is fading out of the table: its file is gone, so it takes no
     /// clicks (they reach the table) and its checkbox does nothing.
     var isDeparting = false
@@ -196,7 +252,13 @@ final class FileRowView: NSTableCellView {
         checkbox.action = #selector(toggle(_:))
         countsLabel.lineBreakMode = .byClipping
         countsLabel.isHidden = true
-        for view in [checkbox, glyph, nameLabel, sourceLabel, directoryLabel, countsLabel] as [NSView] {
+        conflictLabel.lineBreakMode = .byTruncatingTail
+        conflictLabel.isHidden = true
+        conflictGlyph.isHidden = true
+        conflictGlyph.imageScaling = .scaleNone
+        conflictGlyph.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: AppKitTypography.row.pointSize, weight: .regular)
+        conflictGlyph.setAccessibilityElement(false)
+        for view in [checkbox, glyph, conflictGlyph, nameLabel, sourceLabel, directoryLabel, countsLabel, conflictLabel] as [NSView] {
             addSubview(view)
         }
         textField = nameLabel
@@ -217,18 +279,29 @@ final class FileRowView: NSTableCellView {
     /// Shows `content`, changing only what differs (a status pass refills
     /// every row on screen, most of them unchanged).
     ///
-    /// - Parameter repository: The repository the file is in: the same
-    ///   file's checkbox animates its change, but a row reused for another
-    ///   file, or for another repository's, shows its state at once.
-    func configure(_ content: FileRowContent, repository: ObjectIdentifier? = nil) {
+    /// - Parameters:
+    ///   - repository: The repository the file is in: the same file's
+    ///     checkbox animates its change, but a row reused for another file,
+    ///     or for another repository's, shows its state at once.
+    ///   - conflictActions: What a conflicted file's buttons do.
+    func configure(_ content: FileRowContent, repository: ObjectIdentifier? = nil, conflictActions: ConflictFileRowActions? = nil) {
         let isSameRepository = repository == shownRepository
         shownRepository = repository
+        self.conflictActions = conflictActions
+        // The buttons follow the editor's setting, which the content
+        // doesn't carry.
+        if let conflict = content.conflict, let conflictActions, let conflictButtons {
+            conflictButtons.rootView = ConflictFileButtons(content: conflict, actions: conflictActions)
+        }
         guard content != self.content else {
             return
         }
         let isSameFile = isSameRepository && (self.content.map { ExactString($0.id) == ExactString(content.id) } ?? false)
         self.content = content
         let state = InclusionCheckbox.state(content.inclusion)
+        if checkbox.isHidden == content.showsCheckbox {
+            checkbox.isHidden = !content.showsCheckbox
+        }
         if checkbox.state != state {
             checkbox.setState(state, animated: isSameFile)
         }
@@ -245,20 +318,83 @@ final class FileRowView: NSTableCellView {
         }
         Self.set(sourceLabel, content.renameSource ?? "")
         Self.set(directoryLabel, content.directory)
-        setCounts(content.countParts)
+        setCounts(content.conflict == nil ? content.countParts : nil)
         glyph.kind = content.status
+        showConflict(content.conflict)
         setAccessibilityLabel(content.accessibilityLabel)
-        setAccessibilityValue(content.inclusionDescription)
-        setAccessibilityCustomActions([
-            NSAccessibilityCustomAction(name: content.inclusion == true ? "Exclude" : "Include") { [weak self] in
+        setAccessibilityValue(content.showsCheckbox ? content.inclusionDescription : nil)
+        setAccessibilityCustomActions(accessibilityActions(for: content))
+        needsLayout = true
+    }
+
+    /// Shows a conflicted file's glyph, state, and buttons in place of the
+    /// badge and the counts, or hides them.
+    private func showConflict(_ conflict: ConflictFileRowContent?) {
+        guard let conflict else {
+            glyph.isHidden = false
+            conflictGlyph.isHidden = true
+            Self.set(conflictLabel, "")
+            conflictButtons?.isHidden = true
+            return
+        }
+        glyph.isHidden = true
+        conflictGlyph.isHidden = false
+        conflictGlyph.image = NSImage(
+            systemSymbolName: conflict.isUnresolved ? "exclamationmark.triangle.fill" : "checkmark.circle.fill",
+            accessibilityDescription: nil
+        )
+        conflictGlyph.contentTintColor = conflict.isUnresolved ? Palette.warningMark : Palette.success
+        Self.set(conflictLabel, conflict.status)
+        conflictLabel.textColor = conflict.isUnresolved ? Palette.warning : Palette.text3
+        conflictLabel.toolTip = conflict.help
+        let actions = conflictActions ?? ConflictFileRowActions(isEditorAvailable: false)
+        let buttons = ConflictFileButtons(content: conflict, actions: actions)
+        if let conflictButtons {
+            conflictButtons.rootView = buttons
+            conflictButtons.isHidden = false
+        } else {
+            let host = NSHostingView(rootView: buttons)
+            // Its size is its buttons'; the row places it.
+            host.sizingOptions = [.intrinsicContentSize]
+            addSubview(host)
+            conflictButtons = host
+        }
+    }
+
+    /// VoiceOver's actions: including or excluding the file, and a
+    /// conflicted file's buttons.
+    private func accessibilityActions(for content: FileRowContent) -> [NSAccessibilityCustomAction] {
+        var actions: [NSAccessibilityCustomAction] = []
+        if content.showsCheckbox {
+            actions.append(NSAccessibilityCustomAction(name: content.inclusion == true ? "Exclude" : "Include") { [weak self] in
                 guard let content = self?.content, content.isInclusionEnabled else {
                     return false
                 }
                 self?.onIncludeChanged?(content.inclusion != true)
                 return true
-            },
-        ])
-        needsLayout = true
+            })
+        }
+        if let conflict = content.conflict, let conflictActions {
+            for (index, item) in conflict.accessibilityActions(conflictActions).enumerated() {
+                actions.append(NSAccessibilityCustomAction(name: item.name) { [weak self] in
+                    self?.performConflictAction(at: index) ?? false
+                })
+            }
+        }
+        return actions
+    }
+
+    /// Runs a conflicted file's VoiceOver action, as the row shows it now.
+    private func performConflictAction(at index: Int) -> Bool {
+        guard let conflict = content?.conflict, let conflictActions else {
+            return false
+        }
+        let items = conflict.accessibilityActions(conflictActions)
+        guard items.indices.contains(index) else {
+            return false
+        }
+        items[index].perform()
+        return true
     }
 
     // MARK: Accessibility
@@ -302,23 +438,41 @@ final class FileRowView: NSTableCellView {
         let box = CheckboxDrawing.size
         checkbox.frame = CGRect(x: FileRowMetrics.contentInset, y: ((bounds.height - box) / 2).rounded(), width: box, height: box)
         let glyphSize = Metrics.FileList.statusGlyphSize
-        glyph.frame = CGRect(
-            x: checkbox.frame.maxX + FileRowMetrics.spacing,
-            y: ((bounds.height - glyphSize) / 2).rounded(),
-            width: glyphSize,
-            height: glyphSize
-        )
+        let glyphX = checkbox.isHidden ? FileRowMetrics.contentInset : checkbox.frame.maxX + FileRowMetrics.spacing
+        glyph.frame = CGRect(x: glyphX, y: ((bounds.height - glyphSize) / 2).rounded(), width: glyphSize, height: glyphSize)
+        conflictGlyph.frame = glyph.frame
 
         // The name, then the rename's source, then the folder, each as wide
         // as it needs while there's room: the folder gives way first. A
         // label's frame includes its cell's padding (its intrinsic width
         // doesn't, and a frame that narrow truncates the text), so frames
         // start and sit closer by that padding for the text to keep the
-        // spacing. The counts keep their width at the trailing edge.
+        // spacing. The counts keep their width at the trailing edge; a
+        // conflict's buttons keep theirs, and its state takes up to half
+        // the room left.
         let padding = Self.labelPadding
         let gap = FileRowMetrics.labelSpacing - 2 * padding
         var x = glyph.frame.maxX + FileRowMetrics.spacing - padding
         var end = bounds.width - FileRowMetrics.contentInset + padding
+        if let conflictButtons, !conflictButtons.isHidden {
+            let size = conflictButtons.intrinsicContentSize
+            let width = max(size.width, 0)
+            let height = min(max(size.height, 0), bounds.height)
+            conflictButtons.frame = CGRect(
+                x: bounds.width - FileRowMetrics.actionsInset - width,
+                y: ((bounds.height - height) / 2).rounded(),
+                width: width,
+                height: height
+            )
+            end = conflictButtons.frame.minX - FileRowMetrics.countsSpacing + padding
+        }
+        if !conflictLabel.isHidden {
+            let room = max(end - x, 0)
+            let width = min(Self.fittingWidth(conflictLabel), (room * FileRowMetrics.conflictStatusShare).rounded())
+            let height = ceil(conflictLabel.intrinsicContentSize.height)
+            conflictLabel.frame = CGRect(x: end - width, y: ((bounds.height - height) / 2).rounded(), width: width, height: height)
+            end = conflictLabel.frame.minX - FileRowMetrics.countsSpacing + 2 * padding
+        }
         if !countsLabel.isHidden {
             let width = Self.fittingWidth(countsLabel)
             let height = ceil(countsLabel.intrinsicContentSize.height)
@@ -346,6 +500,9 @@ final class FileRowView: NSTableCellView {
         }
         if !countsLabel.isHidden {
             countsLabel.frame.origin.y = (baseline - countsLabel.firstBaselineOffsetFromTop).rounded()
+        }
+        if !conflictLabel.isHidden {
+            conflictLabel.frame.origin.y = (baseline - conflictLabel.firstBaselineOffsetFromTop).rounded()
         }
     }
 
@@ -497,7 +654,8 @@ final class StatusGlyphView: NSView {
 
 /// A checkbox that can be mixed, as a partly included file's is: Espalier's
 /// `CheckboxButton`, since a SwiftUI toggle can't show a mixed state for
-/// one value. Its title is part of it (a click on the title toggles too).
+/// one value. Its title is part of it (a click on the title toggles too),
+/// and changes at once.
 ///
 /// Clicking it includes everything unless everything is included, as
 /// clicking a mixed checkbox turns it on.
@@ -508,13 +666,9 @@ struct InclusionCheckbox: NSViewRepresentable {
     var title = ""
     /// The title's font; the row font when nil.
     var titleFont: NSFont?
-    /// The count the title shows, when it has one: a new count crossfades
-    /// the title over 0.2 s; a title changing otherwise (a filter typed)
-    /// changes at once.
-    var titleCount: Int?
-    /// What the checkbox is for (the repository): its state and title
-    /// animate only while this stays the same, so choosing another
-    /// repository shows its state at once.
+    /// What the checkbox is for (the repository): its state animates only
+    /// while this stays the same, so choosing another repository shows its
+    /// state at once.
     var scope: ObjectIdentifier?
     var onChange: (Bool) -> Void
 
@@ -529,7 +683,6 @@ struct InclusionCheckbox: NSViewRepresentable {
         button.setContentHuggingPriority(.required, for: .horizontal)
         button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         apply(to: button)
-        context.coordinator.shownTitleCount = titleCount
         context.coordinator.shownScope = scope
         return button
     }
@@ -538,11 +691,6 @@ struct InclusionCheckbox: NSViewRepresentable {
         let coordinator = context.coordinator
         coordinator.parent = self
         let isSameScope = coordinator.shownScope == scope
-        if isSameScope, button.title != title, let titleCount, let shown = coordinator.shownTitleCount, shown != titleCount,
-           Motion.animates(button) {
-            Motion.crossfade(button.layer, duration: Motion.kindChange)
-        }
-        coordinator.shownTitleCount = titleCount
         coordinator.shownScope = scope
         apply(to: button, animated: isSameScope)
     }
@@ -576,8 +724,6 @@ struct InclusionCheckbox: NSViewRepresentable {
 
     final class Coordinator: NSObject {
         var parent: InclusionCheckbox
-        /// The count the title showed last.
-        var shownTitleCount: Int?
         /// The scope the checkbox showed last.
         var shownScope: ObjectIdentifier?
 
