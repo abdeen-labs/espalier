@@ -756,9 +756,10 @@ immediately; importing desktop's repository list and settings (my call).
   not.
 - **The commit message card shows which field has focus with its own
   tint** (my call, over an accent bar beside the field): a soft accent
-  behind the summary or the description, hidden in an inactive window and
-  while the fields are read-only. A hairline divides the summary from the
-  description (my call).
+  filling the summary's or the description's whole part of the card, edge
+  to edge (my call, over a smaller shape inset in it), hidden in an
+  inactive window and while the fields are read-only. A hairline divides
+  the summary from the description (my call).
 - **The description scrolls only when its text is taller than it shows**
   (my call): a shorter text, or the placeholder, holds still under a scroll
   instead of bouncing.

@@ -438,19 +438,19 @@ public struct ComposerView: View {
         return focusBridge.focusedField
     }
 
-    /// The faint accent tint behind `field`'s part of the card while it has
-    /// focus: a rounded shape inside the card's, 4 points in from its edges
-    /// and the dividers. It fades in over 0.15 s and out over 0.1 s, and
-    /// crossfades to the other field.
+    /// The faint accent tint over `field`'s whole part of the card while it
+    /// has focus, from the card's edges to the dividers; the summary's top
+    /// corners are the card's. It fades in over 0.15 s and out over 0.1 s,
+    /// and crossfades to the other field.
     private func focusTint(behind field: ComposerField) -> some View {
-        ZStack {
+        let corner = field == .summary ? Metrics.Radius.card : 0
+        return ZStack {
             if markedField == field {
-                RoundedRectangle(cornerRadius: ComposerMetrics.focusTintRadius, style: .continuous)
+                UnevenRoundedRectangle(topLeadingRadius: corner, topTrailingRadius: corner, style: .continuous)
                     .fill(Color(espalier: Palette.accentFaint))
                     .transition(.opacity)
             }
         }
-        .padding(Metrics.grid)
         .animation(motion.animation(markedField == nil ? Motion.focusOut : Motion.leave), value: markedField)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -591,8 +591,6 @@ enum ComposerMetrics {
     static let horizontalPadding: CGFloat = 14
     /// Space inside the card around the summary and description.
     static let cardPadding: CGFloat = 11
-    /// The focus tint's corners, concentric with the card's.
-    static let focusTintRadius: CGFloat = Metrics.Radius.card - Metrics.grid
     /// The card's footer row.
     static let footerHeight: CGFloat = 34
     static let footerPadding: CGFloat = 8
