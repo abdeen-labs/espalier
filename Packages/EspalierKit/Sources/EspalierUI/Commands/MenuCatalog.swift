@@ -170,6 +170,7 @@ nonisolated public enum MenuCatalog {
     ])
 
     public static let help = MenuDefinition(title: "Help", entries: [
+        .item(.reportIssue),
         .item(.showKeyboardShortcuts),
         .item(.showLogsInFinder),
     ])

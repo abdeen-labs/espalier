@@ -56,9 +56,4 @@ pass.
    the command line tool (writes `/usr/local/bin/espalier` behind an
    administrator prompt: ask first).
 3. **Last, mine:** Sparkle, once the app is close to a release and with my
-   feed and keys; Developer ID signing, notarization, appcast hosting,
-   creating the repository and pushing.
-
-## Follow-ups
-
-- Help gets "Report Issue…" once the repository exists.
+   feed and keys; Developer ID signing, notarization, and appcast hosting.

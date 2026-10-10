@@ -19,8 +19,11 @@ enum ShellActions {
 
     // MARK: Espalier, Help
 
-    /// About, Settings, Keyboard Shortcuts, and Show Logs in Finder: the
-    /// handlers the Settings window registers too.
+    /// Where Report Issue… goes: a new issue on Espalier's repository.
+    static let reportIssueURL = URL(string: "https://github.com/abdeen-labs/espalier/issues/new/choose")!
+
+    /// About, Settings, Report Issue…, Keyboard Shortcuts, and Show Logs in
+    /// Finder: the handlers the Settings window registers too.
     static func registerApp(into actions: WindowActions, context: WindowContext) {
         actions.register(.about) { [weak context] _ in
             context?.openWindow?(id: EspalierScenes.aboutWindowID)
@@ -30,6 +33,9 @@ enum ShellActions {
                 return
             }
             context?.openSettings(pane)
+        }
+        actions.register(.reportIssue) { [weak context] _ in
+            context?.app.integrations.openInBrowser(reportIssueURL)
         }
         actions.register(.showKeyboardShortcuts) { [weak context] _ in
             guard let context else {

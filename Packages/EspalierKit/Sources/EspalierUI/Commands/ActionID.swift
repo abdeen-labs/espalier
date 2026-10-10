@@ -27,6 +27,7 @@ nonisolated public enum ActionID: Sendable {
     // MARK: Espalier and Help menus
     case about
     case installCommandLineTool
+    case reportIssue
     case showKeyboardShortcuts
     case showLogsInFinder
     /// Opens Settings at a pane (nil: the last one).
@@ -180,6 +181,7 @@ nonisolated public enum ActionID: Sendable {
         switch self {
         case .about: .about
         case .installCommandLineTool: .installCommandLineTool
+        case .reportIssue: .reportIssue
         case .showKeyboardShortcuts: .showKeyboardShortcuts
         case .showLogsInFinder: .showLogsInFinder
         case .openSettings: .openSettings
@@ -313,7 +315,7 @@ extension ImageDiffType {
 /// The kind of an `ActionID`, without its arguments: what handlers are
 /// registered for.
 nonisolated public enum ActionKind: String, CaseIterable, Sendable {
-    case about, installCommandLineTool, showKeyboardShortcuts, showLogsInFinder, openSettings
+    case about, installCommandLineTool, reportIssue, showKeyboardShortcuts, showLogsInFinder, openSettings
     case newRepository, addLocalRepository, cloneRepository, addRepositories
     case deleteSelection, copyPath
     case showChanges, showHistory, showNextPlace, showPreviousPlace, selectPlace, filterSidebar, search, toggleInspector
@@ -342,6 +344,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         switch self {
         case .about: "About Espalier"
         case .installCommandLineTool: "Install Command Line Tool…"
+        case .reportIssue: "Report Issue…"
         case .showKeyboardShortcuts: "Keyboard Shortcuts"
         case .showLogsInFinder: "Show Logs in Finder"
         case .openSettings: "Settings…"
@@ -510,7 +513,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
     /// is showing.
     public var isRepositoryScoped: Bool {
         switch self {
-        case .about, .installCommandLineTool, .showKeyboardShortcuts, .showLogsInFinder, .openSettings,
+        case .about, .installCommandLineTool, .reportIssue, .showKeyboardShortcuts, .showLogsInFinder, .openSettings,
              .newRepository, .addLocalRepository, .cloneRepository, .addRepositories,
              .switchRepository, .filterSidebar, .search, .toggleSplitDiff, .toggleHideWhitespace,
              .toggleWrapLines, .setImageDiffType, .increaseCodeTextSize, .decreaseCodeTextSize,

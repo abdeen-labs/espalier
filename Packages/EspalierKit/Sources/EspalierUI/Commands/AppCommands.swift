@@ -53,8 +53,8 @@ struct AppMenuCommands: Commands {
     }
 }
 
-/// Help: Keyboard Shortcuts and Show Logs in Finder (the system adds the
-/// search field).
+/// Help: Report Issue…, Keyboard Shortcuts, and Show Logs in Finder (the
+/// system adds the search field).
 struct HelpCommands: Commands {
     let target: MenuTarget
 
