@@ -139,6 +139,8 @@ struct SquashMessageCard: View {
     @Binding var summary: String
     @Binding var description: String
     var focusedField: FocusState<SquashMessageField?>.Binding
+    /// Whether the description has focus, as its text view reports it.
+    @State private var descriptionHasFocus = false
     @Environment(\.appearsActive) private var appearsActive
     @Environment(\.motion) private var motion
 
@@ -165,10 +167,9 @@ struct SquashMessageCard: View {
                 }
             Hairline()
                 .padding(.horizontal, Metrics.insetMedium)
-            TextEditor(text: $description)
-                .font(Typography.row)
-                .foregroundStyle(.text2)
-                .scrollContentBackground(.hidden)
+            TextArea(text: $description, textColor: Palette.text2, accessibilityLabel: "Description") { hasFocus in
+                descriptionHasFocus = hasFocus
+            }
                 .focused(focusedField, equals: .description)
                 .overlay(alignment: .topLeading) {
                     if description.isEmpty {
@@ -186,7 +187,6 @@ struct SquashMessageCard: View {
                 .background {
                     tint(behind: .description)
                 }
-                .accessibilityLabel("Description")
         }
         .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
     }
@@ -194,7 +194,10 @@ struct SquashMessageCard: View {
     /// The field the tint shows behind: the one with focus, while the
     /// window is active.
     private var markedField: SquashMessageField? {
-        appearsActive ? focusedField.wrappedValue : nil
+        guard appearsActive else {
+            return nil
+        }
+        return descriptionHasFocus ? .description : focusedField.wrappedValue
     }
 
     /// The faint accent tint over `field`'s part of the card while it has
@@ -240,8 +243,8 @@ struct FlowingCoAuthors: View {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.text3)
                     }
-                    .buttonStyle(.plain)
-                    .help("Remove \(author.name)")
+                    .buttonStyle(.bare(.circle))
+                    .tooltip("Remove \(author.name)")
                     .accessibilityLabel("Remove \(author.name)")
                 }
                 .font(Typography.secondary)

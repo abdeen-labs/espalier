@@ -96,8 +96,8 @@ struct AppearanceForm: View {
                 }
                 SettingsRow("Diff tab size", labelsControl: true) {
                     CapsulePopUp("Diff tab size", selection: $preferences.tabSize, title: AppearanceSettings.tabSizeTitle(preferences.tabSize)) {
-                        ForEach(AppearanceSettings.tabSizes(including: preferences.tabSize), id: \.self) { size in
-                            Text(AppearanceSettings.tabSizeTitle(size)).tag(size)
+                        for size in AppearanceSettings.tabSizes(including: preferences.tabSize) {
+                            MenuChoice(AppearanceSettings.tabSizeTitle(size), value: size)
                         }
                     }
                     .settingsControlWidth()
@@ -108,24 +108,24 @@ struct AppearanceForm: View {
                 SettingsToggleRow("Prefer absolute dates over relative", isOn: $preferences.preferAbsoluteDates)
                 SettingsRow("Date format", labelsControl: true) {
                     CapsulePopUp("Date format", selection: dateFormat, title: Self.title(dateFormat.wrappedValue)) {
-                        ForEach(DateFormatPattern.allCases, id: \.self) { format in
-                            Text(Self.title(format)).tag(format)
+                        for format in DateFormatPattern.allCases {
+                            MenuChoice(Self.title(format), value: format)
                         }
                     }
                     .settingsControlWidth()
                 }
                 SettingsRow("Time format", labelsControl: true) {
                     CapsulePopUp("Time format", selection: timeFormat, title: Self.title(timeFormat.wrappedValue)) {
-                        ForEach(TimeFormatPattern.allCases, id: \.self) { format in
-                            Text(Self.title(format)).tag(format)
+                        for format in TimeFormatPattern.allCases {
+                            MenuChoice(Self.title(format), value: format)
                         }
                     }
                     .settingsControlWidth()
                 }
                 SettingsRow("Number format", labelsControl: true) {
                     CapsulePopUp("Number format", selection: $preferences.numberFormat, title: AppearanceSettings.numberFormatExample(preferences.numberFormat)) {
-                        ForEach(numberFormats, id: \.self) { format in
-                            Text(AppearanceSettings.numberFormatExample(format)).tag(format)
+                        for format in numberFormats {
+                            MenuChoice(AppearanceSettings.numberFormatExample(format), value: format)
                         }
                     }
                     .settingsControlWidth()

@@ -1,5 +1,6 @@
-// ⇧F10 in the sidebar: the selected place's menu, at its row; and the
-// right-click VoiceOver's Show Menu makes on a place's row.
+// The sidebar's context menus: ⇧F10 opens the selected place's at its row;
+// VoiceOver's Show Menu, or a right-click, opens another place's, and that
+// row is the menu's target.
 
 import AppKit
 @testable import EspalierCore
@@ -11,7 +12,7 @@ import TestSupport
 
 @Suite("Sidebar keyboard menus", .offline, .hangGuard(minutes: 5)) @MainActor
 struct SidebarKeyboardMenuTests {
-    @Test("⇧F10 pops up the menu a right-click on the selected place shows, at its row; Show Menu on another place's row pops up that place's")
+    @Test("⇧F10 opens the selected place's menu at its row; Show Menu or a right-click on another place's row opens that place's, which it targets")
     func selectedPlaceMenu() async throws {
         try await withIsolatedGitConfig { _ in
             let harness = try AppHarness()
@@ -20,29 +21,55 @@ struct SidebarKeyboardMenuTests {
             let repository = try await harness.addAndSelect(try setupEmptyRepository(), to: app)
             let context = WindowContext(app: app)
             context.state.select(.history, in: repository.id)
+            let recorder = MenuRecorder()
 
-            let (window, host) = hostInWindow(SidebarContainer().windowEnvironment(context), size: CGSize(width: Metrics.Column.sidebar.ideal, height: 400))
+            let (window, host) = hostInWindow(
+                SidebarContainer()
+                    .windowEnvironment(context)
+                    .environment(\.menuPresenter, recorder.menuPresenter),
+                size: CGSize(width: Metrics.Column.sidebar.ideal, height: 400)
+            )
             defer { window.contentView = nil }
             let table = try #require(firstView(NSTableView.self, in: host))
             #expect(window.makeFirstResponder(table))
             let row = table.selectedRow
             #expect(row >= 0)
 
-            let popped = PoppedUpMenus()
-            #expect(KeyboardContextMenu.handle(try f10KeyDown(in: window), in: window, present: popped.present))
-            let popup = try #require(popped.popups.first)
-            #expect(popup.view === table)
-            #expect(table.row(at: popup.location) == row)
+            #expect(KeyboardContextMenu.handle(try f10KeyDown(in: window), in: window, presenter: recorder.menuPresenter))
+            let popup = try #require(recorder.popups.first)
+            #expect(table.row(at: table.convert(popup.location, from: popup.view)) == row)
             #expect(popup.titles == ["History Scope"])
+            #expect(popup.item("History Scope")?.submenu?.items.map(\.title) == HistoryScope.allCases.map { context.actions.title(for: .setHistoryScope($0)) })
 
-            // VoiceOver's Show Menu on a place's row makes its right-click at
-            // the row's styler: Changes', unselected, is Changes' menu.
+            // VoiceOver's Show Menu on a place's cell: Changes', unselected,
+            // is Changes' menu, and Changes is its target.
             let changesRow = row - 1
-            let changes = try #require(allViews(SidebarListStyler.StylerView.self, in: table).first { $0.enclosingTableRow?.row == changesRow })
-            #expect(KeyboardContextMenu.showMenu(of: changes, present: popped.present))
-            #expect(popped.popups.count == 2)
-            #expect(table.row(at: popped.popups[1].location) == changesRow)
-            #expect(popped.popups[1].titles == [context.actions.title(for: .stashAllChanges), context.actions.title(for: .discardAllChanges)])
+            let changesMenu = [context.actions.title(for: .stashAllChanges), context.actions.title(for: .discardAllChanges)]
+            let changes = try #require(allViews(ContextMenuRowView.self, in: table).first { $0.enclosingTableRow?.row == changesRow })
+            #expect(KeyboardContextMenu.showMenu(of: changes, presenter: recorder.menuPresenter))
+            #expect(recorder.popups.count == 2)
+            #expect(table.row(at: table.convert(recorder.popups[1].location, from: recorder.popups[1].view)) == changesRow)
+            #expect(recorder.popups[1].titles == changesMenu)
+            let region = try #require(ContextMenuRegions.listRegion(for: table))
+            #expect(region.listHost?.target.id == AnyHashable(SidebarPlace.changes))
+
+            // A right-click on Changes' row, through the app's events.
+            let rowRect = table.convert(table.rect(ofRow: changesRow), to: nil)
+            let rightClick = try #require(NSEvent.mouseEvent(
+                with: .rightMouseDown,
+                location: CGPoint(x: rowRect.midX, y: rowRect.midY),
+                modifierFlags: [],
+                timestamp: 0,
+                windowNumber: window.windowNumber,
+                context: nil,
+                eventNumber: 0,
+                clickCount: 1,
+                pressure: 1
+            ))
+            #expect(MenuEventRouter.shared.handle(rightClick) == nil)
+            #expect(recorder.popups.count == 3)
+            #expect(recorder.popups[2].titles == changesMenu)
+            #expect(table.selectedRow == row)
             await app.idle()
         }
     }

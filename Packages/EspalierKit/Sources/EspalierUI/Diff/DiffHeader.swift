@@ -54,7 +54,7 @@ struct DiffHeader<Options: View>: View {
                             Label(title, systemImage: "arrow.up.forward.app")
                         }
                         .buttonStyle(.icon)
-                        .help(title)
+                        .tooltip(title)
                         .accessibilityLabel(title)
                     }
                     options()
@@ -67,7 +67,7 @@ struct DiffHeader<Options: View>: View {
                     .foregroundStyle(.text3)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .help("\(oldPath) \u{2192} \(content.path)")
+                    .tooltip("\(oldPath) \u{2192} \(content.path)")
                     .padding(.bottom, Metrics.insetSmall)
             }
         }
@@ -90,7 +90,7 @@ struct DiffHeader<Options: View>: View {
                     .truncationMode(.head)
             }
         }
-        .help(content.status.title)
+        .tooltip(content.status.title)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(content.path), \(content.status.title)")
     }

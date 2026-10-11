@@ -751,12 +751,12 @@ struct BranchesSectionRows: View {
         }
         if let sha = content.detachedSHA {
             SidebarRowLabel("Detached HEAD (\(sha))", systemImage: "smallcircle.filled.circle")
-                .help("Currently on a detached HEAD")
+                .tooltip("Currently on a detached HEAD")
                 .sidebarRow(nil, id: "detached")
         }
         if let unborn = content.unbornBranch {
             BranchRow(BranchRowContent(ref: "refs/heads/\(unborn)", name: unborn, isCurrent: true))
-                .help("Current branch is \(unborn)")
+                .tooltip("Current branch is \(unborn)")
                 .sidebarRow(nil, id: "unborn")
         }
         if let defaultBranch = content.defaultBranch {
@@ -869,7 +869,7 @@ nonisolated extension BranchRowContent {
     }
 }
 
-/// Folders and branches, folders as disclosure groups.
+/// Folders and branches, folders as groups that open and close.
 struct BranchNodeList: View {
     let nodes: [BranchNode]
     let repository: RepositoryModel?
@@ -895,48 +895,6 @@ struct BranchNodeList: View {
     }
 }
 
-/// A group of rows whose expansion is remembered; open while the sidebar
-/// filter shows matches. The section's own groups (Default Branch, Recent
-/// Branches, ...) are labeled by name alone, in secondary text; a remote
-/// and a folder have their symbol.
-struct BranchGroupDisclosure<Content: View>: View {
-    let title: String
-    let systemImage: String?
-    let isFiltering: Bool
-    let content: Content
-    @AppStorage private var isExpanded: Bool
-
-    /// - Parameters:
-    ///   - id: Names the remembered expansion (`sidebar.expanded.<id>`).
-    ///   - systemImage: The row's symbol; nil for one of the section's
-    ///     groups.
-    ///   - isExpandedByDefault: The expansion before the user changes it.
-    init(id: String, title: String, systemImage: String? = nil, isExpandedByDefault: Bool = false, isFiltering: Bool, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.systemImage = systemImage
-        self.isFiltering = isFiltering
-        self.content = content()
-        _isExpanded = AppStorage(wrappedValue: isExpandedByDefault, "sidebar.expanded.\(id)")
-    }
-
-    var body: some View {
-        DisclosureGroup(isExpanded: isFiltering ? .constant(true) : $isExpanded) {
-            content
-        } label: {
-            if let systemImage {
-                SidebarRowLabel(title, systemImage: systemImage)
-            } else {
-                Text(title)
-                    .font(Typography.row.weight(.medium))
-                    .foregroundStyle(.text2)
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-            }
-        }
-        .sidebarRow(nil, id: "group:\(title)")
-    }
-}
-
 /// The section's header: its title, Restore Pruned Branch when there's a
 /// branch to restore, and New Branch….
 struct BranchesSectionHeader: View {
@@ -949,17 +907,14 @@ struct BranchesSectionHeader: View {
         SidebarSectionHeader("Branches") {
             let pruned = prunedBranches
             if !pruned.isEmpty {
-                Menu {
-                    RestorePrunedBranchMenu(pruned: pruned, now: fixedNow ?? Date())
+                PullDownButton("More Branch Actions") { [context, fixedNow] in
+                    RestorePrunedBranchMenu.content(pruned: pruned, now: fixedNow ?? Date(), context: context)
                 } label: {
                     Image(systemName: "ellipsis")
                 }
-                .menuStyle(.button)
                 .buttonStyle(SidebarHeaderButtonStyle())
-                .menuIndicator(.hidden)
                 .fixedSize()
-                .help("More")
-                .accessibilityLabel("More Branch Actions")
+                .tooltip("More")
             }
             Button {
                 context.actions.perform(.newBranch(startPoint: nil))
@@ -968,27 +923,24 @@ struct BranchesSectionHeader: View {
             }
             .buttonStyle(SidebarHeaderButtonStyle())
             .disabled(!context.actions.canPerform(.newBranch(startPoint: nil)))
-            .help(ActionKind.newBranch.title)
+            .tooltip(ActionKind.newBranch.title)
             .accessibilityLabel(ActionKind.newBranch.title)
         }
-        .contextMenu {
+        .contextMenuCard { [prunedBranches, context, fixedNow] in
             if !prunedBranches.isEmpty {
-                RestorePrunedBranchMenu(pruned: prunedBranches, now: fixedNow ?? Date())
+                RestorePrunedBranchMenu.content(pruned: prunedBranches, now: fixedNow ?? Date(), context: context)
             }
         }
     }
 }
 
 /// "Restore Pruned Branch ▸ <name> (deleted today)".
-struct RestorePrunedBranchMenu: View {
-    let pruned: [PrunedBranch]
-    let now: Date
-    @Environment(WindowContext.self) private var context
-
-    var body: some View {
-        Menu(ActionKind.restorePrunedBranch.title) {
-            ForEach(Array(pruned.enumerated()), id: \.offset) { _, branch in
-                Button(Self.title(of: branch, now: now)) {
+enum RestorePrunedBranchMenu {
+    @MenuBuilder
+    static func content(pruned: [PrunedBranch], now: Date, context: WindowContext) -> MenuContent {
+        Submenu(ActionKind.restorePrunedBranch.title) {
+            for branch in pruned {
+                MenuAction(title(of: branch, now: now)) {
                     context.actions.perform(.restorePrunedBranch(name: branch.name))
                 }
             }
@@ -1010,38 +962,33 @@ struct RestorePrunedBranchMenu: View {
 // MARK: - Context menu
 
 /// A branch row's context menu.
-public struct BranchContextMenu: View {
-    private let ref: String
-    @Environment(WindowContext.self) private var context
-
-    public init(ref: String) {
-        self.ref = ref
-    }
-
-    public var body: some View {
+enum BranchContextMenu {
+    @MenuBuilder
+    static func content(ref: String, context: WindowContext) -> MenuContent {
         if let repository = context.repository,
            let branch = repository.gitState.branches.all.first(where: { $0.ref == ref })
                ?? repository.gitState.tip.branch.flatMap({ $0.ref == ref ? $0 : nil }) {
+            let actions = context.actions
             let current = repository.gitState.tip.branch
             let isCurrent = current?.ref == branch.ref
-            ActionButton(.checkoutBranch(name: branch.name))
-            ActionButton(.newWorktree(branch: branch.name), title: "Check Out in New Worktree…")
+            actions.menuAction(.checkoutBranch(name: branch.name))
+            actions.menuAction(.newWorktree(branch: branch.name), title: "Check Out in New Worktree…")
             if let current, !isCurrent {
-                Divider()
-                ActionButton(.mergeIntoCurrentBranch(branch: branch.name), title: "Merge into \(current.name)…")
-                ActionButton(.rebaseCurrentBranch(onto: branch.name), title: "Rebase \(current.name) onto \(branch.name)…")
-                ActionButton(.compareToBranch(name: branch.name), title: "Compare with \(current.name)")
+                MenuDivider()
+                actions.menuAction(.mergeIntoCurrentBranch(branch: branch.name), title: "Merge into \(current.name)…")
+                actions.menuAction(.rebaseCurrentBranch(onto: branch.name), title: "Rebase \(current.name) onto \(branch.name)…")
+                actions.menuAction(.compareToBranch(name: branch.name), title: "Compare with \(current.name)")
             }
-            Divider()
+            MenuDivider()
             if branch.type == .local {
-                ActionButton(.viewBranchOnGitHub(name: branch.name))
+                actions.menuAction(.viewBranchOnGitHub(name: branch.name))
             }
-            ActionButton(.copyBranchName(name: branch.name))
-            Divider()
+            actions.menuAction(.copyBranchName(name: branch.name))
+            MenuDivider()
             if branch.type == .local {
-                ActionButton(.renameBranch(name: branch.name))
+                actions.menuAction(.renameBranch(name: branch.name))
             }
-            ActionButton(.deleteBranch(name: branch.name))
+            actions.menuAction(.deleteBranch(name: branch.name))
         }
     }
 }

@@ -36,7 +36,7 @@ struct AIResolutionChanges: View {
                 }
                 .padding(.vertical, Metrics.grid)
                 .selectableRow(isSelected: path == selectedPath)
-                .help(path)
+                .tooltip(path)
                 .tag(path)
                 .listRowInsets(Metrics.ListRow.insets(isFirst: path == paths.first, isLast: path == paths.last))
                 .listRowSeparator(.hidden)

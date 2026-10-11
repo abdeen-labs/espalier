@@ -124,7 +124,7 @@ struct WorktreeRow: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-        .help(content.tooltip)
+        .tooltip(content.tooltip)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(content.accessibilityLabel)
     }
@@ -141,22 +141,19 @@ final class WorktreesWindowState {
 /// A worktree row's context menu, as desktop's: Rename…, the two copies,
 /// Show in Finder, and Delete…. Every item but the copies closes the
 /// popover first.
-struct WorktreeContextMenu: View {
-    let content: WorktreeRowContent
-    @Environment(WindowContext.self) private var context: WindowContext?
-
-    var body: some View {
-        if let context {
-            RepositoryPopoverActionButton(.renameWorktree(path: content.path), context: context)
-            Button("Copy Worktree Name") {
-                WorktreeActions.copy(content.name)
-            }
-            Button("Copy Worktree Path") {
-                WorktreeActions.copy(content.path)
-            }
-            RepositoryPopoverActionButton(.showInFinder(path: content.path), title: "Show in Finder", context: context)
-            Divider()
-            RepositoryPopoverActionButton(.deleteWorktree(path: content.path), context: context)
+enum WorktreeContextMenu {
+    @MenuBuilder
+    static func content(_ worktree: WorktreeRowContent, context: WindowContext) -> MenuContent {
+        let actions = context.actions
+        actions.menuAction(.renameWorktree(path: worktree.path)).closesPopover()
+        MenuAction("Copy Worktree Name") {
+            WorktreeActions.copy(worktree.name)
         }
+        MenuAction("Copy Worktree Path") {
+            WorktreeActions.copy(worktree.path)
+        }
+        actions.menuAction(.showInFinder(path: worktree.path), title: "Show in Finder").closesPopover()
+        MenuDivider()
+        actions.menuAction(.deleteWorktree(path: worktree.path)).closesPopover()
     }
 }

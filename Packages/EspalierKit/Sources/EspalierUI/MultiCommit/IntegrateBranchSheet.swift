@@ -328,39 +328,25 @@ struct IntegrateMethodButton: View {
                 options
             }
             .fixedSize()
-            .help(help ?? method.description)
+            .tooltip(help ?? method.description)
         } else {
-            Menu {
+            PullDownButton("Merge Options", value: method.label) {
                 options
             } label: {
                 MenuCapsuleLabel(method.label)
             }
-            .menuStyle(.button)
             .buttonStyle(.quiet)
-            .menuIndicator(.hidden)
             .fixedSize()
-            .help(help ?? method.description)
-            .accessibilityLabel("Merge Options")
-            .accessibilityValue(method.label)
+            .tooltip(help ?? method.description)
         }
     }
 
-    @ViewBuilder
-    private var options: some View {
-        ForEach(IntegrateMethod.allCases) { option in
-            Button {
-                method = option
-            } label: {
-                if option == method {
-                    Label {
-                        Text(option.label)
-                        Text(option.description)
-                    } icon: {
-                        Image(systemName: "checkmark")
-                    }
-                } else {
-                    Text(option.label)
-                    Text(option.description)
+    /// The methods, each with its description, the current one checked.
+    private var options: MenuContent {
+        MenuContent {
+            MenuPicker(selection: $method) {
+                for option in IntegrateMethod.allCases {
+                    MenuChoice(option.label, value: option, subtitle: option.description)
                 }
             }
         }

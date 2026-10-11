@@ -62,8 +62,10 @@ struct SimpleListTableView: NSViewRepresentable {
 
 /// The simple list's `NSTableView`: its keys, the merges' chevrons, and the
 /// context menu.
-final class SimpleNSTableView: NSTableView {
+final class SimpleNSTableView: NSTableView, ContextMenuContentProviding {
     weak var controller: SimpleListController?
+    /// The row whose context menu is open.
+    lazy var contextMenuTarget = TableContextMenuTarget(table: self)
     /// Whether keyboard reorder is on: ↑↓ move the insertion point, Return
     /// confirms, Esc cancels.
     var isReordering = false
@@ -77,12 +79,12 @@ final class SimpleNSTableView: NSTableView {
         super.mouseDown(with: event)
     }
 
-    override func menu(for event: NSEvent) -> NSMenu? {
-        let row = row(at: convert(event.locationInWindow, from: nil))
-        guard row >= 0 else {
-            return nil
-        }
-        return controller?.menu(forClickedRow: row)
+    func contextMenuContent(at point: CGPoint) -> MenuContent? {
+        controller?.menu(forClickedRow: row(at: point))
+    }
+
+    func markContextMenuTarget(at point: CGPoint) -> (() -> Void)? {
+        contextMenuTarget.mark(row(at: point))
     }
 
     override func keyDown(with event: NSEvent) {

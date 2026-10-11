@@ -88,7 +88,7 @@ private struct ActionListRow: View {
                     .hoverMotion(isHovered)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
         .onHover { isHovered = $0 }
         .accessibilityHint(item.subtitle ?? "")
     }

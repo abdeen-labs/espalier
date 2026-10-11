@@ -89,7 +89,7 @@ struct PullRequestRow: View {
             Group {
                 if let checks = content.checks {
                     ChecksGlyph(checks)
-                        .help(content.checksTooltip ?? "")
+                        .tooltip(content.checksTooltip)
                 } else {
                     Image(systemName: PullRequestGlyph.systemImage)
                         .foregroundStyle(isSelected ? Color.accentColor : .text2)
@@ -111,7 +111,7 @@ struct PullRequestRow: View {
                     .fixedSize()
             }
         }
-        .help(content.subtitle(now: fixedNow ?? Date(), formatting: formatting, timeZone: timeZone))
+        .tooltip(content.subtitle(now: fixedNow ?? Date(), formatting: formatting, timeZone: timeZone))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
     }

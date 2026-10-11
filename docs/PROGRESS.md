@@ -39,6 +39,12 @@ pass.
      minimized window brings it back; a fork's pull request link ends on
      `pr/N`; the sample notification's review sheet; the Dock bouncing for a
      failure while inactive.
+   - Popovers: typing in the repository and branch filters as they open,
+     and focus back in the window after; ⌘T and ⌘B and a click on the
+     location control closing them; the repository popover's menus above
+     it; the base branch picker over Preview Pull Request; the checks
+     popover resizing as checks load; the arrival and leaving motion; the
+     toolbar's popovers in full screen; VoiceOver moving in and back.
    - Signing: pinentry-mac's window and its Cancel; a rebase signed with a
      passphrase-protected SSH key asks once; 1Password's `op-ssh-sign`.
    - Accessibility: ⇧F10 in Changes, History, a commit's files, and the

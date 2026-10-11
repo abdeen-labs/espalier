@@ -36,9 +36,8 @@ struct OnionSkinView: View {
                 CGSize(width: max(proxy.size.width, 1), height: max(proxy.size.height - 40, 1))
             )
             VStack(spacing: Metrics.insetMedium) {
-                Slider(value: $opacity, in: 0...1)
+                CapsuleSlider("Opacity of the new image", value: $opacity)
                     .frame(width: max(size.width / 2, 160))
-                    .accessibilityLabel("Opacity of the new image")
                 ZStack {
                     CheckeredImage(image: previousImage, size: size)
                     CheckeredImage(image: currentImage, size: size)

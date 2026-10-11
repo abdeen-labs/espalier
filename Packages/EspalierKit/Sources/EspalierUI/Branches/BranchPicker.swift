@@ -450,7 +450,7 @@ struct BranchPickerList: View {
             row(branch)
                 .selectableRow(isSelected: isHighlighted)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
         .padding(.horizontal, Metrics.ListRow.inset)
         .padding(.vertical, 1)
         .id(branch.ref)
@@ -489,9 +489,7 @@ struct BranchPickerList: View {
             .scrollContentBackground(.hidden)
             // The rows draw the selection; the table's own is off.
             .rowsDrawSelection()
-            .contextMenu(forSelectionType: String.self) { _ in
-                EmptyView()
-            } primaryAction: { refs in
+            .listPrimaryAction(forSelectionType: String.self) { refs in
                 if let ref = refs.first, let branch = content.branches.first(where: { $0.ref == ref }) {
                     onActivate?(branch)
                 }
@@ -594,7 +592,7 @@ struct BranchPickerRow: View {
                     .foregroundStyle(.text2)
                     .lineLimit(1)
                     .fixedSize()
-                    .help(counts.description)
+                    .tooltip(counts.description)
                     .accessibilityLabel(counts.description)
             }
             if let date {
@@ -604,7 +602,7 @@ struct BranchPickerRow: View {
                     .lineLimit(1)
             }
         }
-        .help(branch.name)
+        .tooltip(branch.name)
     }
 }
 

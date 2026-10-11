@@ -49,10 +49,10 @@ struct WelcomeStart: View {
             .frame(width: Metrics.Welcome.buttonWidth)
             VStack(spacing: Metrics.insetSmall) {
                 // The link opens github.com's sign-up page in the browser.
-                Text("New to GitHub? [Create your free account.](https://github.com/join)")
+                LinkedText(markdown: "New to GitHub? [Create your free account.](https://github.com/join)")
                     .foregroundStyle(.text2)
                 Button("Skip This Step", action: skip)
-                    .buttonStyle(.link)
+                    .buttonStyle(.textLink)
             }
             .font(Typography.secondary)
         }

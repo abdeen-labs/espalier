@@ -1,13 +1,13 @@
-// Find in the diff from anywhere in the window. Edit ▸ Find sends the find
-// bar's actions up the responder chain, and a forwarder after the window
-// hands them to the diff table showing in it when nothing closer (a text
-// field, say) handled them. So ⌘F, ⌘G, and ⇧⌘G work with the file list
-// focused. The menu's items send NSTextView's `performFindPanelAction(_:)`;
-// both selectors are answered.
+// Find in the diff from anywhere in the window. Edit ▸ Find sends its
+// commands up the responder chain, and a forwarder after the window hands
+// them to the diff table showing in it when nothing closer (a text field,
+// History's list) handled them. So ⌘F, ⌘G, and ⇧⌘G work with the file
+// list focused. The menu's items send NSTextView's
+// `performFindPanelAction(_:)`; both selectors are answered.
 
 import AppKit
 
-/// Passes the find bar's actions to the window's diff table.
+/// Passes Edit ▸ Find's commands to the window's diff table.
 final class DiffFindForwarder: NSResponder, NSUserInterfaceValidations {
     /// The table showing in the window, if any.
     weak var table: DiffTableView?

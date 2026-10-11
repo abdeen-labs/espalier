@@ -25,14 +25,14 @@ struct ModelPicker: View {
 
     var body: some View {
         SettingsRow(title, description: description, labelsControl: true) {
-            CapsulePopUp(title, selection: selection, title: ModelPickerItems.selectedTitle(for: feature, in: ai)) {
+            CapsulePopUp(title, selection: selection, title: ModelPickerItems.selectedTitle(for: feature, in: ai)) { [feature, ai] in
                 if ModelPickerItems.selectedKey(for: feature, in: ai) == nil {
-                    Text("None").tag(String?.none)
+                    MenuChoice("None", value: String?.none)
                 }
-                ForEach(ModelPickerItems.groups(in: ai), id: \.provider.id) { group in
-                    Section(group.provider.name) {
-                        ForEach(group.choices) { choice in
-                            Text(ModelPickerItems.title(of: choice.model)).tag(Optional(choice.key))
+                for group in ModelPickerItems.groups(in: ai) {
+                    MenuSection(group.provider.name) {
+                        for choice in group.choices {
+                            MenuChoice(ModelPickerItems.title(of: choice.model), value: Optional(choice.key))
                         }
                     }
                 }

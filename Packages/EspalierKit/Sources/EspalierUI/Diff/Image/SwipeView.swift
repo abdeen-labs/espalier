@@ -36,9 +36,8 @@ struct SwipeView: View {
                 CGSize(width: max(proxy.size.width, 1), height: max(proxy.size.height - 40, 1))
             )
             VStack(spacing: Metrics.insetMedium) {
-                Slider(value: $fraction, in: 0...1)
+                CapsuleSlider("Swipe between the images", value: $fraction)
                     .frame(width: max(size.width, 160))
-                    .accessibilityLabel("Swipe between the images")
                 ZStack(alignment: .topLeading) {
                     CheckeredImage(image: previousImage, size: size)
                         .mask(alignment: .leading) {

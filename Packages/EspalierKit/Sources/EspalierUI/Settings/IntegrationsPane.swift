@@ -263,7 +263,7 @@ struct IntegrationsForm: View {
                             Button("Install \(suggestedExternalEditor.name)?") {
                                 actions?.openSuggestedEditorPage()
                             }
-                            .buttonStyle(.link)
+                            .buttonStyle(.textLink)
                         }
                         .font(Typography.secondary)
                     }
@@ -318,23 +318,23 @@ struct IntegrationPicker: View {
     var body: some View {
         CapsulePopUp(title, selection: $selection, title: selectionTitle) {
             if popUp.selection == .none {
-                Text("None").tag(IntegrationChoice.none)
+                MenuChoice("None", value: IntegrationChoice.none)
             }
-            ForEach(popUp.installed, id: \.self) { name in
-                Text(name).tag(IntegrationChoice.named(name))
+            for name in popUp.installed {
+                MenuChoice(name, value: IntegrationChoice.named(name))
             }
             if let missing = popUp.missing, let title = popUp.missingTitle {
-                Text(title).tag(IntegrationChoice.named(missing))
+                MenuChoice(title, value: IntegrationChoice.named(missing))
             }
             if popUp.selection == .none || !popUp.installed.isEmpty || popUp.missing != nil {
-                Divider()
+                MenuDivider()
             }
             if let customTitle = popUp.customTitle {
-                Text("Custom: \(customTitle)").tag(IntegrationChoice.custom)
+                MenuChoice("Custom: \(customTitle)", value: IntegrationChoice.custom)
             } else if popUp.selection == .custom {
-                Text("Custom").tag(IntegrationChoice.custom)
+                MenuChoice("Custom", value: IntegrationChoice.custom)
             }
-            Text(configureTitle).tag(IntegrationChoice.configure)
+            MenuChoice(configureTitle, value: IntegrationChoice.configure)
         }
     }
 
@@ -359,10 +359,7 @@ struct CustomIntegrationSummary: View {
 
     var body: some View {
         SettingsRow("Command") {
-            Text("\(integration.path) \(integration.arguments)")
-                .font(Typography.sha)
-                .foregroundStyle(.text2)
-                .textSelection(.enabled)
+            SelectableText("\(integration.path) \(integration.arguments)", font: AppKitTypography.sha, color: Palette.text2)
                 .lineLimit(2)
                 .truncationMode(.middle)
                 .multilineTextAlignment(.trailing)

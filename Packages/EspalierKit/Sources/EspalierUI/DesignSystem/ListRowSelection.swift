@@ -20,17 +20,15 @@ extension View {
     }
 
     /// A list row that draws its selection: padded, radius 9, `accent soft`
-    /// while selected, and never the list's highlight. Put
+    /// while selected, and never the list's highlight; while it's a context
+    /// menu's target (`contextMenuRow(_:)`), the target's ring. Put
     /// `.listRowBackground(Color.clear)` and the row insets on it as the
     /// list needs.
     public func selectableRow(isSelected: Bool) -> some View {
         padding(.horizontal, Metrics.ListRow.horizontalPadding)
             .frame(minHeight: Metrics.ListRow.height)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-                    .fill(isSelected ? AnyShapeStyle(.accentSoft) : AnyShapeStyle(.clear))
-            )
+            .background(SelectableRowBackground(isSelected: isSelected))
             .turnsRowHighlightOff()
             .contentShape(RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
     }
@@ -60,6 +58,19 @@ extension Metrics {
         public static func insets(isFirst: Bool = false, isLast: Bool = false) -> EdgeInsets {
             EdgeInsets(top: isFirst ? inset : 1, leading: inset, bottom: isLast ? inset : 1, trailing: inset)
         }
+    }
+}
+
+/// A selectable row's background: the soft accent while selected, and the
+/// ring while it's a context menu's target.
+private struct SelectableRowBackground: View {
+    let isSelected: Bool
+    @Environment(\.isContextMenuTarget) private var isContextMenuTarget
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
+            .fill(isSelected ? AnyShapeStyle(.accentSoft) : AnyShapeStyle(.clear))
+            .contextTargetRing(isContextMenuTarget)
     }
 }
 

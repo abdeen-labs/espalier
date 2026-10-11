@@ -88,33 +88,27 @@ struct SheetComponentSnapshotTests {
     @Test("menus drawn as capsules: quiet, small, and with a symbol")
     func capsuleMenus() {
         let view = HStack(spacing: Metrics.insetMedium) {
-            Menu {
-                Button("Create a merge commit") {}
+            PullDownButton("Merge Options") {
+                MenuAction("Create a merge commit") {}
             } label: {
                 MenuCapsuleLabel("Create a merge commit")
             }
-            .menuStyle(.button)
             .buttonStyle(.quiet)
-            .menuIndicator(.hidden)
             .fixedSize()
-            Menu {
-                Button("Use the modified file from main") {}
+            PullDownButton("Resolve") {
+                MenuAction("Use the modified file from main") {}
             } label: {
                 MenuCapsuleLabel("Resolve")
             }
-            .menuStyle(.button)
             .buttonStyle(.quiet)
-            .menuIndicator(.hidden)
             .controlSize(.small)
             .fixedSize()
-            Menu {
-                Button("Clone Repository…") {}
+            PullDownButton("Add") {
+                MenuAction("Clone Repository…") {}
             } label: {
                 MenuCapsuleLabel("Add", systemImage: "plus")
             }
-            .menuStyle(.button)
             .buttonStyle(.quiet)
-            .menuIndicator(.hidden)
             .controlSize(.small)
             .fixedSize()
         }

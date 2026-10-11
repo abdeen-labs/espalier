@@ -42,7 +42,7 @@ struct WorkingCopyHeader: View {
             }
             .buttonStyle(.quiet)
             .controlSize(.small)
-            .help("Review Changes (⌘1)")
+            .tooltip("Review Changes (⌘1)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

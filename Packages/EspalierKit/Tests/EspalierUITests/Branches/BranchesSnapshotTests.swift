@@ -239,14 +239,16 @@ struct BranchesSnapshotTests {
         #expect(BranchComparisonCounts(counts["spike"]!, currentBranch: "main").text == "↓37 ↑1,204")
     }
 
-    @Test("the branch popover: the picker with the current branch highlighted, New Branch…, and Choose a branch to merge into")
+    @Test("the branch popover, in its card: the picker with the current branch highlighted, New Branch…, and Choose a branch to merge into")
     func popover() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await makeOperationsFixture { local in
                 try await runGit(["branch", "feature/login"], local)
                 try await runGit(["branch", "fix/crash"], local)
             }
-            assertSnapshot(BranchPopover(repository: fixture.repository).windowEnvironment(fixture.context), named: "popover", area: area, appearances: [.light])
+            assertSnapshot(Snapshot.popoverCard {
+                BranchPopover(repository: fixture.repository).windowEnvironment(fixture.context)
+            }, named: "popover", area: area)
         }
     }
 

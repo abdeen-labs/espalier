@@ -193,10 +193,7 @@ private struct DetectedSecretRow: View {
                 Image(systemName: "key.fill")
                     .foregroundStyle(.text2)
                     .accessibilityHidden(true)
-                Text(secret.title)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.text)
-                    .textSelection(.enabled)
+                SelectableText(secret.title, font: AppKitTypography.weighted(AppKitTypography.row, .semibold))
                 Spacer(minLength: Metrics.insetSmall)
                 bypass
             }
@@ -210,7 +207,7 @@ private struct DetectedSecretRow: View {
                             Label(showsMoreLocations ? "Show Fewer Locations" : "Show More Locations", systemImage: "ellipsis.circle")
                         }
                         .buttonStyle(.icon)
-                        .help(showsMoreLocations ? "Show Fewer Locations" : "Show More Locations")
+                        .tooltip(showsMoreLocations ? "Show Fewer Locations" : "Show More Locations")
                         .accessibilityLabel(showsMoreLocations ? "Show Fewer Locations" : "Show More Locations")
                     }
                 }
@@ -236,7 +233,7 @@ private struct DetectedSecretRow: View {
             }
             .buttonStyle(.quiet)
             .controlSize(.small)
-            .help("Ask for a bypass on GitHub")
+            .tooltip("Ask for a bypass on GitHub")
             .accessibilityLabel("Bypass \(secret.title)")
         } else {
             Button("Bypass…") {
@@ -260,10 +257,7 @@ private struct SecretLocationView: View {
             Image(systemName: "smallcircle.filled.circle")
                 .foregroundStyle(.text3)
                 .accessibilityHidden(true)
-            Text(String(location.commitSha.prefix(7)))
-                .font(Typography.sha)
-                .foregroundStyle(.text2)
-                .textSelection(.enabled)
+            SelectableText(String(location.commitSha.prefix(7)), font: AppKitTypography.sha, color: Palette.text2)
             // After a copy, the symbol is a check for a moment (CopyButton).
             CopyButton(location.commitSha, copy: copy) { systemImage in
                 // The copy symbol's room, whichever shows.
@@ -274,16 +268,13 @@ private struct SecretLocationView: View {
                 }
                 .foregroundStyle(.text3)
             }
-            .buttonStyle(.plain)
-            .help("Copy the full SHA")
+            .buttonStyle(.bare)
+            .tooltip("Copy the full SHA")
             .accessibilityLabel("Copy the full SHA")
-            Text("\(location.path) at line \(location.lineNumber)")
-                .font(Typography.secondary)
-                .foregroundStyle(.text3)
+            SelectableText("\(location.path) at line \(location.lineNumber)", font: AppKitTypography.secondary, color: Palette.text3)
                 .lineLimit(1)
                 .truncationMode(.head)
-                .textSelection(.enabled)
-                .help(location.path)
+                .tooltip(location.path)
         }
     }
 }

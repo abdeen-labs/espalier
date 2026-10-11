@@ -160,10 +160,10 @@ public struct AuthorAvatarButton: View {
         } label: {
             AuthorAvatar(content, size: Metrics.Composer.avatarSize)
         }
-        .buttonStyle(.plain)
-        .help(content.title)
+        .buttonStyle(.bare(.circle))
+        .tooltip(content.title)
         .accessibilityLabel(content.accessibilityLabel)
-        .popover(isPresented: $isShowingPopover, arrowEdge: .bottom) {
+        .popoverCard(isPresented: $isShowingPopover, title: content.title) {
             AuthorIdentityPopover(
                 content,
                 canOpenRepositorySettings: canOpenRepositorySettings,
@@ -255,10 +255,7 @@ public struct AuthorIdentityPopover: View {
                     Text(content.title)
                         .font(Typography.heading)
                     if let email = content.email {
-                        Text(email)
-                            .font(Typography.secondary)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
+                        SelectableText(email, font: AppKitTypography.secondary, color: .secondaryLabelColor)
                     } else {
                         Text("Set your name and email in Git settings.")
                             .font(Typography.secondary)
@@ -300,8 +297,8 @@ public struct AuthorIdentityPopover: View {
                 .foregroundStyle(.secondary)
             // The whole width: a private address is long.
             CapsulePopUp(Self.accountEmailsLabel, selection: $accountEmail, title: accountEmail) {
-                ForEach(content.accountEmails, id: \.self) { email in
-                    Text(email).tag(email)
+                for email in content.accountEmails {
+                    MenuChoice(email, value: email)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -313,7 +310,7 @@ public struct AuthorIdentityPopover: View {
                 .buttonStyle(.prominent)
                 .controlSize(.small)
                 .disabled(accountEmail.isEmpty)
-                .help(Self.updateEmailHelp)
+                .tooltip(Self.updateEmailHelp)
             }
         }
     }

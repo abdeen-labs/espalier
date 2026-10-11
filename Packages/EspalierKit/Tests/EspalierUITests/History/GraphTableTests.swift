@@ -1,8 +1,9 @@
 // The history graph's table: rows and pages, reloads that keep the view in
-// place, selection both ways, the context menu from the keyboard and
-// VoiceOver, ref capsules, the unpushed arrow, search dimming, the loading
-// footer, drags, the columns narrow rows hide, and how rows look (in light
-// and dark, the narrowest rows and the emphasis in light).
+// place, selection both ways, the context menu from a right-click, the
+// keyboard, and VoiceOver, and its row's ring, ref capsules, the unpushed
+// arrow, search dimming, the loading footer, drags, the columns narrow rows
+// hide, and how rows look (in light and dark, the narrowest rows and the
+// emphasis in light).
 
 import AppKit
 @testable import EspalierCore
@@ -243,43 +244,62 @@ struct GraphTableTests {
 
     // MARK: Context menus from the keyboard and VoiceOver
 
-    @Test("⇧F10 pops up the selection's menu at the row selected last, and nothing without a selection; VoiceOver's Show Menu pops up a cell's row's")
-    func keyboardContextMenu() throws {
+    @Test("⇧F10 opens the selection's menu at the row selected last, and nothing without a selection; a right-click acts on the selection when its row is in it, else on that row alone, which it rings; VoiceOver's Show Menu opens a cell's row's")
+    func contextMenus() throws {
         let history = featureHistory()
         history.publishFirstPage(7)
         let harness = GraphTableHarness(history)
-        let menu = NSMenu()
         var requests: [(rows: [Int], clicked: Int)] = []
         harness.controller.actions.menu = { rows, clicked in
             requests.append((rows, clicked))
-            return menu
+            return MenuContent {
+                MenuAction("Check Out Commit") {}
+            }
         }
-        let popped = PoppedUpMenus()
+        let recorder = MenuRecorder()
         let key = try f10KeyDown(in: harness.window)
 
-        // Nothing selected: the key is used, and nothing pops up.
-        #expect(KeyboardContextMenu.handle(key, in: harness.window, present: popped.present))
+        // Nothing selected: the key is used, and nothing opens.
+        #expect(KeyboardContextMenu.handle(key, in: harness.window, presenter: recorder.menuPresenter))
         #expect(requests.isEmpty)
-        #expect(popped.popups.isEmpty)
+        #expect(recorder.popups.isEmpty)
 
-        // Rows 2 and 4, 4 selected last: the selection's menu, at row 4.
+        // Rows 2 and 4, 4 selected last: the selection's menu, at row 4,
+        // which shows the ring until the menu closes.
         harness.table.selectRowIndexes([2], byExtendingSelection: false)
         harness.table.selectRowIndexes([4], byExtendingSelection: true)
-        #expect(KeyboardContextMenu.handle(key, in: harness.window, present: popped.present))
+        #expect(KeyboardContextMenu.handle(key, in: harness.window, presenter: recorder.menuPresenter))
         #expect(requests.map(\.rows) == [[2, 4]])
         #expect(requests.map(\.clicked) == [4])
-        let popup = try #require(popped.popups.first)
-        #expect(popup.menu === menu)
+        let popup = try #require(recorder.popups.first)
+        #expect(popup.titles == ["Check Out Commit"])
         #expect(popup.view === harness.table)
+        #expect(popup.request.trigger == .keyboard)
         #expect(harness.table.row(at: popup.location) == 4)
+        #expect(harness.table.contextMenuTarget.row == 4)
+        popup.close()
+        #expect(harness.table.contextMenuTarget.row == nil)
 
         // F10 alone, or with ⌘ too, goes on.
-        #expect(!KeyboardContextMenu.handle(try f10KeyDown([], in: harness.window), in: harness.window, present: popped.present))
-        #expect(!KeyboardContextMenu.handle(try f10KeyDown([.shift, .command], in: harness.window), in: harness.window, present: popped.present))
-        #expect(popped.popups.count == 1)
+        #expect(!KeyboardContextMenu.handle(try f10KeyDown([], in: harness.window), in: harness.window, presenter: recorder.menuPresenter))
+        #expect(!KeyboardContextMenu.handle(try f10KeyDown([.shift, .command], in: harness.window), in: harness.window, presenter: recorder.menuPresenter))
+        #expect(recorder.popups.count == 1)
+
+        // A right-click on a selected row acts on the selection; a
+        // Control-click on another row on that row alone, which shows the
+        // ring. The selection stays.
+        #expect(ContextMenuRegions.openMenu(for: try rightClick(row: 2, in: harness.table), presenter: recorder.menuPresenter))
+        #expect(ContextMenuRegions.openMenu(for: try rightClick(row: 5, in: harness.table, modifiers: .control), presenter: recorder.menuPresenter))
+        #expect(requests.map(\.rows) == [[2, 4], [2, 4], [5]])
+        #expect(requests.map(\.clicked) == [4, 2, 5])
+        #expect(harness.table.selectedRowIndexes == [2, 4])
+        #expect(harness.table.contextMenuTarget.row == 5)
+        #expect((harness.table.rowView(atRow: 5, makeIfNecessary: false) as? GraphRowView)?.isContextMenuTarget == true)
+        recorder.popups.last?.close()
+        #expect((harness.table.rowView(atRow: 5, makeIfNecessary: false) as? GraphRowView)?.isContextMenuTarget == false)
 
         // Show Menu on a cell: its row's menu, alone or the selection's.
-        // (No menu, so nothing pops up.)
+        // (No menu, so nothing opens.)
         harness.controller.actions.menu = { rows, clicked in
             requests.append((rows, clicked))
             return nil
@@ -291,6 +311,22 @@ struct GraphTableTests {
         #expect(try #require(harness.cell(2)).accessibilityPerformShowMenu() == false)
         #expect(requests.map(\.rows) == [[5], [2, 4]])
         #expect(requests.map(\.clicked) == [5, 2])
+    }
+
+    @Test("the row a context menu acts on shows the accent ring, unselected and selected")
+    func snapshotContextTarget() {
+        for appearance in SnapshotAppearance.allCases {
+            let history = featureHistory()
+            history.publishFirstPage(7)
+            let harness = GraphTableHarness(history, appearance: appearance)
+            harness.selection = GraphSelection(shas: ["f2"])
+            harness.update()
+            let unmark = harness.table.contextMenuTarget.mark(4)
+            assertSnapshot(harness.image(), named: "context-target", area: area, appearance: appearance)
+            unmark()
+            _ = harness.table.contextMenuTarget.mark(2)
+            assertSnapshot(harness.image(), named: "context-target-selected", area: area, appearance: appearance)
+        }
     }
 
     // MARK: Row content
@@ -411,7 +447,7 @@ struct GraphTableTests {
 
     // MARK: Drags
 
-    @Test("dragged commits are the selection, or the dragged row alone")
+    @Test("dragged commits are the selection, written by its first row alone, or the dragged row alone")
     func dragPayload() throws {
         let history = featureHistory()
         history.publishFirstPage(7)
@@ -426,7 +462,9 @@ struct GraphTableTests {
             }
             return try JSONDecoder().decode(CommitDragPayload.self, from: data)
         }
-        #expect(try payload(3)?.shas == ["f2", "f1"])
+        // One dragging item: the first selected row writes the selection.
+        #expect(try payload(2)?.shas == ["f2", "f1"])
+        #expect(try payload(3) == nil)
         #expect(try payload(5)?.shas == ["m2"])
         // The working copy can't be dragged.
         #expect(try payload(0) == nil)

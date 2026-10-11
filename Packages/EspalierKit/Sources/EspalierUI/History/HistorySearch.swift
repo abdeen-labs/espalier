@@ -95,14 +95,14 @@ struct HistorySearchStatus: View {
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.text2)
                     }
-                    .help("Previous Match (⇧⌘G)")
+                    .tooltip("Previous Match (⇧⌘G)")
                     .accessibilityLabel("Previous Match")
                     Button(action: actions.next) {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.text2)
                     }
-                    .help("Next Match (⌘G)")
+                    .tooltip("Next Match (⌘G)")
                     .accessibilityLabel("Next Match")
                 }
                 .buttonStyle(.quiet)

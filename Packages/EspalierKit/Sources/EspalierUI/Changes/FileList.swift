@@ -244,6 +244,7 @@ struct FileTable: NSViewRepresentable {
         tableView.headerView = nil
         // Rows inset and round their own selection (`FileTableRowView`).
         tableView.style = .plain
+        tableView.focusRingType = .none
         tableView.intercellSpacing = .zero
         tableView.gridStyleMask = []
         tableView.rowHeight = Metrics.FileList.rowHeight
@@ -259,15 +260,13 @@ struct FileTable: NSViewRepresentable {
         tableView.coordinator = coordinator
         tableView.target = coordinator
         tableView.doubleAction = #selector(FileTableCoordinator.doubleClicked(_:))
-        let menu = NSMenu()
-        menu.delegate = coordinator
-        tableView.menu = menu
         coordinator.tableView = tableView
 
         let scrollView = NSScrollView()
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
+        scrollView.useEspalierScrollers()
         scrollView.drawsBackground = true
         scrollView.backgroundColor = Palette.background
         // A little room above the first row.
@@ -283,7 +282,7 @@ struct FileTable: NSViewRepresentable {
 }
 
 /// The table's data source, delegate, and context menu.
-final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
+final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     private(set) var parent: FileTable
     weak var tableView: ChangesTableView?
     /// Whether the table's selection is being set from the model.
@@ -483,7 +482,9 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
     }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-        tableView.makeView(withIdentifier: FileTableRowView.identifier, owner: nil) as? FileTableRowView ?? FileTableRowView()
+        let rowView = tableView.makeView(withIdentifier: FileTableRowView.identifier, owner: nil) as? FileTableRowView ?? FileTableRowView()
+        rowView.isContextMenuTarget = self.tableView?.contextMenuTarget.isTarget(row) ?? false
+        return rowView
     }
 
     /// A row scrolling in under the pointer shows its hover at once.
@@ -514,40 +515,16 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
 
     // MARK: The context menu
 
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.removeAllItems()
-        guard let tableView else {
-            return
-        }
-        let ids = ids(forClickedRow: tableView.clickedRow)
+    /// The menu for a click on `row`: for the selection when the row is in
+    /// it, else for the row's file alone.
+    func menuContent(forClickedRow row: Int) -> MenuContent? {
+        let ids = ids(forClickedRow: row)
         guard !ids.isEmpty else {
-            return
+            return nil
         }
-        for item in Self.menuItems(parent.actions.menuItems(ids), ids: ids, run: parent.actions.run) {
-            menu.addItem(item)
-        }
-    }
-
-    /// AppKit menu items for `items`, running their commands on `ids`.
-    static func menuItems(_ items: [FileMenuItem], ids: [String], run: @escaping (FileMenuCommand, [String]) -> Void) -> [NSMenuItem] {
-        items.map { item in
-            switch item.kind {
-            case .separator:
-                return .separator()
-            case .command(let command):
-                return MenuItemAction.item(title: item.title, isEnabled: item.isEnabled) {
-                    run(command, ids)
-                }
-            case .submenu(let children):
-                let menuItem = NSMenuItem(title: item.title, action: nil, keyEquivalent: "")
-                let submenu = NSMenu(title: item.title)
-                for child in menuItems(children, ids: ids, run: run) {
-                    submenu.addItem(child)
-                }
-                menuItem.submenu = item.isEnabled ? submenu : nil
-                menuItem.isEnabled = item.isEnabled
-                return menuItem
-            }
+        let run = parent.actions.run
+        return FileMenuItem.menuContent(parent.actions.menuItems(ids)) { command in
+            run(command, ids)
         }
     }
 }
@@ -559,9 +536,19 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
 /// selection included, through `draw(_:)`, which offscreen captures (the
 /// snapshots) include. The row draws no background of its own: the table's
 /// shows through. Its hover is a wash of its own, in the selection's shape,
-/// that fades in and out where the pointer is.
-final class FileTableRowView: NSTableRowView {
+/// that fades in and out where the pointer is. While its context menu is
+/// open it shows the accent ring in that shape.
+final class FileTableRowView: NSTableRowView, ContextMenuTargetRowView {
     static let identifier = NSUserInterfaceItemIdentifier("Espalier.FileTableRow")
+
+    /// Whether the row's context menu is open: it shows the ring.
+    var isContextMenuTarget = false {
+        didSet {
+            if isContextMenuTarget != oldValue {
+                needsDisplay = true
+            }
+        }
+    }
 
     /// The hover wash, under the cells: in over 0.08 s, out over 0.15 s.
     private let hoverLayer: CALayer = {
@@ -597,6 +584,13 @@ final class FileTableRowView: NSTableRowView {
     override func drawSelection(in dirtyRect: NSRect) {
         Palette.accentSoft.setFill()
         selectionPath(in: bounds.insetBy(dx: FileRowMetrics.inset, dy: 0)).fill()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if isContextMenuTarget {
+            ContextTargetRingDrawing.stroke(in: bounds.insetBy(dx: FileRowMetrics.inset, dy: 0), radius: Metrics.Radius.row)
+        }
     }
 
     /// The selection's shape: rounded, square where a selected neighbor
@@ -701,9 +695,21 @@ final class FileTableRowView: NSTableRowView {
 }
 
 /// The table: Space includes or excludes, Return opens, ⌘C copies paths,
-/// and focus is published for Edit ▸ Delete.
-final class ChangesTableView: NSTableView {
+/// the context menu, and focus is published for Edit ▸ Delete.
+final class ChangesTableView: NSTableView, ContextMenuContentProviding {
     weak var coordinator: FileTableCoordinator?
+    /// The row whose context menu is open.
+    lazy var contextMenuTarget = TableContextMenuTarget(table: self)
+
+    // MARK: The context menu
+
+    func contextMenuContent(at point: CGPoint) -> MenuContent? {
+        coordinator?.menuContent(forClickedRow: row(at: point))
+    }
+
+    func markContextMenuTarget(at point: CGPoint) -> (() -> Void)? {
+        contextMenuTarget.mark(row(at: point))
+    }
 
     // MARK: Hover
 
@@ -886,7 +892,7 @@ struct HiddenChangesNote: View {
             Button("Show", action: onShow)
                 .buttonStyle(.quiet)
                 .controlSize(.small)
-                .help("Show the files the commit includes")
+                .tooltip("Show the files the commit includes")
         }
         .padding(.horizontal, FileRowMetrics.contentInset)
         .padding(.vertical, Metrics.insetSmall)

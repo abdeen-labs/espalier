@@ -166,8 +166,7 @@ public struct CompactConfirmationSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let path = content.path {
-                    MonoChip(path)
-                        .textSelection(.enabled)
+                    MonoChip(path, isSelectable: true)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

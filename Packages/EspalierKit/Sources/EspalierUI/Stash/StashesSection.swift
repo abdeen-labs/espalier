@@ -77,7 +77,7 @@ struct StashRow: View {
                     .foregroundStyle(.text3)
             }
         }
-        .help(content.tooltip)
+        .tooltip(content.tooltip)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(content.accessibilityLabel)
     }
@@ -126,22 +126,15 @@ public struct StashesSection: View {
 }
 
 /// A stash row's context menu: Restore, which only the current branch's
-/// stash offers, and Discard….
-public struct StashContextMenu: View {
-    private let branch: String
-    @Environment(WindowContext.self) private var context
-
-    public init(branch: String) {
-        self.branch = branch
-    }
-
-    public var body: some View {
-        if context.repository?.gitState.tip.branch?.name == branch {
-            ActionButton(.restoreStash(branch: branch))
-        } else {
-            ActionButton(.restoreStash(branch: branch))
-                .help(StashActions.restoreUnavailableReason(branch: branch))
-        }
-        ActionButton(.discardStash(branch: branch))
+/// stash offers (another branch's says why under it), and Discard….
+enum StashContextMenu {
+    @MenuBuilder
+    static func content(branch: String, context: WindowContext) -> MenuContent {
+        let isCurrentBranch = context.repository?.gitState.tip.branch?.name == branch
+        context.actions.menuAction(
+            .restoreStash(branch: branch),
+            subtitle: isCurrentBranch ? nil : StashActions.restoreUnavailableReason(branch: branch)
+        )
+        context.actions.menuAction(.discardStash(branch: branch))
     }
 }

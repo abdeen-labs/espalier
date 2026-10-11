@@ -189,7 +189,7 @@ struct RepositoryRow: View {
             Spacer(minLength: Metrics.grid)
             RepositoryStatusIndicators(content: content)
         }
-        .help(content.tooltip)
+        .tooltip(content.tooltip)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(content.accessibilityLabel)
     }
@@ -234,7 +234,7 @@ struct RepositoryStatusIndicators: View {
                         .padding(.horizontal, Metrics.grid + 1)
                         .padding(.vertical, 1)
                         .background(Capsule(style: .circular).fill(.field))
-                        .help(RepositoryRowContent.changesTooltip)
+                        .tooltip(RepositoryRowContent.changesTooltip)
                 }
                 if let tooltip = content.aheadBehindTooltip {
                     HStack(spacing: Metrics.grid) {
@@ -249,7 +249,7 @@ struct RepositoryStatusIndicators: View {
                                 .foregroundStyle(.text3)
                         }
                     }
-                    .help(tooltip)
+                    .tooltip(tooltip)
                 }
             }
         }

@@ -3,7 +3,8 @@
 // The diff's container: the header, then the text table, an image diff, or
 // the binary, submodule, large, unrenderable, empty, or conflicted state.
 // The previous diff stays while the next loads, with a spinner after
-// 150 ms.
+// 150 ms. A text diff has the find bar over its top trailing corner while
+// find is open (DiffFindBar.swift).
 
 import AppKit
 import EspalierCore
@@ -97,7 +98,10 @@ public struct DiffContainer: View {
 
     @Environment(WindowContext.self) private var window: WindowContext?
     @Environment(\.syntaxHighlighter) private var environmentHighlighter
+    @Environment(\.motion) private var motion
     @State private var session = DiffSession()
+    /// Find in the diff, kept from file to file.
+    @State private var find = DiffFindModel()
 
     /// - Parameters:
     ///   - diff: The diff, as the model loads it.
@@ -319,8 +323,18 @@ public struct DiffContainer: View {
                         tokensGeneration: session.tokensGeneration,
                         isInteractive: isInteractive
                     ),
-                    actions: tableActions(hunks: shown.hunks)
+                    actions: tableActions(hunks: shown.hunks),
+                    find: find
                 )
+                .overlay(alignment: .topTrailing) {
+                    if find.isShown {
+                        DiffFindBar(find: find)
+                            .padding(.top, Metrics.DiffFind.topInset)
+                            .padding(.horizontal, Metrics.DiffFind.sideInset)
+                            .transition(DiffFindBar.transition(animates: motion.animates))
+                    }
+                }
+                .barMotion(find.isShown)
             }
         }
     }

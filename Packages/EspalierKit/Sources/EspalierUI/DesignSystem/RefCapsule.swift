@@ -223,9 +223,9 @@ public struct RefCapsuleList: View {
                         .frame(height: Metrics.RefCapsule.height)
                         .background(Capsule(style: .circular).fill(.field))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bare(.capsule))
                 .accessibilityLabel("\(refs.count - maximumVisible) more refs")
-                .popover(isPresented: $isShowingOverflow) {
+                .popoverCard(isPresented: $isShowingOverflow, title: "More Refs") {
                     VStack(alignment: .leading, spacing: Metrics.RefCapsule.spacing) {
                         ForEach(refs.dropFirst(maximumVisible)) { ref in
                             RefCapsule(ref, palette: palette)

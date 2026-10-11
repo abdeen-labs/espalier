@@ -1,8 +1,10 @@
 // The diff table's behavior: row heights from monospace arithmetic,
 // hit-testing (unified, split while lines can be staged, and scrolled
 // sideways), drag ranges, keyboard staging and navigation, the line
-// cursor, copying, text selection with the mouse, the context menus, find,
-// and VoiceOver's labels, actions, and rotors.
+// cursor, copying, text selection with the mouse, the context menus (from
+// a right-click, ⇧F10, and VoiceOver), Edit ▸ Find's commands and scrolling
+// to a match, and VoiceOver's labels,
+// actions, and rotors.
 
 import AppKit
 import EspalierCore
@@ -179,7 +181,7 @@ struct DiffTableControllerTests {
         let drag = controller.mouseDown(at: point(controller, row: 3, x: middle(controller.geometry.handle!)), clickCount: 1, extendsSelection: false)
         #expect(drag == .none)
         #expect(recorder.toggled.isEmpty)
-        #expect(controller.menu(at: point(controller, row: 3, x: middle(controller.geometry.handle!))) == nil)
+        #expect(controller.menuContent(at: point(controller, row: 3, x: middle(controller.geometry.handle!))) == nil)
     }
 
     @Test("Expand Down on a hunk expandable both ways, and on the bottom hunk, expands the hunk above")
@@ -279,52 +281,178 @@ struct DiffTableControllerTests {
     }
 
     @Test("the text menu: Copy, Select All, and the expansion items")
-    func textMenu() {
+    func textMenu() throws {
         let recorder = DiffActionRecorder()
         let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChangeWithBottomHunk, canExpand: true))
         controller.actions = recorder.actions
         let textX = controller.geometry.before.text.lowerBound + 20
-        let menu = try! #require(controller.menu(at: point(controller, row: 1, x: textX)))
-        #expect(menu.items.map(\.title) == ["Copy", "Select All", "", "Expand Whole File"])
-        #expect(!menu.items[0].isEnabled)
-        #expect(menu.items[3].isEnabled)
-        _ = (menu.items[3].target as? MenuItemTarget)?.run()
+        let menu = try #require(controller.menuContent(at: point(controller, row: 1, x: textX)))
+        #expect(MenuRecorder.Popup.titles(menu) == ["Copy", "Select All", "—", "Expand Whole File"])
+        #expect(menu.items.map(\.isEnabled) == [false, true, true])
+        try run(menu, "Expand Whole File")
         #expect(recorder.wholeFileExpansions == 1)
 
         controller.apply(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChangeWithBottomHunk, canExpand: true, hasExpandedLines: true))
-        let collapse = try! #require(controller.menu(at: point(controller, row: 1, x: textX)))
+        let collapse = try #require(controller.menuContent(at: point(controller, row: 1, x: textX)))
         #expect(collapse.items.last?.title == "Collapse Expanded Lines")
-        _ = (collapse.items.last?.target as? MenuItemTarget)?.run()
+        try run(collapse, "Collapse Expanded Lines")
         #expect(recorder.collapses == 1)
 
-        let hunkMenu = try! #require(controller.menu(at: point(controller, row: 0, x: textX)))
-        #expect(hunkMenu.items.map(\.title) == ["Collapse Expanded Lines"])
+        let hunkMenu = try #require(controller.menuContent(at: point(controller, row: 0, x: textX)))
+        #expect(MenuRecorder.Popup.titles(hunkMenu) == ["Collapse Expanded Lines"])
+    }
+
+    @Test("⇧F10 opens the text menu at the line cursor, a right-click the menu under the pointer, and VoiceOver's Show Menu a row's text menu")
+    func contextMenuTriggers() throws {
+        let recorder = DiffActionRecorder()
+        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, staging: staging()))
+        controller.actions = recorder.actions
+        let table = controller.tableView
+        let window = SnapshotWindow(contentRect: controller.scrollView.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = controller.scrollView
+        defer { window.contentView = nil }
+        controller.scrollView.layoutSubtreeIfNeeded()
+        #expect(window.makeFirstResponder(table))
+        let menus = MenuRecorder()
+        let f10 = try f10KeyDown(in: window)
+
+        // No line cursor: the key is used, and nothing opens.
+        #expect(KeyboardContextMenu.handle(f10, in: window, presenter: menus.menuPresenter))
+        #expect(menus.popups.isEmpty)
+
+        // The cursor on a line: its text menu, at the line's text.
+        #expect(controller.keyDown(key(arrow(NSDownArrowFunctionKey))))
+        let row = try #require(controller.cursorHead)
+        #expect(KeyboardContextMenu.handle(f10, in: window, presenter: menus.menuPresenter))
+        let keyboard = try #require(menus.popups.first)
+        #expect(keyboard.titles == ["Copy", "Select All"])
+        #expect(keyboard.item("Copy")?.isEnabled == true)
+        #expect(keyboard.request.trigger == .keyboard)
+        #expect(controller.row(at: keyboard.location) == row)
+
+        // A right-click on a changed line's handle: its block's discard item.
+        let handle = point(controller, row: 3, x: middle(controller.geometry.handle!))
+        #expect(ContextMenuRegions.openMenu(for: try rightClick(at: handle, in: table), presenter: menus.menuPresenter))
+        #expect(menus.popups.count == 2)
+        #expect(menus.popups[1].request.trigger == .press)
+        #expect(controller.row(at: menus.popups[1].location) == 3)
+        #expect(recorder.discardTitleRequests.count == 1)
+
+        // VoiceOver's Show Menu on a row: its text menu (shown in a panel
+        // of its own, which an offscreen window lays out but doesn't show).
+        let rowView = try #require(table.rowView(atRow: row, makeIfNecessary: true))
+        #expect(rowView.accessibilityPerformShowMenu())
+        MenuSession.current?.close(animated: false)
+    }
+
+    /// Chooses the item titled `title` of `content`.
+    private func run(_ content: MenuContent, _ title: String) throws {
+        let item = try #require(content.items.first { $0.title == title })
+        #expect(item.isEnabled)
+        guard case .run(let action) = item.action else {
+            Issue.record("\(title) opens a submenu")
+            return
+        }
+        action()
     }
 
     // MARK: Find
 
-    @Test("find searches every line's content row by row; context lines count on both sides when split")
-    func findText() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
-        let client = controller.findClient
-        let text = client.string
-        #expect(!text.contains("@@"))
-        #expect(text.hasPrefix("    func load() throws -> Repository {\n        let path = configuration.path\n"))
-        let range = (text as NSString).range(of: "repo.tip!")
-        client.selectedRanges = [NSValue(range: range)]
-        #expect(controller.textSelection == DiffTextSelection(
-            column: .before, anchor: DiffTextPosition(row: 3, offset: 18), head: DiffTextPosition(row: 3, offset: 27)
-        ))
-        #expect(client.selectedRanges.first?.rangeValue == range)
-        let rects = try! #require(client.rects(forCharacterRange: range))
-        #expect(rects.count == 1)
-        #expect(abs(rects[0].rectValue.minX - controller.geometry.x(ofColumn: 18, side: .before, scrollX: 0)) < 0.5)
-        #expect(!client.visibleCharacterRanges.isEmpty)
+    /// An Edit ▸ Find item with an action's tag, sending NSTextView's
+    /// selector as the menu's items do.
+    private func findItem(_ action: NSTextFinder.Action) -> NSMenuItem {
+        let item = NSMenuItem(title: "", action: NSSelectorFromString("performFindPanelAction:"), keyEquivalent: "")
+        item.tag = action.rawValue
+        return item
+    }
 
-        let split = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, isSplit: true))
-        let splitText = split.findClient.string as NSString
-        #expect(splitText.components(separatedBy: "configuration.path").count - 1 == 2)
-        #expect(split.findClient.segment(row: 3, column: .after)?.line == split.document.rows[3].after.asInt)
+    @Test("Edit ▸ Find: Find… opens the bar for typing; Use Selection for Find searches for the selection; Find Next and Previous move from it")
+    func findCommands() {
+        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
+        let table = controller.tableView
+        let find = controller.find
+        #expect(table.validateUserInterfaceItem(findItem(.showFindInterface)))
+        #expect(table.validateUserInterfaceItem(findItem(.nextMatch)))
+        #expect(table.validateUserInterfaceItem(findItem(.previousMatch)))
+        #expect(!table.validateUserInterfaceItem(findItem(.setSearchString)))
+        table.performFindPanelAction(findItem(.showFindInterface))
+        #expect(find.isShown)
+        #expect(find.focusRequest)
+        find.close()
+
+        // The added line's first "tip".
+        controller.textSelection = DiffTextSelection(column: .before, anchor: DiffTextPosition(row: 5, offset: 18), head: DiffTextPosition(row: 5, offset: 21))
+        #expect(table.validateUserInterfaceItem(findItem(.setSearchString)))
+        table.performFindPanelAction(findItem(.setSearchString))
+        #expect(find.isShown)
+        #expect(find.query == "tip")
+        #expect(find.currentMatch == DiffFindMatch(row: 5, column: .before, range: 18..<21))
+        table.performFindPanelAction(findItem(.nextMatch))
+        #expect(find.currentMatch == DiffFindMatch(row: 5, column: .before, range: 29..<32))
+        table.performFindPanelAction(findItem(.previousMatch))
+        table.performFindPanelAction(findItem(.previousMatch))
+        #expect(find.currentMatch == DiffFindMatch(row: 4, column: .before, range: 43..<46))
+    }
+
+    @Test("closing find selects the current match and focuses the diff; Escape in the diff closes it; Find Next opens it past the selection, or for typing with no query")
+    func closingFind() {
+        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
+        let window = SnapshotWindow(contentRect: CGRect(x: 0, y: 0, width: 720, height: 360), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = controller.scrollView
+        defer { window.contentView = nil }
+        let find = controller.find
+        controller.performFind(.show)
+        find.query = "tip"
+        window.makeFirstResponder(nil)
+        find.close()
+        #expect(window.firstResponder === controller.tableView)
+        #expect(controller.textSelection == DiffTextSelection(column: .before, anchor: DiffTextPosition(row: 3, offset: 12), head: DiffTextPosition(row: 3, offset: 15)))
+
+        controller.performFind(.next)
+        #expect(find.isShown)
+        #expect(find.currentMatch == DiffFindMatch(row: 3, column: .before, range: 23..<26))
+        #expect(controller.keyDown(key("\u{1b}")))
+        #expect(!find.isShown)
+        #expect(controller.textSelection?.start == DiffTextPosition(row: 3, offset: 23))
+        // Escape again clears the selection.
+        #expect(controller.keyDown(key("\u{1b}")))
+        #expect(controller.textSelection == nil)
+
+        find.query = ""
+        controller.performFind(.next)
+        #expect(find.isShown)
+        #expect(find.focusRequest)
+    }
+
+    @Test("the current match scrolls into view below the find bar, another file's first one too; while lines don't wrap, sideways into its text")
+    func findScrolling() throws {
+        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange), size: CGSize(width: 720, height: 120))
+        let clip = controller.scrollView.contentView
+        controller.performFind(.show)
+        // The deleted "// TODO: notify observers", far below.
+        controller.find.query = "todo"
+        let row = controller.tableView.rect(ofRow: 15)
+        #expect(clip.bounds.minY > 0)
+        #expect(row.minY >= clip.bounds.minY + Metrics.DiffFind.coveredHeight)
+        #expect(row.maxY <= clip.bounds.maxY)
+        // Another file opens at its first match, not its top.
+        controller.apply(DiffTableContent(fileID: "b", diff: DiffFixtures.swiftChangeWithBottomHunk))
+        #expect(controller.find.currentMatch?.row == 15)
+        #expect(clip.bounds.minY > 0)
+
+        let unwrapped = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: false), size: CGSize(width: 480, height: 300))
+        unwrapped.performFind(.show)
+        // The end of the long deleted line.
+        unwrapped.find.query = "wall"
+        let match = try #require(unwrapped.find.currentMatch)
+        #expect(match.row == 2)
+        let rect = try #require(unwrapped.textRects(row: match.row, side: match.column, range: match.range).first)
+        let text = unwrapped.geometry.half(.before).text
+        let scrollX = unwrapped.scrollView.contentView.bounds.minX
+        #expect(scrollX > 0)
+        #expect(unwrapped.textScrollX == scrollX)
+        #expect(rect.minX >= scrollX + text.lowerBound)
+        #expect(rect.maxX <= scrollX + text.upperBound)
     }
 
     @Test("the window's find actions reach the diff from anywhere in it, while the diff shows")
@@ -358,17 +486,24 @@ struct DiffTableControllerTests {
         #expect(!forwarder.validateUserInterfaceItem(item))
     }
 
-    @Test("tearing the diff down detaches the find bar, which outlives it")
+    @Test("a diff table torn down stops following the container's find, unless another table took it over")
     func findTearDown() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
-        let window = SnapshotWindow(contentRect: CGRect(x: 0, y: 0, width: 600, height: 300), styleMask: [.borderless], backing: .buffered, defer: false)
-        window.contentView = controller.scrollView
-        controller.textFinder.performAction(.showFindInterface)
-        #expect(controller.textFinder.client != nil)
-        controller.tearDown()
-        #expect(controller.textFinder.client == nil)
-        #expect(controller.textFinder.findBarContainer == nil)
-        window.contentView = nil
+        let content = DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange)
+        let find = DiffFindModel()
+        let first = DiffTables.controller(content, size: CGSize(width: 720, height: 120))
+        let second = DiffTables.controller(content, size: CGSize(width: 720, height: 120))
+        first.attach(find)
+        second.attach(find)
+        first.tearDown()
+        find.show(focus: false, from: .start)
+        find.query = "todo"
+        #expect(first.scrollView.contentView.bounds.minY == 0)
+        let scrolled = second.scrollView.contentView.bounds.minY
+        #expect(scrolled > 0)
+
+        second.tearDown()
+        find.query = "func load"
+        #expect(second.scrollView.contentView.bounds.minY == scrolled)
     }
 
     // MARK: Accessibility

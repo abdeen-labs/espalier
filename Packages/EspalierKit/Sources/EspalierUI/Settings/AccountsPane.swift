@@ -349,7 +349,7 @@ private struct SignedOutNoteView: View {
     var body: some View {
         SettingsMessageRow {
             Label {
-                Text(text)
+                LinkedText(text)
                     .fixedSize(horizontal: false, vertical: true)
                     .environment(\.openURL, OpenURLAction { url in
                         open(url)

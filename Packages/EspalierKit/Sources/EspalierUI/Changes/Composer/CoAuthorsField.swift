@@ -1,13 +1,13 @@
 // The co-authors region of the commit message card: each co-author a token
 // (the login, or the name without one, on a quiet capsule, with a button
 // that removes it), then a field to add one, on the tokens' last row while
-// there's room. The field completes `@login` from the repository's users;
-// Return, a comma, or leaving the field makes what was typed a co-author,
-// and Delete in the empty field removes the last one. An unknown login is
-// looked up and kept as unknown when it isn't found (its token says so,
-// and the commit then asks, "Unknown Co-Authors"). Typing "Name <email>"
-// adds a co-author without a GitHub login. The field tells the card when
-// it has focus.
+// there's room. The field completes `@login` from the repository's users,
+// in a suggestion list under it; Return, a comma, or leaving the field
+// makes what was typed a co-author, and Delete in the empty field removes
+// the last one. An unknown login is looked up and kept as unknown when it
+// isn't found (its token says so, and the commit then asks, "Unknown
+// Co-Authors"). Typing "Name <email>" adds a co-author without a GitHub
+// login. The field tells the card when it has focus.
 
 import AppKit
 import EspalierSupport
@@ -140,15 +140,15 @@ struct CoAuthorTokenView: View {
                         .foregroundStyle(.text3)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .help("Remove \(token.displayText)")
+                .buttonStyle(.bare(.circle))
+                .tooltip("Remove \(token.displayText)")
             }
         }
         .font(Typography.smallButton)
         .padding(.horizontal, Metrics.insetSmall)
         .frame(height: Metrics.Composer.coAuthorTokenHeight)
         .surface(.quiet, elevation: .quiet)
-        .help(token.fullText)
+        .tooltip(token.fullText)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(token.fullText)
         .accessibilityAction(named: "Remove") {
@@ -291,6 +291,11 @@ struct CoAuthorEntry: NSViewRepresentable {
         /// Counts the edits, so a lookup completes again only while the
         /// text it was for is still the text being typed.
         private var edits = 0
+        /// The list the users show in, under the field.
+        let list = SuggestionList()
+        /// Set while a user is put in the field: the change looks nothing
+        /// up.
+        private var isAccepting = false
 
         init(_ parent: CoAuthorEntry) {
             self.parent = parent
@@ -336,7 +341,7 @@ struct CoAuthorEntry: NSViewRepresentable {
         /// The users to complete `text` with ("@mo", "mo"), without the
         /// co-authors already added; none until the users for it have
         /// loaded, which this starts.
-        func completions(for text: String) -> [String] {
+        func completions(for text: String) -> [ComposerSuggestion] {
             let trimmed = JSCompat.trim(text)
             let query = trimmed.hasPrefix("@") ? String(trimmed.dropFirst()) : trimmed
             guard let loaded, loaded.query == query else {
@@ -351,13 +356,14 @@ struct CoAuthorEntry: NSViewRepresentable {
                 case .unknown(let unknown): unknown.username
                 }
             })
-            return loaded.suggestions.map(\.insertion).filter { suggestion in
-                !taken.contains(suggestion.hasPrefix("@") ? String(suggestion.dropFirst()) : suggestion)
+            return loaded.suggestions.filter { suggestion in
+                let insertion = suggestion.insertion
+                return !taken.contains(insertion.hasPrefix("@") ? String(insertion.dropFirst()) : insertion)
             }
         }
 
-        /// Looks up the users matching `query`, then completes again if the
-        /// text hasn't changed since (an edit asks for its own).
+        /// Looks up the users matching `query`, then shows them if the text
+        /// hasn't changed since (an edit asks for its own).
         func lookUpUsers(_ query: String) {
             lookup?.cancel()
             let completions = parent.completions
@@ -368,10 +374,46 @@ struct CoAuthorEntry: NSViewRepresentable {
                     return
                 }
                 self.loaded = (query, suggestions)
-                if !suggestions.isEmpty, self.edits == edit, let editor = self.field?.currentEditor() as? NSTextView {
-                    editor.complete(nil)
+                if !suggestions.isEmpty, self.edits == edit {
+                    self.showList()
                 }
             }
+        }
+
+        /// Shows the users for what's typed in the list under the field,
+        /// their text lined up with the field's, while it's being edited.
+        func showList() {
+            guard let field, let editor = field.currentEditor() as? NSTextView else {
+                list.close()
+                return
+            }
+            let suggestions = completions(for: editor.string)
+            list.show(
+                suggestions.map { Suggestion(title: $0.insertion, detail: $0.detail) },
+                for: editor,
+                below: field.bounds.offsetBy(dx: -SuggestionList.textInset, dy: 0),
+                in: field
+            ) { [weak self, weak editor] suggestion in
+                if let editor {
+                    self?.insert(suggestion.title, in: editor)
+                }
+            }
+        }
+
+        /// Puts the user `insertion` names in place of the word being
+        /// typed: it replaces the word after the `@`, so it leaves the `@`
+        /// out there.
+        func insert(_ insertion: String, in editor: NSTextView) {
+            let text = editor.string as NSString
+            var range = editor.rangeForUserCompletion
+            if range.location == NSNotFound || NSMaxRange(range) > text.length {
+                range = NSRange(location: editor.selectedRange().location, length: 0)
+            }
+            let partial = text.substring(with: range)
+            let word = insertion.hasPrefix("@") && !partial.hasPrefix("@") ? String(insertion.dropFirst()) : insertion
+            isAccepting = true
+            editor.insertCompletion(word, forPartialWordRange: range, movement: NSTextMovement.return.rawValue, isFinal: true)
+            isAccepting = false
         }
 
         // MARK: The field's delegate
@@ -388,9 +430,11 @@ struct CoAuthorEntry: NSViewRepresentable {
                 editor.string = remainder
             }
             let trimmed = JSCompat.trim(remainder)
-            if !trimmed.isEmpty {
-                lookUpUsers(trimmed.hasPrefix("@") ? String(trimmed.dropFirst()) : trimmed)
+            guard !trimmed.isEmpty, !isAccepting else {
+                list.close()
+                return
             }
+            lookUpUsers(trimmed.hasPrefix("@") ? String(trimmed.dropFirst()) : trimmed)
         }
 
         func controlTextDidEndEditing(_ notification: Notification) {
@@ -418,22 +462,6 @@ struct CoAuthorEntry: NSViewRepresentable {
                 return textView.string.isEmpty && removeLast()
             default:
                 return false
-            }
-        }
-
-        /// The users to complete with, for the word the field completes: a
-        /// completion replaces the word after the `@`, so it leaves the `@`
-        /// out there.
-        func control(
-            _ control: NSControl,
-            textView: NSTextView,
-            completions words: [String],
-            forPartialWordRange charRange: NSRange,
-            indexOfSelectedItem index: UnsafeMutablePointer<Int>
-        ) -> [String] {
-            let partial = (textView.string as NSString).substring(with: charRange)
-            return completions(for: textView.string).map { insertion in
-                insertion.hasPrefix("@") && !partial.hasPrefix("@") ? String(insertion.dropFirst()) : insertion
             }
         }
 
@@ -470,6 +498,12 @@ struct CoAuthorEntry: NSViewRepresentable {
 /// window).
 final class CoAuthorsTextField: NSTextField {
     weak var focusBridge: ComposerFocusBridge?
+
+    /// Its cell edits in a field editor of Espalier's.
+    override class var cellClass: AnyClass? {
+        get { EspalierTextFieldCell.self }
+        set {}
+    }
 
     override func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()

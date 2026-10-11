@@ -16,6 +16,7 @@ import SwiftUI
 public struct BranchPopover: View {
     private let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
+    @Environment(\.closeEnclosingPopover) private var closePopover
     @State private var selection: Branch?
 
     public init(repository: RepositoryModel) {
@@ -35,7 +36,7 @@ public struct BranchPopover: View {
                 // Offered when New Branch… is (not while an operation is in
                 // progress).
                 onCreateBranch: context.actions.canPerform(.newBranch(startPoint: nil)) ? { name in
-                    context.state.isBranchPopoverPresented = false
+                    close()
                     NewBranchSheet.present(.create(initialName: name), in: context)
                 } : nil,
                 style: .popover,
@@ -51,20 +52,19 @@ public struct BranchPopover: View {
         }
         .frame(width: Metrics.BranchPicker.popoverWidth)
         .background(Color(espalier: Palette.background))
-        .flatPopoverPresentation()
     }
 
     /// New Branch…, beside the filter; its shortcut is in its tooltip.
     private var newBranchButton: some View {
         Button {
-            context.state.isBranchPopoverPresented = false
+            close()
             context.actions.perform(.newBranch(startPoint: nil))
         } label: {
             Label(ActionKind.newBranch.title, systemImage: "plus")
         }
         .buttonStyle(.quiet)
         .fixedSize()
-        .help([ActionKind.newBranch.title, ActionKind.newBranch.shortcut?.symbols].compactMap(\.self).joined(separator: " "))
+        .tooltip([ActionKind.newBranch.title, ActionKind.newBranch.shortcut?.symbols].compactMap(\.self).joined(separator: " "))
         .disabled(!context.actions.canPerform(.newBranch(startPoint: nil)))
     }
 
@@ -73,7 +73,7 @@ public struct BranchPopover: View {
     private var mergeButton: some View {
         if let current = repository.gitState.tip.branch {
             MergeIntoCurrentBranchButton(currentBranch: current.name) {
-                context.state.isBranchPopoverPresented = false
+                close()
                 context.actions.perform(.mergeIntoCurrentBranch(branch: nil))
             }
             .controlSize(.small)
@@ -81,10 +81,17 @@ public struct BranchPopover: View {
         }
     }
 
+    /// Closes the popover, at once when it's in its card (so a sheet that
+    /// opens next finds the window focused).
+    private func close() {
+        closePopover?()
+        context.state.isBranchPopoverPresented = false
+    }
+
     /// Checks `branch` out and closes the popover; the current branch only
     /// closes it.
     private func checkOut(_ branch: Branch) {
-        context.state.isBranchPopoverPresented = false
+        close()
         guard branch.ref != repository.gitState.tip.branch?.ref else {
             return
         }
@@ -110,7 +117,7 @@ struct MergeIntoCurrentBranchButton: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.quiet)
-        .help("Choose a branch to merge into \(currentBranch)")
+        .tooltip("Choose a branch to merge into \(currentBranch)")
         .accessibilityLabel("Choose a branch to merge into \(currentBranch)")
     }
 }

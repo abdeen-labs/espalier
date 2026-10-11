@@ -180,24 +180,13 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     /// The longest line's width, for sideways scrolling.
     private var maximumTextWidth: CGFloat = 0
 
-    /// Find, through the system find bar.
-    private(set) lazy var findClient = DiffFindClient(controller: self)
-    private(set) lazy var textFinder: NSTextFinder = {
-        let finder = NSTextFinder()
-        hasTextFinder = true
-        finder.client = findClient
-        finder.findBarContainer = scrollView
-        finder.isIncrementalSearchingEnabled = true
-        finder.incrementalSearchingShouldDimContentView = true
-        return finder
-    }()
-
-    /// Whether `textFinder` was made (tearing down doesn't make it).
-    private var hasTextFinder = false
+    /// Find in the diff: the container's model once attached
+    /// (`attach(_:)`, DiffTableFind.swift).
+    var find = DiffFindModel()
 
     /// The popover offering to show whitespace changes, and where it was
     /// asked for.
-    private var whitespaceHint: NSPopover?
+    private var whitespaceHint: PopoverController?
     private(set) var whitespaceHintPoint: CGPoint?
 
     override init() {
@@ -238,6 +227,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         scrollView.hasVerticalScroller = true
         // Shown while lines don't wrap and one is wider than the pane.
         scrollView.hasHorizontalScroller = true
+        scrollView.useEspalierScrollers()
         // Bouncing past the edges would pull the numbers off the pane.
         scrollView.horizontalScrollElasticity = .none
         scrollView.autohidesScrollers = true
@@ -259,6 +249,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil
         )
         tableView.sizeLastColumnToFit()
+        connectFind()
     }
 
     /// The view went away: stops work in flight.
@@ -266,14 +257,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         buildTask?.cancel()
         relayoutTask?.cancel()
         whitespaceHint?.close()
-        // The find bar outlives this controller (the scroll view keeps it)
-        // but doesn't retain its client: after a search, removing the
-        // scroll view would ask the freed client for its matches and crash.
-        if hasTextFinder {
-            textFinder.cancelFindIndicator()
-            textFinder.findBarContainer = nil
-            textFinder.client = nil
-        }
+        find.disconnect(self)
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
@@ -362,10 +346,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         let canInsert = shownContent.map { $0.wrapsLines == content.wrapsLines && (($0.staging == nil) == (content.staging == nil)) } ?? false
         let expansion = animates && !switchesLayout && canInsert ? Self.expansion(from: self.document, to: document) : nil
 
-        textFinder.noteClientStringWillChange()
         self.document = document
         shownContent = content
-        findClient.invalidate()
         textCache.reset()
         lineLayouts.removeAll()
         intraLineChanges.removeAll()
@@ -395,6 +377,9 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         } else {
             tableView.scroll(.zero)
         }
+        // Laid out, find's matches follow (another file's first one
+        // scrolled into view).
+        find.documentDidChange(document, isNewFile: isNewFile)
     }
 
     // MARK: Expansion's motion
@@ -1178,7 +1163,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         var block: Int?
         var line: (row: Int, column: DiffColumn)?
         var button: (hunk: Int, button: DiffHunkButton)?
-        var toolTip: String?
+        var tooltip: String?
         if let point {
             switch hit(at: point) {
             case .handle(_, let hovered):
@@ -1187,7 +1172,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
                 line = (row, column)
             case .expansion(let hunk, let kind):
                 button = (hunk, kind)
-                toolTip = kind.title
+                tooltip = kind.title
             default:
                 break
             }
@@ -1205,9 +1190,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         hoveredBlock = block
         hoveredLine = line
         hoveredButton = button
-        if tableView.toolTip != toolTip {
-            tableView.toolTip = toolTip
-        }
+        tableView.setTooltip(tooltip)
         if changed {
             redrawVisibleRows()
         }
@@ -1274,19 +1257,19 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         guard tableView.window != nil else {
             return
         }
-        let popover = NSPopover()
-        popover.behavior = .transient
-        let host = NSHostingController(rootView: WhitespaceHintView(
-            onCancel: { [weak popover] in popover?.close() },
-            onShow: { [weak self, weak popover] in
-                popover?.close()
-                self?.actions.staging?.showWhitespaceChanges()
-            }
-        ))
-        host.sizingOptions = .preferredContentSize
-        popover.contentViewController = host
+        let popover = PopoverController(title: "Show whitespace changes?") { [weak self] in
+            WhitespaceHintView(
+                onCancel: {
+                    self?.whitespaceHint?.close()
+                },
+                onShow: {
+                    self?.whitespaceHint?.close()
+                    self?.actions.staging?.showWhitespaceChanges()
+                }
+            )
+        }
         let anchor = CGRect(x: point.x - 2, y: point.y - 2, width: 4, height: 4)
-        popover.show(relativeTo: anchor, of: tableView, preferredEdge: .maxX)
+        popover.show(relativeTo: anchor, of: tableView, edge: .trailing)
         whitespaceHint = popover
     }
 
@@ -1326,6 +1309,11 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         return min(cursor.anchor, cursor.head)...max(cursor.anchor, cursor.head)
     }
 
+    /// The row the cursor moves from, while it shows.
+    var cursorHead: Int? {
+        showsCursor ? cursor?.head : nil
+    }
+
     /// Handles a key; false to let the table handle it.
     func keyDown(_ event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -1360,7 +1348,13 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             }
             return true
         case 0x1B:
-            textSelection = nil
+            // Escape closes find (selecting its current match), else
+            // clears the selection.
+            if find.isShown {
+                find.close()
+            } else {
+                textSelection = nil
+            }
             return true
         default:
             return false
@@ -1466,7 +1460,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     /// The menu for a right-click: the gutter's discard item on a changed
     /// line or block in Changes, the expansion items on a hunk header, and
     /// Copy, Select All, and the expansion items on the text.
-    func menu(at point: CGPoint) -> NSMenu? {
+    func menuContent(at point: CGPoint) -> MenuContent? {
         guard shownContent?.isInteractive ?? false else {
             return nil
         }
@@ -1498,63 +1492,63 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             }
             return discardMenu(.block(containing: document.blocks[block].diffLines.lowerBound))
         case .expansion, .hunkHeader, .hunkCheckbox:
-            let menu = NSMenu()
-            if let item = expansionMenuItem() {
-                menu.addItem(item)
-            }
-            return menu.items.isEmpty ? nil : menu
-        case .text:
-            return textMenu()
-        case .inertGutter, .none:
+            return expansionMenuAction().map { $0.menuContent }
+        case .text, .inertGutter, .none:
             return textMenu()
         }
     }
 
-    private func discardMenu(_ lines: DiffLines) -> NSMenu? {
+    /// Where the menu of `row`'s text opens (⇧F10, VoiceOver's Show Menu):
+    /// the start of its text, on the first side.
+    func textMenuPoint(ofRow row: Int) -> CGPoint? {
+        guard row >= 0, row < tableView.numberOfRows else {
+            return nil
+        }
+        let rect = tableView.rect(ofRow: row)
+        return CGPoint(x: textScrollX + geometry.before.text.lowerBound, y: rect.midY)
+    }
+
+    private func discardMenu(_ lines: DiffLines) -> MenuContent? {
         guard let title = actions.staging?.discardTitle(lines) else {
             return nil
         }
-        let menu = NSMenu()
-        let item = ClosureMenuItem(title: title) { [weak self] in
-            self?.actions.staging?.discardLines(lines)
+        return MenuContent {
+            MenuAction(title) { [weak self] in
+                self?.actions.staging?.discardLines(lines)
+            }
         }
-        menu.addItem(item)
-        return menu
     }
 
-    private func textMenu() -> NSMenu {
-        let menu = NSMenu()
-        let copy = ClosureMenuItem(title: "Copy") { [weak self] in
-            self?.copySelection()
+    private func textMenu() -> MenuContent {
+        MenuContent {
+            MenuAction("Copy") { [weak self] in
+                self?.copySelection()
+            }
+            .disabled(!canCopy)
+            MenuAction("Select All") { [weak self] in
+                self?.selectAll()
+            }
+            if let expansion = expansionMenuAction() {
+                MenuDivider()
+                expansion
+            }
         }
-        copy.isEnabled = canCopy
-        menu.addItem(copy)
-        menu.addItem(ClosureMenuItem(title: "Select All") { [weak self] in
-            self?.selectAll()
-        })
-        if let item = expansionMenuItem() {
-            menu.addItem(.separator())
-            menu.addItem(item)
-        }
-        menu.autoenablesItems = false
-        return menu
     }
 
     /// "Expand Whole File", or "Collapse Expanded Lines" once expanded.
-    func expansionMenuItem() -> NSMenuItem? {
+    func expansionMenuAction() -> MenuAction? {
         guard let content = shownContent, content.canExpand || content.hasExpandedLines else {
             return nil
         }
         if content.hasExpandedLines {
-            return ClosureMenuItem(title: "Collapse Expanded Lines") { [weak self] in
+            return MenuAction("Collapse Expanded Lines") { [weak self] in
                 self?.actions.collapseExpandedLines()
             }
         }
-        let item = ClosureMenuItem(title: "Expand Whole File") { [weak self] in
+        return MenuAction("Expand Whole File") { [weak self] in
             self?.actions.expandWholeFile()
         }
-        item.isEnabled = canExpandWholeFile
-        return item
+        .disabled(!canExpandWholeFile)
     }
 }
 
@@ -1565,27 +1559,4 @@ enum DiffDrag: Equatable {
     case gutter
     /// Selecting text on a side.
     case text(DiffColumn)
-}
-
-/// A menu item that runs a closure.
-func ClosureMenuItem(title: String, handler: @escaping @MainActor () -> Void) -> NSMenuItem {
-    let target = MenuItemTarget(handler: handler)
-    let item = NSMenuItem(title: title, action: #selector(MenuItemTarget.run), keyEquivalent: "")
-    item.target = target
-    // The item keeps its target alive.
-    item.representedObject = target
-    return item
-}
-
-/// The target of a closure's menu item.
-final class MenuItemTarget: NSObject {
-    private let handler: @MainActor () -> Void
-
-    init(handler: @escaping @MainActor () -> Void) {
-        self.handler = handler
-    }
-
-    @objc func run() {
-        handler()
-    }
 }

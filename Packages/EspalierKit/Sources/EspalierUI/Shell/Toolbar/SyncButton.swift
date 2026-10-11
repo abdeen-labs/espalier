@@ -455,7 +455,7 @@ public struct SyncButtonView: View {
                 .overlay {
                     Color.clear
                         .contentShape(Capsule(style: .circular))
-                        .help(detail)
+                        .tooltip(detail)
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(state.accessibilityTitle)
@@ -463,7 +463,7 @@ public struct SyncButtonView: View {
         } else {
             control(look, detail: detail)
                 .disabled(!state.isEnabled)
-                .help(detail)
+                .tooltip(detail)
         }
     }
 
@@ -487,25 +487,18 @@ public struct SyncButtonView: View {
 
     /// The chevron's menu: the alternatives under the last fetch, and the
     /// background failure.
-    @ViewBuilder
-    private func menu(detail: String) -> some View {
-        Section(detail) {
-            ForEach(state.menuItems, id: \.title) { item in
-                Button {
+    @MenuBuilder
+    private func menu(detail: String) -> MenuContent {
+        MenuSection(detail) {
+            for item in state.menuItems {
+                MenuAction(item.title, systemImage: item.systemImage, subtitle: item.description) {
                     onMenuItem(item)
-                } label: {
-                    Label {
-                        Text(item.title)
-                        Text(item.description)
-                    } icon: {
-                        Image(systemName: item.systemImage)
-                    }
                 }
             }
         }
         if let failure = state.backgroundFailure {
-            Section {
-                Button("\(failure.menuTitle) — Show Details…", action: onShowFailure)
+            MenuSection {
+                MenuAction("\(failure.menuTitle) — Show Details…", action: onShowFailure)
             }
         }
     }
@@ -744,7 +737,7 @@ struct SyncButton: View {
         // Another repository's button shows at once, as navigation between
         // repositories does.
         .motionScope(AnyHashable(ObjectIdentifier(repository)))
-        .popover(isPresented: $isShowingFailure) {
+        .popoverCard(isPresented: $isShowingFailure, title: repository.lastBackgroundFailure.map { BackgroundFailureSummary($0).menuTitle }) {
             if let failure = repository.lastBackgroundFailure {
                 BackgroundFailureDetails(BackgroundFailureSummary(failure)) { index in
                     isShowingFailure = false

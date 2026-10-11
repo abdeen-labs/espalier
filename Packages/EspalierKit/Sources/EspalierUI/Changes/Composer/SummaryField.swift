@@ -184,14 +184,10 @@ struct SummaryTextField: NSViewRepresentable {
             }
         }
 
-        func control(
-            _ control: NSControl,
-            textView: NSTextView,
-            completions words: [String],
-            forPartialWordRange charRange: NSRange,
-            indexOfSelectedItem index: UnsafeMutablePointer<Int>
-        ) -> [String] {
-            session.insertions(in: textView, forPartialWordRange: charRange, indexOfSelectedItem: index)
+        /// Shows the completions for the word at the cursor (`complete(_:)`).
+        func showCompletions(in editor: SummaryFieldEditor) {
+            session.completions = parent.completions
+            session.complete(in: editor)
         }
     }
 }
@@ -274,20 +270,12 @@ final class SummaryTextFieldCell: NSTextFieldCell {
 /// The summary's field editor: the completion range, the context menu, the
 /// spelling setting, Escape, and focus. It edits only the summary, so it
 /// has focus exactly while the summary does.
-final class SummaryFieldEditor: NSTextView {
+final class SummaryFieldEditor: EspalierFieldEditor {
     weak var coordinator: SummaryTextField.Coordinator?
     /// The cell whose editor this is.
     weak var ownerCell: SummaryTextFieldCell?
     /// Whether a completion is being inserted (not typed).
     private(set) var isInsertingCompletion = false
-
-    convenience init() {
-        self.init(frame: .zero)
-        isFieldEditor = true
-        isRichText = false
-        importsGraphics = false
-        allowsUndo = true
-    }
 
     /// The `@` or `#` word at the cursor, else the word the system picks.
     override var rangeForUserCompletion: NSRange {
@@ -304,16 +292,9 @@ final class SummaryFieldEditor: NSTextView {
         }
     }
 
-    override func menu(for event: NSEvent) -> NSMenu? {
-        let menu = super.menu(for: event) ?? NSMenu()
-        guard let items = coordinator?.parent.menuItems, !items.isEmpty else {
-            return menu
-        }
-        menu.insertItem(.separator(), at: 0)
-        for item in items.reversed() {
-            menu.insertItem(MenuItemAction.item(title: item.title, isEnabled: item.isEnabled, handler: item.action), at: 0)
-        }
-        return menu
+    /// VoiceOver's Show Menu: the editing menu, at the insertion point.
+    override func accessibilityPerformShowMenu() -> Bool {
+        TextEditingMenu.show(for: self)
     }
 
     override func toggleContinuousSpellChecking(_ sender: Any?) {
@@ -330,12 +311,13 @@ final class SummaryFieldEditor: NSTextView {
         super.cancelOperation(sender)
     }
 
-    /// Escape runs `complete(_:)` in a text view: handle it first.
+    /// Escape runs `complete(_:)` in a text view: handle it first, else
+    /// show the completions for the word at the cursor.
     override func complete(_ sender: Any?) {
         if NSApp.currentEvent?.keyCode == 53, coordinator?.parent.onEscape() == true {
             return
         }
-        super.complete(sender)
+        coordinator?.showCompletions(in: self)
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -352,6 +334,13 @@ final class SummaryFieldEditor: NSTextView {
             coordinator?.parent.focusBridge?.field(.summary, hasFocus: false)
         }
         return resigned
+    }
+}
+
+extension SummaryFieldEditor: TextEditingMenuItems {
+    /// The composer's items, first in the editing menu.
+    var editingMenuItems: MenuContent {
+        ComposerMenuItem.menuContent(coordinator?.parent.menuItems ?? [])
     }
 }
 
@@ -405,11 +394,11 @@ struct SummaryLengthHint: View {
                 .foregroundStyle(.secondary)
                 .frame(width: Metrics.Composer.summaryHintSize, height: Metrics.Composer.summaryHintSize)
         }
-        .buttonStyle(.borderless)
-        .help("\(Self.title). \(Self.detail)")
+        .buttonStyle(.smallIcon)
+        .tooltip("\(Self.title). \(Self.detail)")
         .accessibilityLabel("Summary length")
         .accessibilityValue("\(Self.title). \(Self.detail)")
-        .popover(isPresented: $isShowingDetails, arrowEdge: .top) {
+        .popoverCard(isPresented: $isShowingDetails, edge: .top, title: Self.title) {
             VStack(alignment: .leading, spacing: Metrics.grid) {
                 Text(Self.title)
                     .font(Typography.heading)

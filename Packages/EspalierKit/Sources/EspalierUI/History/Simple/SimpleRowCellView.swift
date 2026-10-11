@@ -163,7 +163,7 @@ final class SimpleRowCellView: NSTableCellView {
         mergeSymbol.contentTintColor = Palette.text2
         mergeSymbol.imageAlignment = .alignCenter
         mergeSymbol.wantsLayer = true
-        unpushedArrow.toolTip = CommitRowContent.notPushedTooltip
+        unpushedArrow.setTooltip(CommitRowContent.notPushedTooltip)
         disclosure.contentTintColor = Palette.text3
         disclosure.imageAlignment = .alignCenter
         for view in [railView, avatarView, mergeSymbol, summaryLabel, refsView, unpushedArrow, metaLabel, timeLabel, disclosure] {
@@ -224,15 +224,15 @@ final class SimpleRowCellView: NSTableCellView {
             summaryLabel.textColor = content.summary.isEmpty ? Palette.text3 : Palette.text
             summaryLabel.stringValue = content.displaySummary
         }
-        summaryLabel.toolTip = content.displaySummary
+        summaryLabel.setTooltip(content.displaySummary)
         summaryWidth = CommitRowParts.fittingWidth(summaryLabel)
         refsView.refs = content.tags.map { RefCapsuleContent(name: $0, kind: .tag) }
         unpushedArrow.isHidden = !content.isUnpushed
         metaLabel.stringValue = content.metaText
-        metaLabel.toolTip = content.authorEmail.isEmpty ? content.authorName : "\(content.authorName) <\(content.authorEmail)>"
+        metaLabel.setTooltip(content.authorEmail.isEmpty ? content.authorName : "\(content.authorName) <\(content.authorEmail)>")
         metaWidth = CommitRowParts.fittingWidth(metaLabel)
         timeLabel.stringValue = content.shortDate
-        timeLabel.toolTip = content.dateTooltip
+        timeLabel.setTooltip(content.dateTooltip)
         let isMerge = content.isMerge
         mergeSymbol.isHidden = !isMerge
         avatarView.isHidden = isMerge
@@ -434,7 +434,7 @@ final class SimpleStatusCellView: NSTableCellView {
     func configure(_ text: String, tooltip: String?, rail: SimpleRail) {
         railView.rail = rail
         label.stringValue = text
-        label.toolTip = tooltip
+        label.setTooltip(tooltip)
         setAccessibilityLabel(text)
         needsLayout = true
     }

@@ -2,7 +2,8 @@
 // size: quiet (the quiet fill, ring, and small shadow, medium weight),
 // prominent (the deeper accent, white semibold; one per area), and
 // secondary (the soft fill, no shadow: Cancel in sheets, Undo). The sync
-// button's split variant adds a chevron menu.
+// button's split variant adds a chevron menu. With keyboard focus, each
+// shows Espalier's ring (`FocusRing`) 1 point outside its shape.
 
 import AppKit
 import SwiftUI
@@ -14,7 +15,7 @@ nonisolated public enum CapsuleButtonKind: Sendable {
 
 /// A capsule button style. Heights follow the control size: small 26,
 /// regular 28, large 32 (the toolbar), extra large 34 (Commit).
-public struct CapsuleButtonStyle: ButtonStyle {
+public struct CapsuleButtonStyle: PrimitiveButtonStyle {
     private let kind: CapsuleButtonKind
 
     public init(_ kind: CapsuleButtonKind) {
@@ -22,11 +23,20 @@ public struct CapsuleButtonStyle: ButtonStyle {
     }
 
     public func makeBody(configuration: Configuration) -> some View {
+        FocusRingButton(configuration: configuration, style: CapsuleButtonDrawing(kind: kind))
+    }
+}
+
+/// Draws a capsule button, its focus ring included.
+private struct CapsuleButtonDrawing: ButtonStyle {
+    let kind: CapsuleButtonKind
+
+    func makeBody(configuration: Configuration) -> some View {
         CapsuleButtonBody(kind: kind, label: configuration.label, isPressed: configuration.isPressed)
     }
 }
 
-extension ButtonStyle where Self == CapsuleButtonStyle {
+extension PrimitiveButtonStyle where Self == CapsuleButtonStyle {
     /// The quiet fill, ring, and small shadow, medium weight.
     public static var quiet: CapsuleButtonStyle { CapsuleButtonStyle(.quiet) }
     /// The deeper accent with white semibold text: one per area.
@@ -115,6 +125,8 @@ struct CapsuleButtonBody<Label: View>: View {
     let isPressed: Bool
     @Environment(\.controlSize) private var controlSize
     @Environment(\.isEnabled) private var isEnabled
+    /// Whether the button has keyboard focus.
+    @Environment(\.isFocused) private var isFocused
     @State private var isHovered = false
 
     var body: some View {
@@ -137,6 +149,7 @@ struct CapsuleButtonBody<Label: View>: View {
             )
             .contentShape(Capsule(style: .circular))
             .opacity(appearance.opacity)
+            .focusRing(isFocused, in: Capsule(style: .circular))
             .onHover { isHovered = $0 }
     }
 }
@@ -164,39 +177,51 @@ struct CapsuleLabelStyle: LabelStyle {
 
 // MARK: - The split button
 
-/// A capsule with a main action and a chevron that opens a menu (the sync
-/// button): one surface, a hairline between the parts. The main action can
-/// take a keyboard shortcut (Return, as a sheet's default button).
-public struct SplitCapsuleButton<Label: View, MenuContent: View>: View {
+/// A capsule with a main action and a chevron that opens a menu below the
+/// capsule (the sync button): one surface, a hairline between the parts.
+/// The main action can take a keyboard shortcut (Return, as a sheet's
+/// default button). Each part takes keyboard focus: the main action shows
+/// the ring around the whole capsule, the chevron a ring around itself.
+public struct SplitCapsuleButton<Label: View>: View {
+    /// The part with keyboard focus.
+    private enum Part: Hashable {
+        case main, menu
+    }
+
     private let kind: CapsuleButtonKind
     private let action: () -> Void
     private let label: Label
-    private let menu: MenuContent
+    private let menu: () -> MenuContent
     private let menuLabel: String
     private let shortcut: KeyboardShortcut?
     @Environment(\.controlSize) private var controlSize
     @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
     @State private var isChevronHovered = false
+    @FocusState private var focusedPart: Part?
+    @Environment(\.showsFocusRings) private var showsFocusRings
+    /// The whole capsule, which the menu opens below.
+    @State private var capsule = WeakView<NSView>()
 
     /// - Parameters:
     ///   - menuLabel: What VoiceOver calls the chevron.
     ///   - shortcut: The main action's keyboard shortcut, if any
     ///     (`.defaultAction` for Return).
+    ///   - menu: The chevron's menu, built as it opens.
     public init(
         _ kind: CapsuleButtonKind,
         menuLabel: String = "More Options",
         shortcut: KeyboardShortcut? = nil,
         action: @escaping () -> Void,
         @ViewBuilder label: () -> Label,
-        @ViewBuilder menu: () -> MenuContent
+        @MenuBuilder menu: @escaping () -> MenuContent
     ) {
         self.kind = kind
         self.menuLabel = menuLabel
         self.shortcut = shortcut
         self.action = action
         self.label = label()
-        self.menu = menu()
+        self.menu = menu
     }
 
     public var body: some View {
@@ -211,6 +236,8 @@ public struct SplitCapsuleButton<Label: View, MenuContent: View>: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .focusEffectDisabled()
+            .focused($focusedPart, equals: .main)
             .keyboardShortcut(shortcut)
             .onHover { isHovered = $0 }
 
@@ -219,9 +246,7 @@ public struct SplitCapsuleButton<Label: View, MenuContent: View>: View {
                 .frame(width: 1, height: 16)
                 .accessibilityHidden(true)
 
-            Menu {
-                menu
-            } label: {
+            MenuOpeningButton(kind: .pullDown, accessibilityLabel: menuLabel, placementView: capsule, menu: menu) {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(kind == .prominent ? Color.white : .text3)
@@ -229,11 +254,11 @@ public struct SplitCapsuleButton<Label: View, MenuContent: View>: View {
                     .frame(maxHeight: .infinity)
                     .contentShape(Rectangle())
             }
-            .menuStyle(.button)
             .buttonStyle(.plain)
-            .menuIndicator(.hidden)
+            .focusEffectDisabled()
+            .focused($focusedPart, equals: .menu)
+            .focusRing(focusedPart == .menu, in: Capsule(style: .circular), outset: -Metrics.SplitCapsule.chevronRingInset)
             .fixedSize(horizontal: true, vertical: false)
-            .accessibilityLabel(menuLabel)
             .onHover { isChevronHovered = $0 }
         }
         .font(appearance.font)
@@ -241,6 +266,10 @@ public struct SplitCapsuleButton<Label: View, MenuContent: View>: View {
         .lineLimit(1)
         .padding(.trailing, 3)
         .frame(height: appearance.height)
+        .background {
+            MenuPlacementAnchor(holder: capsule)
+                .accessibilityHidden(true)
+        }
         .surface(appearance.fill, elevation: appearance.elevation)
         .motion(Motion.kindChange, value: kind)
         .overlay(
@@ -255,47 +284,109 @@ public struct SplitCapsuleButton<Label: View, MenuContent: View>: View {
                 .hoverMotion(isChevronHovered)
         )
         .opacity(appearance.opacity)
+        .focusRing(focusedPart == .main || (showsFocusRings && focusedPart == nil), in: Capsule(style: .circular))
+        .environment(\.showsFocusRings, false)
+    }
+}
+
+extension Metrics {
+    /// The split capsule button.
+    public enum SplitCapsule {
+        /// The chevron's focus ring sits this far inside the chevron's
+        /// part of the capsule.
+        public static let chevronRingInset: CGFloat = 2
     }
 }
 
 // MARK: - Icon buttons
 
-/// A bare symbol button, 28 points square, in secondary text with a hover
-/// wash: the toolbar's overflow menu and its other symbol items.
-public struct IconButtonStyle: ButtonStyle {
-    public init() {}
+/// A bare symbol button in secondary text with a hover wash: 28 points
+/// square (the toolbar's overflow menu and its other symbol items), or, small,
+/// the symbol at its own size with the wash just around it (hints inside a
+/// field).
+public struct IconButtonStyle: PrimitiveButtonStyle {
+    /// An icon button's size.
+    public enum Size: Sendable {
+        /// 28 points square, the symbol at 15 points.
+        case regular
+        /// The symbol at its own size and font, the wash 2 points around it.
+        case small
+    }
+
+    private let size: Size
+
+    public init(_ size: Size = .regular) {
+        self.size = size
+    }
 
     public func makeBody(configuration: Configuration) -> some View {
-        IconButtonBody(label: configuration.label, isPressed: configuration.isPressed)
+        FocusRingButton(configuration: configuration, style: IconButtonDrawing(size: size))
     }
 }
 
-extension ButtonStyle where Self == IconButtonStyle {
+extension PrimitiveButtonStyle where Self == IconButtonStyle {
     /// A bare symbol, 28 points square, with a hover wash.
     public static var icon: IconButtonStyle { IconButtonStyle() }
+
+    /// A bare symbol at its own size, with a hover wash just around it.
+    public static var smallIcon: IconButtonStyle { IconButtonStyle(.small) }
+}
+
+/// Draws an icon button, its focus ring included.
+private struct IconButtonDrawing: ButtonStyle {
+    let size: IconButtonStyle.Size
+
+    func makeBody(configuration: Configuration) -> some View {
+        IconButtonBody(label: configuration.label, isPressed: configuration.isPressed, size: size)
+    }
 }
 
 private struct IconButtonBody<Label: View>: View {
     let label: Label
     let isPressed: Bool
+    let size: IconButtonStyle.Size
     @Environment(\.isEnabled) private var isEnabled
+    /// Whether the button has keyboard focus.
+    @Environment(\.isFocused) private var isFocused
     @State private var isHovered = false
 
     var body: some View {
-        label
-            .labelStyle(.iconOnly)
-            .font(.system(size: 15))
+        let shape = RoundedRectangle(cornerRadius: size == .regular ? 7 : Metrics.Radius.small, style: .continuous)
+        sized(label.labelStyle(.iconOnly))
             .foregroundStyle(.text2)
-            .frame(width: Metrics.ControlHeight.regular, height: Metrics.ControlHeight.regular)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                shape
                     .fill(isEnabled && (isHovered || isPressed) ? Color(nsColor: Palette.hover).opacity(isPressed ? 2 : 1) : .clear)
                     .pressMotion(isPressed)
                     .hoverMotion(isHovered)
+                    .padding(size == .regular ? 0 : -Metrics.IconButton.smallWashInset)
             )
             .contentShape(Rectangle())
             .opacity(isEnabled ? 1 : Palette.disabledOpacity)
+            .focusRing(isFocused, in: shape, outset: size == .regular ? 0 : Metrics.IconButton.smallWashInset + Metrics.FocusRing.outset)
             .onHover { isHovered = $0 }
+    }
+
+    /// The symbol at 15 points in a 28-point square, or as it is.
+    @ViewBuilder
+    private func sized(_ symbol: some View) -> some View {
+        switch size {
+        case .regular:
+            symbol
+                .font(.system(size: 15))
+                .frame(width: Metrics.ControlHeight.regular, height: Metrics.ControlHeight.regular)
+        case .small:
+            symbol
+        }
+    }
+}
+
+extension Metrics {
+    /// Icon buttons.
+    public enum IconButton {
+        /// A small icon button's hover wash reaches this far past its
+        /// symbol.
+        public static let smallWashInset: CGFloat = 2
     }
 }
 

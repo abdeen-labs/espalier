@@ -241,28 +241,23 @@ struct LocalBadge: View {
 }
 
 /// A row's trailing "⋯" menu.
-struct RowActionsMenu<Content: View>: View {
+struct RowActionsMenu: View {
     private let label: String
-    private let content: Content
+    private let content: () -> MenuContent
 
     /// - Parameter label: What VoiceOver reads ("Actions for OpenAI").
-    init(_ label: String, @ViewBuilder content: () -> Content) {
+    init(_ label: String, @MenuBuilder content: @escaping () -> MenuContent) {
         self.label = label
-        self.content = content()
+        self.content = content
     }
 
     var body: some View {
-        Menu {
-            content
-        } label: {
+        PullDownButton(label, menu: content) {
             Label(label, systemImage: "ellipsis.circle")
         }
-        .menuStyle(.button)
         .buttonStyle(.icon)
-        .menuIndicator(.hidden)
         .fixedSize()
-        .accessibilityLabel(label)
-        .help(label)
+        .tooltip(label)
     }
 }
 

@@ -116,7 +116,7 @@ struct SideBySideDiffRowTests {
         // A middle-button press goes past the table; a right-click asks the
         // table for the gutter's menu. Neither starts a selection.
         table.otherMouseDown(with: try press(.otherMouseDown))
-        #expect(table.menu(for: try press(.rightMouseDown)) != nil)
+        #expect(table.contextMenuContent(at: table.convert(location, from: nil)) != nil)
         #expect(controller.gutterDrag == nil)
         #expect(recorder.setLines.isEmpty)
         #expect(recorder.toggled.isEmpty)
@@ -163,11 +163,13 @@ struct SideBySideDiffRowTests {
     func lineContextMenu() {
         let recorder = DiffActionRecorder()
         let controller = controller(recorder: recorder)
-        let menu = try! #require(controller.menu(at: point(controller, row: 2, x: middle(controller.geometry.before.newNumber!))))
+        let menu = try! #require(controller.menuContent(at: point(controller, row: 2, x: middle(controller.geometry.before.newNumber!))))
         // One item, for the line under the pointer.
-        #expect(menu.items.count == 1)
+        #expect(menu.items.map(\.title) == ["Discard Added Line…"])
         #expect(recorder.discardTitleRequests == [.line(2)])
-        _ = (menu.items[0].target as? MenuItemTarget)?.run()
+        if case .run(let discard) = menu.items[0].action {
+            discard()
+        }
         #expect(recorder.discarded == [.line(2)])
     }
 
@@ -194,11 +196,13 @@ struct SideBySideDiffRowTests {
     func blockHandleContextMenu() {
         let recorder = DiffActionRecorder()
         let controller = controller(recorder: recorder)
-        let menu = try! #require(controller.menu(at: point(controller, row: 2, x: middle(controller.geometry.handle!))))
+        let menu = try! #require(controller.menuContent(at: point(controller, row: 2, x: middle(controller.geometry.handle!))))
         // One item, for the block's lines from the hunk's start.
-        #expect(menu.items.count == 1)
+        #expect(menu.items.map(\.title) == ["Discard Modified Lines…"])
         #expect(recorder.discardTitleRequests == [.block(containing: 2)])
-        _ = (menu.items[0].target as? MenuItemTarget)?.run()
+        if case .run(let discard) = menu.items[0].action {
+            discard()
+        }
         #expect(recorder.discarded == [.block(containing: 2)])
     }
 

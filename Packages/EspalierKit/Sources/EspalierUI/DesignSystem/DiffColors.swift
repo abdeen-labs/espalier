@@ -62,6 +62,21 @@ public enum DiffColors {
 
     /// Rows under the keyboard's line cursor.
     public static var cursor: NSColor { Palette.accentSoft }
+
+    /// Find's matches, over a line's tint and changed range: a neutral
+    /// wash, black 12% (white 16% in dark), which reads on added, deleted,
+    /// and context lines alike.
+    public static let findMatch = NSColor.espalierDynamic(
+        light: NSColor.black.withAlphaComponent(0.12), dark: NSColor.white.withAlphaComponent(0.16),
+        highContrastLight: NSColor.black.withAlphaComponent(0.2), highContrastDark: NSColor.white.withAlphaComponent(0.26)
+    )
+    /// The current match: the accent at 32% (45% in dark), as the text
+    /// selection it becomes when find closes.
+    public static let currentFindMatch = NSColor.espalierDynamic { variant in
+        let accent = NSColor.controlAccentColor.resolved(in: variant)
+        let alpha: CGFloat = variant.isDark ? 0.45 : 0.32
+        return accent.withAlphaComponent(variant.isHighContrast ? min(alpha * 1.6, 1) : alpha)
+    }
     /// The line between the halves of a split diff.
     public static var divider: NSColor { Palette.line }
 

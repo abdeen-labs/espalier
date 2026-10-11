@@ -2,9 +2,9 @@
 // lines with tinted numbers and the handle, wrapping with a hanging indent,
 // unwrapped lines scrolled sideways, intra-line ranges, hunk headers with
 // their expansion buttons and checkbox, a missing newline, a conflicted
-// file, text selection, and the line cursor (syntax color is
-// TreeSitterHighlighterSnapshotTests'). The table draws its own colors:
-// unified, split, and staging in light and dark, the rest in light.
+// file, find's matches, text selection, and the line cursor (syntax color
+// is TreeSitterHighlighterSnapshotTests'). The table draws its own colors:
+// unified, split, staging, and find in light and dark, the rest in light.
 
 import AppKit
 import EspalierCore
@@ -120,17 +120,54 @@ struct DiffTableSnapshotTests {
         }
     }
 
-    @Test("text selected with the mouse: the line cursor doesn't show")
-    func selection() {
-        snapshot("table-selection", {
+    @Test("find's matches on context, deleted, and added lines, the current one, on an added line, stronger")
+    func find() {
+        snapshot("table-find", appearances: SnapshotAppearance.allCases, {
             DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange)
         }, configure: { controller in
-            let start = controller.geometry.x(ofColumn: 12, side: .before, scrollX: 0)
-            let end = controller.geometry.x(ofColumn: 20, side: .before, scrollX: 0)
-            let drag = controller.mouseDown(at: point(controller, row: 3, x: start), clickCount: 1, extendsSelection: false)
-            controller.mouseDragged(to: point(controller, row: 5, x: end), drag: drag)
-            controller.mouseUp(drag: drag)
+            controller.find.show(focus: false, from: DiffFindPosition(row: 5, column: .before, offset: 0))
+            controller.find.query = "path"
         })
+    }
+
+    @Test("find's matches split: a context line's on both sides")
+    func findSplit() {
+        snapshot("table-find-split", appearances: SnapshotAppearance.allCases, {
+            DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, isSplit: true)
+        }, configure: { controller in
+            controller.find.show(focus: false, from: DiffFindPosition(row: 5, column: .after, offset: 0))
+            controller.find.query = "path"
+        })
+    }
+
+    @Test("text selected with the mouse: the line cursor doesn't show; Espalier's selection, neutral while the table doesn't have focus")
+    func selection() {
+        snapshot("table-selection", appearances: SnapshotAppearance.allCases, {
+            DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange)
+        }, configure: Self.selectText)
+        for appearance in SnapshotAppearance.allCases {
+            let size = Self.size
+            let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange), size: size)
+            let window = SnapshotWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+            window.appearance = appearance.appearance
+            window.contentView = controller.scrollView
+            window.makeFirstResponder(controller.tableView)
+            Self.selectText(controller)
+            controller.scrollView.layoutSubtreeIfNeeded()
+            let image = Snapshot.bitmap(size)
+            controller.scrollView.cacheDisplay(in: controller.scrollView.bounds, to: image)
+            assertSnapshot(image, named: "table-selection-focused", area: Self.area, appearance: appearance)
+            window.contentView = nil
+        }
+    }
+
+    /// Drags across rows 3 to 5, from column 12 to 20.
+    private static func selectText(_ controller: DiffTableController) {
+        let start = controller.geometry.x(ofColumn: 12, side: .before, scrollX: 0)
+        let end = controller.geometry.x(ofColumn: 20, side: .before, scrollX: 0)
+        let drag = controller.mouseDown(at: point(controller, row: 3, x: start), clickCount: 1, extendsSelection: false)
+        controller.mouseDragged(to: point(controller, row: 5, x: end), drag: drag)
+        controller.mouseUp(drag: drag)
     }
 
     @Test("the focused table: a block under the pointer on its handle, a hovered expansion button, the line cursor")

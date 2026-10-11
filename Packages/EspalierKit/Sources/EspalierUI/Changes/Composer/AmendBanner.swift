@@ -16,7 +16,7 @@ public struct AmendBanner: View {
             Image(systemName: "pencil.circle.fill")
                 .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
-            Text(Self.message)
+            LinkedText(Self.message)
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)
                 .fixedSize(horizontal: false, vertical: true)

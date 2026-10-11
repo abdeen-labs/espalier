@@ -79,7 +79,7 @@ public struct StatusGlyph: View {
                 RoundedRectangle(cornerRadius: Metrics.StatusBadge.cornerRadius, style: .continuous)
                     .fill(Color(espalier: Palette.statusBackground(kind)))
             )
-            .help(kind.title)
+            .tooltip(kind.title)
             .accessibilityLabel(kind.title)
     }
 }

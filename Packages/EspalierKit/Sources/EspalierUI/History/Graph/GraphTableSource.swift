@@ -245,7 +245,7 @@ struct GraphTableActions {
     var activate: (_ row: Int) -> Void = { _ in }
     /// The context menu for `rows` (the clicked row, or the selection when
     /// the clicked row is in it) and the row clicked.
-    var menu: (_ rows: [Int], _ clickedRow: Int) -> NSMenu? = { _, _ in nil }
+    var menu: (_ rows: [Int], _ clickedRow: Int) -> MenuContent? = { _, _ in nil }
     /// A stub was clicked, or a parent or child is gone to.
     var followStub: (_ row: Int, _ edge: CommitGraphEdge) -> Void = { _, _ in }
     /// The payload for dragging commits out; nil refuses the drag.

@@ -92,7 +92,7 @@ struct StashHeader: View {
             Button("Restore", action: restore)
                 .buttonStyle(.prominent)
                 .disabled(!content.canRestore)
-                .help(content.explanation)
+                .tooltip(content.explanation)
                 .fixedSize()
             Button("Discard…", action: discard)
                 .buttonStyle(.quiet)

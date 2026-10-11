@@ -262,17 +262,17 @@ struct ProviderRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
-            RowActionsMenu("Actions for \(provider.name)") {
-                Button("Edit…", action: edit)
-                Button("Remove…", role: .destructive, action: remove)
+            RowActionsMenu("Actions for \(provider.name)") { [edit, remove] in
+                MenuAction("Edit…", action: edit)
+                MenuAction("Remove…", role: .destructive, action: remove)
             }
         }
         .padding(.vertical, Metrics.SettingsWindow.rowVerticalPadding)
         .frame(minHeight: Metrics.SettingsWindow.rowHeight)
         .contentShape(Rectangle())
-        .contextMenu {
-            Button("Edit…", action: edit)
-            Button("Remove…", role: .destructive, action: remove)
+        .contextMenuCard { [edit, remove] in
+            MenuAction("Edit…", action: edit)
+            MenuAction("Remove…", role: .destructive, action: remove)
         }
     }
 }

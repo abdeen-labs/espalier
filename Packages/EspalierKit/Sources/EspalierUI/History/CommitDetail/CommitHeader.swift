@@ -103,10 +103,11 @@ struct CommitHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(content.summary.isEmpty ? AttributedString(CommitRowContent.emptySummary) : content.richSummary)
-                .font(Typography.commitSummary)
-                .foregroundStyle(content.summary.isEmpty ? .text3 : .text)
-                .textSelection(.enabled)
+            SelectableText(
+                content.summary.isEmpty ? AttributedString(CommitRowContent.emptySummary) : content.richSummary,
+                font: AppKitTypography.commitSummary,
+                color: content.summary.isEmpty ? Palette.text3 : Palette.text
+            )
                 .lineLimit(isExpanded ? nil : 3)
                 .fixedSize(horizontal: false, vertical: true)
             metadata
@@ -128,7 +129,7 @@ struct CommitHeader: View {
             Text(content.authorName)
                 .fontWeight(.medium)
                 .foregroundStyle(.text)
-                .help(content.authorEmail.isEmpty ? content.authorName : "\(content.authorName) <\(content.authorEmail)>")
+                .tooltip(content.authorEmail.isEmpty ? content.authorName : "\(content.authorName) <\(content.authorEmail)>")
             HStack(spacing: 3) {
                 Text("committed")
                 RelativeTimeText(content.date)
@@ -138,10 +139,9 @@ struct CommitHeader: View {
                 RefCapsuleList(content.tags, palette: palette)
             }
             Spacer(minLength: Metrics.insetSmall)
-            MonoChip(content.shortSHA) {
+            MonoChip(content.shortSHA, isSelectable: true) {
                 CommitSHACopyButton(sha: content.sha)
             }
-            .textSelection(.enabled)
             .fixedSize()
         }
         .font(Typography.secondary)
@@ -150,11 +150,8 @@ struct CommitHeader: View {
 
     private var description: some View {
         HStack(alignment: .top, spacing: Metrics.insetSmall) {
-            Text(content.richDescription)
-                .font(Typography.secondary)
-                .foregroundStyle(.text2)
+            SelectableText(content.richDescription, font: AppKitTypography.secondary, color: Palette.text2)
                 .lineSpacing(Metrics.CommitDetail.bodyLineSpacing)
-                .textSelection(.enabled)
                 .lineLimit(isExpanded ? nil : 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
@@ -169,8 +166,8 @@ struct CommitHeader: View {
                     .frame(width: Metrics.insetLarge, height: Metrics.insetLarge)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .help(isExpanded ? "Collapse" : "Expand")
+            .buttonStyle(.bare(.circle))
+            .tooltip(isExpanded ? "Collapse" : "Expand")
             .accessibilityLabel(isExpanded ? "Collapse commit details" : "Expand commit details")
         }
     }
@@ -194,8 +191,8 @@ struct CommitSHACopyButton: View {
             .font(.system(size: 10))
             .foregroundStyle(.text3)
         }
-        .buttonStyle(.plain)
-        .help("Copy the full SHA")
+        .buttonStyle(.bare)
+        .tooltip("Copy the full SHA")
         .accessibilityLabel("Copy the full SHA")
     }
 }

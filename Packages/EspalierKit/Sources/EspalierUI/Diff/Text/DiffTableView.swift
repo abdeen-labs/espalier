@@ -2,9 +2,9 @@
 // `NSTableView` with one row per diff row and no cell views: each row view
 // draws its row. The table takes the mouse (staging, text selection, hunk
 // headers), the keyboard (the line cursor, Space, ⌥Space, ⌥↑ and ⌥↓, copy,
-// select all), the find bar (`NSTextFinder`), and context menus. When lines
-// don't wrap, it's wider than the pane and the scroll view scrolls it
-// sideways.
+// select all), Edit ▸ Find's commands (DiffTableFind.swift), and context
+// menus. When lines don't wrap, it's wider than the pane and the scroll
+// view scrolls it sideways.
 
 import AppKit
 import EspalierCore
@@ -12,7 +12,7 @@ import GitKit
 import SwiftUI
 
 /// The diff table.
-final class DiffTableView: NSTableView {
+final class DiffTableView: NSTableView, ContextMenuContentProviding {
     weak var controller: DiffTableController?
     private var trackingArea: NSTrackingArea?
     /// The window whose find actions come here.
@@ -137,11 +137,19 @@ final class DiffTableView: NSTableView {
         }
     }
 
-    override func menu(for event: NSEvent) -> NSMenu? {
-        guard let controller else {
+    // MARK: Context menus
+
+    func contextMenuContent(at point: CGPoint) -> MenuContent? {
+        controller?.menuContent(at: point)
+    }
+
+    /// ⇧F10: the menu of the line cursor's text.
+    func keyboardContextMenuPoint() -> CGPoint? {
+        guard let controller, let row = controller.cursorHead else {
             return nil
         }
-        return controller.menu(at: convert(event.locationInWindow, from: nil))
+        controller.scrollRowIntoView(row)
+        return controller.textMenuPoint(ofRow: row)
     }
 
     // MARK: Scrolling
@@ -173,16 +181,18 @@ final class DiffTableView: NSTableView {
 
     // MARK: Find
 
+    /// Find…, Find Next, Find Previous, and Use Selection for Find, by
+    /// their items' tags.
     override func performTextFinderAction(_ sender: Any?) {
         guard let controller, let tag = (sender as? NSValidatedUserInterfaceItem)?.tag,
-              let action = NSTextFinder.Action(rawValue: tag) else {
+              let command = DiffFindCommand(rawValue: tag) else {
             return
         }
-        controller.textFinder.performAction(action)
+        controller.performFind(command)
     }
 
-    /// Edit ▸ Find's items send this (NSTextView's selector); their tags
-    /// are `NSTextFinder.Action`'s.
+    /// Edit ▸ Find's items send this (NSTextView's selector), with the
+    /// same tags.
     @objc func performFindPanelAction(_ sender: Any?) {
         performTextFinderAction(sender)
     }
@@ -197,10 +207,10 @@ final class DiffTableView: NSTableView {
         case #selector(selectAll(_:)):
             return controller.document.rowCount > 0
         case #selector(performTextFinderAction(_:)), #selector(performFindPanelAction(_:)):
-            guard let action = NSTextFinder.Action(rawValue: item.tag) else {
+            guard let command = DiffFindCommand(rawValue: item.tag) else {
                 return false
             }
-            return controller.textFinder.validateAction(action)
+            return controller.canPerformFind(command)
         default:
             return super.validateUserInterfaceItem(item)
         }
@@ -217,7 +227,10 @@ final class DiffTableView: NSTableView {
 struct DiffTextView: NSViewRepresentable {
     let content: DiffTableContent
     let actions: DiffTableActions
+    /// Find in the diff, which the container's bar shows.
+    let find: DiffFindModel
     @Environment(\.diffBuildsSynchronously) private var buildsSynchronously
+    @Environment(\.announcer) private var announcer
 
     func makeCoordinator() -> DiffTableController {
         DiffTableController()
@@ -232,6 +245,8 @@ struct DiffTextView: NSViewRepresentable {
         let controller = context.coordinator
         controller.buildsSynchronously = buildsSynchronously
         controller.actions = actions
+        find.announcer = announcer
+        controller.attach(find)
         controller.apply(content)
     }
 

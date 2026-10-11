@@ -16,7 +16,6 @@ struct MarkdownView: View {
                 MarkdownBlockView(block: block)
             }
         }
-        .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -45,22 +44,20 @@ private struct MarkdownBlockView: View {
     private var content: some View {
         switch block.content {
         case .text(let text, let level):
-            Text(text)
-                .font(Self.font(headingLevel: level))
+            SelectableText(text, font: Self.font(headingLevel: level), color: textColor)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(level == nil ? [] : .isHeader)
 
         case .listItem(let marker, let text):
             HStack(alignment: .firstTextBaseline, spacing: Metrics.bulletSpacing) {
                 MarkdownListMarker(marker: marker)
-                Text(text)
+                SelectableText(text, color: textColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
         case .code(let code, _):
             ScrollView(.horizontal) {
-                Text(code)
-                    .font(Typography.code())
+                SelectableText(code, font: AppKitTypography.code(), color: textColor)
                     .fixedSize()
                     .padding(Metrics.insetSmall)
             }
@@ -68,7 +65,7 @@ private struct MarkdownBlockView: View {
             .background(Color(espalier: Palette.field), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
         case .table(let header, let rows):
-            MarkdownTable(header: header, rows: rows)
+            MarkdownTable(header: header, rows: rows, color: textColor)
 
         case .image(let image):
             MarkdownImageView(image: image)
@@ -79,13 +76,18 @@ private struct MarkdownBlockView: View {
         }
     }
 
-    /// Headings stay below the pull request's title (`.title3`).
-    private static func font(headingLevel: Int?) -> Font {
+    /// The text's color: secondary in a quote.
+    private var textColor: NSColor {
+        block.quoteDepth > 0 ? .secondaryLabelColor : .labelColor
+    }
+
+    /// Headings stay below the pull request's title (15, semibold).
+    private static func font(headingLevel: Int?) -> NSFont {
         switch headingLevel {
-        case nil: Typography.row
-        case 1?: .title3.weight(.semibold)
-        case 2?: .headline
-        default: .subheadline.weight(.semibold)
+        case nil: AppKitTypography.row
+        case 1?: AppKitTypography.commitSummary
+        case 2?: AppKitTypography.heading
+        default: AppKitTypography.weighted(AppKitTypography.meta, .semibold)
         }
     }
 }
@@ -116,13 +118,13 @@ private struct MarkdownListMarker: View {
 private struct MarkdownTable: View {
     let header: [AttributedString]
     let rows: [[AttributedString]]
+    let color: NSColor
 
     var body: some View {
         Grid(alignment: .leading, horizontalSpacing: Metrics.insetMedium, verticalSpacing: Metrics.grid) {
             GridRow {
                 ForEach(header.indices, id: \.self) { column in
-                    Text(header[column])
-                        .fontWeight(.semibold)
+                    SelectableText(header[column], font: AppKitTypography.weighted(AppKitTypography.row, .semibold), color: color)
                 }
             }
             Hairline()
@@ -130,7 +132,7 @@ private struct MarkdownTable: View {
             ForEach(rows.indices, id: \.self) { row in
                 GridRow {
                     ForEach(rows[row].indices, id: \.self) { column in
-                        Text(rows[row][column])
+                        SelectableText(rows[row][column], color: color)
                     }
                 }
             }
@@ -164,10 +166,10 @@ struct MarkdownImageView: View {
                     .scaledToFit()
                     .frame(maxWidth: image.width ?? CGFloat(loaded.width), alignment: .leading)
             } else if remote == nil || failed {
-                Link(destination: image.url) {
+                TextLink(destination: image.url) {
                     Label(image.alt.isEmpty ? image.url.lastPathComponent : image.alt, systemImage: "photo")
                 }
-                .help(image.url.absoluteString)
+                .tooltip(image.url.absoluteString)
             } else {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(Color(espalier: Palette.field))

@@ -64,7 +64,7 @@ struct HistoryHeader: View {
                     ]
                 )
                 .fixedSize()
-                .help("Show the current branch simply, or every branch as a graph")
+                .tooltip("Show the current branch simply, or every branch as a graph")
                 switch content.style {
                 case .graph:
                     scopePicker
@@ -101,15 +101,15 @@ struct HistoryHeader: View {
     /// The scope pop-up: a small quiet capsule with the scope's name and the
     /// capsule menus' up-and-down chevron.
     private var scopePicker: some View {
-        Menu {
-            Picker("Branches", selection: Binding(get: { content.scope }, set: { setScope($0) })) {
-                ForEach(HistoryScope.allCases, id: \.self) { scope in
-                    Text(scope.title).tag(scope)
+        MenuOpeningButton(kind: .popUp, accessibilityLabel: "Branches Shown", accessibilityValue: content.scope.title, menu: { [content, setScope] in
+            MenuContent {
+                MenuPicker(selection: Binding(get: { content.scope }, set: { setScope($0) })) {
+                    for scope in HistoryScope.allCases {
+                        MenuChoice(scope.title, value: scope)
+                    }
                 }
             }
-            .pickerStyle(.inline)
-            .labelsHidden()
-        } label: {
+        }) {
             HStack(spacing: Metrics.CapsuleMenu.chevronSpacing) {
                 Text(content.scope.title)
                 Image(systemName: "chevron.up.chevron.down")
@@ -118,14 +118,10 @@ struct HistoryHeader: View {
                     .accessibilityHidden(true)
             }
         }
-        .menuStyle(.button)
         .buttonStyle(.quiet)
         .controlSize(.small)
-        .menuIndicator(.hidden)
         .fixedSize()
-        .help("Which branches the history shows")
-        .accessibilityLabel("Branches Shown")
-        .accessibilityValue(content.scope.title)
+        .tooltip("Which branches the history shows")
     }
 }
 
@@ -145,7 +141,7 @@ struct BranchNameLabel: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-        .help(name)
+        .tooltip(name)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(name)
     }

@@ -120,17 +120,19 @@ func assertSnapshot(
     }
 }
 
-/// Snapshots an alert in each appearance.
+/// Snapshots an alert's card in each appearance. `prepare` sets its state
+/// (the checkbox) first.
 @MainActor
 func assertSnapshot(
     _ alert: AlertContent,
     named name: String,
     area: String,
     appearances: [SnapshotAppearance] = SnapshotAppearance.allCases,
+    prepare: (AlertCardModel) -> Void = { _ in },
     sourceLocation: SourceLocation = #_sourceLocation
 ) {
     for appearance in appearances {
-        let image = Snapshot.render(alert, appearance: appearance)
+        let image = Snapshot.render(alert, appearance: appearance, prepare: prepare)
         assertSnapshot(image, named: name, area: area, appearance: appearance, sourceLocation: sourceLocation)
     }
 }

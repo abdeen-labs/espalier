@@ -78,7 +78,7 @@ struct ComponentSnapshotTests {
                         .font(Typography.aheadCount)
                 }
             } menu: {
-                Button("Fetch origin") {}
+                MenuAction("Fetch origin") {}
             }
             SplitCapsuleButton(.quiet, action: {}) {
                 HStack(spacing: 7) {
@@ -88,7 +88,7 @@ struct ComponentSnapshotTests {
                     Text("Pull origin")
                 }
             } menu: {
-                Button("Fetch origin") {}
+                MenuAction("Fetch origin") {}
             }
         }
         .controlSize(.large)

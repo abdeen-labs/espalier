@@ -478,9 +478,9 @@ public struct ComposerView: View {
             footer
         }
         .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
-        .contextMenu {
-            ForEach(Array(menuItems.enumerated()), id: \.offset) { _, item in
-                Button(item.title, action: item.action)
+        .contextMenuCard {
+            for item in menuItems {
+                MenuAction(item.title, action: item.action)
                     .disabled(!item.isEnabled)
             }
         }
@@ -519,7 +519,7 @@ public struct ComposerView: View {
     private var footer: some View {
         HStack(spacing: 0) {
             SparkleButton(content.sparkle, action: actions.generate)
-                .popover(item: $sparklePopover, arrowEdge: .bottom) { popover in
+                .popoverCard(item: $sparklePopover, title: sparklePopover?.title) { popover in
                     switch popover {
                     case .setup:
                         AISetupPopover(onOpenSettings: actions.openAISettings)
@@ -540,7 +540,7 @@ public struct ComposerView: View {
                 .toggleStyle(.button)
                 .buttonStyle(.icon)
                 .disabled(!content.isCoAuthorsToggleEnabled)
-                .help(draft.showCoAuthoredBy ? "Remove Co-Authors" : "Add Co-Authors")
+                .tooltip(draft.showCoAuthoredBy ? "Remove Co-Authors" : "Add Co-Authors")
                 .accessibilityLabel("Co-Authors")
             }
             if content.showsCommitOptions {

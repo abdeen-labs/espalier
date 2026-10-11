@@ -75,7 +75,7 @@ public struct LastCommitRow: View {
             .buttonStyle(.secondary)
             .controlSize(.small)
             .disabled(!content.isUndoEnabled)
-            .help(content.undoHelp)
+            .tooltip(content.undoHelp)
         }
     }
 }
@@ -100,6 +100,6 @@ struct CommittedDateText: View {
 
     private func text(now: Date) -> some View {
         Text("Committed \(RelativeTime.describe(date, now: now, formatting: formatting, timeZone: timeZone))")
-            .help(RelativeTime.formatDate(date, formatting: formatting, timeZone: timeZone))
+            .tooltip(RelativeTime.formatDate(date, formatting: formatting, timeZone: timeZone))
     }
 }

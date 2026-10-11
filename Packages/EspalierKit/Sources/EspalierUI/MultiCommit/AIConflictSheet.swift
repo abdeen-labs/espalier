@@ -232,7 +232,6 @@ struct AIGatePopover: View {
         .padding(Metrics.Popover.padding)
         .frame(width: Self.width, alignment: .leading)
         .background(Color(espalier: Palette.background))
-        .flatPopoverPresentation()
     }
 }
 
@@ -648,7 +647,7 @@ struct AIConflictSheetHeader: View {
                     Label("AI Settings", systemImage: "gearshape")
                 }
                 .buttonStyle(.icon)
-                .help("AI Settings")
+                .tooltip("AI Settings")
                 .accessibilityLabel("AI Settings")
             }
         }
@@ -1077,7 +1076,7 @@ struct AIConflictResultsView: View {
             .buttonStyle(.prominent)
             .keyboardShortcut(.defaultAction)
             .disabled(!content.canContinue)
-            .help(content.continueHelp ?? "")
+            .tooltip(content.continueHelp)
         }
     }
 }
@@ -1118,41 +1117,34 @@ struct AIResolutionRowView: View {
                     .foregroundStyle(Color(espalier: Palette.success))
                     .accessibilityLabel("Resolved")
             } else {
-                Menu {
-                    ForEach(row.options) { option in
-                        Toggle(option.title, isOn: Binding(
-                            get: { option.isChecked },
-                            set: { _ in actions.choose(option.choice) }
-                        ))
+                PullDownButton("Resolution for \(row.path)", value: row.choiceLabel) { [row, actions] in
+                    for option in row.options {
+                        MenuToggle(option.title, isOn: option.isChecked) {
+                            actions.choose(option.choice)
+                        }
                     }
                 } label: {
                     MenuCapsuleLabel(row.choiceLabel)
                 }
-                .menuStyle(.button)
                 .buttonStyle(.quiet)
-                .menuIndicator(.hidden)
                 .controlSize(.small)
                 .fixedSize()
-                .accessibilityLabel("Resolution for \(row.path): \(row.choiceLabel)")
-                Menu {
+                PullDownButton("File Options") { [actions] in
                     if let editorName = actions.editorName {
-                        Button("Open in \(editorName)", action: actions.openInEditor)
+                        MenuAction("Open in \(editorName)", action: actions.openInEditor)
                     }
-                    Button("Open with Default App", action: actions.openWithDefaultProgram)
-                    Button("Show in Finder", action: actions.showInFinder)
+                    MenuAction("Open with Default App", action: actions.openWithDefaultProgram)
+                    MenuAction("Show in Finder", action: actions.showInFinder)
                 } label: {
                     Label("File Options", systemImage: "ellipsis.circle")
                 }
-                .menuStyle(.button)
                 .buttonStyle(.icon)
-                .menuIndicator(.hidden)
                 .fixedSize()
-                .accessibilityLabel("File Options")
             }
         }
         .padding(.vertical, Metrics.grid)
         .padding(.horizontal, Metrics.ListRow.horizontalPadding)
-        .help(row.path)
+        .tooltip(row.path)
     }
 }
 

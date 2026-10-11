@@ -211,7 +211,7 @@ public struct BranchRow: View {
                 // rows.
                 .layoutPriority(0.5)
         }
-        .help(content.name)
+        .tooltip(content.name)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(content.accessibilityLabel)
     }
@@ -248,7 +248,7 @@ struct BranchTrackingView: View {
                 }
                 .lineLimit(1)
                 .fixedSize()
-                .help(tracking.description ?? "")
+                .tooltip(tracking.description)
             }
         case .notPublished:
             // The words give way to the name in a narrow row.
@@ -259,7 +259,7 @@ struct BranchTrackingView: View {
                 }
                 .fixedSize()
                 Image(systemName: "circle.dashed")
-                    .help(tracking.description ?? "")
+                    .tooltip(tracking.description)
             }
             .font(Typography.secondary)
             .foregroundStyle(.text3)
@@ -268,7 +268,7 @@ struct BranchTrackingView: View {
             Image(systemName: "icloud.slash")
                 .font(Typography.secondary)
                 .foregroundStyle(.text3)
-                .help(tracking.description ?? "")
+                .tooltip(tracking.description)
         }
     }
 }
@@ -290,6 +290,6 @@ struct PullRequestBadgeGlyph: View {
             }
         }
         .font(Typography.secondary)
-        .help(badge.tooltip)
+        .tooltip(badge.tooltip)
     }
 }

@@ -104,10 +104,7 @@ struct AIConflictSummary: View {
                     .foregroundStyle(.text2)
             }
             if let markdown = content.markdown {
-                Text(Self.attributed(markdown))
-                    .font(Typography.row)
-                    .foregroundStyle(.text)
-                    .textSelection(.enabled)
+                SelectableText(Self.attributed(markdown), font: AppKitTypography.row)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !content.references.isEmpty {
@@ -140,7 +137,7 @@ struct AIConflictSummary: View {
                 Button(reference.title) {
                     openURL(url)
                 }
-                .buttonStyle(.link)
+                .buttonStyle(.textLink)
                 .lineLimit(1)
             } else {
                 Text(reference.title)
@@ -152,10 +149,7 @@ struct AIConflictSummary: View {
                 Text("#\(number)")
                     .foregroundStyle(.text2)
             case .commit(let shortSHA, let isOnRemote):
-                Text(shortSHA)
-                    .font(Typography.sha)
-                    .foregroundStyle(.text2)
-                    .textSelection(.enabled)
+                SelectableText(shortSHA, font: AppKitTypography.sha, color: Palette.text2)
                 if !isOnRemote {
                     Text("Not on remote")
                         .font(Typography.subheadline)

@@ -35,7 +35,7 @@ struct TagRow: View {
             if content.isWaitingToBePushed {
                 Image(systemName: "arrow.up.circle")
                     .foregroundStyle(.text3)
-                    .help("This tag hasn't been pushed yet")
+                    .tooltip("This tag hasn't been pushed yet")
                     .accessibilityLabel("Not pushed")
             }
         }
@@ -74,27 +74,21 @@ public struct TagsSection: View {
 }
 
 /// A tag row's context menu.
-public struct TagContextMenu: View {
-    private let name: String
-    @Environment(WindowContext.self) private var context
-
-    public init(name: String) {
-        self.name = name
-    }
-
-    public var body: some View {
+enum TagContextMenu {
+    @MenuBuilder
+    static func content(name: String, context: WindowContext) -> MenuContent {
         let sha = context.repository?.gitState.tags?[name]
-        Button("Create Branch from Tag…") {
+        MenuAction("Create Branch from Tag…") {
             if let sha {
                 context.actions.perform(.newBranch(startPoint: sha))
             }
         }
         .disabled(sha.map { !context.actions.canPerform(.newBranch(startPoint: $0)) } ?? true)
-        Button("Copy Tag Name") {
+        MenuAction("Copy Tag Name") {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(name, forType: .string)
         }
-        Divider()
-        ActionButton(.deleteTag(name: name), title: "Delete Tag…")
+        MenuDivider()
+        context.actions.menuAction(.deleteTag(name: name), title: "Delete Tag…")
     }
 }

@@ -1,7 +1,7 @@
 // The Settings window's context. Settings is a window of its own, so it gets
 // its own `WindowContext`: a presenter, an action router, and a modal
-// presenter whose alerts and sheets attach to the Settings window, not the
-// main window. Panes use it exactly as the main window's views use theirs
+// presenter whose alerts and sheets cover the Settings window, not the main
+// window. Panes use it exactly as the main window's views use theirs
 // (`@Environment(WindowContext.self)`, `context.presenter.perform`,
 // `context.modals.presentSheet(id:)`, `context.actions.perform`).
 
@@ -35,12 +35,14 @@ enum SettingsWindowContext {
 
 /// Shows the Settings presenter's confirmations and errors on the Settings
 /// window. Prompts git waits on, decisions, and state notices belong to the
-/// main window, so they aren't shown twice.
+/// main window, so they aren't shown twice. While a modal shows, VoiceOver
+/// can't reach the window behind it.
 struct SettingsPresentationHosts: ViewModifier {
     let context: WindowContext
 
     func body(content: Content) -> some View {
         content
+            .accessibilityHidden(context.modals.isPresenting)
             .onChange(of: context.presenter.confirmation?.id, initial: true) {
                 if let pending = context.presenter.confirmation {
                     ConfirmationHost.present(pending, in: context)

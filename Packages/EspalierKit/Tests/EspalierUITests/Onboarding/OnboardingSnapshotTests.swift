@@ -1,7 +1,8 @@
 // The welcome flow's steps, one image per layout: the first step in light
 // and dark, Configure Git in light. Configure Git shows fixed values (it
 // isn't loaded from git). Its other states differ only in words
-// (OnboardingTests), and Move to Applications' prompts are NSAlerts.
+// (OnboardingTests), and Move to Applications' prompts are alerts, whose
+// card ModalSnapshotTests draws.
 
 import AppKit
 import EspalierCore

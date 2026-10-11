@@ -8,7 +8,7 @@ import QuartzCore
 import os
 
 /// Draws one row of the history graph.
-final class GraphCellView: NSView, NSViewToolTipOwner {
+final class GraphCellView: NSView, TooltipOwner {
     /// What the row draws; nil draws nothing.
     var drawing: GraphRowDrawing? {
         didSet {
@@ -117,7 +117,7 @@ final class GraphCellView: NSView, NSViewToolTipOwner {
     private func updateToolTips() {
         guard let drawing else {
             if nodeToolTipRect != nil {
-                removeAllToolTips()
+                removeTooltipAreas()
                 nodeToolTipRect = nil
             }
             stubTargets = []
@@ -132,24 +132,24 @@ final class GraphCellView: NSView, NSViewToolTipOwner {
             stubTargets = targets
             return
         }
-        removeAllToolTips()
+        removeTooltipAreas()
         nodeToolTipRect = nodeRect
-        addToolTip(nodeRect, owner: self, userData: nil)
+        addTooltipArea(nodeRect, owner: self, tag: 0)
         stubTargets = targets
         for index in stubTargets.indices {
-            addToolTip(geometry.hitArea(around: stubTargets[index].point), owner: self, userData: UnsafeMutableRawPointer(bitPattern: index + 1))
+            addTooltipArea(geometry.hitArea(around: stubTargets[index].point), owner: self, tag: index + 1)
         }
     }
 
     private var nodeToolTipRect: CGRect?
 
-    func view(_ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint, userData data: UnsafeMutableRawPointer?) -> String {
+    /// The node's tooltip (tag 0), or a stub's (its index plus one).
+    func tooltip(for view: NSView, tag: Int, at point: CGPoint) -> String? {
         guard let drawing else {
-            return ""
+            return nil
         }
-        let index = data.map { Int(bitPattern: $0) - 1 }
-        let stub = index.flatMap { stubTargets.indices.contains($0) ? stubTargets[$0] : nil }
-        return tooltipProvider?(drawing.index, stub) ?? ""
+        let stub = stubTargets.indices.contains(tag - 1) ? stubTargets[tag - 1] : nil
+        return tooltipProvider?(drawing.index, stub)
     }
 
     // MARK: Jump targets

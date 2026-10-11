@@ -1,8 +1,9 @@
 // The repository flows' screens, one image per layout: the rows in light
 // and dark, the rest in light. States that differ only in words are
 // RepositoryFlowTests' and Core's, and Add's, Git LFS's, and the quit
-// guard's alerts are NSAlerts. Leaf views take fixed values; the sheets'
-// forms run on a hermetic app, with real repositories where they read one.
+// guard's alerts differ only in words from the cards ModalSnapshotTests
+// draws. Leaf views take fixed values; the sheets' forms run on a hermetic
+// app, with real repositories where they read one.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -38,7 +39,7 @@ struct RepositorySnapshotTests {
         assertSnapshot(rows, named: "rows", area: area)
     }
 
-    @Test("the popover: the filter and Add, worktrees with New Worktree…, Recent and owners, a row highlighted; no repositories")
+    @Test("the popover, in its card: the filter and Add, worktrees with New Worktree…, Recent and owners, a row highlighted; no repositories")
     func popover() {
         let worktrees = [
             WorktreeRowContent(path: "/Users/joe/Developer/espalier", detail: "main", isMain: true, isCurrent: true, isLocked: false),
@@ -61,24 +62,27 @@ struct RepositorySnapshotTests {
         let content = RepositoryPopoverContent(worktrees: worktrees, groups: groups, hasRepositories: true)
         let maxHeight = Metrics.Window.defaultHeight - Metrics.Toolbar.height - Metrics.insetLarge * 2
         assertSnapshot(
-            RepositoryPopoverView(
-                content: content,
-                filter: .constant(""),
-                highlighted: .constant(.entry(groups[1].rows[1].id)),
-                maxHeight: maxHeight,
-                newWorktree: {}
-            ),
+            Snapshot.popoverCard {
+                RepositoryPopoverView(
+                    content: content,
+                    filter: .constant(""),
+                    highlighted: .constant(.entry(groups[1].rows[1].id)),
+                    maxHeight: maxHeight,
+                    newWorktree: {}
+                )
+            },
             named: "popover",
-            area: area,
-            appearances: [.light]
+            area: area
         )
         assertSnapshot(
-            RepositoryPopoverView(
-                content: RepositoryPopoverContent(worktrees: [], groups: [], hasRepositories: false),
-                filter: .constant(""),
-                highlighted: .constant(nil),
-                maxHeight: maxHeight
-            ),
+            Snapshot.popoverCard {
+                RepositoryPopoverView(
+                    content: RepositoryPopoverContent(worktrees: [], groups: [], hasRepositories: false),
+                    filter: .constant(""),
+                    highlighted: .constant(nil),
+                    maxHeight: maxHeight
+                )
+            },
             named: "popover-empty",
             area: area,
             appearances: [.light]

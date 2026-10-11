@@ -4,13 +4,13 @@
 // changed line's number cells are tinted with the accent, so included lines
 // read as one band), the handle beside changed lines (the accent for a line
 // the commit includes, `line2` for one left out), the "+" and "−" markers
-// (color never stands alone), intra-line ranges, the text selection, and
-// the text with syntax colors, faded on a line left out. Hunk headers are
-// `hunk` rows: the expansion buttons in the numbers' gutter, the checkbox,
-// and git's header line in the code font. Text is drawn with Core Text at
-// monospace columns: runs of printable ASCII as one line, other characters
-// glyph by glyph at their columns, so wide and fallback glyphs never shift
-// the columns hit-testing assumes.
+// (color never stands alone), intra-line ranges, find's matches, the text
+// selection, and the text with syntax colors, faded on a line left out.
+// Hunk headers are `hunk` rows: the expansion buttons in the numbers'
+// gutter, the checkbox, and git's header line in the code font. Text is
+// drawn with Core Text at monospace columns: runs of printable ASCII as one
+// line, other characters glyph by glyph at their columns, so wide and
+// fallback glyphs never shift the columns hit-testing assumes.
 
 import AppKit
 import EspalierCore
@@ -68,6 +68,15 @@ final class DiffRowView: NSTableRowView {
 
     override func accessibilityCustomActions() -> [NSAccessibilityCustomAction]? {
         controller?.accessibilityActions(ofRow: row)
+    }
+
+    /// VoiceOver's Show Menu: the menu a right-click on the row's text
+    /// shows.
+    override func accessibilityPerformShowMenu() -> Bool {
+        guard let controller, let point = controller.textMenuPoint(ofRow: row) else {
+            return false
+        }
+        return controller.tableView.openContextMenu(at: point, trigger: .accessibility)
     }
 }
 
@@ -349,16 +358,20 @@ struct DiffRowRenderer {
         context.saveGState()
         context.clip(to: textArea)
 
-        // The intra-line change (not on a line left out), then the
-        // selection, behind the text.
+        // The intra-line change (not on a line left out), find's matches
+        // (the current one stronger), then the selection, behind the text.
         if !excluded, let change = controller.intraLineChange(ofLine: line), documentLine.conflict == nil {
             (documentLine.type == .add ? DiffColors.addedChange : DiffColors.deletedChange).setFill()
             fill(range: change.location..<change.max, layout: layout, half: half, side: side, scrollX: scrollX, radius: DiffTableMetrics.intraLineRadius)
         }
         let selectionSide: DiffColumn = document.isSplit ? side : .before
+        for highlight in controller.find.highlights(row: row, column: selectionSide) {
+            (highlight.isCurrent ? DiffColors.currentFindMatch : DiffColors.findMatch).setFill()
+            fill(range: highlight.range, layout: layout, half: half, side: side, scrollX: scrollX, radius: DiffTableMetrics.intraLineRadius)
+        }
         if let selection = controller.textSelection, selection.column == selectionSide,
            let range = selection.range(inRow: row, contentLength: documentLine.info.utf16Count), !range.isEmpty {
-            (controller.isFocused ? NSColor.selectedTextBackgroundColor : NSColor.unemphasizedSelectedTextBackgroundColor).setFill()
+            (controller.isFocused ? Palette.textSelection : Palette.textSelectionInactive).setFill()
             fill(range: range, layout: layout, half: half, side: side, scrollX: scrollX)
         }
 
@@ -413,7 +426,7 @@ struct DiffRowRenderer {
                 let corner = min(radius, rect.width / 2)
                 NSBezierPath(roundedRect: rect, xRadius: corner, yRadius: corner).fill()
             } else {
-                rect.fill()
+                rect.fill(using: .sourceOver)
             }
         }
     }

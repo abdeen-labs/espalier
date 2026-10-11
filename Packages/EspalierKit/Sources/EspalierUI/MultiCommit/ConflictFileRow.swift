@@ -223,28 +223,23 @@ struct ConflictFileButtons: View {
                 }
                 .buttonStyle(.icon)
                 .disabled(!actions.isEditorAvailable)
-                .help(actions.isEditorAvailable ? actions.editorTitle : "No editor configured in Settings ▸ Integrations")
-                Menu {
+                .tooltip(actions.isEditorAvailable ? actions.editorTitle : "No editor configured in Settings ▸ Integrations")
+                PullDownButton("File Resolution Options") {
                     menuItems
                 } label: {
                     Label("File Resolution Options", systemImage: "ellipsis.circle")
                 }
-                .menuStyle(.button)
                 .buttonStyle(.icon)
-                .menuIndicator(.hidden)
                 .fixedSize()
-                .accessibilityLabel("File Resolution Options")
             }
         case .manual:
             if content.oursLabel != nil {
-                Menu {
+                PullDownButton("Resolve") {
                     sideItems
                 } label: {
                     MenuCapsuleLabel("Resolve")
                 }
-                .menuStyle(.button)
                 .buttonStyle(.quiet)
-                .menuIndicator(.hidden)
                 .controlSize(.small)
                 .fixedSize()
             }
@@ -260,35 +255,37 @@ struct ConflictFileButtons: View {
     }
 
     /// The file's menu: open it, show it, pick a side.
-    @ViewBuilder
-    private var menuItems: some View {
-        if case .markers = content.state {
-            Button(actions.editorTitle, action: actions.openInEditor)
-                .disabled(!actions.isEditorAvailable)
-        }
-        Button("Open with Default App", action: actions.openWithDefaultProgram)
-        Button("Show in Finder", action: actions.showInFinder)
-        if content.isUnresolved, content.oursLabel != nil {
-            Divider()
-            sideItems
-        } else if case .resolved(isUndoable: true) = content.state {
-            Divider()
-            Button("Undo") {
-                actions.choose(nil)
+    private var menuItems: MenuContent {
+        MenuContent { [content, actions] in
+            if case .markers = content.state {
+                MenuAction(actions.editorTitle, action: actions.openInEditor)
+                    .disabled(!actions.isEditorAvailable)
+            }
+            MenuAction("Open with Default App", action: actions.openWithDefaultProgram)
+            MenuAction("Show in Finder", action: actions.showInFinder)
+            if content.isUnresolved, content.oursLabel != nil {
+                MenuDivider()
+                sideItems
+            } else if case .resolved(isUndoable: true) = content.state {
+                MenuDivider()
+                MenuAction("Undo") {
+                    actions.choose(nil)
+                }
             }
         }
     }
 
-    @ViewBuilder
-    private var sideItems: some View {
-        if let oursLabel = content.oursLabel {
-            Button(oursLabel) {
-                actions.choose(.ours)
+    private var sideItems: MenuContent {
+        MenuContent { [content, actions] in
+            if let oursLabel = content.oursLabel {
+                MenuAction(oursLabel) {
+                    actions.choose(.ours)
+                }
             }
-        }
-        if let theirsLabel = content.theirsLabel {
-            Button(theirsLabel) {
-                actions.choose(.theirs)
+            if let theirsLabel = content.theirsLabel {
+                MenuAction(theirsLabel) {
+                    actions.choose(.theirs)
+                }
             }
         }
     }

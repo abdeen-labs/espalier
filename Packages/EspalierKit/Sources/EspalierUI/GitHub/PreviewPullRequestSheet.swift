@@ -1,4 +1,4 @@
-// Preview Pull Request (⌥⌘P), a large resizable sheet that
+// Preview Pull Request (⌥⌘P), a sheet filling the window that
 // `pullRequestPreview` loads: "Merge 3 commits into <base> from <branch>."
 // with the base branch to choose (`BranchPicker`, limited to branches on
 // the pull request's remote),
@@ -99,6 +99,7 @@ struct PreviewPullRequestSheet: View {
             maxHeight: .infinity
         )
         .background(Color(espalier: Palette.background))
+        .modalCardFillsWindow()
         .task {
             await repository.history.previewPullRequest()
         }
@@ -142,7 +143,7 @@ struct PreviewPullRequestSheet: View {
                 }
                 .buttonStyle(.quiet)
                 .controlSize(.small)
-                .popover(isPresented: $isPickingBase, arrowEdge: .bottom) {
+                .popoverCard(isPresented: $isPickingBase, title: "Base Branch") {
                     BranchPicker(
                         repository: repository,
                         selection: baseSelection(preview),
@@ -152,7 +153,6 @@ struct PreviewPullRequestSheet: View {
                         .frame(width: 320, height: 360)
                         .padding(Metrics.insetMedium)
                         .background(Color(espalier: Palette.background))
-                        .flatPopoverPresentation()
                 }
                 Text("from")
                     .foregroundStyle(.text2)
@@ -274,7 +274,8 @@ struct PreviewPullRequestSheet: View {
 }
 
 extension Metrics.Sheet {
-    /// Preview Pull Request: as it opens, and the smallest it resizes to.
+    /// Preview Pull Request: its size before it fills the window, and the
+    /// smallest it gets.
     public static let previewPullRequestSize = CGSize(width: 960, height: 640)
     public static let previewPullRequestMinimumSize = CGSize(width: 760, height: 480)
 }

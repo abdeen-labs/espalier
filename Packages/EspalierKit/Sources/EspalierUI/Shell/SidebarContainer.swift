@@ -50,8 +50,8 @@ struct SidebarContainer: View {
         }
         .sidebarListStyle()
         .environment(\.sidebarSelection, selection.wrappedValue)
-        .contextMenu(forSelectionType: SidebarPlace.self) { places in
-            SidebarContextMenu(places: Self.actionable(places, isHolding: isHolding))
+        .contextMenuCard(forSelectionType: SidebarPlace.self, selection: selection.wrappedValue.map { [$0] } ?? []) { [context] places in
+            SidebarContextMenu.content(places: Self.actionable(places, isHolding: isHolding), context: context)
         } primaryAction: { places in
             primaryAction(Self.actionable(places, isHolding: isHolding))
         }
@@ -209,29 +209,28 @@ struct PlacesSectionRows: View {
 
 /// The context menu of the place right-clicked: each feature's menu for its
 /// rows.
-struct SidebarContextMenu: View {
-    let places: Set<SidebarPlace>
-
-    var body: some View {
+enum SidebarContextMenu {
+    @MenuBuilder
+    static func content(places: Set<SidebarPlace>, context: WindowContext) -> MenuContent {
         if places.count == 1, let place = places.first {
             switch place {
             case .changes:
-                ActionButton(.stashAllChanges)
-                ActionButton(.discardAllChanges)
+                context.actions.menuAction(.stashAllChanges)
+                context.actions.menuAction(.discardAllChanges)
             case .history:
-                Menu("History Scope") {
-                    ForEach(HistoryScope.allCases, id: \.self) { scope in
-                        ActionToggle(.setHistoryScope(scope))
+                Submenu("History Scope") {
+                    for scope in HistoryScope.allCases {
+                        context.actions.menuToggle(.setHistoryScope(scope))
                     }
                 }
             case .branch(let ref):
-                BranchContextMenu(ref: ref)
+                BranchContextMenu.content(ref: ref, context: context)
             case .pullRequest(let number):
-                PullRequestContextMenu(number: number)
+                PullRequestContextMenu.content(number: number, context: context)
             case .tag(let name):
-                TagContextMenu(name: name)
+                TagContextMenu.content(name: name, context: context)
             case .stash(let stashBranch):
-                StashContextMenu(branch: stashBranch)
+                StashContextMenu.content(branch: stashBranch, context: context)
             }
         }
     }
@@ -278,7 +277,7 @@ struct ChangesPlaceRow: View {
         SidebarRowLabel("Changes", systemImage: "plus.forwardslash.minus", isSelected: isSelected) {
             if content.hasConflicts {
                 WarningGlyph()
-                    .help("Conflicts")
+                    .tooltip("Conflicts")
             } else if let badge = content.badge {
                 Text(badge)
                     .font(Typography.count)
@@ -413,17 +412,14 @@ private struct SidebarRowModifier: ViewModifier {
     let isDropTarget: Bool
     @Environment(SidebarHover.self) private var hover: SidebarHover?
     @Environment(\.sidebarSelection) private var selection
-    /// The row's styler, where VoiceOver's Show Menu on a place's row makes
-    /// its right-click.
-    @State private var menuAnchor = KeyboardMenuAnchor()
 
     func body(content: Content) -> some View {
-        content
+        placeMenu(content)
             .environment(\.isSidebarRowSelected, place != nil && place == selection)
             .background {
                 // Inside the row, so the list's table exists when it joins
                 // the window: its highlight is off before any row draws.
-                SidebarListStyler(searchesBeside: false, menuAnchor: menuAnchor)
+                SidebarListStyler(searchesBeside: false)
                     .frame(width: 0, height: 0)
                     .accessibilityHidden(true)
             }
@@ -439,21 +435,15 @@ private struct SidebarRowModifier: ViewModifier {
                     hover.row = nil
                 }
             }
-            .modifier(SidebarPlaceShowMenu(anchor: place == nil ? nil : menuAnchor))
     }
-}
 
-/// VoiceOver's Show Menu on a place's row: the menu the list shows for a
-/// right-click on the row (`SidebarContextMenu`). Rows that aren't places
-/// carry their own menus.
-private struct SidebarPlaceShowMenu: ViewModifier {
-    let anchor: KeyboardMenuAnchor?
-
-    func body(content: Content) -> some View {
-        if let anchor {
-            content.accessibilityAction(.showMenu) {
-                anchor.showMenu()
-            }
+    /// A place's row is a row of the list's context menu
+    /// (`SidebarContextMenu`); rows that aren't places carry their own
+    /// menus.
+    @ViewBuilder
+    private func placeMenu(_ content: Content) -> some View {
+        if let place {
+            content.contextMenuRow(place)
         } else {
             content
         }
@@ -462,13 +452,15 @@ private struct SidebarPlaceShowMenu: ViewModifier {
 
 /// A row's background: the soft accent under dragged commits it takes, the
 /// selection's neutral wash (`Palette.sidebarSelection`), the hover wash,
-/// or nothing.
+/// or nothing; and the ring while the row is the open context menu's
+/// target.
 struct SidebarRowBackground: View {
     let place: SidebarPlace?
     let id: AnyHashable?
     var isDropTarget = false
     @Environment(\.sidebarSelection) private var selection
     @Environment(SidebarHover.self) private var hover: SidebarHover?
+    @Environment(ContextMenuTarget.self) private var contextMenuTarget: ContextMenuTarget?
 
     var body: some View {
         // Hover and a drop target fade in over 0.08 s and out over 0.15 s;
@@ -476,7 +468,15 @@ struct SidebarRowBackground: View {
         RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
             .fill(fill)
             .hoverMotion(isHovered || isDropTarget)
+            .contextTargetRing(isContextMenuTarget)
             .padding(.horizontal, Metrics.Sidebar.rowInset)
+    }
+
+    private var isContextMenuTarget: Bool {
+        guard let place, let target = contextMenuTarget?.id else {
+            return false
+        }
+        return target == AnyHashable(place)
     }
 
     private var isSelected: Bool {
@@ -516,17 +516,12 @@ struct SidebarListStyler: NSViewRepresentable {
     /// only around itself (in a row: a row's search would cover every other
     /// row).
     var searchesBeside = true
-    /// Takes the view, for a right-click on the row it's in.
-    var menuAnchor: KeyboardMenuAnchor?
 
     func makeNSView(context: Context) -> StylerView {
-        let view = StylerView(searchesBeside: searchesBeside)
-        menuAnchor?.view = view
-        return view
+        StylerView(searchesBeside: searchesBeside)
     }
 
     func updateNSView(_ view: StylerView, context: Context) {
-        menuAnchor?.view = view
         view.apply()
     }
 
@@ -754,7 +749,7 @@ private struct SidebarSectionChevron: View {
         }
         .buttonStyle(SidebarHeaderButtonStyle())
         .focused($isFocused)
-        .help(isExpanded ? "Collapse" : "Expand")
+        .tooltip(isExpanded ? "Collapse" : "Expand")
         .accessibilityLabel(isExpanded ? "Collapse \(title)" : "Expand \(title)")
     }
 
@@ -764,15 +759,34 @@ private struct SidebarSectionChevron: View {
 }
 
 /// A header's symbol button (New Branch's plus, the More menu, the
-/// repository popover's New Worktree…).
-struct SidebarHeaderButtonStyle: ButtonStyle {
+/// repository popover's New Worktree…), with the focus ring around it.
+struct SidebarHeaderButtonStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        FocusRingButton(configuration: configuration, style: SidebarHeaderButtonDrawing())
+    }
+}
+
+/// Draws a header's symbol button.
+private struct SidebarHeaderButtonDrawing: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        SidebarHeaderButtonBody(label: configuration.label, isPressed: configuration.isPressed)
+    }
+}
+
+private struct SidebarHeaderButtonBody<Label: View>: View {
+    let label: Label
+    let isPressed: Bool
+    /// Whether the button has keyboard focus.
+    @Environment(\.isFocused) private var isFocused
+
+    var body: some View {
+        label
             .font(Typography.subheadline.weight(.semibold))
             .foregroundStyle(.text3)
             .frame(width: Metrics.Sidebar.badgeSize, height: Metrics.Sidebar.badgeSize)
             .contentShape(Rectangle())
-            .opacity(configuration.isPressed ? 0.6 : 1)
+            .opacity(isPressed ? 0.6 : 1)
+            .focusRing(isFocused, in: RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .continuous), outset: 0)
     }
 }
 
@@ -820,8 +834,7 @@ struct SidebarFilterField: View {
     }
 }
 
-/// A menu button that runs an action, titled and enabled as its menu item
-/// is. Context menus use it.
+/// A button that runs an action, titled and enabled as its menu item is.
 public struct ActionButton: View {
     private let action: ActionID
     private let title: String?
@@ -836,24 +849,6 @@ public struct ActionButton: View {
         Button(title ?? context.actions.title(for: action)) {
             context.actions.perform(action)
         }
-        .disabled(!context.actions.canPerform(action))
-    }
-}
-
-/// A check-marked menu item that runs an action.
-public struct ActionToggle: View {
-    private let action: ActionID
-    @Environment(WindowContext.self) private var context
-
-    public init(_ action: ActionID) {
-        self.action = action
-    }
-
-    public var body: some View {
-        Toggle(context.actions.title(for: action), isOn: Binding(
-            get: { context.actions.isChecked(action) },
-            set: { _ in context.actions.perform(action) }
-        ))
         .disabled(!context.actions.canPerform(action))
     }
 }

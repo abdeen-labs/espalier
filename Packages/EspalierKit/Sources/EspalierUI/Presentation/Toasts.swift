@@ -114,7 +114,7 @@ public struct ToastView: View {
                 Label("Close", systemImage: "xmark")
             }
             .buttonStyle(.icon)
-            .help("Close")
+            .tooltip("Close")
         }
         .padding(.leading, Metrics.insetMedium)
         .padding(.trailing, Metrics.insetSmall)

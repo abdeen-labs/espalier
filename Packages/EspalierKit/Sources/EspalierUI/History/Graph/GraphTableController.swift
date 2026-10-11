@@ -136,6 +136,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         // Rows draw their own selection, in the row's rounded shape
         // (`GraphRowView`).
         tableView.style = .plain
+        tableView.focusRingType = .none
         tableView.rowHeight = Metrics.Graph.rowHeight
         tableView.usesAutomaticRowHeights = false
         tableView.intercellSpacing = .zero
@@ -159,6 +160,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
+        scrollView.useEspalierScrollers()
         scrollView.drawsBackground = true
         scrollView.backgroundColor = Palette.background
         scrollView.contentView.postsBoundsChangedNotifications = true
@@ -474,6 +476,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         let rowView = tableView.makeView(withIdentifier: GraphRowView.identifier, owner: self) as? GraphRowView ?? GraphRowView(frame: .zero)
         rowView.dropFeedback = feedback(forRow: row)
+        rowView.isContextMenuTarget = self.tableView.contextMenuTarget.isTarget(row)
         return rowView
     }
 
@@ -969,22 +972,21 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         guard presentation.allowsDragging, let source, row < shownRowCount, source.commit(atRow: row) != nil else {
             return nil
         }
-        let rows = tableView.selectedRowIndexes.contains(row) ? Array(tableView.selectedRowIndexes) : [row]
-        let shas = rows.filter { $0 < shownRowCount }.compactMap { source.commit(atRow: $0)?.sha }
-        return actions.dragPayload(shas)?.pasteboardItem()
+        let candidates = tableView.selectedRowIndexes.contains(row) ? Array(tableView.selectedRowIndexes) : [row]
+        let rows = candidates.filter { $0 < shownRowCount && source.commit(atRow: $0) != nil }
+        // The first of the rows writes all their commits and the others
+        // nothing: one dragging item, with Espalier's image of the stack
+        // (`CommitDragImage`) and no count badge of the system's.
+        guard row == rows.first else {
+            return nil
+        }
+        return actions.dragPayload(rows.compactMap { source.commit(atRow: $0)?.sha })?.pasteboardItem()
     }
 
     func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint, forRowIndexes rowIndexes: IndexSet) {
-        session.draggingFormation = .stack
-        // A stack of at most three rows.
-        var index = 0
-        session.enumerateDraggingItems(options: [], for: tableView, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, _, _ in
-            if index >= 3 {
-                item.imageComponentsProvider = { [] }
-            }
-            index += 1
-        }
-        if let payload = CommitDragPayload.read(from: session.draggingPasteboard) {
+        let payload = CommitDragPayload.read(from: session.draggingPasteboard)
+        CommitDragImage.apply(to: session, in: tableView, at: screenPoint, rows: rowIndexes, count: payload?.shas.count ?? rowIndexes.count)
+        if let payload {
             actions.dragBegan(payload)
             watchDragEnd()
         }
@@ -1069,7 +1071,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     /// The context menu for a click on `row`: the selection when the row is
     /// in it, else the row alone.
-    func menu(forClickedRow row: Int) -> NSMenu? {
+    func menu(forClickedRow row: Int) -> MenuContent? {
         guard row >= 0, row < shownRowCount else {
             return nil
         }

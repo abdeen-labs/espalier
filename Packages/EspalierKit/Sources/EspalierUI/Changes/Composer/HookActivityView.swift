@@ -94,7 +94,7 @@ public struct HookActivityView: View {
                 }
                 .buttonStyle(.quiet)
                 .controlSize(.small)
-                .popover(isPresented: $isShowingOutput, arrowEdge: .top) {
+                .popoverCard(isPresented: $isShowingOutput, edge: .top, title: "Hook Output") {
                     LiveHookOutput(listener: output)
                 }
             }
@@ -102,7 +102,7 @@ public struct HookActivityView: View {
                 .buttonStyle(.quiet)
                 .controlSize(.small)
                 .disabled(!content.canStop)
-                .help("Stop the \(content.hookName) hook")
+                .tooltip("Stop the \(content.hookName) hook")
         }
         .fixedSize()
     }
@@ -137,10 +137,7 @@ public struct HookOutputView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(text.isEmpty ? "No output yet." : text)
-                        .font(Typography.terminal)
-                        .foregroundStyle(text.isEmpty ? .secondary : .primary)
-                        .textSelection(.enabled)
+                    SelectableText(text.isEmpty ? "No output yet." : text, font: AppKitTypography.sha, color: text.isEmpty ? .secondaryLabelColor : .labelColor)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Metrics.insetMedium)
                     Color.clear

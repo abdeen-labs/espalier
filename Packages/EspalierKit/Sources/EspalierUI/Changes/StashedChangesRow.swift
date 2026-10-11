@@ -30,8 +30,8 @@ public struct StashedChangesRow: View {
             .frame(height: Metrics.FileList.rowHeight + Metrics.insetSmall)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .help("Show the changes stashed on this branch")
+        .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
+        .tooltip("Show the changes stashed on this branch")
         .accessibilityLabel("Stashed Changes")
         .accessibilityHint("Shows the changes stashed on this branch")
     }

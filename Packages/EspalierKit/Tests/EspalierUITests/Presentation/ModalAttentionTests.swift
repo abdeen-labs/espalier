@@ -28,8 +28,6 @@ struct ModalAttentionTests {
 
     @Test("a sheet shown while Espalier is inactive asks for attention; while it's active, never")
     func sheets() {
-        // One sheet per offscreen window: offscreen, a sheet never attaches
-        // or closes, and AppKit queues another behind it.
         let recorder = Recorder()
         let (active, activeWindow) = presenter(recorder)
         defer { withExtendedLifetime(activeWindow) {} }

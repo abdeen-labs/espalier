@@ -93,8 +93,8 @@ struct ChangesColumn: View {
                     },
                     onClearFilters: controller.clearFilters
                 )
-                .contextMenu {
-                    ChangesHeaderMenu(repository: repository)
+                .contextMenuCard { [context] in
+                    ChangesHeaderMenu.content(repository: repository, context: context)
                 }
                 Hairline()
             }
@@ -168,15 +168,13 @@ struct ChangesFooterLayout: Equatable {
 /// The header's context menu: Discard All Changes… and Stash All
 /// Changes(…), as the Repository menu has them; none while a commit runs
 /// or a rebase waits on conflicts.
-struct ChangesHeaderMenu: View {
-    let repository: RepositoryModel
-    @Environment(WindowContext.self) private var context
-
-    var body: some View {
+enum ChangesHeaderMenu {
+    @MenuBuilder
+    static func content(repository: RepositoryModel, context: WindowContext) -> MenuContent {
         let controller = ChangesController(context: context, repository: repository)
         if !controller.isCommitting, !controller.isRebaseConflicts {
-            ForEach(FileContextMenuContent.headerItems(actions: context.actions)) { item in
-                Button(item.title) {
+            for item in FileContextMenuContent.headerItems(actions: context.actions) {
+                MenuAction(item.title) {
                     context.actions.perform(item.action)
                 }
                 .disabled(!item.isEnabled)

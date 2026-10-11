@@ -283,6 +283,6 @@ public struct RelativeTimeText: View {
 
     private func text(now: Date) -> some View {
         Text(RelativeTime.describe(date, now: now, formatting: formatting, timeZone: timeZone))
-            .help(RelativeTime.formatDate(date, formatting: formatting, timeZone: timeZone))
+            .tooltip(RelativeTime.formatDate(date, formatting: formatting, timeZone: timeZone))
     }
 }

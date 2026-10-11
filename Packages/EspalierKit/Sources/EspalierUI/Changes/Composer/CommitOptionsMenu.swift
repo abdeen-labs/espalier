@@ -46,13 +46,10 @@ public struct CommitOptionsMenu: View {
     }
 
     public var body: some View {
-        Menu {
-            Toggle("Amend Last Commit", isOn: Binding(
-                get: { content.isAmending },
-                set: { _ in onToggleAmend() }
-            ))
-            .disabled(!content.canToggleAmend)
-            Divider()
+        PullDownButton("Commit Options") {
+            MenuToggle("Amend Last Commit", isOn: content.isAmending, action: onToggleAmend)
+                .disabled(!content.canToggleAmend)
+            MenuDivider()
             option("Bypass Commit Hooks", \.skipHooks)
             option("Add Signed-off-by Trailer", \.signOff)
             option("Allow Empty Commit", \.allowEmpty)
@@ -64,23 +61,18 @@ public struct CommitOptionsMenu: View {
                     .foregroundStyle(content.isDefault ? AnyShapeStyle(.text2) : AnyShapeStyle(Color.accentColor))
             }
         }
-        .menuStyle(.button)
         .buttonStyle(.icon)
-        .menuIndicator(.hidden)
         .fixedSize()
         .disabled(!content.isEnabled)
-        .help("Commit Options")
-        .accessibilityLabel("Commit Options")
+        .tooltip("Commit Options")
     }
 
-    private func option(_ title: String, _ keyPath: WritableKeyPath<CommitOptions, Bool>) -> some View {
-        Toggle(title, isOn: Binding(
-            get: { content.options[keyPath: keyPath] },
-            set: { isOn in
-                var options = content.options
-                options[keyPath: keyPath] = isOn
-                onChange(options)
-            }
-        ))
+    private func option(_ title: String, _ keyPath: WritableKeyPath<CommitOptions, Bool>) -> MenuToggle {
+        let isOn = content.options[keyPath: keyPath]
+        return MenuToggle(title, isOn: isOn) { [content, onChange] in
+            var options = content.options
+            options[keyPath: keyPath] = !isOn
+            onChange(options)
+        }
     }
 }

@@ -147,7 +147,7 @@ public struct GenericAuthPrompt: View {
                                 Label(showsPassword ? "Hide Password" : "Show Password", systemImage: showsPassword ? "eye.slash" : "eye")
                             }
                             .buttonStyle(.icon)
-                            .help(showsPassword ? "Hide Password" : "Show Password")
+                            .tooltip(showsPassword ? "Hide Password" : "Show Password")
                             .accessibilityLabel(showsPassword ? "Hide Password" : "Show Password")
                         }
                         FieldMessage("Your hosting service may need a personal access token instead of your password.", kind: .note)

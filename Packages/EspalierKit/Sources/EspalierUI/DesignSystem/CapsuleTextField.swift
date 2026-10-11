@@ -116,8 +116,7 @@ private struct CapsuleTextFieldBody<Field: View>: View {
 extension View {
     /// A multi-line field's look (a description, ignored files): the
     /// `field` fill in a rounded rectangle (radius 9), the text inset from
-    /// its edges. For a `TextEditor`, hide its own background first
-    /// (`scrollContentBackground(.hidden)`).
+    /// its edges, around a `TextArea`.
     public func textAreaSurface() -> some View {
         padding(.horizontal, Metrics.TextArea.horizontalInset)
             .padding(.vertical, Metrics.TextArea.verticalInset)
@@ -146,8 +145,8 @@ extension Metrics {
         public static let horizontalInset: CGFloat = 7
         /// The text's inset from its top and bottom.
         public static let verticalInset: CGFloat = 6
-        /// A text view's own inset before its text (AppKit's line fragment
-        /// padding), for a placeholder drawn over it.
+        /// A text area's inset before its text (its line fragment
+        /// padding), which a placeholder drawn over it adds.
         public static let lineFragmentPadding: CGFloat = 5
     }
 }

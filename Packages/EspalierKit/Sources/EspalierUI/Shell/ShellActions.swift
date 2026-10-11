@@ -103,8 +103,10 @@ enum ShellActions {
         }) { [weak context] _ in
             context?.state.isInspectorPresented.toggle()
         }
+        // ⌘T and ⌘B open their popovers, and close them while they're
+        // open, as desktop's foldouts do.
         actions.register(.switchRepository) { [weak context] _ in
-            context?.state.isRepositoryPopoverPresented = true
+            context?.state.isRepositoryPopoverPresented.toggle()
         }
         actions.register(.switchBranch, isEnabled: { [weak context] _ in
             guard let repository = context?.repository, repository.isUsable else {
@@ -115,7 +117,7 @@ enum ShellActions {
             }
             return repository.localOperation?.kind != .checkoutBranch
         }) { [weak context] _ in
-            context?.state.isBranchPopoverPresented = true
+            context?.state.isBranchPopoverPresented.toggle()
         }
     }
 

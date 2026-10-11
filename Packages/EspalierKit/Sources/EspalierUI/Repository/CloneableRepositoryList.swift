@@ -118,7 +118,7 @@ struct CloneableRepositoryListView: View {
                 }
                 .buttonStyle(.icon)
                 .disabled(content.isLoading)
-                .help("Refresh the list of repositories")
+                .tooltip("Refresh the list of repositories")
                 .accessibilityLabel("Refresh the list of repositories")
             }
             Group {
@@ -150,8 +150,7 @@ struct CloneableRepositoryListView: View {
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                     .rowsDrawSelection()
-                    .contextMenu(forSelectionType: CloneableRepositoryListItem.ID.self) { _ in
-                    } primaryAction: { ids in
+                    .listPrimaryAction(forSelectionType: CloneableRepositoryListItem.ID.self) { ids in
                         if let id = ids.first, let item = content.item(id) {
                             activate(item)
                         }
@@ -218,7 +217,7 @@ struct CloneableListEmptyState: View {
                     .foregroundStyle(.text2)
                 HStack(spacing: Metrics.grid) {
                     Button("Refresh this list", action: refresh)
-                        .buttonStyle(.link)
+                        .buttonStyle(.textLink)
                     Text("if you've created a repository recently.")
                         .foregroundStyle(.text2)
                 }

@@ -218,23 +218,23 @@ struct CreateRepositoryForm: View {
                 // The pop-ups as wide as the fields.
                 LabeledContent("Git Ignore") {
                     CapsulePopUp("Git Ignore", selection: $model.gitIgnore, title: model.gitIgnore ?? "None") {
-                        Text("None").tag(String?.none)
-                        Divider()
-                        ForEach(RepositoryTemplates.gitIgnoreNames, id: \.self) { name in
-                            Text(name).tag(Optional(name))
+                        MenuChoice("None", value: String?.none)
+                        MenuDivider()
+                        for name in RepositoryTemplates.gitIgnoreNames {
+                            MenuChoice(name, value: Optional(name))
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 LabeledContent("License") {
                     CapsulePopUp("License", selection: $model.license, title: model.license ?? "None") {
-                        Text("None").tag(String?.none)
-                        ForEach(RepositoryTemplates.featuredLicenses) { license in
-                            Text(license.name).tag(Optional(license.name))
+                        MenuChoice("None", value: String?.none)
+                        for license in RepositoryTemplates.featuredLicenses {
+                            MenuChoice(license.name, value: Optional(license.name))
                         }
-                        Divider()
-                        ForEach(RepositoryTemplates.otherLicenses) { license in
-                            Text(license.name).tag(Optional(license.name))
+                        MenuDivider()
+                        for license in RepositoryTemplates.otherLicenses {
+                            MenuChoice(license.name, value: Optional(license.name))
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -274,12 +274,12 @@ struct CreateRepositoryForm: View {
                 VStack(alignment: .leading, spacing: Metrics.grid) {
                     FieldMessage("\(fullPath) is already a Git repository.", kind: .error)
                     Button("Add This Repository Instead", action: addInstead)
-                        .buttonStyle(.link)
+                        .buttonStyle(.textLink)
                 }
             } else if destination.isSubfolderOfRepository {
                 VStack(alignment: .leading, spacing: Metrics.grid) {
                     FieldMessage("\(fullPath) is inside another Git repository.", kind: .warning)
-                    Link("Learn about submodules.", destination: Self.submodulesURL)
+                    TextLink("Learn about submodules.", destination: Self.submodulesURL)
                         .font(Typography.subheadline)
                 }
             }

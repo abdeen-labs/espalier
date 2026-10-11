@@ -1,6 +1,6 @@
 // Rendering views to PNG without a running app. SwiftUI views go into an
 // `NSHostingView` in an offscreen key window with an explicit appearance;
-// AppKit views (tables, alerts) go straight into the same kind of window.
+// AppKit views (tables) go straight into the same kind of window.
 // Images are rendered at 1x in sRGB, so the references stay small and don't
 // depend on the display: a bitmap made from the window
 // (`bitmapImageRepForCachingDisplay`) takes the screen's color profile and
@@ -107,17 +107,21 @@ enum Snapshot {
         return cache(container, appearance: appearance, fillsBackground: true)
     }
 
-    /// Renders an alert as `ModalPresenter` would show it, on the window
-    /// background.
-    static func render(_ content: AlertContent, appearance: SnapshotAppearance) -> NSBitmapImageRep {
-        let alert = content.makeAlert()
-        alert.window.appearance = appearance.appearance
-        alert.layout()
-        guard let view = alert.window.contentView else {
-            return blank(CGSize(width: 1, height: 1))
-        }
-        view.layoutSubtreeIfNeeded()
-        return cache(view, appearance: appearance, fillsBackground: true)
+    /// Renders an alert's card, with its shadow, on the window background.
+    static func render(_ content: AlertContent, appearance: SnapshotAppearance, prepare: (AlertCardModel) -> Void = { _ in }) -> NSBitmapImageRep {
+        let model = AlertCardModel(content)
+        prepare(model)
+        let state = ModalLayerState(coversWindow: false, title: content.title)
+        state.phase = .shown
+        return render(ModalLayerView(state: state, content: AnyView(AlertCard(model: model))), appearance: appearance)
+    }
+
+    /// `content` in a popover's card, as a popover shows it, with the margin
+    /// its shadow draws in.
+    static func popoverCard<Content: View>(@ViewBuilder _ content: @escaping () -> Content) -> PopoverCardView {
+        PopoverCardView(model: PopoverCardModel {
+            AnyView(content())
+        })
     }
 
     /// Draws `view` as it's laid out into a 1x sRGB bitmap: the same pixels
@@ -167,9 +171,5 @@ enum Snapshot {
         rep.size = CGSize(width: width, height: height)
         // Device RGB already draws as sRGB here; the tag makes it explicit.
         return rep.retagging(with: .sRGB) ?? rep
-    }
-
-    private static func blank(_ size: CGSize) -> NSBitmapImageRep {
-        bitmap(size)
     }
 }

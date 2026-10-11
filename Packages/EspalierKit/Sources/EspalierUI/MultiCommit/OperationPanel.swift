@@ -301,7 +301,7 @@ public struct OperationPanel: View {
                 onOpenTerminal: { context.actions.perform(.openInTerminal(path: nil)) },
                 onResolveWithAI: { AIConflictFlow.start(in: context, repository: repository) }
             )
-            .popover(item: aiGateBinding, arrowEdge: .bottom) { gate in
+            .popoverCard(item: aiGateBinding, title: "Resolve Conflicts with AI") { gate in
                 AIGatePopover(gate: gate, repository: repository)
                     .windowEnvironment(context)
             }

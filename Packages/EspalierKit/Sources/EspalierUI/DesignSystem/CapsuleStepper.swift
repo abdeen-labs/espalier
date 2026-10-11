@@ -1,6 +1,6 @@
 // A stepper drawn as a capsule field: minus, the value in SF Mono, and plus
-// on the `field` fill. It's one stop in the key view loop; the up and down
-// arrows step it, and VoiceOver sees a stepper.
+// on the `field` fill. It's one stop in the key view loop, with a field's
+// focus ring; the up and down arrows step it, and VoiceOver sees a stepper.
 
 import SwiftUI
 
@@ -13,6 +13,7 @@ public struct CapsuleStepper: View {
     private let decrement: () -> Void
     private let increment: () -> Void
     @Environment(\.isEnabled) private var isEnabled
+    @FocusState private var isFocused: Bool
 
     /// - Parameters:
     ///   - label: What VoiceOver calls the stepper ("Text Size").
@@ -51,10 +52,14 @@ public struct CapsuleStepper: View {
         }
         .frame(height: Metrics.ControlHeight.regular)
         .background(Capsule(style: .circular).fill(.field))
-        .contentShape(.focusEffect, Capsule(style: .circular))
+        .overlay {
+            CapsuleFocusRing(isFocused: isFocused)
+        }
         .opacity(isEnabled ? 1 : Palette.disabledOpacity)
         // Focus only with keyboard navigation on.
         .focusable(interactions: .activate)
+        .focused($isFocused)
+        .focusEffectDisabled()
         .onKeyPress(.upArrow) {
             step(canIncrement, increment)
         }

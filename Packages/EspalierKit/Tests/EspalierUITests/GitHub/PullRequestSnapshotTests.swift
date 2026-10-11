@@ -105,10 +105,12 @@ struct PullRequestSnapshotTests {
 
     // MARK: Checks
 
-    @Test("the checks popover: failed, with a step list open")
+    @Test("the checks popover, in its card: failed, with a step list open")
     func popover() {
         assertSnapshot(
-            ChecksPopoverView(number: 142, content: GitHubFixtures.checksContent(GitHubFixtures.failingChecks), actions: .none, showPullRequest: {}),
+            Snapshot.popoverCard {
+                ChecksPopoverView(number: 142, content: GitHubFixtures.checksContent(GitHubFixtures.failingChecks), actions: .none, showPullRequest: {})
+            },
             named: "popover-failed",
             area: area
         )

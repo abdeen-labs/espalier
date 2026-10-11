@@ -308,14 +308,10 @@ final class FileRowView: NSTableCellView {
         if checkbox.isEnabled != content.isInclusionEnabled {
             checkbox.isEnabled = content.isInclusionEnabled
         }
-        if checkbox.toolTip != content.inclusionHelp {
-            checkbox.toolTip = content.inclusionHelp
-        }
+        checkbox.setTooltip(content.inclusionHelp)
         checkbox.setAccessibilityLabel("Include \(content.fileName)")
         Self.set(nameLabel, content.fileName)
-        if nameLabel.toolTip != content.help {
-            nameLabel.toolTip = content.help
-        }
+        nameLabel.setTooltip(content.help)
         Self.set(sourceLabel, content.renameSource ?? "")
         Self.set(directoryLabel, content.directory)
         setCounts(content.conflict == nil ? content.countParts : nil)
@@ -346,7 +342,7 @@ final class FileRowView: NSTableCellView {
         conflictGlyph.contentTintColor = conflict.isUnresolved ? Palette.warningMark : Palette.success
         Self.set(conflictLabel, conflict.status)
         conflictLabel.textColor = conflict.isUnresolved ? Palette.warning : Palette.text3
-        conflictLabel.toolTip = conflict.help
+        conflictLabel.setTooltip(conflict.help)
         let actions = conflictActions ?? ConflictFileRowActions(isEditorAvailable: false)
         let buttons = ConflictFileButtons(content: conflict, actions: actions)
         if let conflictButtons {
@@ -618,7 +614,7 @@ final class StatusGlyphView: NSView {
         letter.stringValue = kind.letter
         letter.textColor = Palette.statusForeground(kind)
         letter.font = Self.font
-        toolTip = kind.title
+        setTooltip(kind.title)
         needsLayout = true
         needsDisplay = true
     }
@@ -736,18 +732,6 @@ struct InclusionCheckbox: NSViewRepresentable {
             // The model decides; show the current state until it does.
             sender.state = InclusionCheckbox.state(parent.value)
             parent.onChange(include)
-        }
-    }
-}
-
-extension View {
-    /// A tooltip, when there's one.
-    @ViewBuilder
-    func helpIfNotEmpty(_ text: String?) -> some View {
-        if let text, !text.isEmpty {
-            help(text)
-        } else {
-            self
         }
     }
 }

@@ -419,7 +419,7 @@ struct ChangesScreenTests {
         }
     }
 
-    @Test("⇧F10 pops up the selected files' menu at the row selected last, and nothing without a selection")
+    @Test("⇧F10 opens the selected files' menu at the row selected last, and nothing without a selection; a right-click on another file opens its menu alone and rings its row")
     func keyboardContextMenu() async throws {
         try await withIsolatedGitConfig { _ in
             let (local, _) = try await setupRepositoryWithChanges()
@@ -430,10 +430,10 @@ struct ChangesScreenTests {
             defer { window.contentView = nil }
             let list = try #require(find(ChangesTableView.self, in: window.contentView))
             #expect(window.makeFirstResponder(list))
-            let popped = PoppedUpMenus()
+            let recorder = MenuRecorder()
             let key = try f10KeyDown(in: window)
-            #expect(KeyboardContextMenu.handle(key, in: window, present: popped.present))
-            #expect(popped.popups.isEmpty)
+            #expect(KeyboardContextMenu.handle(key, in: window, presenter: recorder.menuPresenter))
+            #expect(recorder.popups.isEmpty)
 
             // Two files, README.md selected last: their menu, at its row.
             let files = FileList.listedFiles(fixture.repository)
@@ -441,15 +441,30 @@ struct ChangesScreenTests {
             let readme = try #require(files.firstIndex { $0.path == "README.md" })
             list.selectRowIndexes([license], byExtendingSelection: false)
             list.selectRowIndexes([readme], byExtendingSelection: true)
-            #expect(KeyboardContextMenu.handle(key, in: window, present: popped.present))
-            let popup = try #require(popped.popups.first)
+            #expect(KeyboardContextMenu.handle(key, in: window, presenter: recorder.menuPresenter))
+            let popup = try #require(recorder.popups.first)
             #expect(popup.view === list)
             #expect(list.row(at: popup.location) == readme)
+            #expect(list.contextMenuTarget.row == readme)
             let controller = ChangesController(context: fixture.context, repository: fixture.repository)
-            let expected = controller.menuItems(for: [files[license].id, files[readme].id])
-            #expect(popup.titles == expected.map { item in
-                if case .separator = item.kind { "—" } else { item.title }
-            })
+            @MainActor func titles(_ ids: Set<String>) -> [String] {
+                MenuRecorder.Popup.titles(FileMenuItem.menuContent(controller.menuItems(for: ids)) { _ in })
+            }
+            #expect(popup.titles == titles([files[license].id, files[readme].id]))
+            popup.close()
+
+            // A right-click on the file left out of the selection: its menu
+            // alone, at the pointer, its row ringed; the selection stays.
+            let loader = try #require(files.firstIndex { $0.path == "Sources/App/Loader.swift" })
+            #expect(ContextMenuRegions.openMenu(for: try rightClick(row: loader, in: list), presenter: recorder.menuPresenter))
+            let single = try #require(recorder.popups.last)
+            #expect(single.titles == titles([files[loader].id]))
+            #expect(list.row(at: single.location) == loader)
+            #expect(list.contextMenuTarget.row == loader)
+            #expect((list.rowView(atRow: loader, makeIfNecessary: false) as? FileTableRowView)?.isContextMenuTarget == true)
+            #expect(list.selectedRowIndexes == [license, readme])
+            single.close()
+            #expect(list.contextMenuTarget.row == nil)
             await fixture.settle()
         }
     }

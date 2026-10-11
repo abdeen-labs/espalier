@@ -420,16 +420,11 @@ public struct NoChangesSuggestions: View {
             SuggestionRow(card, isEnabled: content.isPrimaryEnabled, isProminent: true, perform: perform) {
                 SplitCapsuleButton(.prominent, menuLabel: "Pull Request Options", action: { perform(card.action) }) {
                     Text(card.buttonTitle)
-                } menu: {
-                    ForEach(PullRequestSuggestedNextAction.allCases, id: \.self) { action in
-                        Toggle(action.title, isOn: Binding(
-                            get: { action == choice },
-                            set: { isOn in
-                                if isOn {
-                                    onChoosePullRequestAction(action)
-                                }
-                            }
-                        ))
+                } menu: { [onChoosePullRequestAction] in
+                    MenuPicker(selection: Binding(get: { choice }, set: { onChoosePullRequestAction($0) })) {
+                        for action in PullRequestSuggestedNextAction.allCases {
+                            MenuChoice(action.title, value: action)
+                        }
                     }
                 }
                 .controlSize(.small)
@@ -489,7 +484,7 @@ struct SuggestionRow<Control: View>: View {
     var body: some View {
         if isProminent {
             content
-                .help(card.discoverability)
+                .tooltip(card.discoverability)
                 .accessibilityElement(children: .contain)
         } else {
             // The whole row runs the action; a description's link stays
@@ -502,11 +497,11 @@ struct SuggestionRow<Control: View>: View {
                         .hoverMotion(isHovered)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
                 .disabled(!isEnabled)
                 .onHover { isHovered = $0 }
                 .accessibilityLabel(card.buttonTitle)
-                .help(card.discoverability)
+                .tooltip(card.discoverability)
                 content
                     .allowsHitTesting(card.descriptionLinksToSettings)
                     .accessibilityHidden(card.description == nil)
@@ -556,15 +551,12 @@ struct SuggestionRow<Control: View>: View {
     }
 
     /// The description, with "Settings" as a link when the card links it.
-    private func descriptionText(_ description: String) -> Text {
-        guard card.descriptionLinksToSettings, let range = description.range(of: "Settings") else {
-            return Text(description)
-        }
+    private func descriptionText(_ description: String) -> some View {
         var attributed = AttributedString(description)
-        if let linkRange = Range(range, in: attributed) {
+        if card.descriptionLinksToSettings, let range = description.range(of: "Settings"), let linkRange = Range(range, in: attributed) {
             attributed[linkRange].link = URL(string: "espalier-settings:integrations")
         }
-        return Text(attributed)
+        return LinkedText(attributed)
     }
 }
 

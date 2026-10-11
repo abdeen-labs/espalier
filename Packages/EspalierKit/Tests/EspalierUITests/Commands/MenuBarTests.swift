@@ -308,7 +308,7 @@ struct MenuBarTests {
 
     // MARK: The window the menus act on
 
-    @Test("the menus act on the focused main window; with no window key, on the main window, which comes back first", .offline)
+    @Test("the menus act on the focused main window, or on the main window while its popover is key; with no window key, on the main window, which comes back first", .offline)
     func target() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
@@ -321,9 +321,11 @@ struct MenuBarTests {
             }
         }
         var hasKeyWindow = false
+        var keyPopoverWindow: Int?
         func target(focused: WindowContext?) -> MenuTarget {
             var target = MenuTarget(focused: focused, main: main)
             target.hasKeyWindow = { hasKeyWindow }
+            target.keyPopoverWindow = { keyPopoverWindow }
             target.reveal = { context in
                 events.append(context === main ? "reveal main" : "reveal other")
             }
@@ -343,6 +345,21 @@ struct MenuBarTests {
         target(focused: nil).perform(.search)
         await main.actions.idle()
         #expect(events.isEmpty)
+
+        // The main window's popover is key: the main window, nothing
+        // revealed. Another window's popover leaves the menus off.
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.borderless], backing: .buffered, defer: false)
+        main.modals.window = window
+        defer { main.modals.window = nil }
+        keyPopoverWindow = window.windowNumber
+        #expect(target(focused: nil).context === main)
+        target(focused: nil).perform(.search)
+        await main.actions.idle()
+        #expect(events == ["search in main"])
+        keyPopoverWindow = window.windowNumber + 1
+        #expect(target(focused: nil).context == nil)
+        keyPopoverWindow = nil
+        events = []
 
         // No window is key (the main window is minimized): the main window,
         // revealed before the action runs.

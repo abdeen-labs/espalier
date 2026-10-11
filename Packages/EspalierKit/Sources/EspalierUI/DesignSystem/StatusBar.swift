@@ -74,7 +74,7 @@ public struct StatusBar<Glyph: View, Trailing: View>: View {
                             .foregroundStyle(.text2)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                            .help(help ?? "")
+                            .tooltip(help)
                     }
                 }
                 .layoutPriority(1)

@@ -59,7 +59,7 @@ public struct DeleteBranchSheet: View {
         SheetScaffold(content.title, message: content.message, width: Metrics.Sheet.compactWidth) {
             // The number is a link inside the sentence, so the sentence
             // wraps as one.
-            Text(mergedHint)
+            LinkedText(mergedHint)
                 .font(Typography.row)
                 .foregroundStyle(.text2)
                 .fixedSize(horizontal: false, vertical: true)

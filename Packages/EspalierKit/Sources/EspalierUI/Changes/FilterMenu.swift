@@ -106,20 +106,18 @@ public struct FilterMenu: View {
     }
 
     public var body: some View {
-        Menu {
-            ForEach(content.options) { option in
-                Toggle(option.title, isOn: Binding(
-                    get: { content.filter[keyPath: option.keyPath] },
-                    set: { isOn in
-                        var filter = content.filter
-                        filter[keyPath: option.keyPath] = isOn
-                        onChange(filter)
-                    }
-                ))
+        PullDownButton(content.help) { [content, onChange, onClear] in
+            for option in content.options {
+                let isOn = content.filter[keyPath: option.keyPath]
+                MenuToggle(option.title, isOn: isOn) {
+                    var filter = content.filter
+                    filter[keyPath: option.keyPath] = !isOn
+                    onChange(filter)
+                }
             }
             if content.filter.hasActiveFilters {
-                Divider()
-                Button("Clear Filters", action: onClear)
+                MenuDivider()
+                MenuAction("Clear Filters", action: onClear)
             }
         } label: {
             // While options are on, the symbol fills in the accent.
@@ -130,11 +128,8 @@ public struct FilterMenu: View {
                     .foregroundStyle(content.activeOptionCount > 0 ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.text2))
             }
         }
-        .menuStyle(.button)
         .buttonStyle(.icon)
-        .menuIndicator(.hidden)
         .fixedSize()
-        .help(content.help)
-        .accessibilityLabel(content.help)
+        .tooltip(content.help)
     }
 }

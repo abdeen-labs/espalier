@@ -219,8 +219,8 @@ struct ProviderSheet: View {
                 }
                 LabeledContent("Type") {
                     CapsulePopUp("Type", selection: $editor.form.type, title: ProviderCopy.typeTitle(editor.form.type)) {
-                        ForEach(BYOKProviderType.allCases, id: \.self) { type in
-                            Text(ProviderCopy.typeTitle(type)).tag(type)
+                        for type in BYOKProviderType.allCases {
+                            MenuChoice(ProviderCopy.typeTitle(type), value: type)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -232,8 +232,8 @@ struct ProviderSheet: View {
                 if editor.form.type == .openai {
                     LabeledContent("API Format") {
                         CapsulePopUp("API Format", selection: $editor.form.wireApi, title: ProviderCopy.wireApiTitle(editor.form.wireApi)) {
-                            ForEach(BYOKWireApi.allCases, id: \.self) { wireApi in
-                                Text(ProviderCopy.wireApiTitle(wireApi)).tag(wireApi)
+                            for wireApi in BYOKWireApi.allCases {
+                                MenuChoice(ProviderCopy.wireApiTitle(wireApi), value: wireApi)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -258,8 +258,8 @@ struct ProviderSheet: View {
                 }
                 LabeledContent("Authentication") {
                     CapsulePopUp("Authentication", selection: $editor.form.authKind, title: ProviderCopy.authTitle(editor.form.authKind)) {
-                        ForEach(BYOKAuthKind.allCases, id: \.self) { kind in
-                            Text(ProviderCopy.authTitle(kind)).tag(kind)
+                        for kind in BYOKAuthKind.allCases {
+                            MenuChoice(ProviderCopy.authTitle(kind), value: kind)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -350,17 +350,17 @@ struct ModelRow: View {
         HStack(spacing: Metrics.SettingsWindow.rowSpacing) {
             SettingsRowText(title: ProviderCopy.modelHeading(model), description: ProviderCopy.modelDetail(model))
                 .accessibilityElement(children: .combine)
-            RowActionsMenu("Actions for \(ProviderCopy.modelHeading(model))") {
-                Button("Edit…", action: edit)
-                Button("Remove", role: .destructive, action: remove)
+            RowActionsMenu("Actions for \(ProviderCopy.modelHeading(model))") { [edit, remove] in
+                MenuAction("Edit…", action: edit)
+                MenuAction("Remove", role: .destructive, action: remove)
             }
         }
         .padding(.vertical, Metrics.SettingsWindow.rowVerticalPadding)
         .frame(minHeight: Metrics.SettingsWindow.rowHeight)
         .contentShape(Rectangle())
-        .contextMenu {
-            Button("Edit…", action: edit)
-            Button("Remove", role: .destructive, action: remove)
+        .contextMenuCard { [edit, remove] in
+            MenuAction("Edit…", action: edit)
+            MenuAction("Remove", role: .destructive, action: remove)
         }
     }
 }

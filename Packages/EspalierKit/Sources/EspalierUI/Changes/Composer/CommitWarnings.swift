@@ -284,12 +284,12 @@ struct MessageRulesHint: View {
             Image(systemName: failures.canBypass ? "exclamationmark.triangle.fill" : "xmark.octagon.fill")
                 .foregroundStyle(Color(espalier: failures.canBypass ? Palette.warning : Palette.error))
         }
-        .buttonStyle(.borderless)
-        .help(failures.canBypass ? "The commit message fails repository rules you can bypass" : "The commit message fails repository rules")
+        .buttonStyle(.smallIcon)
+        .tooltip(failures.canBypass ? "The commit message fails repository rules you can bypass" : "The commit message fails repository rules")
         .accessibilityLabel(failures.canBypass
             ? "Warning: the commit message fails repository rules, but you can bypass them. View details."
             : "Error: the commit message fails repository rules. View details.")
-        .popover(isPresented: $isShowingDetails, arrowEdge: .trailing) {
+        .popoverCard(isPresented: $isShowingDetails, edge: .trailing, title: "Commit Message Rule Failures") {
             MessageRuleFailuresView(failures: failures, onLink: onLink)
         }
     }

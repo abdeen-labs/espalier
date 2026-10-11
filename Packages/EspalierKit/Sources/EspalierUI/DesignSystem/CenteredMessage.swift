@@ -76,7 +76,7 @@ public struct CenteredMessage<Actions: View>: View {
                 .padding(.top, Metrics.insetLarge)
                 .accessibilityAddTraits(.isHeader)
             if let description {
-                Text(description)
+                LinkedText(description)
                     .font(isLarge ? Typography.row : Typography.secondary)
                     .foregroundStyle(.text2)
                     .multilineTextAlignment(.center)

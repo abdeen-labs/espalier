@@ -2,9 +2,10 @@
 // the rows split by hairlines, the chosen title semibold. `ChoiceList`'s
 // rows are cards, for sheets' choices that each have a line about them;
 // these sit in a pane's list of rows, and in a form's column for plain
-// choices (Repository Settings' Git config, Configure Git's author). The up
-// and down arrows move the choice, and VoiceOver sees a radio group whose
-// buttons have the lines under the titles as their hints.
+// choices (Repository Settings' Git config, Configure Git's author). It's
+// one stop in the key view loop, with the focus ring around the chosen
+// row's mark; the up and down arrows move the choice, and VoiceOver sees a
+// radio group whose buttons have the lines under the titles as their hints.
 
 import SwiftUI
 
@@ -15,6 +16,8 @@ public struct RadioList<Value: Hashable>: View {
     private let choices: [ChoiceListItem<Value>]
     @Binding private var selection: Value
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.showsFocusRings) private var showsFocusRings
+    @FocusState private var isFocused: Bool
 
     /// - Parameter label: What VoiceOver calls the group.
     public init(_ label: String, selection: Binding<Value>, choices: [ChoiceListItem<Value>]) {
@@ -33,10 +36,10 @@ public struct RadioList<Value: Hashable>: View {
             }
         }
         .opacity(isEnabled ? 1 : Palette.disabledOpacity)
-        // Focus only with keyboard navigation on, with a ring in the rows'
-        // shape.
-        .contentShape(.focusEffect, RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
+        // Focus only with keyboard navigation on.
         .focusable(interactions: .activate)
+        .focused($isFocused)
+        .focusEffectDisabled()
         .onKeyPress(.upArrow) {
             move(by: -1)
         }
@@ -60,6 +63,8 @@ public struct RadioList<Value: Hashable>: View {
         let markOffset = Metrics.RadioList.markBaselineOffset
         return HStack(alignment: .firstTextBaseline, spacing: Metrics.RadioList.markSpacing) {
             RadioMark(isSelected: isSelected)
+                .focusRing(isFocused && isSelected, in: Circle())
+                .environment(\.showsFocusRings, showsFocusRings && isSelected)
                 .alignmentGuide(.firstTextBaseline) { dimensions in
                     // The mark's center on the title's middle.
                     dimensions[VerticalAlignment.center] + markOffset

@@ -1,7 +1,6 @@
-// A pull-down menu drawn as a capsule button. The menu itself stays as
-// macOS draws it; its button is a `Menu` with `.menuStyle(.button)`, a
-// capsule button style, the menu indicator hidden, and this label: the
-// title and a small chevron. Pop-ups, which show a choice, are
+// A pull-down menu drawn as a capsule button: a `PullDownButton` with a
+// capsule button style and this label, the title and a small chevron. Its
+// menu is Espalier's card. Pop-ups, which show a choice, are
 // `CapsulePopUp`s.
 
 import SwiftUI

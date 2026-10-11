@@ -84,9 +84,7 @@ struct GitAuthorForm: View {
     var body: some View {
         row("Name") {
             if isAccountAuthor {
-                Text(name)
-                    .foregroundStyle(.text)
-                    .textSelection(.enabled)
+                SelectableText(name)
                     .authorControlWidth(layout)
             } else {
                 TextField("Name", text: $name, prompt: Text(verbatim: namePrompt))
@@ -146,17 +144,17 @@ struct GitAuthorForm: View {
     private var emailPopUp: some View {
         CapsulePopUp("Email", selection: $emailSelection, title: emailTitle) {
             if emailSelection == .none {
-                Text("None").tag(GitAuthorEmailSelection.none)
+                MenuChoice("None", value: GitAuthorEmailSelection.none)
             }
-            ForEach(emailChoices, id: \.email) { choice in
-                Text(choice.title).tag(GitAuthorEmailSelection.account(choice.email))
+            for choice in emailChoices {
+                MenuChoice(choice.title, value: GitAuthorEmailSelection.account(choice.email))
             }
             if case .account(let email) = emailSelection, !emailChoices.contains(where: { $0.email == email }) {
-                Text(verbatim: email).tag(GitAuthorEmailSelection.account(email))
+                MenuChoice(email, value: GitAuthorEmailSelection.account(email))
             }
             if !isAccountAuthor {
-                Divider()
-                Text("Other").tag(GitAuthorEmailSelection.other)
+                MenuDivider()
+                MenuChoice("Other", value: GitAuthorEmailSelection.other)
             }
         }
         .authorControlWidth(layout)
@@ -177,9 +175,7 @@ struct GitAuthorForm: View {
     @ViewBuilder
     private var emailField: some View {
         if isAccountAuthor {
-            Text(otherEmail)
-                .foregroundStyle(.text)
-                .textSelection(.enabled)
+            SelectableText(otherEmail)
                 .authorControlWidth(layout)
         } else {
             TextField(showsPopUp ? "Other Email" : "Email", text: $otherEmail, prompt: Text(verbatim: "name@example.com"))

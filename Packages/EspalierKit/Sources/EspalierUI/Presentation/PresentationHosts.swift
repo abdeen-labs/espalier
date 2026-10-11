@@ -1,5 +1,6 @@
 // Attaches the presenter's hosts to the window. Each host watches one piece
-// of state and shows it through the window's `ModalPresenter`.
+// of state and shows it through the window's `ModalPresenter`. While a modal
+// shows, VoiceOver can't reach the window behind it.
 
 import EspalierCore
 import GitKit
@@ -12,6 +13,7 @@ struct PresentationHosts: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .accessibilityHidden(context.modals.isPresenting)
             .onChange(of: context.presenter.confirmation?.id, initial: true) {
                 if let pending = context.presenter.confirmation {
                     ConfirmationHost.present(pending, in: context)

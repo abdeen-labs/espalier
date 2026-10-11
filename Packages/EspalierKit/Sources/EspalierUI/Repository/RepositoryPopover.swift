@@ -106,6 +106,7 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
 /// The repository popover.
 public struct RepositoryPopover: View {
     @Environment(WindowContext.self) private var context
+    @Environment(\.closeEnclosingPopover) private var closePopover
     @State private var filter = ""
     @State private var highlighted: RepositoryPopoverRowID?
 
@@ -122,7 +123,7 @@ public struct RepositoryPopover: View {
             maxHeight: Self.maxHeight(in: context.modals.window),
             activate: activate,
             newWorktree: context.actions.canPerform(newWorktree) ? {
-                context.state.isRepositoryPopoverPresented = false
+                close()
                 context.actions.perform(newWorktree)
             } : nil
         )
@@ -141,12 +142,19 @@ public struct RepositoryPopover: View {
         return available - Metrics.insetLarge * 2
     }
 
+    /// Closes the popover, at once when it's in its card (so a sheet that
+    /// opens next finds the window focused).
+    private func close() {
+        closePopover?()
+        context.state.isRepositoryPopoverPresented = false
+    }
+
     private func activate(_ row: RepositoryPopoverRowID) {
         switch row {
         case .entry(let entry):
             RepositoryActions.switchTo(entry, in: context)
         case .worktree(let path):
-            context.state.isRepositoryPopoverPresented = false
+            close()
             if path != context.repository?.worktrees.current?.path {
                 context.actions.perform(.switchToWorktree(path: path))
             }
@@ -168,6 +176,7 @@ struct RepositoryPopoverView: View {
     /// The popover's height with the filter empty, which it keeps while a
     /// filter leaves fewer rows.
     @State private var unfilteredHeight: CGFloat?
+    @Environment(WindowContext.self) private var context: WindowContext?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -215,7 +224,6 @@ struct RepositoryPopoverView: View {
             }
         }
         .background(Color(espalier: Palette.background))
-        .flatPopoverPresentation()
         .announcesFilterResults(filter) { [content] in
             content.rowIDs.count
         }
@@ -236,7 +244,7 @@ struct RepositoryPopoverView: View {
                                     Image(systemName: "plus")
                                 }
                                 .buttonStyle(SidebarHeaderButtonStyle())
-                                .help(ActionKind.newWorktree.title)
+                                .tooltip(ActionKind.newWorktree.title)
                                 .accessibilityLabel(ActionKind.newWorktree.title)
                             }
                         }
@@ -244,8 +252,10 @@ struct RepositoryPopoverView: View {
                         ForEach(content.worktrees) { worktree in
                             row(.worktree(path: worktree.path)) {
                                 WorktreeRow(content: worktree)
-                            } menu: {
-                                WorktreeContextMenu(content: worktree)
+                            } menu: { [context] in
+                                if let context {
+                                    WorktreeContextMenu.content(worktree, context: context)
+                                }
                             }
                         }
                     }
@@ -255,8 +265,10 @@ struct RepositoryPopoverView: View {
                         ForEach(group.rows) { repository in
                             row(.entry(repository.id)) {
                                 RepositoryRow(content: repository)
-                            } menu: {
-                                RepositoryContextMenu(entry: repository.id)
+                            } menu: { [context] in
+                                if let context {
+                                    RepositoryContextMenu.content(entry: repository.id, context: context)
+                                }
                             }
                         }
                     }
@@ -278,10 +290,10 @@ struct RepositoryPopoverView: View {
 
     /// A row: a click activates it, the pointer highlights it, and it has
     /// its context menu.
-    private func row<RowLabel: View, MenuContent: View>(
+    private func row<RowLabel: View>(
         _ id: RepositoryPopoverRowID,
         @ViewBuilder label: () -> RowLabel,
-        @ViewBuilder menu: () -> MenuContent
+        @MenuBuilder menu: @escaping () -> MenuContent
     ) -> some View {
         let isHighlighted = highlighted == id
         return Button {
@@ -290,10 +302,8 @@ struct RepositoryPopoverView: View {
             label()
                 .selectableRow(isSelected: isHighlighted)
         }
-        .buttonStyle(.plain)
-        .contextMenu {
-            menu()
-        }
+        .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
+        .contextMenuCard(menu)
         .padding(.horizontal, Metrics.ListRow.inset)
         .padding(.vertical, 1)
         .id(id)
@@ -321,69 +331,42 @@ struct RepositoryPopoverView: View {
 
 // MARK: - Menus
 
-/// A popover menu item that closes the popover, then runs an action, titled
-/// and enabled as its menu item is.
-struct RepositoryPopoverActionButton: View {
-    private let action: ActionID
-    private let title: String?
-    private let context: WindowContext
-
-    init(_ action: ActionID, title: String? = nil, context: WindowContext) {
-        self.action = action
-        self.title = title
-        self.context = context
-    }
-
-    var body: some View {
-        Button(title ?? context.actions.title(for: action)) {
-            context.state.isRepositoryPopoverPresented = false
-            context.actions.perform(action)
-        }
-        .disabled(!context.actions.canPerform(action))
-    }
-}
-
-/// The Add menu beside the filter, as desktop's: Clone, Create, Add.
+/// The Add menu beside the filter, as desktop's: Clone, Create, Add. Each
+/// closes the popover first.
 struct RepositoryAddMenu: View {
     @Environment(WindowContext.self) private var context: WindowContext?
 
     var body: some View {
-        Menu {
-            if let context {
-                RepositoryPopoverActionButton(.cloneRepository(url: nil), title: "Clone Repository…", context: context)
-                RepositoryPopoverActionButton(.newRepository(path: nil), title: "Create New Repository…", context: context)
-                RepositoryPopoverActionButton(.addLocalRepository, title: "Add Existing Repository…", context: context)
+        PullDownButton("Add") { [context] in
+            if let actions = context?.actions {
+                actions.menuAction(.cloneRepository(url: nil), title: "Clone Repository…").closesPopover()
+                actions.menuAction(.newRepository(path: nil), title: "Create New Repository…").closesPopover()
+                actions.menuAction(.addLocalRepository, title: "Add Existing Repository…").closesPopover()
             }
         } label: {
             MenuCapsuleLabel("Add", systemImage: "plus")
         }
-        .menuStyle(.button)
         .buttonStyle(.quiet)
-        .menuIndicator(.hidden)
         .fixedSize()
-        .help("Add a repository")
+        .tooltip("Add a repository")
     }
 }
 
 /// A repository row's context menu, as desktop's. It acts on the row's
-/// repository, whichever is selected; every item but the copies closes the
-/// popover first.
-struct RepositoryContextMenu: View {
-    let entry: RepositoryListEntryID
-    @Environment(WindowContext.self) private var context: WindowContext?
-
-    var body: some View {
-        if let context {
-            switch entry {
-            case .repository(let id):
-                if let record = context.app.record(id) {
-                    menu(for: record, in: context)
-                }
-            case .clone(let id):
-                // Removing a clone in progress cancels it.
-                Button("Remove") {
-                    context.app.clones.remove(id)
-                }
+/// repository, whichever is selected; the items that leave the popover
+/// close it first.
+enum RepositoryContextMenu {
+    @MenuBuilder
+    static func content(entry: RepositoryListEntryID, context: WindowContext) -> MenuContent {
+        switch entry {
+        case .repository(let id):
+            if let record = context.app.record(id) {
+                content(for: record, in: context)
+            }
+        case .clone(let id):
+            // Removing a clone in progress cancels it.
+            MenuAction("Remove") {
+                context.app.clones.remove(id)
             }
         }
     }
@@ -394,73 +377,69 @@ struct RepositoryContextMenu: View {
         record.name
     }
 
-    private static func closePopover(in context: WindowContext) {
-        context.state.isRepositoryPopoverPresented = false
-    }
-
-    @ViewBuilder
-    private func menu(for record: RepositoryRecord, in context: WindowContext) -> some View {
+    @MenuBuilder
+    private static func content(for record: RepositoryRecord, in context: WindowContext) -> MenuContent {
         let app = context.app
         let isMissing: Bool = switch app.availability(of: record.id) {
         case .missing?, .unsafe?: true
         default: record.isMissing
         }
         let integrations = app.integrations
-        Button(record.alias == nil ? "Create Alias…" : "Change Alias…") {
-            Self.closePopover(in: context)
+        MenuAction(record.alias == nil ? "Create Alias…" : "Change Alias…") {
             AliasSheet.present(for: record.id, in: context)
         }
+        .closesPopover()
         if record.alias != nil {
-            Button("Remove Alias") {
+            MenuAction("Remove Alias") {
                 app.setAlias(nil, for: record.id)
             }
         }
         // The worktree actions, for the row's repository once it's selected.
-        Button("Show Worktrees") {
+        MenuAction("Show Worktrees") {
             if app.selection != .repository(record.id) {
                 RepositoryActions.switchTo(.repository(record.id), in: context)
             }
             context.actions.perform(.showWorktrees)
         }
         .disabled(isMissing || !context.actions.canPerform(.showWorktrees))
-        Button("New Worktree…") {
+        MenuAction("New Worktree…") {
             RepositoryActions.switchTo(.repository(record.id), in: context)
             context.actions.perform(.newWorktree(branch: nil))
         }
         .disabled(isMissing || !context.actions.canPerform(.newWorktree(branch: nil)))
-        Button("Copy Repository Name") {
-            RepositoryActions.copy(Self.copiedName(record))
+        MenuAction("Copy Repository Name") {
+            RepositoryActions.copy(copiedName(record))
         }
-        Button("Copy Repository Path") {
+        MenuAction("Copy Repository Path") {
             RepositoryActions.copy(record.path)
         }
-        Divider()
-        Button("View on GitHub") {
-            Self.closePopover(in: context)
+        MenuDivider()
+        MenuAction("View on GitHub") {
             if let url = GitHubWebURLs.repository(record) {
                 _ = integrations.openInBrowser(url)
             }
         }
+        .closesPopover()
         .disabled(GitHubWebURLs.repository(record) == nil)
-        Button("Open in \(integrations.shellLabel ?? "Shell")") {
-            Self.closePopover(in: context)
+        MenuAction("Open in \(integrations.shellLabel ?? "Shell")") {
             Task { await RepositoryActions.openInShell(record.path, in: context) }
         }
+        .closesPopover()
         .disabled(isMissing)
-        Button("Show in Finder") {
-            Self.closePopover(in: context)
+        MenuAction("Show in Finder") {
             Task { await RepositoryActions.showInFinder(record.path, in: context) }
         }
+        .closesPopover()
         .disabled(isMissing)
-        Button("Open in \(integrations.editorLabel ?? "External Editor")") {
-            Self.closePopover(in: context)
+        MenuAction("Open in \(integrations.editorLabel ?? "External Editor")") {
             Task { await RepositoryActions.openInEditor(record.path, in: context) }
         }
+        .closesPopover()
         .disabled(isMissing)
-        Divider()
-        Button(app.preferences.confirmRepositoryRemoval && !record.isMissing ? "Remove…" : "Remove") {
-            Self.closePopover(in: context)
+        MenuDivider()
+        MenuAction(app.preferences.confirmRepositoryRemoval && !record.isMissing ? "Remove…" : "Remove") {
             Task { await RepositoryActions.remove(record.id, in: context) }
         }
+        .closesPopover()
     }
 }

@@ -355,8 +355,8 @@ struct CloneForm: View {
                         }
                     }
                 ), title: "@\(account.login) – \(account.friendlyEndpoint)") {
-                    ForEach(accounts, id: \.self) { account in
-                        Text("@\(account.login) – \(account.friendlyEndpoint)").tag(AccountKey(account))
+                    for account in accounts {
+                        MenuChoice("@\(account.login) – \(account.friendlyEndpoint)", value: AccountKey(account))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

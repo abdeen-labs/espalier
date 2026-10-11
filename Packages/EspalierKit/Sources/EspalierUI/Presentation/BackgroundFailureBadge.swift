@@ -60,10 +60,7 @@ public struct BackgroundFailureDetails: View {
             } icon: {
                 WarningGlyph()
             }
-            Text(summary.message)
-                .font(Typography.secondary)
-                .foregroundStyle(.text2)
-                .textSelection(.enabled)
+            SelectableText(summary.message, font: AppKitTypography.secondary, color: Palette.text2)
                 .fixedSize(horizontal: false, vertical: true)
             if !summary.recoveryTitles.isEmpty {
                 HStack(spacing: Metrics.insetSmall) {
@@ -82,6 +79,5 @@ public struct BackgroundFailureDetails: View {
         .padding(Metrics.Popover.padding)
         .frame(width: Metrics.Popover.width, alignment: .leading)
         .background(Color(espalier: Palette.background))
-        .flatPopoverPresentation()
     }
 }

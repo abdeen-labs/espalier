@@ -322,19 +322,17 @@ struct ChecksRerunButton: View {
             .fixedSize()
             .disabled(!isEnabled)
         case .failedOrAll:
-            Menu {
-                Button("Re-run Failed Checks") {
+            PullDownButton("Re-run") { [rerun] in
+                MenuAction("Re-run Failed Checks") {
                     rerun(true)
                 }
-                Button("Re-run All Checks") {
+                MenuAction("Re-run All Checks") {
                     rerun(false)
                 }
             } label: {
                 MenuCapsuleLabel("Re-run", systemImage: "arrow.clockwise")
             }
-            .menuStyle(.button)
             .buttonStyle(.quiet)
-            .menuIndicator(.hidden)
             .controlSize(.small)
             .fixedSize()
             .disabled(!isEnabled)
@@ -437,8 +435,8 @@ private struct CheckRunRow: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .help(check.name)
+            .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
+            .tooltip(check.name)
             .accessibilityLabel("\(check.name), \(check.description)")
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
 
@@ -475,7 +473,7 @@ private struct CheckStepsView: View {
                             Label("Re-run \(check.name)", systemImage: "arrow.clockwise")
                         }
                         .buttonStyle(.icon)
-                        .help("Re-run \(check.name)")
+                        .tooltip("Re-run \(check.name)")
                     }
                     if let url = check.url {
                         Button {
@@ -484,7 +482,7 @@ private struct CheckStepsView: View {
                             Label("View \(check.name) on GitHub", systemImage: "arrow.up.forward.square")
                         }
                         .buttonStyle(.icon)
-                        .help("View \(check.name) on GitHub")
+                        .tooltip("View \(check.name) on GitHub")
                     }
                 }
                 ForEach(steps) { step in
@@ -524,7 +522,7 @@ private struct CheckStepRow: View {
             } label: {
                 row(showsLink: isHovered)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
             .background(
                 RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .continuous)
                     .fill(isHovered ? Color(espalier: Palette.hover) : .clear)
@@ -532,11 +530,11 @@ private struct CheckStepRow: View {
                     .padding(.horizontal, -Metrics.grid)
             )
             .onHover { isHovered = $0 }
-            .help("View \(step.name) on GitHub")
+            .tooltip("View \(step.name) on GitHub")
             .accessibilityHint("Opens the step on GitHub")
         } else {
             row(showsLink: false)
-                .help(step.name)
+                .tooltip(step.name)
         }
     }
 

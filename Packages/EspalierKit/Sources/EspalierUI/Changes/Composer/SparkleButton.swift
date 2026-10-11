@@ -133,7 +133,7 @@ public struct SparkleButton: View {
             .buttonStyle(.icon)
             .disabled(!state.isEnabled)
             .onHover { isHovering = $0 }
-            .help(state.help)
+            .tooltip(state.help)
             .accessibilityLabel(state.help)
         }
     }

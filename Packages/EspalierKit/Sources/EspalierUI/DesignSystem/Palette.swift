@@ -220,6 +220,11 @@ nonisolated public enum Palette {
         light: .hex(0xD6D6DC), dark: .hex(0x38383F),
         highContrastLight: .hex(0x9A9BA3), highContrastDark: .hex(0x6C6C75)
     )
+    /// The dim over a window behind a sheet or an alert: black 20% (45% in
+    /// dark).
+    public static let scrim = NSColor.espalierDynamic(
+        light: NSColor.black.withAlphaComponent(0.2), dark: NSColor.black.withAlphaComponent(0.45)
+    )
 
     // MARK: Text
 
@@ -242,10 +247,64 @@ nonisolated public enum Palette {
     /// own.
     public static var placeholderText: NSColor { text3 }
 
+    // MARK: Text input
+
+    /// Selected text where the text has focus: the accent at 16% (24% in
+    /// dark), behind text that keeps 4.5:1 on it, secondary text in a field
+    /// included.
+    public static let textSelection = NSColor.espalierDynamic { variant in
+        let accent = NSColor.controlAccentColor.resolved(in: variant)
+        let alpha: CGFloat = variant.isDark ? 0.24 : 0.16
+        return accent.withAlphaComponent(variant.isHighContrast ? alpha * 1.6 : alpha)
+    }
+    /// Selected text where the text doesn't have focus, or its window isn't
+    /// key: a neutral wash, black 8% (white 8% in dark).
+    public static let textSelectionInactive = NSColor.espalierDynamic(
+        light: NSColor.black.withAlphaComponent(0.08), dark: NSColor.white.withAlphaComponent(0.08),
+        highContrastLight: NSColor.black.withAlphaComponent(0.13), highContrastDark: NSColor.white.withAlphaComponent(0.13)
+    )
+    /// The insertion point: the accent.
+    public static var caret: NSColor { accent }
+    /// Text an input method is still composing: the soft accent.
+    public static var markedText: NSColor { accentSoft }
+    /// The wave under a misspelled word: the error hue, at 3:1 as a mark.
+    public static let spellingMark = readable(delete, minimumContrast: 3)
+    /// The wave under a grammar issue: the warning mark.
+    public static var grammarMark: NSColor { warningMark }
+
+    // MARK: Scrollers
+
+    /// The scroller's knob: black 30% (white 32% in dark).
+    public static let scrollerKnob = NSColor.espalierDynamic(
+        light: NSColor.black.withAlphaComponent(0.30), dark: NSColor.white.withAlphaComponent(0.32),
+        highContrastLight: NSColor.black.withAlphaComponent(0.5), highContrastDark: NSColor.white.withAlphaComponent(0.55)
+    )
+    /// The knob while the pointer is over the scroller or drags it: black
+    /// 45% (white 48% in dark).
+    public static let scrollerKnobActive = NSColor.espalierDynamic(
+        light: NSColor.black.withAlphaComponent(0.45), dark: NSColor.white.withAlphaComponent(0.48),
+        highContrastLight: NSColor.black.withAlphaComponent(0.65), highContrastDark: NSColor.white.withAlphaComponent(0.7)
+    )
+    /// The track of a scroller that's always shown: black 3.5% (white 4.5%
+    /// in dark).
+    public static let scrollerTrack = NSColor.espalierDynamic(
+        light: NSColor.black.withAlphaComponent(0.035), dark: NSColor.white.withAlphaComponent(0.045),
+        highContrastLight: NSColor.black.withAlphaComponent(0.07), highContrastDark: NSColor.white.withAlphaComponent(0.08)
+    )
+
     // MARK: Accent
 
-    /// Selection, checkboxes, included lines, links: the system accent.
+    /// Selection, checkboxes, included lines: the system accent.
     public static var accent: NSColor { .controlAccentColor }
+
+    /// Links: the accent, deepened (lightened in dark) only as far as it
+    /// takes to read as text on the content background, 4.5:1 (6:1 under
+    /// Increase Contrast).
+    public static let link = NSColor.espalierDynamic { variant in
+        let accent = NSColor.controlAccentColor.resolved(in: variant)
+        let background = Palette.background.resolved(in: variant)
+        return ColorContrast.adjust(accent, toReach: variant.isHighContrast ? 6 : 4.5, against: background)
+    }
 
     /// Selected rows and chips: the accent at 9% (14% in dark).
     public static let accentSoft = NSColor.espalierDynamic { variant in

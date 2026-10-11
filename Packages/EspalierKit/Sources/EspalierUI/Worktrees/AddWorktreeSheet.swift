@@ -157,12 +157,7 @@ struct AddWorktreeForm: View {
                 LabeledContent("Branch Name") {
                     TextField("Branch Name", text: $branchName, prompt: Text(content.branchPlaceholder.isEmpty ? "Branch name" : content.branchPlaceholder))
                         .labelsHidden()
-                        .textInputSuggestions {
-                            ForEach(content.suggestions, id: \.self) { suggestion in
-                                Text(suggestion)
-                                    .textInputCompletion(suggestion)
-                            }
-                        }
+                        .textFieldSuggestions(content.suggestions, text: branchName)
                 }
                 if let message = content.branchMessage {
                     FieldMessage(message.text, kind: message.isError ? .error : .note)
@@ -171,12 +166,9 @@ struct AddWorktreeForm: View {
             .formStyle(.columns)
             .textFieldStyle(.capsule)
             if let footer = content.footer {
-                Text(footer)
-                    .font(Typography.meta)
-                    .foregroundStyle(.text3)
+                SelectableText(footer, font: AppKitTypography.meta, color: Palette.text3)
                     .lineLimit(3)
                     .truncationMode(.middle)
-                    .textSelection(.enabled)
             }
         } buttons: {
             if content.isCreating {

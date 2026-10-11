@@ -93,18 +93,20 @@ struct CommitInfoView: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
                 row("Authored") {
-                    Text(fullDate(content.authoredDate))
+                    SelectableText(fullDate(content.authoredDate), font: AppKitTypography.secondary)
                     if !content.authorEmail.isEmpty {
-                        Text(content.authorEmail)
-                            .foregroundStyle(.text2)
+                        SelectableText(content.authorEmail, font: AppKitTypography.secondary, color: Palette.text2)
                     }
                 }
                 Hairline()
                 row("Committed") {
-                    Text(fullDate(content.committedDate))
+                    SelectableText(fullDate(content.committedDate), font: AppKitTypography.secondary)
                     if let committer = content.committer {
-                        Text(committer.email.isEmpty ? "by \(committer.name)" : "by \(committer.name) <\(committer.email)>")
-                            .foregroundStyle(.text2)
+                        SelectableText(
+                            committer.email.isEmpty ? "by \(committer.name)" : "by \(committer.name) <\(committer.email)>",
+                            font: AppKitTypography.secondary,
+                            color: Palette.text2
+                        )
                     }
                 }
                 if !content.parents.isEmpty {
@@ -127,14 +129,14 @@ struct CommitInfoView: View {
                     Hairline()
                     row("Co-Authors") {
                         ForEach(content.coAuthors, id: \.self) { coAuthor in
-                            Text(coAuthor)
+                            SelectableText(coAuthor, font: AppKitTypography.secondary)
                         }
                     }
                 }
                 ForEach(content.trailers) { trailer in
                     Hairline()
                     row(trailer.token) {
-                        Text(trailer.value)
+                        SelectableText(trailer.value, font: AppKitTypography.secondary)
                     }
                 }
             }
@@ -155,7 +157,6 @@ struct CommitInfoView: View {
                 value()
             }
             .foregroundStyle(.text)
-            .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -177,8 +178,8 @@ struct CommitInfoView: View {
                 }
             }
         }
-        .buttonStyle(.link)
-        .help("Select \(shortenSHA(parent.sha))")
+        .buttonStyle(.textLink)
+        .tooltip("Select \(shortenSHA(parent.sha))")
     }
 
     /// The date in full, as the user's settings format it.

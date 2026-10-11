@@ -1,7 +1,8 @@
 // The context menus of the Changes list and its header: their items and
 // their order, which items a rebase's conflicts leave, a conflicted file's
 // sides to pick, and when items are disabled. `gitIgnoreMenuItems(for:)`
-// builds the ignore items.
+// builds the ignore items; `FileMenuItem.menuContent(_:run:)` makes them a
+// menu's content, which the list's AppKit menu is built from.
 
 import EspalierCore
 import EspalierSupport
@@ -183,27 +184,19 @@ public struct ChangesHeaderMenuItem: Identifiable {
     }
 }
 
-/// A context menu's items as SwiftUI menu content.
-struct FileMenuItemsView: View {
-    let items: [FileMenuItem]
-    let run: (FileMenuCommand) -> Void
-
-    var body: some View {
-        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+extension FileMenuItem {
+    /// `items` as a menu's content, each running its command through `run`.
+    @MainActor
+    static func menuContent(_ items: [FileMenuItem], run: @escaping (FileMenuCommand) -> Void) -> MenuContent {
+        MenuContent(items.map { item in
             switch item.kind {
             case .separator:
-                Divider()
+                return .divider
             case .command(let command):
-                Button(item.title) {
-                    run(command)
-                }
-                .disabled(!item.isEnabled)
+                return .item(MenuItem(item.title, isEnabled: item.isEnabled, action: .run { run(command) }))
             case .submenu(let children):
-                Menu(item.title) {
-                    FileMenuItemsView(items: children, run: run)
-                }
-                .disabled(!item.isEnabled)
+                return .item(MenuItem(item.title, isEnabled: item.isEnabled, action: .submenu(menuContent(children, run: run))))
             }
-        }
+        })
     }
 }

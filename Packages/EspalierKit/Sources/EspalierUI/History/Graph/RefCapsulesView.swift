@@ -26,7 +26,7 @@ final class RefCapsulesView: NSView {
 
     private var items: [RefCapsuleRenderer.Item] = []
     private var laidOutWidth: CGFloat?
-    private var popover: NSPopover?
+    private var popover: PopoverController?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -82,11 +82,13 @@ final class RefCapsulesView: NSView {
         guard !rest.isEmpty else {
             return
         }
-        let popover = NSPopover()
-        popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: RefOverflowList(refs: rest, palette: palette))
+        self.popover?.close(animated: false)
+        let palette = palette
+        let popover = PopoverController(title: "More Refs") {
+            RefOverflowList(refs: rest, palette: palette)
+        }
         let anchor = rect ?? items.last?.frame ?? bounds
-        popover.show(relativeTo: anchor, of: self, preferredEdge: .maxY)
+        popover.show(relativeTo: anchor, of: self, edge: .bottom)
         self.popover = popover
     }
 }

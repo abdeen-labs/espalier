@@ -1,18 +1,28 @@
-// A row of History's simple list as its table draws it: the selection and the
-// drop and reorder feedback, as every History row draws them
-// (`HistoryRowDrawing`). It tells its cell when it's selected, so the rail's
-// nodes fill with the selection's tint.
+// A row of History's simple list as its table draws it: the selection, the
+// ring while its context menu is open, and the drop and reorder feedback, as
+// every History row draws them (`HistoryRowDrawing`). It tells its cell when
+// it's selected, so the rail's nodes fill with the selection's tint.
 
 import AppKit
 
-/// A row of the simple list: its selection and drop feedback.
-final class SimpleRowView: NSTableRowView {
+/// A row of the simple list: its selection, context menu ring, and drop
+/// feedback.
+final class SimpleRowView: NSTableRowView, ContextMenuTargetRowView {
     static let identifier = NSUserInterfaceItemIdentifier("SimpleRowView")
 
     /// The drop or reorder feedback the row shows.
     var dropFeedback: GraphDropFeedback? {
         didSet {
             if dropFeedback != oldValue {
+                needsDisplay = true
+            }
+        }
+    }
+
+    /// Whether the row's context menu is open: it shows the ring.
+    var isContextMenuTarget = false {
+        didSet {
+            if isContextMenuTarget != oldValue {
                 needsDisplay = true
             }
         }
@@ -78,6 +88,13 @@ final class SimpleRowView: NSTableRowView {
         super.drawBackground(in: dirtyRect)
         if let dropFeedback {
             HistoryRowDrawing.draw(dropFeedback, in: bounds, isFlipped: isFlipped)
+        }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if isContextMenuTarget {
+            HistoryRowDrawing.drawContextTarget(in: bounds, isFlipped: isFlipped)
         }
     }
 

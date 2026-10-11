@@ -398,10 +398,8 @@ struct SignInView: View {
                     .foregroundStyle(.text)
                     .accessibilityAddTraits(.isHeader)
                 if let header = content.header {
-                    Text(header)
-                        .foregroundStyle(.text2)
+                    SelectableText(header, color: Palette.text2)
                         .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
                 }
             }
             // One step crossfades into the next over 0.22 s, as the
@@ -443,8 +441,7 @@ struct SignInView: View {
             Text("Git is requesting permission to sign in to this server:")
                 .foregroundStyle(.text2)
                 .fixedSize(horizontal: false, vertical: true)
-            MonoChip(address)
-                .textSelection(.enabled)
+            MonoChip(address, isSelectable: true)
             Label {
                 Text("**Only continue if you recognize and trust this server.** Confirm this address appears in your browser. Otherwise, cancel and contact your repository administrator.")
                     .foregroundStyle(.text2)
@@ -527,12 +524,12 @@ private struct SignInCodeStep: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: Metrics.insetMedium) {
                 Spacer()
-                Text(code.userCode)
-                    .font(Typography.deviceCode)
-                    .kerning(Metrics.SignIn.codeKerning)
-                    .foregroundStyle(.text)
-                    .textSelection(.enabled)
-                    .accessibilityLabel("Code: \(code.userCode.map(String.init).joined(separator: " "))")
+                SelectableText(
+                    code.userCode,
+                    font: AppKitTypography.deviceCode,
+                    kerning: Metrics.SignIn.codeKerning,
+                    accessibilityLabel: "Code: \(code.userCode.map(String.init).joined(separator: " "))"
+                )
                 Spacer()
                 Button {
                     actions.copyCode(code.userCode)
@@ -556,7 +553,7 @@ private struct SignInCodeStep: View {
             .buttonStyle(.prominent)
             .controlSize(.extraLarge)
             .keyboardShortcut(.defaultAction)
-            .help("Copies the code and opens the page in your browser")
+            .tooltip("Copies the code and opens the page in your browser")
             if let fixedNow {
                 status(now: fixedNow)
             } else {
@@ -598,10 +595,8 @@ struct SignInInlineError: View {
 
     var body: some View {
         Label {
-            Text(message)
-                .foregroundStyle(Color(espalier: Palette.error))
+            SelectableText(message, color: Palette.error)
                 .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
         } icon: {
             Image(systemName: "xmark.octagon.fill")
                 .foregroundStyle(Color(espalier: Palette.error))

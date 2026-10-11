@@ -107,7 +107,7 @@ struct CommitFiles: View {
                 guard let file = change(id) else {
                     return nil
                 }
-                return NSHostingMenu(rootView: CommittedFileContextMenu(content: menuContent(for: file)).windowEnvironment(context))
+                return CommittedFileContextMenu.content(menuContent(for: file), context: context)
             }
         )
     }
@@ -149,37 +149,36 @@ extension CommittedFileMenuContent {
     }
 }
 
-/// A committed file's context menu.
-struct CommittedFileContextMenu: View {
-    let content: CommittedFileMenuContent
-    @Environment(WindowContext.self) private var context
-
-    var body: some View {
+/// A committed file's context menu, in the pull request screen's file list
+/// and History's.
+enum CommittedFileContextMenu {
+    @MenuBuilder
+    static func content(_ content: CommittedFileMenuContent, context: WindowContext) -> MenuContent {
         if content.existsOnDisk {
-            ActionButton(.showInFinder(path: content.fullPath))
-            ActionButton(.openInEditor(path: content.fullPath))
-            ActionButton(.openWithDefaultProgram(path: content.fullPath))
-            Divider()
-            Button("Copy File Path") {
+            context.actions.menuAction(.showInFinder(path: content.fullPath))
+            context.actions.menuAction(.openInEditor(path: content.fullPath))
+            context.actions.menuAction(.openWithDefaultProgram(path: content.fullPath))
+            MenuDivider()
+            MenuAction("Copy File Path") {
                 copy(content.fullPath)
             }
-            Button("Copy Relative File Path") {
+            MenuAction("Copy Relative File Path") {
                 copy(content.relativePath)
             }
-            Divider()
-            Button(content.gitHubTitle) {
+            MenuDivider()
+            MenuAction(content.gitHubTitle) {
                 if let url = content.gitHubURL {
                     context.app.integrations.openInBrowser(url)
                 }
             }
             .disabled(content.gitHubURL == nil)
         } else {
-            Button("File Does Not Exist on Disk") {}
+            MenuAction("File Does Not Exist on Disk") {}
                 .disabled(true)
         }
     }
 
-    private func copy(_ text: String) {
+    private static func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }

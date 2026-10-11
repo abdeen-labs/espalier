@@ -155,8 +155,7 @@ struct CommandsTests {
             _ = await task.value
             #expect(actions.canPerform(.showNextPlace))
 
-            // So does a sheet. (Offscreen, a sheet never closes: this is
-            // the last step.)
+            // So does a sheet.
             let window = SnapshotWindow(contentRect: CGRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
             defer { withExtendedLifetime(window) {} }
             context.modals.window = window

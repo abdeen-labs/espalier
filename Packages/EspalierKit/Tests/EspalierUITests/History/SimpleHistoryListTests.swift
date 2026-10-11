@@ -4,7 +4,8 @@
 // with the graph's nodes, where it started, merges' stubs); selection both
 // ways and which selections are contiguous; expanding and collapsing a merge
 // with the keyboard, its chevron, and VoiceOver; the commit menu of a
-// merge's commit, from a right-click and ⇧F10; and where drops go.
+// merge's commit, from ⇧F10, and a merge's from a right-click, each ringing
+// its row; and where drops go.
 
 import AppKit
 @testable import EspalierCore
@@ -389,7 +390,7 @@ struct SimpleHistoryListTests {
         }
     }
 
-    @Test("a merged commit's menu is a commit's, from a right-click or ⇧F10; drops go between the branch's commits, never among a merge's")
+    @Test("a merged commit's menu is a commit's, from ⇧F10, and a merge's opens from a right-click, each ringing its row; drops go between the branch's commits, never among a merge's")
     func menusAndDrops() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await makeSimpleListFixture()
@@ -400,7 +401,7 @@ struct SimpleHistoryListTests {
             defer { window.contentView = nil }
 
             let widget = try fixture.tableRow("Use the new widget sizes", in: controller)
-            #expect(controller.menu(forClickedRow: widget) != nil)
+            let menu = try #require(controller.menu(forClickedRow: widget))
             let content = CommitContextMenus.menuContent(
                 shas: [fixture.shas["Use the new widget sizes"]!],
                 clicked: try #require(fixture.history.commit(fixture.shas["Use the new widget sizes"]!)),
@@ -408,19 +409,35 @@ struct SimpleHistoryListTests {
             )
             #expect(content.canAmend == false)
 
-            // ⇧F10 with it selected: the same menu, at its row.
+            // ⇧F10 with it selected: the same menu, at its row, which shows
+            // the ring.
             controller.tableView.selectRowIndexes([widget], byExtendingSelection: false)
-            let popped = PoppedUpMenus()
-            #expect(KeyboardContextMenu.handle(try f10KeyDown(in: window), in: window, present: popped.present))
-            let popup = try #require(popped.popups.first)
+            let recorder = MenuRecorder()
+            #expect(KeyboardContextMenu.handle(try f10KeyDown(in: window), in: window, presenter: recorder.menuPresenter))
+            let popup = try #require(recorder.popups.first)
             #expect(controller.tableView.row(at: popup.location) == widget)
-            #expect(popup.titles == controller.menu(forClickedRow: widget)?.items.map { $0.isSeparatorItem ? "—" : $0.title })
+            #expect(popup.titles == MenuRecorder.Popup.titles(menu))
+            #expect(controller.tableView.contextMenuTarget.row == widget)
+            popup.close()
 
-            let mergeTableRow = try fixture.tableRow("Merge pull request #209 from jonas/widget-refresh", in: controller)
-            #expect(controller.dropTarget(proposedRow: mergeTableRow, operation: .on) == .onto(row: merge))
+            // A right-click on the merge's row: its menu, ringed; the
+            // selection stays.
+            let mergeRow = try fixture.tableRow("Merge pull request #209 from jonas/widget-refresh", in: controller)
+            controller.tableView.scrollRowToVisible(mergeRow)
+            controller.scrollView.layoutSubtreeIfNeeded()
+            controller.tableView.layoutSubtreeIfNeeded()
+            #expect(ContextMenuRegions.openMenu(for: try rightClick(row: mergeRow, in: controller.tableView), presenter: recorder.menuPresenter))
+            #expect(recorder.popups.count == 2)
+            #expect(controller.tableView.row(at: recorder.popups[1].location) == mergeRow)
+            #expect(controller.tableView.contextMenuTarget.row == mergeRow)
+            #expect((controller.tableView.rowView(atRow: mergeRow, makeIfNecessary: false) as? SimpleRowView)?.isContextMenuTarget == true)
+            #expect(controller.tableView.selectedRowIndexes == [widget])
+            recorder.popups[1].close()
+
+            #expect(controller.dropTarget(proposedRow: mergeRow, operation: .on) == .onto(row: merge))
             #expect(controller.dropTarget(proposedRow: widget, operation: .on) == nil)
             #expect(controller.dropTarget(proposedRow: widget, operation: .above) == nil)
-            #expect(controller.dropTarget(proposedRow: mergeTableRow + 3, operation: .above) == .above(row: merge + 1))
+            #expect(controller.dropTarget(proposedRow: mergeRow + 3, operation: .above) == .above(row: merge + 1))
             #expect(controller.dropTarget(proposedRow: controller.items.count, operation: .above) == .above(row: fixture.history.commitSHAs.count))
             await fixture.settle()
         }

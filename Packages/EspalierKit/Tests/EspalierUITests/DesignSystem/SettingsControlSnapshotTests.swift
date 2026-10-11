@@ -42,14 +42,14 @@ struct SettingsControlSnapshotTests {
     func popUps() {
         let view = VStack(alignment: .leading, spacing: Metrics.insetMedium) {
             CapsulePopUp("Email", selection: .constant("joe@example.com"), title: "joe@example.com") {
-                Text("joe@example.com").tag("joe@example.com")
-                Text("Other").tag("other")
+                MenuChoice("joe@example.com", value: "joe@example.com")
+                MenuChoice("Other", value: "other")
             }
             CapsulePopUp("Date format", selection: .constant(1), title: "Thursday, October 19, 2017 (EEEE, MMMM d, yyyy)") {
-                Text("Thursday, October 19, 2017 (EEEE, MMMM d, yyyy)").tag(1)
+                MenuChoice("Thursday, October 19, 2017 (EEEE, MMMM d, yyyy)", value: 1)
             }
             CapsulePopUp("Editor", selection: .constant(0), title: "None") {
-                Text("None").tag(0)
+                MenuChoice("None", value: 0)
             }
             .disabled(true)
         }

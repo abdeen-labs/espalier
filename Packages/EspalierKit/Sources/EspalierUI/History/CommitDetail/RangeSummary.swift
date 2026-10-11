@@ -75,12 +75,12 @@ struct RangeSummary: View {
                     Button(link) {
                         showsReachability = .unreachable
                     }
-                    .buttonStyle(.link)
+                    .buttonStyle(.textLink)
                     Text("not included.")
                         .foregroundStyle(.text3)
                 }
                 .font(Typography.secondary)
-                .popover(item: $showsReachability, arrowEdge: .bottom) { tab in
+                .popoverCard(item: $showsReachability, title: "Commit Reachability") { tab in
                     UnreachableCommitsPopover(content: content, initialTab: tab)
                 }
             }

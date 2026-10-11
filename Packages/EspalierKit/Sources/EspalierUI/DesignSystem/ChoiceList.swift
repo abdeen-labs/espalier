@@ -1,9 +1,10 @@
 // A choice between a few options, each with a line about it: rows with
 // radius 9, the chosen one in `accent soft` with a filled radio mark.
 // Sheets use it where a radio group would list choices with descriptions
-// (Switch Branch's decision, New Branch's base). The up and down arrows move
-// the choice, and VoiceOver sees a radio group whose buttons have the lines
-// as their hints.
+// (Switch Branch's decision, New Branch's base). It's one stop in the key
+// view loop, with the focus ring around the chosen row; the up and down
+// arrows move the choice, and VoiceOver sees a radio group whose buttons
+// have the lines as their hints.
 
 import AppKit
 import SwiftUI
@@ -46,6 +47,8 @@ public struct ChoiceList<Value: Hashable>: View {
     private let choices: [ChoiceListItem<Value>]
     @Binding private var selection: Value
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.showsFocusRings) private var showsFocusRings
+    @FocusState private var isFocused: Bool
 
     /// - Parameter label: What VoiceOver calls the group.
     public init(_ label: String, selection: Binding<Value>, choices: [ChoiceListItem<Value>]) {
@@ -88,6 +91,8 @@ public struct ChoiceList<Value: Hashable>: View {
                     RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
                         .strokeBorder(isSelected ? AnyShapeStyle(Color.accentColor.opacity(0.35)) : AnyShapeStyle(.line), lineWidth: 1)
                 )
+                .focusRing(isFocused && isSelected, in: RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
+                .environment(\.showsFocusRings, showsFocusRings && isSelected)
                 .contentShape(RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
                 .onTapGesture {
                     if isEnabled {
@@ -97,10 +102,10 @@ public struct ChoiceList<Value: Hashable>: View {
             }
         }
         .opacity(isEnabled ? 1 : Palette.disabledOpacity)
-        // Focus only with keyboard navigation on, with a ring in the rows'
-        // shape.
-        .contentShape(.focusEffect, RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
+        // Focus only with keyboard navigation on.
         .focusable(interactions: .activate)
+        .focused($isFocused)
+        .focusEffectDisabled()
         .onKeyPress(.upArrow) {
             move(by: -1)
         }

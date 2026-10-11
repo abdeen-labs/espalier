@@ -27,7 +27,7 @@ enum AddRepositoryPanel {
         let panel = makePanel()
         Task {
             let response: NSApplication.ModalResponse
-            if let window = context.modals.window {
+            if let window = context.modals.topmostWindow() {
                 response = await panel.beginSheetModal(for: window)
             } else {
                 response = panel.runModal()

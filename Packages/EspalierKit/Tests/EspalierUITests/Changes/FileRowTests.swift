@@ -1,7 +1,7 @@
 // The Changes list's rows: what each status, rename, and checkbox state
 // shows, a conflicted file's state and buttons, a stash's rows without
 // checkboxes, what VoiceOver reads, and snapshots of every status,
-// inclusion, and the selection, light and dark.
+// inclusion, the selection, and a context menu's ring, light and dark.
 
 import AppKit
 @testable import EspalierCore
@@ -188,5 +188,26 @@ struct FileRowTests {
         let lineCounts = Dictionary(uniqueKeysWithValues: counts.map { (ExactString(files[$0.key].id), $0.value) })
         let table = FileTable(files: .changes(files), selectedIDs: [files[1].id], inclusion: inclusion, lineCounts: lineCounts)
         assertSnapshot(table, named: "rows", area: "Changes", size: CGSize(width: Metrics.Column.changesFileList.ideal, height: 290))
+    }
+
+    @Test("the row a context menu acts on shows the accent ring, unselected and selected")
+    func contextTargetSnapshot() {
+        let files = [
+            WorkingDirectoryFileChange(path: "Sources/App/RepositoryLoader.swift", status: .modified(), selection: .fromInitialSelection(.all)),
+            WorkingDirectoryFileChange(path: "README.md", status: .modified(), selection: .fromInitialSelection(.all)),
+        ]
+        // The tables' coordinators, which they hold weakly.
+        var coordinators: [FileTableCoordinator] = []
+        for (name, selection) in [("contextTarget", [String]()), ("contextTargetSelected", [files[0].id])] {
+            assertSnapshot({
+                let table = FileTable(files: .changes(files), selectedIDs: selection, inclusion: BenchmarkList.inclusion)
+                let coordinator = table.makeCoordinator()
+                coordinators.append(coordinator)
+                let scrollView = FileTable.makeScrollView(coordinator: coordinator, table: table)
+                _ = (scrollView.documentView as? ChangesTableView)?.contextMenuTarget.mark(0)
+                return scrollView
+            }, named: name, area: "Changes", size: CGSize(width: Metrics.Column.changesFileList.ideal, height: 76))
+        }
+        withExtendedLifetime(coordinators) {}
     }
 }

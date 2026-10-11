@@ -86,9 +86,9 @@ struct ModelSheet: View {
                 }
                 LabeledContent("Reasoning Effort") {
                     CapsulePopUp("Reasoning Effort", selection: $editor.form.reasoningEffort, title: reasoningTitle(editor.form.reasoningEffort)) {
-                        Text("Default (provider's choice)").tag(ReasoningEffort?.none)
-                        ForEach(ReasoningEffortOrder, id: \.self) { effort in
-                            Text(formatReasoningEffort(effort)).tag(Optional(effort))
+                        MenuChoice("Default (provider's choice)", value: ReasoningEffort?.none)
+                        for effort in ReasoningEffortOrder {
+                            MenuChoice(formatReasoningEffort(effort), value: Optional(effort))
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

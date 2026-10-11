@@ -77,6 +77,34 @@ public enum AppKitTypography {
         .preferredFont(forTextStyle: .callout)
     }
 
+    /// Smaller secondary text and meta lines (11).
+    public static var meta: NSFont {
+        .preferredFont(forTextStyle: .subheadline)
+    }
+
+    /// Headings inside panes and sheets (13, bold).
+    public static var heading: NSFont {
+        .preferredFont(forTextStyle: .headline)
+    }
+
+    /// A commit's title in its details (15, semibold).
+    public static var commitSummary: NSFont {
+        .systemFont(ofSize: NSFont.preferredFont(forTextStyle: .title3).pointSize, weight: .semibold)
+    }
+
+    /// SHAs in text and terminal output (SF Mono 11).
+    public static var sha: NSFont {
+        .monospacedSystemFont(ofSize: 11, weight: .regular)
+    }
+
+    /// `font` at another weight, monospaced or not as `font` is.
+    public static func weighted(_ font: NSFont, _ weight: NSFont.Weight) -> NSFont {
+        if font.fontDescriptor.symbolicTraits.contains(.monoSpace) {
+            return .monospacedSystemFont(ofSize: font.pointSize, weight: weight)
+        }
+        return .systemFont(ofSize: font.pointSize, weight: weight)
+    }
+
     /// Ref tags: SF Mono 10, semibold.
     public static var refCapsule: NSFont {
         .monospacedSystemFont(ofSize: 10, weight: .semibold)

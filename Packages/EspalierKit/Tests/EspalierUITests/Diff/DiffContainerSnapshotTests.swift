@@ -1,8 +1,8 @@
 // Snapshots of the diff container's layouts: the header, a text diff with
-// its warnings, a large diff, a submodule's change, a failed diff, empty
-// states, and the image modes with their picker; a text diff and the
-// two-up image in light and dark, the rest in light. Which state shows when
-// is DiffContainerContentTests'.
+// its warnings and with find open, the find bar's states, a large diff, a
+// submodule's change, a failed diff, empty states, and the image modes with
+// their picker; a text diff, find, and the two-up image in light and dark,
+// the rest in light. Which state shows when is DiffContainerContentTests'.
 
 import AppKit
 import EspalierCore
@@ -89,6 +89,48 @@ struct DiffContainerSnapshotTests {
             hasHiddenBidiChars: true
         )
         snapshot(DiffContainer(.loaded(.text(warned)), file: modified, context: .history), named: "container-warnings", size: CGSize(width: 640, height: 360))
+    }
+
+    // MARK: Find
+
+    /// Find open on the Swift change from its first added line, searching
+    /// for `query`.
+    private func find(_ query: String) -> DiffFindModel {
+        let find = DiffFindModel()
+        find.documentDidChange(DiffDocument(input: DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange).documentInput), isNewFile: true)
+        find.show(focus: false, from: DiffFindPosition(row: 5, column: .before, offset: 0))
+        find.query = query
+        return find
+    }
+
+    @Test("the find bar: empty, counting matches, and finding none")
+    func findBar() {
+        for (name, query) in [("find-bar-empty", ""), ("find-bar-matches", "tip"), ("find-bar-no-matches", "tipx")] {
+            assertSnapshot(
+                DiffFindBar(find: find(query)).frame(maxWidth: .infinity, maxHeight: .infinity),
+                named: name,
+                area: Self.area,
+                size: CGSize(width: 420, height: 90)
+            )
+        }
+    }
+
+    @Test("a text diff with find open over its top trailing corner")
+    func containerFind() {
+        for appearance in SnapshotAppearance.allCases {
+            let view = DiffContainer(.loaded(.text(DiffFixtures.swiftChange)), file: modified, context: .history)
+                .environment(\.diffBuildsSynchronously, true)
+                .frame(width: Self.size.width, height: Self.size.height)
+            let image = Snapshot.render(view, size: Self.size, appearance: appearance) { host in
+                guard let controller = firstView(DiffTableView.self, in: host)?.controller else {
+                    Issue.record("No diff table")
+                    return
+                }
+                controller.find.show(focus: false, from: .start)
+                controller.find.query = "path"
+            }
+            assertSnapshot(image, named: "container-find", area: Self.area, appearance: appearance)
+        }
     }
 
     // MARK: States

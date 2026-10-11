@@ -55,7 +55,7 @@ struct HistoryFilesActions {
     /// Double click or Return; nil when files don't open.
     var open: ((String) -> Void)?
     /// A file's context menu; nil offers none.
-    var menu: ((String) -> NSMenu?)?
+    var menu: ((String) -> MenuContent?)?
 }
 
 /// The files beside the diff: the table in SwiftUI.
@@ -121,6 +121,7 @@ final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableV
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
+        scrollView.useEspalierScrollers()
         scrollView.drawsBackground = true
         scrollView.backgroundColor = Palette.background
         scrollView.automaticallyAdjustsContentInsets = false
@@ -180,7 +181,9 @@ final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableV
     }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-        tableView.makeView(withIdentifier: HistoryFileRowView.identifier, owner: self) as? HistoryFileRowView ?? HistoryFileRowView(frame: .zero)
+        let rowView = tableView.makeView(withIdentifier: HistoryFileRowView.identifier, owner: self) as? HistoryFileRowView ?? HistoryFileRowView(frame: .zero)
+        rowView.isContextMenuTarget = self.tableView.contextMenuTarget.isTarget(row)
+        return rowView
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
@@ -224,7 +227,7 @@ final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableV
     }
 
     /// The context menu for the file in `row`.
-    func menu(forRow row: Int) -> NSMenu? {
+    func menu(forRow row: Int) -> MenuContent? {
         guard files.indices.contains(row) else {
             return nil
         }
@@ -234,8 +237,10 @@ final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableV
 
 /// The file list's `NSTableView`: Return opens the selected file, and a
 /// secondary click (or ⇧F10) shows a file's menu.
-final class HistoryFileTableView: NSTableView {
+final class HistoryFileTableView: NSTableView, ContextMenuContentProviding {
     weak var controller: HistoryFileListController?
+    /// The row whose context menu is open.
+    lazy var contextMenuTarget = TableContextMenuTarget(table: self)
 
     override func keyDown(with event: NSEvent) {
         let key = event.charactersIgnoringModifiers?.unicodeScalars.first.map { Int($0.value) }
@@ -246,15 +251,29 @@ final class HistoryFileTableView: NSTableView {
         super.keyDown(with: event)
     }
 
-    override func menu(for event: NSEvent) -> NSMenu? {
-        controller?.menu(forRow: row(at: convert(event.locationInWindow, from: nil)))
+    func contextMenuContent(at point: CGPoint) -> MenuContent? {
+        controller?.menu(forRow: row(at: point))
+    }
+
+    func markContextMenuTarget(at point: CGPoint) -> (() -> Void)? {
+        contextMenuTarget.mark(row(at: point))
     }
 }
 
 /// A file's row as the table draws it: the selection in the row's rounded
-/// shape (`HistoryRowDrawing`).
-final class HistoryFileRowView: NSTableRowView {
+/// shape, and the ring while its context menu is open
+/// (`HistoryRowDrawing`).
+final class HistoryFileRowView: NSTableRowView, ContextMenuTargetRowView {
     static let identifier = NSUserInterfaceItemIdentifier("HistoryFileRowView")
+
+    /// Whether the row's context menu is open: it shows the ring.
+    var isContextMenuTarget = false {
+        didSet {
+            if isContextMenuTarget != oldValue {
+                needsDisplay = true
+            }
+        }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -269,6 +288,13 @@ final class HistoryFileRowView: NSTableRowView {
     override func drawSelection(in dirtyRect: NSRect) {
         Palette.accentSoft.setFill()
         HistoryRowDrawing.selectionPath(in: bounds, isFlipped: isFlipped, joinsAbove: false, joinsBelow: false).fill()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if isContextMenuTarget {
+            HistoryRowDrawing.drawContextTarget(in: bounds, isFlipped: isFlipped)
+        }
     }
 
     /// Selected text keeps its colors on `accent soft`.
@@ -356,7 +382,7 @@ struct HistoryFileRow: View {
         }
         .padding(.horizontal, Metrics.CommitRow.selectionInset + Metrics.insetSmall)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .help(content.file.tooltip)
+        .tooltip(content.file.tooltip)
     }
 }
 

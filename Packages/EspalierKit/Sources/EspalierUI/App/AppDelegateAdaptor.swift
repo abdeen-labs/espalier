@@ -50,7 +50,8 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Launching
 
     /// Starts the rolling log file first, so it has the whole run, then
-    /// applies the stored theme before the first window opens.
+    /// applies the stored theme, Espalier's text input, and its scrollers,
+    /// and turns the system's tooltips off before the first window opens.
     public func applicationWillFinishLaunching(_ notification: Notification) {
         Log.startFileLog()
         let info = Bundle.main.infoDictionary
@@ -58,10 +59,15 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
         let build = info?["CFBundleVersion"] as? String ?? "?"
         logger.info("Espalier \(version, privacy: .public) (\(build, privacy: .public)) started, process \(ProcessInfo.processInfo.processIdentifier)")
         ThemeApplier.apply(Preferences.storedTheme(in: PreferenceStore(.standard)), to: NSApplication.shared)
+        TextInputStyling.install()
+        EspalierScroller.installEverywhere()
+        TooltipCenter.turnOffSystemTooltips()
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         installExternalEventHandlers()
+        // Context clicks in every window open Espalier's menus.
+        MenuEventRouter.shared.install()
         // Before launch finishes, so a notification click that launched
         // Espalier reaches it.
         NotificationRouter.shared.install()
@@ -160,14 +166,13 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The quit guard's alert: on the main window when it's showing, else
-    /// on its own.
+    /// on its own, app-modally.
     private func presentQuitAlert(_ content: AlertContent) async -> AlertResponse {
         if let context = mainWindowContext, let window = context.modals.window, window.isVisible {
             NSApp.activate()
             return await context.modals.alert(content)
         }
-        let alert = content.makeAlert()
         NSApp.activate()
-        return content.response(alert.runModal(), alert: alert)
+        return AppModalAlert.run(content)
     }
 }

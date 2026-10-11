@@ -135,7 +135,7 @@ public struct CapsuleSearchField: View {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.text3)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare(.circle))
             .accessibilityLabel("Clear")
             .transition(.opacity)
         case .keyCap:
@@ -149,25 +149,12 @@ public struct CapsuleSearchField: View {
     }
 }
 
-/// A capsule field's focus ring: the accent ring that fades in, settling
-/// from 1.04× to its size, over 0.15 s, and fades out over 0.1 s.
+/// A capsule field's focus ring: Espalier's ring on the capsule's edge.
 struct CapsuleFocusRing: View {
     let isFocused: Bool
-    @Environment(\.motion) private var motion
 
     var body: some View {
-        ZStack {
-            if isFocused {
-                Capsule(style: .circular)
-                    .strokeBorder(Color.accentColor.opacity(0.55), lineWidth: 2)
-                    .transition(.asymmetric(
-                        insertion: .scale(scale: Motion.focusRingScale).combined(with: .opacity),
-                        removal: .opacity
-                    ))
-            }
-        }
-        .animation(motion.animation(isFocused ? Motion.leave : Motion.focusOut), value: isFocused)
-        .allowsHitTesting(false)
+        FocusRing(isFocused: isFocused, shape: Capsule(style: .circular))
     }
 }
 
@@ -285,17 +272,25 @@ public struct CapsuleSegmentedControl<Value: Hashable>: View {
 /// A neutral chip: SF Mono text on the `field` fill (commit IDs).
 public struct MonoChip<Accessory: View>: View {
     private let text: String
+    private let isSelectable: Bool
     private let accessory: Accessory
 
-    public init(_ text: String, @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
+    /// - Parameter isSelectable: Whether its text can be selected and
+    ///   copied (`SelectableText`).
+    public init(_ text: String, isSelectable: Bool = false, @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
         self.text = text
+        self.isSelectable = isSelectable
         self.accessory = accessory()
     }
 
     public var body: some View {
         HStack(spacing: 5) {
-            Text(text)
-                .font(Typography.sha)
+            if isSelectable {
+                SelectableText(text, font: AppKitTypography.sha, color: Palette.text2)
+            } else {
+                Text(text)
+                    .font(Typography.sha)
+            }
             accessory
         }
         .foregroundStyle(.text2)

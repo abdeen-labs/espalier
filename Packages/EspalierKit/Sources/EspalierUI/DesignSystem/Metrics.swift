@@ -469,4 +469,12 @@ public enum Timing {
     /// VoiceOver hears how many items a filter matches once its text has
     /// been still this long.
     public static let filterResultsAnnouncement: Duration = .seconds(1)
+    /// Hovering a menu item this long opens its submenu.
+    public static let submenuHover: Duration = .milliseconds(200)
+    /// While the pointer heads for an open submenu, the item it passes
+    /// over takes the highlight only once it has rested this long.
+    public static let submenuSettle: Duration = .milliseconds(300)
+    /// Typing selects a menu item by its title's start; a pause this long
+    /// starts a new prefix.
+    public static let menuTypeSelect: Duration = .seconds(1)
 }

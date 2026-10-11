@@ -253,8 +253,8 @@ struct PublishRepositoryForm: View {
                         }
                     }
                 ), title: "@\(account.login) – \(account.friendlyEndpoint)") {
-                    ForEach(accounts, id: \.self) { account in
-                        Text("@\(account.login) – \(account.friendlyEndpoint)").tag(AccountKey(account))
+                    for account in accounts {
+                        MenuChoice("@\(account.login) – \(account.friendlyEndpoint)", value: AccountKey(account))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -275,9 +275,9 @@ struct PublishRepositoryForm: View {
                 .toggleStyle(.checkboxMark)
             LabeledContent("Organization") {
                 CapsulePopUp("Organization", selection: $model.organizationID, title: organizationTitle) {
-                    Text("None").tag(Int?.none)
-                    ForEach(model.organizations, id: \.id) { organization in
-                        Text(organization.login).tag(Optional(organization.id))
+                    MenuChoice("None", value: Int?.none)
+                    for organization in model.organizations {
+                        MenuChoice(organization.login, value: Optional(organization.id))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

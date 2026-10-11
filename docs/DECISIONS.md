@@ -45,7 +45,13 @@ reason.
   means the same thing.
 - **Espalier draws its own UI** (my call): every control, list, and surface
   is Espalier's own design, never a stock SwiftUI or AppKit look. Simple,
-  clean, and modern, with personality; `docs/DESIGN.md` is the look.
+  clean, and modern, with personality; `docs/DESIGN.md` is the look. No
+  stock macOS or SwiftUI elements, within reason (my call): not the
+  system's own pieces, such as the traffic lights or Quick Look. The
+  window's chrome stays macOS's: the traffic lights, the toolbar, and the
+  split view (my call: "just undo the chrome thing"). So do the open and
+  save panels (my call): Espalier's own chooser needed privacy permissions
+  the system's panels don't.
 - **History has a simple mode** (my call; desktop has none), the default for a
   new install: the graph overwhelms anyone who doesn't know what they're
   looking at.
@@ -413,6 +419,21 @@ immediately; importing desktop's repository list and settings (my call).
   numbers fixed. A wrapped line continues at its indent plus two columns.
 - **A large diff shows no counts until it's shown.** The whitespace hint's
   buttons are Cancel and Show Whitespace (desktop: No and Yes).
+- **Find in the diff is Espalier's own bar,** a floating capsule where
+  desktop's search box hangs, at the diff's top trailing corner: it floats
+  over the diff rather than pushing it down, and the current match scrolls
+  clear of it. It searches as it's typed in (desktop searched on Return),
+  literally and ignoring case as desktop's does, context lines counting on
+  both sides when split; a query of only spaces finds nothing. It stays
+  open when focus leaves it (desktop closed it on blur), so ⌘G and ⇧⌘G go
+  on from the diff or the file list. Escape in it or in the diff, or Done,
+  closes it and selects the current match in the diff, which takes focus.
+  ⌘G and ⇧⌘G with it closed reopen it on the next or previous match from
+  the selection; Use Selection for Find searches for the selection's first
+  line. It stays open from file to file, each opening at its first match,
+  and the current match stays on its line through Unified ↔ Split and
+  expanding. Past 10,000 matches the count says "10,000+" and the rest
+  aren't found.
 
 **History**
 
@@ -526,7 +547,8 @@ immediately; importing desktop's repository list and settings (my call).
 - **Pull request links check the pull request out.**
 - **Pull requests have their own symbol** (desktop's reads as a figure at
   small sizes) and drafts a Draft tag. A check's step row opens the step.
-  Preview Pull Request resizes, from 760 × 480.
+- **Preview Pull Request fills the window** less its 40-point margins, as
+  desktop's dialog does.
 
 ## GitHubKit
 
@@ -830,6 +852,23 @@ immediately; importing desktop's repository list and settings (my call).
 - **No focus ring over a selection** (my call): History's commit and file
   rows, and the diff's line cursor, show only their accent tint, focused or
   not.
+- **Every control's focus ring is Espalier's,** with keyboard navigation on
+  as before: capsules, symbol and bare buttons, menu buttons, pop-ups,
+  steppers, switches, checkboxes (AppKit's included), choice lists, the
+  segmented control, fields, links, and the slider. A list of choices is
+  one stop, ringing its chosen row or mark.
+- **Links are the accent, deepened to read as text** (`Palette.link`, 4.5:1;
+  6:1 under Increase Contrast), where AppKit's link color was its own
+  blue. Links in text underline while the pointer is anywhere on their
+  text: a text's links can't each track the pointer.
+- **The slider's arrows step 1% of its range,** Page Up and Page Down 10%,
+  Home and End to the ends. Desktop's range inputs stepped 0.1%, too fine
+  to see.
+- **A branch folder's whole row opens and closes it,** not only its
+  chevron; → and ← open and close it while the row has keyboard focus
+  (folder rows can't be selected).
+- **A drag of commits is one dragging item** carrying them all, so its
+  image is Espalier's stack with its own count, not the system's badge.
 - **The commit message card shows which field has focus with its own
   tint** (my call, over an accent bar beside the field): a soft accent
   filling the summary's or the description's whole part of the card, edge
@@ -841,6 +880,25 @@ immediately; importing desktop's repository list and settings (my call).
   instead of bouncing.
 - **No system selection highlight anywhere** (my call): every list's rows
   draw their own selection in the row's rounded shape, focused or not.
+- **The insertion point is the accent,** as the selection is: it's where
+  the user's own changes go.
+- **No text popups of the system's:** automatic spelling correction and
+  its bubbles, text replacement, text completion, inline predictions, math
+  results, and Writing Tools are off in every text view and field editor,
+  SwiftUI's included, since they show only as the system's UI. Smart
+  quotes and dashes stay as each field had them. Spell checking stays, and
+  Check Spelling While Typing is still remembered: the system's checker
+  finds the words, and Espalier draws the mark.
+- **Text views are on TextKit 1,** SwiftUI's text fields' editors included
+  (moved when they take focus): only there can Espalier draw the selection
+  where the text doesn't have focus, and the spelling marks.
+- **Selectable text keeps one selection at a time,** as desktop's page
+  does: another view taking focus clears it. It copies plain text, and
+  output added at its end keeps the selection.
+- **Every scroll view gets Espalier's scroller as it joins a window,**
+  through one hook on scroll views set at launch, so SwiftUI's scroll
+  views, lists, and text views, and those to come, are covered; scroll
+  views made in code also ask for it.
 - **Four corner radii:** 5 for checkboxes and key caps, 9 for rows, 14 for
   cards, 22 for sheets and popovers.
 - **A card in a pane has a ring and no shadow;** only what floats casts
@@ -850,6 +908,71 @@ immediately; importing desktop's repository list and settings (my call).
 - **A disabled control fades to 45%.**
 - **Every checkbox, pop-up, switch, and button is Espalier's,** sheets and
   forms included.
+- **Password fields keep macOS's dots and caps-lock indicator** (my call),
+  in Espalier's capsule.
+- **Menus are Espalier's card,** in a panel of their own that can reach
+  past the window. A pull-down's and a pop-up's open below their button (a
+  pop-up's at least as wide as its capsule, not over it); a context menu's
+  at the pointer. A click outside closes a menu and does nothing else, but
+  a right-click on another view with a context menu opens that menu. A
+  menu closes when its window moves, resizes, or closes, and when Espalier
+  goes to the background. The window keeps its focus while one is open.
+- **Text's editing menu is Espalier's card,** in every field and text
+  view: the field's own items first (the commit message's), then Cut,
+  Copy, Paste, and Select All as the text enables them (Copy and Select
+  All in text that can only be selected; no Cut or Copy in a secure
+  field), then, in editable text, a misspelled word's guesses, Ignore
+  Spelling, Learn Spelling, and Check Spelling While Typing. Look Up,
+  Translate, Services, Writing Tools, the Substitutions, Transformations,
+  and Speech submenus, Font, and AutoFill are left out: only the system can
+  show them. A context click outside the selection selects the word under
+  the pointer, and a field takes focus, as AppKit's did.
+- **Completions show in Espalier's suggestion list** (AppKit's completion
+  window in the commit message and the co-authors field, SwiftUI's
+  suggestion menu in Add Worktree's Branch Name): the menu card under the
+  word being completed, its text lined up with the word's, or under the
+  field, as wide as it. ↑ and ↓ move, Return or Tab accepts, Escape
+  closes, typing goes on filtering, and a click accepts; focus stays in
+  the text. The suggestions and what accepting one inserts are as before.
+  A login just put in the co-authors field shows no list again until more
+  is typed (AppKit's window reopened for it).
+- **A context menu's row shows a ring in the accent** while its menu is
+  open (AppKit drew an outline), in the SwiftUI lists and the AppKit tables
+  alike; the menu acts on the selection when that row is in it, else on the
+  row alone, as desktop's. The diff's lines show none: its menus act on a
+  line's changes or on the text.
+- **Popovers are Espalier's card, with no arrow** (macOS's pointed at its
+  control): centered beside the control, a small gap away, on the other
+  side when there's no room, in a panel of their own that can reach past
+  the window and floats above a sheet's card. A click outside closes one
+  and does nothing else, a click on its control included; so do Escape,
+  Espalier going to the background, the menu bar opening, and the window
+  moving, resizing, or closing. Menus opened in a popover come first.
+- **A popover takes the keys when it has a field, the keyboard opened it,
+  or VoiceOver runs;** opened with a click, one of text and buttons leaves
+  the window focused, and a click on a field in it moves focus there.
+  Closing gives focus back to the window.
+- **The menus act on the main window while its popover has the keys,** as
+  they did with macOS's popovers, which were part of the window; a
+  sheet's popover leaves them off, as the sheet does.
+- **⌘T and ⌘B close their popovers while they're open,** as desktop's
+  foldouts toggle.
+- **Tooltips are Espalier's card,** in a panel of their own; the system's
+  are off for the whole app (their delay is longer than anyone rests), so
+  none can show. The card takes a row's radius, 9: a card's 14 is nearly
+  round on one line. One shows once the pointer rests 0.8 s (desktop's
+  waited 0.4 s), the next after 0.1 s while one has shown in the last
+  second. A click, a key press, or a scroll hides it until the pointer
+  moves off the view. VoiceOver hears a tooltip as the view's hint (an
+  AppKit view's help), as it heard the system's. They show for the
+  pointer only, as the system's did; desktop also shows some for keyboard
+  focus.
+- **No expansion tooltips:** AppKit's were never on, and rows that cut a
+  name or path off have it in their tooltip, shown whether or not it's cut
+  off; desktop shows branch, pull request, check, worktree, and repository
+  names only when they're cut off.
+- **A stash's unavailable Restore says why under its title** (it was the
+  item's tooltip).
 - **Changes' rows show lines added and removed against HEAD** (desktop has
   none), staged and unstaged together; binary files, submodules, and
   conflicted files show none, and none load past 1,000 files.
@@ -896,6 +1019,21 @@ immediately; importing desktop's repository list and settings (my call).
   while Settings or About is key they stay off.
 - **Alerts and sheets shown while Espalier is inactive** beep and bounce the
   Dock icon.
+- **Sheets and alerts are cards in the window,** centered as desktop
+  centers its dialogs, over a scrim that dims the whole window in its own
+  corners. A card opened over another stacks above it and dims it too.
+  The window behind takes no clicks, its title bar and window buttons
+  included; Minimize, Zoom, and Full Screen in the menus still act on it.
+- **A card taller than its window scrolls inside the card,** 40 points from
+  the window's edges.
+- **An alert's default button is the prominent capsule, destructive or
+  not,** as in the compact confirmation sheets. Return presses it; Escape
+  and ⌘. press the cancel button, or an alert's only button, and do
+  nothing in an alert whose buttons all act.
+- **An alert with no window to cover** (the quit guard while the main
+  window is hidden or minimized) is its card alone, centered on the active
+  screen, and holds the app until answered.
+- **VoiceOver can't reach a window behind a sheet or an alert.**
 - **A link that needs a clone waits** for the sheets and alerts in front of
   it and for the welcome flow; links queue in order.
 - **`espalier` takes options anywhere,** in minimist's forms; `--` ends them.
@@ -918,7 +1056,8 @@ immediately; importing desktop's repository list and settings (my call).
 - **VoiceOver hears how many items a filter matches** ("No results", "1
   result", "12 results") once its text has been still for 1 s: the branch
   picker, the repository popover, the sidebar filter, the toolbar search,
-  and Clone's list.
+  Clone's list, and find in the diff. Moving between the diff's matches
+  says which is current, as desktop's does ("Result 2 of 5 for "tip"").
 - **A commit is announced** "Committing" (or "Amending last commit") once
   git runs, not on the button press, so a cancelled question says nothing;
   then "Committed to main" ("Committed" on a detached HEAD, "Amended last
@@ -928,9 +1067,10 @@ immediately; importing desktop's repository list and settings (my call).
   progress ended, a failure included, and a background fetch said "fetch
   complete".
 - **⇧F10 opens a list's context menu** at its selected row, in Changes'
-  files, History, a commit's files, and the sidebar; VoiceOver's Show Menu
-  (VO-⇧-M) opens the same menu. No menu item holds it, so Keyboard
-  Shortcuts lists it under Lists.
+  files, History, a commit's files, and the sidebar, and the diff's text
+  menu at its line cursor; VoiceOver's Show Menu (VO-⇧-M) opens the same
+  menu, on a diff line too. No menu item holds it, so Keyboard Shortcuts
+  lists it under Lists.
 - **A choice's description is its VoiceOver hint** in radio lists and
   choice cards.
 - **Setting AXSelected on a Changes file's cell selects that file alone,**
@@ -955,7 +1095,8 @@ voice:
   addresses private").
 - Left as they are: git's own output, strings matched against git's or
   GitHub's output, AI prompts, logs, GitHub's push-protection bypass
-  wording, and AppKit's "Do not show this message again".
+  wording, and alerts' "Do not show this message again" (AppKit's
+  wording).
 
 ## Tests
 

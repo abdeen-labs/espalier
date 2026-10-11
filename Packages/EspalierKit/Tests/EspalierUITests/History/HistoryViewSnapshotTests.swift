@@ -218,7 +218,7 @@ struct HistoryViewSnapshotTests {
         #expect(CommitFilesSummary(fileCount: 1, linesAdded: 0, linesDeleted: 0).title == "1 changed file")
     }
 
-    @Test("a commit's files work as a Mac list: ⇧F10 pops up the selected file's menu at it, typing selects by name, Return opens the file")
+    @Test("a commit's files work as a Mac list: ⇧F10 opens the selected file's menu at it, a right-click another file's, ringing it; typing selects by name, Return opens the file")
     func filesKeyboard() throws {
         let files = ["a.swift", "b.swift", "c.swift"].enumerated().map { index, path in
             HistoryFileContent(file: CommittedFileRowContent(id: "\(index)", path: path, status: .modified))
@@ -228,9 +228,9 @@ struct HistoryViewSnapshotTests {
             select: { recorder.selected.append($0) },
             open: { recorder.opened.append($0) },
             menu: { id in
-                let menu = NSMenu()
-                menu.addItem(withTitle: "Open \(id)", action: nil, keyEquivalent: "")
-                return menu
+                MenuContent {
+                    MenuAction("Open \(id)") {}
+                }
             }
         )
         let list = HistoryFileList(files: files, selection: "1", actions: actions)
@@ -241,9 +241,15 @@ struct HistoryViewSnapshotTests {
         #expect(table.selectedRow == 1)
 
         window.makeFirstResponder(table)
-        let popped = PoppedUpMenus()
-        #expect(KeyboardContextMenu.handle(try f10KeyDown(in: window), in: window, present: popped.present))
-        #expect(popped.popups.first?.titles == ["Open 1"])
+        let menus = MenuRecorder()
+        #expect(KeyboardContextMenu.handle(try f10KeyDown(in: window), in: window, presenter: menus.menuPresenter))
+        #expect(menus.popups.first?.titles == ["Open 1"])
+        #expect(table.contextMenuTarget.row == 1)
+        menus.popups.first?.close()
+        #expect(ContextMenuRegions.openMenu(for: try rightClick(row: 2, in: table), presenter: menus.menuPresenter))
+        #expect(menus.popups.last?.titles == ["Open 2"])
+        #expect(table.contextMenuTarget.row == 2)
+        #expect(table.selectedRow == 1)
 
         #expect(controller.tableView(table, typeSelectStringFor: nil, row: 2) == "c.swift")
         #expect(controller.openSelection())

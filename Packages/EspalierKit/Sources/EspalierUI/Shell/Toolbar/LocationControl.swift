@@ -207,7 +207,7 @@ public struct LocationControlView: View {
                         .lineLimit(1)
                 }
             }
-            .help(state.repositoryTooltip ?? state.repositoryTitle)
+            .tooltip(state.repositoryTooltip ?? state.repositoryTitle)
             .accessibilityLabel("Repository: \(state.repositoryTitle)")
 
             if let branchTitle = state.branchTitle {
@@ -244,7 +244,7 @@ public struct LocationControlView: View {
                     }
                 }
                 .disabled(!state.isBranchEnabled)
-                .help(state.branchTooltip ?? branchTitle)
+                .tooltip(state.branchTooltip ?? branchTitle)
                 .accessibilityLabel("Branch: \(branchTitle)")
             }
         }
@@ -283,9 +283,9 @@ private struct LocationSegment<Label: View>: View {
                         .padding(.vertical, 3)
                 }
                 .contentShape(Capsule(style: .circular))
-                .opacity(isEnabled ? 1 : Palette.disabledOpacity)
         }
-        .buttonStyle(.plain)
+        // Fades the label while disabled.
+        .buttonStyle(.bare(.capsule))
         .onHover { isHovered = $0 }
     }
 }
@@ -318,7 +318,7 @@ struct LocationControl: View {
         .onChange(of: control.measuredTitles, initial: true) {
             shownTitles = ShownTitles(repository: control.repositoryTitle, branch: control.branchTitle)
         }
-        .popover(isPresented: $state.isRepositoryPopoverPresented, arrowEdge: .bottom) {
+        .popoverCard(isPresented: $state.isRepositoryPopoverPresented, title: "Repositories") {
             RepositoryPopover()
                 .windowEnvironment(context)
         }
@@ -326,21 +326,21 @@ struct LocationControl: View {
             // The branch popover anchors on the control.
             Color.clear
                 .allowsHitTesting(false)
-                .popover(isPresented: $state.isBranchPopoverPresented, arrowEdge: .bottom) {
+                .popoverCard(isPresented: $state.isBranchPopoverPresented, title: "Branches") {
                     if let repository = context.repository {
                         BranchPopover(repository: repository)
                             .windowEnvironment(context)
                     }
                 }
         }
-        .contextMenu {
-            if case .branch(let name) = control.branch {
-                Button(ActionKind.renameBranch.title) { context.actions.perform(.renameBranch(name: name)) }
-                Button(ActionKind.copyBranchName.title) { context.actions.perform(.copyBranchName(name: name)) }
-                Button(ActionKind.viewBranchOnGitHub.title) { context.actions.perform(.viewBranchOnGitHub(name: name)) }
-                Button(ActionKind.viewPullRequestOnGitHub.title) { context.actions.perform(.viewPullRequestOnGitHub(number: nil)) }
-                Divider()
-                Button(ActionKind.deleteBranch.title) { context.actions.perform(.deleteBranch(name: name)) }
+        .contextMenuCard { [context] in
+            if case .branch(let name) = LocationControlState.make(context.app).branch {
+                MenuAction(ActionKind.renameBranch.title) { context.actions.perform(.renameBranch(name: name)) }
+                MenuAction(ActionKind.copyBranchName.title) { context.actions.perform(.copyBranchName(name: name)) }
+                MenuAction(ActionKind.viewBranchOnGitHub.title) { context.actions.perform(.viewBranchOnGitHub(name: name)) }
+                MenuAction(ActionKind.viewPullRequestOnGitHub.title) { context.actions.perform(.viewPullRequestOnGitHub(number: nil)) }
+                MenuDivider()
+                MenuAction(ActionKind.deleteBranch.title) { context.actions.perform(.deleteBranch(name: name)) }
             }
         }
     }

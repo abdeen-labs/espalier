@@ -1,8 +1,8 @@
 // Espalier's switch: a capsule 32 by 19, the accent when on and `line2` when
 // off, with a white knob, in every window, active or not. Every switch in
 // Espalier is one (Settings' rows). The switch is a button, so it joins the
-// key view loop with keyboard navigation on and Space toggles it;
-// VoiceOver sees a switch.
+// key view loop with keyboard navigation on, showing the focus ring around
+// the capsule, and Space toggles it; VoiceOver sees a switch.
 
 import AppKit
 import SwiftUI
@@ -51,21 +51,26 @@ private struct CapsuleSwitchBody: View {
 private struct CapsuleSwitchTrack: View {
     let isOn: Bool
     let toggle: () -> Void
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         Button(action: toggle) {
             EmptyView()
         }
-        .buttonStyle(CapsuleSwitchButtonStyle(isOn: isOn))
+        .buttonStyle(CapsuleSwitchButtonStyle(isOn: isOn, isFocused: isFocused))
+        .focusEffectDisabled()
+        .focused($isFocused)
     }
 }
 
-/// Draws the switch for its state, pressed and disabled included.
+/// Draws the switch for its state, pressed, focused, and disabled included.
 private struct CapsuleSwitchButtonStyle: ButtonStyle {
     let isOn: Bool
+    let isFocused: Bool
 
     func makeBody(configuration: Configuration) -> some View {
         CapsuleSwitchDrawing(isOn: isOn, isPressed: configuration.isPressed)
+            .focusRing(isFocused, in: Capsule(style: .circular))
     }
 }
 
@@ -94,7 +99,6 @@ struct CapsuleSwitchDrawing: View {
         .motion(Motion.arrive, value: isOn)
         .frame(width: size.width, height: size.height)
         .contentShape(Capsule(style: .circular))
-        .contentShape(.focusEffect, Capsule(style: .circular))
         .opacity(isEnabled ? 1 : Palette.disabledOpacity)
     }
 }

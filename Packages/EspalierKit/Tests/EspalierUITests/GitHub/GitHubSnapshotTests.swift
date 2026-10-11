@@ -2,8 +2,8 @@
 // code (light and dark), the Enterprise address with an error, and success;
 // the Accounts pane; push protection; the fork sheet's question and
 // settings; and a review's sheet. The other states differ only in words
-// (GitHubContentTests), and the alerts are NSAlerts, which show only their
-// strings.
+// (GitHubContentTests), and so do the alerts from the cards
+// ModalSnapshotTests draws.
 
 import AppKit
 import EspalierCore

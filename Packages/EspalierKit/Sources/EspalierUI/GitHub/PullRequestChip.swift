@@ -45,9 +45,9 @@ public struct PullRequestChip: View {
                 PullRequestChipLabel(content: content)
             }
             .buttonStyle(.quiet)
-            .help(content.tooltip)
+            .tooltip(content.tooltip)
             .accessibilityLabel(content.tooltip)
-            .popover(isPresented: $isPopoverPresented, arrowEdge: .bottom) {
+            .popoverCard(isPresented: $isPopoverPresented, title: "Checks for pull request \(pullRequest.pullRequestNumber)") {
                 ChecksPopover(repository: repository, pullRequest: pullRequest) {
                     isPopoverPresented = false
                 }

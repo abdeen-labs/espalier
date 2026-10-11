@@ -1,9 +1,9 @@
 // One image per layout of the confirmations, decisions, prompts, and errors
 // that Espalier draws as sheets, the toast, and the operation capsule,
-// through the same mappings the hosts use. Alerts get no pixels: they're
-// NSAlerts, which show only their strings, and WindowPresenterTests,
-// PromptPresentationTests, StateNoticesTests, and the features' content
-// tests check those. Dark only where the view draws its own colors.
+// through the same mappings the hosts use. The alert card's layouts are
+// ModalSnapshotTests'; WindowPresenterTests, PromptPresentationTests,
+// StateNoticesTests, and the features' content tests check each alert's
+// words. Dark only where the view draws its own colors.
 
 import AppKit
 import EspalierCore

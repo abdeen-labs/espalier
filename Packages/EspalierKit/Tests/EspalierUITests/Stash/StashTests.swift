@@ -143,6 +143,14 @@ struct StashTests {
         #expect(actions.canPerform(.discardStash(branch: "feature")))
         #expect(!actions.canPerform(.discardStash(branch: "nothing-here")))
         #expect(StashActions.restoreUnavailableReason(branch: "feature") == "Switch to feature to restore these changes.")
+
+        // The row menu's Restore says why it's unavailable under its title.
+        let other = StashContextMenu.content(branch: "feature", context: fixture.context).items
+        #expect(other.map(\.isEnabled) == [false, true])
+        #expect(other.first?.subtitle == "Switch to feature to restore these changes.")
+        let current = StashContextMenu.content(branch: "master", context: fixture.context).items
+        #expect(current.map(\.isEnabled) == [true, true])
+        #expect(current.first?.subtitle == nil)
     }
 
     @Test("Restore on the stash's place brings the files back and goes to Changes")

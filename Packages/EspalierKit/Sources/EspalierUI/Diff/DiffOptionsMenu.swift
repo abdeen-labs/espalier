@@ -37,31 +37,8 @@ struct DiffOptionsMenu: View {
     let actions: DiffOptionsActions
 
     var body: some View {
-        Menu {
-            Picker("Diff Display", selection: Binding(get: { content.isSplit }, set: actions.setSplit)) {
-                Text("Unified").tag(false)
-                Text("Split").tag(true)
-            }
-            .pickerStyle(.inline)
-            .labelsHidden()
-            Divider()
-            if let hidesWhitespace = content.hidesWhitespace {
-                Toggle("Hide Whitespace Changes", isOn: Binding(get: { hidesWhitespace }, set: actions.setHidesWhitespace))
-            }
-            if let wrapsLines = content.wrapsLines {
-                Toggle("Wrap Lines", isOn: Binding(get: { wrapsLines }, set: actions.setWrapsLines))
-            }
-            switch content.expansion {
-            case .expand(let isEnabled)?:
-                Divider()
-                Button("Expand Whole File", action: actions.expandWholeFile)
-                    .disabled(!isEnabled)
-            case .collapse?:
-                Divider()
-                Button("Collapse Expanded Lines", action: actions.collapseExpandedLines)
-            case nil:
-                EmptyView()
-            }
+        PullDownButton("Diff Options") { [content, actions] in
+            Self.menu(content, actions: actions)
         } label: {
             Label {
                 Text("Diff Options")
@@ -71,11 +48,39 @@ struct DiffOptionsMenu: View {
                     .foregroundStyle(.text3)
             }
         }
-        .menuStyle(.button)
         .buttonStyle(.icon)
-        .menuIndicator(.hidden)
         .fixedSize()
-        .help("Diff Options")
-        .accessibilityLabel("Diff Options")
+        .tooltip("Diff Options")
+    }
+
+    /// Unified or Split, the toggles that apply, then the expansion item.
+    @MenuBuilder
+    static func menu(_ content: DiffOptionsContent, actions: DiffOptionsActions) -> MenuContent {
+        MenuPicker(selection: Binding(get: { content.isSplit }, set: actions.setSplit)) {
+            MenuChoice("Unified", value: false)
+            MenuChoice("Split", value: true)
+        }
+        MenuDivider()
+        if let hidesWhitespace = content.hidesWhitespace {
+            MenuToggle("Hide Whitespace Changes", isOn: hidesWhitespace) {
+                actions.setHidesWhitespace(!hidesWhitespace)
+            }
+        }
+        if let wrapsLines = content.wrapsLines {
+            MenuToggle("Wrap Lines", isOn: wrapsLines) {
+                actions.setWrapsLines(!wrapsLines)
+            }
+        }
+        switch content.expansion {
+        case .expand(let isEnabled)?:
+            MenuDivider()
+            MenuAction("Expand Whole File", action: actions.expandWholeFile)
+                .disabled(!isEnabled)
+        case .collapse?:
+            MenuDivider()
+            MenuAction("Collapse Expanded Lines", action: actions.collapseExpandedLines)
+        case nil:
+            MenuContent()
+        }
     }
 }

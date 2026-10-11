@@ -156,7 +156,7 @@ public struct CommitButton: View {
             }
         }
         .controlSize(.extraLarge)
-        .help(content.help)
+        .tooltip(content.help)
         .accessibilityLabel(content.title)
     }
 

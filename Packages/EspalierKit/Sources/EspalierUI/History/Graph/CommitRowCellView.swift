@@ -314,14 +314,14 @@ final class CommitRowCellView: NSTableCellView {
             summaryLabel.stringValue = summary.title
             summaryLabel.font = AppKitTypography.row
             summaryLabel.textColor = summary.isDirty ? Palette.text : Palette.text3
-            summaryLabel.toolTip = nil
+            summaryLabel.setTooltip(nil)
             detailLabel.stringValue = summary.detail ?? ""
             detailLabel.isHidden = summary.detail == nil
             warningView.isHidden = summary.conflictedFiles == 0
             refsView.refs = []
             unpushedView.isHidden = true
             avatarView.isHidden = true
-            avatarView.toolTip = nil
+            avatarView.setTooltip(nil)
             dateLabel.isHidden = true
             shortIDLabel.isHidden = true
             avatarView.show(nil, pointSize: Metrics.CommitRow.rowAvatarSize, avatars: nil, monograms: monograms, scale: scale)
@@ -329,17 +329,17 @@ final class CommitRowCellView: NSTableCellView {
             summaryLabel.stringValue = content.displaySummary
             summaryLabel.font = CommitRowParts.titleFont(isCurrentTip: content.isCurrentTip)
             summaryLabel.textColor = content.summary.isEmpty || content.isMerge ? Palette.text3 : Palette.text
-            summaryLabel.toolTip = content.displaySummary
+            summaryLabel.setTooltip(content.displaySummary)
             detailLabel.isHidden = true
             warningView.isHidden = true
             refsView.refs = content.refs
             unpushedView.isHidden = content.unpushedTooltip == nil
-            unpushedView.toolTip = content.unpushedTooltip
-            avatarView.toolTip = content.authorTooltip
+            unpushedView.setTooltip(content.unpushedTooltip)
+            avatarView.setTooltip(content.authorTooltip)
             dateLabel.stringValue = content.shortDate
-            dateLabel.toolTip = content.dateTooltip
+            dateLabel.setTooltip(content.dateTooltip)
             shortIDLabel.stringValue = content.shortSHA
-            shortIDLabel.toolTip = content.sha
+            shortIDLabel.setTooltip(content.sha)
             avatarView.isHidden = false
             dateLabel.isHidden = false
             shortIDLabel.isHidden = false
@@ -363,7 +363,7 @@ final class CommitRowCellView: NSTableCellView {
         content.shortDate = short
         content.dateTooltip = tooltip
         dateLabel.stringValue = short
-        dateLabel.toolTip = tooltip
+        dateLabel.setTooltip(tooltip)
     }
 
     // MARK: Selection

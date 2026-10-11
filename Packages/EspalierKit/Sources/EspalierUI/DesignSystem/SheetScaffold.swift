@@ -1,8 +1,8 @@
 // The frame Espalier's sheets share: the title and an optional line under
 // it, the content, and the buttons, on the flat `background`. Cancel is a
-// secondary capsule, the default button the prominent one; the window's
-// sheet takes the sheet radius (22) where macOS lets a presentation choose
-// it.
+// secondary capsule, the default button the prominent one. `ModalPresenter`
+// shows it in a card on the window's modal layer, named by the title for
+// VoiceOver.
 
 import AppKit
 import SwiftUI
@@ -84,6 +84,7 @@ public struct SheetScaffold<Content: View, Buttons: View>: View {
         .padding(Metrics.Sheet.padding)
         .frame(width: width, alignment: .leading)
         .background(Color(espalier: Palette.background))
+        .modalTitle(title)
     }
 }
 
@@ -136,7 +137,7 @@ public struct SheetButtons: View {
             .buttonStyle(.prominent)
             .keyboardShortcut(.defaultAction)
             .disabled(isConfirmDisabled || isWorking)
-            .help(confirmHelp ?? "")
+            .tooltip(confirmHelp)
     }
 }
 
@@ -154,22 +155,5 @@ public struct FieldLabel: View {
             .font(Typography.fieldLabel)
             .foregroundStyle(.text2)
             .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-extension View {
-    /// A sheet's presentation: the sheet radius and the flat `background`,
-    /// where macOS lets the presentation choose them. `ModalPresenter`
-    /// applies it to every sheet.
-    public func sheetPresentation() -> some View {
-        presentationCornerRadius(Metrics.Radius.sheet)
-            .presentationBackground(Color(espalier: Palette.background))
-    }
-
-    /// A popover with Espalier's look: the flat `background` and the sheet
-    /// radius (22), where macOS lets the presentation choose them.
-    public func flatPopoverPresentation() -> some View {
-        presentationCornerRadius(Metrics.Radius.sheet)
-            .presentationBackground(Color(espalier: Palette.background))
     }
 }

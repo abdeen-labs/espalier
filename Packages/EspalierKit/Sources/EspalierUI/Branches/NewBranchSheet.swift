@@ -357,7 +357,7 @@ public struct NewBranchSheet: View {
             baseView
             if content.showsForkBehaviorLink, let onForkBehavior {
                 // The link inside the sentence, so the sentence wraps as one.
-                Text(Self.forkBehaviorSentence)
+                LinkedText(Self.forkBehaviorSentence)
                     .font(Typography.meta)
                     .foregroundStyle(.text3)
                     .fixedSize(horizontal: false, vertical: true)

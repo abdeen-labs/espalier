@@ -43,7 +43,7 @@ struct SimpleListActions {
     var setExpanded: (_ row: Int, _ expanded: Bool) -> Void = { _, _ in }
     /// The context menu for commits (the selection, or the one clicked)
     /// and the one clicked.
-    var menu: (_ shas: [String], _ clicked: String) -> NSMenu? = { _, _ in nil }
+    var menu: (_ shas: [String], _ clicked: String) -> MenuContent? = { _, _ in nil }
     /// The payload for dragging commits out; nil refuses the drag.
     var dragPayload: (_ shas: [String]) -> CommitDragPayload? = { _ in nil }
     var dragBegan: (_ payload: CommitDragPayload) -> Void = { _ in }
@@ -155,6 +155,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         tableView.addTableColumn(column)
         tableView.headerView = nil
         tableView.style = .plain
+        tableView.focusRingType = .none
         tableView.usesAutomaticRowHeights = false
         tableView.rowHeight = rowHeight
         tableView.intercellSpacing = .zero
@@ -179,6 +180,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
+        scrollView.useEspalierScrollers()
         scrollView.drawsBackground = true
         scrollView.backgroundColor = Palette.background
         scrollView.contentView.postsBoundsChangedNotifications = true
@@ -490,6 +492,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         let rowView = tableView.makeView(withIdentifier: SimpleRowView.identifier, owner: self) as? SimpleRowView ?? SimpleRowView(frame: .zero)
         rowView.dropFeedback = feedback(forRow: row)
+        rowView.isContextMenuTarget = self.tableView.contextMenuTarget.isTarget(row)
         return rowView
     }
 
@@ -925,20 +928,19 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         guard presentation.allowsDragging, sha(atTableRow: row) != nil else {
             return nil
         }
-        let rows = tableView.selectedRowIndexes.contains(row) ? Array(tableView.selectedRowIndexes) : [row]
+        let candidates = tableView.selectedRowIndexes.contains(row) ? Array(tableView.selectedRowIndexes) : [row]
+        let rows = candidates.filter { sha(atTableRow: $0) != nil }
+        // One dragging item, as the graph's (`CommitDragImage`).
+        guard row == rows.first else {
+            return nil
+        }
         return actions.dragPayload(rows.compactMap(sha(atTableRow:)))?.pasteboardItem()
     }
 
     func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint, forRowIndexes rowIndexes: IndexSet) {
-        session.draggingFormation = .stack
-        var index = 0
-        session.enumerateDraggingItems(options: [], for: tableView, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, _, _ in
-            if index >= 3 {
-                item.imageComponentsProvider = { [] }
-            }
-            index += 1
-        }
-        if let payload = CommitDragPayload.read(from: session.draggingPasteboard) {
+        let payload = CommitDragPayload.read(from: session.draggingPasteboard)
+        CommitDragImage.apply(to: session, in: tableView, at: screenPoint, rows: rowIndexes, count: payload?.shas.count ?? rowIndexes.count)
+        if let payload {
             actions.dragBegan(payload)
             watchDragEnd()
         }
@@ -1020,7 +1022,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     /// The context menu for a click on `row`: the selection when the row is
     /// in it, else the row alone.
-    func menu(forClickedRow row: Int) -> NSMenu? {
+    func menu(forClickedRow row: Int) -> MenuContent? {
         guard let clicked = sha(atTableRow: row) else {
             return nil
         }

@@ -3,7 +3,8 @@
 // leaves or swaps, 0.25 s ease-in-out for scrolls; hover fades in over
 // 0.08 s and out over 0.15 s; a press shows at once and eases back over
 // 0.15 s; a spinner's arc turns once every 0.9 s, and an indeterminate bar
-// sweeps every 1.4 s. One answer to "animate?": never with Reduce Motion on (hover and
+// sweeps every 1.4 s; a scroller's knob stays 0.8 s after scrolling stops.
+// One answer to "animate?": never with Reduce Motion on (hover and
 // press included), never in a window that isn't on screen (snapshots and
 // tests draw offscreen), and never where motion is turned off (snapshots).
 // Motion never changes a result: models update at once, and only drawing
@@ -39,6 +40,9 @@ public enum Motion {
     nonisolated public static let mark: TimeInterval = 0.12
     /// A focus ring fades out.
     nonisolated public static let focusOut: TimeInterval = 0.1
+    /// A menu fades and grows in from its anchor (it fades out over
+    /// `leave`).
+    nonisolated public static let menuArrive: TimeInterval = 0.1
     /// A focus ring settles from this scale to 1 as it fades in.
     nonisolated public static let focusRingScale: CGFloat = 1.04
     /// How long a copy button shows its check.
@@ -48,6 +52,9 @@ public enum Motion {
     /// One sweep of an indeterminate progress bar's segment, eased in and
     /// out.
     nonisolated public static let sweep: TimeInterval = 1.4
+    /// How long a scroller's knob stays after scrolling stops, before it
+    /// fades out.
+    nonisolated public static let scrollerLinger: TimeInterval = 0.8
 
     // MARK: The curve
 

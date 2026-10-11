@@ -322,9 +322,7 @@ struct PullRequestOverviewView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
             HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
-                Text(content.title)
-                    .font(Typography.commitSummary)
-                    .textSelection(.enabled)
+                SelectableText(content.title, font: AppKitTypography.commitSummary, color: .labelColor)
                     .fixedSize(horizontal: false, vertical: true)
                 if content.isDraft {
                     QuietCapsule("Draft")
@@ -446,7 +444,7 @@ struct QuietCapsule: View {
             .padding(.horizontal, Metrics.RefCapsule.horizontalPadding)
             .frame(height: Metrics.RefCapsule.height)
             .background(Capsule(style: .circular).fill(Color(espalier: Palette.field)))
-            .help(text)
+            .tooltip(text)
     }
 }
 
@@ -600,6 +598,7 @@ struct ChangedFilesList: View {
                         ForEach(files, id: \.id) { file in
                             ChangedFileRow(content: ChangedFileRowContent(file))
                                 .selectableRow(isSelected: file.id == selection.file?.id)
+                                .contextMenuRow(file.id)
                                 .tag(file.id)
                                 .listRowInsets(Metrics.ListRow.insets(isFirst: file.id == files.first?.id, isLast: file.id == files.last?.id))
                                 .listRowSeparator(.hidden)
@@ -608,9 +607,9 @@ struct ChangedFilesList: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
-                    .contextMenu(forSelectionType: String.self) { ids in
+                    .contextMenuCard(forSelectionType: String.self, selection: selection.file.map { [$0.id] } ?? []) { [context, menuContent] ids in
                         if let menuContent, let id = ids.first, let file = changeset.files.first(where: { $0.id == id }) {
-                            CommittedFileContextMenu(content: menuContent(file))
+                            CommittedFileContextMenu.content(menuContent(file), context: context)
                         }
                     } primaryAction: { ids in
                         if let repositoryPath, let id = ids.first, let file = changeset.files.first(where: { $0.id == id }) {
@@ -718,7 +717,7 @@ struct ChangedFileRow: View {
                     .truncationMode(.head)
             }
         }
-        .help(content.oldPath.map { "\($0) → \(content.path)" } ?? content.path)
+        .tooltip(content.oldPath.map { "\($0) → \(content.path)" } ?? content.path)
         .accessibilityElement(children: .combine)
     }
 }

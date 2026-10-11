@@ -4,7 +4,9 @@
 // Graphics for tables that draw their rows (the diff's hunk headers), an
 // `NSButton` for AppKit rows and headers (a checkbox to VoiceOver, mixed
 // state included), and a SwiftUI view, which a `Toggle` takes with the
-// `.checkboxMark` style. Every checkbox in Espalier is one of them.
+// `.checkboxMark` style. Every checkbox in Espalier is one of them. With
+// keyboard focus, the AppKit and SwiftUI ones show Espalier's focus ring
+// around the box.
 
 import AppKit
 import SwiftUI
@@ -128,10 +130,28 @@ public enum CheckboxDrawing {
 
 /// A checkbox as an AppKit button: Espalier's box, then its title. It
 /// stays an `NSButton` of the switch type, so it's a checkbox to VoiceOver
-/// (mixed included) and keeps the target, action, and state of one.
+/// (mixed included) and keeps the target, action, and state of one. While
+/// it has keyboard focus, Espalier's ring shows around the box.
 public final class CheckboxButton: NSButton {
     /// Space between the box and the title.
     static let titleSpacing = Metrics.Checkbox.titleSpacing
+
+    /// The focus ring around the box.
+    private let focusRing = AppKitFocusRing()
+
+    /// Shows the focus ring (true) or hides it (false) whatever the focus;
+    /// nil follows the focus. Tests set it, as they can't give a button
+    /// keyboard focus.
+    var focusRingOverride: Bool? {
+        didSet {
+            updateFocusRing()
+        }
+    }
+
+    /// The focus ring's frame while it shows.
+    var focusRingFrame: CGRect? {
+        focusRing.frame
+    }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -139,6 +159,8 @@ public final class CheckboxButton: NSButton {
         title = ""
         allowsMixedState = true
         isBordered = false
+        focusRingType = .none
+        wantsLayer = true
     }
 
     /// A checkbox titled `title` that sends `action` to `target`.
@@ -284,6 +306,40 @@ public final class CheckboxButton: NSButton {
         if window == nil {
             endChange()
         }
+        updateFocusRing()
+    }
+
+    // MARK: The focus ring
+
+    public override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became {
+            updateFocusRing(isFocused: true)
+        }
+        return became
+    }
+
+    public override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned {
+            updateFocusRing(isFocused: false)
+        }
+        return resigned
+    }
+
+    public override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        updateFocusRing()
+    }
+
+    /// Shows the ring around the box while the button is the first
+    /// responder (`isFocused`, when it's changing), or as overridden.
+    private func updateFocusRing(isFocused: Bool? = nil) {
+        let isShown = focusRingOverride ?? isFocused ?? (window?.firstResponder === self)
+        guard isShown || focusRing.isShown else {
+            return
+        }
+        focusRing.update(isShown, around: boxRect, cornerRadius: Metrics.Radius.small, in: self)
     }
 
     public override func draw(_ dirtyRect: NSRect) {
@@ -313,18 +369,10 @@ public final class CheckboxButton: NSButton {
         shown.draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
-    public override var focusRingMaskBounds: NSRect {
-        boxRect
-    }
-
-    public override func drawFocusRingMask() {
-        let radius = Metrics.Radius.small
-        NSBezierPath(roundedRect: boxRect, xRadius: radius, yRadius: radius).fill()
-    }
-
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         needsDisplay = true
+        updateFocusRing()
     }
 }
 
@@ -369,8 +417,9 @@ public struct CheckboxMark: View {
 
 /// Espalier's checkbox for a SwiftUI `Toggle`: the box, then the label
 /// beside its first line. The two are one button, so a click on either
-/// toggles it, it joins the key view loop with keyboard navigation on, and
-/// Space toggles it; VoiceOver sees a checkbox.
+/// toggles it, it joins the key view loop with keyboard navigation on (the
+/// focus ring around the box), and Space toggles it; VoiceOver sees a
+/// checkbox.
 public struct CheckboxMarkToggleStyle: ToggleStyle {
     public init() {}
 
@@ -387,6 +436,7 @@ extension ToggleStyle where Self == CheckboxMarkToggleStyle {
 /// The toggle as a button, and what VoiceOver sees of it.
 private struct CheckboxToggleBody: View {
     let configuration: ToggleStyleConfiguration
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         Button {
@@ -394,7 +444,9 @@ private struct CheckboxToggleBody: View {
         } label: {
             configuration.label
         }
-        .buttonStyle(CheckboxToggleButtonStyle(state: state))
+        .buttonStyle(CheckboxToggleButtonStyle(state: state, isFocused: isFocused))
+        .focusEffectDisabled()
+        .focused($isFocused)
         .accessibilityRepresentation {
             Toggle(isOn: configuration.$isOn) {
                 configuration.label
@@ -411,12 +463,14 @@ private struct CheckboxToggleBody: View {
     }
 }
 
-/// Draws the box for its state, darker while pressed, then the label.
+/// Draws the box for its state, darker while pressed and ringed while
+/// focused, then the label.
 private struct CheckboxToggleButtonStyle: ButtonStyle {
     let state: CheckboxState
+    let isFocused: Bool
 
     func makeBody(configuration: Configuration) -> some View {
-        CheckboxToggleButtonBody(state: state, label: configuration.label, isPressed: configuration.isPressed)
+        CheckboxToggleButtonBody(state: state, label: configuration.label, isPressed: configuration.isPressed, isFocused: isFocused)
     }
 }
 
@@ -424,6 +478,7 @@ private struct CheckboxToggleButtonBody<Label: View>: View {
     let state: CheckboxState
     let label: Label
     let isPressed: Bool
+    let isFocused: Bool
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.labelsVisibility) private var labelsVisibility
 
@@ -437,6 +492,7 @@ private struct CheckboxToggleButtonBody<Label: View>: View {
                             .fill(.black.opacity(Metrics.Checkbox.pressedOpacity))
                     }
                 }
+                .focusRing(isFocused, in: RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .circular))
                 .alignmentGuide(.firstTextBaseline) { dimensions in
                     // The box's center on the label's first line's middle.
                     dimensions[VerticalAlignment.center] + markOffset
@@ -450,7 +506,6 @@ private struct CheckboxToggleButtonBody<Label: View>: View {
             }
         }
         .contentShape(Rectangle())
-        .contentShape(.focusEffect, RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .continuous))
     }
 }
 

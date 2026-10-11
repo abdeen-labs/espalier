@@ -328,7 +328,7 @@ struct RepositoryFlowTests {
         let first = ExternalCloneRequest(action: OpenRepositoryFromURLAction(url: "https://github.com/joe/first", branch: "dev"), pullRequest: nil)
         let second = ExternalCloneRequest(action: OpenRepositoryFromURLAction(url: "https://github.com/joe/second"), pullRequest: nil)
 
-        // An error is showing (offscreen, an alert closes; a sheet doesn't).
+        // An error is showing.
         let content = AlertContent(title: "Fetch failed", message: "The remote hung up.", buttons: [AlertContent.Button("Close", role: .primary)])
         let alert = Task { await context.modals.alert(content, id: "error") }
         await waitUntil { context.modals.isPresenting }

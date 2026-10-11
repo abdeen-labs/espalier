@@ -1,7 +1,8 @@
 // How History's rows draw beneath their content, in the graph, the simple
 // list, and a commit's files alike: the selection, a soft accent tint in the
 // row's rounded shape inset from the list's sides (never solid blue), a run of
-// selected rows one shape; and the feedback for commits dragged onto a row
+// selected rows one shape; the accent ring of the row a context menu acts
+// on; and the feedback for commits dragged onto a row
 // (squash: a dashed accent outline in the row's shape and "Squash into
 // <summary>") or between rows (reorder: a 2-point accent line starting at a
 // small ring, as the system's insertion indicator does), which keyboard
@@ -41,6 +42,12 @@ enum HistoryRowDrawing {
         let bottom = joinsBelow ? 0 : radius
         // A flipped view's top is its minimum y.
         return roundedRect(rect, minYRadius: isFlipped ? top : bottom, maxYRadius: isFlipped ? bottom : top)
+    }
+
+    /// The ring of the row a context menu acts on, in the row's shape.
+    static func drawContextTarget(in bounds: CGRect, isFlipped: Bool) {
+        let inset = Metrics.Menu.contextTargetLineWidth / 2
+        ContextTargetRingDrawing.stroke(selectionPath(in: bounds.insetBy(dx: inset, dy: inset), isFlipped: isFlipped, joinsAbove: false, joinsBelow: false))
     }
 
     /// Draws `feedback` in a row's `bounds`.

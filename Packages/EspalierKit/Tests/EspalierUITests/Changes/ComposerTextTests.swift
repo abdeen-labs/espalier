@@ -1,5 +1,5 @@
 // Finding the `@` or `#` word being typed, the description editor (typing,
-// its height, its context menu, the spelling setting), and co-author tokens.
+// its height, its editing menu, the spelling setting), and co-author tokens.
 
 import AppKit
 @testable import EspalierCore
@@ -73,7 +73,7 @@ struct ComposerTextTests {
         return (host, window, try #require(Self.find(SummaryNSTextField.self, in: host)))
     }
 
-    @Test("the summary checks spelling as the commit spelling setting says, in a field editor of its own, and reports the menu's toggle")
+    @Test("the summary checks spelling as the commit spelling setting says, in a field editor of its own, and reports the editing menu's toggle; the menu starts with the composer's items")
     func summarySpellChecking() throws {
         let box = TextBox()
         var spellChecking: [Bool] = []
@@ -131,24 +131,31 @@ struct ComposerTextTests {
         #expect(window.makeFirstResponder(textField))
         #expect(textField.currentEditor() === editor)
 
-        // The context menu starts with the composer's items.
+        // The editing menu starts with the composer's items; its Check
+        // Spelling While Typing reports the change as the toggle does.
         host.rootView = SummaryTextField(
             text: Binding(get: { box.text }, set: { box.text = $0 }),
             placeholder: "Summary (required)",
-            menuItems: [ComposerMenuItem(title: "Generate Commit Message") { generated += 1 }]
+            menuItems: [ComposerMenuItem(title: "Generate Commit Message") { generated += 1 }],
+            onSpellCheckingChange: { spellChecking.append($0) }
         )
         host.layoutSubtreeIfNeeded()
-        let event = try #require(NSEvent.mouseEvent(
-            with: .rightMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
-            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1
-        ))
-        let menu = try #require(editor.menu(for: event))
-        #expect(menu.items.prefix(2).map(\.title) == ["Generate Commit Message", ""])
-        menu.performActionForItem(at: 0)
+        #expect(editor.isContinuousSpellCheckingEnabled)
+        let recorder = MenuRecorder()
+        #expect(TextEditingMenu.show(for: editor, presenter: recorder.menuPresenter))
+        let menu = try #require(recorder.popups.first)
+        #expect(menu.view === editor)
+        #expect(menu.titles == ["Generate Commit Message", "—", "Cut", "Copy", "Paste", "Select All", "—", "Check Spelling While Typing"])
+        menu.choose("Generate Commit Message")
         #expect(generated == 1)
+        #expect(menu.item("Check Spelling While Typing")?.isChecked == true)
+        menu.choose("Check Spelling While Typing")
+        #expect(spellChecking == [false, false])
+        #expect(!editor.isContinuousSpellCheckingEnabled)
+        #expect(textField.summaryCell?.isSpellCheckingEnabled == false)
     }
 
-    @Test("the summary offers the completions for the word at the cursor once they arrive")
+    @Test("the summary shows the completions for the word at the cursor in a suggestion list once they arrive; accepting one replaces the word and adds a space")
     func summaryCompletions() async throws {
         let box = TextBox()
         let completions = ComposerCompletions(
@@ -171,12 +178,17 @@ struct ComposerTextTests {
         coordinator.session.lookUp(in: editor)
         await coordinator.session.lookup?.value
         #expect(presented == 1)
-        let range = NSRange(location: 7, length: 3)
-        #expect(editor.rangeForUserCompletion == range)
-        #expect(coordinator.control(textField, textView: editor, completions: [], forPartialWordRange: range, indexOfSelectedItem: UnsafeMutablePointer<Int>.allocate(capacity: 1)) == ["@octocat"])
+        #expect(editor.rangeForUserCompletion == NSRange(location: 7, length: 3))
+        #expect(coordinator.session.suggestions(in: editor).map(\.insertion) == ["@octocat"])
 
-        // Picking one replaces the word and adds a space.
-        editor.insertCompletion("@octocat", forPartialWordRange: range, movement: NSTextMovement.return.rawValue, isFinal: true)
+        // The list shows them under the word; Return accepts the
+        // highlighted one, which replaces the word and adds a space.
+        let list = coordinator.session.list
+        coordinator.session.showList(in: editor)
+        #expect(list.isOpen)
+        #expect(list.model.suggestions == [Suggestion(title: "@octocat", detail: "Mona Lisa")])
+        #expect(list.handle(try keyPress(KeyCode.returnKey, characters: "\r", in: window)) == .consumed)
+        #expect(!list.isOpen)
         #expect(box.text == "Thanks @octocat  and more")
     }
 
@@ -243,7 +255,7 @@ struct ComposerTextTests {
         #expect(DescriptionEditor.height(for: String(repeating: "line\n", count: 20), width: 280) == line * 8 + inset)
     }
 
-    @Test("typing in the description reaches the draft; its menu starts with the composer's items")
+    @Test("typing in the description reaches the draft; its editing menu starts with the composer's items, and its spelling toggle reports the change")
     func description() throws {
         let box = TextBox()
         var spellChecking: [Bool] = []
@@ -266,21 +278,23 @@ struct ComposerTextTests {
         textView.insertText("The loader returns an empty state.", replacementRange: textView.selectedRange())
         #expect(box.text == "The loader returns an empty state.")
 
-        let event = try #require(NSEvent.mouseEvent(
-            with: .rightMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
-            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1
-        ))
-        let menu = try #require(textView.menu(for: event))
-        #expect(menu.items.prefix(3).map(\.title) == ["Add Co-Authors", "Generate Commit Message", ""])
-        menu.performActionForItem(at: 1)
+        let recorder = MenuRecorder()
+        #expect(TextEditingMenu.show(for: textView, presenter: recorder.menuPresenter))
+        let menu = try #require(recorder.popups.first)
+        #expect(Array(menu.titles.prefix(3)) == ["Add Co-Authors", "Generate Commit Message", "—"])
+        menu.choose("Generate Commit Message")
         #expect(generated == 1)
 
+        // Check Spelling While Typing runs the text view's toggle, which
+        // reports the change for the setting.
         let wasOn = textView.isContinuousSpellCheckingEnabled
-        textView.toggleContinuousSpellChecking(nil)
+        #expect(menu.item("Check Spelling While Typing")?.isChecked == wasOn)
+        menu.choose("Check Spelling While Typing")
         #expect(spellChecking == [!wasOn])
+        #expect(textView.isContinuousSpellCheckingEnabled == !wasOn)
     }
 
-    @Test("the description offers the completions for the word at the cursor once they arrive")
+    @Test("the description shows the completions for the word at the cursor in a suggestion list once they arrive, until the cursor leaves the word; accepting one replaces the word and adds a space")
     func descriptionCompletions() async throws {
         let box = TextBox()
         let completions = ComposerCompletions(
@@ -303,21 +317,30 @@ struct ComposerTextTests {
         textView.insertText("Thanks @oc", replacementRange: textView.selectedRange())
         await coordinator.lookup?.value
         #expect(presented == 1)
-        let range = NSRange(location: 7, length: 3)
-        #expect(textView.rangeForUserCompletion == range)
-        #expect(coordinator.textView(textView, completions: [], forPartialWordRange: range, indexOfSelectedItem: nil) == ["@octocat"])
+        #expect(textView.rangeForUserCompletion == NSRange(location: 7, length: 3))
+        #expect(coordinator.session.suggestions(in: textView).map(\.insertion) == ["@octocat"])
 
         // A word without completions offers none.
         textView.insertText("t", replacementRange: textView.selectedRange())
         await coordinator.lookup?.value
         #expect(presented == 1)
-        #expect(coordinator.textView(textView, completions: [], forPartialWordRange: NSRange(location: 7, length: 4), indexOfSelectedItem: nil).isEmpty)
+        #expect(coordinator.session.suggestions(in: textView).isEmpty)
 
-        // Picking a completion replaces the word and adds a space.
+        // The list closes when the cursor leaves the word.
         textView.insertText("", replacementRange: NSRange(location: 10, length: 1))
         await coordinator.lookup?.value
         #expect(presented == 2)
-        textView.insertCompletion("@octocat", forPartialWordRange: range, movement: NSTextMovement.return.rawValue, isFinal: true)
+        let list = coordinator.session.list
+        coordinator.session.showList(in: textView)
+        #expect(list.isOpen)
+        textView.setSelectedRange(NSRange(location: 3, length: 0))
+        #expect(!list.isOpen)
+
+        // Tab accepts a completion, which replaces the word and adds a
+        // space.
+        textView.setSelectedRange(NSRange(location: 10, length: 0))
+        coordinator.session.showList(in: textView)
+        #expect(list.handle(try keyPress(KeyCode.tab, characters: "\t", in: window)) == .consumed)
         #expect(box.text == "Thanks @octocat ")
 
         // Completions that arrive after the description lost focus wait.
@@ -396,7 +419,7 @@ struct ComposerTextTests {
         ])
     }
 
-    @Test("the co-author field completes from the users once they arrive, leaving out those already added")
+    @Test("the co-author field's completions are the users once they arrive, leaving out those already added")
     func coAuthorCompletions() async throws {
         let box = AuthorsBox()
         box.authors = [.known(KnownAuthor(name: "Hubot", email: "hubot@example.com", username: "hubot"))]
@@ -410,7 +433,7 @@ struct ComposerTextTests {
         let entry = CoAuthorEntry(authors: Binding(get: { box.authors }, set: { box.authors = $0 }), completions: completions)
         let coordinator = entry.makeCoordinator()
         func complete(_ text: String) -> [String] {
-            coordinator.completions(for: text)
+            coordinator.completions(for: text).map(\.insertion)
         }
         // The first ask looks the users up.
         #expect(complete("@mo") == [])
@@ -421,6 +444,44 @@ struct ComposerTextTests {
         #expect(complete("x") == [])
         await coordinator.lookup?.value
         #expect(complete("x") == [])
+    }
+
+    @Test("the co-author field shows the users in a suggestion list under it; accepting one puts the login in the field, keeping the @ typed, and shows no list again until typing")
+    func coAuthorSuggestionList() async throws {
+        let box = AuthorsBox()
+        let completions = ComposerCompletions(
+            users: { _ in [ComposerSuggestion(insertion: "@monalisa", detail: "Mona Lisa")] },
+            issues: { _ in [] },
+            author: { _ in nil }
+        )
+        let entry = CoAuthorEntry(authors: Binding(get: { box.authors }, set: { box.authors = $0 }), completions: completions)
+        let host = NSHostingView(rootView: entry.frame(width: 240))
+        let window = SnapshotWindow(contentRect: CGRect(x: 0, y: 0, width: 240, height: 40), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.layoutSubtreeIfNeeded()
+        let field = try #require(Self.find(CoAuthorsTextField.self, in: host))
+        let coordinator = try #require(field.delegate as? CoAuthorEntry.Coordinator)
+        #expect(window.makeFirstResponder(field))
+        let editor = try #require(field.currentEditor() as? NSTextView)
+        let list = coordinator.list
+
+        for (typed, filled) in [("@mo", "@monalisa"), ("mo", "monalisa")] {
+            editor.insertText(typed, replacementRange: NSRange(location: 0, length: (editor.string as NSString).length))
+            await coordinator.lookup?.value
+            #expect(list.model.suggestions == [Suggestion(title: "@monalisa", detail: "Mona Lisa")])
+            // Shown again, as the lookup showed it: one list is open at a
+            // time, and other tests run while this one waits.
+            coordinator.showList()
+            #expect(list.isOpen)
+            #expect(list.handle(try keyPress(KeyCode.returnKey, characters: "\r", in: window)) == .consumed)
+            #expect(field.stringValue == filled)
+            await coordinator.lookup?.value
+            #expect(!list.isOpen)
+        }
+        // Return again makes the login a co-author.
+        editor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+        #expect(box.authors.count == 1)
     }
 
     // MARK: Helpers

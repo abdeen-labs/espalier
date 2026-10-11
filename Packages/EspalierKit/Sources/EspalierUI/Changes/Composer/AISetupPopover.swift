@@ -12,6 +12,14 @@ nonisolated public enum SparklePopover: Sendable, Equatable, Identifiable {
     public var id: Self {
         self
     }
+
+    /// What VoiceOver calls the popover: its heading.
+    var title: String {
+        switch self {
+        case .setup: "Generate Commit Messages"
+        case .chooseModel: "Choose a Model"
+        }
+    }
 }
 
 /// "Generate Commit Messages": no provider is set up yet.
@@ -77,7 +85,7 @@ public struct AIModelPopover: View {
                         .padding(.vertical, Metrics.grid)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bare(.rounded(Metrics.Radius.small)))
                     .accessibilityLabel("\(choice.modelName), \(choice.providerName)")
                     if choice.id != choices.last?.id {
                         Hairline()

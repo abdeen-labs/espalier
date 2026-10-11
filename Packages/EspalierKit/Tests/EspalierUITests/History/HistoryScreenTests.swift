@@ -399,10 +399,7 @@ struct HistoryScreenTests {
             await fixture.show(.history)
             let history = fixture.history
             @MainActor func titles(_ rows: [Int], clicked: Int) throws -> [String] {
-                let built = CommitContextMenus.menu(rows: rows, clickedRow: clicked, repository: fixture.repository, context: fixture.context)
-                let menu = try #require(built)
-                menu.update()
-                return menu.items.map { $0.isSeparatorItem ? "—" : $0.title }
+                MenuRecorder.Popup.titles(CommitContextMenus.menu(rows: rows, clickedRow: clicked, repository: fixture.repository, context: fixture.context))
             }
             let tagged = try #require(history.row(of: fixture.shas["Add loader"]!))
             #expect(try titles([tagged], clicked: tagged) == [
