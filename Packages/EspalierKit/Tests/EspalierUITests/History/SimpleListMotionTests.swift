@@ -1,7 +1,7 @@
-// Simple mode's motion. A merge's commits slide down from under it and back
-// up, up to 100 rows, and the "Loading…" line shows only past 300 ms;
-// motion never changes a result: expanding then collapsing during the load
-// or the slide ends collapsed, the selection on the merge's commit.
+// Simple mode's motion. The list crossfades to a merge's commits and back,
+// up to 100 rows, and the "Loading…" line shows only past 300 ms; motion
+// never changes a result: expanding then collapsing during the load or the
+// crossfade ends collapsed, the selection on the merge's commit.
 
 import AppKit
 @testable import EspalierCore
@@ -50,8 +50,8 @@ struct SimpleListMotionTests {
         }
     }
 
-    @Test("collapsing a merge while its commits slide in ends collapsed, the selection back on the merge")
-    func collapseDuringSlide() async throws {
+    @Test("collapsing a merge while its commits fade in ends collapsed, the selection back on the merge")
+    func collapseDuringCrossfade() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await makeSimpleListFixture()
             let mergeSHA = try #require(fixture.shas[mergeSummary])
@@ -62,14 +62,14 @@ struct SimpleListMotionTests {
             controller.scheduler = fixture.harness.scheduler
             let mergeTableRow = try fixture.tableRow(mergeSummary, in: controller)
 
-            // The commits loaded: they slide down from under the merge.
+            // The commits loaded: the list fades to them under the merge.
             fixture.history.setMergeExpanded(true, row: historyRow)
             await fixture.settle()
             fixture.update(controller)
             #expect(controller.items.count == fixture.history.commitSHAs.count + 2)
             #expect(controller.tableView.numberOfRows == controller.items.count)
 
-            // One of them selected, then ← while they slide: back to the
+            // One of them selected, then ← while they fade in: back to the
             // merge, collapsed.
             let widget = try fixture.tableRow("Use the new widget sizes", in: controller)
             controller.tableView.selectRowIndexes([widget], byExtendingSelection: false)
@@ -85,16 +85,16 @@ struct SimpleListMotionTests {
         }
     }
 
-    @Test("only a merge's commits slide, up to 100 rows")
-    func slideLimits() {
+    @Test("only a merge's commits crossfade, up to 100 rows")
+    func crossfadeLimits() {
         let merged = (0..<100).map { SimpleHistoryItem.mergedCommit(mergeRow: 3, index: $0) }
-        #expect(SimpleListController.isMergeSlide(removed: [], inserted: merged))
-        #expect(SimpleListController.isMergeSlide(removed: merged, inserted: []))
+        #expect(SimpleListController.isMergeCrossfade(removed: [], inserted: merged))
+        #expect(SimpleListController.isMergeCrossfade(removed: merged, inserted: []))
         // The loading line giving way to the commits.
-        #expect(SimpleListController.isMergeSlide(removed: [.mergedCommitsStatus(mergeRow: 3)], inserted: Array(merged.prefix(4))))
+        #expect(SimpleListController.isMergeCrossfade(removed: [.mergedCommitsStatus(mergeRow: 3)], inserted: Array(merged.prefix(4))))
         // More than 100 rows, a page of the branch's own commits, nothing.
-        #expect(!SimpleListController.isMergeSlide(removed: [], inserted: merged + [.mergedCommit(mergeRow: 3, index: 100)]))
-        #expect(!SimpleListController.isMergeSlide(removed: [], inserted: [.commit(row: 40), .commit(row: 41)]))
-        #expect(!SimpleListController.isMergeSlide(removed: [], inserted: []))
+        #expect(!SimpleListController.isMergeCrossfade(removed: [], inserted: merged + [.mergedCommit(mergeRow: 3, index: 100)]))
+        #expect(!SimpleListController.isMergeCrossfade(removed: [], inserted: [.commit(row: 40), .commit(row: 41)]))
+        #expect(!SimpleListController.isMergeCrossfade(removed: [], inserted: []))
     }
 }

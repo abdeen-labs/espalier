@@ -869,7 +869,7 @@ nonisolated extension BranchRowContent {
     }
 }
 
-/// Folders and branches, folders as groups that open and close.
+/// Folders and branches, folders as disclosure groups.
 struct BranchNodeList: View {
     let nodes: [BranchNode]
     let repository: RepositoryModel?
@@ -892,6 +892,116 @@ struct BranchNodeList: View {
                 }
             }
         }
+    }
+}
+
+/// A group of rows whose expansion is remembered; open while the sidebar
+/// filter shows matches. A disclosure group of the sidebar's list, so its
+/// rows are the list's rows a level in, and the list's chevron before its
+/// label opens and closes it, as does a click anywhere on its label. The
+/// section's own groups (Default Branch, Recent Branches, ...) are labeled
+/// by name alone, in secondary text; a remote and a folder have their
+/// symbol.
+///
+/// As in `SidebarSection`, the rows follow the expansion the group sets, a
+/// state change (made inside its animation when the label is clicked), so
+/// the list animates them in and out; the remembered expansion follows it
+/// once that change has drawn, and a change made elsewhere (another window)
+/// reaches the remembered one first.
+struct BranchGroupDisclosure<Content: View>: View {
+    let title: String
+    let systemImage: String?
+    let isFiltering: Bool
+    let content: Content
+    @AppStorage private var rememberedExpansion: Bool
+    /// The expansion the group set, or nil before it sets one.
+    @State private var chosenExpansion: Bool?
+    @Environment(\.motion) private var motion
+
+    /// - Parameters:
+    ///   - id: Names the remembered expansion (`sidebar.expanded.<id>`).
+    ///   - systemImage: The row's symbol; nil for one of the section's
+    ///     groups.
+    ///   - isExpandedByDefault: The expansion before the user changes it.
+    init(id: String, title: String, systemImage: String? = nil, isExpandedByDefault: Bool = false, isFiltering: Bool, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.systemImage = systemImage
+        self.isFiltering = isFiltering
+        self.content = content()
+        _rememberedExpansion = AppStorage(wrappedValue: isExpandedByDefault, "sidebar.expanded.\(id)")
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: Binding(get: { isOpen }, set: { setExpanded($0) })) {
+            content
+        } label: {
+            // The group's own row; modifiers on the group would reach its
+            // rows too.
+            labelContent
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withMotion(motion, isOpen ? Motion.leave : Motion.arrive) {
+                        setExpanded(!isOpen)
+                    }
+                }
+                .sidebarRow(nil, id: "group:\(title)")
+                .onChange(of: chosenExpansion) { _, chosen in
+                    if let chosen {
+                        rememberedExpansion = chosen
+                    }
+                }
+                .onChange(of: rememberedExpansion) { _, remembered in
+                    chosenExpansion = remembered
+                }
+        }
+    }
+
+    /// Whether the group shows its rows.
+    private var isOpen: Bool {
+        BranchGroupExpansion.isOpen(chosen: chosenExpansion, remembered: rememberedExpansion, isFiltering: isFiltering)
+    }
+
+    /// Opens or closes the group; while the filter shows matches it stays
+    /// open.
+    private func setExpanded(_ expanded: Bool) {
+        let current = chosenExpansion ?? rememberedExpansion
+        if let next = BranchGroupExpansion.change(to: expanded, from: current, isFiltering: isFiltering) {
+            chosenExpansion = next
+        }
+    }
+
+    /// The symbol and the title, or the title alone, in secondary text.
+    @ViewBuilder
+    private var labelContent: some View {
+        if let systemImage {
+            SidebarRowLabel(title, systemImage: systemImage)
+        } else {
+            Text(title)
+                .font(Typography.row.weight(.medium))
+                .foregroundStyle(.text2)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+        }
+    }
+}
+
+/// When a branch group shows its rows, and what opening or closing it
+/// changes.
+nonisolated enum BranchGroupExpansion {
+    /// Whether the group shows its rows: as the group set it, else as
+    /// remembered, and always while the filter shows matches.
+    static func isOpen(chosen: Bool?, remembered: Bool, isFiltering: Bool) -> Bool {
+        isFiltering || (chosen ?? remembered)
+    }
+
+    /// The expansion to set when the user opens (`expanded`) or closes the
+    /// group: nil when nothing changes, as while the filter holds it open.
+    static func change(to expanded: Bool, from current: Bool, isFiltering: Bool) -> Bool? {
+        guard !isFiltering, expanded != current else {
+            return nil
+        }
+        return expanded
     }
 }
 

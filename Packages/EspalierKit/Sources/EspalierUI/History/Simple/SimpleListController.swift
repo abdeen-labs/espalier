@@ -137,9 +137,9 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// loading line when its wait ends.
     private var lastPresentation: (presentation: SimpleListPresentation, reorderInsertionRow: Int?)?
 
-    /// The most rows a merge's expanding or collapsing slides; more change
-    /// at once.
-    static let slideLimit = 100
+    /// The most rows a merge's expanding or collapsing crossfades; more
+    /// change at once.
+    static let crossfadeLimit = 100
 
     override init() {
         tableView = SimpleNSTableView(frame: .zero)
@@ -180,7 +180,6 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
-        scrollView.useEspalierScrollers()
         scrollView.drawsBackground = true
         scrollView.backgroundColor = Palette.background
         scrollView.contentView.postsBoundsChangedNotifications = true
@@ -247,9 +246,8 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     /// Applies a change of the same list: pages appended, or a merge's
     /// commits shown or hidden (the rows between the common start and end).
-    /// A merge's commits slide down from under it over 0.22 s and back up
-    /// over 0.15 s, up to 100 rows; pages and anything larger change at
-    /// once.
+    /// The rows change at once; for a merge's commits, up to 100 rows, the
+    /// list crossfades to them over 0.22 s, and back over 0.15 s.
     private func apply(_ newItems: [SimpleHistoryItem]) {
         let old = items
         var prefix = 0
@@ -264,15 +262,21 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         items = newItems
         let removed = IndexSet(integersIn: prefix..<(old.count - suffix))
         let inserted = IndexSet(integersIn: prefix..<(newItems.count - suffix))
-        let slides = Self.isMergeSlide(removed: removed.map { old[$0] }, inserted: inserted.map { newItems[$0] })
+        let crossfades = Self.isMergeCrossfade(removed: removed.map { old[$0] }, inserted: inserted.map { newItems[$0] })
+        if crossfades, Motion.animates(tableView) {
+            Motion.crossfade(scrollView.layer, duration: inserted.isEmpty ? Motion.leave : Motion.arrive)
+        }
         isApplyingSelection = true
-        Motion.run(inserted.isEmpty ? Motion.leave : Motion.arrive, in: slides ? tableView : nil) { animates in
+        // The rows go in and out in a group of no duration, so the table's
+        // own row motion doesn't run.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
             tableView.beginUpdates()
             if !removed.isEmpty {
-                tableView.removeRows(at: removed, withAnimation: animates ? (inserted.isEmpty ? .slideUp : .effectFade) : [])
+                tableView.removeRows(at: removed, withAnimation: [])
             }
             if !inserted.isEmpty {
-                tableView.insertRows(at: inserted, withAnimation: animates ? .slideDown : [])
+                tableView.insertRows(at: inserted, withAnimation: [])
             }
             tableView.endUpdates()
         }
@@ -281,9 +285,9 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     /// Whether rows coming and going are a merge's commits shown or hidden
     /// (its commits and its status line, no commit of the branch's line),
-    /// few enough to slide.
-    static func isMergeSlide(removed: [SimpleHistoryItem], inserted: [SimpleHistoryItem]) -> Bool {
-        guard !(removed.isEmpty && inserted.isEmpty), removed.count <= slideLimit, inserted.count <= slideLimit else {
+    /// few enough to crossfade.
+    static func isMergeCrossfade(removed: [SimpleHistoryItem], inserted: [SimpleHistoryItem]) -> Bool {
+        guard !(removed.isEmpty && inserted.isEmpty), removed.count <= crossfadeLimit, inserted.count <= crossfadeLimit else {
             return false
         }
         return (removed + inserted).allSatisfy { item in

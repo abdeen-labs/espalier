@@ -322,7 +322,9 @@ struct PullRequestOverviewView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
             HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
-                SelectableText(content.title, font: AppKitTypography.commitSummary, color: .labelColor)
+                Text(content.title)
+                    .font(Typography.commitSummary)
+                    .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                 if content.isDraft {
                     QuietCapsule("Draft")

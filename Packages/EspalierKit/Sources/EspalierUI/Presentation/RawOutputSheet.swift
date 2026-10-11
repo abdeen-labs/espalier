@@ -39,7 +39,9 @@ public struct TerminalOutputView: View {
     }
 
     private var output: some View {
-        SelectableText(text.isEmpty ? " " : text, font: AppKitTypography.sha)
+        Text(text.isEmpty ? " " : text)
+            .font(Typography.terminal)
+            .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .padding(Metrics.insetSmall)

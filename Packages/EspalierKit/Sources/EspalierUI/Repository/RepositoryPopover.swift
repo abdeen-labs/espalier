@@ -173,6 +173,9 @@ struct RepositoryPopoverView: View {
     /// New Worktree…, beside the worktrees' label; nil shows none.
     var newWorktree: (() -> Void)?
     @FocusState private var isFilterFocused: Bool
+    /// The row the pointer highlighted last, which the list doesn't scroll
+    /// to.
+    @State private var hovered: RepositoryPopoverRowID?
     /// The popover's height with the filter empty, which it keeps while a
     /// filter leaves fewer rows.
     @State private var unfilteredHeight: CGFloat?
@@ -198,6 +201,7 @@ struct RepositoryPopoverView: View {
                         }
                     }
                     .onChange(of: filter) {
+                        hovered = nil
                         highlighted = content.rowIDs.first
                     }
                 RepositoryAddMenu()
@@ -232,11 +236,14 @@ struct RepositoryPopoverView: View {
         }
     }
 
-    /// The worktrees, then the repositories' groups.
+    /// The worktrees, then the repositories' groups. They're laid out all
+    /// at once, so the popover is as tall as they are from the start, and
+    /// stays that tall as they scroll. A list that fits doesn't scroll, and
+    /// the highlight scrolls into view unless the pointer put it there.
     private var rows: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                     if !content.worktrees.isEmpty {
                         ListGroupLabel("Worktrees") {
                             if let newWorktree {
@@ -275,8 +282,9 @@ struct RepositoryPopoverView: View {
                 }
                 .padding(.bottom, Metrics.ListRow.inset)
             }
+            .scrollsOnlyWhenOverflowing()
             .onChange(of: highlighted) {
-                if let highlighted {
+                if let highlighted, highlighted != hovered {
                     proxy.scrollTo(highlighted)
                 }
             }
@@ -309,6 +317,7 @@ struct RepositoryPopoverView: View {
         .id(id)
         .onHover { isHovering in
             if isHovering {
+                hovered = id
                 highlighted = id
             }
         }
@@ -321,6 +330,7 @@ struct RepositoryPopoverView: View {
         guard !rows.isEmpty else {
             return
         }
+        hovered = nil
         guard let highlighted, let index = rows.firstIndex(of: highlighted) else {
             self.highlighted = offset > 0 ? rows.first : rows.last
             return

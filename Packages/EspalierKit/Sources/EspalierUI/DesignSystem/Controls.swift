@@ -49,6 +49,12 @@ public struct CapsuleSearchField: View {
     private let systemImage: String
     private let keyCap: String?
     @FocusState private var isFocused: Bool
+    /// Whether the window's first responder is editing the field, which
+    /// SwiftUI's focus state doesn't follow in the toolbar.
+    @State private var isEditing = false
+    /// Counts the requests to focus the field, which reach it through
+    /// AppKit too: SwiftUI's focus state doesn't move it in the toolbar.
+    @State private var focusRequests = 0
     @Environment(\.controlSize) private var controlSize
 
     /// - Parameters:
@@ -70,24 +76,36 @@ public struct CapsuleSearchField: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.text3)
                 .accessibilityHidden(true)
-            TextField(prompt, text: $text, prompt: Text(prompt).foregroundStyle(.text3))
-                .textFieldStyle(.plain)
-                // AppKit's one-line mode: a pasted line break becomes a
-                // space.
-                .lineLimit(1)
-                .font(Typography.row)
-                .foregroundStyle(.text)
-                .focused($isFocused)
-                .onExitCommand {
-                    text = ""
+            // The prompt is drawn here, on the typed text's baseline, rather
+            // than by the field, so it holds still as editing starts and
+            // ends.
+            ZStack(alignment: Alignment(horizontal: .leading, vertical: .firstTextBaseline)) {
+                if text.isEmpty {
+                    Text(prompt)
+                        .lineLimit(1)
+                        .foregroundStyle(.text3)
+                        .accessibilityHidden(true)
                 }
-                // The line's inset from the capsule's top, rather than
-                // centered, as in a capsule field: the field draws its text
-                // at its own top, so one measured a little shorter or
-                // taller (as a field can be for a moment) would otherwise
-                // draw its text lower or higher.
-                .padding(.top, (Metrics.ControlHeight.height(for: controlSize) - Metrics.CapsuleField.lineHeight) / 2)
-                .frame(maxHeight: .infinity, alignment: .top)
+                TextField("", text: $text)
+                    .textFieldStyle(.plain)
+                    // AppKit's one-line mode: a pasted line break becomes a
+                    // space.
+                    .lineLimit(1)
+                    .foregroundStyle(.text)
+                    .focused($isFocused)
+                    .onExitCommand {
+                        text = ""
+                    }
+                    .accessibilityLabel(prompt)
+            }
+            .font(Typography.row)
+            // The line's inset from the capsule's top, rather than
+            // centered, as in a capsule field: the field draws its text at
+            // its own top, so one measured a little shorter or taller (as a
+            // field can be for a moment) would otherwise draw its text
+            // lower or higher.
+            .padding(.top, (Metrics.ControlHeight.height(for: controlSize) - Metrics.CapsuleField.lineHeight) / 2)
+            .frame(maxHeight: .infinity, alignment: .top)
             trailing
         }
         .motion(Motion.mark, value: trailingKind)
@@ -95,20 +113,34 @@ public struct CapsuleSearchField: View {
         .padding(.trailing, 8)
         .frame(height: Metrics.ControlHeight.height(for: controlSize))
         .background(Capsule(style: .circular).fill(.field))
-        .fieldRegion()
+        .fieldRegion(focusRequest: focusRequests) { isEditing in
+            self.isEditing = isEditing
+        }
         .overlay {
-            CapsuleFocusRing(isFocused: isFocused)
+            CapsuleFocusRing(isFocused: hasFocus)
         }
         .contentShape(Capsule(style: .circular))
         .onTapGesture {
-            isFocused = true
+            focus()
         }
         .onChange(of: focusRequest, initial: true) {
             if focusRequest {
-                isFocused = true
+                focus()
                 focusRequest = false
             }
         }
+    }
+
+    /// Focuses the field, through SwiftUI and AppKit both.
+    private func focus() {
+        isFocused = true
+        focusRequests += 1
+    }
+
+    /// Whether the field has keyboard focus, by SwiftUI's account or
+    /// AppKit's.
+    private var hasFocus: Bool {
+        isFocused || isEditing
     }
 
     /// What the field ends with.
@@ -120,7 +152,7 @@ public struct CapsuleSearchField: View {
         if !text.isEmpty {
             return .clear
         }
-        return keyCap != nil && !isFocused ? .keyCap : .none
+        return keyCap != nil && !hasFocus ? .keyCap : .none
     }
 
     /// The clear button once there's text, else the key cap while the
@@ -276,7 +308,7 @@ public struct MonoChip<Accessory: View>: View {
     private let accessory: Accessory
 
     /// - Parameter isSelectable: Whether its text can be selected and
-    ///   copied (`SelectableText`).
+    ///   copied.
     public init(_ text: String, isSelectable: Bool = false, @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
         self.text = text
         self.isSelectable = isSelectable
@@ -286,7 +318,9 @@ public struct MonoChip<Accessory: View>: View {
     public var body: some View {
         HStack(spacing: 5) {
             if isSelectable {
-                SelectableText(text, font: AppKitTypography.sha, color: Palette.text2)
+                Text(text)
+                    .font(Typography.sha)
+                    .textSelection(.enabled)
             } else {
                 Text(text)
                     .font(Typography.sha)

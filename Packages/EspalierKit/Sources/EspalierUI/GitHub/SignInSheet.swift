@@ -398,8 +398,10 @@ struct SignInView: View {
                     .foregroundStyle(.text)
                     .accessibilityAddTraits(.isHeader)
                 if let header = content.header {
-                    SelectableText(header, color: Palette.text2)
+                    Text(header)
+                        .foregroundStyle(.text2)
                         .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
             }
             // One step crossfades into the next over 0.22 s, as the
@@ -524,12 +526,12 @@ private struct SignInCodeStep: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: Metrics.insetMedium) {
                 Spacer()
-                SelectableText(
-                    code.userCode,
-                    font: AppKitTypography.deviceCode,
-                    kerning: Metrics.SignIn.codeKerning,
-                    accessibilityLabel: "Code: \(code.userCode.map(String.init).joined(separator: " "))"
-                )
+                Text(code.userCode)
+                    .font(Typography.deviceCode)
+                    .kerning(Metrics.SignIn.codeKerning)
+                    .foregroundStyle(.text)
+                    .textSelection(.enabled)
+                    .accessibilityLabel("Code: \(code.userCode.map(String.init).joined(separator: " "))")
                 Spacer()
                 Button {
                     actions.copyCode(code.userCode)
@@ -595,8 +597,10 @@ struct SignInInlineError: View {
 
     var body: some View {
         Label {
-            SelectableText(message, color: Palette.error)
+            Text(message)
+                .foregroundStyle(Color(espalier: Palette.error))
                 .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
         } icon: {
             Image(systemName: "xmark.octagon.fill")
                 .foregroundStyle(Color(espalier: Palette.error))

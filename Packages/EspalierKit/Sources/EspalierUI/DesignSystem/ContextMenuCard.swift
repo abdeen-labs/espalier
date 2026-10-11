@@ -8,9 +8,9 @@
 // Each such view puts a `ContextMenuRegionView` behind itself. A
 // right-click or Control-click opens the menu of the innermost region
 // under the pointer (`MenuEventRouter`), unless an AppKit view there has
-// menus of its own (`AppKitContextMenu`: a table's, the diff's, text's
-// editing menu); the click never reaches the view, so a list's own context
-// menu machinery never sees it. VoiceOver's Show Menu opens the same menu, and ⇧F10 opens
+// menus of its own (`AppKitContextMenu`: a table's, the diff's); the click
+// never reaches the view, so a list's own context menu machinery never sees
+// it. A click on text goes on to it, for AppKit's own menu. VoiceOver's Show Menu opens the same menu, and ⇧F10 opens
 // a list's for its selected row (`KeyboardContextMenu`).
 
 import AppKit
@@ -284,8 +284,14 @@ enum ContextMenuRegions {
         let region = regions(at: point, in: window).first
         let hitView = (window.contentView?.superview ?? window.contentView)?.hitTest(point)
         if let hitView, let menu = AppKitContextMenu(at: hitView, within: region) {
-            menu.open(atWindowPoint: point, presenter: presenter)
-            return true
+            switch menu {
+            case .content(let provider):
+                provider.openContextMenu(at: provider.convert(point, from: nil), trigger: .press, presenter: presenter ?? .panel)
+                return true
+            case .text:
+                // Text's menu is AppKit's: the click goes on to the text.
+                return false
+            }
         }
         guard let region else {
             return false
@@ -314,8 +320,9 @@ enum ContextMenuRegions {
 enum AppKitContextMenu {
     /// A view that gives its menu's content: a table, the diff.
     case content(any ContextMenuContentProviding)
-    /// Text's editing menu: a text view's, or a field's.
-    case text(NSView)
+    /// Text that can be edited or selected, whose menu is AppKit's: a text
+    /// view, or a field.
+    case text
 
     /// The menus of `view`, or of the first view it's in that has menus,
     /// short of the view holding `region` (the region's own menu is for
@@ -327,8 +334,8 @@ enum AppKitContextMenu {
                 self = .content(provider)
                 return
             }
-            if TextEditingMenu.hasMenu(current) {
-                self = .text(current)
+            if Self.isText(current) {
+                self = .text
                 return
             }
             candidate = current.superview
@@ -336,17 +343,15 @@ enum AppKitContextMenu {
         return nil
     }
 
-    /// Opens the menu for a context click at `point`, in the window's
-    /// coordinates.
-    ///
-    /// - Parameter presenter: Shows the menu in place of `.panel`.
-    func open(atWindowPoint point: CGPoint, presenter: MenuPresenter?) {
-        switch self {
-        case .content(let provider):
-            provider.openContextMenu(at: provider.convert(point, from: nil), trigger: .press, presenter: presenter ?? .panel)
-        case .text(let view):
-            TextEditingMenu.open(for: view, atWindowPoint: point, trigger: .press, presenter: presenter ?? .panel)
+    /// Whether `view` is text that can be edited or selected.
+    static func isText(_ view: NSView) -> Bool {
+        if let textView = view as? NSTextView {
+            return textView.isEditable || textView.isSelectable
         }
+        if let field = view as? NSTextField {
+            return field.isEnabled && (field.isEditable || field.isSelectable)
+        }
+        return false
     }
 }
 

@@ -1,5 +1,5 @@
 // Finding the `@` or `#` word being typed, the description editor (typing,
-// its height, its editing menu, the spelling setting), and co-author tokens.
+// its height, its context menu, the spelling setting), and co-author tokens.
 
 import AppKit
 @testable import EspalierCore
@@ -73,7 +73,7 @@ struct ComposerTextTests {
         return (host, window, try #require(Self.find(SummaryNSTextField.self, in: host)))
     }
 
-    @Test("the summary checks spelling as the commit spelling setting says, in a field editor of its own, and reports the editing menu's toggle; the menu starts with the composer's items")
+    @Test("the summary checks spelling as the commit spelling setting says, in a field editor of its own, and reports the toggle; its context menu starts with the composer's items")
     func summarySpellChecking() throws {
         let box = TextBox()
         var spellChecking: [Bool] = []
@@ -131,8 +131,7 @@ struct ComposerTextTests {
         #expect(window.makeFirstResponder(textField))
         #expect(textField.currentEditor() === editor)
 
-        // The editing menu starts with the composer's items; its Check
-        // Spelling While Typing reports the change as the toggle does.
+        // The context menu starts with the composer's items.
         host.rootView = SummaryTextField(
             text: Binding(get: { box.text }, set: { box.text = $0 }),
             placeholder: "Summary (required)",
@@ -141,18 +140,14 @@ struct ComposerTextTests {
         )
         host.layoutSubtreeIfNeeded()
         #expect(editor.isContinuousSpellCheckingEnabled)
-        let recorder = MenuRecorder()
-        #expect(TextEditingMenu.show(for: editor, presenter: recorder.menuPresenter))
-        let menu = try #require(recorder.popups.first)
-        #expect(menu.view === editor)
-        #expect(menu.titles == ["Generate Commit Message", "—", "Cut", "Copy", "Paste", "Select All", "—", "Check Spelling While Typing"])
-        menu.choose("Generate Commit Message")
+        let event = try #require(NSEvent.mouseEvent(
+            with: .rightMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+        ))
+        let menu = try #require(editor.menu(for: event))
+        #expect(menu.items.prefix(2).map(\.title) == ["Generate Commit Message", ""])
+        menu.performActionForItem(at: 0)
         #expect(generated == 1)
-        #expect(menu.item("Check Spelling While Typing")?.isChecked == true)
-        menu.choose("Check Spelling While Typing")
-        #expect(spellChecking == [false, false])
-        #expect(!editor.isContinuousSpellCheckingEnabled)
-        #expect(textField.summaryCell?.isSpellCheckingEnabled == false)
     }
 
     @Test("the summary shows the completions for the word at the cursor in a suggestion list once they arrive; accepting one replaces the word and adds a space")
@@ -255,7 +250,7 @@ struct ComposerTextTests {
         #expect(DescriptionEditor.height(for: String(repeating: "line\n", count: 20), width: 280) == line * 8 + inset)
     }
 
-    @Test("typing in the description reaches the draft; its editing menu starts with the composer's items, and its spelling toggle reports the change")
+    @Test("typing in the description reaches the draft; its context menu starts with the composer's items, and its spelling toggle reports the change")
     func description() throws {
         let box = TextBox()
         var spellChecking: [Bool] = []
@@ -278,18 +273,19 @@ struct ComposerTextTests {
         textView.insertText("The loader returns an empty state.", replacementRange: textView.selectedRange())
         #expect(box.text == "The loader returns an empty state.")
 
-        let recorder = MenuRecorder()
-        #expect(TextEditingMenu.show(for: textView, presenter: recorder.menuPresenter))
-        let menu = try #require(recorder.popups.first)
-        #expect(Array(menu.titles.prefix(3)) == ["Add Co-Authors", "Generate Commit Message", "—"])
-        menu.choose("Generate Commit Message")
+        let event = try #require(NSEvent.mouseEvent(
+            with: .rightMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+        ))
+        let menu = try #require(textView.menu(for: event))
+        #expect(menu.items.prefix(3).map(\.title) == ["Add Co-Authors", "Generate Commit Message", ""])
+        menu.performActionForItem(at: 1)
         #expect(generated == 1)
 
-        // Check Spelling While Typing runs the text view's toggle, which
-        // reports the change for the setting.
+        // The text view's toggle (Spelling and Grammar ▸ Check Spelling
+        // While Typing) reports the change for the setting.
         let wasOn = textView.isContinuousSpellCheckingEnabled
-        #expect(menu.item("Check Spelling While Typing")?.isChecked == wasOn)
-        menu.choose("Check Spelling While Typing")
+        textView.toggleContinuousSpellChecking(nil)
         #expect(spellChecking == [!wasOn])
         #expect(textView.isContinuousSpellCheckingEnabled == !wasOn)
     }

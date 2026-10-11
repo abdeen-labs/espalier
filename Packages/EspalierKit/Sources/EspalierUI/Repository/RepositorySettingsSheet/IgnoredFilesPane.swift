@@ -17,7 +17,9 @@ struct IgnoredFilesPane: View {
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)
                 .fixedSize(horizontal: false, vertical: true)
-            TextArea(text: $text, font: AppKitTypography.code(), accessibilityLabel: "Ignored files")
+            TextEditor(text: $text)
+                .font(Typography.code())
+                .scrollContentBackground(.hidden)
                 .textAreaSurface()
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
@@ -31,6 +33,9 @@ struct IgnoredFilesPane: View {
                 }
                 .frame(maxHeight: .infinity)
                 .disabled(!isLoaded)
+                .accessibilityLabel("Ignored files")
+                .autocorrectionDisabled(true)
+                .writingToolsBehavior(.disabled)
         }
     }
 }

@@ -18,7 +18,7 @@ pass.
      rows departing and arriving, the footer's bars moving the list, the
      operation bar (and a fast rebase never showing it); the diff's
      expansion, Unified ↔ Split, the staging crossfade; Simple ↔ Graph, a
-     merge's commits sliding out, the loading line after 300 ms, new
+     merge's commits crossfading in and out, the loading line after 300 ms, new
      commits sliding in; switching repositories with nothing animating; the
      Last Commit row and co-authors field growing in; copy buttons' checks
      (the submodule diff and push protection included), toasts, focus

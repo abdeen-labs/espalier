@@ -1,9 +1,7 @@
 // Espalier's focus ring on every control that takes keyboard focus, in
 // light and dark: shown as if each had focus, since tests can't turn
-// keyboard navigation on. And the AppKit checkbox, which draws the ring
-// itself instead of the system's.
+// keyboard navigation on.
 
-import AppKit
 import SwiftUI
 import Testing
 @testable import EspalierUI
@@ -108,35 +106,5 @@ struct FocusRingTests {
         .padding(Metrics.insetLarge)
         .environment(\.showsFocusRings, true)
         assertSnapshot(view, named: "focusRings", area: area)
-    }
-
-    @Test("the AppKit checkbox draws Espalier's ring around its box, never the system's")
-    func appKitCheckbox() throws {
-        let checkbox = CheckboxButton(title: "Include in commit", target: nil, action: nil)
-        #expect(checkbox.focusRingType == .none)
-        checkbox.frame = CGRect(x: 8, y: 6, width: 160, height: 20)
-        #expect(checkbox.focusRingFrame == nil)
-        checkbox.focusRingOverride = true
-        let outset = Metrics.FocusRing.outset
-        let frame = try #require(checkbox.focusRingFrame)
-        #expect(frame.size == checkbox.boxRect.insetBy(dx: -outset, dy: -outset).size)
-        #expect(frame.minX == checkbox.boxRect.minX - outset)
-        checkbox.focusRingOverride = false
-        #expect(checkbox.focusRingFrame == nil)
-    }
-
-    @Test("the AppKit checkbox's ring, on and off")
-    func appKitCheckboxSnapshot() {
-        for state in [NSControl.StateValue.on, .off] {
-            assertSnapshot({
-                let container = NSView(frame: CGRect(x: 0, y: 0, width: 180, height: 32))
-                let checkbox = CheckboxButton(title: "Include in commit", target: nil, action: nil)
-                checkbox.state = state
-                checkbox.frame = CGRect(x: 8, y: 6, width: 160, height: 20)
-                checkbox.focusRingOverride = true
-                container.addSubview(checkbox)
-                return container
-            }, named: state == .on ? "checkboxFocusRing-on" : "checkboxFocusRing-off", area: area, size: CGSize(width: 180, height: 32))
-        }
     }
 }

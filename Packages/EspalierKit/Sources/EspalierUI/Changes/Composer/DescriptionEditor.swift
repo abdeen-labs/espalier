@@ -1,7 +1,7 @@
 // The commit description, an `EspalierTextView` that shows 3 to 8 lines and then
 // scrolls (a shorter text, or the placeholder, doesn't move under a
 // scroll), with a placeholder, `@` and `#` completion (a suggestion
-// list), the composer's items at the top of its editing menu, and
+// list), the composer's items at the top of its context menu, and
 // spell checking that remembers its setting (`commit-spellcheck-enabled`).
 // Tab moves to the next field, as in a form. The summary and the
 // description tell the composer which of them has focus.
@@ -10,17 +10,21 @@ import AppKit
 import EspalierSupport
 import SwiftUI
 
-/// An item the summary's and the description's editing menus start with.
+/// An item the summary's and the description's context menus start with.
 struct ComposerMenuItem {
     var title: String
     var isEnabled = true
     var action: () -> Void
 
-    /// `items` as menu content.
-    static func menuContent(_ items: [ComposerMenuItem]) -> MenuContent {
-        MenuContent(items.map { item in
-            .item(MenuItem(item.title, isEnabled: item.isEnabled, action: .run(item.action)))
-        })
+    /// `items` at the top of `menu`, above a separator.
+    static func insert(_ items: [ComposerMenuItem], atTopOf menu: NSMenu) {
+        guard !items.isEmpty else {
+            return
+        }
+        menu.insertItem(.separator(), at: 0)
+        for item in items.reversed() {
+            menu.insertItem(MenuItemAction.item(title: item.title, isEnabled: item.isEnabled, handler: item.action), at: 0)
+        }
     }
 }
 
@@ -79,7 +83,6 @@ struct DescriptionEditor: NSViewRepresentable {
         scrollView.borderType = .noBorder
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
-        scrollView.useEspalierScrollers()
         scrollView.documentView = textView
         context.coordinator.textView = textView
         focusBridge?.descriptionView = textView
@@ -355,9 +358,10 @@ final class ComposerTextView: EspalierTextView {
         }
     }
 
-    /// VoiceOver's Show Menu: the editing menu, at the insertion point.
-    override func accessibilityPerformShowMenu() -> Bool {
-        TextEditingMenu.show(for: self)
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        ComposerMenuItem.insert(coordinator?.parent.menuItems ?? [], atTopOf: menu)
+        return menu
     }
 
     override func toggleContinuousSpellChecking(_ sender: Any?) {
@@ -414,10 +418,27 @@ final class ComposerTextView: EspalierTextView {
     }
 }
 
-extension ComposerTextView: TextEditingMenuItems {
-    /// The composer's items, first in the editing menu.
-    var editingMenuItems: MenuContent {
-        ComposerMenuItem.menuContent(coordinator?.parent.menuItems ?? [])
+/// A target for a menu item that runs a closure.
+final class MenuItemAction: NSObject {
+    private let handler: () -> Void
+
+    init(_ handler: @escaping () -> Void) {
+        self.handler = handler
+    }
+
+    @objc func run(_ sender: Any?) {
+        handler()
+    }
+
+    /// A menu item that runs `handler`; a disabled one has no action, so
+    /// the menu's automatic enabling disables it.
+    static func item(title: String, isEnabled: Bool = true, handler: @escaping () -> Void) -> NSMenuItem {
+        let action = MenuItemAction(handler)
+        let item = NSMenuItem(title: title, action: isEnabled ? #selector(run(_:)) : nil, keyEquivalent: "")
+        item.target = action
+        item.representedObject = action
+        item.isEnabled = isEnabled
+        return item
     }
 }
 

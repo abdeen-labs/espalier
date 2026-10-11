@@ -292,9 +292,10 @@ final class SummaryFieldEditor: EspalierFieldEditor {
         }
     }
 
-    /// VoiceOver's Show Menu: the editing menu, at the insertion point.
-    override func accessibilityPerformShowMenu() -> Bool {
-        TextEditingMenu.show(for: self)
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        ComposerMenuItem.insert(coordinator?.parent.menuItems ?? [], atTopOf: menu)
+        return menu
     }
 
     override func toggleContinuousSpellChecking(_ sender: Any?) {
@@ -334,13 +335,6 @@ final class SummaryFieldEditor: EspalierFieldEditor {
             coordinator?.parent.focusBridge?.field(.summary, hasFocus: false)
         }
         return resigned
-    }
-}
-
-extension SummaryFieldEditor: TextEditingMenuItems {
-    /// The composer's items, first in the editing menu.
-    var editingMenuItems: MenuContent {
-        ComposerMenuItem.menuContent(coordinator?.parent.menuItems ?? [])
     }
 }
 

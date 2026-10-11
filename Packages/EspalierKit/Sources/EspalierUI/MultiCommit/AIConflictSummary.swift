@@ -104,7 +104,11 @@ struct AIConflictSummary: View {
                     .foregroundStyle(.text2)
             }
             if let markdown = content.markdown {
-                SelectableText(Self.attributed(markdown), font: AppKitTypography.row)
+                Text(Self.attributed(markdown))
+                    .font(Typography.row)
+                    .foregroundStyle(.text)
+                    .tint(Color(espalier: Palette.link))
+                    .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !content.references.isEmpty {
@@ -149,7 +153,10 @@ struct AIConflictSummary: View {
                 Text("#\(number)")
                     .foregroundStyle(.text2)
             case .commit(let shortSHA, let isOnRemote):
-                SelectableText(shortSHA, font: AppKitTypography.sha, color: Palette.text2)
+                Text(shortSHA)
+                    .font(Typography.sha)
+                    .foregroundStyle(.text2)
+                    .textSelection(.enabled)
                 if !isOnRemote {
                     Text("Not on remote")
                         .font(Typography.subheadline)

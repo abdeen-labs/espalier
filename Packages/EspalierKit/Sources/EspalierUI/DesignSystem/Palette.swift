@@ -267,30 +267,6 @@ nonisolated public enum Palette {
     public static var caret: NSColor { accent }
     /// Text an input method is still composing: the soft accent.
     public static var markedText: NSColor { accentSoft }
-    /// The wave under a misspelled word: the error hue, at 3:1 as a mark.
-    public static let spellingMark = readable(delete, minimumContrast: 3)
-    /// The wave under a grammar issue: the warning mark.
-    public static var grammarMark: NSColor { warningMark }
-
-    // MARK: Scrollers
-
-    /// The scroller's knob: black 30% (white 32% in dark).
-    public static let scrollerKnob = NSColor.espalierDynamic(
-        light: NSColor.black.withAlphaComponent(0.30), dark: NSColor.white.withAlphaComponent(0.32),
-        highContrastLight: NSColor.black.withAlphaComponent(0.5), highContrastDark: NSColor.white.withAlphaComponent(0.55)
-    )
-    /// The knob while the pointer is over the scroller or drags it: black
-    /// 45% (white 48% in dark).
-    public static let scrollerKnobActive = NSColor.espalierDynamic(
-        light: NSColor.black.withAlphaComponent(0.45), dark: NSColor.white.withAlphaComponent(0.48),
-        highContrastLight: NSColor.black.withAlphaComponent(0.65), highContrastDark: NSColor.white.withAlphaComponent(0.7)
-    )
-    /// The track of a scroller that's always shown: black 3.5% (white 4.5%
-    /// in dark).
-    public static let scrollerTrack = NSColor.espalierDynamic(
-        light: NSColor.black.withAlphaComponent(0.035), dark: NSColor.white.withAlphaComponent(0.045),
-        highContrastLight: NSColor.black.withAlphaComponent(0.07), highContrastDark: NSColor.white.withAlphaComponent(0.08)
-    )
 
     // MARK: Accent
 

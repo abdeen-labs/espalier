@@ -3,7 +3,7 @@
 // leaves or swaps, 0.25 s ease-in-out for scrolls; hover fades in over
 // 0.08 s and out over 0.15 s; a press shows at once and eases back over
 // 0.15 s; a spinner's arc turns once every 0.9 s, and an indeterminate bar
-// sweeps every 1.4 s; a scroller's knob stays 0.8 s after scrolling stops.
+// sweeps every 1.4 s.
 // One answer to "animate?": never with Reduce Motion on (hover and
 // press included), never in a window that isn't on screen (snapshots and
 // tests draw offscreen), and never where motion is turned off (snapshots).
@@ -52,9 +52,6 @@ public enum Motion {
     /// One sweep of an indeterminate progress bar's segment, eased in and
     /// out.
     nonisolated public static let sweep: TimeInterval = 1.4
-    /// How long a scroller's knob stays after scrolling stops, before it
-    /// fades out.
-    nonisolated public static let scrollerLinger: TimeInterval = 0.8
 
     // MARK: The curve
 
@@ -82,50 +79,6 @@ public enum Motion {
     /// A scroll's ease-in-out, for Core Animation.
     nonisolated public static var scrollTimingFunction: CAMediaTimingFunction {
         CAMediaTimingFunction(name: .easeInEaseOut)
-    }
-
-    /// The curve's value at `time` (0 to 1, clamped), for drawing that
-    /// animates frame by frame (a checkbox's mark).
-    nonisolated public static func curveProgress(_ time: Double) -> Double {
-        let time = min(max(time, 0), 1)
-        let (x1, y1, x2, y2) = controlPoints
-        // The cubic Bézier through (0, 0), (x1, y1), (x2, y2), (1, 1):
-        // find the parameter whose x is `time` (Newton's method, then
-        // bisection if it strays), and return its y.
-        func sample(_ a: Double, _ b: Double, _ s: Double) -> Double {
-            3 * a * s * (1 - s) * (1 - s) + 3 * b * s * s * (1 - s) + s * s * s
-        }
-        func slope(_ a: Double, _ b: Double, _ s: Double) -> Double {
-            3 * a * (1 - s) * (1 - s) + 6 * (b - a) * s * (1 - s) + 3 * (1 - b) * s * s
-        }
-        var s = time
-        for _ in 0..<8 {
-            let error = sample(x1, x2, s) - time
-            let derivative = slope(x1, x2, s)
-            if abs(error) < 1e-6 {
-                return sample(y1, y2, s)
-            }
-            if abs(derivative) < 1e-6 {
-                break
-            }
-            s -= error / derivative
-        }
-        var low = 0.0
-        var high = 1.0
-        s = time
-        for _ in 0..<30 {
-            let x = sample(x1, x2, s)
-            if abs(x - time) < 1e-6 {
-                break
-            }
-            if x < time {
-                low = s
-            } else {
-                high = s
-            }
-            s = (low + high) / 2
-        }
-        return sample(y1, y2, s)
     }
 
     // MARK: Whether to animate

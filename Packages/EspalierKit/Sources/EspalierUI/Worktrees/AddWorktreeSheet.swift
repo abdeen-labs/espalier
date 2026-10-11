@@ -166,9 +166,12 @@ struct AddWorktreeForm: View {
             .formStyle(.columns)
             .textFieldStyle(.capsule)
             if let footer = content.footer {
-                SelectableText(footer, font: AppKitTypography.meta, color: Palette.text3)
+                Text(footer)
+                    .font(Typography.meta)
+                    .foregroundStyle(.text3)
                     .lineLimit(3)
                     .truncationMode(.middle)
+                    .textSelection(.enabled)
             }
         } buttons: {
             if content.isCreating {

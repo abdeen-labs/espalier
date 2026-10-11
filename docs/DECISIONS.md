@@ -854,7 +854,7 @@ immediately; importing desktop's repository list and settings (my call).
   not.
 - **Every control's focus ring is Espalier's,** with keyboard navigation on
   as before: capsules, symbol and bare buttons, menu buttons, pop-ups,
-  steppers, switches, checkboxes (AppKit's included), choice lists, the
+  steppers, switches, checkboxes, choice lists, the
   segmented control, fields, links, and the slider. A list of choices is
   one stop, ringing its chosen row or mark.
 - **Links are the accent, deepened to read as text** (`Palette.link`, 4.5:1;
@@ -865,8 +865,7 @@ immediately; importing desktop's repository list and settings (my call).
   Home and End to the ends. Desktop's range inputs stepped 0.1%, too fine
   to see.
 - **A branch folder's whole row opens and closes it,** not only its
-  chevron; → and ← open and close it while the row has keyboard focus
-  (folder rows can't be selected).
+  chevron.
 - **A drag of commits is one dragging item** carrying them all, so its
   image is Espalier's stack with its own count, not the system's badge.
 - **The commit message card shows which field has focus with its own
@@ -882,23 +881,6 @@ immediately; importing desktop's repository list and settings (my call).
   draw their own selection in the row's rounded shape, focused or not.
 - **The insertion point is the accent,** as the selection is: it's where
   the user's own changes go.
-- **No text popups of the system's:** automatic spelling correction and
-  its bubbles, text replacement, text completion, inline predictions, math
-  results, and Writing Tools are off in every text view and field editor,
-  SwiftUI's included, since they show only as the system's UI. Smart
-  quotes and dashes stay as each field had them. Spell checking stays, and
-  Check Spelling While Typing is still remembered: the system's checker
-  finds the words, and Espalier draws the mark.
-- **Text views are on TextKit 1,** SwiftUI's text fields' editors included
-  (moved when they take focus): only there can Espalier draw the selection
-  where the text doesn't have focus, and the spelling marks.
-- **Selectable text keeps one selection at a time,** as desktop's page
-  does: another view taking focus clears it. It copies plain text, and
-  output added at its end keeps the selection.
-- **Every scroll view gets Espalier's scroller as it joins a window,**
-  through one hook on scroll views set at launch, so SwiftUI's scroll
-  views, lists, and text views, and those to come, are covered; scroll
-  views made in code also ask for it.
 - **Four corner radii:** 5 for checkboxes and key caps, 9 for rows, 14 for
   cards, 22 for sheets and popovers.
 - **A card in a pane has a ring and no shadow;** only what floats casts
@@ -917,16 +899,9 @@ immediately; importing desktop's repository list and settings (my call).
   a right-click on another view with a context menu opens that menu. A
   menu closes when its window moves, resizes, or closes, and when Espalier
   goes to the background. The window keeps its focus while one is open.
-- **Text's editing menu is Espalier's card,** in every field and text
-  view: the field's own items first (the commit message's), then Cut,
-  Copy, Paste, and Select All as the text enables them (Copy and Select
-  All in text that can only be selected; no Cut or Copy in a secure
-  field), then, in editable text, a misspelled word's guesses, Ignore
-  Spelling, Learn Spelling, and Check Spelling While Typing. Look Up,
-  Translate, Services, Writing Tools, the Substitutions, Transformations,
-  and Speech submenus, Font, and AutoFill are left out: only the system can
-  show them. A context click outside the selection selects the word under
-  the pointer, and a field takes focus, as AppKit's did.
+- **Text keeps AppKit's context menu** (my call), in every field and
+  text view, with Look Up, Translate, Services, Writing Tools, and the
+  rest; the commit message's fields put their own items first.
 - **Completions show in Espalier's suggestion list** (AppKit's completion
   window in the commit message and the co-authors field, SwiftUI's
   suggestion menu in Add Worktree's Branch Name): the menu card under the
@@ -957,9 +932,9 @@ immediately; importing desktop's repository list and settings (my call).
   sheet's popover leaves them off, as the sheet does.
 - **⌘T and ⌘B close their popovers while they're open,** as desktop's
   foldouts toggle.
-- **Tooltips are Espalier's card,** in a panel of their own; the system's
-  are off for the whole app (their delay is longer than anyone rests), so
-  none can show. The card takes a row's radius, 9: a card's 14 is nearly
+- **Tooltips are Espalier's card,** in a panel of their own; Espalier
+  sets no system tooltips, and the system's own windows (the open and save
+  panels, Quick Look) keep theirs. The card takes a row's radius, 9: a card's 14 is nearly
   round on one line. One shows once the pointer rests 0.8 s (desktop's
   waited 0.4 s), the next after 0.1 s while one has shown in the last
   second. A click, a key press, or a scroll hides it until the pointer

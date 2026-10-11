@@ -1,29 +1,28 @@
-// The base of Espalier's own text views: TextKit 1 with
-// `EspalierLayoutManager`, set up by `TextInputStyle` (the selection, the
-// insertion point, spelling marks, and the system's text popups off). The
-// selectable text view, text areas, the commit message's fields, and the
-// field editors of Espalier's AppKit text fields are text views of this
-// kind.
+// The base of Espalier's own text views: on TextKit 2, set up by
+// `TextInputStyle` (the selection and the insertion point). The commit
+// message's fields and the field editors of Espalier's AppKit text fields
+// are text views of this kind.
 
 import AppKit
 
 /// An `NSTextView` drawn Espalier's way.
 class EspalierTextView: NSTextView {
     /// The text system the view made for itself, kept alive with it.
-    private var ownedStorage: NSTextStorage?
+    private var ownedContentStorage: NSTextContentStorage?
 
-    /// A text view with a text system of its own: a text storage,
-    /// Espalier's layout manager, and a container that follows the view's
-    /// width.
+    /// A text view with a TextKit 2 text system of its own: a content
+    /// storage, a text layout manager, and a container that follows the
+    /// view's width.
     convenience init() {
-        let storage = NSTextStorage()
-        let layoutManager = EspalierLayoutManager()
-        storage.addLayoutManager(layoutManager)
         let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
         container.widthTracksTextView = true
-        layoutManager.addTextContainer(container)
+        let layoutManager = NSTextLayoutManager()
+        layoutManager.textContainer = container
+        let contentStorage = NSTextContentStorage()
+        contentStorage.addTextLayoutManager(layoutManager)
+        contentStorage.primaryTextLayoutManager = layoutManager
         self.init(frame: .zero, textContainer: container)
-        ownedStorage = storage
+        ownedContentStorage = contentStorage
     }
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
@@ -34,13 +33,6 @@ class EspalierTextView: NSTextView {
     /// Espalier's text views are made in code, never decoded.
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-
-    /// VoiceOver's Show Menu: the editing menu, at the insertion point. A
-    /// right-click opens it through the menu router before AppKit asks for
-    /// a menu.
-    override func accessibilityPerformShowMenu() -> Bool {
-        TextEditingMenu.show(for: self)
     }
 
     /// AppKit's completion window never shows (views with completions show

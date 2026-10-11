@@ -11,13 +11,6 @@ extension Typography {
     public static let welcomeBody: Font = .title3
 }
 
-extension AppKitTypography {
-    /// The device code to enter when signing in (SF Mono, 22, semibold).
-    public static var deviceCode: NSFont {
-        .monospacedSystemFont(ofSize: NSFont.preferredFont(forTextStyle: .title1).pointSize, weight: .semibold)
-    }
-}
-
 extension Metrics.Welcome {
     /// Between the welcome flow's parts (the icon, the heading, the form,
     /// the buttons).

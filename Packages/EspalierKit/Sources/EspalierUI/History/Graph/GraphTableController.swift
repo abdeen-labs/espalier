@@ -160,7 +160,6 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
-        scrollView.useEspalierScrollers()
         scrollView.drawsBackground = true
         scrollView.backgroundColor = Palette.background
         scrollView.contentView.postsBoundsChangedNotifications = true

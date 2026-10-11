@@ -266,7 +266,6 @@ struct FileTable: NSViewRepresentable {
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
-        scrollView.useEspalierScrollers()
         scrollView.drawsBackground = true
         scrollView.backgroundColor = Palette.background
         // A little room above the first row.

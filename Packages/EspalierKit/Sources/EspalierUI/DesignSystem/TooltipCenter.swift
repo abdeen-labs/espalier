@@ -378,12 +378,6 @@ final class TooltipCenter {
         let cursor = NSCursor.current
         return min(max(cursor.image.size.height - cursor.hotSpot.y, 0), Metrics.Tooltip.maximumCursorDepth)
     }
-
-    /// Turns the system's tooltips off for the app: any a view or a stock
-    /// control would show waits longer than anyone rests.
-    static func turnOffSystemTooltips(in defaults: UserDefaults = .standard) {
-        defaults.register(defaults: ["NSInitialToolTipDelay": Int(Int32.max)])
-    }
 }
 
 /// A tooltip's card on screen: its panel, and the text and anchor it shows.

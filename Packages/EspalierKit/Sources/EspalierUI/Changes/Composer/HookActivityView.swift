@@ -137,7 +137,10 @@ public struct HookOutputView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    SelectableText(text.isEmpty ? "No output yet." : text, font: AppKitTypography.sha, color: text.isEmpty ? .secondaryLabelColor : .labelColor)
+                    Text(text.isEmpty ? "No output yet." : text)
+                        .font(Typography.terminal)
+                        .foregroundStyle(text.isEmpty ? .secondary : .primary)
+                        .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(Metrics.insetMedium)
                     Color.clear

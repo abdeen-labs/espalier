@@ -227,7 +227,6 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         scrollView.hasVerticalScroller = true
         // Shown while lines don't wrap and one is wider than the pane.
         scrollView.hasHorizontalScroller = true
-        scrollView.useEspalierScrollers()
         // Bouncing past the edges would pull the numbers off the pane.
         scrollView.horizontalScrollElasticity = .none
         scrollView.autohidesScrollers = true
@@ -334,9 +333,10 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
     }
 
-    /// Shows a new document. The same file's expanded lines slide down into
-    /// place (0.22 s, up to 100 lines, when the table can insert them
-    /// rather than reload); Unified ↔ Split crossfades over 0.15 s.
+    /// Shows a new document. The same file's expanded lines crossfade in
+    /// over 0.22 s (up to 100 lines, when the table can insert them rather
+    /// than reload); Unified ↔ Split crossfades over 0.15 s. A hover
+    /// showing moves to what's under the pointer in the new rows.
     private func install(_ document: DiffDocument, for content: DiffTableContent) {
         let isNewFile = shownContent?.fileID != content.fileID
         let keepsScroll = !isNewFile
@@ -345,6 +345,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         let switchesLayout = shownContent.map { $0.isSplit != content.isSplit } ?? false
         let canInsert = shownContent.map { $0.wrapsLines == content.wrapsLines && (($0.staging == nil) == (content.staging == nil)) } ?? false
         let expansion = animates && !switchesLayout && canInsert ? Self.expansion(from: self.document, to: document) : nil
+        let hovers = hoveredBlock != nil || hoveredLine != nil || hoveredButton != nil
 
         self.document = document
         shownContent = content
@@ -380,6 +381,9 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         // Laid out, find's matches follow (another file's first one
         // scrolled into view).
         find.documentDidChange(document, isNewFile: isNewFile)
+        if hovers {
+            refreshHover()
+        }
     }
 
     // MARK: Expansion's motion
@@ -449,8 +453,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         return ExpansionChange(removed: IndexSet(integersIn: removed), inserted: IndexSet(integersIn: inserted))
     }
 
-    /// Lays out the new document and inserts its revealed rows, sliding
-    /// down from the row above over 0.22 s, as the rows below make room.
+    /// Lays out the new document and inserts its revealed rows at once, the
+    /// pane crossfading to them over 0.22 s.
     private func insertExpandedRows(_ change: ExpansionChange) {
         let width = max(scrollView.contentView.bounds.width, 200)
         geometry = DiffRowGeometry(
@@ -465,12 +469,16 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         textCache.reset()
         computeRowHeights(wraps: shownContent?.wrapsLines ?? true)
         updateDocumentWidth()
-        Motion.run(Motion.arrive, in: tableView) { animates in
+        // The rows go in in a group of no duration, so the table's own row
+        // motion doesn't run, and the pane crossfades.
+        Motion.crossfade(scrollView.layer, duration: Motion.arrive)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
             tableView.beginUpdates()
             if !change.removed.isEmpty {
-                tableView.removeRows(at: change.removed, withAnimation: animates ? .effectFade : [])
+                tableView.removeRows(at: change.removed, withAnimation: [])
             }
-            tableView.insertRows(at: change.inserted, withAnimation: animates ? .slideDown : [])
+            tableView.insertRows(at: change.inserted, withAnimation: [])
             tableView.endUpdates()
         }
         // Rows keep their views as they move: tell each its new row.
@@ -1198,6 +1206,16 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             crossfade(rows: leaving, duration: Motion.hoverOut)
             crossfade(rows: hoverRows(block: block, line: line?.row, buttonHunk: button?.hunk), duration: Motion.hoverIn)
         }
+    }
+
+    /// Finds what's under the pointer again: the rows changed under a
+    /// pointer that didn't move.
+    private func refreshHover() {
+        guard let window = tableView.window else {
+            return
+        }
+        let point = tableView.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        mouseMoved(to: tableView.visibleRect.contains(point) ? point : nil)
     }
 
     /// Whether the cursor over a point is an I-beam (text).

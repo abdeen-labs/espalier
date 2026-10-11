@@ -192,7 +192,10 @@ struct AcknowledgementDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.insetMedium) {
                 VStack(alignment: .leading, spacing: Metrics.grid) {
-                    SelectableText(acknowledgement.name, font: AppKitTypography.commitSummary)
+                    Text(acknowledgement.name)
+                        .font(Typography.commitSummary)
+                        .foregroundStyle(.text)
+                        .textSelection(.enabled)
                     Text(acknowledgement.subtitle)
                         .font(Typography.secondary)
                         .foregroundStyle(.text2)
@@ -200,10 +203,15 @@ struct AcknowledgementDetail: View {
                         .font(Typography.secondary)
                 }
                 if let note = acknowledgement.note {
-                    SelectableText(note, color: Palette.text2)
+                    Text(note)
+                        .foregroundStyle(.text2)
                         .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
                 }
-                SelectableText(acknowledgement.text, font: AppKitTypography.sha, color: Palette.text2)
+                Text(acknowledgement.text)
+                    .font(Typography.terminal)
+                    .foregroundStyle(.text2)
+                    .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

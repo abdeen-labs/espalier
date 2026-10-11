@@ -60,7 +60,10 @@ public struct BackgroundFailureDetails: View {
             } icon: {
                 WarningGlyph()
             }
-            SelectableText(summary.message, font: AppKitTypography.secondary, color: Palette.text2)
+            Text(summary.message)
+                .font(Typography.secondary)
+                .foregroundStyle(.text2)
+                .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             if !summary.recoveryTitles.isEmpty {
                 HStack(spacing: Metrics.insetSmall) {

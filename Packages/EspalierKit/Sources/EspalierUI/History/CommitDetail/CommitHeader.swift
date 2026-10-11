@@ -103,11 +103,11 @@ struct CommitHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SelectableText(
-                content.summary.isEmpty ? AttributedString(CommitRowContent.emptySummary) : content.richSummary,
-                font: AppKitTypography.commitSummary,
-                color: content.summary.isEmpty ? Palette.text3 : Palette.text
-            )
+            Text(content.summary.isEmpty ? AttributedString(CommitRowContent.emptySummary) : content.richSummary)
+                .font(Typography.commitSummary)
+                .foregroundStyle(content.summary.isEmpty ? .text3 : .text)
+                .tint(Color(espalier: Palette.link))
+                .textSelection(.enabled)
                 .lineLimit(isExpanded ? nil : 3)
                 .fixedSize(horizontal: false, vertical: true)
             metadata
@@ -150,8 +150,12 @@ struct CommitHeader: View {
 
     private var description: some View {
         HStack(alignment: .top, spacing: Metrics.insetSmall) {
-            SelectableText(content.richDescription, font: AppKitTypography.secondary, color: Palette.text2)
+            Text(content.richDescription)
+                .font(Typography.secondary)
+                .foregroundStyle(.text2)
+                .tint(Color(espalier: Palette.link))
                 .lineSpacing(Metrics.CommitDetail.bodyLineSpacing)
+                .textSelection(.enabled)
                 .lineLimit(isExpanded ? nil : 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {

@@ -146,7 +146,8 @@ struct AlertCard: View {
             ForEach(Array(AlertMessageBlock.blocks(message).enumerated()), id: \.offset) { _, block in
                 switch block {
                 case .text(let text):
-                    SelectableText(text, font: AppKitTypography.row, color: Palette.text2)
+                    Text(text)
+                        .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 case .list(let items):
                     VStack(alignment: .leading, spacing: Metrics.Sheet.listItemSpacing) {
@@ -154,7 +155,8 @@ struct AlertCard: View {
                             HStack(alignment: .firstTextBaseline, spacing: Metrics.Sheet.bulletSpacing) {
                                 Text("•")
                                     .accessibilityHidden(true)
-                                SelectableText(item, font: AppKitTypography.row, color: Palette.text2)
+                                Text(item)
+                                    .textSelection(.enabled)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }

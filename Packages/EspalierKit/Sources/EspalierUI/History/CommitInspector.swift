@@ -93,20 +93,22 @@ struct CommitInfoView: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
                 row("Authored") {
-                    SelectableText(fullDate(content.authoredDate), font: AppKitTypography.secondary)
+                    Text(fullDate(content.authoredDate))
+                        .textSelection(.enabled)
                     if !content.authorEmail.isEmpty {
-                        SelectableText(content.authorEmail, font: AppKitTypography.secondary, color: Palette.text2)
+                        Text(content.authorEmail)
+                            .foregroundStyle(.text2)
+                            .textSelection(.enabled)
                     }
                 }
                 Hairline()
                 row("Committed") {
-                    SelectableText(fullDate(content.committedDate), font: AppKitTypography.secondary)
+                    Text(fullDate(content.committedDate))
+                        .textSelection(.enabled)
                     if let committer = content.committer {
-                        SelectableText(
-                            committer.email.isEmpty ? "by \(committer.name)" : "by \(committer.name) <\(committer.email)>",
-                            font: AppKitTypography.secondary,
-                            color: Palette.text2
-                        )
+                        Text(verbatim: committer.email.isEmpty ? "by \(committer.name)" : "by \(committer.name) <\(committer.email)>")
+                            .foregroundStyle(.text2)
+                            .textSelection(.enabled)
                     }
                 }
                 if !content.parents.isEmpty {
@@ -129,14 +131,16 @@ struct CommitInfoView: View {
                     Hairline()
                     row("Co-Authors") {
                         ForEach(content.coAuthors, id: \.self) { coAuthor in
-                            SelectableText(coAuthor, font: AppKitTypography.secondary)
+                            Text(coAuthor)
+                                .textSelection(.enabled)
                         }
                     }
                 }
                 ForEach(content.trailers) { trailer in
                     Hairline()
                     row(trailer.token) {
-                        SelectableText(trailer.value, font: AppKitTypography.secondary)
+                        Text(trailer.value)
+                            .textSelection(.enabled)
                     }
                 }
             }

@@ -41,8 +41,8 @@ the app's snapshots show it in light and dark.
   same gray up to a round knob on the quiet fill with the quiet capsules'
   ring and shadow; the knob takes the capsules' hover and press.
 - **Disclosure is a chevron** before the label, right while closed and
-  down while open (`DisclosureChevron`); a branch folder's rows sit a level
-  in, under its label.
+  down while open. A branch folder is the sidebar list's own outline row,
+  with the list's chevron, its rows a level in, under its label.
 - **Dragged commits** show the row the drag started on as History draws
   it, on a card with the floating ring and shadow; several stack up to
   two more cards behind it, with a count badge (white SF Mono on the
@@ -62,17 +62,11 @@ the app's snapshots show it in light and dark.
   22, with the floating ring and shadow, and no arrow: centered beside the
   control that opens it, 6 points away. A popover is as large as its
   content, up to the screen.
-- **Text selection is Espalier's too:** selected text sits on the accent
-  at 16% (24% in dark) where the text has focus, and on a neutral wash
-  where it doesn't or its window isn't key; the insertion point is the
-  accent. A misspelled word has a soft wave in the error hue under it (a
-  grammar issue, in the warning hue). Text to copy is selectable text that
-  looks as the label did (`SelectableText`); multi-line text to edit is a
-  text area (`TextArea`) on the `field` fill or a card.
-- **Scrollers have no track:** a neutral capsule knob, 5 points thin (8
-  under the pointer), at the edge away from the content, shown while the
-  content scrolls and under the pointer. With scroll bars always shown, it
-  stays, on a faint track.
+- **Text selection is the accent:** in fields and text views, selected
+  text sits on the accent at 16% (24% in dark) where the text has focus,
+  and the insertion point is the accent. Text to copy is `Text` that can
+  be selected; multi-line text to edit is a `TextEditor` on the `field`
+  fill or a card.
 - **Tooltips are small cards:** the `quiet` fill with the floating ring
   and a smaller shadow, radius 9, secondary text (12, secondary color)
   padded 6 by 8, wrapping at 280 points. One shows below the cursor once
@@ -128,18 +122,16 @@ token, `Motion`.
   from 97% toward its control, fades out over 0.15 s, and grows and
   shrinks with its content over 0.22 s. The segmented control's selection
   slides. A focus ring settles in from 1.04× as it fades in (0.15 s) and
-  fades out (0.1 s). Checkbox and radio marks fade and scale in, the
-  switch's knob slides, and disclosure chevrons turn. A link's underline
-  shows at once. A copy button shows a check for 1.5 s. A scroller's knob
-  fades in and thickens with the pointer, and fades out 0.8 s after
-  scrolling stops.
+  fades out (0.1 s). Checkbox and radio marks fade and scale in (a file
+  row's checkbox crossfades), the switch's knob slides, and disclosure chevrons turn. A link's underline
+  shows at once. A copy button shows a check for 1.5 s.
 - **Sheets and alerts arrive:** the scrim fades in over 0.22 s while the card
   fades in and settles from 97%; both fade out over 0.15 s.
 - **What the user changes moves:** the sync button's counts roll, and the
   branch name fades in after a switch. Bars and banners grow in while
   what's below moves, and leave quicker. Simple ↔ Graph and Unified ↔ Split crossfade, and the
-  shimmer crossfades into a generated message. A diff's expanded lines
-  slide down, and a sidebar section's rows animate in and out as it opens
+  shimmer crossfades into a generated message. A diff crossfades to its
+  expanded lines, and a sidebar section's rows animate in and out as it opens
   and closes. The diff's find bar fades in, settling from 97%, and fades
   out; the next match scrolls into view, easing when it's within three
   screens. Hover in lists fades, row by row.

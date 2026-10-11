@@ -2,7 +2,7 @@
 // row clicked is in it and on that row alone otherwise, takes every
 // context click in the list, and keeps the list's primary action; an
 // AppKit table's opens from the keyboard and a right-click and rings its
-// row; text in a view with a menu keeps its editing menu; buttons open
+// row; text in a view with a menu keeps AppKit's menu; buttons open
 // their menus below themselves; and VoiceOver sees menu and pop-up
 // buttons.
 
@@ -175,7 +175,7 @@ struct ContextMenuCardTests {
         #expect(activated == [[3]])
     }
 
-    @Test("in a view with a context menu, a right-click on its text opens the text's editing menu, and elsewhere the view's menu")
+    @Test("in a view with a context menu, a right-click on its text goes on to the text, for AppKit's menu, and elsewhere opens the view's menu")
     func textInAView() throws {
         let recorder = MenuRecorder()
         let (window, host) = hostInWindow(
@@ -197,11 +197,8 @@ struct ContextMenuCardTests {
             try #require(NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
         }
         let onText = try rightClick(at: CGPoint(x: textView.bounds.midX, y: textView.bounds.midY), in: textView)
-        #expect(ContextMenuRegions.openMenu(for: onText, presenter: recorder.menuPresenter))
-        #expect(recorder.popups.map(\.titles) == [["Cut", "Copy", "Paste", "Select All", "—", "Check Spelling While Typing"]])
-        #expect(recorder.popups.first?.view === textView)
-        // The text takes focus, as a click on it would.
-        #expect(window.firstResponder === textView)
+        #expect(!ContextMenuRegions.openMenu(for: onText, presenter: recorder.menuPresenter))
+        #expect(recorder.popups.isEmpty)
         #expect(MenuEventRouter.shared.handle(try rightClickInWindow(at: CGPoint(x: 120, y: 40))) == nil)
         #expect(recorder.popups.last?.titles == ["Copy Message"])
     }

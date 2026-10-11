@@ -255,7 +255,10 @@ public struct AuthorIdentityPopover: View {
                     Text(content.title)
                         .font(Typography.heading)
                     if let email = content.email {
-                        SelectableText(email, font: AppKitTypography.secondary, color: .secondaryLabelColor)
+                        Text(email)
+                            .font(Typography.secondary)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
                     } else {
                         Text("Set your name and email in Git settings.")
                             .font(Typography.secondary)

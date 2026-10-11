@@ -316,6 +316,9 @@ struct BranchPickerList: View {
     /// What sits beside the filter.
     var filterAccessory: AnyView?
     @FocusState private var isFilterFocused: Bool
+    /// The branch the pointer highlighted last in the popover, which the
+    /// list doesn't scroll to.
+    @State private var hoveredRef: String?
 
     init(
         content: BranchPickerContent,
@@ -414,7 +417,8 @@ struct BranchPickerList: View {
     }
 
     /// The popover's rows, as a menu's: a click activates a branch, and the
-    /// pointer highlights the row it's on.
+    /// pointer highlights the row it's on. A list that fits doesn't scroll,
+    /// and the highlight scrolls into view unless the pointer put it there.
     private var popoverList: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -429,10 +433,14 @@ struct BranchPickerList: View {
                 }
                 .padding(.bottom, Metrics.ListRow.inset)
             }
+            .scrollsOnlyWhenOverflowing()
             .onChange(of: selection?.ref) {
-                if let ref = selection?.ref {
+                if let ref = selection?.ref, ref != hoveredRef {
                     proxy.scrollTo(ref)
                 }
+            }
+            .onChange(of: filter) {
+                hoveredRef = nil
             }
             .onAppear {
                 if let ref = selection?.ref {
@@ -456,6 +464,7 @@ struct BranchPickerList: View {
         .id(branch.ref)
         .onHover { isHovering in
             if isHovering {
+                hoveredRef = branch.ref
                 selection = branch
             }
         }
@@ -535,6 +544,7 @@ struct BranchPickerList: View {
         guard !branches.isEmpty else {
             return
         }
+        hoveredRef = nil
         guard let selection, let index = branches.firstIndex(where: { $0.ref == selection.ref }) else {
             self.selection = offset > 0 ? branches.first : branches.last
             return

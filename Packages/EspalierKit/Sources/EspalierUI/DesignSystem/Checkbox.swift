@@ -5,8 +5,8 @@
 // `NSButton` for AppKit rows and headers (a checkbox to VoiceOver, mixed
 // state included), and a SwiftUI view, which a `Toggle` takes with the
 // `.checkboxMark` style. Every checkbox in Espalier is one of them. With
-// keyboard focus, the AppKit and SwiftUI ones show Espalier's focus ring
-// around the box.
+// keyboard focus, the SwiftUI one shows Espalier's focus ring around the
+// box.
 
 import AppKit
 import SwiftUI
@@ -57,27 +57,20 @@ public enum CheckboxDrawing {
     /// - Parameters:
     ///   - flipped: Whether y grows downward in the context.
     ///   - isPressed: Darkens the box while the mouse is down on it.
-    ///   - alpha: The whole checkbox's opacity (a crossfade between two
-    ///     states draws both).
-    ///   - markScale: The check's or dash's size, about the box's center,
-    ///     as it scales in.
     public static func draw(
         _ state: CheckboxState,
         in rect: CGRect,
         isEnabled: Bool = true,
         isPressed: Bool = false,
-        flipped: Bool,
-        alpha: CGFloat = 1,
-        markScale: CGFloat = 1
+        flipped: Bool
     ) {
         guard let context = NSGraphicsContext.current?.cgContext else {
             return
         }
         context.saveGState()
         defer { context.restoreGState() }
-        let opacity = (isEnabled ? 1 : Palette.disabledOpacity) * alpha
-        if opacity < 1 {
-            context.setAlpha(opacity)
+        if !isEnabled {
+            context.setAlpha(Palette.disabledOpacity)
         }
         let radius = Metrics.Radius.small * rect.width / size
         switch state {
@@ -97,8 +90,7 @@ public enum CheckboxDrawing {
             mark.lineWidth = 1.75 * rect.width / size
             mark.lineCapStyle = .round
             mark.lineJoinStyle = .round
-            for (index, unscaled) in markPoints(state).enumerated() {
-                let point = markScale == 1 ? unscaled : CGPoint(x: 0.5 + (unscaled.x - 0.5) * markScale, y: 0.5 + (unscaled.y - 0.5) * markScale)
+            for (index, point) in markPoints(state).enumerated() {
                 let location = CGPoint(
                     x: rect.minX + point.x * rect.width,
                     y: flipped ? rect.minY + point.y * rect.height : rect.maxY - point.y * rect.height
@@ -130,28 +122,11 @@ public enum CheckboxDrawing {
 
 /// A checkbox as an AppKit button: Espalier's box, then its title. It
 /// stays an `NSButton` of the switch type, so it's a checkbox to VoiceOver
-/// (mixed included) and keeps the target, action, and state of one. While
-/// it has keyboard focus, Espalier's ring shows around the box.
+/// (mixed included) and keeps the target, action, and state of one. Its
+/// owners keep it out of the key view loop (the list handles Space).
 public final class CheckboxButton: NSButton {
     /// Space between the box and the title.
     static let titleSpacing = Metrics.Checkbox.titleSpacing
-
-    /// The focus ring around the box.
-    private let focusRing = AppKitFocusRing()
-
-    /// Shows the focus ring (true) or hides it (false) whatever the focus;
-    /// nil follows the focus. Tests set it, as they can't give a button
-    /// keyboard focus.
-    var focusRingOverride: Bool? {
-        didSet {
-            updateFocusRing()
-        }
-    }
-
-    /// The focus ring's frame while it shows.
-    var focusRingFrame: CGRect? {
-        focusRing.frame
-    }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -245,114 +220,22 @@ public final class CheckboxButton: NSButton {
         return CGRect(x: 0, y: ((bounds.height - box) / 2).rounded(), width: box, height: box)
     }
 
-    // MARK: The mark's motion
-
-    /// The state the box is changing from, and when the change began,
-    /// while it animates.
-    private var change: (from: CheckboxState, start: CFTimeInterval)?
-    private var changeLink: CADisplayLink?
-
-    /// Sets the state; when `animated` and motion runs here, the box
-    /// crossfades and the new mark fades and scales in over 0.15 s. Owners
-    /// animate only a change of the same item's state, never a row reused
-    /// for another.
+    /// Sets the state; when `animated` and motion runs here, the old box
+    /// crossfades into the new one over 0.15 s. Owners animate only a change
+    /// of the same item's state, never a row reused for another.
     public func setState(_ newState: NSControl.StateValue, animated: Bool) {
         let old = CheckboxState(state)
         state = newState
         guard animated, old != CheckboxState(newState), Motion.animates(self) else {
-            endChange()
             return
         }
-        change = (old, CACurrentMediaTime())
-        if changeLink == nil {
-            let link = displayLink(target: self, selector: #selector(changeStep(_:)))
-            link.add(to: .main, forMode: .common)
-            changeLink = link
-        }
-        // The last frame, should the display link not fire (a window
-        // offscreen).
-        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.leave + 0.05) { [weak self] in
-            self?.changeStep(nil)
-        }
-    }
-
-    /// How far the change has gone, on the motion curve: 1 when none runs.
-    var changeProgress: CGFloat {
-        guard let change else {
-            return 1
-        }
-        return CGFloat(Motion.curveProgress((CACurrentMediaTime() - change.start) / Motion.leave))
-    }
-
-    @objc private func changeStep(_ link: CADisplayLink?) {
-        needsDisplay = true
-        if changeProgress >= 1 {
-            endChange()
-        }
-    }
-
-    private func endChange() {
-        guard change != nil || changeLink != nil else {
-            return
-        }
-        change = nil
-        changeLink?.invalidate()
-        changeLink = nil
-        needsDisplay = true
-    }
-
-    public override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window == nil {
-            endChange()
-        }
-        updateFocusRing()
-    }
-
-    // MARK: The focus ring
-
-    public override func becomeFirstResponder() -> Bool {
-        let became = super.becomeFirstResponder()
-        if became {
-            updateFocusRing(isFocused: true)
-        }
-        return became
-    }
-
-    public override func resignFirstResponder() -> Bool {
-        let resigned = super.resignFirstResponder()
-        if resigned {
-            updateFocusRing(isFocused: false)
-        }
-        return resigned
-    }
-
-    public override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(newSize)
-        updateFocusRing()
-    }
-
-    /// Shows the ring around the box while the button is the first
-    /// responder (`isFocused`, when it's changing), or as overridden.
-    private func updateFocusRing(isFocused: Bool? = nil) {
-        let isShown = focusRingOverride ?? isFocused ?? (window?.firstResponder === self)
-        guard isShown || focusRing.isShown else {
-            return
-        }
-        focusRing.update(isShown, around: boxRect, cornerRadius: Metrics.Radius.small, in: self)
+        Motion.crossfade(layer, duration: Motion.leave)
+        // Drawn now, so the crossfade takes this change of contents.
+        displayIfNeeded()
     }
 
     public override func draw(_ dirtyRect: NSRect) {
-        let current = CheckboxState(state)
-        let progress = changeProgress
-        if let change, progress < 1 {
-            // The old box fades out under the new one, whose mark scales
-            // in from 60%.
-            CheckboxDrawing.draw(change.from, in: boxRect, isEnabled: isEnabled, isPressed: isHighlighted, flipped: true, alpha: 1 - progress)
-            CheckboxDrawing.draw(current, in: boxRect, isEnabled: isEnabled, isPressed: isHighlighted, flipped: true, alpha: progress, markScale: 0.6 + 0.4 * progress)
-        } else {
-            CheckboxDrawing.draw(current, in: boxRect, isEnabled: isEnabled, isPressed: isHighlighted, flipped: true)
-        }
+        CheckboxDrawing.draw(CheckboxState(state), in: boxRect, isEnabled: isEnabled, isPressed: isHighlighted, flipped: true)
         guard let title = drawnTitle else {
             return
         }
@@ -372,7 +255,6 @@ public final class CheckboxButton: NSButton {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         needsDisplay = true
-        updateFocusRing()
     }
 }
 

@@ -120,7 +120,6 @@ struct ModalCard: View {
     let fillSize: CGSize?
     /// Kept clear between the card and the edges of what it's in.
     let margin: CGFloat
-    @State private var overflows = false
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Metrics.Radius.sheet, style: .continuous)
@@ -129,13 +128,7 @@ struct ModalCard: View {
                 content
                     .frame(width: fillSize?.width, height: fillSize?.height)
             }
-            .scrollDisabled(!overflows)
-            .scrollBounceBehavior(.basedOnSize)
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentSize.height > geometry.containerSize.height + 0.5
-            } action: { _, overflows in
-                self.overflows = overflows
-            }
+            .scrollsOnlyWhenOverflowing()
         }
         .clipShape(shape)
         .surface(Color(espalier: Palette.background), elevation: .sheet, in: shape)

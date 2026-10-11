@@ -16,6 +16,8 @@ struct MarkdownView: View {
                 MarkdownBlockView(block: block)
             }
         }
+        .textSelection(.enabled)
+        .tint(Color(espalier: Palette.link))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -44,20 +46,22 @@ private struct MarkdownBlockView: View {
     private var content: some View {
         switch block.content {
         case .text(let text, let level):
-            SelectableText(text, font: Self.font(headingLevel: level), color: textColor)
+            Text(text)
+                .font(Self.font(headingLevel: level))
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(level == nil ? [] : .isHeader)
 
         case .listItem(let marker, let text):
             HStack(alignment: .firstTextBaseline, spacing: Metrics.bulletSpacing) {
                 MarkdownListMarker(marker: marker)
-                SelectableText(text, color: textColor)
+                Text(text)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
         case .code(let code, _):
             ScrollView(.horizontal) {
-                SelectableText(code, font: AppKitTypography.code(), color: textColor)
+                Text(code)
+                    .font(Typography.code())
                     .fixedSize()
                     .padding(Metrics.insetSmall)
             }
@@ -65,7 +69,7 @@ private struct MarkdownBlockView: View {
             .background(Color(espalier: Palette.field), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
         case .table(let header, let rows):
-            MarkdownTable(header: header, rows: rows, color: textColor)
+            MarkdownTable(header: header, rows: rows)
 
         case .image(let image):
             MarkdownImageView(image: image)
@@ -76,18 +80,13 @@ private struct MarkdownBlockView: View {
         }
     }
 
-    /// The text's color: secondary in a quote.
-    private var textColor: NSColor {
-        block.quoteDepth > 0 ? .secondaryLabelColor : .labelColor
-    }
-
     /// Headings stay below the pull request's title (15, semibold).
-    private static func font(headingLevel: Int?) -> NSFont {
+    private static func font(headingLevel: Int?) -> Font {
         switch headingLevel {
-        case nil: AppKitTypography.row
-        case 1?: AppKitTypography.commitSummary
-        case 2?: AppKitTypography.heading
-        default: AppKitTypography.weighted(AppKitTypography.meta, .semibold)
+        case nil: Typography.row
+        case 1?: Typography.commitSummary
+        case 2?: Typography.heading
+        default: Typography.meta.weight(.semibold)
         }
     }
 }
@@ -118,13 +117,13 @@ private struct MarkdownListMarker: View {
 private struct MarkdownTable: View {
     let header: [AttributedString]
     let rows: [[AttributedString]]
-    let color: NSColor
 
     var body: some View {
         Grid(alignment: .leading, horizontalSpacing: Metrics.insetMedium, verticalSpacing: Metrics.grid) {
             GridRow {
                 ForEach(header.indices, id: \.self) { column in
-                    SelectableText(header[column], font: AppKitTypography.weighted(AppKitTypography.row, .semibold), color: color)
+                    Text(header[column])
+                        .fontWeight(.semibold)
                 }
             }
             Hairline()
@@ -132,7 +131,7 @@ private struct MarkdownTable: View {
             ForEach(rows.indices, id: \.self) { row in
                 GridRow {
                     ForEach(rows[row].indices, id: \.self) { column in
-                        SelectableText(rows[row][column], color: color)
+                        Text(rows[row][column])
                     }
                 }
             }

@@ -50,8 +50,8 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Launching
 
     /// Starts the rolling log file first, so it has the whole run, then
-    /// applies the stored theme, Espalier's text input, and its scrollers,
-    /// and turns the system's tooltips off before the first window opens.
+    /// applies the stored theme and Espalier's text input before the first
+    /// window opens.
     public func applicationWillFinishLaunching(_ notification: Notification) {
         Log.startFileLog()
         let info = Bundle.main.infoDictionary
@@ -60,8 +60,6 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
         logger.info("Espalier \(version, privacy: .public) (\(build, privacy: .public)) started, process \(ProcessInfo.processInfo.processIdentifier)")
         ThemeApplier.apply(Preferences.storedTheme(in: PreferenceStore(.standard)), to: NSApplication.shared)
         TextInputStyling.install()
-        EspalierScroller.installEverywhere()
-        TooltipCenter.turnOffSystemTooltips()
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {

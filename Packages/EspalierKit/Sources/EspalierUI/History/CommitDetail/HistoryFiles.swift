@@ -121,7 +121,6 @@ final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableV
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
-        scrollView.useEspalierScrollers()
         scrollView.drawsBackground = true
         scrollView.backgroundColor = Palette.background
         scrollView.automaticallyAdjustsContentInsets = false

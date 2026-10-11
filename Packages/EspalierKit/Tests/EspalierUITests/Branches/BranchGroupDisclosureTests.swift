@@ -1,12 +1,12 @@
-// A branch group's expansion: the row's choice, the remembered one, and the
-// filter holding it open.
+// A branch group's expansion: the group's choice, the remembered one, and
+// the filter holding it open.
 
 import Testing
 @testable import EspalierUI
 
 @Suite("Branch groups")
 struct BranchGroupDisclosureTests {
-    @Test("a group shows its rows as the row set it, else as remembered, and always while filtering")
+    @Test("a group shows its rows as last set, else as remembered, and always while filtering")
     func isOpen() {
         #expect(BranchGroupExpansion.isOpen(chosen: nil, remembered: true, isFiltering: false))
         #expect(!BranchGroupExpansion.isOpen(chosen: nil, remembered: false, isFiltering: false))
@@ -19,7 +19,7 @@ struct BranchGroupDisclosureTests {
     func change() {
         #expect(BranchGroupExpansion.change(to: true, from: false, isFiltering: false) == true)
         #expect(BranchGroupExpansion.change(to: false, from: true, isFiltering: false) == false)
-        // → on an open group, ← on a closed one.
+        // Opening an open group, closing a closed one.
         #expect(BranchGroupExpansion.change(to: true, from: true, isFiltering: false) == nil)
         #expect(BranchGroupExpansion.change(to: false, from: false, isFiltering: false) == nil)
         #expect(BranchGroupExpansion.change(to: false, from: true, isFiltering: true) == nil)

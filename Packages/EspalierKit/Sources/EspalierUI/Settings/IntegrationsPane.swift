@@ -359,7 +359,10 @@ struct CustomIntegrationSummary: View {
 
     var body: some View {
         SettingsRow("Command") {
-            SelectableText("\(integration.path) \(integration.arguments)", font: AppKitTypography.sha, color: Palette.text2)
+            Text(verbatim: "\(integration.path) \(integration.arguments)")
+                .font(Typography.sha)
+                .foregroundStyle(.text2)
+                .textSelection(.enabled)
                 .lineLimit(2)
                 .truncationMode(.middle)
                 .multilineTextAlignment(.trailing)

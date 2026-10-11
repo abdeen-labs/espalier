@@ -84,7 +84,9 @@ struct GitAuthorForm: View {
     var body: some View {
         row("Name") {
             if isAccountAuthor {
-                SelectableText(name)
+                Text(name)
+                    .foregroundStyle(.text)
+                    .textSelection(.enabled)
                     .authorControlWidth(layout)
             } else {
                 TextField("Name", text: $name, prompt: Text(verbatim: namePrompt))
@@ -175,7 +177,9 @@ struct GitAuthorForm: View {
     @ViewBuilder
     private var emailField: some View {
         if isAccountAuthor {
-            SelectableText(otherEmail)
+            Text(otherEmail)
+                .foregroundStyle(.text)
+                .textSelection(.enabled)
                 .authorControlWidth(layout)
         } else {
             TextField(showsPopUp ? "Other Email" : "Email", text: $otherEmail, prompt: Text(verbatim: "name@example.com"))
