@@ -31,9 +31,9 @@ struct MainWindow: View {
                 .inspector(isPresented: inspectorBinding) {
                     InspectorRouter()
                         .toolbarBand()
+                        // Below the toolbar, which spans the inspector too.
                         .overlay(alignment: .leading) {
                             Hairline(.vertical)
-                                .ignoresSafeArea()
                         }
                         .inspectorColumnWidth(
                             min: Metrics.Column.inspector.min,
