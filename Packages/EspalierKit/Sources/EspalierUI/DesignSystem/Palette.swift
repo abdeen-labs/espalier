@@ -1,9 +1,10 @@
 // Espalier's colors. Every color is a dynamic NSColor with light, dark, and
-// Increase Contrast variants, resolved where they're drawn. The surfaces,
-// lines, and text are fixed values; the accent is the system's accent
-// color. Status colors used as text are the status hues, darkened (light)
-// or lightened (dark) just enough to read: text 4.5:1, marks 3:1, and 1.5
-// more under Increase Contrast.
+// Increase Contrast variants, resolved where they're drawn, and comes from
+// the current design theme (Themes/). Classic's surfaces, lines, and text
+// are fixed values and its accent is the system's accent color. Status
+// colors used as text are the status hues, darkened (light) or lightened
+// (dark) just enough to read: text 4.5:1, marks 3:1, and 1.5 more under
+// Increase Contrast.
 
 import AppKit
 import SwiftUI
@@ -183,66 +184,41 @@ nonisolated public enum SystemTone: String, CaseIterable, Sendable {
     }
 }
 
-/// Espalier's colors.
+/// Espalier's colors: the current theme's (`Theme.current`). A SwiftUI
+/// body that reads one draws again when the look changes.
 nonisolated public enum Palette {
     // MARK: Surfaces
 
     /// Content panes and the toolbar.
-    public static let background = NSColor.espalierDynamic(light: .hex(0xFFFFFF), dark: .hex(0x1A1A1D))
+    public static var background: NSColor { Theme.current.background }
     /// The sidebar.
-    public static let sidebar = NSColor.espalierDynamic(light: .hex(0xF3F3F5), dark: .hex(0x141416))
+    public static var sidebar: NSColor { Theme.current.sidebar }
     /// Search fields, segmented tracks, neutral chips.
-    public static let field = NSColor.espalierDynamic(
-        light: .hex(0xF2F2F5), dark: .hex(0x232327),
-        highContrastLight: .hex(0xE6E6EA), highContrastDark: .hex(0x2E2E33)
-    )
+    public static var field: NSColor { Theme.current.field }
     /// Diff hunk headers.
-    public static let hunk = NSColor.espalierDynamic(light: .hex(0xF6F7F9), dark: .hex(0x202024))
+    public static var hunk: NSColor { Theme.current.hunk }
     /// A hovered row.
-    public static let hover = NSColor.espalierDynamic(
-        light: NSColor.black.withAlphaComponent(0.045), dark: NSColor.white.withAlphaComponent(0.05),
-        highContrastLight: NSColor.black.withAlphaComponent(0.08), highContrastDark: NSColor.white.withAlphaComponent(0.09)
-    )
-    /// The sidebar's selected item: a neutral wash, black 6.5% (white 5% in
-    /// dark), so the sidebar stays neutral; `accentSoft` is the selection
-    /// everywhere else.
-    public static let sidebarSelection = NSColor.espalierDynamic(
-        light: NSColor.black.withAlphaComponent(0.065), dark: NSColor.white.withAlphaComponent(0.05),
-        highContrastLight: NSColor.black.withAlphaComponent(0.11), highContrastDark: NSColor.white.withAlphaComponent(0.09)
-    )
+    public static var hover: NSColor { Theme.current.hover }
+    /// The sidebar's selected item: Classic's is a neutral wash, black 6.5%
+    /// (white 5% in dark), so the sidebar stays neutral; `accentSoft` is
+    /// the selection everywhere else.
+    public static var sidebarSelection: NSColor { Theme.current.sidebarSelection }
     /// Dividers and hairlines.
-    public static let line = NSColor.espalierDynamic(
-        light: .hex(0xE8E8EC), dark: .hex(0x2A2A2F),
-        highContrastLight: .hex(0xB9B9C1), highContrastDark: .hex(0x55555D)
-    )
+    public static var line: NSColor { Theme.current.line }
     /// Checkbox borders, key caps, outlined pills.
-    public static let line2 = NSColor.espalierDynamic(
-        light: .hex(0xD6D6DC), dark: .hex(0x38383F),
-        highContrastLight: .hex(0x9A9BA3), highContrastDark: .hex(0x6C6C75)
-    )
+    public static var line2: NSColor { Theme.current.line2 }
     /// The dim over a window behind a sheet or an alert: black 20% (45% in
     /// dark).
-    public static let scrim = NSColor.espalierDynamic(
-        light: NSColor.black.withAlphaComponent(0.2), dark: NSColor.black.withAlphaComponent(0.45)
-    )
+    public static var scrim: NSColor { Theme.current.scrim }
 
     // MARK: Text
 
     /// Primary text.
-    public static let text = NSColor.espalierDynamic(
-        light: .hex(0x1B1B1F), dark: .hex(0xECECEF),
-        highContrastLight: .black, highContrastDark: .white
-    )
+    public static var text: NSColor { Theme.current.text }
     /// Secondary text and icons.
-    public static let text2 = NSColor.espalierDynamic(
-        light: .hex(0x5F6068), dark: .hex(0xA1A1AA),
-        highContrastLight: .hex(0x3E3F45), highContrastDark: .hex(0xCACAD1)
-    )
+    public static var text2: NSColor { Theme.current.text2 }
     /// Tertiary text: counts, paths, merge commits' summaries.
-    public static let text3 = NSColor.espalierDynamic(
-        light: .hex(0x9A9BA3), dark: .hex(0x6C6C75),
-        highContrastLight: .hex(0x5F6068), highContrastDark: .hex(0xA1A1AA)
-    )
+    public static var text3: NSColor { Theme.current.text3 }
     /// A placeholder drawn by hand, as the composer's description draws its
     /// own.
     public static var placeholderText: NSColor { text3 }
@@ -252,11 +228,7 @@ nonisolated public enum Palette {
     /// Selected text where the text has focus: the accent at 16% (24% in
     /// dark), behind text that keeps 4.5:1 on it, secondary text in a field
     /// included.
-    public static let textSelection = NSColor.espalierDynamic { variant in
-        let accent = NSColor.controlAccentColor.resolved(in: variant)
-        let alpha: CGFloat = variant.isDark ? 0.24 : 0.16
-        return accent.withAlphaComponent(variant.isHighContrast ? alpha * 1.6 : alpha)
-    }
+    public static var textSelection: NSColor { Theme.current.textSelection }
     /// Selected text where the text doesn't have focus, or its window isn't
     /// key: a neutral wash, black 8% (white 8% in dark).
     public static let textSelectionInactive = NSColor.espalierDynamic(
@@ -270,59 +242,32 @@ nonisolated public enum Palette {
 
     // MARK: Accent
 
-    /// Selection, checkboxes, included lines: the system accent.
-    public static var accent: NSColor { .controlAccentColor }
+    /// Selection, checkboxes, included lines: Classic's is the system
+    /// accent.
+    public static var accent: NSColor { Theme.current.accent }
 
     /// Links: the accent, deepened (lightened in dark) only as far as it
     /// takes to read as text on the content background, 4.5:1 (6:1 under
     /// Increase Contrast).
-    public static let link = NSColor.espalierDynamic { variant in
-        let accent = NSColor.controlAccentColor.resolved(in: variant)
-        let background = Palette.background.resolved(in: variant)
-        return ColorContrast.adjust(accent, toReach: variant.isHighContrast ? 6 : 4.5, against: background)
-    }
+    public static var link: NSColor { Theme.current.link }
 
     /// Selected rows and chips: the accent at 9% (14% in dark).
-    public static let accentSoft = NSColor.espalierDynamic { variant in
-        let accent = NSColor.controlAccentColor.resolved(in: variant)
-        let alpha: CGFloat = variant.isDark ? 0.14 : 0.09
-        return accent.withAlphaComponent(variant.isHighContrast ? alpha * 1.6 : alpha)
-    }
+    public static var accentSoft: NSColor { Theme.current.accentSoft }
 
     /// The commit message field that has focus: the accent at 6% (10% in
     /// dark), fainter than a selection.
-    public static let accentFaint = NSColor.espalierDynamic { variant in
-        let accent = NSColor.controlAccentColor.resolved(in: variant)
-        let alpha: CGFloat = variant.isDark ? 0.10 : 0.06
-        return accent.withAlphaComponent(variant.isHighContrast ? alpha * 1.6 : alpha)
-    }
+    public static var accentFaint: NSColor { Theme.current.accentFaint }
 
     /// The diff's included line number cells: the accent at 16% (24% in
     /// dark).
-    public static let accentMid = NSColor.espalierDynamic { variant in
-        let accent = NSColor.controlAccentColor.resolved(in: variant)
-        let alpha: CGFloat = variant.isDark ? 0.24 : 0.16
-        return accent.withAlphaComponent(variant.isHighContrast ? alpha * 1.6 : alpha)
-    }
+    public static var accentMid: NSColor { Theme.current.accentMid }
 
-    /// A deeper accent for prominent fills under white text: `#0064E1`
-    /// for the default blue in light; the accent itself in dark.
-    public static let button = NSColor.espalierDynamic { variant in
-        let accent = NSColor.controlAccentColor.resolved(in: variant)
-        guard !variant.isDark else {
-            return accent
-        }
-        if isDefaultBlue(accent) {
-            return .hex(0x0064E1)
-        }
-        let deeper = NSColor(
-            hue: accent.hueComponent,
-            saturation: accent.saturationComponent,
-            brightness: accent.brightnessComponent * 0.88,
-            alpha: 1
-        )
-        return ColorContrast.adjust(deeper, toReach: 4.5, against: .white)
-    }
+    /// The prominent fill, one action per area: Classic's is a deeper
+    /// accent under white text, `#0064E1` for the default blue in light,
+    /// the accent itself in dark.
+    public static var button: NSColor { Theme.current.prominent }
+    /// The text on the prominent fill.
+    public static var buttonText: NSColor { Theme.current.prominentText }
 
     /// Whether `accent` is the system's default blue (`#007AFF`).
     nonisolated static func isDefaultBlue(_ accent: NSColor) -> Bool {
@@ -333,79 +278,68 @@ nonisolated public enum Palette {
     // MARK: Controls
 
     /// Quiet buttons, cards, chips, toasts.
-    public static let quiet = NSColor.espalierDynamic(light: .hex(0xFFFFFF), dark: .hex(0x2A2A2F))
+    public static var quiet: NSColor { Theme.current.quiet }
     /// Secondary buttons (Cancel in sheets, Undo).
-    public static let soft = NSColor.espalierDynamic(
-        light: .hex(0xEDEDF0), dark: .hex(0x2E2E34),
-        highContrastLight: .hex(0xDCDCE1), highContrastDark: .hex(0x3A3A41)
-    )
+    public static var soft: NSColor { Theme.current.soft }
     /// A disabled control, whole, fades to this opacity.
     public static let disabledOpacity: CGFloat = 0.45
 
     // MARK: Status
 
     /// Additions and new files.
-    public static let add = NSColor.espalierDynamic(light: .hex(0x16924C), dark: .hex(0x3FCF7F))
+    public static var add: NSColor { Theme.current.add }
     /// Deletions and deleted files.
-    public static let delete = NSColor.espalierDynamic(light: .hex(0xD33A3A), dark: .hex(0xFF6B6B))
+    public static var delete: NSColor { Theme.current.delete }
     /// Modified files, conflicts, warnings.
-    public static let modified = NSColor.espalierDynamic(light: .hex(0xC07F00), dark: .hex(0xF2B53A))
+    public static var modified: NSColor { Theme.current.modified }
     /// Renamed and copied files.
-    public static let renamed = NSColor.espalierDynamic(light: .hex(0x7C3AED), dark: .hex(0xA78BFA))
+    public static var renamed: NSColor { Theme.current.renamed }
 
     // MARK: Meaning
 
     /// Warnings in text.
-    public static let warning = readable(modified, minimumContrast: 4.5)
+    public static var warning: NSColor { Theme.current.warning }
     /// Errors in text (inline AI failures).
-    public static let error = readable(delete, minimumContrast: 4.5)
+    public static var error: NSColor { Theme.current.error }
     /// Success marks (toasts, checks).
-    public static let success = readable(add, minimumContrast: 3)
+    public static var success: NSColor { Theme.current.success }
     /// Warning marks (the conflict triangle).
-    public static let warningMark = readable(modified, minimumContrast: 3)
+    public static var warningMark: NSColor { Theme.current.warningMark }
 
     /// The fill behind a file status's letter: 15%.
     static let statusTint: (light: CGFloat, dark: CGFloat) = (0.15, 0.15)
 
-    private static let statusForegrounds: [FileStatusKind: NSColor] = Dictionary(
-        uniqueKeysWithValues: FileStatusKind.allCases.map { ($0, readable($0.color, minimumContrast: 4.5, tint: statusTint)) }
-    )
-
-    private static let statusBackgrounds: [FileStatusKind: NSColor] = Dictionary(
-        uniqueKeysWithValues: FileStatusKind.allCases.map { ($0, tint($0.color, light: statusTint.light, dark: statusTint.dark)) }
-    )
-
-    private static let checksColors: [ChecksState: NSColor] = [
-        .success: readable(add, minimumContrast: 3),
-        .failure: readable(delete, minimumContrast: 3),
-        .pending: readable(modified, minimumContrast: 3),
-        .neutral: text2,
-    ]
-
     /// The color of a file status's letter.
     public static func statusForeground(_ kind: FileStatusKind) -> NSColor {
-        statusForegrounds[kind] ?? text
+        Theme.current.statusForegrounds[kind] ?? text
     }
 
     /// The fill behind a file status's letter.
     public static func statusBackground(_ kind: FileStatusKind) -> NSColor {
-        statusBackgrounds[kind] ?? field
+        Theme.current.statusBackgrounds[kind] ?? field
     }
 
     /// The color of a checks status glyph.
     public static func checks(_ state: ChecksState) -> NSColor {
-        checksColors[state] ?? text2
+        Theme.current.checksColors[state] ?? text2
     }
 
     // MARK: Deriving colors
 
-    /// `color` adjusted until it reaches `minimumContrast` against the
-    /// content background (under `color`'s own `tint`, for text on a tinted
-    /// fill), and 1.5 more under Increase Contrast.
-    nonisolated static func readable(_ color: NSColor, minimumContrast: Double, tint: (light: CGFloat, dark: CGFloat)? = nil) -> NSColor {
+    /// `color` adjusted until it reaches `minimumContrast` against
+    /// `background` (the current content background; under `color`'s own
+    /// `tint`, for text on a tinted fill), and 1.5 more under Increase
+    /// Contrast.
+    nonisolated static func readable(
+        _ color: NSColor,
+        minimumContrast: Double,
+        tint: (light: CGFloat, dark: CGFloat)? = nil,
+        background: NSColor? = nil
+    ) -> NSColor {
+        let backgroundColor = background ?? Palette.background
         let colors = AppearanceVariant.allCases.map { variant in
             let base = color.resolved(in: variant)
-            var background = Palette.background.resolved(in: variant)
+            var background = backgroundColor.resolved(in: variant)
             if let tint {
                 let alpha = variant.isDark ? tint.dark : tint.light
                 background = background.blended(withFraction: variant.isHighContrast ? min(1, alpha * 1.6) : alpha, of: base) ?? background
@@ -439,6 +373,9 @@ extension Color {
 
 extension ShapeStyle where Self == Color {
     /// Palette colors as SwiftUI shape styles: `.foregroundStyle(.text2)`.
+    public static var accent: Color { Color(nsColor: Palette.accent) }
+    /// The text on the prominent fill.
+    public static var prominentText: Color { Theme.current.prominentTextStyle }
     public static var field: Color { Color(nsColor: Palette.field) }
     public static var line: Color { Color(nsColor: Palette.line) }
     public static var line2: Color { Color(nsColor: Palette.line2) }

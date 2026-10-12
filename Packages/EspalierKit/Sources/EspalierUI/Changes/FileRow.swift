@@ -231,6 +231,8 @@ final class FileRowView: NSTableCellView {
     var isDeparting = false
     /// The repository whose file the row showed last.
     private var shownRepository: ObjectIdentifier?
+    /// The look the row's fonts and colors are in.
+    private var styledLook = Look.current
 
     /// The row's file departed: it stops answering while it fades out.
     func depart() {
@@ -273,7 +275,7 @@ final class FileRowView: NSTableCellView {
 
     /// The name's font: the row font, medium.
     static var nameFont: NSFont {
-        .systemFont(ofSize: AppKitTypography.row.pointSize, weight: .medium)
+        AppKitTypography.row(weight: .medium)
     }
 
     /// Shows `content`, changing only what differs (a status pass refills
@@ -288,6 +290,9 @@ final class FileRowView: NSTableCellView {
         let isSameRepository = repository == shownRepository
         shownRepository = repository
         self.conflictActions = conflictActions
+        if styledLook != Look.current {
+            restyle()
+        }
         // The buttons follow the editor's setting, which the content
         // doesn't carry.
         if let conflict = content.conflict, let conflictActions, let conflictButtons {
@@ -416,6 +421,25 @@ final class FileRowView: NSTableCellView {
     /// VoiceOver's Show Menu: the menu a right-click on the row shows.
     override func accessibilityPerformShowMenu() -> Bool {
         KeyboardContextMenu.showMenu(of: self)
+    }
+
+    /// Takes the current look's fonts and colors, and shows the content
+    /// again in them.
+    private func restyle() {
+        styledLook = Look.current
+        nameLabel.font = Self.nameFont
+        for label in [sourceLabel, directoryLabel, conflictLabel] {
+            label.font = AppKitTypography.secondary
+        }
+        countsLabel.font = AppKitTypography.count()
+        conflictGlyph.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: AppKitTypography.row.pointSize, weight: .regular)
+        nameLabel.textColor = Palette.text
+        for label in [sourceLabel, directoryLabel, countsLabel, conflictLabel] {
+            label.textColor = Palette.text3
+        }
+        glyph.lookDidChange()
+        // Shown again in full, in the new fonts and colors.
+        content = nil
     }
 
     override var backgroundStyle: NSView.BackgroundStyle {
@@ -591,7 +615,7 @@ final class StatusGlyphView: NSView {
         }
     }
 
-    private let letter = NSTextField(labelWithString: "")
+    fileprivate let letter = NSTextField(labelWithString: "")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -622,7 +646,7 @@ final class StatusGlyphView: NSView {
     /// SF Mono 9.5, bold (heavy with Increase Contrast), as `StatusGlyph`.
     private static var font: NSFont {
         let increased = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
-        return .monospacedSystemFont(ofSize: 9.5, weight: increased ? .heavy : .bold)
+        return FontFallback.checked(.monospacedSystemFont(ofSize: 9.5, weight: increased ? .heavy : .bold), size: 9.5, design: .mono)
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -639,7 +663,7 @@ final class StatusGlyphView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         Palette.statusBackground(kind).setFill()
-        let radius = Metrics.StatusBadge.cornerRadius
+        let radius = min(Metrics.StatusBadge.radius, bounds.height / 2)
         NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
     }
 
@@ -733,5 +757,22 @@ struct InclusionCheckbox: NSViewRepresentable {
             sender.state = InclusionCheckbox.state(parent.value)
             parent.onChange(include)
         }
+    }
+}
+
+extension FileRowView: LookChangeObserving {
+    func lookDidChange() {
+        guard let content else {
+            return
+        }
+        restyle()
+        configure(content, repository: shownRepository, conflictActions: conflictActions)
+    }
+}
+
+extension StatusGlyphView: LookChangeObserving {
+    func lookDidChange() {
+        letter.textColor = Palette.statusForeground(kind)
+        needsDisplay = true
     }
 }

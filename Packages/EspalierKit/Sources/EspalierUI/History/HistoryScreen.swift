@@ -433,7 +433,7 @@ struct HistoryBanner<Action: View>: View {
 
     var body: some View {
         HStack(spacing: Metrics.insetMedium) {
-            IconCircle(systemImage, tint: .accentColor)
+            IconCircle(systemImage, tint: .accent)
             Text(message)
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)

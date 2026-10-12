@@ -42,6 +42,9 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
     /// Keeps the app's appearance on the theme chosen in Settings, once
     /// launched.
     @ObservationIgnored private var themeApplier: ThemeApplier?
+    /// Keeps the look on the design theme, color, app font, and code font
+    /// chosen in Settings, once launched.
+    @ObservationIgnored private var lookApplier: LookApplier?
 
     override public init() {
         super.init()
@@ -50,8 +53,8 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Launching
 
     /// Starts the rolling log file first, so it has the whole run, then
-    /// applies the stored theme and Espalier's text input before the first
-    /// window opens.
+    /// applies the stored theme, look, and Espalier's text input before the
+    /// first window opens.
     public func applicationWillFinishLaunching(_ notification: Notification) {
         Log.startFileLog()
         let info = Bundle.main.infoDictionary
@@ -59,6 +62,8 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
         let build = info?["CFBundleVersion"] as? String ?? "?"
         logger.info("Espalier \(version, privacy: .public) (\(build, privacy: .public)) started, process \(ProcessInfo.processInfo.processIdentifier)")
         ThemeApplier.apply(Preferences.storedTheme(in: PreferenceStore(.standard)), to: NSApplication.shared)
+        BundledFonts.register()
+        LookApplier.apply(Look.stored(in: PreferenceStore(.standard)))
         TextInputStyling.install()
     }
 
@@ -74,6 +79,7 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
             do {
                 let launched = try await AppBootstrap.launch()
                 themeApplier = ThemeApplier(preferences: launched.model.preferences, target: NSApplication.shared)
+                lookApplier = LookApplier(preferences: launched.model.preferences)
                 self.launched = launched
             } catch {
                 logger.error("Launch failed: \(error.localizedDescription, privacy: .public)")

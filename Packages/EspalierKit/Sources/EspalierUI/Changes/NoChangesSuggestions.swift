@@ -513,7 +513,7 @@ struct SuggestionRow<Control: View>: View {
         HStack(alignment: .center, spacing: Metrics.insetMedium) {
             Image(systemName: card.action.systemImage)
                 .font(.system(size: 15))
-                .foregroundStyle(isProminent ? Color.accentColor : .text2)
+                .foregroundStyle(isProminent ? Color.accent : .text2)
                 .frame(width: SuggestionMetrics.symbolWidth)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Metrics.grid / 2) {

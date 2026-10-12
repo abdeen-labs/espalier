@@ -26,6 +26,8 @@ final class RefCapsulesView: NSView {
 
     private var items: [RefCapsuleRenderer.Item] = []
     private var laidOutWidth: CGFloat?
+    /// The look the capsules were laid out in: their font's.
+    private var laidOutLook: Look?
     private var popover: PopoverController?
 
     override init(frame frameRect: NSRect) {
@@ -49,9 +51,10 @@ final class RefCapsulesView: NSView {
             items = []
             return 0
         }
-        if laidOutWidth != maximumWidth || items.isEmpty {
+        if laidOutWidth != maximumWidth || items.isEmpty || laidOutLook != Look.current {
             items = RefCapsuleRenderer.layout(refs, maximumWidth: maximumWidth)
             laidOutWidth = maximumWidth
+            laidOutLook = Look.current
             needsDisplay = true
         }
         return RefCapsuleRenderer.width(of: items)

@@ -29,7 +29,8 @@ nonisolated public enum StatusBarTone: Sendable, Equatable {
 }
 
 /// A bar across a place: a glyph, the title and a line under it, and
-/// trailing controls, with a hairline under it.
+/// trailing controls, with a hairline under it (none in the floating
+/// layout, where the bar is a card).
 public struct StatusBar<Glyph: View, Trailing: View>: View {
     private let tone: StatusBarTone
     private let title: String
@@ -87,7 +88,9 @@ public struct StatusBar<Glyph: View, Trailing: View>: View {
             .padding(.horizontal, Metrics.insetLarge)
             .frame(minHeight: Metrics.StatusBar.height)
             .background(Color(espalier: tone.fill).motion(Motion.arrive, value: tone))
+            // A card of its own in the floating layout, which needs none.
             Hairline()
+                .opacity(PaneCards.floats ? 0 : 1)
         }
         .accessibilityElement(children: .contain)
     }
@@ -95,7 +98,7 @@ public struct StatusBar<Glyph: View, Trailing: View>: View {
 
 extension Typography {
     /// A status bar's title (13, semibold).
-    public static let statusBarTitle: Font = .body.weight(.semibold)
+    public static var statusBarTitle: Font { sans(.body, weight: .semibold) }
 }
 
 extension Metrics {

@@ -12,17 +12,19 @@ final class RowAvatarView: NSView {
     /// Whether a loaded image fades in over the monogram.
     var fadesIn = false
 
-    private let imageLayer = CALayer()
+    fileprivate let imageLayer = CALayer()
     /// Who the avatar shows, at what size.
-    private var identity: Identity?
+    fileprivate var identity: Identity?
     private var task: Task<Void, Never>?
     /// The loader still to be asked again when the network comes back.
     private var pendingLoader: (any AvatarLoading)?
     /// Where the monogram came from, while it shows.
-    private var monograms: MonogramCache?
+    fileprivate var monograms: MonogramCache?
     private var monogramVariant: AppearanceVariant?
+    fileprivate var monogramShape: AvatarShape?
+    fileprivate var monogramTone: MonogramTone?
 
-    private struct Identity: Equatable {
+    fileprivate struct Identity: Equatable {
         var user: AvatarUser
         var pointSize: CGFloat
         var scale: CGFloat
@@ -79,16 +81,19 @@ final class RowAvatarView: NSView {
         }
     }
 
-    private func showMonogram(_ identity: Identity, from monograms: MonogramCache) {
+    fileprivate func showMonogram(_ identity: Identity, from monograms: MonogramCache) {
         let variant = AppearanceVariant.of(effectiveAppearance)
         self.monograms = monograms
         monogramVariant = variant
+        monogramShape = Theme.current.avatarShape
+        monogramTone = Theme.current.monogramTone
         imageLayer.contents = monograms.image(
             name: identity.user.name,
             email: identity.user.email,
             pointSize: identity.pointSize,
             scale: identity.scale,
-            variant: variant
+            variant: variant,
+            shape: Theme.current.avatarShape
         )
     }
 
@@ -128,25 +133,37 @@ final class RowAvatarView: NSView {
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         imageLayer.frame = bounds
-        imageLayer.cornerRadius = min(bounds.width, bounds.height) / 2
+        imageLayer.cornerRadius = AvatarClipShape.cornerRadius(Theme.current.avatarShape, side: min(bounds.width, bounds.height))
     }
 }
 
-/// Monogram images by initials, color, size, and appearance, drawn once
-/// each.
+/// Monogram images by initials, color, size, appearance, and the theme's
+/// tone, drawn once each.
 final class MonogramCache {
     private var images: [String: CGImage] = [:]
 
-    func image(name: String, email: String, pointSize: CGFloat, scale: CGFloat, variant: AppearanceVariant) -> CGImage? {
+    func image(name: String, email: String, pointSize: CGFloat, scale: CGFloat, variant: AppearanceVariant, shape: AvatarShape = .circle) -> CGImage? {
         let hue = Monogram.hue(name: name, email: email)
-        let key = "\(Monogram.initials(name: name, email: email))|\(hue)|\(pointSize)|\(scale)|\(variant.isDark)"
+        let tone = Theme.current.monogramTone.map { "\($0.saturation)\($0.lightness)" } ?? ""
+        let key = "\(Monogram.initials(name: name, email: email))|\(hue)|\(pointSize)|\(scale)|\(variant.isDark)|\(shape)|\(tone)"
         if let image = images[key] {
             return image
         }
-        let image = MonogramRenderer.image(name: name, email: email, pointSize: pointSize, scale: scale, variant: variant)
+        let image = MonogramRenderer.image(name: name, email: email, pointSize: pointSize, scale: scale, variant: variant, shape: shape)
         if let image, images.count < 1_000 {
             images[key] = image
         }
         return image
+    }
+}
+
+extension RowAvatarView: LookChangeObserving {
+    /// A monogram takes the look's avatar shape, as the image's mask does,
+    /// and its tone.
+    func lookDidChange() {
+        imageLayer.cornerRadius = AvatarClipShape.cornerRadius(Theme.current.avatarShape, side: min(bounds.width, bounds.height))
+        if let identity, let monograms, monogramShape != Theme.current.avatarShape || monogramTone != Theme.current.monogramTone {
+            showMonogram(identity, from: monograms)
+        }
     }
 }

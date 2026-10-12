@@ -69,22 +69,31 @@ struct DetailRouter: View {
 
     var body: some View {
         let app = context.app
+        // A place's panes are its split's cards in the floating layout; the
+        // other destinations are one card.
         switch DetailDestination.make(app: app, place: context.state.place) {
         case .launching:
             DelayedProgressView()
+                .paneCard()
         case .getStarted:
             GetStartedView()
+                .paneCard()
         case .noRepositorySelected:
             NoRepositorySelectedView()
+                .paneCard()
         case .cloning(let id):
-            if let clone = app.clones.clones.first(where: { $0.id == id }) {
-                CloningRepositoryView(clone: clone)
-            } else {
-                DelayedProgressView()
+            Group {
+                if let clone = app.clones.clones.first(where: { $0.id == id }) {
+                    CloningRepositoryView(clone: clone)
+                } else {
+                    DelayedProgressView()
+                }
             }
+            .paneCard()
         case .missing(let id), .unsafe(let id, _):
             if let repository = app.repository(id) {
                 MissingRepositoryView(repository: repository)
+                    .paneCard()
             }
         case .changes(let id):
             if let repository = app.repository(id) {

@@ -30,7 +30,7 @@ public struct PullRequestsSection: View {
                     if filter.isEmpty, !gitHub.isLoadingPullRequests {
                         Text("No Open Pull Requests")
                             .font(Typography.row)
-                            .foregroundStyle(.text3)
+                            .foregroundStyle(.sidebarText3)
                             .selectionDisabled()
                             .sidebarRow(nil)
                     }

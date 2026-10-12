@@ -150,10 +150,12 @@ let package = Package(
         vendoredGrammar("TreeSitterPython"),
         vendoredGrammar("TreeSitterYAML", exclude: ["src/schema.core.c", "src/schema.json.c", "src/schema.legacy.c"]),
 
-        // SwiftUI and AppKit views.
+        // SwiftUI and AppKit views. The text fonts' files are copied as they
+        // are, each family with its license (Resources/Fonts/SOURCES.md).
         .target(
             name: "EspalierUI",
             dependencies: ["EspalierSupport", "GitKit", "GitHubKit", "AIKit", "EspalierCore", "EspalierSyntax"],
+            resources: [.copy("Resources/Fonts")],
             swiftSettings: approachable + [.defaultIsolation(MainActor.self)]
         ),
 

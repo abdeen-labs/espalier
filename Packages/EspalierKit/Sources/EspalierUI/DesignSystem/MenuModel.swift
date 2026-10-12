@@ -65,6 +65,9 @@ public struct MenuItem {
     /// Closes the popover the menu was opened from before it acts.
     public var closesPopover: Bool
     public var action: Action
+    /// The title's font, when it isn't the row's (a font's name in that
+    /// font).
+    public var titleFont: Font?
 
     public init(
         _ title: String,
@@ -103,12 +106,14 @@ public struct MenuOption {
     public var systemImage: String?
     public var subtitle: String?
     public var isEnabled: Bool
+    /// The title's font, when it isn't the row's.
+    public var titleFont: Font?
 
     /// The checkable item choosing it selects `value` through `select`;
     /// checked when `value` is `selected`.
     func item(selected: AnyHashable?, select: @escaping (AnyHashable) -> Void) -> MenuItem {
         let value = value
-        return MenuItem(
+        var item = MenuItem(
             title,
             systemImage: systemImage,
             subtitle: subtitle,
@@ -116,6 +121,8 @@ public struct MenuOption {
             isChecked: value == selected,
             action: .run { select(value) }
         )
+        item.titleFont = titleFont
+        return item
     }
 }
 
@@ -229,6 +236,13 @@ public struct MenuChoice: MenuElement {
 
     public init(_ title: String, value: some Hashable, systemImage: String? = nil, subtitle: String? = nil) {
         option = MenuOption(title: title, value: AnyHashable(value), systemImage: systemImage, subtitle: subtitle, isEnabled: true)
+    }
+
+    /// The choice with its title in `font`.
+    public func titleFont(_ font: Font?) -> MenuChoice {
+        var copy = self
+        copy.option.titleFont = font
+        return copy
     }
 
     public func disabled(_ isDisabled: Bool) -> MenuChoice {

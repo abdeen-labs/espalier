@@ -128,7 +128,7 @@ public struct CommitButton: View {
                 // While it works, the capsule stays legible rather than
                 // fading as a disabled button does (as the sync button).
                 HStack(spacing: Metrics.insetSmall) {
-                    ArcProgress(.small, tint: .white)
+                    ArcProgress(.small, tint: Palette.buttonText)
                     label
                 }
                 .frame(maxWidth: .infinity)
@@ -168,7 +168,7 @@ public struct CommitButton: View {
     private func shortcut(_ symbols: String) -> some View {
         Text(symbols)
             .font(Typography.keyCap)
-            .foregroundStyle(.white.opacity(0.7))
+            .foregroundStyle(Color.prominentText.opacity(0.7))
             .fixedSize()
             .accessibilityHidden(true)
     }

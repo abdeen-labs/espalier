@@ -158,6 +158,7 @@ public struct CommitWarningView: View {
             Text(warning.message)
                 .font(Typography.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .composerLinkTint()
                 .environment(\.openURL, OpenURLAction { url in
                     onLink(url)
                     return .handled
@@ -318,6 +319,7 @@ struct MessageRuleFailuresView: View {
         }
         .padding(Metrics.insetLarge)
         .frame(width: Metrics.Composer.popoverWidth, alignment: .leading)
+        .composerLinkTint()
         .environment(\.openURL, OpenURLAction { url in
             onLink(url)
             return .handled
@@ -386,5 +388,13 @@ extension AttributedString {
             }
         }
         return result
+    }
+}
+
+extension View {
+    /// The links in the warnings' text in the link color (`Palette.link`);
+    /// Classic's in the system's tint, its accent.
+    fileprivate func composerLinkTint() -> some View {
+        tint(Theme.current.theme == .classic ? nil : Color(nsColor: Palette.link))
     }
 }

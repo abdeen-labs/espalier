@@ -36,7 +36,10 @@ public struct ChangesScreen: View {
             // and leaves over 0.15 s, Changes moving with it, and a running
             // operation shows it only past 300 ms.
             if showsPanel {
+                // A card of its own above the place's in the floating
+                // layout.
                 OperationPanel(repository: repository)
+                    .paneCard(margins: EdgeInsets(top: 0, leading: 0, bottom: PaneCards.frameGap, trailing: 0))
                     .barTransition()
             }
         }

@@ -17,6 +17,8 @@ extension BranchColors {
         var defaultBranch: String?
         var remotes: [String]
         var accent: NSColor
+        /// The theme, whose tones the colors are.
+        var theme: ObjectIdentifier
     }
 
     /// The colors of `repository`'s branches.
@@ -29,7 +31,8 @@ extension BranchColors {
             defaultBranch: state.branches.defaultBranch?.name,
             remotes: state.remotes.all.map(\.name),
             // Resolved, so a change of the accent color is a change.
-            accent: NSColor.controlAccentColor.resolved(in: .light)
+            accent: Palette.accent.resolved(in: .light),
+            theme: ObjectIdentifier(Theme.current)
         )
         if let cache, cache.key == key {
             return cache.colors

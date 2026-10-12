@@ -47,6 +47,32 @@ struct SettingsSnapshotTests {
         assertSnapshot(window(.appearance) { AppearanceForm(preferences: app.preferences, openAppearanceSettings: {}) }, named: "appearance", area: area)
     }
 
+    @Test("Appearance: a theme other than Classic, with its colors")
+    func appearanceTheme() throws {
+        let harness = try AppHarness()
+        let app = SettingsFixtures.app(harness)
+        app.preferences.numberFormat = NumberFormat(thousandsSeparator: .comma, decimalSeparator: .period)
+        app.preferences.timeFormat = TimeFormatPattern.colonTwelveHour.rawValue
+        app.preferences.designTheme = .orchard
+        app.preferences.appFont = .fixel
+        app.preferences.codeFont = .geistMono
+        // As the settings apply it.
+        let look = Look(preferences: app.preferences)
+        assertSnapshot(window(.appearance) { AppearanceForm(preferences: app.preferences, openAppearanceSettings: {}) }, named: "appearance", area: area, look: look)
+    }
+
+    @Test("Appearance in Islands: the pane is a card on the backdrop", arguments: [DesignThemeColor.lagoon, .indigo])
+    func appearanceIslands(_ color: DesignThemeColor) throws {
+        let harness = try AppHarness()
+        let app = SettingsFixtures.app(harness)
+        app.preferences.numberFormat = NumberFormat(thousandsSeparator: .comma, decimalSeparator: .period)
+        app.preferences.timeFormat = TimeFormatPattern.colonTwelveHour.rawValue
+        app.preferences.designTheme = .islands
+        app.preferences.designThemeColor = color
+        let look = Look(preferences: app.preferences)
+        assertSnapshot(window(.appearance) { AppearanceForm(preferences: app.preferences, openAppearanceSettings: {}) }, named: "appearance", area: area, look: look)
+    }
+
     @Test("Advanced: the command line tool's button follows its action")
     func advanced() throws {
         let harness = try AppHarness()

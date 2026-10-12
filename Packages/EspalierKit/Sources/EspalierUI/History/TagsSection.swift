@@ -34,7 +34,7 @@ struct TagRow: View {
         SidebarRowLabel(content.name, systemImage: "tag") {
             if content.isWaitingToBePushed {
                 Image(systemName: "arrow.up.circle")
-                    .foregroundStyle(.text3)
+                    .foregroundStyle(.sidebarText3)
                     .tooltip("This tag hasn't been pushed yet")
                     .accessibilityLabel("Not pushed")
             }

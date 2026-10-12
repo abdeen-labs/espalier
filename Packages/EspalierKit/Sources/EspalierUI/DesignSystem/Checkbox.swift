@@ -1,6 +1,7 @@
 // Espalier's checkbox, 15 with radius 5. Off, it's an empty box with a
 // `line2` border on the content background; on or mixed, it's filled with
-// the accent with a white check or dash. One drawing, three renderers: Core
+// the accent with a check or dash in the theme's marks color (`onAccent`,
+// white but on a near-white accent). One drawing, three renderers: Core
 // Graphics for tables that draw their rows (the diff's hunk headers), an
 // `NSButton` for AppKit rows and headers (a checkbox to VoiceOver, mixed
 // state included), and a SwiftUI view, which a `Toggle` takes with the
@@ -85,7 +86,7 @@ public enum CheckboxDrawing {
             let box = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
             Palette.accent.setFill()
             box.fill()
-            NSColor.white.setStroke()
+            Theme.current.onAccent.setStroke()
             let mark = NSBezierPath()
             mark.lineWidth = 1.75 * rect.width / size
             mark.lineCapStyle = .round
@@ -274,7 +275,7 @@ public struct CheckboxMark: View {
         ZStack {
             // The fill crossfades, and the mark fades and scales in, over
             // 0.15 s.
-            shape.fill(state == .off ? Color(espalier: Palette.background) : Color.accentColor)
+            shape.fill(state == .off ? Color(espalier: Palette.background) : Color.accent)
             if state == .off {
                 shape.strokeBorder(.line2, lineWidth: 1)
                     .transition(.opacity)
@@ -283,7 +284,7 @@ public struct CheckboxMark: View {
                     let points = CheckboxDrawing.markPoints(state).map { CGPoint(x: $0.x * size, y: $0.y * size) }
                     path.addLines(points)
                 }
-                .stroke(.white, style: StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round))
+                .stroke(Color(nsColor: Theme.current.onAccent), style: StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round))
                 .id(state)
                 .transition(.scale(scale: 0.6).combined(with: .opacity))
             }

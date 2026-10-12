@@ -6,10 +6,18 @@
 // more). On failure the actual image and a difference image go to
 // `$TMPDIR/espalier-snapshots/<Area>/`.
 //
+// A review run, ESPALIER_REVIEW_LOOK=<theme>-<color>[-<app font>][-<code
+// font>] as snapshot names spell a look ("orchard-ink",
+// "islands-lagoon-fixel", "pop-tangerine-atkinson-geistmono"), draws every
+// snapshot in that look instead of Classic's and writes it, under the
+// reference's name, to `$TMPDIR/espalier-review/<look>/<Area>/`; nothing is
+// compared or recorded.
+//
 // Package.swift excludes the references from the test target: PNGs inside
 // it would make SwiftPM warn about unhandled files.
 
 import AppKit
+import EspalierCore
 import Foundation
 import SwiftUI
 import Testing
@@ -40,6 +48,40 @@ enum SnapshotReferences {
     static let artifacts: URL = FileManager.default.temporaryDirectory
         .appending(path: "espalier-snapshots", directoryHint: .isDirectory)
 
+    /// The look a review run draws in, else nil. It's made the process's
+    /// too, so views drawn outside a snapshot helper's own look are in it.
+    static let reviewLook: Look? = {
+        guard let value = ProcessInfo.processInfo.environment["ESPALIER_REVIEW_LOOK"] else {
+            return nil
+        }
+        var parts = value.split(separator: "-").map(String.init)
+        guard let first = parts.first, let theme = DesignTheme(rawValue: first) else {
+            fatalError("ESPALIER_REVIEW_LOOK=\(value) doesn't name a theme")
+        }
+        parts.removeFirst()
+        var color: DesignThemeColor?
+        var appFont = AppFont.sf
+        var codeFont = CodeFont.sfMono
+        for part in parts {
+            if let named = DesignThemeColor(rawValue: part) {
+                color = named
+            } else if let named = AppFont(rawValue: part) {
+                appFont = named
+            } else if let named = CodeFont(rawValue: part) {
+                codeFont = named
+            } else {
+                fatalError("ESPALIER_REVIEW_LOOK=\(value): \(part) is neither a color, an app font, nor a code font")
+            }
+        }
+        let look = Look(theme: theme, color: color, appFont: appFont, codeFont: codeFont)
+        LookCenter.shared.look = look
+        return look
+    }()
+
+    /// Where a review run writes.
+    static let review: URL = FileManager.default.temporaryDirectory
+        .appending(path: "espalier-review", directoryHint: .isDirectory)
+
     /// A channel may differ by this much.
     static let channelTolerance = 2
     /// At most this fraction of pixels may differ by more.
@@ -60,6 +102,18 @@ func assertSnapshot(
         return
     }
     let fileName = "\(name)-\(appearance.rawValue).png"
+    if let review = SnapshotReferences.reviewLook {
+        let directory = SnapshotReferences.review
+            .appending(path: review.snapshotSuffix ?? "classic", directoryHint: .isDirectory)
+            .appending(path: area, directoryHint: .isDirectory)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try png.write(to: directory.appending(path: fileName))
+        } catch {
+            Issue.record("Couldn't write \(fileName) for review: \(error)", sourceLocation: sourceLocation)
+        }
+        return
+    }
     let reference = SnapshotReferences.directory.appending(path: area).appending(path: fileName)
     let fileManager = FileManager.default
 
@@ -104,19 +158,59 @@ func assertSnapshot(
     }
 }
 
-/// Snapshots a SwiftUI view in each appearance.
+extension Look {
+    /// What a snapshot's name adds for this look: nothing for Classic in
+    /// SF Pro and SF Mono, so the default look's references keep their
+    /// names; else the theme and color ("orchard-ink"), then the app font
+    /// and the code font when they aren't SF's ("classic-fixel",
+    /// "classic-geistmono"). The fonts' names are apart ("atkinson",
+    /// "atkinsonmono"), so a suffix names one look.
+    var snapshotSuffix: String? {
+        guard self != .classic else {
+            return nil
+        }
+        var parts = [theme.rawValue]
+        if let color {
+            parts.append(color.rawValue)
+        }
+        if appFont != .sf {
+            parts.append(appFont.rawValue)
+        }
+        if codeFont != .sfMono {
+            parts.append(codeFont.rawValue)
+        }
+        return parts.joined(separator: "-")
+    }
+
+    /// The look a snapshot in this look draws in: a review run's in place
+    /// of Classic's.
+    var reviewed: Look {
+        self == .classic ? SnapshotReferences.reviewLook ?? self : self
+    }
+
+    /// `name` for a snapshot in this look.
+    func snapshotName(_ name: String) -> String {
+        snapshotSuffix.map { "\(name)-\($0)" } ?? name
+    }
+}
+
+/// Snapshots a SwiftUI view in each appearance, in `look` (the task's own:
+/// the process's stays as it is).
 @MainActor
 func assertSnapshot(
     _ view: some View,
     named name: String,
     area: String,
     size: CGSize? = nil,
+    look: Look = .classic,
     appearances: [SnapshotAppearance] = SnapshotAppearance.allCases,
     sourceLocation: SourceLocation = #_sourceLocation
 ) {
     for appearance in appearances {
-        let image = Snapshot.render(view, size: size, appearance: appearance)
-        assertSnapshot(image, named: name, area: area, appearance: appearance, sourceLocation: sourceLocation)
+        let image = Look.with(look.reviewed) {
+            Snapshot.render(view, size: size, appearance: appearance)
+        }
+        assertSnapshot(image, named: look.snapshotName(name), area: area, appearance: appearance, sourceLocation: sourceLocation)
     }
 }
 
@@ -132,24 +226,30 @@ func assertSnapshot(
     sourceLocation: SourceLocation = #_sourceLocation
 ) {
     for appearance in appearances {
-        let image = Snapshot.render(alert, appearance: appearance, prepare: prepare)
+        let image = Look.with(Look.classic.reviewed) {
+            Snapshot.render(alert, appearance: appearance, prepare: prepare)
+        }
         assertSnapshot(image, named: name, area: area, appearance: appearance, sourceLocation: sourceLocation)
     }
 }
 
-/// Snapshots an AppKit view in each appearance.
+/// Snapshots an AppKit view in each appearance, in `look` (made and drawn
+/// in it).
 @MainActor
 func assertSnapshot(
     _ makeView: () -> NSView,
     named name: String,
     area: String,
     size: CGSize,
+    look: Look = .classic,
     appearances: [SnapshotAppearance] = SnapshotAppearance.allCases,
     sourceLocation: SourceLocation = #_sourceLocation
 ) {
     for appearance in appearances {
-        let image = Snapshot.render(makeView(), size: size, appearance: appearance)
-        assertSnapshot(image, named: name, area: area, appearance: appearance, sourceLocation: sourceLocation)
+        let image = Look.with(look.reviewed) {
+            Snapshot.render(makeView(), size: size, appearance: appearance)
+        }
+        assertSnapshot(image, named: look.snapshotName(name), area: area, appearance: appearance, sourceLocation: sourceLocation)
     }
 }
 

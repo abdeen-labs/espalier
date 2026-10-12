@@ -18,15 +18,16 @@ public enum Metrics {
     /// Large inset: around a pane's content.
     public static let insetLarge: CGFloat = 16
 
-    /// Corner radii, four of them; controls are capsules.
+    /// Corner radii, four of them, the theme's but for sheets'; controls
+    /// are capsules.
     public enum Radius {
-        /// Checkboxes and key caps.
-        public static let small: CGFloat = 5
+        /// Checkboxes and key caps (Classic's 5).
+        public static var small: CGFloat { Theme.current.radii.small }
         /// Every list row: sidebar items, file rows, picker rows, and
-        /// History's simple rows.
-        public static let row: CGFloat = 9
-        /// Cards, banners, action lists, and lists in sheets.
-        public static let card: CGFloat = 14
+        /// History's simple rows (Classic's 9).
+        public static var row: CGFloat { Theme.current.radii.row }
+        /// Cards, banners, action lists, and lists in sheets (Classic's 14).
+        public static var card: CGFloat { Theme.current.radii.card }
         /// Sheets and popovers.
         public static let sheet: CGFloat = 22
     }
@@ -75,7 +76,14 @@ public enum Metrics {
     /// The file status badge (M, A, D, R).
     public enum StatusBadge {
         public static let size: CGFloat = 17
+        /// A rounded square's corner radius.
         public static let cornerRadius: CGFloat = 6
+
+        /// The badge's corner radius in the current theme: the rounded
+        /// square's, or half its side for a circle.
+        public static var radius: CGFloat {
+            Theme.current.statusBadge.shape == .circle ? size / 2 : cornerRadius
+        }
     }
 
     /// Checkboxes.
@@ -188,9 +196,10 @@ public enum Metrics {
     /// The history graph.
     public enum Graph {
         /// The row height: `ceil(lineHeight(.body) × 2)`, 32 at the default
-        /// text size.
+        /// text size, from SF Pro's line height at the app font's body size
+        /// (`AppKitTypography.bodyLayoutLineHeight`).
         public static var rowHeight: CGFloat {
-            rowHeight(for: NSFont.preferredFont(forTextStyle: .body))
+            ceil(AppKitTypography.bodyLayoutLineHeight * 2)
         }
 
         /// The row height for a body font.
@@ -198,8 +207,8 @@ public enum Metrics {
             ceil(NSLayoutManager().defaultLineHeight(for: font) * 2)
         }
 
-        /// Lane pitch P.
-        public static let lanePitch: CGFloat = 16
+        /// Lane pitch P: the theme's (Classic's 16).
+        public static var lanePitch: CGFloat { Theme.current.graph.lanePitch }
         /// The pitch past `maxUncompressedLanes` lanes.
         public static let compressedLanePitch: CGFloat = 9
         public static let maxUncompressedLanes = 12
@@ -224,9 +233,9 @@ public enum Metrics {
         /// Nodes shrink by this much past `maxUncompressedLanes` lanes, so a
         /// ring stays clear of the lines beside it.
         public static let compressedNodeScale: CGFloat = 0.65
-        /// Lines are 3 points with round caps and joins, the trunk's and the
-        /// branches' alike.
-        public static let trackStroke: CGFloat = 3
+        /// Lines have round caps and joins, the trunk's and the branches'
+        /// alike, in the theme's width (Classic's 3).
+        public static var trackStroke: CGFloat { Theme.current.graph.lineWidth }
         /// Added to every stroke under Increase Contrast.
         public static let increaseContrastStroke: CGFloat = 0.5
         /// A line changing lanes runs on a short diagonal centered on the
@@ -308,9 +317,10 @@ public enum Metrics {
     /// status costs only the rows on screen.
     public enum FileList {
         /// The row height: `ceil(lineHeight(.body) × 1.875)`, 30 at the
-        /// default text size.
+        /// default text size, from SF Pro's line height at the app font's
+        /// body size.
         public static var rowHeight: CGFloat {
-            ceil(NSLayoutManager().defaultLineHeight(for: NSFont.preferredFont(forTextStyle: .body)) * 1.875)
+            ceil(AppKitTypography.bodyLayoutLineHeight * 1.875)
         }
 
         /// The status letter's square, and a conflicted file's symbol.

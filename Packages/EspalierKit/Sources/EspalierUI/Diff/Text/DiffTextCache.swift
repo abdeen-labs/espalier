@@ -51,6 +51,8 @@ final class DiffTextCache {
     /// Hunk headers' lines, by the document line they show.
     private var headers: [Int: CTLine] = [:]
     private var appearance: AppearanceVariant?
+    /// The look the colors and fonts are in.
+    private var look: Look?
     private static let limit = 2_000
 
     /// Forgets everything (new document, tokens, font, or width).
@@ -61,10 +63,12 @@ final class DiffTextCache {
         headers.removeAll(keepingCapacity: true)
     }
 
-    /// Forgets everything when the appearance changed (colors are baked).
+    /// Forgets everything when the appearance or the look changed (colors
+    /// and fonts are baked).
     func use(_ appearance: AppearanceVariant) {
-        if self.appearance != appearance {
+        if self.appearance != appearance || look != Look.current {
             self.appearance = appearance
+            look = Look.current
             reset()
         }
     }

@@ -19,7 +19,7 @@ import GitKit
 struct DiffFontMetrics: Sendable, Equatable {
     /// The code font's size.
     let fontSize: CGFloat
-    /// The advance of every printable ASCII character (SF Mono is
+    /// The advance of every printable ASCII character (the code font is
     /// monospaced).
     let characterWidth: CGFloat
     /// The height of one visual line: 20 at the default code size (11.5),
@@ -30,7 +30,7 @@ struct DiffFontMetrics: Sendable, Equatable {
 
     init(fontSize: CGFloat) {
         self.fontSize = fontSize
-        let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let font = AppKitTypography.code(size: fontSize)
         var glyph = CGGlyph(0)
         var character = UniChar(UInt8(ascii: "0"))
         var advance = CGSize.zero

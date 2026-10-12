@@ -71,8 +71,11 @@ struct SidebarContainer: View {
         }
         .background(Color(espalier: Palette.sidebar).ignoresSafeArea())
         .overlay(alignment: .trailing) {
+            // The floating layout's sidebar sits on the backdrop, beside
+            // the cards.
             Hairline(.vertical)
                 .ignoresSafeArea()
+                .opacity(PaneCards.floats ? 0 : 1)
         }
     }
 
@@ -281,7 +284,7 @@ struct ChangesPlaceRow: View {
             } else if let badge = content.badge {
                 Text(badge)
                     .font(Typography.count)
-                    .foregroundStyle(.text3)
+                    .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
             }
         }
     }
@@ -317,12 +320,12 @@ struct SidebarRowLabel<Trailing: View>: View {
         HStack(spacing: Metrics.insetSmall) {
             Image(systemName: systemImage)
                 .font(Typography.row)
-                .foregroundStyle(isSelected ? Color.accentColor : .text2)
+                .foregroundStyle(.sidebarRowIcon(isSelected: isSelected))
                 .frame(width: Metrics.Sidebar.symbolWidth)
                 .accessibilityHidden(true)
             Text(title)
                 .font(SidebarRowFont.title(isSelected: isSelected, isEmphasized: isEmphasized))
-                .foregroundStyle(.text)
+                .foregroundStyle(.sidebarRowText(isSelected: isSelected))
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: Metrics.grid)
@@ -332,11 +335,15 @@ struct SidebarRowLabel<Trailing: View>: View {
     }
 }
 
-/// A sidebar row title's weight: semibold for the current branch and its
-/// pull request (the one way the sidebar marks what's current); medium
-/// while the row is selected; regular otherwise.
+/// A sidebar row title's weight: bold while the row is selected in a theme
+/// whose selection is bold (`Theme.sidebarSelectionIsBold`); semibold for
+/// the current branch and its pull request (the one way the sidebar marks
+/// what's current); medium while the row is selected; regular otherwise.
 enum SidebarRowFont {
     static func title(isSelected: Bool, isEmphasized: Bool = false) -> Font {
+        if isSelected, Theme.current.sidebarSelectionIsBold {
+            return Typography.row.weight(.bold)
+        }
         if isEmphasized {
             return Typography.row.weight(.semibold)
         }
@@ -468,6 +475,11 @@ struct SidebarRowBackground: View {
         RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
             .fill(fill)
             .hoverMotion(isHovered || isDropTarget)
+            .background {
+                if isSelected, !isDropTarget {
+                    SidebarSelectionFill()
+                }
+            }
             .contextTargetRing(isContextMenuTarget)
             .padding(.horizontal, Metrics.Sidebar.rowInset)
     }
@@ -492,7 +504,8 @@ struct SidebarRowBackground: View {
             return Color(espalier: Palette.accentSoft)
         }
         if isSelected {
-            return Color(espalier: Palette.sidebarSelection)
+            // `SidebarSelectionFill`, under it.
+            return .clear
         }
         if isHovered {
             return Color(espalier: Palette.hover)
@@ -685,6 +698,9 @@ extension EnvironmentValues {
     /// The expansion of the `SidebarSection` whose header this is, which
     /// the header's chevron toggles.
     @Entry var sidebarSectionExpansion: Binding<Bool>?
+    /// Whether this is in a sidebar section header's accessory, whose
+    /// buttons are the sidebar's tertiary text.
+    @Entry var isInSidebarSectionHeader = false
 }
 
 /// A section's header: the uppercase label, with no count, and what
@@ -711,7 +727,8 @@ struct SidebarSectionHeader<Accessory: View>: View {
             }
             accessory
                 .font(Typography.subheadline.weight(.semibold))
-                .foregroundStyle(.text3)
+                .foregroundStyle(.sidebarText3)
+                .environment(\.isInSidebarSectionHeader, true)
         }
         // Aligned with the rows' symbols and their trailing counts.
         .padding(.leading, Metrics.grid)
@@ -742,7 +759,7 @@ private struct SidebarSectionChevron: View {
             Image(systemName: "chevron.right")
                 .font(Typography.row.weight(.semibold))
                 .imageScale(.small)
-                .foregroundStyle(isShown ? Color.text3 : Color.clear)
+                .foregroundStyle(isShown ? Color.sidebarText3 : Color.clear)
                 .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 .motion(Motion.leave, value: isExpanded)
                 .hoverMotion(isShown)
@@ -778,11 +795,12 @@ private struct SidebarHeaderButtonBody<Label: View>: View {
     let isPressed: Bool
     /// Whether the button has keyboard focus.
     @Environment(\.isFocused) private var isFocused
+    @Environment(\.isInSidebarSectionHeader) private var isInSidebarSectionHeader
 
     var body: some View {
         label
             .font(Typography.subheadline.weight(.semibold))
-            .foregroundStyle(.text3)
+            .foregroundStyle(isInSidebarSectionHeader ? Color.sidebarText3 : Color.text3)
             .frame(width: Metrics.Sidebar.badgeSize, height: Metrics.Sidebar.badgeSize)
             .contentShape(Rectangle())
             .opacity(isPressed ? 0.6 : 1)
@@ -804,6 +822,7 @@ struct SidebarFilterField: View {
             focusRequest: $state.isSidebarFilterFocused
         )
         .controlSize(.regular)
+        .environment(\.searchFieldIsRaised, PaneCards.floats)
         .padding(.horizontal, Metrics.Sidebar.rowInset)
         .padding(.vertical, Metrics.insetSmall)
         .background(Color(espalier: Palette.sidebar))

@@ -572,7 +572,7 @@ struct AIConflictLoadingView: View {
                     Text(content.phase)
                         .foregroundStyle(.text)
                 } icon: {
-                    IconCircle("sparkles", size: 24, tint: .accentColor)
+                    IconCircle("sparkles", size: 24, tint: .accent)
                 }
                 .font(Typography.heading)
                 Spacer()

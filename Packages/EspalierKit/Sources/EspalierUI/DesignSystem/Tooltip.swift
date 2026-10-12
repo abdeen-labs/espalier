@@ -124,7 +124,7 @@ extension Metrics {
         /// The widest a card gets; its text wraps to stay inside.
         public static let maximumWidth: CGFloat = 280
         /// The card's corner radius: a row's.
-        public static let cornerRadius: CGFloat = Radius.row
+        public static var cornerRadius: CGFloat { Radius.row }
         /// Between the cursor, or the area the card is for, and the card.
         public static let gap: CGFloat = 4
         /// The cursor reaches at most this far below the pointer's hotspot.

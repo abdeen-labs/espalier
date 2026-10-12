@@ -114,6 +114,14 @@ extension View {
         surface(.quiet, elevation: .floating, in: shape)
     }
 
+    /// A quiet capsule control's surface (the location control, a
+    /// co-author token): the theme's quiet control fill, with the quiet
+    /// ring and small shadow where the theme raises quiet controls.
+    public func quietControlSurface() -> some View {
+        let theme = Theme.current
+        return surface(Color(nsColor: theme.quietControl), elevation: theme.quietControlIsRaised ? .quiet : nil)
+    }
+
     /// A card in a pane: the quiet fill with the ring and no shadow, radius
     /// 14.
     public func cardSurface(cornerRadius: CGFloat = Metrics.Radius.card) -> some View {

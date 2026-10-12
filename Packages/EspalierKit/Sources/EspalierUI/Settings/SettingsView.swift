@@ -34,6 +34,7 @@ public struct SettingsView: View {
         }
         .frame(width: Metrics.SettingsWindow.width, height: Metrics.SettingsWindow.height)
         .background(SettingsWindowChromeReader())
+        .lookFont()
     }
 }
 
@@ -81,7 +82,9 @@ struct SettingsPanes: View {
 
 /// The window's layout: the sidebar of panes on the left; on the right,
 /// the header band with the selected pane's name and a hairline, then the
-/// pane. It fills the window, under its transparent titlebar too.
+/// pane. It fills the window, under its transparent titlebar too. In the
+/// floating layout the band sits on the backdrop with no hairline, and the
+/// pane is a card.
 struct SettingsLayout<Pane: View>: View {
     @Binding var selection: SettingsTab
     private let pane: Pane
@@ -103,8 +106,12 @@ struct SettingsLayout<Pane: View>: View {
                     // the titlebar when the pointer is over it, blurring the
                     // header band; the band is opaque, so it needs none.
                     .scrollEdgeEffectHidden(true, for: .top)
+                    // In the floating layout, the pane is a card on the
+                    // backdrop, under the band, as the main window's are.
+                    .paneCard()
+                    .paneMargins()
             }
-            .background(Color(espalier: Palette.background))
+            .background(Color(espalier: PaneCards.floats ? Theme.current.backdrop : Palette.background))
         }
         .ignoresSafeArea()
         .navigationTitle(selection.title)
@@ -131,6 +138,7 @@ struct SettingsHeader: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
             Hairline()
+                .opacity(PaneCards.floats ? 0 : 1)
         }
         .frame(height: Metrics.SettingsWindow.headerHeight)
     }
@@ -160,6 +168,7 @@ struct SettingsSidebar: View {
         .background(Color(espalier: Palette.sidebar))
         .overlay(alignment: .trailing) {
             Hairline(.vertical)
+                .opacity(PaneCards.floats ? 0 : 1)
         }
         .focusable()
         .focusEffectDisabled()
@@ -182,6 +191,11 @@ struct SettingsSidebar: View {
             // Hover fades (in 0.08 s, out 0.15 s); choosing a pane is
             // instant, as selection is.
             .background(shape.fill(fill(for: tab)).hoverMotion(hovered == tab))
+            .background {
+                if isSelected {
+                    SidebarSelectionFill()
+                }
+            }
             .contentShape(shape)
             .onTapGesture {
                 selection = tab
@@ -201,7 +215,8 @@ struct SettingsSidebar: View {
 
     private func fill(for tab: SettingsTab) -> Color {
         if tab == selection {
-            return Color(espalier: Palette.sidebarSelection)
+            // `SidebarSelectionFill`, under it.
+            return .clear
         }
         return tab == hovered ? Color(espalier: Palette.hover) : .clear
     }

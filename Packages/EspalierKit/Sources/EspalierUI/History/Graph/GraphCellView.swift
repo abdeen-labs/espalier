@@ -170,9 +170,9 @@ final class GraphCellView: NSView, TooltipOwner {
         outline.path = CGPath(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2), transform: nil)
         outline.fillColor = nil
         outline.lineWidth = Metrics.Graph.targetOutline
-        var color = NSColor.controlAccentColor.cgColor
+        var color = Palette.accent.cgColor
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            color = (colors?.color(forTrack: row.track)) ?? NSColor.controlAccentColor.cgColor
+            color = (colors?.color(forTrack: row.track)) ?? Palette.accent.cgColor
         }
         outline.strokeColor = color
         layer.addSublayer(outline)

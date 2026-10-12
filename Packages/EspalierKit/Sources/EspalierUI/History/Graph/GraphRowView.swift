@@ -87,6 +87,7 @@ final class GraphRowView: NSTableRowView, ContextMenuTargetRowView {
             joinsAbove: isPreviousRowSelected,
             joinsBelow: isNextRowSelected
         ).fill()
+        SelectionBarDrawing.draw(in: HistoryRowDrawing.selectionRect(in: bounds))
     }
 
     // MARK: Drop feedback

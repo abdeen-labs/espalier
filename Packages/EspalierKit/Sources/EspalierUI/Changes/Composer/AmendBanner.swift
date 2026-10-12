@@ -14,7 +14,7 @@ public struct AmendBanner: View {
     public var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
             Image(systemName: "pencil.circle.fill")
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Color.accent)
                 .accessibilityHidden(true)
             LinkedText(Self.message)
                 .font(Typography.secondary)

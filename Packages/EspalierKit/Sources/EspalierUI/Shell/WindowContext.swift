@@ -190,5 +190,6 @@ struct WindowEnvironment: ViewModifier {
             .environment(\.avatarLoader, context.avatarLoader)
             .environment(\.announcer, context.announcer)
             .environment(\.scheduler, context.app.environment.scheduler)
+            .lookFont()
     }
 }

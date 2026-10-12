@@ -534,7 +534,7 @@ public struct ComposerView: View {
                         Text("Co-Authors")
                     } icon: {
                         Image(systemName: draft.showCoAuthoredBy ? "person.2.fill" : "person.2")
-                            .foregroundStyle(draft.showCoAuthoredBy ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.text2))
+                            .foregroundStyle(draft.showCoAuthoredBy ? AnyShapeStyle(Color.accent) : AnyShapeStyle(.text2))
                     }
                 }
                 .toggleStyle(.button)
@@ -635,7 +635,7 @@ public struct ComposerView: View {
 
     /// The summary's font: the row font, semibold.
     private static var summaryFont: NSFont {
-        .systemFont(ofSize: AppKitTypography.row.pointSize, weight: .semibold)
+        AppKitTypography.row(weight: .semibold)
     }
 }
 

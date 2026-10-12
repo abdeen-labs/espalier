@@ -144,14 +144,14 @@ public struct SparkleButton: View {
         case .generating:
             if isHovering {
                 Image(systemName: "stop.fill")
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.accent)
                     .imageScale(.small)
             } else {
                 ArcProgress(.mini, tint: Palette.accent)
             }
         case .generated:
             Image(systemName: "sparkles")
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Color.accent)
         default:
             Image(systemName: "sparkles")
         }

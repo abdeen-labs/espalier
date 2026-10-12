@@ -22,6 +22,25 @@ extension Metrics.Graph {
     static let cleanWorkingCopyOpacity: CGFloat = 0.5
     /// Added to the stroke of the focused or hovered track.
     static let emphasizedStroke: CGFloat = 0.5
+
+    /// Dot nodes (`GraphStyle.Node.dot`): a commit's dot, a merge's (with a
+    /// hole), the current tip's, and the hole's radius in each, with a gap
+    /// of the row's background around them.
+    static let dotRadius: CGFloat = 5
+    static let headDotNodeRadius: CGFloat = 6.5
+    static let mergeHoleRadius: CGFloat = 2.25
+    static let headHoleRadius: CGFloat = 2.5
+    static let dotGap: CGFloat = 2
+    /// Haloed dots (`GraphStyle.Node.haloedDot`): bigger dots, a merge as a
+    /// ring, and the current tip in a soft halo of its color.
+    static let haloedDotRadius: CGFloat = 5.5
+    static let haloedHeadRadius: CGFloat = 7
+    static let haloedHoleRadius: CGFloat = 2.75
+    static let haloedMergeRadius: CGFloat = 4.5
+    static let haloedMergeStroke: CGFloat = 3
+    static let haloedGap: CGFloat = 2.5
+    static let haloRadius: CGFloat = 11.5
+    static let haloOpacity: CGFloat = 0.22
 }
 
 /// The kinds of node a row draws, for their sizes.
@@ -54,6 +73,10 @@ struct GraphGeometry: Equatable {
     let nodeScale: CGFloat
     /// Added to every stroke (Increase Contrast).
     let extraStroke: CGFloat
+    /// How nodes are drawn: the theme's.
+    let nodeStyle: GraphStyle.Node
+    /// The lines' width: the theme's.
+    let lineWidth: CGFloat
 
     /// - Parameters:
     ///   - rowHeight: The row height (`Metrics.Graph.rowHeight`).
@@ -68,6 +91,9 @@ struct GraphGeometry: Equatable {
         bendHeight = (rowHeight * Metrics.Graph.bendFraction).rounded()
         nodeScale = compressed ? Metrics.Graph.compressedNodeScale : 1
         extraStroke = increaseContrast ? Metrics.Graph.increaseContrastStroke : 0
+        let graph = Theme.current.graph
+        nodeStyle = graph.node
+        lineWidth = graph.lineWidth
     }
 
     /// The x of a lane's center.
@@ -102,16 +128,19 @@ struct GraphGeometry: Equatable {
         }
     }
 
-    /// How far from the node's center its ring reaches: lines stop there,
-    /// and stubs start there.
+    /// How far from the node's center its ring (or its dot's gap) reaches:
+    /// lines stop there, and stubs start there.
     func clearance(_ size: GraphNodeSize) -> CGFloat {
+        if nodeStyle != .ring, let dot = GraphDot(size, style: nodeStyle) {
+            return dot.clearance(scale: nodeScale, extraStroke: extraStroke)
+        }
         let ring = ring(size)
         return ring.radius + ring.stroke / 2
     }
 
     /// A segment's stroke width.
     func stroke(track: Int) -> CGFloat {
-        Metrics.Graph.trackStroke + extraStroke
+        lineWidth + extraStroke
     }
 
     /// Where an outgoing stub ends: below the node for a first parent,
@@ -142,5 +171,85 @@ struct GraphGeometry: Equatable {
     func hitArea(around point: CGPoint) -> CGRect {
         let size = Metrics.Graph.stubHitArea
         return CGRect(x: point.x - size / 2, y: point.y - size / 2, width: size, height: size)
+    }
+}
+
+/// A node drawn as a dot (`GraphStyle.Node.dot` and `.haloedDot`): every
+/// node but the working copy's, which stays a dashed ring.
+struct GraphDot: Equatable {
+    /// The dot's radius, and the hole's in it (a merge's, the current
+    /// tip's), at full scale.
+    var radius: CGFloat
+    var hole: CGFloat?
+    /// A ring of this stroke instead of a dot (a haloed theme's merge).
+    var ringStroke: CGFloat?
+    /// The gap of background around it.
+    var gap: CGFloat
+    /// A soft halo of its color around it (a haloed theme's current tip).
+    var halo: CGFloat?
+
+    init?(_ size: GraphNodeSize, style: GraphStyle.Node) {
+        let graph = Metrics.Graph.self
+        switch (style, size) {
+        case (.ring, _), (_, .workingCopy):
+            return nil
+        case (.dot, .commit):
+            self.init(radius: graph.dotRadius, gap: graph.dotGap)
+        case (.dot, .merge):
+            self.init(radius: graph.dotRadius, hole: graph.mergeHoleRadius, gap: graph.dotGap)
+        case (.dot, .head):
+            self.init(radius: graph.headDotNodeRadius, hole: graph.headHoleRadius, gap: graph.dotGap)
+        case (.haloedDot, .commit):
+            self.init(radius: graph.haloedDotRadius, gap: graph.haloedGap)
+        case (.haloedDot, .merge):
+            self.init(radius: graph.haloedMergeRadius, ringStroke: graph.haloedMergeStroke, gap: graph.haloedGap - graph.haloedMergeStroke / 2)
+        case (.haloedDot, .head):
+            self.init(radius: graph.haloedHeadRadius, hole: graph.haloedHoleRadius, gap: graph.haloedGap, halo: graph.haloRadius)
+        }
+    }
+
+    init(radius: CGFloat, hole: CGFloat? = nil, ringStroke: CGFloat? = nil, gap: CGFloat, halo: CGFloat? = nil) {
+        self.radius = radius
+        self.hole = hole
+        self.ringStroke = ringStroke
+        self.gap = gap
+        self.halo = halo
+    }
+
+    /// How far from the center the dot and its gap reach.
+    func clearance(scale: CGFloat, extraStroke: CGFloat) -> CGFloat {
+        (radius + (ringStroke ?? 0) / 2 + gap) * scale + extraStroke / 2
+    }
+
+    /// Draws the dot at `center`: the halo, the gap in `background`, the
+    /// dot (or ring) in `color` at `opacity`, and the hole.
+    func draw(at center: CGPoint, color: CGColor, background: CGColor, opacity: CGFloat, scale: CGFloat, extraStroke: CGFloat, in context: CGContext) {
+        func circle(_ radius: CGFloat) -> CGRect {
+            CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+        }
+        let radius = radius * scale + extraStroke / 2
+        if let halo {
+            context.setAlpha(opacity * Metrics.Graph.haloOpacity)
+            context.setFillColor(color)
+            context.fillEllipse(in: circle(halo * scale))
+        }
+        // The gap is opaque whatever the node's opacity, so dimmed dots
+        // still hide the lines' ends.
+        context.setAlpha(1)
+        context.setFillColor(background)
+        context.fillEllipse(in: circle(clearance(scale: scale, extraStroke: extraStroke)))
+        context.setAlpha(opacity)
+        if let ringStroke {
+            context.setStrokeColor(color)
+            context.setLineWidth(ringStroke + extraStroke)
+            context.strokeEllipse(in: circle(radius))
+            return
+        }
+        context.setFillColor(color)
+        context.fillEllipse(in: circle(radius))
+        if let hole {
+            context.setFillColor(background)
+            context.fillEllipse(in: circle(hole * scale))
+        }
     }
 }

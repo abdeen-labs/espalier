@@ -133,6 +133,6 @@ public struct ChangesHeader: View {
 
     /// The count's font: the row font, semibold.
     static var titleFont: NSFont {
-        .systemFont(ofSize: AppKitTypography.row.pointSize, weight: .semibold)
+        AppKitTypography.row(weight: .semibold)
     }
 }

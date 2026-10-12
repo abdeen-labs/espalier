@@ -170,14 +170,22 @@ enum CommitRowParts {
         ceil(label.cell?.cellSize.width ?? label.intrinsicContentSize.width)
     }
 
-    /// The height of one line of `font` in a label.
+    /// The height of one line of `font` in a label, measured once per
+    /// font.
     static func lineHeight(_ font: NSFont) -> CGFloat {
-        ceil(label(font: font, color: .labelColor, sample: true).intrinsicContentSize.height)
+        if let height = lineHeights[font] {
+            return height
+        }
+        let height = ceil(label(font: font, color: .labelColor, sample: true).intrinsicContentSize.height)
+        lineHeights[font] = height
+        return height
     }
+
+    private static var lineHeights: [NSFont: CGFloat] = [:]
 
     /// A title's font: the row's, semibold for HEAD's commit.
     static func titleFont(isCurrentTip: Bool) -> NSFont {
-        isCurrentTip ? .systemFont(ofSize: AppKitTypography.row.pointSize, weight: .semibold) : AppKitTypography.row
+        isCurrentTip ? AppKitTypography.row(weight: .semibold) : AppKitTypography.row
     }
 
     /// The time label: secondary text, right-aligned in its column.
@@ -247,11 +255,14 @@ final class CommitRowCellView: NSTableCellView {
     private(set) var content = CommitRowContent()
     private var summaryWidth: CGFloat = 0
     private var isDimmed = false
+    /// The look the row's fonts and colors are in.
+    private var styledLook = Look.current
 
-    /// The heights of one line of the row's fonts, measured once.
-    private static let rowLabelHeight = CommitRowParts.lineHeight(AppKitTypography.row)
-    private static let secondaryLabelHeight = CommitRowParts.lineHeight(AppKitTypography.secondary)
-    private static let shortIDHeight = CommitRowParts.lineHeight(AppKitTypography.code(size: 11))
+    /// The heights of one line of the row's fonts in the current text
+    /// fonts.
+    private static var rowLabelHeight: CGFloat { CommitRowParts.lineHeight(AppKitTypography.row) }
+    private static var secondaryLabelHeight: CGFloat { CommitRowParts.lineHeight(AppKitTypography.secondary) }
+    private static var shortIDHeight: CGFloat { CommitRowParts.lineHeight(AppKitTypography.code(size: 11)) }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -299,7 +310,11 @@ final class CommitRowCellView: NSTableCellView {
         graphView.emphasis = emphasis
         refsView.palette = style.palette
 
-        let contentChanged = content != self.content
+        var contentChanged = content != self.content
+        if styledLook != Look.current {
+            restyle()
+            contentChanged = true
+        }
         self.content = content
         if contentChanged {
             apply(content, avatars: style.avatars, monograms: style.monograms, scale: style.scale)
@@ -379,6 +394,19 @@ final class CommitRowCellView: NSTableCellView {
             emphasis.isSelected = isSelectedRow
             graphView.emphasis = emphasis
         }
+    }
+
+    /// Takes the current look's fonts and colors.
+    private func restyle() {
+        styledLook = Look.current
+        detailLabel.font = AppKitTypography.secondary
+        detailLabel.textColor = Palette.text3
+        dateLabel.font = AppKitTypography.secondary
+        dateLabel.textColor = Palette.text3
+        shortIDLabel.font = AppKitTypography.code(size: 11)
+        shortIDLabel.textColor = Palette.text3
+        unpushedView.contentTintColor = Palette.accent
+        needsLayout = true
     }
 
     // MARK: Layout

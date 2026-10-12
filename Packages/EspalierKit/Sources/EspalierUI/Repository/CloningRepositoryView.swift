@@ -44,7 +44,7 @@ struct CloningForm: View {
 
     var body: some View {
         VStack(spacing: Metrics.insetMedium) {
-            IconCircle("arrow.down", size: Metrics.StateIcon.size, tint: .accentColor)
+            IconCircle("arrow.down", size: Metrics.StateIcon.size, tint: .accent)
                 .accessibilityHidden(true)
             Text("Cloning \(content.name)")
                 .font(Typography.sheetTitle)

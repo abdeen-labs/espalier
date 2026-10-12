@@ -80,9 +80,10 @@ nonisolated public struct RefCapsuleContent: Sendable, Hashable, Identifiable {
     }
 }
 
-/// How a capsule is painted, from its kind and track color: the current
-/// branch filled in the accent; other local branches tinted in their track
-/// color; remote branches outlined, with a cloud; tags neutral, with a tag.
+/// How a capsule is painted, from its kind, track color, and the theme's
+/// tags: the current branch filled in the accent (or the theme's prominent
+/// fill); other local branches tinted in their track color (or filled with
+/// it); remote branches outlined, with a cloud; tags neutral, with a tag.
 struct RefCapsuleStyle {
     var fill: NSColor?
     var stroke: NSColor?
@@ -96,20 +97,34 @@ struct RefCapsuleStyle {
     static let outlineAlpha: CGFloat = 0.45
 
     init(_ content: RefCapsuleContent, palette: TrackPalette.Resolved, variant: AppearanceVariant) {
+        let theme = Theme.current
         let track = palette.color(forRef: content).resolved(in: variant)
-        let solidText = NSColor.white
         switch content.kind {
         case .currentBranch, .currentBranchWithUpstream, .detachedHead:
-            fill = palette.current.resolved(in: variant)
+            let solidText = theme.refTag.currentUsesProminent ? theme.prominentText.resolved(in: variant) : NSColor.white
+            fill = (theme.refTag.currentUsesProminent ? theme.prominent : palette.current).resolved(in: variant)
             stroke = nil
             text = solidText
             secondaryText = solidText.withAlphaComponent(0.75)
             symbol = nil
         case .localBranch, .localBranchWithUpstream:
-            fill = track.withAlphaComponent(Self.tintAlpha)
+            switch theme.refTag.fill {
+            case .tinted(let alpha, let textMix, let ink):
+                fill = track.withAlphaComponent(variant.isDark ? alpha.dark : alpha.light)
+                if let textMix {
+                    let fraction = variant.isDark ? textMix.dark : textMix.light
+                    text = track.blended(withFraction: fraction, of: variant.isDark ? .white : .hex(ink)) ?? track
+                } else {
+                    text = track
+                }
+                secondaryText = text.withAlphaComponent(0.7)
+            case .solid(let darken):
+                let solid = variant.isDark ? track : (track.blended(withFraction: darken, of: .black) ?? track)
+                fill = solid
+                text = variant.isDark ? .hex(0x111116) : .white
+                secondaryText = text.withAlphaComponent(0.75)
+            }
             stroke = nil
-            text = track
-            secondaryText = track.withAlphaComponent(0.7)
             symbol = nil
         case .remoteBranch:
             fill = nil
@@ -133,6 +148,36 @@ struct RefCapsuleStyle {
 }
 
 // MARK: - SwiftUI
+
+/// A ref tag's shape: a capsule, or the theme's rounded rectangle.
+nonisolated struct RefTagShape: InsettableShape {
+    /// The theme's corner radius; nil for a capsule.
+    var cornerRadius: CGFloat?
+    var inset: CGFloat = 0
+
+    init() {
+        cornerRadius = Theme.current.radii.tag
+    }
+
+    /// The corner radius of a tag `height` high in the current theme.
+    static func radius(height: CGFloat) -> CGFloat {
+        min(Theme.current.radii.tag ?? height / 2, height / 2)
+    }
+
+    func path(in rect: CGRect) -> Path {
+        guard let cornerRadius else {
+            return Capsule(style: .circular).inset(by: inset).path(in: rect)
+        }
+        let radius = max(min(cornerRadius, rect.height / 2) - inset, 0)
+        return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect.insetBy(dx: inset, dy: inset))
+    }
+
+    func inset(by amount: CGFloat) -> RefTagShape {
+        var shape = self
+        shape.inset += amount
+        return shape
+    }
+}
 
 /// One ref capsule.
 public struct RefCapsule: View {
@@ -171,12 +216,12 @@ public struct RefCapsule: View {
         .frame(height: Metrics.RefCapsule.height)
         .background {
             if let fill = style.fill {
-                Capsule(style: .circular).fill(Color(nsColor: fill))
+                RefTagShape().fill(Color(nsColor: fill))
             }
         }
         .overlay {
             if let stroke = style.stroke {
-                Capsule(style: .circular).strokeBorder(Color(nsColor: stroke), lineWidth: 1)
+                RefTagShape().strokeBorder(Color(nsColor: stroke), lineWidth: 1)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -221,7 +266,7 @@ public struct RefCapsuleList: View {
                         .foregroundStyle(.text2)
                         .padding(.horizontal, Metrics.RefCapsule.horizontalPadding)
                         .frame(height: Metrics.RefCapsule.height)
-                        .background(Capsule(style: .circular).fill(.field))
+                        .background(RefTagShape().fill(.field))
                 }
                 .buttonStyle(.bare(.capsule))
                 .accessibilityLabel("\(refs.count - maximumVisible) more refs")
@@ -310,7 +355,7 @@ public enum RefCapsuleRenderer {
 
     private static func drawCapsule(_ content: RefCapsuleContent, in frame: CGRect, palette: TrackPalette.Resolved, variant: AppearanceVariant) {
         let style = RefCapsuleStyle(content, palette: palette, variant: variant)
-        let radius = frame.height / 2
+        let radius = RefTagShape.radius(height: frame.height)
         if let fill = style.fill {
             fill.setFill()
             NSBezierPath(roundedRect: frame, xRadius: radius, yRadius: radius).fill()
@@ -338,7 +383,7 @@ public enum RefCapsuleRenderer {
     }
 
     private static func drawOverflow(_ count: Int, in frame: CGRect, variant: AppearanceVariant) {
-        let radius = frame.height / 2
+        let radius = RefTagShape.radius(height: frame.height)
         Palette.field.resolved(in: variant).setFill()
         NSBezierPath(roundedRect: frame, xRadius: radius, yRadius: radius).fill()
         let text = NSAttributedString(string: "+\(count)", attributes: [

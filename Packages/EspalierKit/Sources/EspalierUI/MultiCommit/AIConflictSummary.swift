@@ -95,7 +95,7 @@ struct AIConflictSummary: View {
                     .foregroundStyle(.text)
             } icon: {
                 Image(systemName: "sparkles")
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.accent)
             }
             .font(Typography.heading)
             if let phrase = content.operationPhrase {

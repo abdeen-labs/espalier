@@ -112,7 +112,7 @@ struct PopoverCardRoot: View {
         if let environment = model.environment {
             card.environment(\.self, environment)
         } else {
-            card
+            card.lookFont()
         }
     }
 }

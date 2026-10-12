@@ -149,6 +149,7 @@ struct ToolbarSearchField: View {
         )
         .controlSize(.large)
         .frame(width: Metrics.Toolbar.searchWidth)
+        .environment(\.searchFieldIsRaised, PaneCards.floats)
         .announcesFilterResults(state.searchText) { [context] in
             Self.resultCount(in: context)
         }

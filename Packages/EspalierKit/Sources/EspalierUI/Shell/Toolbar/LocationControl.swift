@@ -252,7 +252,7 @@ public struct LocationControlView: View {
         .foregroundStyle(.text)
         .padding(.horizontal, Metrics.grid)
         .frame(height: Metrics.ControlHeight.toolbar)
-        .surface(.quiet, elevation: .quiet)
+        .quietControlSurface()
     }
 
     /// The current branch's accent; a detached HEAD is neutral.

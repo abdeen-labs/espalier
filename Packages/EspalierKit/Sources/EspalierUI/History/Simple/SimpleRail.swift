@@ -63,7 +63,7 @@ struct SimpleRailColors: Equatable {
     /// The repository's branches, for merged branches' colors.
     var branchColors: BranchColors?
 
-    init(line: NSColor = .controlAccentColor, base: NSColor? = nil, startRow: Int? = nil, branchColors: BranchColors? = nil) {
+    init(line: NSColor = Palette.accent, base: NSColor? = nil, startRow: Int? = nil, branchColors: BranchColors? = nil) {
         self.line = line
         self.base = base
         self.startRow = startRow
@@ -76,7 +76,7 @@ struct SimpleRailColors: Equatable {
     init(branchColors: BranchColors, start: SimpleHistoryStart?, branch: Branch? = nil) {
         let line = branch.map { branchColors.color(of: (name: $0.name, isRemote: $0.type == .remote)) }
             ?? branchColors.current.flatMap { branchColors.color(forBranch: $0) }
-            ?? .controlAccentColor
+            ?? Palette.accent
         let base = start.map { branchColors.color(of: (name: $0.base.name, isRemote: $0.base.type == .remote)) }
         self.init(line: line, base: base, startRow: start?.row, branchColors: branchColors)
     }
@@ -276,6 +276,17 @@ enum SimpleRailRenderer {
         let opacity = rail.isDimmed ? graph.searchDimming : 1
         func circle(_ radius: CGFloat) -> CGRect {
             CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+        }
+        let nodeStyle = Theme.current.graph.node
+        let size: GraphNodeSize? = switch rail.node {
+        case .none: nil
+        case .head: .head
+        case .commit: .commit
+        case .merge, .merged: .merge
+        }
+        if let size, let dot = GraphDot(size, style: nodeStyle) {
+            dot.draw(at: center, color: nodeColor, background: background, opacity: opacity, scale: 1, extraStroke: extraStroke, in: context)
+            return
         }
         func ring(radius: CGFloat, width: CGFloat) {
             let width = width + extraStroke

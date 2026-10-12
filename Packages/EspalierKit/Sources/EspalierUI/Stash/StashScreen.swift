@@ -224,6 +224,7 @@ public struct StashScreen: View {
                 // worktree switch): it shows again if it comes back.
                 CenteredMessage("No Stashed Changes", systemImage: "tray", description: "There are no stashed changes on \(branch).")
                     .fillingSpace()
+                    .paneCard()
             }
         }
         .onAppear(perform: showStash)

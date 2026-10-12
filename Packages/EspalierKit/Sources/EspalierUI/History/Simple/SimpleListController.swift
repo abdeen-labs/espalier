@@ -118,8 +118,8 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     private var currentDrop: Drop?
     private var dates = DateTextCache(capacity: 2_000)
     private let monograms = MonogramCache()
-    /// A commit's row height, measured once.
-    private let rowHeight = Metrics.SimpleList.rowHeight
+    /// A commit's row height, measured again when the look changes.
+    private var rowHeight = Metrics.SimpleList.rowHeight
     private var minuteTimer: Timer?
     private var dragEndTimer: Timer?
     private var isLiveScrolling = false
@@ -186,6 +186,18 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         NotificationCenter.default.addObserver(self, selector: #selector(boundsDidChange(_:)), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         NotificationCenter.default.addObserver(self, selector: #selector(willStartLiveScroll(_:)), name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
         NotificationCenter.default.addObserver(self, selector: #selector(didEndLiveScroll(_:)), name: NSScrollView.didEndLiveScrollNotification, object: scrollView)
+        NotificationCenter.default.addObserver(self, selector: #selector(lookDidChange(_:)), name: Look.didChange, object: nil)
+    }
+
+    /// The look changed: the rows' height and colors follow it, and the
+    /// rows show again in its fonts.
+    @objc private func lookDidChange(_ notification: Notification) {
+        rowHeight = Metrics.SimpleList.rowHeight
+        tableView.rowHeight = rowHeight
+        tableView.backgroundColor = Palette.background
+        scrollView.backgroundColor = Palette.background
+        tableView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<tableView.numberOfRows))
+        reconfigureVisibleRows()
     }
 
     isolated deinit {

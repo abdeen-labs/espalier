@@ -146,7 +146,7 @@ enum CommitDragImage {
         NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()
         let attributed = NSAttributedString(string: text, attributes: [
             .font: Metrics.CommitDragImage.badgeFont,
-            .foregroundColor: NSColor.white,
+            .foregroundColor: Palette.buttonText,
         ])
         let size = attributed.size()
         attributed.draw(at: CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2))

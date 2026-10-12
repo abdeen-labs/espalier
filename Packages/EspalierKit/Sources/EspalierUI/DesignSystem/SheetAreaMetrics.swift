@@ -5,10 +5,15 @@ import AppKit
 import SwiftUI
 
 extension Typography {
-    /// The device code to enter when signing in (SF Mono, 22, semibold).
-    public static let deviceCode: Font = .system(.title, design: .monospaced).weight(.semibold)
+    /// The device code to enter when signing in (the mono, 22, semibold).
+    public static var deviceCode: Font {
+        guard Look.current.codeFont.face != nil else {
+            return .system(.title, design: .monospaced).weight(.semibold)
+        }
+        return mono(size: 22, weight: .semibold)
+    }
     /// The welcome flow's paragraphs (15).
-    public static let welcomeBody: Font = .title3
+    public static var welcomeBody: Font { sans(.title3) }
 }
 
 extension Metrics.Welcome {

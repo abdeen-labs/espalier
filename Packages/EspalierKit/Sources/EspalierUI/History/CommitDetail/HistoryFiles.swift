@@ -287,6 +287,7 @@ final class HistoryFileRowView: NSTableRowView, ContextMenuTargetRowView {
     override func drawSelection(in dirtyRect: NSRect) {
         Palette.accentSoft.setFill()
         HistoryRowDrawing.selectionPath(in: bounds, isFlipped: isFlipped, joinsAbove: false, joinsBelow: false).fill()
+        SelectionBarDrawing.draw(in: HistoryRowDrawing.selectionRect(in: bounds))
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -337,7 +338,7 @@ final class HistoryFileCellView: NSTableCellView {
     }
 
     private static func row(_ content: HistoryFileContent) -> AnyView {
-        AnyView(HistoryFileRow(content: content).accessibilityHidden(true))
+        AnyView(HistoryFileRow(content: content).accessibilityHidden(true).lookFont())
     }
 
     override func layout() {
@@ -425,5 +426,14 @@ struct CommitFilesHeader: View {
         }
         .padding(.horizontal, Metrics.HistoryHeader.horizontalPadding)
         .frame(height: Metrics.HistoryHeader.height)
+    }
+}
+
+extension HistoryFileTableView: LookChangeObserving {
+    /// The rows' height and the background follow the look.
+    func lookDidChange() {
+        rowHeight = Metrics.FileList.rowHeight
+        backgroundColor = Palette.background
+        enclosingScrollView?.backgroundColor = Palette.background
     }
 }

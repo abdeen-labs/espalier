@@ -41,21 +41,36 @@ nonisolated public enum Monogram {
     }
 
     /// The person's color: their hue at 45% saturation and 55% lightness in
-    /// light, 35% and 42% in dark.
+    /// light, 35% and 42% in dark; or in the theme's tone
+    /// (`Theme.monogramTone`).
     public static func color(name: String, email: String = "") -> NSColor {
         let hue = hue(name: name, email: email)
+        let tone = Theme.current.monogramTone
         return .espalierDynamic(
-            light: hsl(hue, saturation: 0.45, lightness: 0.55),
-            dark: hsl(hue, saturation: 0.35, lightness: 0.42)
+            light: shade(hue, tone: tone, isDark: false),
+            dark: shade(hue, tone: tone, isDark: true)
         )
     }
 
     /// The person's color as it resolves in `variant`.
     public static func color(name: String, email: String = "", in variant: AppearanceVariant) -> NSColor {
-        let hue = hue(name: name, email: email)
-        return variant.isDark
-            ? hsl(hue, saturation: 0.35, lightness: 0.42)
-            : hsl(hue, saturation: 0.45, lightness: 0.55)
+        shade(hue(name: name, email: email), tone: Theme.current.monogramTone, isDark: variant.isDark)
+    }
+
+    /// `hue` at Classic's saturation and lightness, or at `tone`'s,
+    /// deepened until white initials reach 3:1.
+    static func shade(_ hue: CGFloat, tone: MonogramTone?, isDark: Bool) -> NSColor {
+        guard let tone else {
+            return isDark
+                ? hsl(hue, saturation: 0.35, lightness: 0.42)
+                : hsl(hue, saturation: 0.45, lightness: 0.55)
+        }
+        let color = hsl(
+            hue,
+            saturation: isDark ? tone.saturation.dark : tone.saturation.light,
+            lightness: isDark ? tone.lightness.dark : tone.lightness.light
+        )
+        return ColorContrast.adjust(color, toReach: 3, against: .white)
     }
 
     /// An sRGB color from hue, saturation, and lightness, each 0 to 1.
@@ -76,8 +91,35 @@ nonisolated public enum Monogram {
     }
 }
 
-/// A circular monogram: initials on the person's color, or a person glyph
-/// when there are no initials.
+/// The avatar's shape in the current theme: a circle, or a rounded square
+/// (`AvatarShape`).
+nonisolated struct AvatarClipShape: Shape {
+    var shape: AvatarShape
+
+    init() {
+        shape = Theme.current.avatarShape
+    }
+
+    /// The corner radius of an avatar `side` points square.
+    static func cornerRadius(_ shape: AvatarShape, side: CGFloat) -> CGFloat {
+        switch shape {
+        case .circle: side / 2
+        case .roundedSquare: (side * 0.3).rounded()
+        }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        switch shape {
+        case .circle:
+            Circle().path(in: rect)
+        case .roundedSquare:
+            RoundedRectangle(cornerRadius: Self.cornerRadius(shape, side: min(rect.width, rect.height)), style: .continuous).path(in: rect)
+        }
+    }
+}
+
+/// A monogram in the avatar's shape (a circle in Classic): initials on the
+/// person's color, or a person glyph when there are no initials.
 public struct MonogramView: View {
     private let initials: String
     private let color: NSColor
@@ -91,7 +133,7 @@ public struct MonogramView: View {
 
     public var body: some View {
         ZStack {
-            Circle().fill(Color(espalier: color))
+            AvatarClipShape().fill(Color(espalier: color))
             if initials.isEmpty {
                 Image(systemName: "person.fill")
                     .font(.system(size: size * 0.5))
@@ -111,8 +153,15 @@ public struct MonogramView: View {
 /// Draws monograms for AppKit layers (History's avatar columns).
 public enum MonogramRenderer {
     /// A monogram image of `pointSize` points at `scale`, in the person's
-    /// color for `variant`.
-    public static func image(name: String, email: String = "", pointSize: CGFloat, scale: CGFloat, variant: AppearanceVariant = .light) -> CGImage? {
+    /// color for `variant`, in `shape`.
+    public static func image(
+        name: String,
+        email: String = "",
+        pointSize: CGFloat,
+        scale: CGFloat,
+        variant: AppearanceVariant = .light,
+        shape: AvatarShape = .circle
+    ) -> CGImage? {
         let pixels = Int((pointSize * scale).rounded(.up))
         guard pixels > 0, let context = CGContext(
             data: nil,
@@ -126,7 +175,13 @@ public enum MonogramRenderer {
             return nil
         }
         let bounds = CGRect(x: 0, y: 0, width: pixels, height: pixels)
-        context.addEllipse(in: bounds)
+        switch shape {
+        case .circle:
+            context.addEllipse(in: bounds)
+        case .roundedSquare:
+            let radius = AvatarClipShape.cornerRadius(shape, side: pointSize) * scale
+            context.addPath(CGPath(roundedRect: bounds, cornerWidth: radius, cornerHeight: radius, transform: nil))
+        }
         context.clip()
         context.setFillColor(Monogram.color(name: name, email: email, in: variant).cgColor)
         context.fill(bounds)
@@ -137,7 +192,7 @@ public enum MonogramRenderer {
             return context.makeImage()
         }
         let fontSize = CGFloat(pixels) * (initials.count > 1 ? 0.42 : 0.5)
-        let font = NSFont.systemFont(ofSize: fontSize, weight: .medium)
+        let font = FontFallback.checked(.systemFont(ofSize: fontSize, weight: .medium), size: fontSize, design: .sans)
         let text = NSAttributedString(string: initials, attributes: [.font: font, .foregroundColor: NSColor.white])
         let graphics = NSGraphicsContext(cgContext: context, flipped: false)
         NSGraphicsContext.saveGraphicsState()

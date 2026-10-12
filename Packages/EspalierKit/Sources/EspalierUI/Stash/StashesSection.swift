@@ -68,13 +68,14 @@ nonisolated struct StashRowContent: Sendable, Equatable, Identifiable {
 /// One stash.
 struct StashRow: View {
     let content: StashRowContent
+    @Environment(\.isSidebarRowSelected) private var isSelected
 
     var body: some View {
         SidebarRowLabel(content.branch, systemImage: "tray.full") {
             if let badge = content.badge {
                 Text(badge)
                     .font(Typography.count)
-                    .foregroundStyle(.text3)
+                    .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
             }
         }
         .tooltip(content.tooltip)

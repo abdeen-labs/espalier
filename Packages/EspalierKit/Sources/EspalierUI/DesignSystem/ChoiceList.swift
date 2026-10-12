@@ -89,7 +89,7 @@ public struct ChoiceList<Value: Hashable>: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-                        .strokeBorder(isSelected ? AnyShapeStyle(Color.accentColor.opacity(0.35)) : AnyShapeStyle(.line), lineWidth: 1)
+                        .strokeBorder(isSelected ? AnyShapeStyle(Color.accent.opacity(0.35)) : AnyShapeStyle(.line), lineWidth: 1)
                 )
                 .focusRing(isFocused && isSelected, in: RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
                 .environment(\.showsFocusRings, showsFocusRings && isSelected)
@@ -137,8 +137,8 @@ public struct ChoiceList<Value: Hashable>: View {
     }
 }
 
-/// A radio mark: 15 points; the accent with a white dot when chosen, else
-/// a `line2` ring on the quiet fill.
+/// A radio mark: 15 points; the accent with a dot in the theme's marks
+/// color (`onAccent`) when chosen, else a `line2` ring on the quiet fill.
 public struct RadioMark: View {
     private let isSelected: Bool
 
@@ -151,10 +151,10 @@ public struct RadioMark: View {
             // The fill crossfades and the dot fades and scales in over
             // 0.15 s.
             Circle()
-                .fill(isSelected ? Color.accentColor : Color.quiet)
+                .fill(isSelected ? Color.accent : Color.quiet)
             if isSelected {
                 Circle()
-                    .fill(.white)
+                    .fill(Color(nsColor: Theme.current.onAccent))
                     .frame(width: Metrics.ChoiceList.dotSize, height: Metrics.ChoiceList.dotSize)
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
             } else {

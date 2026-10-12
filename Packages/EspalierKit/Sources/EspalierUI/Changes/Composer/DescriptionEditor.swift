@@ -102,6 +102,13 @@ struct DescriptionEditor: NSViewRepresentable {
     }
 
     private func apply(to textView: ComposerTextView) {
+        // The look's font and color.
+        if textView.font != Self.font {
+            textView.font = Self.font
+        }
+        if textView.textColor != textColor {
+            textView.textColor = textColor
+        }
         if textView.string != text, !textView.hasMarkedText() {
             textView.string = text
             textView.needsDisplay = true

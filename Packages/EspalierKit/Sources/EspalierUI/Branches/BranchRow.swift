@@ -195,7 +195,7 @@ public struct BranchRow: View {
                 .accessibilityHidden(true)
             Text(content.title)
                 .font(SidebarRowFont.title(isSelected: isSelected, isEmphasized: content.isCurrent))
-                .foregroundStyle(.text)
+                .foregroundStyle(.sidebarRowText(isSelected: isSelected))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 // The name first; what follows takes the room left.
@@ -217,12 +217,14 @@ public struct BranchRow: View {
     }
 }
 
-/// The trailing comparison: "↑2" in the accent and "↓3" in tertiary text,
-/// in SF Mono; a dashed circle and "Not published" for a branch that isn't
-/// published; a crossed-out cloud, with a tooltip, for a branch whose
-/// upstream is gone from its remote.
+/// The trailing comparison: "↑2" in the theme's ahead color (Classic's
+/// accent) and "↓3" as the sidebar's counts are
+/// (`sidebarRowCount(isSelected:)`), in SF Mono; a dashed circle and "Not
+/// published" for a branch that isn't published; a crossed-out cloud, with
+/// a tooltip, for a branch whose upstream is gone from its remote.
 struct BranchTrackingView: View {
     let tracking: BranchTracking
+    @Environment(\.isSidebarRowSelected) private var isSelected
 
     init(_ tracking: BranchTracking) {
         self.tracking = tracking
@@ -238,12 +240,12 @@ struct BranchTrackingView: View {
                     if ahead > 0 {
                         Text("↑\(BranchTracking.formatCount(ahead))")
                             .font(Typography.aheadCount)
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(.aheadText)
                     }
                     if behind > 0 {
                         Text("↓\(BranchTracking.formatCount(behind))")
                             .font(Typography.secondaryCount)
-                            .foregroundStyle(.text3)
+                            .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
                     }
                 }
                 .lineLimit(1)
@@ -262,12 +264,12 @@ struct BranchTrackingView: View {
                     .tooltip(tracking.description)
             }
             .font(Typography.secondary)
-            .foregroundStyle(.text3)
+            .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
             .lineLimit(1)
         case .upstreamGone:
             Image(systemName: "icloud.slash")
                 .font(Typography.secondary)
-                .foregroundStyle(.text3)
+                .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
                 .tooltip(tracking.description)
         }
     }

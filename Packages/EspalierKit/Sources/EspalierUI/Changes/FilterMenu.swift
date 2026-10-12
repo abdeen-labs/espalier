@@ -125,7 +125,7 @@ public struct FilterMenu: View {
                 Text("Filter Options")
             } icon: {
                 Image(systemName: content.systemImage)
-                    .foregroundStyle(content.activeOptionCount > 0 ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.text2))
+                    .foregroundStyle(content.activeOptionCount > 0 ? AnyShapeStyle(Color.accent) : AnyShapeStyle(.text2))
             }
         }
         .buttonStyle(.icon)

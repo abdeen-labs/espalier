@@ -29,7 +29,7 @@ reason.
 - **`LICENSE-THIRD-PARTY` carries the notices for what the repository takes
   from other projects** (desktop's and dugite's ports and desktop's
   fixtures, gemoji, choosealicense.com's licenses, github/gitignore's
-  templates, the vendored grammars): MIT asks for the notice with every
+  templates, the vendored grammars, the bundled fonts): MIT asks for the notice with every
   copy, and About ▸ Acknowledgements covers only the app.
 
 ## Desktop's layout, Espalier's look
@@ -55,7 +55,87 @@ reason.
 - **The diff has no "Show check marks" setting** (my call): the tinted
   gutter already shows inclusion without relying on color, since a line
   left out is faded.
-- **The app's typefaces are SF Pro and SF Mono** (my call).
+- **Themes are a setting** (my call): Settings ▸ Appearance picks a theme
+  (Classic, the look before themes and the default; Orchard; Islands; Pop)
+  and a color of that theme's own (Orchard: Plum, Clay, Ink, the default,
+  Teal, Espresso; Islands: Berry, Lagoon, the default, Indigo; Pop:
+  Tangerine, the default, Electric, Magenta), each theme with its own
+  colors. Classic follows the Mac's accent color. Theme, color, app font,
+  and code font are separate picks, and a theme keeps its color when
+  another is chosen. The themes are the mockup I reviewed, in the app's own sizes,
+  but for what a theme changes on purpose (the commit title, 18 rather
+  than 15, and section labels' case).
+- **The app font and the code font are two settings** (my call), picked
+  apart from each other and from the theme, any app font with any code
+  font. The app font is all the interface's text: SF Pro (the default),
+  Fixel Text, Atkinson Hyperlegible Next, or Martian Grotesk. The code font
+  is everything drawn monospaced (commit IDs, counts, ahead and behind,
+  ref tags, code, terminal output): SF Mono (the default), Geist Mono, or
+  Atkinson Hyperlegible Mono. Martian Mono isn't one (I turned it down).
+- **The bundled fonts ship unmodified,** each with its license: Atkinson's
+  Reserved Font Names forbid a modified version keeping its name, so none
+  is subset or converted.
+- **Each font is scaled to read alike,** whichever the other is
+  (Atkinson Hyperlegible Next 1.04, Martian Grotesk 0.88, Atkinson
+  Hyperlegible Mono 1.02, the others 1); the app font relative to the text
+  styles, so the Mac's Text Size still applies, the code font at fixed
+  sizes as SF Mono was.
+- **Rows keep SF Pro's line height at the app font's body size,** so a
+  face with tall line metrics (Fixel) doesn't grow every row; the code
+  font doesn't change rows.
+- **Monos never join characters** (`calt` and `liga` off): the diff shows
+  exact characters.
+- **Key caps stay SF Pro** whatever the app font: the other faces lack
+  the keys' symbols. Bundled faces fall back on the system font's cascade
+  list, so a missing glyph takes SF's line height.
+- **A change of theme, color, or fonts applies at once** to every open
+  window; menus, popovers, and tooltips take it when they next open.
+- **Classic's dark prominent fill stays the accent itself,** as it was:
+  white on the default blue is 3.65:1, under the 4.5:1 every other
+  theme's prominent fill reaches.
+- **Orchard Teal's dark prominent fill is `#1E837E`,** not the mockup's
+  `#1F8681`, which is 4.39:1 under white text.
+- **Orchard's secondary text is deeper than the mockup's,** `#5E574C`
+  (`#C0B6A7` in dark) rather than `#6F675B` (`#B4AA9B`), and Espresso's
+  selected text is its accent at 12% (14% in dark) rather than 16% (24%),
+  so secondary text keeps 4.5:1 on a text selection in a stone field.
+- **Orchard Espresso's links are coffee brown** (`#8A5A2B`, `#D7AE84`):
+  the mockup gives Espresso none, and links in its warm black accent would
+  read as text.
+- **Orchard colors code its own way** (plum keywords, brick strings, warm
+  gray comments, ochre numbers, teal types, sky functions); the mockup
+  shows no syntax colors, and the system's read cold on paper.
+- **Marks on the accent follow its lightness:** a check, a radio's dot,
+  and the switch's knob are white, but the background's color on a
+  near-white accent (under 1.3:1, none of the Mac's), and a theme can set
+  its own. Orchard's are the dark paper in dark, where white is 1.2:1 on
+  Espresso's cream and about 2:1 on the other colors' light accents.
+- **Pop departs from its mockup** where it doesn't read or doesn't say: its
+  text selection is the accent at 15% (18% in dark), since at 16% (24%)
+  secondary text on a selection in a field is 4.07:1 in dark; Tangerine's
+  sidebar selection text is `#8F3305` under Increase Contrast, since the
+  mockup's `#A63C06` is 4.497:1 on the stronger wash; its marks on the
+  accent, which the mockup doesn't show, follow its solid shapes (near-black
+  on Tangerine, whose dark accent leaves white at 2.2:1; on Electric and
+  Magenta white in light, near-black in dark); monograms take the mockup's
+  saturated avatars (75% saturation and 50% lightness, 62% and 48% in dark),
+  deepened until white initials reach 3:1; and a selected sidebar row's
+  every count takes the selection's ink (the mockup shows only Changes'),
+  Islands' too.
+- **Islands departs from its mockup** where it doesn't read or doesn't say:
+  its tertiary text is `#7A8880`, not `#8A988F`, so the sidebar's section
+  labels and counts reach 3:1 on the backdrop; its text selection is the
+  accent at 15% (16% in dark) in Lagoon, 14% (18%) in Indigo, and 14%
+  (20%) in Berry, since at 16% (24%) secondary text on a selection in a
+  field falls to 3.9:1; its marks on the accent, which the mockup doesn't
+  show, are the card's dark in dark, where white is 2.0 to 2.6:1 on the
+  light accents; the segmented control's titles are bold with every other
+  button's (the mockup's are medium); and a commit's file list keeps its
+  hairline beside the diff rather than the mockup's tinted column.
+- **The floating layout reaches Settings** (the mockup shows only the main
+  window): its pane is a card on the backdrop under the header band, as
+  the main window's panes are, and the theme picker's Islands preview is
+  a card on the backdrop.
 
 ## GitHub
 
@@ -707,7 +787,11 @@ immediately; importing desktop's repository list and settings (my call).
 
 - **Code text size** (`diff-code-text-size`) steps through desktop's zoom
   factors; `diff-wrap-lines` and `ai-features-enabled` default to on.
-- **The theme** is Settings ▸ Appearance's System, Light, or Dark (`theme`,
+- **The design theme, its color, the app font, and the code font** are
+  Espalier's own settings (`design-theme`, one `design-theme-color-<theme>`
+  per theme, `app-font`, `code-font`); an unknown value, or another
+  theme's color, reads as the default.
+- **The appearance** is Settings ▸ Appearance's System, Light, or Dark (`theme`,
   desktop's values; System by default).
 - **No command works through an open sheet.**
 - **Desktop bugs fixed:** Git LFS 3's "warning: the … attribute" (dugite's
@@ -878,7 +962,7 @@ immediately; importing desktop's repository list and settings (my call).
   cards, 22 for sheets and popovers.
 - **A card in a pane has a ring and no shadow;** only what floats casts
   one.
-- **Type sizes are the system's** (10, 11, 12, 13, 15); SF Mono's roles in
+- **Type sizes are the system's** (10, 11, 12, 13, 15); the mono's roles in
   fixed-height capsules keep fixed sizes.
 - **A disabled control fades to 45%.**
 - **Every checkbox, pop-up, switch, and button is Espalier's,** sheets and

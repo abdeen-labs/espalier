@@ -2,7 +2,8 @@
 // and a detail area with its own inner split), the inspector, the toolbar
 // with its search field, and the floating capsule and toasts. The window is
 // flat (`FlatWindowChrome`): the sidebar is opaque and the columns draw the
-// toolbar's band.
+// toolbar's band. In the floating layout the panes are cards on the
+// backdrop (FloatingPanes.swift).
 
 import EspalierCore
 import GitKit
@@ -23,24 +24,27 @@ struct MainWindow: View {
                     max: Metrics.Column.sidebar.max ?? Metrics.Column.sidebar.ideal
                 )
         } detail: {
+            let inspector = inspectorBinding
             DetailRouter()
                 .overlay(alignment: .bottom) {
                     FloatingStatus()
                 }
+                // The inspector's card keeps the gap after the cards.
+                .paneMargins(trailing: inspector.wrappedValue ? 0 : PaneCards.frameMargins.trailing)
                 .toolbarBand()
-                .inspector(isPresented: inspectorBinding) {
-                    InspectorRouter()
-                        .toolbarBand()
-                        // Below the toolbar, which spans the inspector too.
-                        .overlay(alignment: .leading) {
-                            Hairline(.vertical)
-                        }
+                .inspector(isPresented: inspector) {
+                    InspectorColumn()
                         .inspectorColumnWidth(
                             min: Metrics.Column.inspector.min,
                             ideal: Metrics.Column.inspector.ideal,
                             max: Metrics.Column.inspector.max ?? Metrics.Column.inspector.ideal
                         )
                 }
+        }
+        .background {
+            WindowDividerStyler()
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
         }
         .navigationTitle(context.repository?.record.displayName ?? "Espalier")
         .toolbar(removing: .title)
@@ -75,6 +79,27 @@ struct MainWindow: View {
         } else {
             context.state.select(nil, in: nil)
         }
+    }
+}
+
+/// The inspector's column: Commit Info under the toolbar's band, with a
+/// hairline on its leading edge; a card on the backdrop in the floating
+/// layout.
+struct InspectorColumn: View {
+    var body: some View {
+        InspectorRouter()
+            .paneCard(margins: EdgeInsets(
+                top: PaneCards.frameMargins.top,
+                leading: PaneCards.frameGap,
+                bottom: PaneCards.frameMargins.bottom,
+                trailing: PaneCards.frameMargins.trailing
+            ))
+            .toolbarBand()
+            // Below the toolbar, which spans the inspector too.
+            .overlay(alignment: .leading) {
+                Hairline(.vertical)
+                    .opacity(PaneCards.floats ? 0 : 1)
+            }
     }
 }
 

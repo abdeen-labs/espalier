@@ -550,7 +550,7 @@ final class FileTableRowView: NSTableRowView, ContextMenuTargetRowView {
     }
 
     /// The hover wash, under the cells: in over 0.08 s, out over 0.15 s.
-    private let hoverLayer: CALayer = {
+    fileprivate let hoverLayer: CALayer = {
         let layer = CALayer()
         layer.cornerRadius = Metrics.Radius.row
         layer.opacity = 0
@@ -583,6 +583,7 @@ final class FileTableRowView: NSTableRowView, ContextMenuTargetRowView {
     override func drawSelection(in dirtyRect: NSRect) {
         Palette.accentSoft.setFill()
         selectionPath(in: bounds.insetBy(dx: FileRowMetrics.inset, dy: 0)).fill()
+        SelectionBarDrawing.draw(in: bounds.insetBy(dx: FileRowMetrics.inset, dy: 0))
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -664,7 +665,7 @@ final class FileTableRowView: NSTableRowView, ContextMenuTargetRowView {
         CATransaction.commit()
     }
 
-    private func updateHoverColor() {
+    fileprivate func updateHoverColor() {
         var color = Palette.hover.cgColor
         effectiveAppearance.performAsCurrentDrawingAppearance {
             color = Palette.hover.cgColor
@@ -1099,5 +1100,22 @@ struct ChangesController {
     func showIncludedFiles() {
         context.state.searchText = ""
         changes.filter = FileListFilter(includedInCommit: true)
+    }
+}
+
+extension ChangesTableView: LookChangeObserving {
+    /// The rows' height and the background follow the look.
+    func lookDidChange() {
+        rowHeight = Metrics.FileList.rowHeight
+        backgroundColor = Palette.background
+        enclosingScrollView?.backgroundColor = Palette.background
+    }
+}
+
+extension FileTableRowView: LookChangeObserving {
+    /// The hover wash takes the look's shape and color.
+    func lookDidChange() {
+        hoverLayer.cornerRadius = Metrics.Radius.row
+        updateHoverColor()
     }
 }

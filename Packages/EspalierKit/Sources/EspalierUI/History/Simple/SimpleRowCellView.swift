@@ -137,6 +137,8 @@ final class SimpleRowCellView: NSTableCellView {
     private let metaLabel = CommitRowParts.label(font: AppKitTypography.simpleMeta, color: Palette.text3)
     private let timeLabel = CommitRowParts.timeLabel()
     private let disclosure = NSImageView()
+    /// The look the row's fonts and colors are in.
+    private var styledLook = Look.current
 
     private(set) var content = SimpleRowContent()
     /// Whether the row sits under an expanded merge or is one: it keeps
@@ -145,9 +147,9 @@ final class SimpleRowCellView: NSTableCellView {
     private var summaryWidth: CGFloat = 0
     private var metaWidth: CGFloat = 0
 
-    private static let summaryHeight = CommitRowParts.lineHeight(AppKitTypography.row)
-    private static let metaHeight = CommitRowParts.lineHeight(AppKitTypography.simpleMeta)
-    private static let timeHeight = CommitRowParts.lineHeight(AppKitTypography.secondary)
+    private static var summaryHeight: CGFloat { CommitRowParts.lineHeight(AppKitTypography.row) }
+    private static var metaHeight: CGFloat { CommitRowParts.lineHeight(AppKitTypography.simpleMeta) }
+    private static var timeHeight: CGFloat { CommitRowParts.lineHeight(AppKitTypography.secondary) }
 
     /// The views that dim when the row doesn't match the search (the
     /// rail dims its node).
@@ -201,7 +203,9 @@ final class SimpleRowCellView: NSTableCellView {
             self.keepsDisclosureColumn = keepsDisclosureColumn
             needsLayout = true
         }
-        guard content != self.content else {
+        if styledLook != Look.current {
+            restyle()
+        } else if content == self.content {
             return
         }
         let previous = self.content
@@ -319,7 +323,7 @@ final class SimpleRowCellView: NSTableCellView {
         let avatarFrame = CGRect(x: avatarX, y: ((height - avatar) / 2).rounded(), width: avatar, height: avatar)
         avatarView.frame = avatarFrame
         mergeSymbol.frame = avatarFrame
-        mergeSymbol.layer?.cornerRadius = avatar / 2
+        mergeSymbol.layer?.cornerRadius = AvatarClipShape.cornerRadius(Theme.current.avatarShape, side: avatar)
         mergeSymbol.layer?.backgroundColor = Palette.field.resolved(in: AppearanceVariant.of(effectiveAppearance)).cgColor
         let leading = avatarFrame.maxX + row.spacing
 
@@ -356,6 +360,19 @@ final class SimpleRowCellView: NSTableCellView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        needsLayout = true
+    }
+
+    /// Takes the current look's fonts and colors; the next configuration
+    /// shows the content again in them.
+    private func restyle() {
+        styledLook = Look.current
+        summaryLabel.font = AppKitTypography.row
+        metaLabel.font = AppKitTypography.simpleMeta
+        metaLabel.textColor = Palette.text3
+        timeLabel.font = AppKitTypography.secondary
+        timeLabel.textColor = Palette.text3
+        unpushedArrow.contentTintColor = Palette.accent
         needsLayout = true
     }
 
@@ -432,6 +449,8 @@ final class SimpleStatusCellView: NSTableCellView {
 
     /// Shows `text`, with `tooltip`, beside `rail`.
     func configure(_ text: String, tooltip: String?, rail: SimpleRail) {
+        label.font = AppKitTypography.simpleMeta
+        label.textColor = Palette.text3
         railView.rail = rail
         label.stringValue = text
         label.setTooltip(tooltip)

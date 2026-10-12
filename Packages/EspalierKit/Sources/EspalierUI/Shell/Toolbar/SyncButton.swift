@@ -507,7 +507,7 @@ public struct SyncButtonView: View {
     /// menu and toolbar labels, which keep only an image and a title), the
     /// title, and its counts in SF Mono ("Push origin ↑2").
     private func label(kind: CapsuleButtonKind, detail: String, drawsArc: Bool) -> some View {
-        let symbolColor: NSColor = kind == .prominent ? .white : Palette.text2
+        let symbolColor: NSColor = kind == .prominent ? Palette.buttonText : Palette.text2
         return HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
             symbol(color: symbolColor, drawsArc: drawsArc)
             Text(state.title)

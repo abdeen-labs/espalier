@@ -170,6 +170,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     private func observeSystem() {
         NotificationCenter.default.addObserver(self, selector: #selector(systemColorsDidChange(_:)), name: NSColor.systemColorsDidChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(lookDidChange(_:)), name: Look.didChange, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(displayOptionsDidChange(_:)),
@@ -1112,6 +1113,16 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         appearanceDidChange()
     }
 
+    /// The look changed: the rows' height, the lanes, the colors, and the
+    /// rows' fonts follow it.
+    @objc private func lookDidChange(_ notification: Notification) {
+        tableView.rowHeight = Metrics.Graph.rowHeight
+        tableView.backgroundColor = Palette.background
+        scrollView.backgroundColor = Palette.background
+        style.geometry = GraphGeometry(rowHeight: tableView.rowHeight, laneCount: lanesSeen, increaseContrast: isIncreasedContrast)
+        appearanceDidChange()
+    }
+
     @objc private func displayOptionsDidChange(_ notification: Notification) {
         isIncreasedContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         differentiatesWithoutColor = NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor
@@ -1253,7 +1264,7 @@ final class GraphFooterCellView: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("GraphFooter")
 
     private let spinner = ArcProgressView(.small)
-    private let label = NSTextField(labelWithString: "Loading older commits…")
+    fileprivate let label = NSTextField(labelWithString: "Loading older commits…")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1280,6 +1291,13 @@ final class GraphFooterCellView: NSTableCellView {
         let x = max((bounds.width - total) / 2, Metrics.insetSmall)
         spinner.frame = CGRect(x: x, y: (bounds.height - size) / 2, width: size, height: size)
         label.frame = CGRect(x: x + size + Metrics.insetSmall, y: (bounds.height - labelSize.height) / 2, width: labelSize.width, height: labelSize.height)
+    }
+}
+
+extension GraphFooterCellView: LookChangeObserving {
+    func lookDidChange() {
+        label.font = AppKitTypography.secondary
+        label.textColor = Palette.text3
     }
 }
 

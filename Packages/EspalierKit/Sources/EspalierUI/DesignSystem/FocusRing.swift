@@ -43,7 +43,7 @@ struct FocusRing<RingShape: InsettableShape>: View {
             if isShown {
                 shape
                     .inset(by: -outset)
-                    .strokeBorder(Color.accentColor.opacity(Metrics.FocusRing.opacity), lineWidth: Metrics.FocusRing.lineWidth)
+                    .strokeBorder(Color.accent.opacity(Metrics.FocusRing.opacity), lineWidth: Metrics.FocusRing.lineWidth)
                     .transition(.asymmetric(
                         insertion: .scale(scale: Motion.focusRingScale).combined(with: .opacity),
                         removal: .opacity

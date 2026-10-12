@@ -1,5 +1,6 @@
 // Espalier's capsule buttons. Three styles at four heights, from the control
-// size: quiet (the quiet fill, ring, and small shadow, medium weight),
+// size: quiet (the theme's quiet control fill, with the ring and small
+// shadow where the theme raises them, medium weight),
 // prominent (the deeper accent, white semibold; one per area), and
 // secondary (the soft fill, no shadow: Cancel in sheets, Undo). The sync
 // button's split variant adds a chevron menu. With keyboard focus, each
@@ -37,7 +38,8 @@ private struct CapsuleButtonDrawing: ButtonStyle {
 }
 
 extension PrimitiveButtonStyle where Self == CapsuleButtonStyle {
-    /// The quiet fill, ring, and small shadow, medium weight.
+    /// The theme's quiet control (the quiet fill, ring, and small shadow
+    /// by default), medium weight.
     public static var quiet: CapsuleButtonStyle { CapsuleButtonStyle(.quiet) }
     /// The deeper accent with white semibold text: one per area.
     public static var prominent: CapsuleButtonStyle { CapsuleButtonStyle(.prominent) }
@@ -53,6 +55,9 @@ struct CapsuleButtonAppearance {
     var isPressed = false
     var isHovered = false
     var isEnabled = true
+    /// Whether a quiet capsule draws flat on the `field` fill, in a card
+    /// (`PaneCards.drawsQuietFlat`).
+    var isFlat = false
 
     var height: CGFloat {
         Metrics.ControlHeight.height(for: controlSize)
@@ -77,24 +82,31 @@ struct CapsuleButtonAppearance {
 
     /// The title's color.
     var foreground: Color {
-        kind == .prominent ? .white : .text
+        kind == .prominent ? .prominentText : .text
     }
 
     /// The symbol's color: secondary text on quiet and secondary capsules.
     var symbolColor: Color {
-        kind == .prominent ? .white : .text2
+        kind == .prominent ? .prominentText : .text2
     }
 
     var fill: Color {
         switch kind {
-        case .quiet: .quiet
+        case .quiet: isFlat ? .field : Color(nsColor: Theme.current.quietControl)
         case .prominent: Color(nsColor: Palette.button)
         case .secondary: .soft
         }
     }
 
+    /// A quiet capsule's ring and small shadow, where the theme raises
+    /// quiet controls.
     var elevation: Elevation? {
-        kind == .quiet ? .quiet : nil
+        kind == .quiet && !isFlat && Theme.current.quietControlIsRaised ? .quiet : nil
+    }
+
+    /// The theme's shadow under a prominent capsule, if any.
+    var shadow: NSColor? {
+        kind == .prominent ? Theme.current.controls.prominentShadow : nil
     }
 
     /// Hover lightens a prominent capsule and shades the others; pressing
@@ -127,10 +139,18 @@ struct CapsuleButtonBody<Label: View>: View {
     @Environment(\.isEnabled) private var isEnabled
     /// Whether the button has keyboard focus.
     @Environment(\.isFocused) private var isFocused
+    @Environment(\.isInPaneCard) private var isInPaneCard
     @State private var isHovered = false
 
     var body: some View {
-        let appearance = CapsuleButtonAppearance(kind: kind, controlSize: controlSize, isPressed: isPressed, isHovered: isHovered, isEnabled: isEnabled)
+        let appearance = CapsuleButtonAppearance(
+            kind: kind,
+            controlSize: controlSize,
+            isPressed: isPressed,
+            isHovered: isHovered,
+            isEnabled: isEnabled,
+            isFlat: PaneCards.drawsQuietFlat(isInPaneCard: isInPaneCard)
+        )
         label
             .labelStyle(CapsuleLabelStyle(symbolColor: appearance.symbolColor))
             .font(appearance.font)
@@ -140,6 +160,7 @@ struct CapsuleButtonBody<Label: View>: View {
             .frame(height: appearance.height)
             .frame(minWidth: appearance.height)
             .surface(appearance.fill, elevation: appearance.elevation)
+            .capsuleShadow(appearance.shadow)
             .motion(Motion.kindChange, value: kind)
             .overlay(
                 Capsule(style: .circular).fill(appearance.stateOverlay)
@@ -242,14 +263,14 @@ public struct SplitCapsuleButton<Label: View>: View {
             .onHover { isHovered = $0 }
 
             Rectangle()
-                .fill(kind == .prominent ? Color.white.opacity(0.35) : .line2)
+                .fill(kind == .prominent ? Color.prominentText.opacity(0.35) : .line2)
                 .frame(width: 1, height: 16)
                 .accessibilityHidden(true)
 
             MenuOpeningButton(kind: .pullDown, accessibilityLabel: menuLabel, placementView: capsule, menu: menu) {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(kind == .prominent ? Color.white : .text3)
+                    .foregroundStyle(kind == .prominent ? Color.prominentText : .text3)
                     .frame(width: 26)
                     .frame(maxHeight: .infinity)
                     .contentShape(Rectangle())
@@ -404,9 +425,10 @@ extension View {
 private struct CapsuleChrome: ViewModifier {
     let kind: CapsuleButtonKind
     @Environment(\.controlSize) private var controlSize
+    @Environment(\.isInPaneCard) private var isInPaneCard
 
     func body(content: Content) -> some View {
-        let appearance = CapsuleButtonAppearance(kind: kind, controlSize: controlSize)
+        let appearance = CapsuleButtonAppearance(kind: kind, controlSize: controlSize, isFlat: PaneCards.drawsQuietFlat(isInPaneCard: isInPaneCard))
         content
             .font(appearance.font)
             .foregroundStyle(appearance.foreground)
@@ -414,5 +436,20 @@ private struct CapsuleChrome: ViewModifier {
             .padding(.horizontal, appearance.horizontalPadding)
             .frame(height: appearance.height)
             .surface(appearance.fill, elevation: appearance.elevation)
+            .capsuleShadow(appearance.shadow)
+    }
+}
+
+extension View {
+    /// The theme's shadow under a prominent capsule, 1 point down and
+    /// blurred 2 (as CSS blurs), behind the capsule; nothing when nil.
+    func capsuleShadow(_ color: NSColor?) -> some View {
+        background {
+            if let color {
+                Capsule(style: .circular)
+                    .fill(Color(nsColor: Palette.button))
+                    .shadow(color: Color(nsColor: color), radius: 1, y: 1)
+            }
+        }
     }
 }

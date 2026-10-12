@@ -132,7 +132,9 @@ extension Metrics {
     /// One-line fields.
     public enum CapsuleField {
         /// A line of `Typography.row` (body) text, as a field lays it out.
-        public static let lineHeight: CGFloat = measuredLineHeight(for: .preferredFont(forTextStyle: .body))
+        public static var lineHeight: CGFloat {
+            measuredLineHeight(for: AppKitTypography.row)
+        }
 
         /// A line of `font`, as a field lays it out.
         public static func measuredLineHeight(for font: NSFont) -> CGFloat {

@@ -238,7 +238,7 @@ final class GraphColors {
     let selectedBackground: CGColor
 
     init(palette: TrackPalette.Resolved = TrackPalette.Resolved(), appearance: NSAppearance) {
-        var trunk = NSColor.controlAccentColor.cgColor
+        var trunk = Palette.accent.cgColor
         var current = trunk
         var named: [Int: CGColor] = [:]
         var others: [CGColor] = []
@@ -596,6 +596,25 @@ enum GraphRenderer {
         opacity *= emphasis.nodeOpacity
         context.saveGState()
         defer { context.restoreGState() }
+
+        if let dot = GraphDot(size, style: geometry.nodeStyle) {
+            dot.draw(
+                at: center,
+                color: color,
+                background: emphasis.isSelected ? colors.selectedBackground : colors.background,
+                opacity: opacity,
+                scale: geometry.nodeScale,
+                extraStroke: geometry.extraStroke,
+                in: context
+            )
+            if emphasis.outlinesNode {
+                context.setAlpha(1)
+                context.setStrokeColor(color)
+                context.setLineWidth(Metrics.Graph.targetOutline)
+                context.strokeEllipse(in: circle(center, outlineRadius(for: size, geometry: geometry)))
+            }
+            return
+        }
 
         // The fill is opaque whatever the node's opacity, so dimmed rings
         // still hide the lines' ends.

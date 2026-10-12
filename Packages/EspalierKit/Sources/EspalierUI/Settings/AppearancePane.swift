@@ -1,5 +1,8 @@
-// Settings ▸ Appearance: the theme (System, Light, Dark), the accent color,
-// code, dates and numbers, accessibility, and the sidebar. The code text size
+// Settings ▸ Appearance: the theme (Classic, Orchard, Islands, Pop), its
+// color (Classic's is the Mac's accent color), the appearance (System,
+// Light, Dark), and the app font; code (the code font, its text size, the
+// diff's tab size), dates and numbers, accessibility, and the sidebar. Each
+// font's name in its pop-up is drawn in that font. The code text size
 // steps through the same sizes as View ▸ Bigger (⌘=) and Smaller (⌘−).
 
 import EspalierCore
@@ -64,8 +67,9 @@ enum AppearanceSettings {
     }
 }
 
-/// The Appearance pane: the theme and the accent color, code, dates and
-/// numbers, accessibility, and the sidebar.
+/// The Appearance pane: the theme, its color, the appearance, and the app
+/// font; code (its font, text size, and tab size), dates and numbers,
+/// accessibility, and the sidebar.
 struct AppearanceForm: View {
     @Bindable var preferences: Preferences
     let openAppearanceSettings: () -> Void
@@ -73,17 +77,47 @@ struct AppearanceForm: View {
     var body: some View {
         SettingsPage {
             SettingsSection("Theme") {
+                SettingsRow("Theme") {
+                    EmptyView()
+                } footer: {
+                    ThemeCardPicker(selection: $preferences.designTheme, colors: preferences.designThemeColors)
+                        .padding(.vertical, Metrics.FocusRing.outset)
+                }
+                if preferences.designTheme == .classic {
+                    SettingsRow("Color", description: "Espalier follows your Mac's accent color.") {
+                        Button("Appearance Settings…", action: openAppearanceSettings)
+                            .settingsButton()
+                    }
+                } else {
+                    SettingsRow("Color", description: preferences.designThemeColor?.title) {
+                        ThemeColorPicker(theme: preferences.designTheme, selection: designThemeColor)
+                    }
+                }
                 SettingsRow("Appearance", labelsControl: true) {
                     CapsuleSegmentedControl("Appearance", selection: $preferences.theme, segments: AppearanceSettings.themes)
                         .fixedSize()
                 }
-                SettingsRow("Accent color", description: "Espalier follows your Mac's accent color.") {
-                    Button("Appearance Settings…", action: openAppearanceSettings)
-                        .settingsButton()
+                SettingsRow("Font", labelsControl: true) {
+                    CapsulePopUp("Font", selection: $preferences.appFont, title: preferences.appFont.title) {
+                        for font in AppFont.allCases {
+                            MenuChoice(font.title, value: font)
+                                .titleFont(Typography.sans(.body, in: font))
+                        }
+                    }
+                    .fixedSize()
                 }
             }
 
             SettingsSection("Code") {
+                SettingsRow("Font", labelsControl: true) {
+                    CapsulePopUp("Code font", selection: $preferences.codeFont, title: preferences.codeFont.title) {
+                        for font in CodeFont.allCases {
+                            MenuChoice(font.title, value: font)
+                                .titleFont(Typography.mono(size: TextStyleSizes.size(of: .body), in: font))
+                        }
+                    }
+                    .fixedSize()
+                }
                 SettingsRow("Text size", description: "View ▸ Bigger (⌘=) and Smaller (⌘−) change it too.", labelsControl: true) {
                     CapsuleStepper(
                         "Text size",
@@ -156,6 +190,15 @@ struct AppearanceForm: View {
 
     private static func title(_ format: TimeFormatPattern) -> String {
         AppearanceSettings.formatTitle(example: format.example, pattern: format.rawValue)
+    }
+
+    /// The current design theme's color.
+    private var designThemeColor: Binding<DesignThemeColor> {
+        Binding {
+            preferences.designThemeColor ?? preferences.designTheme.defaultColor ?? .ink
+        } set: { color in
+            preferences.designThemeColor = color
+        }
     }
 
     /// The date format, the default when none (or an unknown one) is

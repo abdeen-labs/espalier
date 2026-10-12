@@ -61,6 +61,7 @@ enum Snapshot {
             .environment(\.showsDelayedContentImmediately, true)
             .environment(\.savesSplitDividers, false)
             .defaultAppStorage(SnapshotDefaults.empty)
+            .lookFont()
     }
 
     /// Renders a SwiftUI view on the window background. With no size, the
@@ -72,6 +73,7 @@ enum Snapshot {
         appearance: SnapshotAppearance,
         prepare: (NSView) -> Void = { _ in }
     ) -> NSBitmapImageRep {
+        _ = SnapshotReferences.reviewLook
         let root = deterministic(view)
             .background(Color(nsColor: Palette.background))
         let host = NSHostingView(rootView: root)
@@ -103,6 +105,10 @@ enum Snapshot {
         container.addSubview(view)
         window.contentView = container
         defer { window.contentView = nil }
+        if SnapshotReferences.reviewLook != nil {
+            // A view made before the review look was the process's.
+            LookApplier.refresh(container)
+        }
         container.layoutSubtreeIfNeeded()
         return cache(container, appearance: appearance, fillsBackground: true)
     }

@@ -62,6 +62,20 @@ struct AboutTests {
         }
     }
 
+    @Test("every bundled font is acknowledged with its copyright and the license it ships with")
+    func fonts() throws {
+        let directory = POSIXPath.join(packageRoot, "Sources/EspalierUI/Resources/Fonts")
+        let folders = try FileManager.default.contentsOfDirectory(atPath: directory).filter { !$0.hasPrefix(".") && !$0.hasSuffix(".md") }
+        #expect(Set(folders.map { "font-\($0)" }) == Set(Acknowledgement.fonts.map(\.id)))
+        for folder in folders {
+            let acknowledgement = try #require(Acknowledgement.fonts.first { $0.id == "font-\(folder)" })
+            let license = try #require(read(POSIXPath.join(directory, "\(folder)/OFL.txt")))
+            #expect(normalized(acknowledgement.text) == normalized(license), "\(folder)'s license")
+            #expect(acknowledgement.text.hasPrefix("Copyright"))
+            #expect(acknowledgement.text.contains("SIL OPEN FONT LICENSE Version 1.1"))
+        }
+    }
+
     @Test("Git's release is the bundled one, and the bundled notices match")
     func bundledGit() throws {
         let pinned = try #require(read(POSIXPath.join(repositoryRoot, "scripts/git-version"))).trimmingCharacters(in: .whitespacesAndNewlines)

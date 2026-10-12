@@ -39,6 +39,13 @@ public struct KeyCap: View {
 
 // MARK: - Search field
 
+extension EnvironmentValues {
+    /// Whether a capsule search field is drawn as a quiet capsule, raised,
+    /// rather than on the `field` fill: on the floating layout's backdrop,
+    /// beside quiet capsules.
+    @Entry public var searchFieldIsRaised = false
+}
+
 /// A capsule search or filter field: a magnifying glass, the field, and a
 /// key cap for its shortcut while it's empty, or a clear button once it
 /// isn't. Escape clears it.
@@ -56,6 +63,7 @@ public struct CapsuleSearchField: View {
     /// AppKit too: SwiftUI's focus state doesn't move it in the toolbar.
     @State private var focusRequests = 0
     @Environment(\.controlSize) private var controlSize
+    @Environment(\.searchFieldIsRaised) private var isRaised
 
     /// - Parameters:
     ///   - focusRequest: Set to true to focus the field; the field sets it
@@ -112,7 +120,16 @@ public struct CapsuleSearchField: View {
         .padding(.leading, 12)
         .padding(.trailing, 8)
         .frame(height: Metrics.ControlHeight.height(for: controlSize))
-        .background(Capsule(style: .circular).fill(.field))
+        .background {
+            if isRaised {
+                // A quiet capsule, as the controls beside it on the
+                // backdrop.
+                Color.clear
+                    .surface(.quiet, elevation: .quiet)
+            } else {
+                Capsule(style: .circular).fill(.field)
+            }
+        }
         .fieldRegion(focusRequest: focusRequests) { isEditing in
             self.isEditing = isEditing
         }
@@ -208,7 +225,8 @@ public struct CapsuleSegment<Value: Hashable>: Identifiable {
 }
 
 /// A capsule segmented control (Simple | Graph, Unified | Split): a `field`
-/// track 28 high with the selected segment raised on a quiet capsule. The
+/// track 28 high with the selected segment raised on a quiet capsule (or
+/// the theme's segment selection). The
 /// raised capsule slides to a new choice over 0.22 s, the labels' colors
 /// crossfading with it. It takes focus only with keyboard navigation on
 /// (System Settings › Keyboard), and then shows a capsule field's ring; the
@@ -247,9 +265,7 @@ public struct CapsuleSegmentedControl<Value: Hashable>: View {
                 .frame(maxHeight: .infinity)
                 .background {
                     if isSelected {
-                        Capsule(style: .circular)
-                            .fill(.clear)
-                            .surface(.quiet, elevation: .quiet)
+                        SegmentSelection()
                             .matchedGeometryEffect(id: "selection", in: namespace)
                     }
                 }
@@ -296,6 +312,26 @@ public struct CapsuleSegmentedControl<Value: Hashable>: View {
         }
         selection = segments[next].value
         return .handled
+    }
+}
+
+/// The selected segment's capsule: a quiet capsule with its ring and small
+/// shadow, or the theme's segment selection, raised as the sidebar's card
+/// is.
+private struct SegmentSelection: View {
+    var body: some View {
+        let theme = Theme.current
+        let shape = Capsule(style: .circular)
+        if let fill = theme.segmentSelection {
+            shape
+                .fill(Color(nsColor: fill))
+                .shadow(color: Color(nsColor: theme.raisedShadow), radius: 1, y: 1)
+                .overlay(shape.strokeBorder(Color(nsColor: theme.raisedRing), lineWidth: 1))
+        } else {
+            shape
+                .fill(.clear)
+                .surface(.quiet, elevation: .quiet)
+        }
     }
 }
 

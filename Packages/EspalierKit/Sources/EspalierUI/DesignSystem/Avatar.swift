@@ -5,7 +5,8 @@
 import GitHubKit
 import SwiftUI
 
-/// A circular avatar: the environment's loader's image, or a monogram.
+/// An avatar in the theme's shape (a circle in Classic): the environment's
+/// loader's image, or a monogram.
 public struct Avatar: View {
     private let identity: AvatarUser
     private let size: CGFloat
@@ -35,7 +36,7 @@ public struct Avatar: View {
             }
         }
         .frame(width: size, height: size)
-        .clipShape(Circle())
+        .clipShape(AvatarClipShape())
         .accessibilityHidden(true)
         .task(id: TaskKey(identity: identity, size: size, scale: scale, retries: retries)) {
             if let cached = loader.cachedImage(for: identity, pointSize: size, scale: scale) {

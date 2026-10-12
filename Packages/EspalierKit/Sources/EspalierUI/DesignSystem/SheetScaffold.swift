@@ -20,12 +20,12 @@ extension Metrics.Sheet {
 
 extension Typography {
     /// A sheet's or a welcome step's title (15, semibold).
-    public static let sheetTitle: Font = .title3.weight(.semibold)
+    public static var sheetTitle: Font { sans(.title3, weight: .semibold) }
     /// A label above a field or a group in a sheet (12, medium, secondary
     /// text).
-    public static let fieldLabel: Font = .callout.weight(.medium)
+    public static var fieldLabel: Font { sans(.callout, weight: .medium) }
     /// The welcome flow's and Get Started's headings (26, bold).
-    public static let welcomeTitle: Font = .largeTitle.weight(.bold)
+    public static var welcomeTitle: Font { sans(.largeTitle, weight: .bold) }
 }
 
 /// A sheet: its title, an optional line under it, the content, and a row

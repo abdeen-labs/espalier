@@ -247,6 +247,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             self, selector: #selector(displayOptionsDidChange(_:)),
             name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil
         )
+        NotificationCenter.default.addObserver(self, selector: #selector(lookDidChange(_:)), name: Look.didChange, object: nil)
         tableView.sizeLastColumnToFit()
         connectFind()
     }
@@ -513,6 +514,17 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
         textScrollX = x
         redrawVisibleRows()
+    }
+
+    /// The look changed: the code font's metrics, the colors, and the rows'
+    /// heights follow it.
+    @objc private func lookDidChange(_ notification: Notification) {
+        font = DiffFontMetrics(fontSize: font.fontSize)
+        tableView.rowHeight = font.lineHeight
+        tableView.backgroundColor = Palette.background
+        scrollView.backgroundColor = Palette.background
+        textCache.reset()
+        relayout(force: true, reload: true)
     }
 
     @objc private func displayOptionsDidChange(_ notification: Notification) {

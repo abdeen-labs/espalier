@@ -198,8 +198,8 @@ private struct MenuRowView: View {
             Text(text)
                 .font(Typography.sectionLabel)
                 .tracking(Typography.sectionLabelTracking)
-                .textCase(.uppercase)
-                .foregroundStyle(.text3)
+                .textCase(Theme.current.sectionLabel.isUppercase ? .uppercase : nil)
+                .foregroundStyle(Color(nsColor: Theme.current.sectionLabel.color ?? Palette.text3))
                 .lineLimit(1)
                 .padding(.leading, Metrics.Menu.rowPadding + leadingColumnsWidth)
                 .padding(.trailing, Metrics.Menu.rowPadding)
@@ -230,7 +230,7 @@ private struct MenuRowView: View {
             if level.hasChecks {
                 Image(systemName: "checkmark")
                     .font(.system(size: Metrics.Menu.checkSize, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.accent)
                     .opacity(item.isChecked == true ? 1 : 0)
                     .frame(width: Metrics.Menu.checkColumnWidth)
             }
@@ -246,7 +246,7 @@ private struct MenuRowView: View {
             }
             VStack(alignment: .leading, spacing: Metrics.Menu.subtitleSpacing) {
                 Text(item.title)
-                    .font(Typography.row)
+                    .font(item.titleFont ?? Typography.row)
                     .foregroundStyle(item.isDestructive ? Color(espalier: Palette.error) : .text)
                     .lineLimit(1)
                     .truncationMode(.middle)

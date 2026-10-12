@@ -56,7 +56,7 @@ private struct ActionListRow: View {
     var body: some View {
         Button(action: item.action) {
             HStack(spacing: Metrics.insetMedium) {
-                IconCircle(item.systemImage, size: Metrics.ActionList.iconSize, tint: .accentColor)
+                IconCircle(item.systemImage, size: Metrics.ActionList.iconSize, tint: .accent)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(item.title)

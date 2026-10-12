@@ -162,6 +162,52 @@ struct PreferencesTests {
         }
     }
 
+    @Test("keeps the design theme, each theme's color, the app font, and the code font, and reads unknown ones as the defaults")
+    func designTheme() throws {
+        let temporary = try TemporaryDefaults()
+        defer { temporary.remove() }
+        let preferences = Preferences(store: PreferenceStore(temporary.defaults))
+        #expect(preferences.designTheme == .classic)
+        #expect(preferences.designThemeColor == nil)
+        #expect(preferences.appFont == .sf)
+        #expect(preferences.codeFont == .sfMono)
+
+        preferences.designTheme = .orchard
+        #expect(preferences.designThemeColor == .ink)
+        preferences.designThemeColor = .clay
+        // A color of another theme isn't the theme's.
+        preferences.designThemeColor = .berry
+        preferences.designTheme = .pop
+        preferences.designThemeColor = .magenta
+        preferences.appFont = .atkinson
+        preferences.codeFont = .geistMono
+        #expect(storedKeys(temporary) == ["design-theme", "design-theme-color-orchard", "design-theme-color-pop", "app-font", "code-font"])
+
+        // Switching back restores the theme's own color.
+        let reloaded = Preferences(store: PreferenceStore(temporary.defaults))
+        #expect(reloaded.designTheme == .pop)
+        #expect(reloaded.designThemeColor == .magenta)
+        reloaded.designTheme = .orchard
+        #expect(reloaded.designThemeColor == .clay)
+        reloaded.designTheme = .islands
+        #expect(reloaded.designThemeColor == .lagoon)
+        #expect(reloaded.appFont == .atkinson)
+        #expect(reloaded.codeFont == .geistMono)
+
+        // Unknown values, and a color of another theme, are the defaults.
+        temporary.defaults.set("neon", forKey: "design-theme")
+        temporary.defaults.set("berry", forKey: "design-theme-color-orchard")
+        temporary.defaults.set("chartreuse", forKey: "design-theme-color-pop")
+        temporary.defaults.set("comic", forKey: "app-font")
+        // A font of the other kind isn't one of these.
+        temporary.defaults.set("atkinson", forKey: "code-font")
+        let unknown = Preferences(store: PreferenceStore(temporary.defaults))
+        #expect(unknown.designTheme == .classic)
+        #expect(unknown.designThemeColors == [.orchard: .ink, .islands: .lagoon, .pop: .tangerine])
+        #expect(unknown.appFont == .sf)
+        #expect(unknown.codeFont == .sfMono)
+    }
+
     @Test("changes the hooks and credential helper settings that GitKit and the trampoline read")
     func liveSettings() throws {
         let temporary = try TemporaryDefaults()

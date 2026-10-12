@@ -69,5 +69,6 @@ public struct AboutWindow: View {
         AboutView(content: content) {
             openWindow(id: EspalierScenes.acknowledgementsWindowID)
         }
+        .lookFont()
     }
 }

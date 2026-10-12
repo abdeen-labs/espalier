@@ -58,7 +58,7 @@ public struct CommitOptionsMenu: View {
                 Text("Commit Options")
             } icon: {
                 Image(systemName: content.isDefault ? "ellipsis.circle" : "ellipsis.circle.fill")
-                    .foregroundStyle(content.isDefault ? AnyShapeStyle(.text2) : AnyShapeStyle(Color.accentColor))
+                    .foregroundStyle(content.isDefault ? AnyShapeStyle(.text2) : AnyShapeStyle(Color.accent))
             }
         }
         .buttonStyle(.icon)

@@ -241,7 +241,7 @@ struct RepositoryStatusIndicators: View {
                         if content.ahead > 0 {
                             Text("↑\(content.ahead)")
                                 .font(Typography.aheadCount)
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(.aheadText)
                         }
                         if content.behind > 0 {
                             Text("↓\(content.behind)")

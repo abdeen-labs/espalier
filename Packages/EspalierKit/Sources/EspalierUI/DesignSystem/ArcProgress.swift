@@ -203,7 +203,7 @@ final class ArcProgressView: NSView {
         CATransaction.commit()
     }
 
-    private func updateColors() {
+    fileprivate func updateColors() {
         var color = tint.cgColor
         effectiveAppearance.performAsCurrentDrawingAppearance {
             color = tint.cgColor
@@ -235,5 +235,11 @@ final class ArcProgressView: NSView {
         spin.isRemovedOnCompletion = false
         arc.add(spin, forKey: Self.spinKey)
         spinAngle = angle
+    }
+}
+
+extension ArcProgressView: LookChangeObserving {
+    func lookDidChange() {
+        updateColors()
     }
 }

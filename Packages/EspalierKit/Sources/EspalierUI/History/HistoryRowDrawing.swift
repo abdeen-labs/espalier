@@ -36,12 +36,18 @@ enum HistoryRowDrawing {
     /// `Metrics.Radius.row`, square where it joins a selected row above or
     /// below.
     static func selectionPath(in bounds: CGRect, isFlipped: Bool, joinsAbove: Bool, joinsBelow: Bool) -> NSBezierPath {
-        let rect = bounds.insetBy(dx: Metrics.CommitRow.selectionInset, dy: 0)
+        let rect = selectionRect(in: bounds)
         let radius = min(Metrics.Radius.row, rect.height / 2, rect.width / 2)
         let top = joinsAbove ? 0 : radius
         let bottom = joinsBelow ? 0 : radius
         // A flipped view's top is its minimum y.
         return roundedRect(rect, minYRadius: isFlipped ? top : bottom, maxYRadius: isFlipped ? bottom : top)
+    }
+
+    /// The selection's rectangle in a row's `bounds`: inset from the list's
+    /// sides.
+    static func selectionRect(in bounds: CGRect) -> CGRect {
+        bounds.insetBy(dx: Metrics.CommitRow.selectionInset, dy: 0)
     }
 
     /// The ring of the row a context menu acts on, in the row's shape.
@@ -75,7 +81,7 @@ enum HistoryRowDrawing {
 
         let text = NSAttributedString(string: label, attributes: [
             .font: AppKitTypography.tinyCount,
-            .foregroundColor: NSColor.white,
+            .foregroundColor: Palette.buttonText,
         ])
         let size = text.size()
         let padding = Metrics.RefCapsule.horizontalPadding

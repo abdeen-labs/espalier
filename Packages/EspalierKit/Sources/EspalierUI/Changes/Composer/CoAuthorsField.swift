@@ -147,7 +147,7 @@ struct CoAuthorTokenView: View {
         .font(Typography.smallButton)
         .padding(.horizontal, Metrics.insetSmall)
         .frame(height: Metrics.Composer.coAuthorTokenHeight)
-        .surface(.quiet, elevation: .quiet)
+        .quietControlSurface()
         .tooltip(token.fullText)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(token.fullText)
@@ -269,6 +269,9 @@ struct CoAuthorEntry: NSViewRepresentable {
     }
 
     private func apply(to field: NSTextField) {
+        if field.font != AppKitTypography.row {
+            field.font = AppKitTypography.row
+        }
         if field.isEditable != isEditable {
             field.isEditable = isEditable
             field.isEnabled = isEditable

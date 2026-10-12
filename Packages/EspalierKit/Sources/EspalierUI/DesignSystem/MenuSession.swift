@@ -610,6 +610,7 @@ struct MenuCardRoot: View {
     var body: some View {
         MenuCard(level: level)
             .environment(\.motionSuppressed, motionSuppressed)
+            .lookFont()
     }
 }
 

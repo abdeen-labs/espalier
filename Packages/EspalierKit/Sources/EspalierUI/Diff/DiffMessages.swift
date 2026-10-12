@@ -43,7 +43,7 @@ struct DiffMessages: View {
     let warnings: [DiffContentsWarning]
 
     /// The band: the modified color at 7%.
-    static let background = Palette.tint(Palette.modified, light: 0.07, dark: 0.07)
+    static var background: NSColor { Palette.tint(Palette.modified, light: 0.07, dark: 0.07) }
 
     var body: some View {
         if !warnings.isEmpty {

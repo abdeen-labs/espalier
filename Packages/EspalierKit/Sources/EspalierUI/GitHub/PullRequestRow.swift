@@ -92,17 +92,17 @@ struct PullRequestRow: View {
                         .tooltip(content.checksTooltip)
                 } else {
                     Image(systemName: PullRequestGlyph.systemImage)
-                        .foregroundStyle(isSelected ? Color.accentColor : .text2)
+                        .foregroundStyle(.sidebarRowIcon(isSelected: isSelected))
                 }
             }
             .font(Typography.secondary)
             .frame(width: Metrics.Sidebar.symbolWidth)
             Text("#\(content.number)")
                 .font(Typography.count)
-                .foregroundStyle(.text3)
+                .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
             Text(content.title)
                 .font(SidebarRowFont.title(isSelected: isSelected, isEmphasized: content.isCurrent))
-                .foregroundStyle(.text)
+                .foregroundStyle(.sidebarRowText(isSelected: isSelected))
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 0)

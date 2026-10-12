@@ -57,7 +57,7 @@ extension View {
         overlay {
             if isTarget {
                 RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-                    .strokeBorder(Color.accentColor, lineWidth: Metrics.Menu.contextTargetLineWidth)
+                    .strokeBorder(Color.accent, lineWidth: Metrics.Menu.contextTargetLineWidth)
                     .allowsHitTesting(false)
             }
         }

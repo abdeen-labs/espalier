@@ -371,6 +371,7 @@ struct SuggestionListCardRoot: View {
     var body: some View {
         SuggestionListCard(model: model)
             .environment(\.motionSuppressed, motionSuppressed)
+            .lookFont()
     }
 }
 

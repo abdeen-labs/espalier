@@ -11,9 +11,8 @@ extension Metrics {
         /// A commit's row: the title over the meta line, 54 at the default
         /// text size.
         public static var rowHeight: CGFloat {
-            let layout = NSLayoutManager()
-            let lines = layout.defaultLineHeight(for: AppKitTypography.row) + lineSpacing
-                + layout.defaultLineHeight(for: AppKitTypography.simpleMeta)
+            let lines = AppKitTypography.layoutLineHeight(of: AppKitTypography.row) + lineSpacing
+                + AppKitTypography.layoutLineHeight(of: AppKitTypography.simpleMeta)
             return max(ceil(lines + rowPadding), minimumRowHeight)
         }
 

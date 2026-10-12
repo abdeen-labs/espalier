@@ -1,5 +1,6 @@
 // Espalier's switch: a capsule 32 by 19, the accent when on and `line2` when
-// off, with a white knob, in every window, active or not. Every switch in
+// off, with a white knob (in the theme's marks color, `onAccent`, while
+// on), in every window, active or not. Every switch in
 // Espalier is one (Settings' rows). The switch is a button, so it joins the
 // key view loop with keyboard navigation on, showing the focus ring around
 // the capsule, and Space toggles it; VoiceOver sees a switch.
@@ -19,7 +20,7 @@ public struct CapsuleSwitchStyle: ToggleStyle {
 
 extension ToggleStyle where Self == CapsuleSwitchStyle {
     /// Espalier's switch: the accent when on, `line2` when off, a white
-    /// knob.
+    /// knob (the theme's marks color while on).
     public static var capsuleSwitch: CapsuleSwitchStyle { CapsuleSwitchStyle() }
 }
 
@@ -84,9 +85,9 @@ struct CapsuleSwitchDrawing: View {
         let size = Metrics.Switch.self
         ZStack(alignment: isOn ? .trailing : .leading) {
             Capsule(style: .circular)
-                .fill(isOn ? Color.accentColor : .line2)
+                .fill(isOn ? Color.accent : .line2)
             Circle()
-                .fill(.white)
+                .fill(isOn ? Color(nsColor: Theme.current.onAccent) : .white)
                 .frame(width: size.knob, height: size.knob)
                 .shadow(color: .black.opacity(size.knobShadowOpacity), radius: size.knobShadowRadius, y: size.knobShadowOffset)
                 .padding(size.knobInset)
@@ -104,7 +105,7 @@ struct CapsuleSwitchDrawing: View {
 }
 
 extension Metrics {
-    /// Espalier's switch: 32 by 19, a white knob.
+    /// Espalier's switch: 32 by 19, a round knob.
     public enum Switch {
         public static let width: CGFloat = 32
         public static let height: CGFloat = 19
