@@ -45,21 +45,17 @@ reason.
   means the same thing.
 - **Espalier draws its own UI** (my call): every control, list, and surface
   is Espalier's own design, never a stock SwiftUI or AppKit look. Simple,
-  clean, and modern, with personality; `docs/DESIGN.md` is the look. No
-  stock macOS or SwiftUI elements, within reason (my call): not the
-  system's own pieces, such as the traffic lights or Quick Look. The
-  window's chrome stays macOS's: the traffic lights, the toolbar, and the
-  split view (my call: "just undo the chrome thing"). So do the open and
-  save panels (my call): Espalier's own chooser needed privacy permissions
-  the system's panels don't.
+  clean, and modern, with personality; `docs/DESIGN.md` is the look. The
+  system's own pieces stay macOS's (my call): the window's chrome (the
+  traffic lights, the toolbar, and the split view), Quick Look, and the
+  open and save panels, which need no privacy permissions.
 - **History has a simple mode** (my call; desktop has none), the default for a
   new install: the graph overwhelms anyone who doesn't know what they're
   looking at.
-- **The diff's "Show check marks" setting is gone** (my call): the tinted
+- **The diff has no "Show check marks" setting** (my call): the tinted
   gutter already shows inclusion without relying on color, since a line
   left out is faded.
-- **The app's typefaces are SF Pro and SF Mono** (my call). Satoshi, Switzer,
-  IBM Plex Sans, and Khand with Hind were tried and turned down.
+- **The app's typefaces are SF Pro and SF Mono** (my call).
 
 ## GitHub
 
@@ -378,8 +374,9 @@ immediately; importing desktop's repository list and settings (my call).
 - **Return opens a file in the external editor,** as Finder-like lists do;
   Space toggles inclusion (desktop's Enter).
 - **An unknown co-author's token is drawn in the warning color.** The
-  co-authors are a region of the commit message card. Hiding co-authors keeps them in the draft, never committed or
-  checked while hidden (desktop cleared them).
+  co-authors are a region of the commit message card. Hiding co-authors
+  keeps them in the draft, never committed or checked while hidden
+  (desktop cleared them).
 - **"N included" counts every file the next commit includes,** in full or in
   part, including files the filter hides; the include-all checkbox reflects
   only the files shown.
@@ -410,8 +407,8 @@ immediately; importing desktop's repository list and settings (my call).
   menu, which holds only view settings; an image's modes sit above it.
   Espalier keeps a checkbox in each hunk header.
 - **A left-out line keeps a faint add or delete tint and fades its text,**
-  without a strikethrough: a struck-through deletion read as deleted when it
-  stays. Included lines' numbers aren't bold.
+  without a strikethrough: a struck-through deletion reads as deleted when
+  it stays. Included lines' numbers aren't bold.
 - **The diff's line cursor shows after the arrow keys or a gutter click,**
   not after a click in the text.
 - **Conflict regions:** ours mint, the common ancestor gray, theirs orange.
@@ -480,7 +477,7 @@ immediately; importing desktop's repository list and settings (my call).
 - **A branch row's Rename… and Delete… work on any local branch;** the
   Branch menu keeps desktop's rules for the current branch.
 - **Delete Branch makes Delete the default button,** as every confirmation
-  does (desktop's made Cancel the default; I agreed).
+  does (my call; desktop's makes Cancel the default).
 - **The branch popover is desktop's branch switcher:** a click or Return
   checks a branch out, and "Choose a branch to merge into <current>" sits
   beside New Branch…. The sidebar's branches use its groups (Default,
@@ -805,9 +802,8 @@ immediately; importing desktop's repository list and settings (my call).
 
 - **A branch's first-parent line,** the current branch's from HEAD in
   History and another branch's in its row's place, one commit after
-  another, grouped by nothing (my call): no day headings, no "Not pushed yet"
-  section, no start marker, and no uncommitted-work row. The style is
-  app-wide, simple when nothing is stored.
+  another, grouped by nothing and with no uncommitted-work row (my call).
+  The style is app-wide, simple when nothing is stored.
 - **The notice above the list** counts the commits the base (the branch
   Update from <branch> merges) has that this branch doesn't, and shows only
   when there are some and the two share a merge base; none on a detached
@@ -827,7 +823,7 @@ immediately; importing desktop's repository list and settings (my call).
 
 `docs/DESIGN.md` is the look; these are the decisions behind it.
 
-- **The flat window stays a `NavigationSplitView`,** so collapsing the
+- **The flat window is a `NavigationSplitView`,** so collapsing the
   sidebar, full screen, the traffic lights, and toolbar customization work
   as AppKit makes them; its content is opaque over macOS's glass.
 - **Tokens have light, dark, and Increase Contrast values.** Status letters
@@ -835,8 +831,7 @@ immediately; importing desktop's repository list and settings (my call).
 - **The toolbar's search capsule shows ⌥⌘F,** the real Search shortcut (⌘F is
   Find).
 - **The sync button holds still while a push, pull, or fetch runs**
-  (my call: pressing Fetch "jumps between a billion different things"). It
-  keeps its title, color, and count, with the arc in its symbol's place,
+  (my call). It keeps its title, color, and count, with the arc in its symbol's place,
   and takes no clicks; what runs and git's step are its tooltip and what
   VoiceOver hears. Desktop retitled it at every step, which moved the
   button and "Fetched just now". An operation the button didn't offer
@@ -846,21 +841,20 @@ immediately; importing desktop's repository list and settings (my call).
   ones takes the palette entry its name hashes to, or the next free one;
   remote branches take their local branch's color. The sidebar dot, the
   tag, and the line agree. Creating or deleting a branch can recolor a
-  later-named one (fine by me).
+  later-named one.
 - **A commit's details show its tags, not branches** (my call; the rows show
   branches), and keep the "CHANGED FILES" label (my call).
 - **No focus ring over a selection** (my call): History's commit and file
   rows, and the diff's line cursor, show only their accent tint, focused or
   not.
-- **Every control's focus ring is Espalier's,** with keyboard navigation on
-  as before: capsules, symbol and bare buttons, menu buttons, pop-ups,
-  steppers, switches, checkboxes, choice lists, the
+- **Every control's focus ring is Espalier's,** shown with keyboard
+  navigation on (a field's always): capsules, symbol and bare buttons, menu
+  buttons, pop-ups, steppers, switches, checkboxes, choice lists, the
   segmented control, fields, links, and the slider. A list of choices is
   one stop, ringing its chosen row or mark.
 - **Links are the accent, deepened to read as text** (`Palette.link`, 4.5:1;
-  6:1 under Increase Contrast), where AppKit's link color was its own
-  blue. Links in text underline while the pointer is anywhere on their
-  text: a text's links can't each track the pointer.
+  6:1 under Increase Contrast). Links in text underline while the pointer
+  is anywhere on their text: a text's links can't each track the pointer.
 - **The slider's arrows step 1% of its range,** Page Up and Page Down 10%,
   Home and End to the ends. Desktop's range inputs stepped 0.1%, too fine
   to see.
@@ -869,11 +863,10 @@ immediately; importing desktop's repository list and settings (my call).
 - **A drag of commits is one dragging item** carrying them all, so its
   image is Espalier's stack with its own count, not the system's badge.
 - **The commit message card shows which field has focus with its own
-  tint** (my call, over an accent bar beside the field): a soft accent
-  filling the summary's or the description's whole part of the card, edge
-  to edge (my call, over a smaller shape inset in it), hidden in an
+  tint** (my call): a soft accent filling the summary's or the
+  description's whole part of the card, edge to edge, hidden in an
   inactive window and while the fields are read-only. A hairline divides
-  the summary from the description (my call).
+  the summary from the description.
 - **The description scrolls only when its text is taller than it shows**
   (my call): a shorter text, or the placeholder, holds still under a scroll
   instead of bouncing.
@@ -902,22 +895,19 @@ immediately; importing desktop's repository list and settings (my call).
 - **Text keeps AppKit's context menu** (my call), in every field and
   text view, with Look Up, Translate, Services, Writing Tools, and the
   rest; the commit message's fields put their own items first.
-- **Completions show in Espalier's suggestion list** (AppKit's completion
-  window in the commit message and the co-authors field, SwiftUI's
-  suggestion menu in Add Worktree's Branch Name): the menu card under the
-  word being completed, its text lined up with the word's, or under the
-  field, as wide as it. ↑ and ↓ move, Return or Tab accepts, Escape
-  closes, typing goes on filtering, and a click accepts; focus stays in
-  the text. The suggestions and what accepting one inserts are as before.
-  A login just put in the co-authors field shows no list again until more
-  is typed (AppKit's window reopened for it).
+- **Completions show in Espalier's suggestion list** (the commit message,
+  the co-authors field, and Add Worktree's Branch Name): the menu card
+  under the word being completed, its text lined up with the word's, or
+  under the field, as wide as it. ↑ and ↓ move, Return or Tab accepts,
+  Escape closes, typing goes on filtering, and a click accepts; focus stays
+  in the text. A login just put in the co-authors field shows no list
+  again until more is typed.
 - **A context menu's row shows a ring in the accent** while its menu is
-  open (AppKit drew an outline), in the SwiftUI lists and the AppKit tables
-  alike; the menu acts on the selection when that row is in it, else on the
+  open, in the SwiftUI lists and the AppKit tables alike; the menu acts on the selection when that row is in it, else on the
   row alone, as desktop's. The diff's lines show none: its menus act on a
   line's changes or on the text.
-- **Popovers are Espalier's card, with no arrow** (macOS's pointed at its
-  control): centered beside the control, a small gap away, on the other
+- **Popovers are Espalier's card, with no arrow:** centered beside the
+  control, a small gap away, on the other
   side when there's no room, in a panel of their own that can reach past
   the window and floats above a sheet's card. A click outside closes one
   and does nothing else, a click on its control included; so do Escape,
@@ -927,27 +917,24 @@ immediately; importing desktop's repository list and settings (my call).
   or VoiceOver runs;** opened with a click, one of text and buttons leaves
   the window focused, and a click on a field in it moves focus there.
   Closing gives focus back to the window.
-- **The menus act on the main window while its popover has the keys,** as
-  they did with macOS's popovers, which were part of the window; a
+- **The menus act on the main window while its popover has the keys;** a
   sheet's popover leaves them off, as the sheet does.
 - **⌘T and ⌘B close their popovers while they're open,** as desktop's
   foldouts toggle.
 - **Tooltips are Espalier's card,** in a panel of their own; Espalier
   sets no system tooltips, and the system's own windows (the open and save
-  panels, Quick Look) keep theirs. The card takes a row's radius, 9: a card's 14 is nearly
-  round on one line. One shows once the pointer rests 0.8 s (desktop's
-  waited 0.4 s), the next after 0.1 s while one has shown in the last
-  second. A click, a key press, or a scroll hides it until the pointer
-  moves off the view. VoiceOver hears a tooltip as the view's hint (an
-  AppKit view's help), as it heard the system's. They show for the
-  pointer only, as the system's did; desktop also shows some for keyboard
-  focus.
-- **No expansion tooltips:** AppKit's were never on, and rows that cut a
-  name or path off have it in their tooltip, shown whether or not it's cut
-  off; desktop shows branch, pull request, check, worktree, and repository
-  names only when they're cut off.
-- **A stash's unavailable Restore says why under its title** (it was the
-  item's tooltip).
+  panels, Quick Look) keep theirs. The card takes a row's radius, 9: a
+  card's 14 is nearly round on one line. One shows once the pointer rests
+  0.8 s (desktop's waits 0.4 s), the next after 0.1 s while one has shown
+  in the last second. A click, a key press, or a scroll hides it until the
+  pointer moves off the view. VoiceOver hears a tooltip as the view's hint
+  (an AppKit view's help). They show for the pointer only; desktop also
+  shows some for keyboard focus.
+- **No expansion tooltips:** rows that cut a name or path off have it in
+  their tooltip, shown whether or not it's cut off; desktop shows branch,
+  pull request, check, worktree, and repository names only when they're
+  cut off.
+- **A stash's unavailable Restore says why under its title.**
 - **Changes' rows show lines added and removed against HEAD** (desktop has
   none), staged and unstaged together; binary files, submodules, and
   conflicted files show none, and none load past 1,000 files.
@@ -955,23 +942,21 @@ immediately; importing desktop's repository list and settings (my call).
   and the Stashed Changes row need it.
 - **A toast's Undo answers ⌘Z** while it shows; typing since then undoes
   first.
-- **Settings is Espalier's own window** (my call: the restyled stock one was
-  "SO stock").
+- **Settings is Espalier's own window** (my call).
 - **Git Credential Manager's description is Espalier's own;** desktop's
   "experimental" was a caution about its own integration.
-- **Progress is Espalier's own** (my call): the arc I picked and the
-  capsule bar replace the system's spinner and bars everywhere, AppKit's
-  included. Both are neutral gray, since color is only for selection,
-  branches, and status, and stand still under Reduce Motion, where the
-  system's spinner turned regardless.
+- **Progress is Espalier's own** (my call): the arc and the capsule bar,
+  everywhere, never the system's spinner or bars. Both are neutral gray,
+  since color is only for selection, branches, and status, and stand still
+  under Reduce Motion.
 - **The operation panel shows a running operation only past 300 ms,** so a
   fast one never flashes; a commit clicked meanwhile is refused as busy.
 - **Sidebar sections draw their own Show/Hide chevron,** just before the
-  header's buttons: the list's own took the header's trailing edge, so
-  hovering the plus moved it.
+  header's buttons: the list's own takes the header's trailing edge, so
+  hovering the plus would move it.
 - **Switching repositories leaves the sidebar's sections in place**
   (my call): a repository that hasn't loaded has no branches, tags, or pull
-  requests yet, so Branches vanished and came back, moving the row just
+  requests yet, so Branches would vanish and come back, moving the row just
   clicked. The sections keep the previous repository's rows, which can't
   be chosen meanwhile, until the selected one has loaded (at most 1 s),
   then change in one step.
@@ -979,14 +964,14 @@ immediately; importing desktop's repository list and settings (my call).
 ## The app shell
 
 - **File ▸ Close is Espalier's own** (⌘W), without AppKit's hidden Close All
-  (⌥⌘W), which took Show Worktrees' shortcut. ⌘J and ⌥⌘F run in the main
+  (⌥⌘W), which would take Show Worktrees' shortcut. ⌘J and ⌥⌘F run in the main
   window whichever menu item holds them.
 - **⌃⇥ and ⇧⌃⇥ go between Changes and History** (desktop's Ctrl+Tab), as
   View ▸ Next Place and Previous Place. From any other place, ⌃⇥ shows
   Changes and ⇧⌃⇥ History (desktop has only the two tabs, and ignores
   Shift). Both run before a text view or list can take them to move focus.
 - **A click away from a text field ends its editing** (my call), as in
-  desktop's web page: AppKit kept the commit message and the toolbar
+  desktop's web page: AppKit keeps the commit message and the toolbar
   search focused after a click on the background, a label, or a button. A
   click anywhere but the focused field and the area that belongs to it
   unfocuses it; a Control-click, which opens a context menu, leaves it.

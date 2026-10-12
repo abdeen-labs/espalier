@@ -6,11 +6,10 @@ the app's snapshots show it in light and dark.
 
 ## Principles
 
-- **Espalier draws its own UI, never stock** ("Espalier draws its own UI"
-  in `docs/DECISIONS.md`). Simple, clean, and modern, with personality: not
-  elaborate, and not default controls with minimal touches. No stock macOS
-  or SwiftUI elements, within reason; the system's own pieces (the window's
-  chrome, Quick Look) stay macOS's.
+- **Espalier draws its own UI, never stock.** Simple, clean, and modern,
+  with personality: not elaborate, and not default controls with minimal
+  touches. The system's own pieces (the window's chrome, Quick Look, the
+  open and save panels) stay macOS's.
 - **Flat.** Opaque surfaces, hairline dividers, and soft shadows only on
   things that float (menus, popovers, tooltips, sheets, alerts, toasts, the
   operation capsule).
@@ -123,24 +122,24 @@ token, `Motion`.
   shrinks with its content over 0.22 s. The segmented control's selection
   slides. A focus ring settles in from 1.04× as it fades in (0.15 s) and
   fades out (0.1 s). Checkbox and radio marks fade and scale in (a file
-  row's checkbox crossfades), the switch's knob slides, and disclosure chevrons turn. A link's underline
-  shows at once. A copy button shows a check for 1.5 s.
+  row's checkbox crossfades), the switch's knob slides, and disclosure
+  chevrons turn. A link's underline shows at once. A copy button shows a
+  check for 1.5 s.
 - **Sheets and alerts arrive:** the scrim fades in over 0.22 s while the card
   fades in and settles from 97%; both fade out over 0.15 s.
 - **What the user changes moves:** the sync button's counts roll, and the
   branch name fades in after a switch. Bars and banners grow in while
-  what's below moves, and leave quicker. Simple ↔ Graph and Unified ↔ Split crossfade, and the
-  shimmer crossfades into a generated message. A diff crossfades to its
-  expanded lines, and a sidebar section's rows animate in and out as it opens
-  and closes. The diff's find bar fades in, settling from 97%, and fades
+  what's below moves, and leave quicker. Simple ↔ Graph and Unified ↔
+  Split crossfade, and the shimmer crossfades into a generated message. A
+  diff crossfades to its expanded lines, and a sidebar section's rows
+  animate in and out as it opens and closes. The diff's find bar fades in, settling from 97%, and fades
   out; the next match scrolls into view, easing when it's within three
   screens. Hover in lists fades, row by row.
 - **Work that runs moves:** the arc turns once every 0.9 s, the bar's
   segment sweeps every 1.4 s, and the shimmer passes over a message being
   generated. Under Reduce Motion and in snapshots they stand still: the
   arc at twelve o'clock, the segment in the middle.
-- **Instant:** selection and arrow-key browsing, and what follows them;
-  a slider's knob, dragged or stepped;
-  navigating between repositories and places, and the reload after a
-  branch switch; typing-driven updates; enabled ↔ disabled; paging;
-  ticking times.
+- **Instant:** selection and arrow-key browsing, and what follows them; a
+  slider's knob, dragged or stepped; navigating between repositories and
+  places, and the reload after a branch switch; typing-driven updates;
+  enabled ↔ disabled; paging; ticking times.
