@@ -47,7 +47,6 @@ public struct ChoiceList<Value: Hashable>: View {
     private let choices: [ChoiceListItem<Value>]
     @Binding private var selection: Value
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.showsFocusRings) private var showsFocusRings
     @FocusState private var isFocused: Bool
 
     /// - Parameter label: What VoiceOver calls the group.
@@ -92,7 +91,6 @@ public struct ChoiceList<Value: Hashable>: View {
                         .strokeBorder(isSelected ? AnyShapeStyle(Color.accent.opacity(0.35)) : AnyShapeStyle(.line), lineWidth: 1)
                 )
                 .focusRing(isFocused && isSelected, in: RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
-                .environment(\.showsFocusRings, showsFocusRings && isSelected)
                 .contentShape(RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
                 .onTapGesture {
                     if isEnabled {

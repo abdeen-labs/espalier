@@ -70,7 +70,7 @@ struct HistoryViewModelTests {
             open: { recorder.opened.append($0) },
             menu: { id in
                 MenuContent {
-                    MenuAction("Open \(id)") {}
+                    MenuAction("Open") { recorder.menuChosen.append(id) }
                 }
             }
         )
@@ -84,13 +84,14 @@ struct HistoryViewModelTests {
         window.makeFirstResponder(table)
         let menus = MenuRecorder()
         #expect(KeyboardContextMenu.handle(try f10KeyDown(in: window), in: window, presenter: menus.menuPresenter))
-        #expect(menus.popups.first?.titles == ["Open 1"])
         #expect(table.contextMenuTarget.row == 1)
+        menus.popups.first?.choose("Open")
         menus.popups.first?.close()
         #expect(ContextMenuRegions.openMenu(for: try rightClick(row: 2, in: table), presenter: menus.menuPresenter))
-        #expect(menus.popups.last?.titles == ["Open 2"])
         #expect(table.contextMenuTarget.row == 2)
         #expect(table.selectedRow == 1)
+        menus.popups.last?.choose("Open")
+        #expect(recorder.menuChosen == ["1", "2"])
 
         #expect(controller.tableView(table, typeSelectStringFor: nil, row: 2) == "c.swift")
         #expect(controller.openSelection())
@@ -136,4 +137,6 @@ struct HistoryViewModelTests {
 private final class FileListRecorder {
     var selected: [String?] = []
     var opened: [String] = []
+    /// The files whose menu's item was chosen.
+    var menuChosen: [String] = []
 }

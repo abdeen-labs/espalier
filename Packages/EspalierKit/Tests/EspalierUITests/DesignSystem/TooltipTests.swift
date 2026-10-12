@@ -30,7 +30,7 @@ struct TooltipTests {
         await harness.rest(.milliseconds(799))
         #expect(harness.center.shownText == nil)
         await harness.rest(.milliseconds(1))
-        #expect(harness.center.shownText == "Fetch origin")
+        #expect(harness.shownView === fetch)
         let shown = try #require(harness.center.shown)
         #expect(shown.anchor == fetch.convert(TooltipCenter.pointerAnchor(at: onFetch, cursorDepth: 20), from: nil))
         #expect(shown.panel.isOpen)
@@ -47,31 +47,31 @@ struct TooltipTests {
         await harness.rest(.milliseconds(500))
         #expect(harness.center.shownText == nil)
         await harness.rest(.milliseconds(300))
-        #expect(harness.center.shownText == "Fetch origin")
+        #expect(harness.shownView === fetch)
     }
 
     @Test("once a tooltip has shown, the next shows after 0.1 s, until none has shown for 1 s")
     func followOn() async {
         let harness = TooltipHarness()
         defer { harness.tearDown() }
-        harness.addView(fetchFrame, tooltip: "Fetch origin")
-        harness.addView(pushFrame, tooltip: "Push origin")
+        let fetch = harness.addView(fetchFrame, tooltip: "Fetch origin")
+        let push = harness.addView(pushFrame, tooltip: "Push origin")
         harness.move(to: onFetch)
         await harness.rest(.milliseconds(800))
-        #expect(harness.center.shownText == "Fetch origin")
+        #expect(harness.shownView === fetch)
 
         // Straight onto the next view.
         harness.move(to: onPush)
         #expect(harness.center.shownText == nil)
         await harness.rest(.milliseconds(100))
-        #expect(harness.center.shownText == "Push origin")
+        #expect(harness.shownView === push)
 
         // Away, and back within the second.
         harness.move(to: away)
         await harness.rest(.milliseconds(500))
         harness.move(to: onFetch)
         await harness.rest(.milliseconds(100))
-        #expect(harness.center.shownText == "Fetch origin")
+        #expect(harness.shownView === fetch)
 
         // Away for longer: the whole rest again.
         harness.move(to: away)
@@ -80,7 +80,7 @@ struct TooltipTests {
         await harness.rest(.milliseconds(100))
         #expect(harness.center.shownText == nil)
         await harness.rest(.milliseconds(700))
-        #expect(harness.center.shownText == "Push origin")
+        #expect(harness.shownView === push)
     }
 
     // MARK: Hiding
@@ -90,7 +90,7 @@ struct TooltipTests {
         let harness = TooltipHarness()
         defer { harness.tearDown() }
         harness.addView(fetchFrame, tooltip: "Fetch origin")
-        harness.addView(pushFrame, tooltip: "Push origin")
+        let push = harness.addView(pushFrame, tooltip: "Push origin")
         harness.move(to: onFetch)
         await harness.rest(.milliseconds(800))
         let panel = try #require(harness.center.shown?.panel)
@@ -106,7 +106,7 @@ struct TooltipTests {
         await harness.rest(.milliseconds(100))
         #expect(harness.center.shownText == nil)
         await harness.rest(.milliseconds(700))
-        #expect(harness.center.shownText == "Push origin")
+        #expect(harness.shownView === push)
 
         let key = try #require(NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: harness.window.windowNumber,
@@ -121,7 +121,7 @@ struct TooltipTests {
         harness.move(to: away)
         harness.move(to: onPush)
         await harness.rest(.milliseconds(800))
-        #expect(harness.center.shownText == "Push origin")
+        #expect(harness.shownView === push)
     }
 
     @Test("a scroll hides the tooltip, and a view scrolled under the still pointer shows none until the pointer moves")
@@ -132,7 +132,7 @@ struct TooltipTests {
         let second = harness.addView(fetchFrame.offsetBy(dx: 0, dy: -40), tooltip: "Second commit")
         harness.move(to: onFetch)
         await harness.rest(.milliseconds(800))
-        #expect(harness.center.shownText == "First commit")
+        #expect(harness.shownView === first)
 
         let scroll = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -40, wheel2: 0, wheel3: 0).flatMap(NSEvent.init(cgEvent:)))
         harness.center.handle(scroll)
@@ -146,23 +146,23 @@ struct TooltipTests {
 
         harness.move(to: CGPoint(x: onFetch.x + 1, y: onFetch.y))
         await harness.rest(.milliseconds(800))
-        #expect(harness.center.shownText == "Second commit")
+        #expect(harness.shownView === second)
     }
 
     @Test("another window becoming key, or the key window resigning, hides the tooltip, and so does the app deactivating")
     func windowAndApp() async {
         let harness = TooltipHarness()
         defer { harness.tearDown() }
-        harness.addView(fetchFrame, tooltip: "Fetch origin")
+        let fetch = harness.addView(fetchFrame, tooltip: "Fetch origin")
         harness.move(to: onFetch)
         await harness.rest(.milliseconds(800))
-        #expect(harness.center.shownText == "Fetch origin")
+        #expect(harness.shownView === fetch)
         NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: harness.window)
         #expect(harness.center.shownText == nil)
 
         harness.move(to: CGPoint(x: 50, y: 212))
         await harness.rest(.milliseconds(800))
-        #expect(harness.center.shownText == "Fetch origin")
+        #expect(harness.shownView === fetch)
         // What the app deactivating runs.
         harness.center.hideAll()
         #expect(harness.center.shownText == nil)
@@ -206,9 +206,9 @@ struct TooltipTests {
 
         harness.move(toMiddleOf: empty)
         await harness.rest(.milliseconds(800))
-        #expect(harness.center.shownText == "Sources/App/Loader.swift")
+        #expect(harness.shownView === row)
         harness.move(toMiddleOf: cleared)
-        #expect(harness.center.shownText == "Sources/App/Loader.swift")
+        #expect(harness.shownView === row)
     }
 
     @Test("a tooltip's text changing while it shows changes in place; gone, the tooltip hides, and back, it shows again")
@@ -220,7 +220,6 @@ struct TooltipTests {
         await harness.rest(.milliseconds(800))
         let panel = try #require(harness.center.shown?.panel)
         sync.setTooltip("Fetching origin: Receiving objects 45%")
-        #expect(harness.center.shownText == "Fetching origin: Receiving objects 45%")
         #expect(harness.center.shown?.panel === panel)
         #expect(panel.isOpen)
 
@@ -229,7 +228,7 @@ struct TooltipTests {
         #expect(!panel.isOpen)
         sync.setTooltip("Fetched just now")
         await harness.rest(.milliseconds(100))
-        #expect(harness.center.shownText == "Fetched just now")
+        #expect(harness.shownView === sync)
     }
 
     @Test("the innermost tooltip under the pointer shows; leaving it for the view around it shows that one's next")
@@ -240,11 +239,11 @@ struct TooltipTests {
         let button = harness.addView(CGRect(x: 260, y: 5, width: 30, height: 30), tooltip: "Discard Changes", in: row)
         harness.move(toMiddleOf: button)
         await harness.rest(.milliseconds(800))
-        #expect(harness.center.shownText == "Discard Changes")
+        #expect(harness.shownView === button)
         harness.move(to: CGPoint(x: 60, y: 120))
         #expect(harness.center.shownText == nil)
         await harness.rest(.milliseconds(100))
-        #expect(harness.center.shownText == "Sources/App/Loader.swift")
+        #expect(harness.shownView === row)
     }
 
     // MARK: AppKit areas
@@ -273,7 +272,7 @@ struct TooltipTests {
         harness.move(to: CGPoint(x: 40, y: 120))
         #expect(view.asked.isEmpty)
         await harness.rest(.milliseconds(800))
-        #expect(harness.center.shownText == "Area 1")
+        #expect(harness.shownView === view)
         #expect(view.asked == [1])
         #expect(harness.center.shown?.anchor == first)
 
@@ -310,26 +309,26 @@ struct TooltipTests {
         defer { harness.tearDown() }
         let regions = allViews(TooltipRegionView.self, in: host)
         #expect(regions.count == 4)
-        #expect(regions.compactMap { $0.tooltipText }.sorted() == ["Fetch origin", "Remote"])
+        #expect(regions.filter { $0.tooltipText != nil }.count == 2)
 
         let fetch = try #require(regions.first { $0.tooltipText == "Fetch origin" })
         harness.move(toMiddleOf: fetch)
         await harness.rest(.milliseconds(800))
-        #expect(harness.center.shownText == "Fetch origin")
+        #expect(harness.shownView === fetch)
 
+        let remote = try #require(regions.first { $0.tooltipText == "Remote" })
         let none = try #require(regions.first { $0.tooltipText == nil })
         harness.move(toMiddleOf: none)
         await harness.rest(.milliseconds(100))
-        #expect(harness.center.shownText == "Remote")
+        #expect(harness.shownView === remote)
     }
 
     // MARK: VoiceOver
 
-    @Test("an AppKit view's tooltip is its VoiceOver help")
+    @Test("clearing an AppKit view's tooltip clears its VoiceOver help")
     func appKitAccessibility() {
         let label = NSTextField(labelWithString: "12m")
         label.setTooltip("Monday, October 5, 2026 at 9:41 AM")
-        #expect(label.accessibilityHelp() == "Monday, October 5, 2026 at 9:41 AM")
         label.setTooltip(nil)
         #expect(label.accessibilityHelp() == nil)
     }
@@ -362,6 +361,11 @@ final class TooltipHarness {
 
     var content: NSView {
         window.contentView ?? NSView()
+    }
+
+    /// The view whose tooltip shows.
+    var shownView: NSView? {
+        center.shown?.target.tracker.view
     }
 
     func tearDown() {

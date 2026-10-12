@@ -29,7 +29,6 @@ public struct DelayedProgressView: View {
     private let size: Metrics.Progress.ArcSize
     private let delay: Duration
     @State private var isVisible = false
-    @Environment(\.showsDelayedContentImmediately) private var showsImmediately
 
     /// - Parameter size: Large alone in a pane, small in a row.
     public init(_ size: Metrics.Progress.ArcSize = .large, delay: Duration = Timing.spinnerDelay) {
@@ -39,7 +38,7 @@ public struct DelayedProgressView: View {
 
     public var body: some View {
         Group {
-            if isVisible || showsImmediately {
+            if isVisible {
                 ArcProgress(size)
             } else {
                 Color.clear
@@ -74,9 +73,4 @@ public struct PlaceholderRows: View {
         .padding(Metrics.insetMedium)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
-}
-
-extension EnvironmentValues {
-    /// Shows delayed content (spinners) at once; snapshots set it.
-    @Entry public var showsDelayedContentImmediately = false
 }

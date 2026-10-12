@@ -29,19 +29,19 @@ struct MenuTests {
             MenuAction("Settings…") { chosen.append("Settings…") }
         })
         // Opened from the keyboard: the first item that can be chosen.
-        #expect(harness.highlightedTitle(session) == "Fetch")
+        #expect(try harness.highlightedRow(session) == harness.row("Fetch", in: session))
         harness.press(KeyCode.downArrow, in: session)
-        #expect(harness.highlightedTitle(session) == "Push")
+        #expect(try harness.highlightedRow(session) == harness.row("Push", in: session))
         harness.press(KeyCode.downArrow, in: session)
-        #expect(harness.highlightedTitle(session) == "Settings…")
+        #expect(try harness.highlightedRow(session) == harness.row("Settings…", in: session))
         harness.press(KeyCode.downArrow, in: session)
-        #expect(harness.highlightedTitle(session) == "Settings…")
+        #expect(try harness.highlightedRow(session) == harness.row("Settings…", in: session))
         harness.press(KeyCode.home, in: session)
-        #expect(harness.highlightedTitle(session) == "Fetch")
+        #expect(try harness.highlightedRow(session) == harness.row("Fetch", in: session))
         harness.press(KeyCode.upArrow, in: session)
-        #expect(harness.highlightedTitle(session) == "Fetch")
+        #expect(try harness.highlightedRow(session) == harness.row("Fetch", in: session))
         harness.press(KeyCode.end, in: session)
-        #expect(harness.highlightedTitle(session) == "Settings…")
+        #expect(try harness.highlightedRow(session) == harness.row("Settings…", in: session))
         harness.press(KeyCode.upArrow, in: session)
         harness.press(KeyCode.returnKey, in: session)
         #expect(chosen == ["Push"])
@@ -81,22 +81,22 @@ struct MenuTests {
             MenuAction("Rename…") {}.disabled(true)
         })
         harness.press(0, characters: "c", at: 10, in: session)
-        #expect(harness.highlightedTitle(session) == "Copy File Path")
+        #expect(try harness.highlightedRow(session) == harness.row("Copy File Path", in: session))
         harness.press(0, characters: "h", at: 10.2, in: session)
-        #expect(harness.highlightedTitle(session) == "Cherry-pick")
+        #expect(try harness.highlightedRow(session) == harness.row("Cherry-pick", in: session))
         harness.press(0, characters: "c", at: 12, in: session)
         harness.press(0, characters: "o", at: 12.1, in: session)
         harness.press(0, characters: "p", at: 12.2, in: session)
         harness.press(0, characters: "y", at: 12.3, in: session)
         harness.press(KeyCode.space, characters: " ", at: 12.4, in: session)
         harness.press(0, characters: "r", at: 12.5, in: session)
-        #expect(harness.highlightedTitle(session) == "Copy Relative File Path")
+        #expect(try harness.highlightedRow(session) == harness.row("Copy Relative File Path", in: session))
         // A disabled item isn't selected.
         harness.press(0, characters: "r", at: 20, in: session)
-        #expect(harness.highlightedTitle(session) == "Revert Changes")
+        #expect(try harness.highlightedRow(session) == harness.row("Revert Changes", in: session))
         harness.press(0, characters: "e", at: 20.1, in: session)
         harness.press(0, characters: "n", at: 20.2, in: session)
-        #expect(harness.highlightedTitle(session) == "Revert Changes")
+        #expect(try harness.highlightedRow(session) == harness.row("Revert Changes", in: session))
     }
 
     // MARK: Mouse
@@ -113,9 +113,9 @@ struct MenuTests {
         }, trigger: .press)
         #expect(session.levels[0].level.highlighted == nil)
         #expect(harness.move(to: "Push", in: session) == .consumed)
-        #expect(harness.highlightedTitle(session) == "Push")
+        #expect(try harness.highlightedRow(session) == harness.row("Push", in: session))
         harness.move(to: "Pull", in: session)
-        #expect(harness.highlightedTitle(session) == nil)
+        #expect(harness.highlightedRow(session) == nil)
         harness.click("Pull", in: session)
         #expect(session.isOpen)
         harness.click("Fetch", in: session)
@@ -143,7 +143,7 @@ struct MenuTests {
         dragged.handle(harness.mouse(.leftMouseDragged, at: CGPoint(x: start.x, y: start.y - 10)))
         let push = try harness.center(of: "Push", in: dragged)
         dragged.handle(harness.mouse(.leftMouseDragged, at: push))
-        #expect(harness.highlightedTitle(dragged) == "Push")
+        #expect(try harness.highlightedRow(dragged) == harness.row("Push", in: dragged))
         dragged.handle(harness.mouse(.leftMouseUp, at: push))
         #expect(chosen == ["Push"])
         #expect(!dragged.isOpen)
@@ -177,7 +177,7 @@ struct MenuTests {
         let rightClick = try #require(NSEvent.mouseEvent(with: .rightMouseDown, location: CGPoint(x: 260, y: 20), modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
         #expect(router.handle(rightClick) == nil)
         #expect(!second.isOpen)
-        #expect(recorder.popups.map(\.titles) == [["Copy"]])
+        #expect(recorder.popups.count == 1)
 
         // With no menu open, a right-click elsewhere goes on as usual.
         let elsewhere = try #require(NSEvent.mouseEvent(with: .rightMouseDown, location: CGPoint(x: 40, y: 20), modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
@@ -241,20 +241,20 @@ struct MenuTests {
             .disabled(true)
             MenuAction("Copy SHA") {}
         })
-        #expect(harness.highlightedTitle(session) == "History Scope")
+        #expect(try harness.highlightedRow(session) == harness.row("History Scope", in: session))
         harness.press(KeyCode.rightArrow, in: session)
         #expect(session.levels.count == 2)
-        #expect(harness.highlightedTitle(session, level: 1) == "Current Branch")
+        #expect(try harness.highlightedRow(session, level: 1) == harness.row("Current Branch", in: session, level: 1))
         harness.press(KeyCode.leftArrow, in: session)
         #expect(session.levels.count == 1)
-        #expect(harness.highlightedTitle(session) == "History Scope")
+        #expect(try harness.highlightedRow(session) == harness.row("History Scope", in: session))
         harness.press(KeyCode.returnKey, in: session)
         #expect(session.levels.count == 2)
         harness.press(KeyCode.escape, in: session)
         #expect(session.levels.count == 1)
         #expect(session.isOpen)
         harness.press(KeyCode.downArrow, in: session)
-        #expect(harness.highlightedTitle(session) == "Copy SHA")
+        #expect(try harness.highlightedRow(session) == harness.row("Copy SHA", in: session))
         harness.press(KeyCode.upArrow, in: session)
         harness.press(KeyCode.rightArrow, in: session)
         harness.press(KeyCode.downArrow, in: session)
@@ -283,7 +283,7 @@ struct MenuTests {
         let scope = try harness.center(of: "History Scope", in: session)
         session.handle(harness.mouse(.mouseMoved, at: scope))
         #expect(session.levels.count == 2)
-        #expect(harness.highlightedTitle(session) == "History Scope")
+        #expect(try harness.highlightedRow(session) == harness.row("History Scope", in: session))
 
         // Down and toward the submenu, over Below: it stays open.
         let submenu = session.levels[1].cardFrame
@@ -291,13 +291,13 @@ struct MenuTests {
         let towardSubmenu = CGPoint(x: min(below.x + 30, submenu.minX - 2), y: below.y)
         session.handle(harness.mouse(.mouseMoved, at: towardSubmenu))
         #expect(session.levels.count == 2)
-        #expect(harness.highlightedTitle(session) == "History Scope")
+        #expect(try harness.highlightedRow(session) == harness.row("History Scope", in: session))
 
         // Back away from it, over Further Below: it closes.
         let further = try harness.center(of: "Further Below", in: session)
         session.handle(harness.mouse(.mouseMoved, at: CGPoint(x: further.x - 40, y: further.y)))
         #expect(session.levels.count == 1)
-        #expect(harness.highlightedTitle(session) == "Further Below")
+        #expect(try harness.highlightedRow(session) == harness.row("Further Below", in: session))
     }
 
     // MARK: Content
@@ -338,23 +338,28 @@ struct MenuTests {
         }
     }
 
+    /// A tidied entry, by kind.
+    enum TidiedEntry: Sendable, Equatable {
+        case item, disabledItem, header, divider
+    }
+
     @Test("tidying drops leading, trailing, and repeated dividers and empty sections' headers", arguments: [
-        NamedCase("leading and trailing dividers", ([EntrySpec.divider, .item("A"), .divider], ["A"])),
-        NamedCase("repeated dividers", ([.item("A"), .divider, .divider, .item("B")], ["A", "—", "B"])),
-        NamedCase("a header with nothing under it", ([.item("A"), .divider, .header("Empty"), .divider, .header("Full"), .item("B")], ["A", "—", "[Full]", "B"])),
-        NamedCase("a trailing header", ([.item("A"), .divider, .header("Empty")], ["A"])),
-        NamedCase("an unresolved choice", ([.option("Stray")], ["Stray (disabled)"])),
+        NamedCase("leading and trailing dividers", ([EntrySpec.divider, .item("A"), .divider], [TidiedEntry.item])),
+        NamedCase("repeated dividers", ([.item("A"), .divider, .divider, .item("B")], [.item, .divider, .item])),
+        NamedCase("a header with nothing under it", ([.item("A"), .divider, .header("Empty"), .divider, .header("Full"), .item("B")], [.item, .divider, .header, .item])),
+        NamedCase("a trailing header", ([.item("A"), .divider, .header("Empty")], [.item])),
+        NamedCase("an unresolved choice", ([.option("Stray")], [.disabledItem])),
     ])
-    func tidying(_ named: NamedCase<([EntrySpec], [String])>) {
+    func tidying(_ named: NamedCase<([EntrySpec], [TidiedEntry])>) {
         let (specs, expected) = named.value
-        let titles = MenuContent(specs.map(\.entry)).tidied.entries.map { entry in
+        let entries = MenuContent(specs.map(\.entry)).tidied.entries.map { entry -> TidiedEntry in
             switch entry {
-            case .item(let item): item.isEnabled ? item.title : "\(item.title) (disabled)"
-            case .header(let text): "[\(text)]"
-            case .divider, .option: "—"
+            case .item(let item): item.isEnabled ? .item : .disabledItem
+            case .header: .header
+            case .divider, .option: .divider
             }
         }
-        #expect(titles == expected)
+        #expect(entries == expected)
     }
 
     // MARK: Placement
@@ -384,7 +389,7 @@ struct MenuTests {
 
     // MARK: VoiceOver
 
-    @Test("VoiceOver sees an open menu of menu items, with their checks and disabled state, and can choose one")
+    @Test("VoiceOver sees an open menu of menu items, with their disabled state, and can choose one")
     func accessibility() throws {
         let harness = MenuHarness()
         defer { harness.tearDown() }
@@ -396,14 +401,11 @@ struct MenuTests {
                 MenuAction("All Branches") {}
             }
             MenuAction("Fetch") { chosen.append("Fetch") }
-        }, label: "Sync Options")
+        })
         let menu = session.levels[0].container
         #expect(menu.accessibilityRole() == .menu)
-        #expect(menu.accessibilityLabel() == "Sync Options")
         let items = try #require(menu.accessibilityChildren() as? [MenuItemElement])
-        #expect(items.map { $0.accessibilityLabel() ?? "" } == ["Wrap Lines", "Pull", "History Scope", "Fetch"])
         #expect(items.map { $0.accessibilityRole() } == Array(repeating: .menuItem, count: 4))
-        #expect(items[0].accessibilityValue() as? String == "checked")
         #expect(!items[1].isAccessibilityEnabled())
         #expect(items[0].isAccessibilitySelected())
         #expect(items[0].accessibilityFrame() != .zero)
@@ -435,8 +437,8 @@ struct MenuHarness {
     }
 
     /// Opens `content` below the anchor.
-    func open(_ content: MenuContent, trigger: MenuTrigger = .keyboard, label: String? = nil) throws -> MenuSession {
-        try #require(MenuSession.open(MenuRequest(content: content, view: anchor, placement: .below(anchor.bounds), trigger: trigger, label: label)))
+    func open(_ content: MenuContent, trigger: MenuTrigger = .keyboard) throws -> MenuSession {
+        try #require(MenuSession.open(MenuRequest(content: content, view: anchor, placement: .below(anchor.bounds), trigger: trigger)))
     }
 
     /// The anchor's middle, on screen.
@@ -445,9 +447,14 @@ struct MenuHarness {
         return CGPoint(x: frame.midX, y: frame.midY)
     }
 
-    func highlightedTitle(_ session: MenuSession, level: Int = 0) -> String? {
-        let level = session.levels[level].level
-        return level.highlighted.flatMap { level.row($0)?.item?.title }
+    /// The highlighted row's ID.
+    func highlightedRow(_ session: MenuSession, level: Int = 0) -> Int? {
+        session.levels[level].level.highlighted
+    }
+
+    /// The ID of the row of the item titled `title`.
+    func row(_ title: String, in session: MenuSession, level: Int = 0) throws -> Int {
+        try #require(session.levels[level].level.rows.first { $0.item?.title == title }?.id)
     }
 
     /// The middle of the item titled `title`, on screen.

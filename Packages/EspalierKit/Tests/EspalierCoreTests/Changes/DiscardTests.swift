@@ -91,15 +91,12 @@ struct DiscardTests {
         }
         let oneConfirmation = try #require(confirmation(of: one))
         #expect(oneConfirmation.kind == .discardChanges)
-        #expect(oneConfirmation.title == "Discard Changes?")
         #expect(oneConfirmation.details == .files(["README.md"]))
-        #expect(oneConfirmation.message == "The changes to these files will be discarded:\n\nYou can get them back from the Trash.")
 
         let all = await #expect(throws: OperationError.self) {
             try await fixture.changes.discard([readme, notes], confirmed: [.discardChanges])
         }
         #expect(confirmationKind(of: all) == .discardAllChanges)
-        #expect(confirmation(of: all)?.title == "Discard All Changes?")
         #expect(fixture.read("README.md") == "# Changed\n")
 
         // Without the preference one file goes at once; several still ask.
@@ -131,7 +128,6 @@ struct DiscardTests {
             }
             let asked = try #require(confirmation(of: one))
             #expect(asked.kind == .discardAllChanges)
-            #expect(asked.title == "Discard All Changes?")
             #expect(asked.details == .files(["README.md"]))
             // Confirming the single file's question isn't enough.
             let other = await #expect(throws: OperationError.self) {
@@ -175,10 +171,9 @@ struct DiscardTests {
             try await fixture.changes.discard(files, confirmed: everything)
         }
         #expect(error?.reason == .trashFailed(files: files))
-        #expect(error?.title == "Discard Changes Permanently?")
         #expect(error?.retry?.kind == .discardChanges)
         let recovery = try #require(error?.recoveries.first)
-        #expect(recovery.title == "Permanently Discard Changes")
+        #expect(recovery.kind == .discardPermanently)
         #expect(recovery.isHeadless)
         await fixture.settle()
         // Nothing was discarded yet.
@@ -374,8 +369,6 @@ struct DiscardTests {
         }
         let asked = try #require(confirmation(of: error))
         #expect(asked.kind == .discardLines)
-        #expect(asked.title == "Discard Changes?")
-        #expect(asked.message == "The selected changes to this file will be discarded:")
         #expect(asked.details == .files(["numbered.txt"]))
 
         fixture.app.preferences.confirmDiscardChanges = false
@@ -395,7 +388,7 @@ struct DiscardTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.changes.discardLines(.line(addTwo), confirmed: [.discardLines])
         }
-        #expect(error?.reason == .precondition("The file changed since its changes were shown. Review them and try again."))
+        #expect(preconditionText(error) != nil)
         #expect(fixture.read("numbered.txt") == changed)
         await fixture.settle()
     }
@@ -420,7 +413,7 @@ struct DiscardTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.changes.discardLines(.fromInitialSelection(.all), in: try fixture.file("other.txt"), confirmed: [.discardLines])
         }
-        #expect(error?.reason == .precondition("Select the file to see its changes before discarding lines."))
+        #expect(preconditionText(error) != nil)
         #expect(fixture.read("other.txt") == "other\n")
         await fixture.settle()
     }

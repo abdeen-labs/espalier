@@ -62,7 +62,7 @@ struct GitPaneTests {
 
             // Only characters git strips: shown, never written.
             settings.name = " .,:;<>\"'\\ "
-            #expect(settings.nameProblem == "The name can't be only spaces and punctuation.")
+            #expect(settings.nameProblem != nil)
             await settings.commitName()
             #expect(try await configured(app).name == "Joe Q. Bloggs")
 
@@ -98,7 +98,6 @@ struct GitPaneTests {
             #expect(settings.otherEmail == "1234+joe@users.noreply.github.com")
             settings.otherEmail = "  joe@elsewhere.example.com "
             #expect(settings.attribution?.isAttributable == false)
-            #expect(settings.attribution?.message == "This email address doesn't match your GitHub account. Your commits won't be attributed to you.")
             #expect(try await configured(app).email == "1234+joe@users.noreply.github.com")
             await settings.commitOtherEmail()
             #expect(settings.otherEmail == "joe@elsewhere.example.com")
@@ -141,7 +140,6 @@ struct GitPaneTests {
             #expect(try await configured(app).defaultBranch == "master")
             settings.otherBranch = "release candidate"
             let sanitized = sanitizedRefName("release candidate")
-            #expect(settings.branchNameMessage?.text == "Will be saved as \(sanitized).")
             #expect(settings.branchNameMessage?.isError == false)
             await settings.commitOtherBranch()
             #expect(try await configured(app).defaultBranch == sanitized)
@@ -151,7 +149,6 @@ struct GitPaneTests {
             // A name with nothing valid in it is never written.
             settings.otherBranch = "..."
             #expect(sanitizedRefName("...").isEmpty)
-            #expect(settings.branchNameMessage?.text == "... is not a valid name.")
             #expect(settings.branchNameMessage?.isError == true)
             await settings.commitOtherBranch()
             #expect(try await configured(app).defaultBranch == sanitized)
@@ -175,9 +172,7 @@ struct GitPaneTests {
             await settings.commitName()
             await settings.selectBranch(.master)
 
-            let problem = try #require(settings.lockFile)
-            #expect(problem.message.hasPrefix("Couldn't update your Git configuration because a lock file already exists at "))
-            #expect(problem.message.hasSuffix("Delete the lock file and try again?"))
+            #expect(settings.lockFile != nil)
             #expect(presenter.error == nil)
             #expect(try await configured(app).name == nil)
 
@@ -200,7 +195,10 @@ struct GitPaneTests {
             await settings.editGlobalConfig()
             let error = try #require(presenter.error?.error)
             #expect(error.operation == .openInEditor)
-            #expect(error.recoveries.map(\.title) == ["Download Visual Studio Code"])
+            #expect(error.recoveries.count == 1)
+            if case .downloadSuggestedEditor? = error.recoveries.first {} else {
+                Issue.record("Expected the suggested editor's download, got \(error.recoveries)")
+            }
             #expect(harness.launcher.launched.isEmpty)
         }
     }

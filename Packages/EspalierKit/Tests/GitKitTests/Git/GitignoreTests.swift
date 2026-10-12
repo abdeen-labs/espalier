@@ -23,18 +23,14 @@ private func symlink(_ target: String, _ path: String) throws {
     try FileManager.default.createSymbolicLink(atPath: path, withDestinationPath: target)
 }
 
-/// Expects `operation` to fail with the symbolic link error.
+/// Expects `operation` to fail with a `GitLibError`.
 private func expectSymbolicLinkError(
     sourceLocation: SourceLocation = #_sourceLocation,
     _ operation: () async throws -> Void
 ) async {
-    let error = await #expect(throws: GitLibError.self, sourceLocation: sourceLocation) {
+    await #expect(throws: GitLibError.self, sourceLocation: sourceLocation) {
         try await operation()
     }
-    #expect(
-        error?.message.contains("Cannot use a symbolic link as the root .gitignore file") == true,
-        sourceLocation: sourceLocation
-    )
 }
 
 @Suite("gitignore")

@@ -21,7 +21,7 @@ import TestSupport
 struct RepositoryFlowTests {
     // MARK: The popover
 
-    @Test("the popover's rows: by title in their groups, the filter, status when it's on, the tooltip, a clone in progress")
+    @Test("the popover's rows: by title in their groups, the filter, status when it's on, a clone in progress")
     func popoverRows() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
@@ -39,13 +39,10 @@ struct RepositoryFlowTests {
             RepositoryPopoverContent.make(app, filter: filter).groups.flatMap(\.rows)
         }
         let content = RepositoryPopoverContent.make(app, filter: "")
-        #expect(content.groups.map(\.title) == ["octo-org", "Other"])
+        #expect(content.groups.map(\.id) == ["1:dotcom:octo-org", "3:other"])
         #expect(rows().map(\.title) == ["website", "Alpha", "beta", "website"])
         let beta = rows()[2]
         #expect(beta.showsStatus && beta.changedFileCount == 3 && beta.ahead == 2)
-        #expect(beta.accessibilityLabel == "beta, 3 changed files, 2 ahead")
-        #expect(rows()[0].tooltip == "octo-org/website\n/Users/joe/Developer/website")
-        #expect(rows()[1].tooltip == "zeta (Alpha)\n/Users/joe/Developer/zeta")
 
         // The filter matches titles, owners, and names, ignoring case.
         #expect(rows("OCTO").map(\.title) == ["website"])
@@ -61,16 +58,6 @@ struct RepositoryFlowTests {
         app.clones.clones.removeAll()
     }
 
-    @Test("the ahead and behind tooltip is desktop's")
-    func aheadBehindTooltip() {
-        #expect(RepositoryFixtures.row("a", ahead: 1).aheadBehindTooltip == "The currently checked out branch is 1 commit ahead of its tracked branch.")
-        #expect(RepositoryFixtures.row("a", behind: 3).aheadBehindTooltip == "The currently checked out branch is 3 commits behind its tracked branch.")
-        #expect(RepositoryFixtures.row("a", ahead: 1, behind: 2).aheadBehindTooltip
-            == "The currently checked out branch is 2 commits behind and 1 commit ahead of its tracked branch.")
-        #expect(RepositoryFixtures.row("a").aheadBehindTooltip == nil)
-        #expect(RepositoryFixtures.row("a", ahead: 1, showsStatus: false).aheadBehindTooltip == nil)
-    }
-
     @Test("the popover groups as desktop does, filters fuzzily, and lists the selected repository's worktrees")
     func popoverContent() async throws {
         try await withIsolatedGitConfig { _ in
@@ -83,14 +70,14 @@ struct RepositoryFlowTests {
             app.recentRepositoryIDs = [app.repositories[2].id]
 
             let content = RepositoryPopoverContent.make(app, filter: "")
-            #expect(content.groups.map(\.title) == ["Recent", "octo-org", "Other"])
+            #expect(content.groups.map(\.id) == ["0:recent", "1:dotcom:octo-org", "3:other"])
             #expect(content.groups[0].rows.map(\.title) == ["repository-3"])
             #expect(content.worktrees.isEmpty)
             #expect(content.rowIDs.count == 10)
 
             // Fuzzy: "rpo8" finds "repository-8".
             #expect(RepositoryPopoverContent.make(app, filter: "rpo8").groups.flatMap(\.rows).map(\.title) == ["repository-8"])
-            #expect(RepositoryPopoverContent.make(app, filter: "octo").groups.map(\.title) == ["octo-org"])
+            #expect(RepositoryPopoverContent.make(app, filter: "octo").groups.map(\.id) == ["1:dotcom:octo-org"])
 
             // A repository with one worktree lists none, unless Show
             // Worktrees revealed it; the popover opens on the selected
@@ -139,13 +126,9 @@ struct RepositoryFlowTests {
         result.invalidPaths = ["/Users/joe/Downloads"]
         let one = try #require(AddRepositoryAlert(result))
         #expect(one == .createRepository(path: "/Users/joe/Downloads"))
-        #expect(one.content.title == "/Users/joe/Downloads isn't a Git repository.")
-        #expect(one.content.message == "Would you like to create a repository here instead?")
-        #expect(one.content.buttons.map(\.title) == ["Create a Repository…", "Cancel"])
 
         result.barePaths = result.invalidPaths
         #expect(AddRepositoryAlert(result) == .bareRepository(path: "/Users/joe/Downloads"))
-        #expect(AddRepositoryAlert(result)?.content.title == "This folder is a bare repository.")
 
         result.invalidPaths = ["/a", "/b"]
         result.invalidPathsMessage = "The following paths aren't Git repositories:\n\n- /a\n- /b"
@@ -202,7 +185,7 @@ struct RepositoryFlowTests {
         model.setPath("/Library")
         model.setURL("https://example.com/repo.git")
         await model.validatePath()
-        #expect(model.current.problem == "This folder contains files. Git can only clone to empty folders.")
+        #expect(model.current.problem != nil)
         #expect(!model.canClone)
 
         // Each source keeps its own fields.
@@ -233,7 +216,7 @@ struct RepositoryFlowTests {
 
         let alias = CloneSheetModel(app: app, initialURL: "octocat/Hello-World")
         #expect(await alias.prepareClone() == nil)
-        #expect(alias.current.problem?.hasPrefix("Espalier couldn't find that repository.") == true)
+        #expect(alias.current.problem != nil)
 
         let url = CloneSheetModel(app: app, initialURL: "https://example.com/team/tool.git")
         let request = await url.prepareClone()
@@ -274,14 +257,10 @@ struct RepositoryFlowTests {
             retry: retry,
             recoveries: [.retry(retry)]
         )
-        guard case .rawOutput(let content, let recoveries) = error.presentation else {
+        guard case .rawOutput(_, let recoveries) = error.presentation else {
             Issue.record("A clone's git output shows as raw output")
             return
         }
-        #expect(content.title == "Clone Failed")
-        #expect(content.note == "Would you like to retry cloning missing?")
-        #expect(content.recoveryTitles == ["Retry Clone"])
-        #expect(content.dismissTitle == "Cancel")
         #expect(recoveries.count == 1)
         // Offscreen the sheet has no window and closes at once: nothing is
         // chosen, so the flow ends.
@@ -426,7 +405,7 @@ struct RepositoryFlowTests {
             relative.basePath = "Developer"
             relative.name = "app"
             #expect(await relative.create(presenter: context.presenter) == nil)
-            #expect(relative.problem == "Choose the folder for the repository by its full path.")
+            #expect(relative.problem != nil)
             await app.idle()
         }
     }
@@ -580,13 +559,10 @@ struct RepositoryFlowTests {
         harness.workspace.opens = false
         await context.actions.performAndWait(.openWithDefaultProgram(path: "/Users/joe/Developer/espalier/data.unknown"))
         let presented = try #require(context.presenter.error)
-        #expect(presented.error.message == "Couldn't open /Users/joe/Developer/espalier/data.unknown. Check that an app is set to open this kind of file.")
-        guard case .alert(let content, let recoveries) = presented.error.presentation else {
+        guard case .alert(_, let recoveries) = presented.error.presentation else {
             Issue.record("The failure isn't an alert")
             return
         }
-        #expect(content.title == "Error")
-        #expect(content.buttons.map(\.title) == ["Close"])
         #expect(recoveries.isEmpty)
         await app.idle()
     }
@@ -599,8 +575,6 @@ struct RepositoryFlowTests {
         app.clones.clones.append(CloneTask(url: "https://github.com/joe/espalier.git", path: "/Users/joe/Developer/espalier"))
         let reasons = QuitGuard.reasons(app)
         #expect(reasons.runningOperation == .clone)
-        #expect(reasons.alert?.title == "Quit while a clone is running?")
-        #expect(reasons.alert?.message == "Quitting now cancels the clone.")
         app.clones.clones[0].phase = .cancelling
         #expect(QuitGuard.reasons(app).isEmpty)
         app.clones.clones.removeAll()

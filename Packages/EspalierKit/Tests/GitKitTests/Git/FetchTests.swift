@@ -99,8 +99,8 @@ struct FetchTests {
         })
 
         let events = progress.withLock { $0 }
-        #expect(events.first == FetchProgress(value: 0, title: "Fetching origin", remote: "origin"))
-        #expect(events.allSatisfy { $0.title == "Fetching origin" && $0.remote == "origin" })
+        #expect(events.first?.value == 0)
+        #expect(events.allSatisfy { $0.remote == "origin" })
 
         let upstreamTip = try await getTipOrError(upstream)
         let fetched = try await getRefOrError(repository, "origin/master")

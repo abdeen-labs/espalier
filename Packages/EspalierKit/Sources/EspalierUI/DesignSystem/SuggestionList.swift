@@ -377,8 +377,8 @@ struct SuggestionListCardRoot: View {
 
 /// The suggestions drawn as Espalier's menu card, scrolling past
 /// `Metrics.Suggestions.visibleRows` rows. It fades and grows very
-/// slightly from its top as it opens, except under Reduce Motion and in
-/// snapshots; what's typed changes it at once.
+/// slightly from its top as it opens, except under Reduce Motion and
+/// offscreen; what's typed changes it at once.
 struct SuggestionListCard: View {
     let model: SuggestionListModel
     @Environment(\.motion) private var motion

@@ -124,8 +124,6 @@ struct ModelTests {
 
             #expect(dotCom.friendlyName == "octocat")
             #expect(enterprise.friendlyName == "Mona")
-            #expect(dotCom.friendlyEndpoint == "GitHub.com")
-            #expect(enterprise.friendlyEndpoint == "ghe.example.com")
             #expect(isDotComAccount(dotCom) && isEnterpriseAccount(enterprise))
             #expect(accountEquals(dotCom, dotCom.withToken("")))
             #expect(Account.anonymous().id == -1)

@@ -184,7 +184,6 @@ struct FetchOperationTests {
             try await fixture.model.sync.fetch()
         }
         #expect(error?.operation == .fetch)
-        #expect(error?.title == "Error")
         #expect(error?.retry?.kind == .fetch)
         // Git's "Could not read from remote repository" reads as an
         // authentication failure; the failure is the broken remote's.

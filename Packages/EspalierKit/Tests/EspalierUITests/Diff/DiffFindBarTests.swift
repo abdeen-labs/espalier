@@ -35,16 +35,17 @@ struct DiffFindBarTests {
     }
 
     @Test("Find… shows the bar; typing searches; Return, Shift-Return, ⌘G, and ⇧⌘G move; Escape closes it, selecting the match in the diff, focused again")
-    func keys() throws {
+    func keys() async throws {
         let file = DiffFileInfo(DiffFixtures.workingFile("Sources/App/RepositoryLoader.swift"))
         let (window, host) = hostInWindow(
-            DiffContainer(.loaded(.text(DiffFixtures.swiftChange)), file: file, context: .history)
-                .environment(\.diffBuildsSynchronously, true),
+            DiffContainer(.loaded(.text(DiffFixtures.swiftChange)), file: file, context: .history),
             size: CGSize(width: 720, height: 400)
         )
         defer { window.contentView = nil }
         let table = try #require(firstView(DiffTableView.self, in: host))
         let controller = try #require(table.controller)
+        await controller.documentIdle()
+        host.layoutSubtreeIfNeeded()
         let find = controller.find
         #expect(!allViews(NSTextField.self, in: host).contains { $0.isEditable })
 

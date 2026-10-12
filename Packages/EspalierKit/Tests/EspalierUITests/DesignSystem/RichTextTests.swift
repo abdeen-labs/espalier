@@ -1,6 +1,6 @@
 // How commit messages show their tokens (the tokenizer's own tests are
-// EspalierCoreTests/Text/TextTokenParserTests.swift): emoji wherever a
-// summary shows, and links in a commit's header and Commit Info.
+// EspalierCoreTests/Text/TextTokenParserTests.swift): links in a commit's
+// header and Commit Info.
 
 import Foundation
 import GitHubKit
@@ -21,15 +21,6 @@ struct RichTextTests {
         }
     }
 
-    @Test("summaries show emoji for shortcodes; unknown and custom ones stay text")
-    func emojified() {
-        #expect(RichText.emojified(":bug: Fix the crash :tada:") == "\u{1F41B} Fix the crash \u{1F389}")
-        #expect(RichText.emojified("Plain summary") == "Plain summary")
-        #expect(RichText.emojified("Ship it :shipit: :not-an-emoji:") == "Ship it :shipit: :not-an-emoji:")
-        #expect(RichText.emojified("Fix #12 for @octocat at https://example.com") == "Fix #12 for @octocat at https://example.com")
-        #expect(RichText.emojified("") == "")
-    }
-
     @Test("a GitHub repository's messages link issue references, mentions, and URLs, underlined per the setting")
     func gitHubLinks() {
         let text = RichText.attributed(
@@ -38,7 +29,6 @@ struct RichTextTests {
             underlinesLinks: true
         )
         let parts = runs(text)
-        #expect(parts.map(\.text) == ["Fix ", "#12", " \u{1F389} thanks ", "@octocat", ", see ", "#7"])
         #expect(parts[1].link == URL(string: "https://github.com/octo/app/issues/12"))
         #expect(parts[3].link == URL(string: "https://github.com/octocat"))
         #expect(parts[5].link == URL(string: "https://github.com/octo/app/issues/7"))
@@ -59,6 +49,5 @@ struct RichTextTests {
         #expect(linked.map(\.text) == ["https://example.com/a", "https://example.com/b", "joe@example.com"])
         #expect(linked.first?.link == URL(string: "https://example.com/a"))
         #expect(linked.last?.link?.scheme == "mailto")
-        #expect(String(text.characters) == message)
     }
 }

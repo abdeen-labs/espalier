@@ -20,23 +20,6 @@ final class MenuRecorder {
         /// opens below.
         let location: CGPoint
 
-        /// The menu's entries as it shows them: items' titles, "—" for a
-        /// divider, and a header's text in brackets.
-        var titles: [String] {
-            Self.titles(content)
-        }
-
-        /// `content`'s entries as a menu shows them.
-        static func titles(_ content: MenuContent) -> [String] {
-            content.tidied.entries.map { entry in
-                switch entry {
-                case .item(let item): item.title
-                case .header(let text): "[\(text)]"
-                case .divider, .option: "—"
-                }
-            }
-        }
-
         /// The menu's content, resolved and tidied as it shows.
         var content: MenuContent {
             request.content.tidied
@@ -62,7 +45,7 @@ final class MenuRecorder {
         /// Chooses the item titled `title`, as a click on it would.
         func choose(_ title: String, sourceLocation: SourceLocation = #_sourceLocation) {
             guard let item = item(title) else {
-                Issue.record("No item titled \(title) in \(titles)", sourceLocation: sourceLocation)
+                Issue.record("No item titled \(title)", sourceLocation: sourceLocation)
                 return
             }
             guard item.isEnabled, case .run(let action) = item.action else {

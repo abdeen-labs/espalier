@@ -213,12 +213,6 @@ struct MarkdownImageView: View {
     }
 }
 
-extension EnvironmentValues {
-    /// Parses pull request descriptions on the main actor, so a snapshot
-    /// renders them at once (they're parsed off it otherwise).
-    @Entry var markdownParsesSynchronously = false
-}
-
 extension Metrics {
     /// Between a bulleted line's marker and its text: Markdown's lists and
     /// the GitHub sheets' bullets.

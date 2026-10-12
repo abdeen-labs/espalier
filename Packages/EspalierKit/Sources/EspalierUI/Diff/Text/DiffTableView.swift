@@ -229,7 +229,6 @@ struct DiffTextView: NSViewRepresentable {
     let actions: DiffTableActions
     /// Find in the diff, which the container's bar shows.
     let find: DiffFindModel
-    @Environment(\.diffBuildsSynchronously) private var buildsSynchronously
     @Environment(\.announcer) private var announcer
 
     func makeCoordinator() -> DiffTableController {
@@ -237,13 +236,11 @@ struct DiffTextView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        context.coordinator.buildsSynchronously = buildsSynchronously
-        return context.coordinator.scrollView
+        context.coordinator.scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         let controller = context.coordinator
-        controller.buildsSynchronously = buildsSynchronously
         controller.actions = actions
         find.announcer = announcer
         controller.attach(find)
@@ -253,10 +250,4 @@ struct DiffTextView: NSViewRepresentable {
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: DiffTableController) {
         coordinator.tearDown()
     }
-}
-
-extension EnvironmentValues {
-    /// Builds diff documents on the main actor, so a snapshot renders the
-    /// rows at once.
-    @Entry var diffBuildsSynchronously = false
 }

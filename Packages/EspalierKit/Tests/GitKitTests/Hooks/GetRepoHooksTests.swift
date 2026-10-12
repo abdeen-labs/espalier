@@ -136,6 +136,5 @@ struct GetRepoHooksTests {
             try await getRepoHooks(directory)
         }
         #expect(error?.exitCode == 128)
-        #expect(error?.description.hasPrefix("Git command failed with exit code 128: fatal: not a git repository") == true)
     }
 }

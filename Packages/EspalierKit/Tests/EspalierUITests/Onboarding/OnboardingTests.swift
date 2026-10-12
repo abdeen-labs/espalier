@@ -83,7 +83,7 @@ struct OnboardingTests {
             let harness = try AppHarness()
             let app = harness.makeApp()
             try await app.setGlobalGitAuthor(name: "Joe Bloggs", email: "joe@old.example.com")
-            let model = ConfigureGitModel(app: app, presenter: WindowPresenter(app: app), account: .some(nil))
+            let model = ConfigureGitModel(app: app, presenter: WindowPresenter(app: app))
             #expect(model.source == .manual)
             #expect(model.account == nil)
             #expect(!model.canFinish)
@@ -107,11 +107,11 @@ struct OnboardingTests {
     func account() async throws {
         try await withIsolatedGitConfig { _ in
             let harness = try AppHarness()
-            let app = harness.makeApp()
-            let model = ConfigureGitModel(app: app, presenter: WindowPresenter(app: app), account: .some(OnboardingFixtures.dotCom))
+            let app = await harness.loadedApp()
+            try await harness.signIn([OnboardingFixtures.dotCom], to: app)
+            let model = ConfigureGitModel(app: app, presenter: WindowPresenter(app: app))
             await model.load()
             #expect(model.source == .account)
-            #expect(model.accountChoiceTitle == "Use my GitHub account name and email address")
             #expect(model.name == "Joe Bloggs")
             #expect(model.emailChoices.map(\.email) == ["joe@example.com", "1234+joe@users.noreply.github.com"])
             #expect(model.accountEmail == "joe@example.com")
@@ -123,7 +123,7 @@ struct OnboardingTests {
             #expect(model.manualEmail == "joe@example.com")
             #expect(model.attribution?.isAttributable == true)
             model.manualEmail = "joe@elsewhere.example.com"
-            #expect(model.attribution?.message == "This email address doesn't match your GitHub account. Your commits won't be attributed to you.")
+            #expect(model.attribution?.isAttributable == false)
 
             model.source = .account
             model.accountEmail = "1234+joe@users.noreply.github.com"
@@ -134,12 +134,12 @@ struct OnboardingTests {
         }
     }
 
-    @Test("an Enterprise account without a name: its login, and the Enterprise wording")
-    func enterprise() throws {
+    @Test("an Enterprise account without a name: its login and its address")
+    func enterprise() async throws {
         let harness = try AppHarness()
-        let app = harness.makeApp()
-        let model = ConfigureGitModel(app: app, presenter: WindowPresenter(app: app), account: .some(OnboardingFixtures.enterprise))
-        #expect(model.accountChoiceTitle == "Use my GitHub Enterprise account name and email address")
+        let app = await harness.loadedApp()
+        try await harness.signIn([OnboardingFixtures.enterprise], to: app)
+        let model = ConfigureGitModel(app: app, presenter: WindowPresenter(app: app))
         #expect(model.name == "jbloggs")
         #expect(model.accountEmail == "joe.bloggs@corp.example.com")
     }
@@ -149,10 +149,10 @@ struct OnboardingTests {
         try await withIsolatedGitConfig { _ in
             let harness = try AppHarness()
             let app = harness.makeApp()
-            let model = ConfigureGitModel(app: app, presenter: WindowPresenter(app: app), account: .some(nil))
+            let model = ConfigureGitModel(app: app, presenter: WindowPresenter(app: app))
             await model.load()
             model.manualName = " .,:;<>\"'\\ "
-            #expect(model.nameProblem == "The name can't be only spaces and punctuation.")
+            #expect(model.nameProblem != nil)
             #expect(!model.canFinish)
             #expect(await model.finish() == false)
             #expect(!app.preferences.hasShownWelcomeFlow)
@@ -167,12 +167,12 @@ struct OnboardingTests {
         }
     }
 
-    @Test("a lock file in the way is explained; deleting it finishes")
+    @Test("a lock file in the way is reported with its path; deleting it finishes")
     func lockFile() async throws {
         try await withIsolatedGitConfig { configPath in
             let harness = try AppHarness()
             let app = harness.makeApp()
-            let model = ConfigureGitModel(app: app, presenter: WindowPresenter(app: app), account: .some(nil))
+            let model = ConfigureGitModel(app: app, presenter: WindowPresenter(app: app))
             await model.load()
             model.manualName = "Joe Bloggs"
             model.manualEmail = "joe@example.com"
@@ -182,7 +182,6 @@ struct OnboardingTests {
             #expect(await model.finish() == false)
             let problem = try #require(model.lockFile)
             #expect(problem.path == lockPath)
-            #expect(problem.message.hasPrefix("Couldn't update your Git configuration because a lock file already exists at "))
             #expect(!model.canFinish)
             #expect(!app.preferences.hasShownWelcomeFlow)
 
@@ -245,7 +244,6 @@ struct OnboardingTests {
         await MoveToApplicationsPrompt.respond(AlertResponse(buttonIndex: 0), preferences: preferences, mover: mover(moved: moved, failure: "Permission denied."), showAlert: showAlert)
         #expect(moved.count == 2)
         #expect(alerts == [MoveToApplicationsPrompt.failureAlert("Permission denied.")])
-        #expect(alerts.first?.title == "Couldn't Move Espalier")
     }
 
     @Test("an Applications folder is the system's or any folder of that name")

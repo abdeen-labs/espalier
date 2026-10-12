@@ -171,7 +171,7 @@ nonisolated public struct LocationControlState: Sendable, Equatable {
     }
 }
 
-/// The location control's look, value-driven (snapshots render each state):
+/// The location control's look, value-driven (`LocationControlState`):
 /// one quiet capsule with the repository (a folder and its name), a
 /// chevron, and the branch (its symbol in the current branch's accent, its
 /// name, and a down chevron). Each part opens its popover.

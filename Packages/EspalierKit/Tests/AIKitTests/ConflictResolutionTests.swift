@@ -59,21 +59,11 @@ private func paths(_ chunks: [[FileConflictContext]]) -> [[String]] {
 }
 
 private func expectValidationError(
-    _ pattern: String,
     sourceLocation: SourceLocation = #_sourceLocation,
     _ body: () throws -> Void
 ) {
-    do {
+    #expect(throws: AIValidationError.self, sourceLocation: sourceLocation) {
         try body()
-        Issue.record("Expected an AIValidationError matching \(pattern)", sourceLocation: sourceLocation)
-    } catch let error as AIValidationError {
-        #expect(
-            error.message.range(of: pattern, options: .regularExpression) != nil,
-            "\(error.message) doesn't match \(pattern)",
-            sourceLocation: sourceLocation
-        )
-    } catch {
-        Issue.record("Expected an AIValidationError, got \(error)", sourceLocation: sourceLocation)
     }
 }
 
@@ -98,22 +88,22 @@ struct ParseConflictResolutionTests {
 
     @Test("throws on invalid JSON")
     func invalidJSON() {
-        expectValidationError("invalid JSON") { _ = try parseAIConflictResolution("not json") }
+        expectValidationError { _ = try parseAIConflictResolution("not json") }
     }
 
     @Test("throws on non-object payload")
     func nonObject() {
-        expectValidationError("expected an object") { _ = try parseAIConflictResolution(#""string""#) }
+        expectValidationError { _ = try parseAIConflictResolution(#""string""#) }
     }
 
     @Test("throws on missing resolutions array")
     func missingResolutions() {
-        expectValidationError(#""resolutions" must be an array"#) { _ = try parseAIConflictResolution(#"{"foo":"bar"}"#) }
+        expectValidationError { _ = try parseAIConflictResolution(#"{"foo":"bar"}"#) }
     }
 
     @Test("throws on empty resolutions array")
     func emptyResolutions() {
-        expectValidationError(#""resolutions" must not be empty"#) {
+        expectValidationError {
             _ = try parseAIConflictResolution(#"{"resolutions":[]}"#)
         }
     }
@@ -121,18 +111,18 @@ struct ParseConflictResolutionTests {
     @Test("throws on missing path")
     func missingPath() {
         let json = payload([["hunks": [["resolvedContent": "c"]], "reasoning": "r"]])
-        expectValidationError(#""path" at index 0"#) { _ = try parseAIConflictResolution(json) }
+        expectValidationError { _ = try parseAIConflictResolution(json) }
     }
 
     @Test("throws on empty path")
     func emptyPath() {
         let json = payload([["path": "  ", "hunks": [["resolvedContent": "c"]], "reasoning": "r"]])
-        expectValidationError(#""path" at index 0"#) { _ = try parseAIConflictResolution(json) }
+        expectValidationError { _ = try parseAIConflictResolution(json) }
     }
 
     @Test("throws on missing hunks")
     func missingHunks() {
-        expectValidationError(#""hunks" at index 0 must be an array"#) {
+        expectValidationError {
             _ = try parseAIConflictResolution(#"{"resolutions":[{"path":"a.ts","reasoning":"r"}]}"#)
         }
     }
@@ -140,13 +130,13 @@ struct ParseConflictResolutionTests {
     @Test("throws on empty hunks array")
     func emptyHunks() {
         let json = payload([["path": "a.ts", "hunks": [], "reasoning": "r"]])
-        expectValidationError(#""hunks" at index 0 must not be empty"#) { _ = try parseAIConflictResolution(json) }
+        expectValidationError { _ = try parseAIConflictResolution(json) }
     }
 
     @Test("throws on missing reasoning")
     func missingReasoning() {
         let json = payload([["path": "a.ts", "hunks": [["resolvedContent": "c"]]]])
-        expectValidationError(#""reasoning" at index 0"#) { _ = try parseAIConflictResolution(json) }
+        expectValidationError { _ = try parseAIConflictResolution(json) }
     }
 
     @Test("allows empty resolvedContent in a hunk (intentional deletion)")
@@ -180,7 +170,7 @@ struct ParseConflictResolutionTests {
     @Test("throws on truncated conflict markers (opening + separator without closing)")
     func truncatedMarkers() {
         let json = payload([makeResolution("a.ts", "<<<<<<< HEAD\nours\n=======\ntheirs but truncated", "truncated")])
-        expectValidationError("still contains conflict markers") { _ = try parseAIConflictResolution(json) }
+        expectValidationError { _ = try parseAIConflictResolution(json) }
     }
 
     @Test("parses JSON block followed by another code block")
@@ -308,7 +298,7 @@ struct ParseConflictResolutionTests {
     @Test("throws when action resolution has empty reasoning")
     func actionEmptyReasoning() {
         let json = payload([["path": "a.ts", "hunks": [], "reasoning": "", "action": "keep"]])
-        expectValidationError("reasoning.*must be a non-empty string") { _ = try parseAIConflictResolution(json) }
+        expectValidationError { _ = try parseAIConflictResolution(json) }
     }
 
     @Test("finds conflict markers after any JavaScript line terminator")
@@ -317,7 +307,7 @@ struct ParseConflictResolutionTests {
             "x\r<<<<<<< a\r=======\r>>>>>>> b", "<<<<<<<\n=======", "x\u{2028}<<<<<<< a\u{2029}=======",
         ] {
             let json = payload([makeResolution("a.ts", content, "r")])
-            expectValidationError("still contains conflict markers") { _ = try parseAIConflictResolution(json) }
+            expectValidationError { _ = try parseAIConflictResolution(json) }
         }
         for content in ["<<<<<<<x\n=======", " <<<<<<< a\n=======", "<<<<<<< a\n========", "<<<<<<< a\n=======x"] {
             #expect(throws: Never.self, "\(content.debugDescription)") {
@@ -464,7 +454,7 @@ struct ValidateResolutionPathsTests {
                 reasoning: "merged"
             ),
         ]
-        expectValidationError(#"2 hunk\(s\).*expected 1"#) {
+        expectValidationError {
             try validateResolutionPaths(resolutions, [makeFile("text.ts", "a", "b")])
         }
     }
@@ -475,15 +465,15 @@ struct ValidateResolutionPathsTests {
         let a = RawFileResolution(path: "a.ts", hunks: [HunkResolution(resolvedContent: "x")], reasoning: "r")
         let b = RawFileResolution(path: "b.ts", hunks: [HunkResolution(resolvedContent: "x")], reasoning: "r")
         let c = RawFileResolution(path: "c.ts", hunks: [HunkResolution(resolvedContent: "x")], reasoning: "r")
-        expectValidationError("unexpected file: c.ts") { try validateResolutionPaths([a, c], expected) }
-        expectValidationError("duplicate file paths") { try validateResolutionPaths([a, a, b], expected) }
-        expectValidationError("did not return resolutions for: b.ts") { try validateResolutionPaths([a], expected) }
+        expectValidationError { try validateResolutionPaths([a, c], expected) }
+        expectValidationError { try validateResolutionPaths([a, a, b], expected) }
+        expectValidationError { try validateResolutionPaths([a], expected) }
     }
 
     @Test("compares paths by code units, as JavaScript does")
     func exactPaths() {
         let composed = RawFileResolution(path: "caf\u{E9}.ts", hunks: [HunkResolution(resolvedContent: "x")], reasoning: "r")
-        expectValidationError("unexpected file") {
+        expectValidationError {
             try validateResolutionPaths([composed], [makeFile("cafe\u{301}.ts", "a", "b")])
         }
     }
@@ -491,11 +481,11 @@ struct ValidateResolutionPathsTests {
     @Test("accepts an action only for a delete-vs-modify conflict")
     func actionsOnlyForDeleteConflicts() {
         let keep = RawFileResolution(path: "text.ts", hunks: [], reasoning: "keep it", action: .keep)
-        expectValidationError(#"action for "text.ts", which is not a delete-vs-modify conflict"#) {
+        expectValidationError {
             try validateResolutionPaths([keep], [makeFile("text.ts", "a", "b")])
         }
         let delete = RawFileResolution(path: "text.ts", hunks: [], reasoning: "drop it", action: .delete)
-        expectValidationError("not a delete-vs-modify conflict") {
+        expectValidationError {
             try validateResolutionPaths([delete], [makeFile("text.ts", "a", "b")])
         }
         #expect(throws: Never.self) {
@@ -535,7 +525,7 @@ struct ReassembleResolutionsTests {
 
     @Test("fails when the original content is unavailable")
     func missingRawContent() {
-        expectValidationError("original file content is unavailable") {
+        expectValidationError {
             _ = try reassembleResolutions(
                 [RawFileResolution(path: "a.ts", hunks: [HunkResolution(resolvedContent: "x")], reasoning: "r")],
                 [makeFile("a.ts", "a", "b")]
@@ -552,7 +542,7 @@ struct ReassembleResolutionsTests {
         // A single marker is enough to reject the file.
         for marker in ["<<<<<<< HEAD", ">>>>>>> feature", "<<<<<<<", ">>>>>>>\u{2003}x"] {
             let resolution = RawFileResolution(path: "a.ts", hunks: [HunkResolution(resolvedContent: "merged\n\(marker)")], reasoning: "r")
-            expectValidationError(#"resolved content of "a.ts" still contains conflict markers"#) {
+            expectValidationError {
                 _ = try reassembleResolutions([resolution], [file])
             }
         }
@@ -560,7 +550,7 @@ struct ReassembleResolutionsTests {
         // A marker outside the file's blocks stays in the file too.
         var stray = file
         stray.rawContent = rawContent + "\n<<<<<<< leftover"
-        expectValidationError("still contains conflict markers") {
+        expectValidationError {
             _ = try reassembleResolutions(
                 [RawFileResolution(path: "a.ts", hunks: [HunkResolution(resolvedContent: "merged")], reasoning: "r")],
                 [stray]

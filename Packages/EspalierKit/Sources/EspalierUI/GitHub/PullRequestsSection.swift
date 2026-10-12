@@ -94,11 +94,10 @@ struct PullRequestsHeader: View {
 /// shows nothing.
 struct DelayedSpinner: View {
     @State private var isVisible = false
-    @Environment(\.showsDelayedContentImmediately) private var showsImmediately
 
     var body: some View {
         Group {
-            if isVisible || showsImmediately {
+            if isVisible {
                 ArcProgress(.mini)
                     .accessibilityLabel("Loading")
             }

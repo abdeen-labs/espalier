@@ -553,7 +553,6 @@ struct AIConflictLoadingView: View {
     let content: AIConflictLoadingContent
     var onStop: () -> Void
     var onAbort: () -> Void
-    @Environment(\.fixedNow) private var fixedNow
 
     init(content: AIConflictLoadingContent, onStop: @escaping () -> Void = {}, onAbort: @escaping () -> Void = {}) {
         self.content = content
@@ -585,12 +584,8 @@ struct AIConflictLoadingView: View {
             Hairline()
             VStack(alignment: .leading, spacing: Metrics.grid) {
                 if content.reasoning.isEmpty {
-                    if fixedNow != nil {
-                        fallback(at: 0)
-                    } else {
-                        TimelineView(.periodic(from: .now, by: Self.fallbackInterval)) { timeline in
-                            fallback(at: Int(timeline.date.timeIntervalSinceReferenceDate / Self.fallbackInterval))
-                        }
+                    TimelineView(.periodic(from: .now, by: Self.fallbackInterval)) { timeline in
+                        fallback(at: Int(timeline.date.timeIntervalSinceReferenceDate / Self.fallbackInterval))
                     }
                 } else {
                     ForEach(Array(content.reasoning.enumerated()), id: \.offset) { index, line in
@@ -911,14 +906,13 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
 /// The results phase: Summary and Changes, the files, and Continue.
 struct AIConflictResultsView: View {
     let content: AIConflictResultsContent
-    var repository: RepositoryModel?
+    /// Whose files the rows act on.
+    let repository: RepositoryModel
     @Binding var alwaysUseAI: Bool
     @State private var tab = Tab.summary
     @Environment(WindowContext.self) private var context
 
-    /// - Parameter repository: Whose files the rows act on (nil: none, for
-    ///   snapshots).
-    init(content: AIConflictResultsContent, repository: RepositoryModel? = nil, alwaysUseAI: Binding<Bool>) {
+    init(content: AIConflictResultsContent, repository: RepositoryModel, alwaysUseAI: Binding<Bool>) {
         self.content = content
         self.repository = repository
         _alwaysUseAI = alwaysUseAI
@@ -967,14 +961,12 @@ struct AIConflictResultsView: View {
                     .padding(.vertical, Metrics.grid)
             }
         case .changes:
-            if let repository {
-                AIResolutionChanges(repository: repository, paths: content.paths)
-                    .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
-                            .strokeBorder(.line, lineWidth: 1)
-                    )
-            }
+            AIResolutionChanges(repository: repository, paths: content.paths)
+                .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
+                        .strokeBorder(.line, lineWidth: 1)
+                )
         }
     }
 
@@ -1000,15 +992,13 @@ struct AIConflictResultsView: View {
                                 .font(Typography.secondary)
                                 .foregroundStyle(.text2)
                             Button("Stop") {
-                                repository?.ai.stopResolvingConflicts()
+                                repository.ai.stopResolvingConflicts()
                             }
                             .buttonStyle(.quiet)
                             .controlSize(.small)
                         } else {
                             Button("Try Again") {
-                                if let repository {
-                                    AIConflictFlow.retry(in: context, repository: repository)
-                                }
+                                AIConflictFlow.retry(in: context, repository: repository)
                             }
                             .buttonStyle(.quiet)
                             .controlSize(.small)
@@ -1034,9 +1024,6 @@ struct AIConflictResultsView: View {
     }
 
     private func rowActions(_ row: AIResolutionRow) -> AIResolutionRowActions {
-        guard let repository else {
-            return AIResolutionRowActions()
-        }
         let path = POSIXPath.join(repository.record.path, row.path)
         let actions = context.actions
         let integrations = context.app.integrations
@@ -1056,22 +1043,18 @@ struct AIConflictResultsView: View {
                 .font(Typography.secondary)
             Spacer()
             Button("Switch to Manual") {
-                repository?.ai.dismissConflictResolution()
+                repository.ai.dismissConflictResolution()
             }
             .buttonStyle(.secondary)
             .keyboardShortcut(.cancelAction)
             .disabled(content.isContinuing)
             Button(content.abortTitle) {
-                if let repository {
-                    AIConflictFlow.abort(in: context, repository: repository)
-                }
+                AIConflictFlow.abort(in: context, repository: repository)
             }
             .buttonStyle(.quiet)
             .disabled(content.isContinuing)
             Button(content.continueTitle) {
-                if let repository {
-                    AIConflictFlow.applyAndContinue(in: context, repository: repository)
-                }
+                AIConflictFlow.applyAndContinue(in: context, repository: repository)
             }
             .buttonStyle(.prominent)
             .keyboardShortcut(.defaultAction)

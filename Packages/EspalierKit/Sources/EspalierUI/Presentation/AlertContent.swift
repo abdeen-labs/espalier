@@ -1,6 +1,6 @@
 // One value describes every alert Espalier shows (confirmations, errors,
-// prompts, the quit guard, state notices), so the same card draws it at run
-// time and in snapshots (`AlertCard`).
+// prompts, the quit guard, state notices), so one card draws them all
+// (`AlertCard`).
 
 import Foundation
 

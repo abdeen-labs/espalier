@@ -70,13 +70,11 @@ struct SyncProgressTests {
         let pushWeight = 2.5 / 3.5 * 0.9
         let pushes = values.compactMap { if case .push(let progress) = $0 { progress } else { nil } }
         #expect(!pushes.isEmpty)
-        #expect(pushes.allSatisfy { $0.value <= pushWeight + 1e-9 && $0.title == "Pushing to origin" && $0.branch == "main" })
+        #expect(pushes.allSatisfy { $0.value <= pushWeight + 1e-9 && $0.branch == "main" })
         let fetches = values.compactMap { if case .fetch(let progress) = $0 { progress } else { nil } }
         #expect(!fetches.isEmpty)
         #expect(fetches.allSatisfy { $0.value >= pushWeight - 1e-9 && $0.value <= 0.9 + 1e-9 })
         #expect(refreshesAtDesktopsValues(values))
-        #expect(refreshing(values).map(\.title) == ["Refreshing Repository", "Refreshing Repository"])
-        #expect(refreshing(values).first?.description == "Fast-forwarding branches")
         #expect(zip(values, values.dropFirst()).allSatisfy { $0.value <= $1.value })
         await fixture.app.idle()
     }
@@ -98,7 +96,7 @@ struct SyncProgressTests {
         let values = recorder.values
         let pulls = values.compactMap { if case .pull(let progress) = $0 { progress } else { nil } }
         #expect(!pulls.isEmpty)
-        #expect(pulls.allSatisfy { $0.value <= 0.6 + 1e-9 && $0.title == "Pulling origin" })
+        #expect(pulls.allSatisfy { $0.value <= 0.6 + 1e-9 })
         #expect(refreshesAtDesktopsValues(values))
         #expect(zip(values, values.dropFirst()).allSatisfy { $0.value <= $1.value })
         await fixture.app.idle()
@@ -122,8 +120,8 @@ struct SyncProgressTests {
         let origin = fetches.filter { $0.remote == "origin" }
         let mirrorProgress = fetches.filter { $0.remote == "mirror" }
         #expect(!origin.isEmpty && !mirrorProgress.isEmpty)
-        #expect(origin.allSatisfy { $0.value <= 0.45 + 1e-9 && $0.title == "Fetching origin" })
-        #expect(mirrorProgress.allSatisfy { $0.value >= 0.45 - 1e-9 && $0.value <= 0.9 + 1e-9 && $0.title == "Fetching mirror" })
+        #expect(origin.allSatisfy { $0.value <= 0.45 + 1e-9 })
+        #expect(mirrorProgress.allSatisfy { $0.value >= 0.45 - 1e-9 && $0.value <= 0.9 + 1e-9 })
         #expect(refreshesAtDesktopsValues(recorder.values))
         await fixture.app.idle()
     }

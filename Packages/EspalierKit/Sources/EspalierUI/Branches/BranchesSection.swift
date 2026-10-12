@@ -738,11 +738,11 @@ public struct BranchesSection: View {
     }
 }
 
-/// The section's rows, value-driven: with a repository, the branch rows
-/// (and the transient New Branch… row) take dropped commits.
+/// The section's rows: the branch rows (and the transient New Branch… row)
+/// take dropped commits.
 struct BranchesSectionRows: View {
     let content: BranchesSectionContent
-    var repository: RepositoryModel?
+    let repository: RepositoryModel
     var showsNewBranchDropRow = false
 
     var body: some View {
@@ -812,25 +812,21 @@ struct BranchesSectionRows: View {
     }
 }
 
-/// A branch row in the sidebar: selectable, and, with a repository, a
-/// target for dropped commits that loads how its branch compares with its
-/// upstream while it's on screen.
+/// A branch row in the sidebar: selectable, a target for dropped commits,
+/// and loading how its branch compares with its upstream while it's on
+/// screen.
 struct BranchSidebarRow: View {
     let content: BranchRowContent
-    let repository: RepositoryModel?
+    let repository: RepositoryModel
     @State private var isDropTarget = false
 
     var body: some View {
         let place = SidebarPlace.branch(ref: content.ref)
-        let row = BranchRow(content, dotColor: repository.map { Self.dotColor(content, in: $0) })
+        BranchRow(content, dotColor: Self.dotColor(content, in: repository))
             .sidebarRow(place, isDropTarget: isDropTarget)
             .tag(place)
-        if let repository {
-            row.commitDropTarget(.branch(name: content.name, isCurrent: content.isCurrent), repository: repository, isTargeted: $isDropTarget)
-                .modifier(UpstreamStateWatcher(ref: content.watchesUpstreamState ? content.ref : nil, repository: repository))
-        } else {
-            row
-        }
+            .commitDropTarget(.branch(name: content.name, isCurrent: content.isCurrent), repository: repository, isTargeted: $isDropTarget)
+            .modifier(UpstreamStateWatcher(ref: content.watchesUpstreamState ? content.ref : nil, repository: repository))
     }
 }
 
@@ -872,7 +868,7 @@ nonisolated extension BranchRowContent {
 /// Folders and branches, folders as disclosure groups.
 struct BranchNodeList: View {
     let nodes: [BranchNode]
-    let repository: RepositoryModel?
+    let repository: RepositoryModel
     let isFiltering: Bool
 
     var body: some View {
@@ -1011,14 +1007,13 @@ struct BranchesSectionHeader: View {
     /// The branches the branch pruner deleted this session.
     let prunedBranches: [PrunedBranch]
     @Environment(WindowContext.self) private var context
-    @Environment(\.fixedNow) private var fixedNow
 
     var body: some View {
         SidebarSectionHeader("Branches") {
             let pruned = prunedBranches
             if !pruned.isEmpty {
-                PullDownButton("More Branch Actions") { [context, fixedNow] in
-                    RestorePrunedBranchMenu.content(pruned: pruned, now: fixedNow ?? Date(), context: context)
+                PullDownButton("More Branch Actions") { [context] in
+                    RestorePrunedBranchMenu.content(pruned: pruned, now: Date(), context: context)
                 } label: {
                     Image(systemName: "ellipsis")
                 }
@@ -1036,9 +1031,9 @@ struct BranchesSectionHeader: View {
             .tooltip(ActionKind.newBranch.title)
             .accessibilityLabel(ActionKind.newBranch.title)
         }
-        .contextMenuCard { [prunedBranches, context, fixedNow] in
+        .contextMenuCard { [prunedBranches, context] in
             if !prunedBranches.isEmpty {
-                RestorePrunedBranchMenu.content(pruned: prunedBranches, now: fixedNow ?? Date(), context: context)
+                RestorePrunedBranchMenu.content(pruned: prunedBranches, now: Date(), context: context)
             }
         }
     }

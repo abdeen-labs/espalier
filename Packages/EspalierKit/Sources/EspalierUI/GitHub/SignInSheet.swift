@@ -253,8 +253,7 @@ public struct SignInSheet: View {
         if let signIn = context?.app.accounts.signIn {
             sheet(signIn)
         } else {
-            // No window to sign in from (a snapshot of git's prompt): the
-            // first step, and Cancel.
+            // No window to sign in from: the first step, and Cancel.
             SignInView(content: SignInContent(state: nil, request: request), actions: SignInActions(
                 cancel: { finish(nil) },
                 continueSignIn: {},
@@ -381,8 +380,6 @@ struct SignInActions {
     var submitAddress: (_ address: String, _ clientID: String) -> Void
     var copyCode: (String) -> Void
     var openVerificationPage: (String) -> Void
-
-    static let none = SignInActions(cancel: {}, continueSignIn: {}, submitAddress: { _, _ in }, copyCode: { _ in }, openVerificationPage: { _ in })
 }
 
 /// The sheet's content for a step.
@@ -517,7 +514,6 @@ struct SignInView: View {
 private struct SignInCodeStep: View {
     let code: SignInCodeContent
     let actions: SignInActions
-    @Environment(\.fixedNow) private var fixedNow
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetMedium) {
@@ -556,12 +552,8 @@ private struct SignInCodeStep: View {
             .controlSize(.extraLarge)
             .keyboardShortcut(.defaultAction)
             .tooltip("Copies the code and opens the page in your browser")
-            if let fixedNow {
-                status(now: fixedNow)
-            } else {
-                TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                    status(now: timeline.date)
-                }
+            TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                status(now: timeline.date)
             }
         }
     }

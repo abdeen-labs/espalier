@@ -3,7 +3,7 @@
 // ideal size, capped to the screen; the card follows it, and where the
 // card is larger for a moment (while it resizes) the content keeps to the
 // anchor's side. The card fades in and settles from 97% toward its anchor
-// as it arrives, except under Reduce Motion, offscreen, and in snapshots.
+// as it arrives, except under Reduce Motion and offscreen.
 // `PopoverController` shows it in an `AnchoredPanel`.
 
 import SwiftUI

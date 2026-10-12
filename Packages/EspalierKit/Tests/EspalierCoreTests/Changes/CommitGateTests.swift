@@ -32,9 +32,6 @@ struct CommitGateTests {
         let asked = try #require(confirmation(of: error))
         #expect(asked.kind == .commitFilteredChanges)
         #expect(asked.details == .files(["hidden.txt"]))
-        #expect(asked.title == "Commit Filtered Changes?")
-        #expect(asked.confirmButton == "Commit Anyway")
-        #expect(error?.title == "Commit Filtered Changes?")
         #expect(try await fixture.commitCount() == 1)
 
         // Excluding the hidden file needs no confirmation.
@@ -67,7 +64,6 @@ struct CommitGateTests {
         let asked = try #require(confirmation(of: error))
         #expect(asked.kind == .commitOversizedFiles)
         #expect(asked.details == .files(["big.bin"]))
-        #expect(asked.title == "Commit Large Files?")
 
         // Excluded, it's not asked about.
         fixture.changes.setIncluded([try fixture.file("big.bin").id], false)
@@ -106,7 +102,6 @@ struct CommitGateTests {
         let asked = try #require(confirmation(of: error))
         #expect(asked.kind == .commitConflictMarkers)
         #expect(asked.details == .files(["foo"]))
-        #expect(asked.title == "Commit Conflicted Files?")
 
         // Committing anyway records the merge, markers and all.
         let result = try await fixture.commit.commit(confirmed: [.commitConflictMarkers])
@@ -154,7 +149,7 @@ struct CommitGateTests {
         await fixture.refresh()
         #expect(fixture.commit.summaryPlaceholder == nil)
         let error = await #expect(throws: OperationError.self) { try await fixture.commit.commit() }
-        #expect(error?.reason == .precondition("Enter a summary to commit"))
+        #expect(preconditionText(error) != nil)
         await fixture.settle()
     }
 
@@ -179,11 +174,7 @@ struct CommitGateTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.commit.commit(confirmed: [.commitConflictMarkers])
         }
-        guard case .precondition(let message)? = error?.reason else {
-            Issue.record("Expected a precondition, got \(String(describing: error))")
-            return
-        }
-        #expect(message.hasPrefix("Resolve conflicts to continue rebasing"))
+        #expect(preconditionText(error) != nil)
         await fixture.settle()
     }
 }

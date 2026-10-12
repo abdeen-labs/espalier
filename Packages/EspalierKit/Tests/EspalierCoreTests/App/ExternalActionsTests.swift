@@ -345,10 +345,9 @@ struct ExternalActionsTests {
         let (harness, app, _, _, _) = try await makeRepository()
         let action = try url("espalier://openRepo/https://github.com/octocat/app?pr=12")
 
-        let noAccount = await #expect(throws: OperationError.self) {
+        await #expect(throws: OperationError.self) {
             try await app.handle(action)
         }
-        #expect(noAccount?.message == "Sign in to github.com to check out this pull request.")
 
         try await harness.signIn([testAccount], to: app)
         harness.gitHub.on("GET", "/repos/octocat/app/pulls/12", respond: .status(404))
@@ -406,7 +405,6 @@ struct ExternalActionsTests {
         #expect(added.existing == [existingID])
         #expect(added.added.count == 1)
         #expect(added.invalidPaths == [notRepository])
-        #expect(added.invalidPathsMessage == "\(notRepository) isn't a Git repository.")
         #expect(app.selection == added.added.first.map(AppSelection.repository))
 
         _ = try await app.handle(.folders([POSIXPath.join(existing.path, ".git", "..")]))

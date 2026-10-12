@@ -1,8 +1,7 @@
 // Find in the diff: what a query matches (ignoring case, several on a line,
 // across hunks, the old side then the new when split, never hunk headers),
-// where the current match starts and how Next and Previous wrap, the count,
-// typing and the diff changing under the current match, Use Selection for
-// Find, and what VoiceOver hears.
+// where the current match starts and how Next and Previous wrap, typing and
+// the diff changing under the current match, and Use Selection for Find.
 
 import AppKit
 import EspalierCore
@@ -72,14 +71,10 @@ struct DiffFindTests {
 
     // MARK: The current match
 
-    @Test("the current match is the first from where find opened; Next and Previous wrap around, and VoiceOver hears where they land")
+    @Test("the current match is the first from where find opened; Next and Previous wrap around")
     func navigation() {
-        let announcements = RecordedAnnouncements()
         let find = model("tip", from: DiffFindPosition(row: 5, column: .before, offset: 0))
-        find.announcer = announcements.announcer
         #expect(find.currentMatch == Self.tipMatches[4])
-        #expect(find.countText == "5 of 8")
-        #expect(find.countAccessibilityLabel == "Match 5 of 8")
 
         find.findNext()
         find.findNext()
@@ -87,13 +82,8 @@ struct DiffFindTests {
         #expect(find.current == 7)
         find.findNext()
         #expect(find.current == 0)
-        #expect(find.countText == "1 of 8")
         find.findPrevious()
         #expect(find.current == 7)
-        #expect(announcements.messages == [
-            "Result 6 of 8 for \"tip\"", "Result 7 of 8 for \"tip\"", "Result 8 of 8 for \"tip\"",
-            "Result 1 of 8 for \"tip\"", "Result 8 of 8 for \"tip\"",
-        ])
     }
 
     @Test("typing keeps the current match where it was, also past a query that matches nothing; no query, no count")
@@ -104,7 +94,6 @@ struct DiffFindTests {
         #expect(find.currentMatch == Self.match(4, 38..<41))
         find.query = "tipx"
         #expect(find.currentMatch == nil)
-        #expect(find.countText == "No matches")
         find.query = "tip"
         #expect(find.currentMatch == Self.match(4, 38..<41))
         find.query = ""

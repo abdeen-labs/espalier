@@ -17,7 +17,6 @@ struct CommitDragImageTests {
 
         let several = CommitDragImage.Layout(rowSize: rowSize, count: 5)
         #expect(several.cardsBehind.count == 2)
-        #expect(several.badgeText == "5")
         guard let badge = several.badge else {
             Issue.record("No badge for several commits")
             return

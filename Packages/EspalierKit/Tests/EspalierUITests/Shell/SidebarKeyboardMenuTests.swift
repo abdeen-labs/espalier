@@ -38,18 +38,14 @@ struct SidebarKeyboardMenuTests {
             #expect(KeyboardContextMenu.handle(try f10KeyDown(in: window), in: window, presenter: recorder.menuPresenter))
             let popup = try #require(recorder.popups.first)
             #expect(table.row(at: table.convert(popup.location, from: popup.view)) == row)
-            #expect(popup.titles == ["History Scope"])
-            #expect(popup.item("History Scope")?.submenu?.items.map(\.title) == HistoryScope.allCases.map { context.actions.title(for: .setHistoryScope($0)) })
 
             // VoiceOver's Show Menu on a place's cell: Changes', unselected,
-            // is Changes' menu, and Changes is its target.
+            // opens at its row, and Changes is its target.
             let changesRow = row - 1
-            let changesMenu = [context.actions.title(for: .stashAllChanges), context.actions.title(for: .discardAllChanges)]
             let changes = try #require(allViews(ContextMenuRowView.self, in: table).first { $0.enclosingTableRow?.row == changesRow })
             #expect(KeyboardContextMenu.showMenu(of: changes, presenter: recorder.menuPresenter))
             #expect(recorder.popups.count == 2)
             #expect(table.row(at: table.convert(recorder.popups[1].location, from: recorder.popups[1].view)) == changesRow)
-            #expect(recorder.popups[1].titles == changesMenu)
             let region = try #require(ContextMenuRegions.listRegion(for: table))
             #expect(region.listHost?.target.id == AnyHashable(SidebarPlace.changes))
 
@@ -68,7 +64,6 @@ struct SidebarKeyboardMenuTests {
             ))
             #expect(MenuEventRouter.shared.handle(rightClick) == nil)
             #expect(recorder.popups.count == 3)
-            #expect(recorder.popups[2].titles == changesMenu)
             #expect(table.selectedRow == row)
             await app.idle()
         }

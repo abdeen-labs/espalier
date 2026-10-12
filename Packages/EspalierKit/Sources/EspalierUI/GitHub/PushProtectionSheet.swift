@@ -107,8 +107,6 @@ struct PushProtectionActions {
     var open: (URL) -> Void
     var copy: (String) -> Void
     var close: () -> Void
-
-    static let none = PushProtectionActions(bypass: { _ in }, open: { _ in }, copy: { _ in }, close: {})
 }
 
 /// The sheet's content.

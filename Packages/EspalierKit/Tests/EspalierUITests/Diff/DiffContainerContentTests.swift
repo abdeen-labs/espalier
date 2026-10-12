@@ -40,7 +40,7 @@ struct DiffContainerContentTests {
             Issue.record("Expected the error")
             return
         }
-        #expect(failure.message == error.message)
+        #expect(failure.reason == error.reason)
     }
 
     @Test("a binary, unrenderable, or submodule diff shows its own view, interactive once loaded")

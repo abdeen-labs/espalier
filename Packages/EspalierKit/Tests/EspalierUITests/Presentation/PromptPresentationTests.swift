@@ -29,7 +29,7 @@ struct PromptPresentationTests {
             Issue.record("Expected an alert, got \(presentation)")
             return
         }
-        #expect(content.buttons.map(\.title) == ["Connect", "Cancel"])
+        #expect(content.buttons.map(\.role) == [.primary, .cancel])
         #expect(answer(AlertResponse(buttonIndex: 0)) == .addSSHHost(true))
         #expect(answer(AlertResponse(buttonIndex: 1)) == .addSSHHost(false))
         #expect(answers.received.isEmpty)

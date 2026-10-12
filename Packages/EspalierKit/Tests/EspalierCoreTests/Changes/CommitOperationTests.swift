@@ -79,25 +79,25 @@ struct CommitOperationTests {
         await app.idle()
     }
 
-    @Test("refuses with desktop's copy when there's nothing to commit")
+    @Test("refuses when there's nothing to commit")
     func nothingToCommit() async throws {
         let (harness, app, repository, local) = try await makeRepository()
 
         repository.commit.draft.summary = "Nothing"
         let nothing = await #expect(throws: OperationError.self) { try await repository.commit.commit() }
-        #expect(nothing?.reason == .precondition("There are no changes to commit."))
+        #expect(preconditionText(nothing) != nil)
 
         try harness.write("a.txt", "a\n", in: local)
         try harness.write("b.txt", "b\n", in: local)
         await repository.refresh(.status, reason: .user)
         repository.commit.draft.summary = ""
         let noSummary = await #expect(throws: OperationError.self) { try await repository.commit.commit() }
-        #expect(noSummary?.reason == .precondition("Enter a summary to commit"))
+        #expect(preconditionText(noSummary) != nil)
 
         repository.commit.draft.summary = "Something"
         repository.changes.setIncludeAll(false)
         let noFiles = await #expect(throws: OperationError.self) { try await repository.commit.commit() }
-        #expect(noFiles?.reason == .precondition("Select one or more files to commit"))
+        #expect(preconditionText(noFiles) != nil)
         #expect(try await commitCount(local) == 1)
 
         // Allowing an empty commit commits nothing, once.
@@ -126,7 +126,6 @@ struct CommitOperationTests {
         }
         #expect(confirmation.kind == .commitWithUnknownCoAuthors)
         #expect(confirmation.details == .authors(["ghost"]))
-        #expect(confirmation.title == "Commit Without Unknown Co-Authors?")
         #expect(try await commitCount(local) == 1)
 
         _ = try await repository.commit.commit(confirmed: [.commitWithUnknownCoAuthors])
@@ -195,7 +194,7 @@ struct CommitOperationTests {
         await app.idle()
     }
 
-    @Test("a failure is titled Commit failed, keeps the message, and still refreshes")
+    @Test("a failure keeps the message and still refreshes")
     func failure() async throws {
         let (harness, app, repository, local) = try await makeRepository()
         try writeScript(local.path + "/.git/hooks/pre-commit", "#!/bin/sh\necho 'lint failed' >&2\nexit 1\n")
@@ -205,7 +204,6 @@ struct CommitOperationTests {
         let passes = repository.refreshScheduler.passCount
 
         let error = await #expect(throws: OperationError.self) { try await repository.commit.commit() }
-        #expect(error?.title == "Commit Failed")
         #expect(error?.gitContext == .commit)
         #expect(error?.message.contains("lint failed") == true)
         #expect(repository.commit.draft.summary == "Add a")

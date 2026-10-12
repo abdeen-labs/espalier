@@ -2,7 +2,7 @@
 // branch's semibold, the one way it's marked), the branch's pull request,
 // and how it compares with its upstream ("↑2 ↓3", not published, or its
 // upstream gone). Value-driven: `BranchRowContent` is built from the models
-// by `BranchesSectionContent` and snapshotted on its own.
+// by `BranchesSectionContent`.
 
 import EspalierCore
 import GitHubKit

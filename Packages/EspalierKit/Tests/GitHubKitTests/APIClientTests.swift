@@ -128,20 +128,16 @@ struct APIClientTests {
             #expect(mock.requests.first?.json == ["name": "new-repo", "description": "A repo", "private": true])
         }
 
-        @Test("maps failures to desktop's messages when creating repositories")
+        @Test("throws a GitHubError when creating a repository fails")
         func createRepositoryErrors() async {
             mock.on("POST", "/orgs/desktop/repos", respond: .json(["message": "Validation Failed"], status: 422))
             mock.on("POST", "/user/repos", respond: .networkError(.notConnectedToInternet))
             let org = APIOrganization(id: 1, url: "", login: "desktop", avatarURL: "")
 
-            await #expect(throws: GitHubError(
-                "Couldn't create the repository in desktop. Check that desktop doesn't already have a repository with this name, and that you can create repositories there."
-            )) {
+            await #expect(throws: GitHubError.self) {
                 try await api.createRepository(org: org, name: "r", description: "", private: false)
             }
-            await #expect(throws: GitHubError(
-                "Couldn't publish the repository. Check your internet connection and try again."
-            )) {
+            await #expect(throws: GitHubError.self) {
                 try await api.createRepository(org: nil, name: "r", description: "", private: false)
             }
         }

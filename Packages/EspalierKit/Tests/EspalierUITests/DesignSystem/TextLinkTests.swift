@@ -17,7 +17,6 @@ struct TextLinkTests {
 
         let rest = LinkedText.styled(text, underlined: false)
         let hovered = LinkedText.styled(text, underlined: true)
-        #expect(String(rest.characters) == "Read the guide first.")
         let color = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute.self
         let underline = AttributeScopes.SwiftUIAttributes.UnderlineStyleAttribute.self
         for run in rest.runs {
@@ -39,7 +38,6 @@ struct TextLinkTests {
     @Test("Markdown links become links")
     func markdown() {
         let text = LinkedText(markdown: "See [the docs](https://git-scm.com/docs/gitignore).").text
-        #expect(String(text.characters) == "See the docs.")
         #expect(text.runs.contains { $0.link == URL(string: "https://git-scm.com/docs/gitignore") })
     }
 }

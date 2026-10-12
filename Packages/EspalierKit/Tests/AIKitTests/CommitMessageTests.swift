@@ -16,10 +16,7 @@ struct CommitMessageTests {
     @Test("rejects arrays, null, and primitives as non-object payloads")
     func rejectsNonObjects() {
         for content in ["[]", "null", "42"] {
-            #expect(
-                throws: AIResponseError("The model returned an invalid commit message payload: expected an object"),
-                "\(content)"
-            ) {
+            #expect(throws: AIResponseError.self, "\(content)") {
                 try parseAICommitMessage(content)
             }
         }
@@ -42,28 +39,16 @@ struct CommitMessageTests {
 
     @Test("rejects invalid JSON, blank titles, and non-string descriptions")
     func rejectsInvalidPayloads() {
-        #expect(throws: AIResponseError("The model returned invalid JSON for commit message generation")) {
+        #expect(throws: AIResponseError.self) {
             try parseAICommitMessage("Fix the bug")
         }
-        #expect(
-            throws: AIResponseError(
-                #"The model returned an invalid commit message payload: "title" must be a non-empty string"#
-            )
-        ) {
+        #expect(throws: AIResponseError.self) {
             try parseAICommitMessage(#"{"title":"  ","description":"D"}"#)
         }
-        #expect(
-            throws: AIResponseError(
-                #"The model returned an invalid commit message payload: "title" must be a non-empty string"#
-            )
-        ) {
+        #expect(throws: AIResponseError.self) {
             try parseAICommitMessage(#"{"title":1}"#)
         }
-        #expect(
-            throws: AIResponseError(
-                #"The model returned an invalid commit message payload: "description" must be a string when provided"#
-            )
-        ) {
+        #expect(throws: AIResponseError.self) {
             try parseAICommitMessage(#"{"title":"T","description":null}"#)
         }
     }

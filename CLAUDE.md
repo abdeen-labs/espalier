@@ -221,7 +221,8 @@ My rule: rigor where a mistake hurts users, not everywhere.
   (EspalierCoreTestSupport, with `ManualFileWatcher` and recording
   services) and wait with `idle()` and `ManualScheduler`. `AppHarness`
   starts a background service only when given `backgroundServices:`.
-- No screenshot tests.
+- Never write screenshot, snapshot, or string tests (tests of strings the
+  UI shows).
 - Tests run in parallel in one process, so a test leaves process-wide state
   (`setenv`, `chdir`, `GitRuntime.configure`) alone.
 - Blocking work in a test (a blocking `read`, a semaphore wait,
@@ -237,9 +238,8 @@ My rule: rigor where a mistake hurts users, not everywhere.
   for the event itself (`AsyncEvent`, observation, a dispatch source) and
   end when the task is cancelled.
 - Cases of one shape are one `@Test(arguments:)` over `NamedCase`s.
-- A test earns its place by checking behavior: no tests of strings the UI
-  shows, constants, copied mapping tables, test doubles, or exact
-  duplicates.
+- A test earns its place by checking behavior: no tests of constants,
+  copied mapping tables, test doubles, or exact duplicates.
 
 ## Conventions
 

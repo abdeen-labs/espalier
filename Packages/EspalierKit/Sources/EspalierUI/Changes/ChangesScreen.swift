@@ -15,7 +15,6 @@ import SwiftUI
 public struct ChangesScreen: View {
     private let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
-    @Environment(\.showsDelayedContentImmediately) private var showsDelayedContentImmediately
     /// The operation panel's 300 ms rule.
     @State private var operationPresence = OperationPanelPresence()
 
@@ -25,7 +24,7 @@ public struct ChangesScreen: View {
 
     public var body: some View {
         let demand = OperationPanelPresence.demand(for: repository)
-        let showsPanel = operationPresence.isShown(for: demand, immediately: showsDelayedContentImmediately)
+        let showsPanel = operationPresence.isShown(for: demand)
         SplitView(.changes) {
             ChangesColumn(repository: repository)
         } trailing: {

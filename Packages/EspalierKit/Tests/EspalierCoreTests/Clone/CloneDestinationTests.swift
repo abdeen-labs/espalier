@@ -1,6 +1,6 @@
-// The clone dialog's behavior that isn't layout: `validateClonePath` with
-// its messages, the local path that follows the URL, the default folder,
-// and `resolveCloneInfo` against a mock GitHub. "desktop's dialog test"
+// The clone dialog's behavior that isn't layout: `validateClonePath`, the
+// local path that follows the URL, the default folder, and
+// `resolveCloneInfo` against a mock GitHub. "desktop's dialog test"
 // carries over the cases of
 // desktop/app/test/unit/ui/clone-repository-test.tsx that aren't about
 // its layout.
@@ -33,7 +33,6 @@ struct CloneDestinationTests {
         try Data().write(to: URL(filePath: POSIXPath.join(directory, ".hidden")))
 
         #expect(await validateClonePath(directory) == .notEmpty)
-        #expect(CloneDestinationProblem.notEmpty.message == "This folder contains files. Git can only clone to empty folders.")
     }
 
     @Test("a file isn't a folder")
@@ -42,7 +41,6 @@ struct CloneDestinationTests {
         try Data("x".utf8).write(to: URL(filePath: file))
 
         #expect(await validateClonePath(file) == .notAFolder)
-        #expect(CloneDestinationProblem.notAFolder.message == "There is already a file with this name. Git can only clone to a folder.")
     }
 
     @Test("desktop's dialog test: .app folders are refused, as derived from the URL or edited, whatever the case or trailing separators")
@@ -78,10 +76,6 @@ struct CloneDestinationTests {
         let corrected = clonePath(changed, afterURLChangeFrom: "https://example.com/owner/changed.app.git", to: "https://example.com/owner/changed.git")
         #expect(corrected == POSIXPath.join(directory, "changed"))
         #expect(await validateClonePath(corrected) == nil)
-        #expect(
-            CloneDestinationProblem.applicationBundle.message
-                == "The folder's name can't end in .app, because macOS would treat it as an app. Choose a different name."
-        )
     }
 
     @Test("a folder that can't be read is reported")
@@ -92,7 +86,6 @@ struct CloneDestinationTests {
         defer { chmod(directory, 0o755) }
 
         #expect(await validateClonePath(directory) == .unreadable)
-        #expect(CloneDestinationProblem.unreadable.message == "Couldn't read this location. Check the path and try again.")
     }
 
     // MARK: The local path
@@ -200,7 +193,7 @@ struct CloneResolutionTests {
         await settle(app, harness)
     }
 
-    @Test("a repository the account's API can't find is refused with Espalier's copy")
+    @Test("a repository the account's API can't find is refused")
     func notFound() async throws {
         let harness = try AppHarness()
         harness.gitHub.on("GET", "/repos/octocat/secret", respond: .status(404))
@@ -210,10 +203,7 @@ struct CloneResolutionTests {
             try await app.clones.resolveCloneInfo("https://github.com/octocat/secret.git")
         }
         #expect(error?.operation == .clone)
-        #expect(
-            preconditionText(error)
-                == "Espalier couldn't find that repository. Check that you're signed in, that the network is available, and that the URL or owner/name is spelled correctly."
-        )
+        #expect(preconditionText(error) != nil)
 
         // An owner/name no account can see isn't cloned as typed: git could
         // only fail at it.

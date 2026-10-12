@@ -36,13 +36,10 @@ private struct TextLinkDrawing: ButtonStyle {
     }
 }
 
-/// A link's label in one state.
-struct TextLinkBody<Label: View>: View {
+/// A link's label: underlined while the pointer is over it.
+private struct TextLinkBody<Label: View>: View {
     let label: Label
     let isPressed: Bool
-    /// Draws the link as hovered whatever the pointer does (snapshots); nil
-    /// follows the pointer.
-    var isHoveredOverride: Bool?
     @Environment(\.isEnabled) private var isEnabled
     /// Whether the button has keyboard focus.
     @Environment(\.isFocused) private var isFocused
@@ -50,7 +47,7 @@ struct TextLinkBody<Label: View>: View {
 
     var body: some View {
         let color = Color(nsColor: Palette.link)
-        let isUnderlined = isEnabled && (isHoveredOverride ?? isHovered)
+        let isUnderlined = isEnabled && isHovered
         label
             .foregroundStyle(color)
             .underline(isUnderlined, color: color)
@@ -108,9 +105,6 @@ extension TextLink where Label == Text {
 public struct LinkedText: View {
     /// The text as given, before the links' styling.
     let text: AttributedString
-    /// Draws the text as hovered whatever the pointer does (snapshots);
-    /// nil follows the pointer.
-    var isHoveredOverride: Bool?
     @State private var isHovered = false
 
     public init(_ text: AttributedString) {
@@ -125,7 +119,7 @@ public struct LinkedText: View {
     }
 
     public var body: some View {
-        Text(Self.styled(text, underlined: isHoveredOverride ?? isHovered))
+        Text(Self.styled(text, underlined: isHovered))
             .tint(Color(nsColor: Palette.link))
             .onHover { isHovered = $0 }
     }

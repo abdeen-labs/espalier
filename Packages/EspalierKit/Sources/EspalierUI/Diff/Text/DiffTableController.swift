@@ -109,8 +109,6 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     let scrollView: NSScrollView
     let tableView: DiffTableView
     var actions = DiffTableActions()
-    /// Builds documents on the main actor (snapshots and tests).
-    var buildsSynchronously = false
 
     private(set) var content: DiffTableContent?
     /// The content of the document shown (it lags `content` while a new
@@ -319,10 +317,6 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         let generation = buildGeneration
         let input = content.documentInput
         buildTask?.cancel()
-        if buildsSynchronously {
-            install(DiffDocument(input: input), for: content)
-            return
-        }
         buildTask = Task.detached(priority: .userInitiated) { [weak self] in
             let document = DiffDocument(input: input)
             await MainActor.run { [weak self] in

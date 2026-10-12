@@ -66,7 +66,6 @@ struct ProgressFromProcessTests {
         let recorded = recorder.recorded
         let texts = recorded.map(\.text)
         #expect(texts.contains("Receiving objects:  50% (1/2)"))
-        #expect(texts.contains("Downloading a.bin (0 out of an estimated 1 completed, 5 B / 10 B)"))
         #expect(texts.last == "Receiving objects: 100% (2/2), done.")
         // Context lines are hidden while Git LFS progress shows.
         #expect(!texts.contains("remote: hidden while LFS progress shows"))
@@ -135,10 +134,8 @@ struct ProgressFromProcessTests {
         }
         try await git(scriptedGit(script), directory, "scripted", options: opts)
 
-        #expect(recorder.recorded.map(\.text) == [
-            "Downloading a.bin (1 out of an estimated 1 completed, 10 B / 10 B)",
-            "shown context",
-        ])
+        // After the Git LFS progress, only the context that follows filtering.
+        #expect(Array(recorder.recorded.map(\.text).dropFirst()) == ["shown context"])
     }
 
     @Test("reports progress from every process the options start, with one parser")

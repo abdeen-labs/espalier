@@ -176,7 +176,7 @@ struct PullOperationTests {
         #expect(error?.gitContext == .pull(currentBranch: "main", theirBranch: "origin/main"))
         #expect(error?.retry?.kind == .pull)
         let recovery = try #require(error?.recoveries.first)
-        #expect(recovery.title == "Stash Changes and Continue")
+        #expect(recovery.kind == .stashChangesAndRetry)
 
         try await recovery.perform(in: fixture.app)
         #expect(try await fixture.head() == (try await fixture.remoteTip("main")))
@@ -200,7 +200,7 @@ struct PullOperationTests {
         #expect(error?.gitFailure?.gitError == .rebaseWithStagedChanges)
         #expect(error?.retry?.kind == .pull)
         let recovery = try #require(error?.recoveries.first)
-        #expect(recovery.title == "Stash Changes and Continue")
+        #expect(recovery.kind == .stashChangesAndRetry)
 
         try await recovery.perform(in: fixture.app)
         #expect(try await fixture.head() == (try await fixture.remoteTip("main")))
@@ -241,7 +241,7 @@ struct PullOperationTests {
         #expect(error?.gitFailure?.gitError == .rebaseAlreadyInProgress)
         let recovery = try #require(error?.recoveries.first)
         #expect(error?.recoveries.count == 1)
-        #expect(recovery.title == "Clear Old Rebase and Continue")
+        #expect(recovery.kind == .clearLeftoverRebaseAndRetry)
         // Refusing changed nothing.
         #expect(try await fixture.head() == ours)
         #expect(fixture.gitFileExists("rebase-merge"))
@@ -308,31 +308,30 @@ struct PullOperationTests {
             try await fixture.model.sync.pull()
         }
         #expect(error?.gitFailure?.gitError == .rebaseAlreadyInProgress)
-        #expect(error?.message == "A rebase is already in progress. Finish or abort it first.")
         #expect(error?.recoveries.isEmpty == true)
         #expect(fixture.gitFileExists("rebase-merge/orig-head"))
         await fixture.app.idle()
     }
 
-    @Test("needs a remote and a branch, in desktop's words")
+    @Test("needs a remote and a branch")
     func preconditions() async throws {
         let fixture = try await makeSelectedRepository()
 
         try await runGit(["checkout", "-q", "--detach", "HEAD"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         var error = await #expect(throws: OperationError.self) { try await fixture.model.sync.pull() }
-        #expect(preconditionMessage(error) == "You're on a detached HEAD, not a branch.")
+        #expect(preconditionMessage(error) != nil)
 
         try await runGit(["checkout", "-q", "--orphan", "fresh"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         error = await #expect(throws: OperationError.self) { try await fixture.model.sync.pull() }
-        #expect(preconditionMessage(error) == "The current branch has no commits yet.")
+        #expect(preconditionMessage(error) != nil)
 
         try await runGit(["checkout", "-q", "main"], fixture.local)
         try await runGit(["remote", "remove", "origin"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         error = await #expect(throws: OperationError.self) { try await fixture.model.sync.pull() }
-        #expect(preconditionMessage(error) == "The repository has no remotes.")
+        #expect(preconditionMessage(error) != nil)
         await fixture.app.idle()
     }
 

@@ -80,13 +80,6 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     private(set) weak var history: HistoryModel?
     var actions = SimpleListActions()
     var avatarLoader: (any AvatarLoading)?
-    /// The time relative dates are measured from; nil for the clock, with
-    /// visible dates refreshed once a minute.
-    var fixedNow: Date? {
-        didSet {
-            updateMinuteTimer()
-        }
-    }
 
     var dateFormatting = DateTimeFormatting() {
         didSet {
@@ -146,7 +139,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         scrollView = NSScrollView(frame: .zero)
         super.init()
         configureTable()
-        updateMinuteTimer()
+        startMinuteTimer()
     }
 
     private func configureTable() {
@@ -565,7 +558,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
             return nil
         }
         let commit = simpleRow.commit
-        let date = dates.entry(for: commit.sha, date: commit.author.date, now: fixedNow ?? Date(), formatting: dateFormatting, timeZone: timeZone)
+        let date = dates.entry(for: commit.sha, date: commit.author.date, now: Date(), formatting: dateFormatting, timeZone: timeZone)
         let content = SimpleRowContent(
             kind: kind,
             sha: commit.sha,
@@ -1074,12 +1067,8 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     // MARK: Dates
 
-    private func updateMinuteTimer() {
-        minuteTimer?.invalidate()
-        minuteTimer = nil
-        guard fixedNow == nil else {
-            return
-        }
+    /// Shows the visible rows' relative dates again once a minute.
+    private func startMinuteTimer() {
         minuteTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.reconfigureVisibleRows()

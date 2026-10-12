@@ -194,8 +194,6 @@ struct PullRequestOverviewActions {
     var checkOutInNewWorktree: (() -> Void)?
     var open: (URL) -> Void
     var checks: ChecksListActions
-
-    static let none = PullRequestOverviewActions(checkOut: {}, checkOutInNewWorktree: nil, open: { _ in }, checks: .none)
 }
 
 /// The overview, from the models.
@@ -203,7 +201,6 @@ struct PullRequestOverview: View {
     let repository: RepositoryModel
     let pullRequest: PullRequest
     @Environment(WindowContext.self) private var context
-    @Environment(\.markdownParsesSynchronously) private var parsesSynchronously
     @State private var description: ParsedDescription?
 
     var body: some View {
@@ -244,10 +241,7 @@ struct PullRequestOverview: View {
     /// The description parsed for the current body and setting; nil while
     /// it's being parsed.
     private func parsedDescription(underlineLinks: Bool) -> MarkdownDocument? {
-        if parsesSynchronously {
-            return MarkdownDocument.parse(pullRequest.body, underlineLinks: underlineLinks)
-        }
-        return description?.matches(pullRequest.body, underlineLinks: underlineLinks) == true ? description?.document : nil
+        description?.matches(pullRequest.body, underlineLinks: underlineLinks) == true ? description?.document : nil
     }
 
     private var actions: PullRequestOverviewActions {
@@ -514,13 +508,10 @@ private struct PullRequestFilesAndDiff: View {
     let changes: PullRequestPreviewModel
     let repository: RepositoryModel
     let pullRequest: PullRequest
-    /// History's prefix for its inner splits' dividers (snapshots use
-    /// their own).
-    @Environment(\.historySplitAutosavePrefix) private var autosavePrefix
     @Environment(WindowContext.self) private var context
 
     var body: some View {
-        SplitView(autosaveName: "\(autosavePrefix).pullRequestFiles", leadingColumn: Metrics.Column.commitFileList) {
+        SplitView(autosaveName: "Espalier.Split.pullRequestFiles", leadingColumn: Metrics.Column.commitFileList) {
             ChangedFilesList(
                 selection: changes.selection,
                 repositoryPath: repository.record.path,

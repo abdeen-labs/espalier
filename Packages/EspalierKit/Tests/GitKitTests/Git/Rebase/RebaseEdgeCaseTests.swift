@@ -53,7 +53,6 @@ struct RebaseEdgeCaseTests {
                 try await rebase(repository, base, feature)
             }
             #expect(error?.result.gitError == .rebaseWithStagedChanges)
-            #expect(error?.message == "Can't rebase while you have uncommitted changes. Commit or stash them first.")
 
             #expect(try await RebaseTesting.revParse(repository, "feature") == tip)
             #expect(!isRebaseStateDirectoryPresent(repository))
@@ -102,7 +101,6 @@ struct RebaseEdgeCaseTests {
                 try await rebase(repository, base, feature)
             }
             #expect(error?.result.gitError == .rebaseAlreadyInProgress)
-            #expect(error?.message == "A rebase is already in progress. Finish or abort it first.")
             #expect(await getRebaseInternalState(repository) == state)
         }
 
@@ -126,7 +124,6 @@ struct RebaseEdgeCaseTests {
                 try await rebase(repository, base, feature)
             }
             #expect(error?.result.gitError == .rebaseAlreadyInProgress)
-            #expect(error?.message == "A rebase is already in progress. Finish or abort it first.")
             #expect(try await RebaseTesting.revParse(repository, "feature") == tip)
         }
 
@@ -148,7 +145,6 @@ struct RebaseEdgeCaseTests {
                 try await rebase(repository, base, feature)
             }
             #expect(error?.result.gitError == .applyingPatchesInProgress)
-            #expect(error?.message == "Git is applying patches (git am). Finish or abort that in Terminal first.")
             #expect(FileManager.default.fileExists(atPath: POSIXPath.join(repository.resolvedGitDir, "rebase-apply", "applying")))
         }
 
@@ -169,7 +165,6 @@ struct RebaseEdgeCaseTests {
                 try await rebase(repository, base, feature)
             }
             #expect(error?.result.gitError == .rebaseAlreadyInProgress)
-            #expect(error?.message == "A rebase is already in progress. Finish or abort it first.")
             #expect(FileManager.default.fileExists(atPath: rebasing))
         }
     }

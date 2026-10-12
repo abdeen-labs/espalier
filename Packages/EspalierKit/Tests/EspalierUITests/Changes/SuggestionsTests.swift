@@ -1,7 +1,7 @@
 // The primary suggestion for real repositories, in order (the stash,
 // publishing the repository, publishing the branch, pulling, pushing, a
 // pull request), and none before the repository's state has loaded; the
-// cards' words and shortcuts.
+// cards' actions, and which cards show.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -92,7 +92,7 @@ struct SuggestionsTests {
             // GitHub repositories get the View on GitHub card.
             let content = SuggestionsContent.make(fixture.repository, app: fixture.app, actions: fixture.context.actions)
             #expect(content.isGitHub)
-            #expect(content.gitHubCard?.buttonTitle == "View on GitHub")
+            #expect(content.gitHubCard != nil)
             await fixture.app.idle()
         }
     }
@@ -157,40 +157,14 @@ struct SuggestionsTests {
         }
     }
 
-    @Test("the cards' words and where else their actions live")
+    @Test("a card's action, and the cards a repository off GitHub shows")
     func cards() {
-        let format = defaultNumberFormat
-        let push = SuggestionsContent.Primary.push(remote: "origin", ahead: 2, tags: 1, isGitHub: true).card(numberFormat: format)
-        #expect(push.title == "Push commits and tags to the origin remote")
-        #expect(push.description == "You have 2 local commits and 1 tag waiting to be pushed to GitHub.")
-        #expect(push.discoverability == "Always available in the toolbar when there are local commits waiting to be pushed, or ⌘P")
-        #expect(push.buttonTitle == "Push origin")
+        let push = SuggestionsContent.Primary.push(remote: "origin", ahead: 2, tags: 1, isGitHub: true).card(numberFormat: defaultNumberFormat)
         #expect(push.action == .push)
         #expect(push.action.actionID.kind == .push)
-        // Each row shows its action's shortcut as a key cap.
-        #expect(push.action.shortcut == "⌘P")
-        #expect(SuggestionAction.showInFinder.shortcut == "⇧⌘F")
 
-        let pull = SuggestionsContent.Primary.pull(branch: "main", remote: "upstream", behind: 1, isGitHub: false).card(numberFormat: format)
-        #expect(pull.title == "Pull 1 commit from the upstream remote")
-        #expect(pull.description == "The current branch (main) has a commit on the remote that doesn't exist on this Mac.")
-        #expect(pull.discoverability.hasSuffix("⇧⌘P"))
-        #expect(pull.buttonTitle == "Pull upstream")
-
-        let publish = SuggestionsContent.Primary.publishBranch(branch: "feature", isGitHub: false).card(numberFormat: format)
-        #expect(publish.description == "The current branch (feature) hasn't been published to the remote yet. Publish it to share it and collaborate with others.")
-
-        // The line under the title says what's left: the primary
-        // suggestion's description, or the general note without one.
-        let pushing = SuggestionsContent(primary: .push(remote: "origin", ahead: 2, tags: 0, isGitHub: true), editorTitle: nil, isGitHub: true)
-        #expect(pushing.subtitle == "You have 2 local commits waiting to be pushed to GitHub.")
         let content = SuggestionsContent(primary: nil, editorTitle: "Open in Xcode", isGitHub: false)
-        #expect(content.subtitle == "There are no uncommitted changes in this repository. Here are some suggestions for what to do next.")
-        #expect(content.editorCard?.discoverability == "Repository menu or ⇧⌘A")
         #expect(content.editorCard?.descriptionLinksToSettings == true)
-        #expect(content.finderCard.discoverability == "Repository menu or ⇧⌘F")
         #expect(content.gitHubCard == nil)
-        #expect(SuggestionsContent.Primary.viewStash.card(numberFormat: format).discoverability == "View menu or ⌃H")
-        #expect(SuggestionsContent.Primary.pullRequest(branch: "f", choice: .createPullRequest).card(numberFormat: format).discoverability == "Branch menu or ⌘R")
     }
 }

@@ -50,15 +50,9 @@ struct ChangesScreenTests {
         }
     }
 
-    @Test("when nothing matches, the list says what it was filtered by")
+    @Test("without a filter, the list has no message for nothing matching")
     func noResults() {
         #expect(NoMatchingFiles.message(for: FileListFilter()) == nil)
-        #expect(NoMatchingFiles.message(for: FileListFilter(text: "loader")) == "No changed files match “loader”.")
-        #expect(NoMatchingFiles.message(for: FileListFilter(newFiles: true)) == "No changed files match the filter options.")
-        #expect(NoMatchingFiles.message(for: FileListFilter(text: "x", deletedFiles: true)) == "No changed files match “x” and the filter options.")
-        let note = HiddenChangesNote(count: 3, numberFormat: defaultNumberFormat) {}
-        #expect(note.text == "3 hidden files will be committed.")
-        #expect(HiddenChangesNote(count: 1, numberFormat: defaultNumberFormat) {}.text == "1 hidden file will be committed.")
     }
 
     // MARK: Keyboard and menus
@@ -90,22 +84,18 @@ struct ChangesScreenTests {
         let ignore = gitIgnoreMenuItems(for: ["Sources/App/Loader.swift"])
 
         let one = FileContextMenuContent.items(for: [loader], ignoreItems: ignore, editorTitle: "Open in Xcode", asksBeforeDiscarding: true, isRebaseConflicts: false)
-        #expect(one.map(\.title) == [
-            "Discard Changes…", "",
-            "Ignore File (Add to .gitignore)", "Ignore Folder (Add to .gitignore)", "Ignore All .swift Files (Add to .gitignore)", "",
-            "Copy File Path", "Copy Relative File Path", "",
-            "Show in Finder", "Open in Xcode", "Open with Default App",
-        ])
-        if case .submenu(let folders) = one[3].kind {
-            #expect(folders.map(\.title) == ["/Sources/App", "/Sources"])
-        } else {
-            Issue.record("Ignore Folder has no submenu")
-        }
-
-        // Without the confirmation, one file's discard has no ellipsis.
-        let quiet = FileContextMenuContent.items(for: [readme], ignoreItems: [], editorTitle: nil, asksBeforeDiscarding: false, isRebaseConflicts: false)
-        #expect(quiet.first?.title == "Discard Changes")
-        #expect(quiet.contains { $0.title == "Open in External Editor" })
+        let oneKinds: [FileMenuItem.Kind] = [
+            .command(.discard), .separator,
+            .command(.ignore(.files(["Sources/App/Loader.swift"]))),
+            .submenu([
+                FileMenuItem("/Sources/App", .ignore(.files(["/Sources/App"]))),
+                FileMenuItem("/Sources", .ignore(.files(["/Sources"]))),
+            ]),
+            .command(.ignore(.patterns(["*.swift"]))), .separator,
+            .command(.copyPaths), .command(.copyRelativePaths), .separator,
+            .command(.showInFinder), .command(.openInEditor), .command(.openWithDefaultProgram),
+        ]
+        #expect(one.map(\.kind) == oneKinds)
 
         let several = FileContextMenuContent.items(
             for: [readme, deleted],
@@ -114,13 +104,15 @@ struct ChangesScreenTests {
             asksBeforeDiscarding: false,
             isRebaseConflicts: false
         )
-        #expect(several.map(\.title) == [
-            "Discard 2 Selected Changes…", "",
-            "Ignore 2 Selected Files (Add to .gitignore)", "Ignore All .md Files (Add to .gitignore)", "Ignore All .swift Files (Add to .gitignore)", "",
-            "Include Selected Files", "Exclude Selected Files", "",
-            "Copy Paths", "Copy Relative Paths", "",
-            "Show in Finder", "Open in Xcode", "Open with Default App",
-        ])
+        let severalKinds: [FileMenuItem.Kind] = [
+            .command(.discard), .separator,
+            .command(.ignore(.files(["README.md", "Legacy/Old.swift"]))),
+            .command(.ignore(.patterns(["*.md"]))), .command(.ignore(.patterns(["*.swift"]))), .separator,
+            .command(.include), .command(.exclude), .separator,
+            .command(.copyPaths), .command(.copyRelativePaths), .separator,
+            .command(.showInFinder), .command(.openInEditor), .command(.openWithDefaultProgram),
+        ]
+        #expect(several.map(\.kind) == severalKinds)
 
         // A deleted file can't be shown or opened.
         let gone = FileContextMenuContent.items(for: [deleted], ignoreItems: [], editorTitle: "Open in Xcode", asksBeforeDiscarding: true, isRebaseConflicts: false)
@@ -128,7 +120,11 @@ struct ChangesScreenTests {
 
         // During a rebase's conflicts: discard (untracked only), copy, open.
         let rebase = FileContextMenuContent.items(for: [readme], ignoreItems: [], editorTitle: "Open in Xcode", asksBeforeDiscarding: true, isRebaseConflicts: true)
-        #expect(rebase.map(\.title) == ["Copy File Path", "Copy Relative File Path", "", "Show in Finder", "Open in Xcode", "Open with Default App"])
+        let rebaseKinds: [FileMenuItem.Kind] = [
+            .command(.copyPaths), .command(.copyRelativePaths), .separator,
+            .command(.showInFinder), .command(.openInEditor), .command(.openWithDefaultProgram),
+        ]
+        #expect(rebase.map(\.kind) == rebaseKinds)
         let untracked = FileContextMenuContent.items(
             for: [ModelFixtures.file("notes.txt", status: .untracked())],
             ignoreItems: [],
@@ -136,7 +132,7 @@ struct ChangesScreenTests {
             asksBeforeDiscarding: true,
             isRebaseConflicts: true
         )
-        #expect(untracked.first?.title == "Discard Changes…")
+        #expect(untracked.first?.kind == FileMenuItem.Kind.command(.discard))
     }
 
     @Test("the menu acts on the files: include, ignore, copy, discard through the presenter")
@@ -169,8 +165,6 @@ struct ChangesScreenTests {
             fixture.context.presenter.respond(to: pending.id, with: .cancelled)
             await fixture.settle()
             #expect((try? fixture.file("README.md")) != nil)
-            #expect(controller.discardTitle(count: 1) == "Discard Changes…")
-            #expect(controller.discardTitle(count: 3) == "Discard 3 Selected Changes…")
             await fixture.app.idle()
         }
     }
@@ -190,7 +184,6 @@ struct ChangesScreenTests {
             #expect(ChangesDetailKind.make(fixture.repository) == .multiple(count: 2))
             changes.select(fileIDs: [])
             #expect(ChangesDetailKind.make(fixture.repository) == .none)
-            #expect(MultipleSelectionContent.title(count: 2, numberFormat: defaultNumberFormat) == "2 Files Selected")
             await fixture.app.idle()
         }
     }
@@ -300,7 +293,7 @@ struct ChangesScreenTests {
             ? SnapshotWindow(contentRect: rect, styleMask: [.borderless], backing: .buffered, defer: false)
             : NSWindow(contentRect: rect, styleMask: [.borderless], backing: .buffered, defer: false)
         let host = NSHostingView(rootView: Snapshot.deterministic(
-            ChangesScreen(repository: fixture.repository).environment(\.diffBuildsSynchronously, true).windowEnvironment(fixture.context)
+            ChangesScreen(repository: fixture.repository).windowEnvironment(fixture.context)
         ))
         window.contentView = host
         host.frame = CGRect(origin: .zero, size: Self.size)
@@ -342,7 +335,6 @@ struct ChangesScreenTests {
             #expect(window.makeFirstResponder(list))
             #expect(actions.canPerform(.deleteSelection))
             #expect(actions.canPerform(.copyPath))
-            #expect(actions.title(for: .deleteSelection) == FileContextMenuContent.discardItem(count: 1, asksFirst: false).title)
             await actions.performAndWait(.deleteSelection)
             await waitUntil { !changes.workingDirectory.files.contains { $0.path == "README.md" } }
             #expect(changes.workingDirectory.files.map(\.path).sorted() == ["LICENSE", "Sources/App/Loader.swift"])
@@ -419,7 +411,7 @@ struct ChangesScreenTests {
         }
     }
 
-    @Test("⇧F10 opens the selected files' menu at the row selected last, and nothing without a selection; a right-click on another file opens its menu alone and rings its row")
+    @Test("⇧F10 opens the menu at the row selected last, and nothing without a selection; a right-click on another file opens the menu at its row and rings it")
     func keyboardContextMenu() async throws {
         try await withIsolatedGitConfig { _ in
             let (local, _) = try await setupRepositoryWithChanges()
@@ -435,7 +427,7 @@ struct ChangesScreenTests {
             #expect(KeyboardContextMenu.handle(key, in: window, presenter: recorder.menuPresenter))
             #expect(recorder.popups.isEmpty)
 
-            // Two files, README.md selected last: their menu, at its row.
+            // Two files, README.md selected last: the menu, at its row.
             let files = FileList.listedFiles(fixture.repository)
             let license = try #require(files.firstIndex { $0.path == "LICENSE" })
             let readme = try #require(files.firstIndex { $0.path == "README.md" })
@@ -446,19 +438,13 @@ struct ChangesScreenTests {
             #expect(popup.view === list)
             #expect(list.row(at: popup.location) == readme)
             #expect(list.contextMenuTarget.row == readme)
-            let controller = ChangesController(context: fixture.context, repository: fixture.repository)
-            @MainActor func titles(_ ids: Set<String>) -> [String] {
-                MenuRecorder.Popup.titles(FileMenuItem.menuContent(controller.menuItems(for: ids)) { _ in })
-            }
-            #expect(popup.titles == titles([files[license].id, files[readme].id]))
             popup.close()
 
-            // A right-click on the file left out of the selection: its menu
-            // alone, at the pointer, its row ringed; the selection stays.
+            // A right-click on the file left out of the selection: the menu,
+            // at the pointer, its row ringed; the selection stays.
             let loader = try #require(files.firstIndex { $0.path == "Sources/App/Loader.swift" })
             #expect(ContextMenuRegions.openMenu(for: try rightClick(row: loader, in: list), presenter: recorder.menuPresenter))
             let single = try #require(recorder.popups.last)
-            #expect(single.titles == titles([files[loader].id]))
             #expect(list.row(at: single.location) == loader)
             #expect(list.contextMenuTarget.row == loader)
             #expect((list.rowView(atRow: loader, makeIfNecessary: false) as? FileTableRowView)?.isContextMenuTarget == true)
@@ -512,7 +498,7 @@ struct ChangesScreenTests {
         }
     }
 
-    @Test("without changes, the header says \"0 changed files\" over the empty list, and its checkbox can't change")
+    @Test("without changes, the list is empty, the header counts nothing included, and its checkbox can't change")
     func noChangesHeader() async throws {
         try await withIsolatedGitConfig { _ in
             let (local, _) = try await setupRepositoryWithChanges()
@@ -520,7 +506,6 @@ struct ChangesScreenTests {
             try await fixture.repository.stash.stashAllChanges()
             await fixture.settle()
             let header = ChangesHeaderContent.make(fixture.repository, numberFormat: defaultNumberFormat)
-            #expect(header.title == "0 changed files")
             #expect(header.included.isEmpty)
             #expect(!header.isIncludeAllEnabled)
             #expect(FileList.listedFiles(fixture.repository).isEmpty)

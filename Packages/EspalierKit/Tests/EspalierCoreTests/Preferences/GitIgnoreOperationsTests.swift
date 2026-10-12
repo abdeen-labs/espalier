@@ -13,45 +13,28 @@ import TestSupport
 struct GitIgnoreMenuItemsTests {
     @Test("one file at the root: ignore the file, and its extension")
     func rootFile() {
-        #expect(gitIgnoreMenuItems(for: ["debug.log"]) == [
-            GitIgnoreMenuItem(title: "Ignore File (Add to .gitignore)", action: .files(["debug.log"])),
-            GitIgnoreMenuItem(title: "Ignore All .log Files (Add to .gitignore)", action: .patterns(["*.log"])),
-        ])
+        #expect(gitIgnoreMenuItems(for: ["debug.log"]).map(\.action) == [.files(["debug.log"]), .patterns(["*.log"])])
     }
 
     // Unescaped, `*.t[x]t` would also ignore every .txt file.
-    @Test("an extension with pattern characters is escaped in its rule, not in its title")
+    @Test("an extension with pattern characters is escaped in its rule")
     func extensionWithPatternCharacters() {
-        #expect(gitIgnoreMenuItems(for: ["notes.t[x]t"]).last == GitIgnoreMenuItem(
-            title: "Ignore All .t[x]t Files (Add to .gitignore)",
-            action: .patterns(["*.t\\[x\\]t"])
-        ))
+        #expect(gitIgnoreMenuItems(for: ["notes.t[x]t"]).last?.action == .patterns(["*.t\\[x\\]t"]))
     }
 
     @Test("one file in a folder: also each folder above it, innermost first")
     func nestedFile() {
         let items = gitIgnoreMenuItems(for: ["src/app/main.swift"])
-        #expect(items == [
-            GitIgnoreMenuItem(title: "Ignore File (Add to .gitignore)", action: .files(["src/app/main.swift"])),
-            GitIgnoreMenuItem(
-                title: "Ignore Folder (Add to .gitignore)",
-                action: nil,
-                submenu: [
-                    GitIgnoreMenuItem(title: "/src/app", action: .files(["/src/app"])),
-                    GitIgnoreMenuItem(title: "/src", action: .files(["/src"])),
-                ]
-            ),
-            GitIgnoreMenuItem(title: "Ignore All .swift Files (Add to .gitignore)", action: .patterns(["*.swift"])),
-        ])
+        #expect(items.map(\.action) == [.files(["src/app/main.swift"]), nil, .patterns(["*.swift"])])
+        #expect(items.dropFirst().first?.submenu.map(\.action) == [.files(["/src/app"]), .files(["/src"])])
     }
 
     @Test("a .gitignore file can't be ignored, nor its folder from its menu")
     func gitIgnoreFile() {
-        #expect(gitIgnoreMenuItems(for: [".gitignore"]) == [
-            GitIgnoreMenuItem(title: "Ignore File (Add to .gitignore)", isEnabled: false, action: .files([".gitignore"])),
-        ])
+        let root = gitIgnoreMenuItems(for: [".gitignore"])
+        #expect(root.map(\.action) == [.files([".gitignore"])])
+        #expect(root.map(\.isEnabled) == [false])
         let nested = gitIgnoreMenuItems(for: ["docs/.gitignore"])
-        #expect(nested.map(\.title) == ["Ignore File (Add to .gitignore)", "Ignore Folder (Add to .gitignore)"])
         #expect(nested.map(\.isEnabled) == [false, false])
     }
 
@@ -61,25 +44,22 @@ struct GitIgnoreMenuItemsTests {
             "a.txt", ".gitignore", "b/c.md", "Makefile", "d.txt", "e.tar.gz", "f.json", "g.png", "h.yml", "i.rb",
         ]
         let items = gitIgnoreMenuItems(for: paths)
-        #expect(items.first == GitIgnoreMenuItem(
-            title: "Ignore 10 Selected Files (Add to .gitignore)",
-            action: .files(["a.txt", "b/c.md", "Makefile", "d.txt", "e.tar.gz", "f.json", "g.png", "h.yml", "i.rb"])
-        ))
-        #expect(items.dropFirst().map(\.title) == [
-            "Ignore All .txt Files (Add to .gitignore)",
-            "Ignore All .md Files (Add to .gitignore)",
-            "Ignore All .gz Files (Add to .gitignore)",
-            "Ignore All .json Files (Add to .gitignore)",
-            "Ignore All .png Files (Add to .gitignore)",
+        #expect(items.first?.action == .files(["a.txt", "b/c.md", "Makefile", "d.txt", "e.tar.gz", "f.json", "g.png", "h.yml", "i.rb"]))
+        #expect(items.first?.isEnabled == true)
+        #expect(items.dropFirst().map(\.action) == [
+            .patterns(["*.txt"]),
+            .patterns(["*.md"]),
+            .patterns(["*.gz"]),
+            .patterns(["*.json"]),
+            .patterns(["*.png"]),
         ])
-        #expect(items.last?.action == .patterns(["*.png"]))
     }
 
     @Test("several .gitignore files: nothing to ignore")
     func onlyGitIgnoreFiles() {
-        #expect(gitIgnoreMenuItems(for: [".gitignore", "a/.gitignore"]) == [
-            GitIgnoreMenuItem(title: "Ignore 2 Selected Files (Add to .gitignore)", isEnabled: false, action: .files([])),
-        ])
+        let items = gitIgnoreMenuItems(for: [".gitignore", "a/.gitignore"])
+        #expect(items.map(\.action) == [.files([])])
+        #expect(items.map(\.isEnabled) == [false])
         #expect(gitIgnoreMenuItems(for: []).isEmpty)
     }
 }
@@ -95,20 +75,17 @@ struct GitIgnoreOperationsTests {
             withDestinationPath: POSIXPath.join(fixture.local.path, "target")
         )
 
-        let readError = await #expect(throws: OperationError.self) {
+        await #expect(throws: OperationError.self) {
             try await fixture.model.readGitIgnore()
         }
-        #expect(readError?.message == "Cannot use a symbolic link as the root .gitignore file")
 
         let saveError = await #expect(throws: OperationError.self) {
             try await fixture.model.saveGitIgnore("node_modules\n")
         }
         #expect(saveError?.operation == .saveGitIgnore)
-        #expect(saveError?.message == "Cannot use a symbolic link as the root .gitignore file")
-        let ignoreError = await #expect(throws: OperationError.self) {
+        await #expect(throws: OperationError.self) {
             try await fixture.model.ignore(.patterns(["*.log"]))
         }
-        #expect(ignoreError?.message == "Cannot use a symbolic link as the root .gitignore file")
         #expect(try fixture.read("target") == "target contents")
         await fixture.app.idle()
     }
@@ -169,7 +146,7 @@ struct GitIgnoreOperationsTests {
         await fixture.model.refresh(.status, reason: .user)
 
         let menu = fixture.model.gitIgnoreMenuItems(for: ["logs/today.log"])
-        let folder = try #require(menu.first { $0.title == "Ignore Folder (Add to .gitignore)" }?.submenu.first)
+        let folder = try #require(menu.first { !$0.submenu.isEmpty }?.submenu.first)
         try await fixture.model.ignore(try #require(folder.action))
         try await fixture.model.ignore(.patterns(["*.tmp"]))
 

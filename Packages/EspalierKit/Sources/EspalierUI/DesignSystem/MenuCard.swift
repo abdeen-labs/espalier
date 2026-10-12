@@ -9,7 +9,7 @@
 // never highlighted. Section headers look like the app's section labels;
 // dividers are hairlines inset from the card's edges. A menu taller than
 // the screen scrolls. The card fades and grows very slightly from its
-// anchor as it opens, except under Reduce Motion and in snapshots.
+// anchor as it opens, except under Reduce Motion and offscreen.
 
 import SwiftUI
 

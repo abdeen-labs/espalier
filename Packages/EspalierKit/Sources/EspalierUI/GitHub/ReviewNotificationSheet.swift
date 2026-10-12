@@ -173,8 +173,6 @@ struct ReviewNotificationActions {
     var open: (URL) -> Void
     var checkOut: () -> Void
     var close: () -> Void
-
-    static let none = ReviewNotificationActions(open: { _ in }, checkOut: {}, close: {})
 }
 
 /// The sheet's content.

@@ -79,7 +79,6 @@ nonisolated struct PullRequestRowContent: Sendable, Equatable {
 /// branch's semibold, a selected one medium), and Draft for a draft.
 struct PullRequestRow: View {
     let content: PullRequestRowContent
-    @Environment(\.fixedNow) private var fixedNow
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
     @Environment(\.isSidebarRowSelected) private var isSelected
@@ -111,7 +110,7 @@ struct PullRequestRow: View {
                     .fixedSize()
             }
         }
-        .tooltip(content.subtitle(now: fixedNow ?? Date(), formatting: formatting, timeZone: timeZone))
+        .tooltip(content.subtitle(now: Date(), formatting: formatting, timeZone: timeZone))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
     }

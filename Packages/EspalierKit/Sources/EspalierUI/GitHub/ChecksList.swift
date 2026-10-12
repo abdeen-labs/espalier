@@ -259,8 +259,6 @@ struct ChecksListActions {
     var open: (URL) -> Void
     /// Reruns: failed ones only, or all; or one check (`checkID`).
     var rerun: (_ failedOnly: Bool, _ checkID: Int?) -> Void
-
-    static let none = ChecksListActions(open: { _ in }, rerun: { _, _ in })
 }
 
 // MARK: Views

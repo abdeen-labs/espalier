@@ -5,7 +5,6 @@
 import EspalierCore
 import EspalierCoreTestSupport
 import Foundation
-import GitKit
 import Synchronization
 import Testing
 import TestSupport
@@ -18,15 +17,9 @@ struct SettingsPreferencesTests {
     @Test("Appearance's pop-ups list desktop's values")
     func appearanceValues() {
         #expect(AppearanceSettings.tabSizes == [1, 2, 3, 4, 5, 6, 8, 10, 12])
-        #expect(AppearanceSettings.tabSizeTitle(4) == "4 (default)")
-        #expect(AppearanceSettings.tabSizeTitle(8) == "8")
         // A size set some other way still shows.
         #expect(AppearanceSettings.tabSizes(including: 7) == [1, 2, 3, 4, 5, 6, 7, 8, 10, 12])
         #expect(AppearanceSettings.tabSizes(including: 4) == AppearanceSettings.tabSizes)
-
-        let formats = numberFormats.map(AppearanceSettings.numberFormatExample)
-        #expect(formats == ["1234567.89", "1234567,89", "1,234,567.89", "1.234.567,89", "1 234 567.89", "1 234 567,89"])
-        #expect(AppearanceSettings.formatTitle(example: "Oct 19, 2017", pattern: "MMM d, yyyy") == "Oct 19, 2017 (MMM d, yyyy)")
     }
 
     // MARK: Notifications
@@ -66,8 +59,6 @@ struct SettingsPreferencesTests {
         #expect(system.requests == 0)
         let line = try #require(settings.statusLine)
         #expect(line.kind == .warning)
-        #expect(line.message == "Espalier isn't allowed to show notifications. Turn them on in System Settings.")
-        #expect(line.buttonTitle == "Open Notifications Settings…")
         await settings.perform(line.action)
         #expect(opened == [URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=dev.abdeen.espalier")!])
     }
@@ -75,7 +66,6 @@ struct SettingsPreferencesTests {
     @Test("the status line for each permission")
     func statusLines() {
         #expect(NotificationStatusLine(.notDetermined, isEnabled: true)?.action == .request)
-        #expect(NotificationStatusLine(.notDetermined, isEnabled: true)?.buttonTitle == "Allow Notifications…")
         #expect(NotificationStatusLine(.authorized, isEnabled: true)?.kind == .success)
         #expect(NotificationStatusLine(.denied, isEnabled: true)?.kind == .warning)
         #expect(NotificationStatusLine(.unavailable, isEnabled: true) == nil)

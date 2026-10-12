@@ -153,17 +153,16 @@ struct PopoverTests {
         #expect(recorder.madeKey == closed)
     }
 
-    @Test("VoiceOver sees a popover named by its title, moves into it as it opens and back to the anchor as it closes, and can close it")
+    @Test("VoiceOver sees a popover, moves into it as it opens and back to the anchor as it closes, and can close it")
     func accessibility() throws {
         let harness = PopoverHarness()
         defer { harness.tearDown() }
         let recorder = FocusRecorder()
-        let controller = harness.show(recorder, title: "Commit Reachability") {
+        let controller = harness.show(recorder) {
             Text("2 commits not included.")
                 .padding(Metrics.Popover.padding)
         }
         #expect(controller.container.accessibilityRole() == .popover)
-        #expect(controller.container.accessibilityLabel() == "Commit Reachability")
         #expect(recorder.accessibilityFocus.count == 1)
         #expect(recorder.accessibilityFocus.first === controller.container)
         controller.close()
@@ -412,8 +411,8 @@ private struct PopoverHarness {
     }
 
     /// Shows `content` in a popover below the anchor.
-    func show<Content: View>(_ recorder: FocusRecorder? = nil, title: String? = nil, @ViewBuilder _ content: @escaping () -> Content) -> PopoverController {
-        let controller = PopoverController(title: title, content: content)
+    func show<Content: View>(_ recorder: FocusRecorder? = nil, @ViewBuilder _ content: @escaping () -> Content) -> PopoverController {
+        let controller = PopoverController(content: content)
         if let recorder {
             controller.focus = recorder.focus
         }

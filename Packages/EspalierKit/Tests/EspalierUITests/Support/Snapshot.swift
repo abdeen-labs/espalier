@@ -45,19 +45,16 @@ enum SnapshotDefaults {
 /// Hosts and draws views offscreen.
 @MainActor
 enum Snapshot {
-    /// The environment every hosted view gets: a fixed clock and time zone,
-    /// English, monograms, delayed content shown at once, and no motion (a
-    /// state change never draws a frame from the middle of an animation).
+    /// The environment every hosted view gets: a fixed time zone, English,
+    /// monograms, and no motion (a state change never draws a frame from
+    /// the middle of an animation).
     static func deterministic(_ view: some View) -> some View {
         view
             .environment(\.motionSuppressed, true)
             .environment(\.appearsActive, true)
-            .environment(\.fixedNow, UIFixtures.now)
             .environment(\.timeZone, UIFixtures.timeZone)
             .environment(\.locale, Locale(identifier: "en_US"))
             .environment(\.avatarLoader, MonogramAvatarLoader())
-            .environment(\.showsDelayedContentImmediately, true)
-            .environment(\.savesSplitDividers, false)
             .defaultAppStorage(SnapshotDefaults.empty)
             .lookFont()
     }

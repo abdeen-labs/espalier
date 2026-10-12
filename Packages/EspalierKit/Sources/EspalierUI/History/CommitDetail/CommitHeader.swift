@@ -181,10 +181,9 @@ struct CommitHeader: View {
 /// a moment after.
 struct CommitSHACopyButton: View {
     let sha: String
-    var showsCheck = false
 
     var body: some View {
-        CopyButton(sha, showsCheck: showsCheck) { systemImage in
+        CopyButton(sha) { systemImage in
             // The copy symbol's room, whichever shows, so the chip keeps
             // its width.
             ZStack {

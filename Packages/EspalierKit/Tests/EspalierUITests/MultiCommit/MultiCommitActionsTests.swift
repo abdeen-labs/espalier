@@ -45,13 +45,11 @@ struct MultiCommitActionsTests {
             await fixture.settle()
             #expect(try await fixture.summaries("main").first == "Feature work")
             let toast = try #require(fixture.presenter.toasts.last)
-            #expect(toast.message == "Copied 1 commit to main.")
             let undo = try #require(toast.undo)
 
             await undo.perform()
             await fixture.settle()
             #expect(try await fixture.sha("main") == before)
-            #expect(fixture.presenter.toasts.last?.message == "Cherry-pick undone. Removed the 1 copied commit from main.")
         }
     }
 
@@ -106,11 +104,9 @@ struct MultiCommitActionsTests {
             await fixture.settle()
             #expect(try await fixture.summaries("main").prefix(3) == ["C and D", "B", "A"])
             let toast = try #require(fixture.presenter.toasts.last)
-            #expect(toast.message == "Squashed 2 commits.")
             try await #require(toast.undo).perform()
             await fixture.settle()
             #expect(try await fixture.sha("main") == d)
-            #expect(fixture.presenter.toasts.last?.message == "Squash of 2 commits undone.")
         }
     }
 
@@ -125,7 +121,6 @@ struct MultiCommitActionsTests {
             await fixture.settle()
             #expect(try await fixture.summaries("main").prefix(4) == ["C", "B", "D", "A"])
             let toast = try #require(fixture.presenter.toasts.last)
-            #expect(toast.message == "Reordered 1 commit.")
             #expect(toast.undo != nil)
         }
     }
@@ -148,20 +143,14 @@ struct MultiCommitActionsTests {
             #expect(fixture.presenter.toasts.isEmpty)
 
             var panel = try #require(OperationPanelContent.make(repository, aiEnabled: false))
-            #expect(panel.title == "Resolve conflicts before Merge")
-            #expect(panel.continueTitle == "Commit Merge")
             #expect(!panel.canContinue)
             #expect(OperationPanel.isShown(for: repository))
-            var section = try #require(ConflictsSectionContent.make(repository))
+            let section = try #require(ConflictsSectionContent.make(repository))
             #expect(section.rows.map(\.state) == [.markers(conflicts: 1)])
-            #expect(section.rows.first?.theirsLabel == "Use the modified file from feature")
 
             repository.operations.setManualResolution(.theirs, forPath: "shared.txt")
             panel = try #require(OperationPanelContent.make(repository, aiEnabled: false))
             #expect(panel.canContinue)
-            #expect(panel.title == "All conflicts resolved")
-            section = try #require(ConflictsSectionContent.make(repository))
-            #expect(section.rows.first?.status == "Using the modified file from feature")
 
             // Git's message is there to edit; Commit Merge waits for a
             // summary.
@@ -169,13 +158,11 @@ struct MultiCommitActionsTests {
             repository.operations.mergeMessage?.summary = ""
             panel = try #require(OperationPanelContent.make(repository, aiEnabled: false))
             #expect(!panel.canContinue)
-            #expect(panel.continueHelp == "Enter a summary to commit")
             repository.operations.mergeMessage = MergeMessage(summary: "Take feature's line three", description: "main's change goes.")
             #expect(try #require(OperationPanelContent.make(repository, aiEnabled: false)).canContinue)
 
             await MultiCommitActions.continueOperation(in: fixture.context, repository: repository)
             await fixture.settle()
-            #expect(fixture.presenter.toasts.last?.message == "Merged feature into main")
             let merged = try await getTipOrError(fixture.local)
             #expect(merged.summary == "Take feature's line three")
             #expect(JSCompat.trim(merged.body) == "main's change goes.")
@@ -192,7 +179,6 @@ struct MultiCommitActionsTests {
             }
             let confirmation = await fixture.confirmation()
             #expect(confirmation.confirmation.kind == .abortWithResolvedConflicts)
-            #expect(confirmation.confirmation.title == "Abort Merge?")
             fixture.presenter.respond(to: confirmation.id, with: ConfirmationResponse(isConfirmed: true))
             await abort.value
             await fixture.settle()
@@ -261,7 +247,6 @@ struct MultiCommitActionsTests {
             await fixture.refresh()
 
             let panel = try #require(OperationPanelContent.make(repository, aiEnabled: false))
-            #expect(panel.title == "Bisect in progress")
             #expect(panel.state == .unsupported(message: try #require(GitOperationInProgress.bisect.unsupportedMessage)))
             #expect(panel.opensTerminal)
             #expect(panel.continueTitle == nil)

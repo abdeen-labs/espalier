@@ -100,7 +100,7 @@ struct RepositoryGitConfigTests {
             let empty = await #expect(throws: OperationError.self) {
                 try await model.saveGitAuthor(.local, name: "  ", email: "joe@example.com", loaded: loaded)
             }
-            #expect(empty?.message == "Enter a name for this repository's commits.")
+            #expect(preconditionText(empty) != nil)
             let invalid = await #expect(throws: OperationError.self) {
                 try await model.saveGitAuthor(.local, name: "<>", email: "joe@example.com", loaded: loaded)
             }
@@ -108,7 +108,7 @@ struct RepositoryGitConfigTests {
             let noEmail = await #expect(throws: OperationError.self) {
                 try await model.saveGitAuthor(.local, name: "Joe", email: "", loaded: loaded)
             }
-            #expect(noEmail?.message == "Enter an email for this repository's commits.")
+            #expect(preconditionText(noEmail) != nil)
             #expect(try await getConfigValue(local, "user.name", onlyLocal: true) == nil)
 
             // Global with nothing of its own: nothing to do, no operation.

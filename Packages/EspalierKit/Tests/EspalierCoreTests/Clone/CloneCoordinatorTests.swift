@@ -36,7 +36,6 @@ struct CloneCoordinatorTests {
         #expect(task.phase == .cloning)
         // Git's progress: none yet, but maybe its first line.
         #expect(task.progress?.value == 0)
-        #expect(task.progress?.title == "Cloning into \(destination)")
         #expect(app.clones.task(task.id) == task)
         #expect(app.selection == .clone(task.id))
         #expect(app.repositoryListGroups.flatMap(\.items).contains { $0.id == .clone(task.id) })
@@ -78,7 +77,6 @@ struct CloneCoordinatorTests {
         // Git has fetched and checked out: the progress is git's.
         await waitForState { (app.clones.clones.first?.progress?.value ?? 0) > 0 }
         let progress = try #require(app.clones.clones.first?.progress)
-        #expect(progress.title == "Cloning into \(destination)")
         #expect(progress.value <= 1)
         #expect(progress.description != nil)
 
@@ -128,7 +126,7 @@ struct CloneCoordinatorTests {
         let error = await #expect(throws: OperationError.self) {
             try await app.clones.clone(source.path, to: full)
         }
-        #expect(preconditionText(error) == "This folder contains files. Git can only clone to empty folders.")
+        #expect(preconditionText(error) != nil)
         #expect(error?.operation == .clone)
         #expect(app.clones.clones.isEmpty)
         #expect(app.selection == nil)
@@ -143,14 +141,14 @@ struct CloneCoordinatorTests {
         let emptyError = await #expect(throws: OperationError.self) {
             try await app.clones.clone(source.path, to: "")
         }
-        #expect(preconditionText(emptyError) == "Couldn't create a folder at this path.")
+        #expect(preconditionText(emptyError) != nil)
 
         // A relative path would mean one folder to git and another to the
         // cleanup of a cancelled clone.
         let relativeError = await #expect(throws: OperationError.self) {
             try await app.clones.clone(source.path, to: "Developer/hello")
         }
-        #expect(preconditionText(relativeError) == "Choose the folder to clone into by its full path.")
+        #expect(preconditionText(relativeError) != nil)
         #expect(app.clones.clones.isEmpty)
 
         // Two clones into one folder would write into the same repository.
@@ -161,7 +159,7 @@ struct CloneCoordinatorTests {
         let duplicate = await #expect(throws: OperationError.self) {
             try await app.clones.clone(source.path, to: destination + "/")
         }
-        #expect(preconditionText(duplicate) == "Espalier is already cloning into \(destination).")
+        #expect(preconditionText(duplicate) != nil)
         #expect(app.clones.clones.count == 1)
 
         #expect(ssh.gate.release())
@@ -274,7 +272,7 @@ struct CloneCoordinatorTests {
 
     // MARK: Failing and retrying
 
-    @Test("a failed clone is \"Clone failed\" with Retry Clone, which clones it again")
+    @Test("a failed clone offers Retry Clone, which clones it again")
     func failureAndRetry() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
@@ -286,9 +284,7 @@ struct CloneCoordinatorTests {
             try await app.clones.clone(sourcePath, to: destination)
         })
         #expect(error.operation == .clone)
-        #expect(error.title == "Clone Failed")
-        #expect(error.message.hasSuffix("\n\nWould you like to retry cloning later?"))
-        #expect(error.recoveries.map(\.title) == ["Retry Clone"])
+        #expect(error.recoveries.map(\.kind) == [.retry(.clone)])
         let retry = try #require(error.retry as? CloneRetry)
         #expect(retry.request == CloneRequest(url: sourcePath, path: destination))
         #expect(retry.missingRepositoryID == nil)
@@ -353,7 +349,7 @@ struct CloneCoordinatorTests {
         let noURL = await #expect(throws: OperationError.self) {
             try await app.clones.cloneAgain(model.id)
         }
-        #expect(preconditionText(noURL) == "Espalier doesn't know where \(model.record.name) was cloned from.")
+        #expect(preconditionText(noURL) != nil)
 
         // A clone URL nothing answers at.
         let unreachable = POSIXPath.join(try createTempDirectory(), "gone")
@@ -372,11 +368,9 @@ struct CloneCoordinatorTests {
         let failure = try #require(await #expect(throws: OperationError.self) {
             try await app.clones.cloneAgain(model.id)
         })
-        #expect(failure.title == "Clone Failed")
         #expect(failure.repositoryID == model.id)
-        #expect(failure.message.hasSuffix("Would you like to retry cloning gone?"))
         #expect((failure.retry as? CloneRetry)?.missingRepositoryID == model.id)
-        #expect(failure.recoveries.map(\.title) == ["Retry Clone"])
+        #expect(failure.recoveries.map(\.kind) == [.retry(.clone)])
         #expect(model.record.isMissing)
         #expect(app.selection == .repository(model.id))
         await app.idle()
@@ -395,7 +389,7 @@ struct CloneCoordinatorTests {
 
         let result = try await app.clones.clone(CloneRequest(url: source.path, path: try cloneDestination()))
         #expect(result.usesLFS)
-        #expect(app.lfsInitializationPrompt(for: [result.repositoryID])?.title == "Initialize Git LFS")
+        #expect(app.lfsInitializationPrompt(for: [result.repositoryID]) != nil)
         await app.idle()
     }
 

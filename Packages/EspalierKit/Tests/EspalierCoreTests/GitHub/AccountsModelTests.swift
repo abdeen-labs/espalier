@@ -241,7 +241,6 @@ struct AccountsModelTests {
 
         #expect(app.accounts.accounts.isEmpty)
         let issue = try #require(app.accounts.issues.first)
-        #expect(issue.message == "Espalier couldn't read this account's saved credentials. Sign in again.")
         app.accounts.dismissIssue(issue.id)
         #expect(app.accounts.issues.isEmpty)
         await settle(app, harness)

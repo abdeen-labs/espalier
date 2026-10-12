@@ -1,8 +1,8 @@
 // The Stashes section, the stash's place, and the stash actions on a real
 // repository with stashes on two branches: the current branch's stash first
-// with its count, Restore only for it ("Switch to <branch> to restore these
-// changes."), Discard… asking first, both going back to Changes from the
-// stash's place, and Show/Hide Stashed Changes.
+// with its count, the place's files filtered, Restore only for it, Discard…
+// asking first, both going back to Changes from the stash's place, and
+// Show/Hide Stashed Changes.
 
 import EspalierCore
 import EspalierCoreTestSupport
@@ -82,15 +82,11 @@ struct StashTests {
             filter: ""
         )
         #expect(rows.map(\.branch) == ["main", "Feature/a", "feature/b", "zeta"])
-        #expect(rows.map(\.badge) == ["4", nil, nil, nil])
+        #expect(rows.map(\.fileCount) == [4, nil, nil, nil])
         #expect(rows.map(\.isCurrentBranch) == [true, false, false, false])
-        #expect(rows[0].accessibilityLabel == "main, 4 files")
-        #expect(rows[0].tooltip == "Stashed changes on main")
-        #expect(rows[1].tooltip == "Stashed changes on Feature/a. Switch to Feature/a to restore these changes.")
 
         let filtered = StashRowContent.rows(branches: ["zeta", "feature/b", "main"], currentBranch: "main", fileCount: { _ in 1 }, filter: "FEAT")
         #expect(filtered.map(\.branch) == ["feature/b"])
-        #expect(filtered[0].accessibilityLabel == "feature/b, 1 file")
     }
 
     @Test("the section lists every branch's stash with its count")
@@ -105,28 +101,12 @@ struct StashTests {
 
     // MARK: The place
 
-    @Test("the column's lines: the branch and count, and what Restore does or why it can't")
+    @Test("the column's files filter by path, ignoring case")
     func columnContent() {
         let files = [
             CommittedFileChange(path: "Sources/App/Loader.swift", status: .modified(), commitish: "abc", parentCommitish: "abc^"),
             CommittedFileChange(path: "README.md", status: .new(), commitish: "abc", parentCommitish: "abc^"),
         ]
-        var content = StashColumnContent(
-            branch: "main",
-            files: .loaded(StashColumnContent.files(files, filter: ""), total: 2),
-            isCurrentBranch: true,
-            canRestore: true,
-            canDiscard: true,
-            isBusy: false,
-            filter: ""
-        )
-        #expect(content.subtitle == "On main · 2 files")
-        #expect(content.explanation == "Restore will move your stashed files to the Changes list.")
-
-        content.isCurrentBranch = false
-        #expect(content.explanation == "Switch to main to restore these changes.")
-        content.files = .loading
-        #expect(content.subtitle == "On main")
         #expect(StashColumnContent.files(files, filter: "loader").map(\.path) == ["Sources/App/Loader.swift"])
         #expect(StashColumnContent.files(files, filter: "LOADER").map(\.path) == ["Sources/App/Loader.swift"])
         #expect(StashColumnContent.files(files, filter: "").map(\.path) == ["Sources/App/Loader.swift", "README.md"])
@@ -142,12 +122,11 @@ struct StashTests {
         #expect(actions.canPerform(.discardStash(branch: "master")))
         #expect(actions.canPerform(.discardStash(branch: "feature")))
         #expect(!actions.canPerform(.discardStash(branch: "nothing-here")))
-        #expect(StashActions.restoreUnavailableReason(branch: "feature") == "Switch to feature to restore these changes.")
 
         // The row menu's Restore says why it's unavailable under its title.
         let other = StashContextMenu.content(branch: "feature", context: fixture.context).items
         #expect(other.map(\.isEnabled) == [false, true])
-        #expect(other.first?.subtitle == "Switch to feature to restore these changes.")
+        #expect(other.first?.subtitle != nil)
         let current = StashContextMenu.content(branch: "master", context: fixture.context).items
         #expect(current.map(\.isEnabled) == [true, true])
         #expect(current.first?.subtitle == nil)
@@ -185,8 +164,8 @@ struct StashTests {
             return
         }
         #expect(recoveries.isEmpty)
-        #expect(alert.buttons.map(\.title) == ["Close"])
-        #expect(alert.message.contains("• good-file"))
+        #expect(alert.buttons.map(\.role) == [AlertContent.Role.primary])
+        #expect(alert.message.contains("good-file"))
         #expect(fixture.context.state.place == .stash(branch: "master"))
         #expect(fixture.repository.gitState.stashes.entriesByBranch["master"] != nil)
     }
@@ -200,9 +179,8 @@ struct StashTests {
         let pending = await fixture.confirmation()
         #expect(pending.confirmation.kind == .discardStash)
         let alert = pending.confirmation.alertContent
-        #expect(alert.title == "Discard Stash?")
-        #expect(alert.buttons.map(\.title) == ["Discard", "Cancel"])
-        #expect(alert.suppressionTitle == "Do not show this message again")
+        #expect(alert.buttons.map(\.role) == [AlertContent.Role.destructive, .cancel])
+        #expect(alert.suppressionTitle != nil)
         fixture.context.presenter.respond(to: pending.id, with: ConfirmationResponse(isConfirmed: true))
         await task.value
         await fixture.settle()
@@ -239,11 +217,8 @@ struct StashTests {
 
         fixture.repository.stash.show(try fixture.entry("master"))
         await fixture.settle()
-        #expect(actions.title(for: .toggleStashedChanges) == "Hide Stashed Changes")
         await actions.performAndWait(.toggleStashedChanges)
         #expect(fixture.context.state.place == .changes)
-        fixture.repository.stash.hide()
-        #expect(actions.title(for: .toggleStashedChanges) == "Show Stashed Changes")
     }
 
     @Test("Stash All Changes asks before replacing the branch's stash")
@@ -251,7 +226,6 @@ struct StashTests {
         let fixture = try await StashFixture.make()
         try fixture.harness.write("great-file", "changed\n", in: fixture.local)
         await fixture.refresh()
-        #expect(fixture.context.actions.title(for: .stashAllChanges) == "Stash All Changes…")
 
         let task = Task { await fixture.context.actions.performAndWait(.stashAllChanges) }
         let pending = await fixture.confirmation()

@@ -23,7 +23,8 @@ nonisolated private let logger = Log.logger(category: "images")
 
 /// Loads images from the web for views that show them (pull request
 /// descriptions, reviews, comments). The windows' avatar loader also loads
-/// these; snapshots' monogram loader doesn't, so their images show as links.
+/// these; under a loader that doesn't (the monogram loader), images show
+/// as links.
 nonisolated public protocol RemoteImageLoading: Sendable {
     /// The image at `url`, if it's already loaded.
     func cachedImage(at url: URL, maximumPixels: Int) -> CGImage?

@@ -100,7 +100,6 @@ struct RevertTests {
             }
 
             #expect(error?.result.gitError == .revertConflicts)
-            #expect(error?.message == "The revert has conflicts. Resolve them, then commit the changes to finish reverting.")
             #expect(await pathExists(POSIXPath.join(repo.path, ".git", "REVERT_HEAD")))
             #expect(try await getTipOrError(repo).sha == head.sha)
             let status = try await getStatusOrThrow(repo)

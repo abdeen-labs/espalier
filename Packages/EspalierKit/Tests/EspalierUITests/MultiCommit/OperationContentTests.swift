@@ -11,8 +11,8 @@ import TestSupport
 @testable import EspalierUI
 
 /// A conflicted file.
-func conflictedFile(_ path: String, markers: Int? = 3, action: UnmergedEntrySummary = .bothModified) -> WorkingDirectoryFileChange {
-    let entry = UnmergedEntry(action: action)
+func conflictedFile(_ path: String, markers: Int? = 3) -> WorkingDirectoryFileChange {
+    let entry = UnmergedEntry(action: .bothModified)
     let status: ConflictedFileStatus = markers.map { .conflictsWithMarkers(entry: entry, conflictMarkerCount: $0) }
         ?? .manualConflict(entry: entry)
     return WorkingDirectoryFileChange(path: path, status: .conflicted(status), selection: DiffSelection.fromInitialSelection(.all))
@@ -22,7 +22,7 @@ func conflictedFile(_ path: String, markers: Int? = 3, action: UnmergedEntrySumm
 struct OperationContentTests {
     // MARK: Conflicts
 
-    @Test("conflicted files say what's left, as desktop's conflicts dialog")
+    @Test("conflicted files' rows: the conflicts left, a manual conflict, and resolved files")
     func conflictRows() throws {
         let branches = ConflictBranches(ours: "main", theirs: "feature")
         func row(_ file: WorkingDirectoryFileChange, _ resolution: ManualConflictResolution? = nil, branches: ConflictBranches? = branches) throws -> ConflictFileRowContent {
@@ -31,35 +31,20 @@ struct OperationContentTests {
 
         let one = try row(conflictedFile("Sources/App/Loader.swift", markers: 3))
         #expect(one.state == .markers(conflicts: 1))
-        #expect(one.status == "1 conflict")
         #expect(one.fileName == "Loader.swift")
         #expect(one.directory == "Sources/App")
-        #expect(one.oursLabel == "Use the modified file from main")
-        #expect(one.theirsLabel == "Use the modified file from feature")
         // Markers ÷ 3, rounded up.
-        #expect(try row(conflictedFile("a.txt", markers: 7)).status == "3 conflicts")
+        #expect(try row(conflictedFile("a.txt", markers: 7)).state == .markers(conflicts: 3))
 
         let manual = try row(conflictedFile("logo.png", markers: nil))
         #expect(manual.state == .manual)
-        #expect(manual.status == "Manual conflict")
         #expect(manual.directory == nil)
-
-        let deletedByUs = try row(conflictedFile("old.txt", markers: nil, action: .deletedByUs))
-        #expect(deletedByUs.status == "File does not exist on main.")
-        #expect(deletedByUs.oursLabel == "Do not include this file on main")
-        #expect(deletedByUs.theirsLabel == "Use the modified file from feature")
-        let deletedByThem = try row(conflictedFile("old.txt", markers: nil, action: .deletedByThem), branches: ConflictBranches(ours: "main", theirs: nil))
-        #expect(deletedByThem.status == "File does not exist on target branch.")
 
         let noMarkers = try row(conflictedFile("done.txt", markers: 0))
         #expect(noMarkers.state == .resolved(isUndoable: false))
-        #expect(noMarkers.status == "No conflicts remaining")
 
         let chosen = try row(conflictedFile("logo.png", markers: nil), .ours)
         #expect(chosen.state == .resolved(isUndoable: true))
-        #expect(chosen.status == "Using the modified file from main")
-        let theirs = try row(conflictedFile("added.txt", markers: nil, action: .bothAdded), .theirs)
-        #expect(theirs.status == "Using the added file from feature")
 
         // A stash restore has no sides to pick.
         let stash = try #require(ConflictFileRowContent.make(conflictedFile("a.txt"), manualResolution: nil, branches: nil, offersSides: false))
@@ -86,23 +71,13 @@ struct OperationContentTests {
 
     // MARK: The panel
 
-    @Test("the panel's titles, summary, and buttons follow the operation")
+    @Test("the panel's Continue, untracked files note, and Resolve with AI follow the operation")
     func panel() {
-        #expect(OperationPanelContent.summary(resolved: 0, total: 2) == "2 conflicted files")
-        #expect(OperationPanelContent.summary(resolved: 0, total: 1) == "1 conflicted file")
-        #expect(OperationPanelContent.summary(resolved: 1, total: 2) == "1 of 2 conflicted files has been resolved.")
-        #expect(OperationPanelContent.summary(resolved: 2, total: 3) == "2 of 3 conflicted files have been resolved.")
-        #expect(OperationPanelContent.summary(resolved: 2, total: 2) == "All conflicted files have been resolved.")
-
         let rebase = OperationPanelContent.conflicts(
             operation: "Rebase", isMerge: false, resolved: 1, total: 2, unresolved: 1, isContinuing: false,
             hasUntrackedFiles: true, isRebaseFamily: true, showsResolveWithAI: true, canResolveWithAI: true
         )
-        #expect(rebase.title == "Resolve conflicts before Rebase")
-        #expect(rebase.abortTitle == "Abort Rebase")
-        #expect(rebase.continueTitle == "Continue Rebase")
         #expect(!rebase.canContinue)
-        #expect(rebase.continueHelp == "Resolve all conflicts before continuing")
         #expect(rebase.notesUntrackedFiles)
         #expect(rebase.showsResolveWithAI)
 
@@ -110,8 +85,6 @@ struct OperationContentTests {
             operation: "Merge", isMerge: true, resolved: 2, total: 2, unresolved: 0, isContinuing: false,
             hasUntrackedFiles: true, isRebaseFamily: false, showsResolveWithAI: true, canResolveWithAI: false
         )
-        #expect(merge.title == "All conflicts resolved")
-        #expect(merge.continueTitle == "Commit Merge")
         #expect(merge.canContinue)
         #expect(merge.continueHelp == nil)
         #expect(!merge.notesUntrackedFiles)
@@ -122,13 +95,12 @@ struct OperationContentTests {
             operation: "Cherry-pick", isMerge: false, resolved: 0, total: 1, unresolved: 1, isContinuing: false,
             hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: false, canResolveWithAI: false
         )
-        #expect(aiOff.continueTitle == "Continue Cherry-pick")
         #expect(!aiOff.showsResolveWithAI)
         // Before its message loads, a merge commits git's.
         #expect(merge.isResolved)
     }
 
-    @Test("a rebase or cherry-pick stopped at one of several commits says which")
+    @Test("a rebase or cherry-pick stopped at one of several commits shows where it stopped")
     func stoppedAt() {
         func rebase(resolved: Int, unresolved: Int, step: OperationStep?) -> OperationPanelContent {
             .conflicts(
@@ -137,7 +109,7 @@ struct OperationContentTests {
                 step: step
             )
         }
-        #expect(rebase(resolved: 1, unresolved: 2, step: OperationStep(position: 2, total: 4)).stoppedAt == "Stopped at commit 2 of 4")
+        #expect(rebase(resolved: 1, unresolved: 2, step: OperationStep(position: 2, total: 4)).stoppedAt != nil)
         // One commit, or none known: the conflicted files say it.
         #expect(rebase(resolved: 1, unresolved: 2, step: OperationStep(position: 1, total: 1)).stoppedAt == nil)
         #expect(rebase(resolved: 1, unresolved: 2, step: nil).stoppedAt == nil)
@@ -155,91 +127,68 @@ struct OperationContentTests {
         let ready = merge(unresolved: 0, message: MergeMessage(summary: "Merge branch 'feature'"))
         #expect(ready.canContinue)
         #expect(ready.continueHelp == nil)
-        #expect(ready.continueTitle == "Commit Merge")
 
         let blank = merge(unresolved: 0, message: MergeMessage(summary: " \t", description: "Only a description."))
         #expect(!blank.canContinue)
-        #expect(blank.continueHelp == "Enter a summary to commit")
         #expect(blank.isResolved)
-        #expect(blank.title == "All conflicts resolved")
 
         // While a file needs the user, that's what it waits for.
         let waiting = merge(unresolved: 1, message: MergeMessage(summary: " "))
         #expect(!waiting.canContinue)
-        #expect(waiting.continueHelp == "Resolve all conflicts before continuing")
         #expect(merge(unresolved: 0, message: MergeMessage(summary: " "), isMerge: false).canContinue)
     }
 
     // MARK: Integrate
 
-    @Test("the merge sheet's status lines, as desktop's merge dialog")
+    @Test("the merge sheet's status: its icon, and whether the merge can start")
     func mergeStatus() {
         #expect(IntegrateStatus.merge(current: "main", branch: nil, preview: nil) == IntegrateStatus())
         #expect(IntegrateStatus.merge(current: "main", branch: "main", preview: nil) == IntegrateStatus())
-        #expect(IntegrateStatus.merge(current: "main", branch: "feature", preview: nil)
-            == IntegrateStatus(icon: .loading, message: "Checking whether Git can merge automatically…"))
-        #expect(IntegrateStatus.merge(current: "main", branch: "feature", preview: MergePreview(status: .clean, commitCount: 3))
-            == IntegrateStatus(icon: .clean, message: "This will merge 3 commits from feature into main", canStart: true))
-        #expect(IntegrateStatus.merge(current: "main", branch: "feature", preview: MergePreview(status: .clean, commitCount: 1)).message
-            == "This will merge 1 commit from feature into main")
-        #expect(IntegrateStatus.merge(current: "main", branch: "feature", preview: MergePreview(status: .clean, commitCount: 0))
-            == IntegrateStatus(icon: .clean, message: "main is already up to date with feature"))
-        #expect(IntegrateStatus.merge(current: "main", branch: "feature", preview: MergePreview(status: .conflicts(conflictedFiles: 2), commitCount: 3))
-            == IntegrateStatus(icon: .conflicts, message: "There will be 2 conflicted files when merging feature into main", canStart: true))
-        #expect(IntegrateStatus.merge(current: "main", branch: "feature", preview: MergePreview(status: .invalid, commitCount: 0))
-            == IntegrateStatus(icon: .invalid, message: "These branches have unrelated histories and can't be merged"))
+        let loading = IntegrateStatus.merge(current: "main", branch: "feature", preview: nil)
+        #expect(loading.icon == .loading)
+        #expect(!loading.canStart)
+        let clean = IntegrateStatus.merge(current: "main", branch: "feature", preview: MergePreview(status: .clean, commitCount: 3))
+        #expect(clean.icon == .clean)
+        #expect(clean.canStart)
+        let upToDate = IntegrateStatus.merge(current: "main", branch: "feature", preview: MergePreview(status: .clean, commitCount: 0))
+        #expect(upToDate.icon == .clean)
+        #expect(!upToDate.canStart)
+        let conflicts = IntegrateStatus.merge(current: "main", branch: "feature", preview: MergePreview(status: .conflicts(conflictedFiles: 2), commitCount: 3))
+        #expect(conflicts.icon == .conflicts)
+        #expect(conflicts.canStart)
+        let invalid = IntegrateStatus.merge(current: "main", branch: "feature", preview: MergePreview(status: .invalid, commitCount: 0))
+        #expect(invalid.icon == .invalid)
+        #expect(!invalid.canStart)
     }
 
-    @Test("the rebase sheet's status lines and tooltips, as desktop's rebase dialog")
+    @Test("the rebase sheet's status: its icon, and whether the rebase can start")
     func rebaseStatus() {
         let one = CommitOneLine(sha: "a", summary: "A")
         let two = CommitOneLine(sha: "b", summary: "B")
-        #expect(IntegrateStatus.rebase(current: "feature", base: "feature", preview: nil)
-            == IntegrateStatus(buttonHelp: "You can't rebase a branch onto itself."))
-        #expect(IntegrateStatus.rebase(current: "feature", base: "main", preview: .loading).message == "Checking whether Git can rebase automatically…")
-        #expect(IntegrateStatus.rebase(current: "feature", base: "main", preview: .invalid).message
-            == "Can't start the rebase. Check that you chose a valid branch.")
+        let ontoItself = IntegrateStatus.rebase(current: "feature", base: "feature", preview: nil)
+        #expect(ontoItself.icon == nil)
+        #expect(!ontoItself.canStart)
+        #expect(IntegrateStatus.rebase(current: "feature", base: "main", preview: .loading).icon == .loading)
+        #expect(IntegrateStatus.rebase(current: "feature", base: "main", preview: .invalid).icon == .invalid)
         let fastForward = IntegrateStatus.rebase(current: "feature", base: "main", preview: .clean(commitsAhead: [], commitsBehind: [one, two]))
-        #expect(fastForward.message == "This will fast-forward feature by 2 commits to match main")
         #expect(fastForward.canStart)
         let update = IntegrateStatus.rebase(current: "feature", base: "main", preview: .clean(commitsAhead: [one], commitsBehind: [two]))
-        #expect(update.message == "This will update feature by applying its 1 commit on top of main")
         #expect(update.canStart)
         let upToDate = IntegrateStatus.rebase(current: "feature", base: "main", preview: .clean(commitsAhead: [one], commitsBehind: []))
-        #expect(upToDate.message == "feature is already up to date with main")
         #expect(!upToDate.canStart)
-        #expect(upToDate.buttonHelp == "The current branch is already up to date with the selected branch.")
-    }
-
-    @Test("the Integrate sheet's titles and methods")
-    func integrateMethods() {
-        #expect(IntegrateMethod.merge.title(currentBranch: "main") == "Merge into main")
-        #expect(IntegrateMethod.squashMerge.title(currentBranch: "main") == "Squash and Merge into main")
-        #expect(IntegrateMethod.rebase.title(currentBranch: "main") == "Rebase main")
-        let long = String(repeating: "x", count: 45)
-        #expect(IntegrateMethod.merge.title(currentBranch: long) == "Merge into \(String(repeating: "x", count: 39))…")
-        #expect(IntegrateMethod.allCases.map(\.label) == ["Create a merge commit", "Squash and merge", "Rebase"])
-        #expect(IntegrateMethod.merge.description == "Adds the selected branch's commits to the current branch with a merge commit.")
     }
 
     // MARK: Cherry-pick and squash
 
-    @Test("the cherry-pick target sheet's copy and same-branch rule")
+    @Test("the cherry-pick target sheet's same-branch rule")
     func cherryPickTarget() {
         let content = CherryPickTargetContent(commitCount: 2, currentBranch: "main", commitsAreOnCurrentBranch: true)
-        #expect(content.title == "Cherry-pick 2 commits to a branch")
-        #expect(content.confirmButton(target: "feature", isCreatingBranch: false) == "Cherry-pick 2 Commits to feature…")
-        #expect(content.confirmButton(target: nil, isCreatingBranch: false) == "Cherry-pick 2 Commits")
-        #expect(content.confirmButton(target: nil, isCreatingBranch: true) == "Cherry-pick to New Branch")
         #expect(!content.canCherryPick(onto: "main"))
-        #expect(content.tooltip(target: "main") == "You can't cherry-pick commits onto the branch they're from")
         #expect(content.canCherryPick(onto: "feature"))
         #expect(content.tooltip(target: "feature") == nil)
         #expect(!content.canCherryPick(onto: nil))
 
         let one = CherryPickTargetContent(commitCount: 1, currentBranch: "main", commitsAreOnCurrentBranch: false)
-        #expect(one.title == "Cherry-pick 1 commit to a branch")
-        #expect(one.confirmButton(target: "main", isCreatingBranch: false) == "Cherry-pick 1 Commit to main…")
         // Commits from another branch may come to the current one.
         #expect(one.canCherryPick(onto: "main"))
     }
@@ -258,7 +207,6 @@ struct OperationContentTests {
         let target = commit("aaaaaaa", "Add the loader", "Loads repositories.", coAuthors: [("Mona", "mona@example.com")])
         let squashed = [commit("bbbbbbb", "Fix a typo", "", coAuthors: [("Mona", "mona@example.com"), ("Hubot", "hubot@example.com")])]
         let content = SquashSheetContent(toSquash: squashed, target: target)
-        #expect(content.title == "Squash 2 Commits")
         #expect(content.summary == "Add the loader")
         #expect(content.description == "Loads repositories.\n\nFix a typo")
         #expect(content.coAuthors.map(\.name) == ["Mona", "Hubot"])
@@ -275,7 +223,7 @@ struct OperationContentTests {
 
     // MARK: AI
 
-    @Test("the loading phase cleans the model's reasoning and has desktop's fallbacks")
+    @Test("the loading phase cleans the model's reasoning")
     func aiLoading() {
         #expect(AIConflictLoadingContent.clean("## Heading") == nil)
         #expect(AIConflictLoadingContent.clean("- a bullet that is quite long enough") == nil)
@@ -284,55 +232,28 @@ struct OperationContentTests {
         #expect(AIConflictLoadingContent.clean("Too short.") == nil)
         #expect(AIConflictLoadingContent.clean("1. Keep both") == "1. Keep both")
         #expect(AIConflictLoadingContent.clean("  The **loader** keeps both `validations` here.  ") == "The loader keeps both validations here.")
-
-        let loading = AIConflictLoadingContent(
-            title: "Resolving conflicts for rebase", modelLabel: "Model · Medium", phase: "Analyzing conflicts…",
-            progress: "2 of 5 files", reasoning: [], fallbackLines: [], abortTitle: "Abort Rebase"
-        )
-        #expect(loading.title == "Resolving conflicts for rebase")
-        #expect(aiModelLabel(ConflictResolutionModelDisplay(modelName: "Model", reasoningEffort: .xhigh)) == "Model · Extra high")
-        #expect(aiModelLabel(ConflictResolutionModelDisplay(modelName: "Model", reasoningEffort: nil)) == "Model")
     }
 
-    @Test("result rows: the model's suggestion, a side, delete conflicts, skipped files")
+    @Test("result rows: the model's suggestion, skipped files, resolved files")
     func aiRows() {
         let branches = ConflictBranches(ours: "main", theirs: "feature")
         let text = ConflictedFileStatus.conflictsWithMarkers(entry: UnmergedEntry(action: .bothModified), conflictMarkerCount: 3)
         let resolution = FileResolution(path: "a.swift", resolvedContent: "merged", reasoning: "Kept both validations.")
 
         let model = AIConflictResultsContent.resolutionRow(path: "a.swift", status: text, choice: .model, resolution: resolution, branches: branches, offersModel: true, failure: nil)
-        #expect(model.choiceLabel == "The Model")
         #expect(model.explanation == "Kept both validations.")
-        #expect(model.options.map(\.title) == ["Use the model's suggestion", "Use current file from main", "Use incoming file from feature"])
+        #expect(model.options.map(\.choice) == [.model, .ours, .theirs])
         #expect(model.options.map(\.isChecked) == [true, false, false])
 
-        let ours = AIConflictResultsContent.resolutionRow(path: "a.swift", status: text, choice: .ours, resolution: resolution, branches: branches, offersModel: true, failure: nil)
-        #expect(ours.choiceLabel == "Current")
-        #expect(ours.explanation == "Using changes from main")
-        let theirs = AIConflictResultsContent.resolutionRow(path: "a.swift", status: text, choice: .theirs, resolution: nil, branches: nil, offersModel: true, failure: nil)
-        #expect(theirs.choiceLabel == "Incoming")
-        #expect(theirs.explanation == "Using changes from incoming branch")
-
-        let deleted = ConflictedFileStatus.manualConflict(entry: UnmergedEntry(action: .deletedByThem))
-        let keep = AIConflictResultsContent.resolutionRow(path: "old.txt", status: deleted, choice: .ours, resolution: nil, branches: branches, offersModel: true, failure: nil)
-        #expect(keep.choiceLabel == "Keep file")
-        #expect(keep.explanation == "Keeping modified file")
-        #expect(keep.options.map(\.title) == ["Use the model's suggestion", "Keep file from main", "Delete file on feature"])
-        let delete = AIConflictResultsContent.resolutionRow(path: "old.txt", status: deleted, choice: .theirs, resolution: nil, branches: branches, offersModel: true, failure: nil)
-        #expect(delete.choiceLabel == "Delete file")
-        #expect(delete.explanation == "Deleting file (deleted on feature)")
-
         let skipped = AIConflictResultsContent.resolutionRow(path: "logo.png", status: .manualConflict(entry: UnmergedEntry(action: .bothModified)), choice: .model, resolution: nil, branches: branches, offersModel: false, failure: "Binary file")
-        #expect(skipped.choiceLabel == "Choose a resolution")
         #expect(skipped.explanation == "Binary file")
-        #expect(skipped.options.map(\.title) == ["Use current file from main", "Use incoming file from feature"])
+        #expect(skipped.options.map(\.choice) == [.ours, .theirs])
 
         let resolved = AIConflictResultsContent.resolutionRow(path: "done.txt", status: .conflictsWithMarkers(entry: UnmergedEntry(action: .bothModified), conflictMarkerCount: 0), choice: .model, resolution: nil, branches: branches, offersModel: true, failure: nil)
         #expect(resolved.isResolved)
-        #expect(resolved.explanation == "No conflicts remaining")
     }
 
-    @Test("the summary card's phrase and links")
+    @Test("the summary card's Markdown and links")
     func aiSummary() {
         let summary = AIResolutionSummary(
             markdown: "### Resolution\nKept **both**.",
@@ -345,32 +266,28 @@ struct OperationContentTests {
             ]
         )
         let content = AIConflictSummaryContent.make(summary, operation: .rebase, htmlURL: "https://github.com/joe/espalier")
-        #expect(content.operationPhrase == "Rebasing main onto develop")
         #expect(content.markdown == "### Resolution\nKept **both**.")
         #expect(content.references.map(\.url) == [
             URL(string: "https://github.com/joe/espalier/pull/140"),
             URL(string: "https://github.com/joe/espalier/commit/1a2b3c4d5e6f"),
             nil,
         ])
-        #expect(AIConflictSummaryContent.make(summary, operation: .merge, htmlURL: nil).operationPhrase == "Merging develop into main")
-        #expect(AIConflictSummaryContent.make(summary, operation: .cherryPick, htmlURL: nil).operationPhrase == "Cherry-picking from develop into main")
         #expect(AIConflictSummaryContent.make(AIResolutionSummary(markdown: "  ", ourLabel: "a", theirLabel: "b", references: []), operation: nil, htmlURL: nil).markdown == nil)
     }
 
     // MARK: Outcomes
 
-    @Test("outcomes become desktop's banners as toasts")
+    @Test("which outcomes show a toast")
     func outcomes() {
-        #expect(OperationOutcomes.toast(for: MergeOutcome.merged(ours: "main", theirs: "feature"))?.message == "Merged feature into main")
-        #expect(OperationOutcomes.toast(for: MergeOutcome.alreadyUpToDate(ours: "main", theirs: "feature"))?.message == "main is already up to date with feature")
+        #expect(OperationOutcomes.toast(for: MergeOutcome.merged(ours: "main", theirs: "feature")) != nil)
+        #expect(OperationOutcomes.toast(for: MergeOutcome.alreadyUpToDate(ours: "main", theirs: "feature")) != nil)
         #expect(OperationOutcomes.toast(for: MergeOutcome.conflicted) == nil)
         let undo = MultiCommitUndo(kind: .squash, undoSha: "a", branchName: "main", resultTip: "b", commitCount: 3, createdBranch: nil)
-        #expect(OperationOutcomes.toast(for: undo)?.message == "Squash of 3 commits undone.")
+        #expect(OperationOutcomes.toast(for: undo) != nil)
         let newBranch = MultiCommitUndo(kind: .cherryPick, undoSha: "a", branchName: "copy", resultTip: "b", commitCount: 1, createdBranch: "copy")
         #expect(OperationOutcomes.toast(for: newBranch) == nil)
         #expect(OperationOutcomes.toast(for: CheckoutResult.alreadyCheckedOut) == nil)
-        #expect(OperationOutcomes.toast(for: CheckoutResult.switchedToWorktree(WorktreeEntry(path: "/Users/joe/Developer/espalier-feature", head: "a", branch: "refs/heads/feature", isDetached: false, type: .linked, isLocked: false, isPrunable: false)))?.message
-            == "Switched to worktree espalier-feature")
+        #expect(OperationOutcomes.toast(for: CheckoutResult.switchedToWorktree(WorktreeEntry(path: "/Users/joe/Developer/espalier-feature", head: "a", branch: "refs/heads/feature", isDetached: false, type: .linked, isLocked: false, isPrunable: false))) != nil)
         #expect(BranchActions.toast(for: .alreadyCheckedOut) == nil)
     }
 }

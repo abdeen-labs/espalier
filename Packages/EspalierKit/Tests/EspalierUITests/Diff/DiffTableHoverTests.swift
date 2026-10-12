@@ -21,8 +21,8 @@ struct DiffTableHoverTests {
     }
 
     @Test("the pointer hovers a block on its handle, and an expansion button")
-    func hover() {
-        let controller = DiffTables.controller(DiffTableContent(
+    func hover() async {
+        let controller = await DiffTables.controller(DiffTableContent(
             fileID: "a",
             diff: DiffFixtures.swiftChangeWithBottomHunk,
             canExpand: true,

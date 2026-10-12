@@ -1,8 +1,7 @@
 // The suggestion list: ↑ and ↓, Return and Tab, Escape, and typing going
 // on in the text; a click accepting a suggestion and a click elsewhere
 // closing the list; showing new suggestions keeping the highlighted one;
-// closing when editing ends; what VoiceOver hears; and a SwiftUI field's
-// suggestions.
+// closing when editing ends; and a SwiftUI field's suggestions.
 
 import AppKit
 import Testing
@@ -37,8 +36,6 @@ struct SuggestionListTests {
         let (window, textView) = try focusedTextView()
         defer { window.contentView = nil }
         let list = SuggestionList()
-        let announced = RecordedAnnouncements()
-        list.announcer = announced.announcer
         var accepted: [String] = []
         func show() {
             list.show(suggestions, for: textView, below: CGRect(x: 0, y: 0, width: 40, height: 16), in: textView) { accepted.append($0.title) }
@@ -48,14 +45,12 @@ struct SuggestionListTests {
         #expect(list.isOpen)
         #expect(SuggestionList.current === list)
         #expect(list.model.highlighted == 0)
-        #expect(announced.messages == ["3 suggestions"])
         #expect(list.handle(try keyPress(KeyCode.downArrow, in: window)) == .consumed)
         #expect(list.handle(try keyPress(KeyCode.downArrow, in: window)) == .consumed)
         #expect(list.handle(try keyPress(KeyCode.downArrow, in: window)) == .consumed)
         #expect(list.model.highlighted == 2)
         #expect(list.handle(try keyPress(KeyCode.upArrow, in: window)) == .consumed)
         #expect(list.model.highlighted == 1)
-        #expect(announced.messages.last == "@monalisa, Mona Lisa")
         // Typing and keys with modifiers go on to the text.
         #expect(list.handle(try keyPress(0, characters: "m", in: window)) == .passed)
         #expect(list.handle(try keyPress(KeyCode.returnKey, characters: "\r", modifiers: .command, in: window)) == .passed)

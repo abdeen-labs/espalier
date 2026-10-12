@@ -265,10 +265,6 @@ public struct AcknowledgementsView: View {
 
     public init() {}
 
-    init(selection: Acknowledgement.ID?) {
-        _selection = State(initialValue: selection)
-    }
-
     public var body: some View {
         HStack(spacing: 0) {
             List(selection: $selection) {

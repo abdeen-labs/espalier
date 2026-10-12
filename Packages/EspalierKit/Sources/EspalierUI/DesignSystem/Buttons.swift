@@ -220,7 +220,6 @@ public struct SplitCapsuleButton<Label: View>: View {
     @State private var isHovered = false
     @State private var isChevronHovered = false
     @FocusState private var focusedPart: Part?
-    @Environment(\.showsFocusRings) private var showsFocusRings
     /// The whole capsule, which the menu opens below.
     @State private var capsule = WeakView<NSView>()
 
@@ -305,8 +304,7 @@ public struct SplitCapsuleButton<Label: View>: View {
                 .hoverMotion(isChevronHovered)
         )
         .opacity(appearance.opacity)
-        .focusRing(focusedPart == .main || (showsFocusRings && focusedPart == nil), in: Capsule(style: .circular))
-        .environment(\.showsFocusRings, false)
+        .focusRing(focusedPart == .main, in: Capsule(style: .circular))
     }
 }
 

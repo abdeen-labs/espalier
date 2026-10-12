@@ -46,7 +46,6 @@ struct DiscardConfirmationTests {
             fixture.context.actions.perform(.discardAllChanges)
             let one = await confirmation(fixture)
             #expect(one.confirmation.kind == .discardAllChanges)
-            #expect(one.confirmation.title == "Discard All Changes?")
             #expect(suppressionTitle(one) == nil)
             presenter.respond(to: one.id, with: .cancelled)
             await fixture.context.actions.idle()
@@ -108,7 +107,7 @@ struct DiscardConfirmationTests {
             controller.discard([try fixture.file("a.txt")])
             let one = await confirmation(fixture)
             #expect(one.confirmation.kind == .discardChanges)
-            #expect(suppressionTitle(one) == AlertContent.doNotShowAgain)
+            #expect(suppressionTitle(one) != nil)
             presenter.respond(to: one.id, with: ConfirmationResponse(isConfirmed: true, suppressesFutureConfirmations: true))
             await waitUntil { paths(fixture) == ["LICENSE", "b.txt"] }
             #expect(!fixture.app.preferences.confirmDiscardChanges)

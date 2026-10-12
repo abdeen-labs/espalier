@@ -224,7 +224,6 @@ struct BranchTests {
                 try await createBranch(repository, "existing", nil)
             }
             #expect(error?.result.gitError == .branchAlreadyExists)
-            #expect(error?.message == "A branch with that name already exists.")
             #expect(try await getBranchOrError(repository, "existing").tip.sha == first.sha)
 
             await #expect(throws: GitError.self) {

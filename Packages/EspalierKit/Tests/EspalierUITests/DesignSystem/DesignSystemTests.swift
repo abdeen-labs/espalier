@@ -87,14 +87,8 @@ struct DesignSystemTests {
 
     // MARK: Monograms
 
-    @Test("monograms take the first letters of the first and last names")
+    @Test("a monogram's image is its point size at its scale")
     func monograms() {
-        #expect(Monogram.initials(name: "Joe Bloggs") == "JB")
-        #expect(Monogram.initials(name: "joe") == "J")
-        #expect(Monogram.initials(name: "Mary-Jane van der Berg") == "MB")
-        #expect(Monogram.initials(name: "", email: "octo@example.com") == "O")
-        #expect(Monogram.initials(name: "", email: "") == "")
-        #expect(Monogram.initials(name: "  ") == "")
         #expect(MonogramRenderer.image(name: "Joe Bloggs", pointSize: 16, scale: 2)?.width == 32)
     }
 

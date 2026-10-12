@@ -1,6 +1,6 @@
 // Settings ▸ Appearance's theme, applied to the app. Windows, sheets,
 // popovers, menus, and alerts take the application's appearance unless they
-// set their own (snapshot windows set theirs), so they all follow the theme;
+// set their own, so they all follow the theme;
 // System leaves the application's appearance unset, so they follow the
 // Mac's.
 

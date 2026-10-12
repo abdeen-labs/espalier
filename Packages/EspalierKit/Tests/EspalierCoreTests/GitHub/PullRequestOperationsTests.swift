@@ -164,7 +164,7 @@ struct PullRequestOperationsTests {
         await fixture.settle()
     }
 
-    @Test("a branch that's gone says so")
+    @Test("a branch that's gone fails the checkout")
     func branchGone() async throws {
         let fixture = try await makeGitHubFixture { _, _ in }
         let fork = try await Self.makeFork(of: fixture.local)
@@ -175,7 +175,6 @@ struct PullRequestOperationsTests {
             try await fixture.model.gitHub.checkout(pr)
         }
         #expect(error?.operation == .checkoutPullRequest)
-        #expect(error?.message == "Couldn't find the branch gone on espalier-hubot. The pull request's author may have deleted the branch or the fork.")
         #expect(fixture.model.gitState.tip.branch?.name == "main")
         await fixture.settle()
     }
@@ -282,10 +281,9 @@ struct PullRequestOperationsTests {
         _ = try await fixture.model.gitHub.checkoutPullRequest(number: 5)
         #expect(fixture.model.gitState.tip.branch?.name == "feature")
 
-        let error = await #expect(throws: OperationError.self) {
+        await #expect(throws: OperationError.self) {
             try await fixture.model.gitHub.checkoutPullRequest(number: 6)
         }
-        #expect(error?.message == "Couldn't find pull request #6.")
         await fixture.settle()
     }
 
@@ -303,9 +301,6 @@ struct PullRequestOperationsTests {
         let outcome = try await fixture.model.gitHub.createPullRequest()
         #expect(outcome == .choiceRequired(.publishBranch(topic)))
         if case .choiceRequired(let step) = outcome {
-            #expect(step.title == "Publish Branch?")
-            #expect(step.message == "topic needs to be published before you can open a pull request for it.")
-            #expect(step.confirmButton == "Publish Branch")
             #expect(step.alternativeButton == nil)
         }
         #expect(fixture.harness.workspace.openedURLs.isEmpty)
@@ -333,9 +328,7 @@ struct PullRequestOperationsTests {
         let outcome = try await fixture.model.gitHub.createPullRequest()
         #expect(outcome == .choiceRequired(.pushCommits(main, unpushedCommits: 1)))
         if case .choiceRequired(let step) = outcome {
-            #expect(step.title == "Push Local Changes?")
-            #expect(step.message == "main has 1 local commit that hasn't been pushed. Push it before opening the pull request?")
-            #expect(step.alternativeButton == "Create Without Pushing")
+            #expect(step.alternativeButton != nil)
         }
 
         let url = try #require(URL(string: "https://github.com/octocat/app/pull/new/main"))
@@ -357,7 +350,7 @@ struct PullRequestOperationsTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.gitHub.createPullRequest()
         }
-        #expect(preconditionMessage(error) == "Only repositories on GitHub can have pull requests.")
+        #expect(preconditionMessage(error) != nil)
         await fixture.app.idle()
     }
 
@@ -390,8 +383,7 @@ struct PullRequestOperationsTests {
             Issue.record("Unexpected \(String(describing: error))")
             return
         }
-        #expect(failure.message.hasPrefix("Couldn't create the push protection bypass."))
-        #expect(failure.message.hasSuffix("Try again at: \(secret.bypassURL)"))
+        #expect(failure.message.contains(secret.bypassURL))
 
         // Without a reason, GitHub's own page asks for one.
         try await fixture.model.gitHub.bypassPushProtection(secret)

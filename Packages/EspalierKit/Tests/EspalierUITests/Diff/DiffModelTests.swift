@@ -75,7 +75,7 @@ struct DiffModelTests {
             #expect(state.canSelectLines)
             #expect(!state.hidesWhitespace)
 
-            let controller = DiffTables.controller(DiffTableContent(fileID: try fixture.file.id, diff: diff, staging: state))
+            let controller = await DiffTables.controller(DiffTableContent(fileID: try fixture.file.id, diff: diff, staging: state))
             controller.actions = DiffTableActions(staging: staging.actions(hunks: diff.hunks, discard: { _, _ in }))
 
             // Click the added "let two = 2": excluded.
@@ -88,6 +88,7 @@ struct DiffModelTests {
 
             // The view redraws from the model's new selection.
             controller.apply(DiffTableContent(fileID: try fixture.file.id, diff: diff, staging: DiffStaging(changes: changes).state(hunks: diff.hunks)))
+            await controller.documentIdle()
             #expect(controller.isIncluded(line: controller.document.rows[row].after.asInt) == false)
 
             // The block handle includes the partly included block again.
@@ -96,6 +97,7 @@ struct DiffModelTests {
 
             // The second hunk's checkbox excludes it.
             controller.apply(DiffTableContent(fileID: try fixture.file.id, diff: diff, staging: DiffStaging(changes: changes).state(hunks: diff.hunks)))
+            await controller.documentIdle()
             let secondHunk = controller.document.hunks[1].row
             _ = controller.mouseDown(at: point(controller, row: secondHunk, x: middle(controller.geometry.hunkCheckbox!)), clickCount: 1, extendsSelection: false)
             let addFifteen = try fixture.index(.add, "let fifteen = 15", in: diff)
@@ -123,8 +125,6 @@ struct DiffModelTests {
                 })
             })
             let addTwo = try fixture.index(.add, "let two = 2", in: diff)
-            #expect(actions.discardTitle(.line(addTwo)) == "Discard Added Line")
-            #expect(actions.discardTitle(.block(containing: addTwo)) == "Discard Modified Lines")
             actions.discardLines(.block(containing: addTwo))
             for task in tasks {
                 await task.value
@@ -156,7 +156,7 @@ struct DiffModelTests {
             #expect(state.hidesWhitespace)
             #expect(!state.canSelectLines)
 
-            let controller = DiffTables.controller(DiffTableContent(fileID: try fixture.file.id, diff: diff, staging: state))
+            let controller = await DiffTables.controller(DiffTableContent(fileID: try fixture.file.id, diff: diff, staging: state))
             controller.actions = DiffTableActions(staging: staging.actions(hunks: diff.hunks, discard: { _, _ in }))
             let row = try #require(controller.document.blocks.first?.rows.first)
             _ = controller.mouseDown(at: point(controller, row: row, x: middle(controller.geometry.before.newNumber!)), clickCount: 1, extendsSelection: false)

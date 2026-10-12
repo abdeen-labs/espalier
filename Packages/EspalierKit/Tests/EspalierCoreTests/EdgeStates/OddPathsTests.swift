@@ -159,7 +159,7 @@ struct OddPathsTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.commit.commit()
         }
-        #expect(error?.message.contains("isn't UTF-8 text") == true)
+        #expect(error?.message == notByteExactMessage("latin1.txt", "committed"))
         #expect(try await fixture.commitCount() == 2)
         #expect(Array(try await Dugite.exec(["diff", "--cached", "--name-only"], fixture.local.path).stdout).isEmpty)
 

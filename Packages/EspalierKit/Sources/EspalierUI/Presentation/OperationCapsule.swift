@@ -124,7 +124,6 @@ public struct OperationCapsule: View {
                 VStack(alignment: .leading, spacing: Metrics.grid) {
                     HStack(spacing: Metrics.insetSmall) {
                         // It turns while work runs; still with Reduce Motion.
-                        // (Snapshots draw the effect's first frame.)
                         Image(systemName: "arrow.trianglehead.2.clockwise.rotate.90")
                             .symbolEffect(.rotate, options: .repeat(.continuous), isActive: !motion.reduceMotion)
                             .foregroundStyle(.secondary)

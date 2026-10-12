@@ -162,7 +162,7 @@ public struct RepositoryPopover: View {
     }
 }
 
-/// The popover's look, value-driven (snapshots render each state).
+/// The popover's look, value-driven (`RepositoryPopoverContent`).
 struct RepositoryPopoverView: View {
     let content: RepositoryPopoverContent
     @Binding var filter: String

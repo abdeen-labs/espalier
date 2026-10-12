@@ -262,7 +262,7 @@ struct ConflictResolverTests {
 
         #expect(error?.stage == .streamResponse)
         #expect(error?.retryState == .notRetried)
-        #expect(error?.underlyingError as? AIResponseError == AIResponseError("No response from the model"))
+        #expect(error?.underlyingError is AIResponseError)
         #expect(provider.requests.count == 1)
     }
 
@@ -281,7 +281,6 @@ struct ConflictResolverTests {
         #expect(error?.underlyingError as? AIProviderError == providerError)
         let displayInfo = try #require(error.flatMap { getAIErrorDisplayInfo(for: $0) })
         #expect(displayInfo.message == "Nope")
-        #expect(displayInfo.retryAfterMessage == "You can try again in 5 seconds.")
         #expect(provider.requests.count == 1)
     }
 

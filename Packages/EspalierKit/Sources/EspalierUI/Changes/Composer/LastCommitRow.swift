@@ -84,17 +84,12 @@ public struct LastCommitRow: View {
 /// time in the tooltip.
 struct CommittedDateText: View {
     let date: Date
-    @Environment(\.fixedNow) private var fixedNow
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
 
     var body: some View {
-        if let fixedNow {
-            text(now: fixedNow)
-        } else {
-            TimelineView(.everyMinute) { context in
-                text(now: context.date)
-            }
+        TimelineView(.everyMinute) { context in
+            text(now: context.date)
         }
     }
 

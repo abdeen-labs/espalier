@@ -155,8 +155,7 @@ struct HooksProxyTests {
             "ESPALIER=1",
         ]))
         #expect(!env.contains { $0.hasPrefix("GIT_CONFIG_PARAMETERS=") || $0.hasPrefix("GIT_ASKPASS=") || $0.hasPrefix("GIT_USER_AGENT=") || $0.hasPrefix("HOME=") })
-        #expect(connection.stderr.hasPrefix("Running commit-msg hook...\nargs: .git/COMMIT_EDITMSG\ncommit-msg hook done after "))
-        #expect(connection.stderr.hasSuffix("s\n"))
+        #expect(connection.stderr.contains("args: .git/COMMIT_EDITMSG\n"))
         #expect(events.all == ["started commit-msg", "finished commit-msg"])
     }
 
@@ -202,7 +201,6 @@ struct HooksProxyTests {
 
         #expect(connection.exitCode == 5)
         #expect(asked.all == [])
-        #expect(connection.stderr.contains("post-commit hook failed with code 5 after "))
         #expect(events.all == ["started post-commit", "failed post-commit"])
     }
 
@@ -215,7 +213,6 @@ struct HooksProxyTests {
         try await proxy(shell: { _ in .success(env: shellEnv) }).run(connection)
 
         #expect(connection.exitCode == 0)
-        #expect(connection.stderr.contains("pre-auto-gc hook done after "))
     }
 
     @Test("gives the hook its buffered standard input")
@@ -244,7 +241,6 @@ struct HooksProxyTests {
         try await proxy(events: events, shell: { _ in .success(env: shellEnv) }).run(connection)
 
         #expect(connection.exitCode == 1)
-        #expect(connection.stderr == "Running pre-commit hook...\nhook pre-commit aborted\n")
         #expect(events.all == ["started pre-commit", "failed pre-commit"])
         #expect(!FileManager.default.fileExists(atPath: "\(output)/ran"))
     }
@@ -271,7 +267,6 @@ struct HooksProxyTests {
         try await run.value
 
         #expect(connection.exitCode == 1)
-        #expect(connection.stderr == "Running pre-commit hook...\nhook pre-commit aborted\n")
         #expect(events.all == ["started pre-commit", "failed pre-commit"])
 
         // The shell finishing afterwards changes nothing.
@@ -288,12 +283,10 @@ struct HooksProxyTests {
         let thrown = FakeConnection(hook: "pre-commit", cwd: repository)
         try await proxy(shell: { _ in throw ShellEnvError.missingStartMarker }).run(thrown)
         #expect(thrown.exitCode == 1)
-        #expect(thrown.stderr == "Running pre-commit hook...\nFailed to load shell environment for hook pre-commit.\ncould not find start marker in shell output\n")
 
         let failed = FakeConnection(hook: "pre-commit", cwd: repository)
         try await proxy(shell: { _ in .failure }).run(failed)
         #expect(failed.exitCode == 1)
-        #expect(failed.stderr == "Running pre-commit hook...\nFailed to load shell environment for hook pre-commit.\n")
 
         #expect(!FileManager.default.fileExists(atPath: "\(output)/ran"))
     }

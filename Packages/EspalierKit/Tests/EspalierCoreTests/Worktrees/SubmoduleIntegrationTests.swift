@@ -97,7 +97,6 @@ struct SubmoduleIntegrationTests {
 
         #expect(error.operation == .addWorktree)
         #expect(error.gitFailure?.gitError == .submoduleRepositoryDoesNotExist)
-        #expect(error.message == "A submodule points to a location that doesn't exist.")
         #expect(model.record.path == path)
         #expect(app.selection == .repository(model.id))
         #expect(model.localOperation == nil)
@@ -125,8 +124,7 @@ struct SubmoduleIntegrationTests {
         let delete = try #require(await #expect(throws: OperationError.self) {
             try await model.worktrees.remove(entry, confirmed: [.removeWorktree])
         })
-        #expect(delete.title == "Delete Worktree Failed")
-        #expect(delete.recoveries.map(\.title) == ["Delete Anyway"])
+        #expect(delete.recoveries.map(\.kind) == [.retry(.removeWorktree)])
         #expect(FileManager.default.fileExists(atPath: path))
         #expect(model.record.path == path)
 

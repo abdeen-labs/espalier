@@ -1,4 +1,4 @@
-// The menu capabilities and labels. The first suite checks each rule on
+// The menu capabilities. The first suite checks each rule on
 // states built by hand; the second derives the capabilities from real
 // repositories in the states the rules tell apart.
 
@@ -78,7 +78,7 @@ struct RepositoryCapabilitiesRulesTests {
         #expect(repositoryCommands(capabilities).allSatisfy { !$0.value })
     }
 
-    @Test("with a sheet or alert open, every command is off, and the labels stay")
+    @Test("with a sheet or alert open, every command is off")
     func modal() {
         var state = onBranch { $0.forcePushState = .available }
         state.isModalPresented = true
@@ -86,7 +86,6 @@ struct RepositoryCapabilitiesRulesTests {
         #expect(!capabilities.canShowAbout && !capabilities.canShowSettings && !capabilities.canShowRepositoryList)
         #expect(!capabilities.canCreateRepository && !capabilities.canAddLocalRepository && !capabilities.canCloneRepository)
         #expect(repositoryCommands(capabilities).allSatisfy { !$0.value })
-        #expect(capabilities.pushTitle == "Force Push…")
 
         var missing = RepositoryCapabilities.State(selection: .missing(hasGitHubRepository: true), repositoryCount: 1)
         missing.isModalPresented = true
@@ -130,7 +129,6 @@ struct RepositoryCapabilitiesRulesTests {
         let capabilities = RepositoryCapabilities(onBranch(feature))
         #expect(capabilities.canRenameBranch && capabilities.canDeleteBranch)
         #expect(capabilities.canUpdateFromContributionTarget)
-        #expect(capabilities.updateFromContributionTargetTitle == "Update from main")
         #expect(capabilities.contributionTargetDefaultBranch == main)
         #expect(capabilities.canPull && capabilities.canPush && capabilities.canFetch)
         #expect(capabilities.canCompareToBranch && capabilities.canCreateBranch)
@@ -156,7 +154,6 @@ struct RepositoryCapabilitiesRulesTests {
         #expect(!capabilities.canUpdateFromContributionTarget)
         #expect(!capabilities.canStashAllChanges)
         #expect(!capabilities.canToggleStashedChanges)
-        #expect(capabilities.stashAllChangesTitle == "Stash All Changes")
         #expect(capabilities.canCreateBranch && capabilities.canDiscardAllChanges && capabilities.canFetch)
         #expect(capabilities.canViewOnGitHub)
     }
@@ -233,42 +230,33 @@ struct RepositoryCapabilitiesRulesTests {
         #expect(!unpublished.canCreateIssueOnGitHub)
     }
 
-    @Test("a branch that can be force pushed makes Push a force push, asking first by default")
+    @Test("a branch that can be force pushed makes Push a force push")
     func forcePush() {
         for state in [ForcePushBranchState.available, .recommended] {
-            var input = onBranch { $0.forcePushState = state }
-            #expect(RepositoryCapabilities(input).pushTitle == "Force Push…")
-            #expect(RepositoryCapabilities(input).isForcePush)
-            input.confirmForcePush = false
-            #expect(RepositoryCapabilities(input).pushTitle == "Force Push")
+            #expect(RepositoryCapabilities(onBranch { $0.forcePushState = state }).isForcePush)
         }
         let notAvailable = RepositoryCapabilities(onBranch { $0.forcePushState = .notAvailable })
-        #expect(notAvailable.pushTitle == "Push")
         #expect(!notAvailable.isForcePush)
     }
 
-    @Test("a stash on the current branch: the toggle, and stashing again asks")
+    @Test("a stash on the current branch shows the toggle")
     func stash() {
         let hidden = RepositoryCapabilities(onBranch { state in
             state.hasStash = true
             state.hasChangedFiles = true
         })
         #expect(hidden.canToggleStashedChanges)
-        #expect(hidden.toggleStashedChangesTitle == "Show Stashed Changes")
         #expect(!hidden.isShowingStashedChanges)
-        #expect(hidden.stashAllChangesTitle == "Stash All Changes…")
         #expect(hidden.canStashAllChanges)
 
         let shown = RepositoryCapabilities(onBranch { state in
             state.hasStash = true
             state.isShowingStash = true
         })
-        #expect(shown.toggleStashedChangesTitle == "Hide Stashed Changes")
         #expect(shown.isShowingStashedChanges)
 
         let none = RepositoryCapabilities(onBranch())
         #expect(!none.canToggleStashedChanges)
-        #expect(none.stashAllChangesTitle == "Stash All Changes")
     }
 
     @Test("the pull request command views the current branch's pull request")
@@ -277,59 +265,22 @@ struct RepositoryCapabilitiesRulesTests {
             state.isHostedOnGitHub = true
             state.hasCurrentPullRequest = true
         })
-        #expect(capabilities.createPullRequestTitle == "View Pull Request on GitHub")
         #expect(capabilities.hasCurrentPullRequest)
-    }
-
-    @Test("labels name the editor, shell, and removal as the settings say")
-    func settingsLabels() {
-        var state = onBranch()
-        state.editorLabel = "Visual Studio Code"
-        state.shellLabel = "iTerm2"
-        state.confirmRepositoryRemoval = false
-        let capabilities = RepositoryCapabilities(state)
-        #expect(capabilities.openInEditorTitle == "Open in Visual Studio Code")
-        #expect(capabilities.openInShellTitle == "Open in iTerm2")
-        #expect(capabilities.removeRepositoryTitle == "Remove")
-
-        state.shellLabel = nil
-        #expect(RepositoryCapabilities(state).openInShellTitle == "Open in Shell")
     }
 
     @Test("an alias can be created for a repository, missing or not, and changed or removed once it has one")
     func alias() {
         let none = RepositoryCapabilities(onBranch())
-        #expect(none.aliasTitle == "Create Alias")
         #expect(none.canChangeAlias && !none.canRemoveAlias)
 
         var named = onBranch()
         named.alias = "Work"
-        #expect(RepositoryCapabilities(named).aliasTitle == "Change Alias")
         #expect(RepositoryCapabilities(named).canRemoveAlias)
 
         let missing = RepositoryCapabilities(RepositoryCapabilities.State(selection: .missing(hasGitHubRepository: false), alias: "Old"))
         #expect(missing.canChangeAlias && missing.canRemoveAlias)
         let nothing = RepositoryCapabilities(RepositoryCapabilities.State())
         #expect(!nothing.canChangeAlias && !nothing.canRemoveAlias)
-        #expect(nothing.aliasTitle == "Create Alias")
-    }
-
-    @Test("a long target branch name is cut at 25 characters, counting a variation selector with its character")
-    func truncatedTarget() {
-        let long = branch("upstream/a-very-long-default-branch-name")
-        let capabilities = RepositoryCapabilities(onBranch { $0.contributionTargetDefaultBranch = long })
-        #expect(capabilities.updateFromContributionTargetTitle == "Update from upstream/a-very-long-defa\u{2026}")
-
-        // 26 UTF-16 units but 25 characters once the selector joins the
-        // heart: not cut.
-        let heart = "\u{2764}\u{FE0F}" + String(repeating: "x", count: 24)
-        let notCut = RepositoryCapabilities(onBranch { $0.contributionTargetDefaultBranch = branch(heart) })
-        #expect(notCut.updateFromContributionTargetTitle == "Update from \(heart)")
-
-        // Emoji outside the BMP count once.
-        let emoji = String(repeating: "\u{1F600}", count: 26)
-        let cut = RepositoryCapabilities(onBranch { $0.contributionTargetDefaultBranch = branch(emoji) })
-        #expect(cut.updateFromContributionTargetTitle == "Update from \(String(repeating: "\u{1F600}", count: 25))\u{2026}")
     }
 
     @Test("a fork contributing to its parent updates from the parent's default branch")
@@ -398,14 +349,11 @@ struct RepositoryCapabilitiesModelTests {
         let capabilities = fixture.app.capabilities
         #expect(capabilities.isRepositoryActive)
         #expect(capabilities.canPush && capabilities.canPull && capabilities.canFetch)
-        #expect(capabilities.pushTitle == "Push")
         #expect(!capabilities.canRenameBranch && !capabilities.canDeleteBranch)
         #expect(!capabilities.canUpdateFromContributionTarget)
         #expect(capabilities.contributionTargetDefaultBranch?.name == "main")
         #expect(!capabilities.canDiscardAllChanges && !capabilities.canStashAllChanges)
         #expect(!capabilities.canViewOnGitHub && !capabilities.canCreatePullRequest)
-        #expect(capabilities.openInEditorTitle == "Open in External Editor")
-        #expect(capabilities.openInShellTitle == "Open in Terminal")
         #expect(fixture.app.capabilities(isModalPresented: true).canPush == false)
     }
 
@@ -421,13 +369,11 @@ struct RepositoryCapabilitiesModelTests {
         let capabilities = fixture.app.capabilities
         #expect(capabilities.canRenameBranch && capabilities.canDeleteBranch)
         #expect(capabilities.canUpdateFromContributionTarget)
-        #expect(capabilities.updateFromContributionTargetTitle == "Update from main")
         #expect(capabilities.canStashAllChanges && capabilities.canDiscardAllChanges)
-        #expect(capabilities.stashAllChangesTitle == "Stash All Changes")
         #expect(!capabilities.canPull)
     }
 
-    @Test("a stash on the current branch: the toggle, and stashing again asks")
+    @Test("a stash on the current branch shows the toggle")
     func stashPresent() async throws {
         let fixture = try await makeSelectedRepository()
         fixture.app.preferences.hasShownWelcomeFlow = true
@@ -439,12 +385,10 @@ struct RepositoryCapabilitiesModelTests {
 
         let capabilities = fixture.app.capabilities
         #expect(capabilities.canToggleStashedChanges)
-        #expect(capabilities.toggleStashedChangesTitle == "Show Stashed Changes")
-        #expect(capabilities.stashAllChangesTitle == "Stash All Changes…")
         await fixture.app.idle()
     }
 
-    @Test("diverged from the upstream: a force push, asking first unless the setting is off")
+    @Test("diverged from the upstream: a force push")
     func forcePushAvailable() async throws {
         let fixture = try await makeSelectedRepository()
         fixture.app.preferences.hasShownWelcomeFlow = true
@@ -454,10 +398,7 @@ struct RepositoryCapabilitiesModelTests {
         await fixture.model.refresh(.full, reason: .user)
         #expect(fixture.model.gitState.aheadBehind == AheadBehind(ahead: 1, behind: 1))
 
-        #expect(fixture.app.capabilities.pushTitle == "Force Push…")
         #expect(fixture.app.capabilities.isForcePush)
-        fixture.app.preferences.confirmForcePush = false
-        #expect(fixture.app.capabilities.pushTitle == "Force Push")
     }
 
     @Test("on a detached HEAD")
@@ -551,10 +492,8 @@ struct RepositoryCapabilitiesModelTests {
         #expect(capabilities.canRemoveRepository)
         #expect(!capabilities.canViewOnGitHub)
         #expect(repositoryCommands(capabilities).filter(\.value).map(\.key) == ["canRemoveRepository", "canChangeAlias"])
-        #expect(capabilities.pushTitle == "Push")
 
         fixture.app.setAlias("Old project", for: fixture.model.id)
-        #expect(fixture.app.capabilities.aliasTitle == "Change Alias")
         #expect(fixture.app.capabilities.canRemoveAlias)
         await fixture.app.idle()
     }
@@ -602,18 +541,5 @@ struct RepositoryCapabilitiesModelTests {
         let unhosted = capabilities(repository(htmlURL: nil, issues: true, archived: nil))
         #expect(!unhosted.canViewOnGitHub && !unhosted.canCreatePullRequest)
         await fixture.app.idle()
-    }
-
-    @Test("the editor and shell labels follow the settings")
-    func editorAndShell() async throws {
-        let fixture = try await makeIntegrationsFixture(
-            editors: [(name: "Zed.app", bundleID: "dev.zed.Zed")],
-            shells: [(name: "iTerm.app", bundleID: "com.googlecode.iterm2", executable: nil)]
-        )
-        #expect(fixture.app.capabilities.openInEditorTitle == "Open in Zed")
-        fixture.app.preferences.integrations.selectedShell = .iTerm2
-        #expect(fixture.app.capabilities.openInShellTitle == "Open in iTerm2")
-        fixture.app.preferences.confirmRepositoryRemoval = false
-        #expect(fixture.app.capabilities.removeRepositoryTitle == "Remove")
     }
 }

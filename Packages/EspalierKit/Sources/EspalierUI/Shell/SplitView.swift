@@ -79,9 +79,9 @@ public struct SplitView<Leading: View, Trailing: View>: NSViewRepresentable {
         context.coordinator.trailingHost = trailingHost
         context.coordinator.leadingPane = leadingPane
         // AppKit saves dividers only in the standard defaults: a window
-        // whose app keeps its state elsewhere (tests) and snapshots save
-        // none, and start at the ideal width.
-        let savesDivider = context.environment.savesSplitDividers && (windowContext?.persistsUIState ?? true)
+        // whose app keeps its state elsewhere (tests) saves none, and
+        // starts at the ideal width.
+        let savesDivider = windowContext?.persistsUIState ?? true
         if savesDivider {
             context.coordinator.needsInitialPosition = UserDefaults.standard.object(forKey: "NSSplitView Subview Frames \(autosaveName)") == nil
             splitView.autosaveName = autosaveName
@@ -187,12 +187,6 @@ public struct SplitView<Leading: View, Trailing: View>: NSViewRepresentable {
     }
 }
 
-extension EnvironmentValues {
-    /// Whether splits save their dividers (`NSSplitView.autosaveName`):
-    /// snapshots turn it off, so no saved divider changes what they draw.
-    @Entry public var savesSplitDividers = true
-}
-
 /// Carries the window's environment into a hosted pane.
 struct EnvironmentBridge: ViewModifier {
     let values: EnvironmentValues
@@ -204,11 +198,8 @@ struct EnvironmentBridge: ViewModifier {
         content
             .environment(windowContext)
             .environment(\.isInPaneCard, isInPaneCard)
-            .environment(\.fixedNow, values.fixedNow)
             .environment(\.dateTimeFormatting, values.dateTimeFormatting)
             .environment(\.avatarLoader, values.avatarLoader)
-            .environment(\.savesSplitDividers, values.savesSplitDividers)
-            .environment(\.showsDelayedContentImmediately, values.showsDelayedContentImmediately)
             .environment(\.timeZone, values.timeZone)
             .environment(\.locale, values.locale)
             .environment(\.calendar, values.calendar)

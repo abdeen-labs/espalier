@@ -24,7 +24,6 @@ struct SimpleListTableView: NSViewRepresentable {
     let actions: SimpleListActions
 
     @Environment(\.avatarLoader) private var avatarLoader
-    @Environment(\.fixedNow) private var fixedNow
     @Environment(\.dateTimeFormatting) private var dateTimeFormatting
     @Environment(\.timeZone) private var timeZone
 
@@ -53,9 +52,6 @@ struct SimpleListTableView: NSViewRepresentable {
         controller.avatarLoader = avatarLoader
         controller.dateFormatting = dateTimeFormatting
         controller.timeZone = timeZone
-        if controller.fixedNow != fixedNow {
-            controller.fixedNow = fixedNow
-        }
         controller.update(history: history, presentation: presentation, selection: selection, reorderInsertionRow: reorderInsertionRow)
     }
 }

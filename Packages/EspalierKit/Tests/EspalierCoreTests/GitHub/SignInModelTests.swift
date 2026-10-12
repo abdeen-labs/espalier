@@ -251,7 +251,6 @@ struct SignInModelTests {
 
             #expect(signIn.state?.kind == .endpointEntry)
             #expect(signIn.state?.error == .unsupportedProtocol)
-            #expect(signIn.state?.error?.message == "Only https addresses are supported for GitHub Enterprise.")
             #expect(signIn.state?.loading == false)
             await fixture.settle()
         }

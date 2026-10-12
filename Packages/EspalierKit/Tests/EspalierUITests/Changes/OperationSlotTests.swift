@@ -37,9 +37,8 @@ struct OperationSlotTests {
             // Merge waits.
             #expect(ChangesFooterLayout.make(repository, showsOperationPanel: true).bottom == .merge)
             var content = ComposerContent.make(repository, app: fixture.app)
-            #expect(content.button.title == "Commit Merge")
+            #expect(content.button.kind == .merge)
             #expect(!content.button.isEnabled)
-            #expect(content.button.help == "Resolve all conflicts before continuing")
             #expect(content.sparkle == .hidden)
             #expect(!content.showsCommitOptions)
             #expect(!content.showsCoAuthorsToggle)
@@ -60,13 +59,11 @@ struct OperationSlotTests {
             form.wrappedValue.summary = " "
             content = ComposerContent.make(repository, app: fixture.app)
             #expect(!content.button.isEnabled)
-            #expect(content.button.help == "Enter a summary to commit")
             form.wrappedValue.summary = "Take feature's line three"
 
             // Commit Merge commits the merge with the message shown.
             await ComposerController(context: fixture.context, repository: repository).commitMerge()
             await fixture.settle()
-            #expect(fixture.presenter.toasts.last?.message == "Merged feature into main")
             let merged = try await getTipOrError(fixture.local)
             #expect(merged.summary == "Take feature's line three")
             #expect(JSCompat.trim(merged.body) == "main's change goes.")
@@ -93,11 +90,9 @@ struct OperationSlotTests {
             #expect(ChangesFooterLayout.make(repository, showsOperationPanel: true).bottom == .continueOperation)
             var slot = try #require(OperationSlotContent.make(repository))
             #expect(slot.kind == .continueOperation)
-            #expect(slot.button.title == "Continue Rebase")
             #expect(!slot.button.isEnabled)
-            #expect(slot.button.help == "Resolve all conflicts before continuing")
             // The bar keeps Abort; continuing is the form's place's.
-            #expect(try #require(OperationPanelContent.make(repository, aiEnabled: false)).abortTitle == "Abort Rebase")
+            #expect(try #require(OperationPanelContent.make(repository, aiEnabled: false)).abortTitle != nil)
 
             operations.setManualResolution(.theirs, forPath: "README.md")
             slot = try #require(OperationSlotContent.make(repository))
@@ -115,7 +110,7 @@ struct OperationSlotTests {
             await fixture.refresh()
             #expect(operations.current?.phase == .interrupted)
             let interrupted = try #require(OperationSlotContent.make(repository))
-            #expect(interrupted.button.title == "Continue Rebase")
+            #expect(interrupted.kind == .continueOperation)
             #expect(interrupted.button.isEnabled)
             #expect(ChangesFooterLayout.make(repository, showsOperationPanel: true).bottom == .continueOperation)
             try await operations.abortOperation()

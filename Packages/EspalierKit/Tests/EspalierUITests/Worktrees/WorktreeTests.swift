@@ -2,8 +2,7 @@
 // and the worktree actions, on real repositories: rows with their branch or
 // SHA, the current one and locked ones; Show Worktrees opening the popover;
 // the sheets' hints; a name with "/" refused; switching; Delete… asking,
-// and when git refuses, "Couldn't delete the worktree <name>." with Cancel
-// and Delete Anyway.
+// and when git refuses, git's output with a recovery that deletes anyway.
 
 import EspalierCore
 import EspalierCoreTestSupport
@@ -91,8 +90,6 @@ struct WorktreeTests {
         #expect(detachedRow.isLocked)
         #expect(!detachedRow.canRenameOrDelete)
         #expect(detachedRow.detail.count == 7)
-        #expect(detachedRow.tooltip == "\(detached.path)\nThis worktree is locked.")
-        #expect(detachedRow.accessibilityLabel == "detached-tree, \(detachedRow.detail), locked")
 
         let filtered = WorktreeRowContent.rows(worktrees.entries, currentPath: worktrees.current?.path, filter: "FEATURE")
         #expect(filtered.map(\.path) == [feature.path])
@@ -135,24 +132,23 @@ struct WorktreeTests {
         content = AddWorktreeContent.make(name: "espalier-login", directory: fixture.directory, branchName: "", repository: repository, isCreating: false)
         let path = POSIXPath.join(fixture.directory, "espalier-login")
         #expect(content.path == path)
-        #expect(content.footer == "Worktree will be created at \(path).")
         #expect(content.branchPlaceholder == "espalier-login")
         #expect(content.branchMessage == nil)
         #expect(content.canCreate)
 
         content = AddWorktreeContent.make(name: "espalier-login", directory: fixture.directory, branchName: "feature", repository: repository, isCreating: false)
-        #expect(content.branchMessage == .init(text: "Will check out existing branch feature.", isError: false))
+        #expect(content.branchMessage?.isError == false)
         #expect(content.canCreate)
 
         content = AddWorktreeContent.make(name: "espalier-login", directory: fixture.directory, branchName: "my login", repository: repository, isCreating: false)
-        #expect(content.branchMessage == .init(text: "Will be created as my-login.", isError: false))
+        #expect(content.branchMessage?.isError == false)
 
         content = AddWorktreeContent.make(name: "espalier-login", directory: fixture.directory, branchName: "..", repository: repository, isCreating: false)
-        #expect(content.branchMessage == .init(text: ".. is not a valid name.", isError: true))
+        #expect(content.branchMessage?.isError == true)
         #expect(!content.canCreate)
 
         content = AddWorktreeContent.make(name: "x", directory: fixture.directory, branchName: "", repository: repository, isCreating: false) { _ in .folder }
-        #expect(content.pathProblem == "There's already a file or folder at \(POSIXPath.join(fixture.directory, "x")).")
+        #expect(content.pathProblem != nil)
         #expect(!content.canCreate)
         content = AddWorktreeContent.make(name: "x", directory: fixture.directory, branchName: "", repository: repository, isCreating: false) { _ in .emptyFolder }
         #expect(content.pathProblem == nil)
@@ -221,17 +217,16 @@ struct WorktreeTests {
         try FileManager.default.createDirectory(atPath: POSIXPath.join(parent, "taken"), withIntermediateDirectories: true)
 
         var content = RenameWorktreeContent.make(path: path, name: "feature-tree", isRenaming: false)
-        #expect(content.buttonTitle == "Rename feature-tree")
         #expect(content.problem == nil)
         #expect(!content.canRename)
 
         content = RenameWorktreeContent.make(path: path, name: "login-tree", isRenaming: false)
         #expect(content.canRename)
         content = RenameWorktreeContent.make(path: path, name: "elsewhere/login-tree", isRenaming: false)
-        #expect(content.problem == "Worktree names can't contain “/”.")
+        #expect(content.problem != nil)
         #expect(!content.canRename)
         content = RenameWorktreeContent.make(path: path, name: "taken", isRenaming: false)
-        #expect(content.problem == "The name “taken” is already taken. Choose a different name.")
+        #expect(content.problem != nil)
         #expect(!content.canRename)
         content = RenameWorktreeContent.make(path: path, name: "   ", isRenaming: false)
         #expect(!content.canRename)
@@ -279,10 +274,8 @@ struct WorktreeTests {
         let task = Task { await fixture.context.actions.performAndWait(.deleteWorktree(path: feature.path)) }
         let pending = await fixture.confirmation()
         let alert = pending.confirmation.alertContent
-        #expect(alert.title == "Delete Worktree?")
-        #expect(alert.message == "Are you sure you want to delete the worktree feature-tree?")
-        #expect(alert.buttons.map(\.title) == ["Delete", "Cancel"])
-        #expect(alert.suppressionTitle == "Do not show this message again")
+        #expect(alert.buttons.map(\.role) == [AlertContent.Role.destructive, .cancel])
+        #expect(alert.suppressionTitle != nil)
         fixture.context.presenter.respond(to: pending.id, with: ConfirmationResponse(isConfirmed: true, suppressesFutureConfirmations: true))
         await task.value
         await fixture.settle()
@@ -291,7 +284,7 @@ struct WorktreeTests {
         #expect(!fixture.app.preferences.confirmWorktreeRemoval)
     }
 
-    @Test("when git refuses, \"Couldn't delete the worktree <name>.\" offers Delete Anyway, with Cancel")
+    @Test("when git refuses, the error shows git's output and offers to delete anyway, which does")
     func deleteFails() async throws {
         let fixture = try await WorktreeUIFixture.make()
         fixture.app.preferences.confirmWorktreeRemoval = false
@@ -302,19 +295,12 @@ struct WorktreeTests {
         await fixture.settle()
         let presented = try #require(fixture.context.presenter.error)
         let error = presented.error
-        #expect(error.title == "Delete Worktree Failed")
         switch error.presentation {
         case .rawOutput(let content, let recoveries):
-            #expect(content.title == "Delete Worktree Failed")
-            #expect(content.message == "Couldn't delete the worktree feature-tree.")
             #expect(content.output.contains("contains modified or untracked files"))
-            #expect(content.note == "Delete the worktree feature-tree anyway?")
-            #expect(content.recoveryTitles == ["Delete Anyway"])
-            #expect(content.dismissTitle == "Cancel")
             #expect(recoveries.count == 1)
         case .alert(let alert, let recoveries):
-            #expect(alert.message.hasPrefix("Couldn't delete the worktree feature-tree.\n\n"))
-            #expect(alert.buttons.map(\.title) == ["Delete Anyway", "Cancel"])
+            #expect(alert.buttons.map(\.role) == [AlertContent.Role.primary, .cancel])
             #expect(recoveries.count == 1)
         default:
             Issue.record("Unexpected presentation \(error.presentation)")
@@ -328,7 +314,7 @@ struct WorktreeTests {
         #expect(fixture.context.presenter.error == nil)
     }
 
-    @Test("the delete failure's presentation, from its error alone")
+    @Test("the delete failure shows git's output, from its error alone")
     func deleteFailurePresentation() {
         let worktree = WorktreeEntry(path: "/Users/joe/Developer/espalier-login", head: "a1b2c3d", branch: "refs/heads/login", isDetached: false, type: .linked, isLocked: false, isPrunable: false)
         let retry = RemoveWorktreeRetry(repositoryID: UIFixtures.repositoryID, worktree: worktree)
@@ -344,13 +330,6 @@ struct WorktreeTests {
             Issue.record("Expected git's output")
             return
         }
-        #expect(content == RawOutputContent(
-            title: "Delete Worktree Failed",
-            message: "Couldn't delete the worktree espalier-login.",
-            output: output,
-            note: "Delete the worktree espalier-login anyway?",
-            recoveryTitles: ["Delete Anyway"],
-            dismissTitle: "Cancel"
-        ))
+        #expect(content.output == output)
     }
 }

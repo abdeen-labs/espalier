@@ -11,27 +11,24 @@ public struct CopyButton<Label: View>: View {
     private let text: String
     private let copy: ((String) -> Void)?
     private let label: (_ systemImage: String) -> Label
-    @State private var showsCheck: Bool
+    @State private var showsCheck = false
     /// Copies made, so each one restarts the check's time.
     @State private var copies = 0
     @Environment(\.motion) private var motion
 
     /// - Parameters:
     ///   - text: What a click copies.
-    ///   - showsCheck: Starts with the check showing (snapshots).
     ///   - copy: Copies the text; the general pasteboard by default.
     ///   - label: The button's look for a symbol name: `doc.on.doc`, or
     ///     `checkmark` after a copy.
     public init(
         _ text: String,
-        showsCheck: Bool = false,
         copy: ((String) -> Void)? = nil,
         @ViewBuilder label: @escaping (_ systemImage: String) -> Label
     ) {
         self.text = text
         self.copy = copy
         self.label = label
-        _showsCheck = State(initialValue: showsCheck)
     }
 
     /// Puts `text` on the general pasteboard.

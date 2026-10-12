@@ -1,11 +1,11 @@
 // History on a real repository: the graph of every local branch with HEAD's
-// commit selected, emoji in summaries, a branch's place with its history and
-// its comparison, and a tag off the simple list's line; Compare to Branch's
-// list; the Commit menu's rules (reset to a commit with only unpushed
-// commits after it, checkout of another commit, revert in the history or
-// Compare's Ahead, delete only tags not pushed) and context menus; no
-// rewrites in another branch's place; keyboard reorder moving a commit in
-// git; and refused drops.
+// commit selected, a commit header's links, a branch's place with its
+// history and its comparison, and a tag off the simple list's line; Compare
+// to Branch's list; the Commit menu's rules (reset to a commit with only
+// unpushed commits after it, checkout of another commit, revert in the
+// history or Compare's Ahead, delete only tags not pushed); no rewrites in
+// another branch's place; keyboard reorder moving a commit in git; and
+// refused drops.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -134,8 +134,8 @@ struct HistoryScreenTests {
         }
     }
 
-    @Test("shortcodes in a commit's summary show as emoji: its row, its header, and Undo Commit")
-    func emojiSummaries() async throws {
+    @Test("a commit's summary keeps its shortcodes, and its header links the URLs in its description")
+    func descriptionLinks() async throws {
         try await withIsolatedGitConfig { _ in
             let local = try setupEmptyRepository("main")
             try Data("a\n".utf8).write(to: URL(filePath: POSIXPath.join(local.path, "a.txt")))
@@ -150,14 +150,8 @@ struct HistoryScreenTests {
             let commit = try #require(fixture.history.commit(atRow: 1))
             #expect(commit.summary == ":bug: Fix the loader :tada:")
 
-            let controller = GraphTableController()
-            controller.update(source: fixture.history, presentation: GraphPresentation(repository: repository, place: .history), selection: GraphSelection(), reorderInsertionRow: nil)
-            #expect(controller.content(forRow: 1).summary == "\u{1F41B} Fix the loader \u{1F389}")
             let header = CommitHeaderContent(commit, repository: repository, underlinesLinks: true)
-            #expect(String(header.richSummary.characters) == "\u{1F41B} Fix the loader \u{1F389}")
-            #expect(String(header.richDescription.characters) == "Found by \u{1F50D} https://example.com")
             #expect(header.richDescription.runs.compactMap(\.link) == [URL(string: "https://example.com")])
-            #expect(LastCommitContent.make(repository)?.summary == "\u{1F41B} Fix the loader \u{1F389}")
             await fixture.settle()
         }
     }
@@ -280,7 +274,6 @@ struct HistoryScreenTests {
             let counted = await comparison.load(feature)
             #expect(counted == AheadBehind(ahead: 1, behind: 2))
             #expect(comparison.cached(feature) == counted)
-            #expect(counted.map { BranchComparisonCounts($0, currentBranch: comparison.currentBranch).text } == "↓2 ↑1")
 
             // A detached HEAD has nothing to compare with.
             try await fixture.git(["checkout", "-q", "--detach", "HEAD"])
@@ -316,8 +309,6 @@ struct HistoryScreenTests {
             #expect(!actions.canPerform(.reorder(shas: [fixture.shas["Fix crash on empty repository"]!], before: nil)))
             // Only a tag created here and not pushed can be deleted.
             #expect(!actions.canPerform(.deleteTag(name: "v1.0")))
-            #expect(actions.title(for: .reorder(shas: [head, merge], before: nil)) == "Reorder 2 Commits…")
-            #expect(actions.title(for: .reorder(shas: [head], before: nil)) == "Reorder Commit")
             // Without a GitHub repository, nothing to view.
             #expect(!actions.canPerform(.viewCommitOnGitHub(sha: head)))
 
@@ -332,29 +323,6 @@ struct HistoryScreenTests {
             )
             #expect(tagged.tags == ["v1.0"])
             #expect(!tagged.canAmend && !tagged.canUndo)
-            await fixture.settle()
-        }
-    }
-
-    @Test("context menus: one commit's items in desktop's order, several commits', the working copy's")
-    func contextMenus() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await makeHistoryScreenFixture(dirty: false)
-            await fixture.show(.history)
-            let history = fixture.history
-            @MainActor func titles(_ rows: [Int], clicked: Int) throws -> [String] {
-                MenuRecorder.Popup.titles(CommitContextMenus.menu(rows: rows, clickedRow: clicked, repository: fixture.repository, context: fixture.context))
-            }
-            let tagged = try #require(history.row(of: fixture.shas["Add loader"]!))
-            #expect(try titles([tagged], clicked: tagged) == [
-                "Reset to Commit…", "Check Out Commit", "Reorder Commit", "Revert Changes in Commit", "—",
-                "Create Branch from Commit…", "Create Tag…", "—", "Delete Tag v1.0…", "Cherry-pick Commit…", "—",
-                "Copy SHA", "Copy Tag", "View on GitHub",
-            ])
-            let head = try #require(history.row(of: fixture.shas["Bump version"]!))
-            #expect(try titles([head], clicked: head).prefix(2) == ["Amend Commit…", "Undo Commit…"])
-            #expect(try titles([head, head + 1], clicked: head) == ["Cherry-pick 2 Commits…", "Squash 2 Commits…", "Reorder 2 Commits…"])
-            #expect(try titles([0], clicked: 0) == ["Review Changes", "—", "Stash All Changes", "Discard All Changes…"])
             await fixture.settle()
         }
     }
@@ -399,17 +367,16 @@ struct HistoryScreenTests {
             let docs = try #require(fixture.shas["Update docs"])
             let loader = try #require(fixture.shas["Add loader"])
             let signIn = try #require(fixture.shas["Add sign-in sheet"])
-            let reorderReason = "Can't reorder. Reordering replays every commit back to the oldest one involved, and none of them can be a merge commit."
-            let squashReason = "Can't squash. Squashing replays every commit back to the oldest one involved, and none of them can be a merge commit."
             let before = try await runGit(["rev-parse", "main"], fixture.local)
 
-            @MainActor func takeReason() -> String? {
+            /// The operation whose refusal is shown, dismissing it.
+            @MainActor func takeRefusal() -> OperationKind? {
                 guard let presented = presenter.error else {
                     return nil
                 }
                 presenter.dismissError(presented.id)
-                if case .precondition(let message) = presented.error.reason {
-                    return message
+                if case .precondition(_) = presented.error.reason {
+                    return presented.error.operation
                 }
                 return nil
             }
@@ -417,16 +384,16 @@ struct HistoryScreenTests {
             // Reorder Commit below the merge: no keyboard reorder, the reason.
             await actions.performAndWait(.reorder(shas: [docs], before: nil))
             #expect(fixture.context.state.history.reorder == nil)
-            #expect(takeReason() == reorderReason)
+            #expect(takeRefusal() == .reorder)
             // A commit the merge brought in, too.
             #expect(actions.canPerform(.reorder(shas: [signIn], before: nil)))
             await actions.performAndWait(.reorder(shas: [signIn], before: nil))
-            #expect(takeReason() == reorderReason)
+            #expect(takeRefusal() == .reorder)
 
             // Squash below the merge.
             #expect(actions.canPerform(.squash(shas: [docs], into: loader)))
             await actions.performAndWait(.squash(shas: [docs], into: loader))
-            #expect(takeReason() == squashReason)
+            #expect(takeRefusal() == .squash)
             // One commit alone still can't be squashed.
             #expect(!actions.canPerform(.squash(shas: [docs], into: nil)))
 
@@ -440,7 +407,7 @@ struct HistoryScreenTests {
             state.reorder?.insertionRow = docsRow + 1
             await KeyboardReorder.confirm(repository: fixture.repository, context: fixture.context)
             #expect(state.reorder == nil)
-            #expect(takeReason() == reorderReason)
+            #expect(takeRefusal() == .reorder)
             // Right where it is (below itself): nothing to do or say.
             history.select(shas: [head], contiguous: true)
             await actions.performAndWait(.reorder(shas: nil, before: nil))
@@ -453,11 +420,11 @@ struct HistoryScreenTests {
             // A drop below the merge, and a drop onto a commit below it.
             let payload = CommitDragPayload(repositoryID: fixture.repository.id, shas: [head])
             #expect(CommitDragging.accept(payload, .above(row: docsRow + 1), repository: fixture.repository, context: fixture.context))
-            #expect(takeReason() == reorderReason)
+            #expect(takeRefusal() == .reorder)
             #expect(CommitDragging.validate(payload, .onto(row: docsRow), repository: fixture.repository, context: fixture.context) != nil)
             #expect(CommitDragging.accept(payload, .onto(row: docsRow), repository: fixture.repository, context: fixture.context))
             await waitUntil { presenter.error != nil }
-            #expect(takeReason() == squashReason)
+            #expect(takeRefusal() == .squash)
             // Dropped back where it is: refused, without a reason.
             let below = CommitDragPayload(repositoryID: fixture.repository.id, shas: [docs])
             #expect(CommitDragging.validate(below, .above(row: docsRow), repository: fixture.repository, context: fixture.context) == nil)

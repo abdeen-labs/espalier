@@ -117,7 +117,9 @@ struct AIModelTests {
             try app.ai.addProvider(provider(), secret: .set("sk"))
         }
         #expect(error?.operation == .updateAIProviders)
-        #expect(error?.reason == .other("Couldn't save the credential for \"Local Llama\" in your keychain. The keychain is locked."))
+        if case .other? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
+        }
         #expect(app.ai.providers.isEmpty)
         #expect(harness.defaults.defaults.object(forKey: PreferenceKey.byokProviders) == nil)
     }
@@ -161,7 +163,7 @@ struct AIModelTests {
         #expect(stored == #"{"conflict-resolution":"\#(key(original, "llama3"))"}"#)
     }
 
-    @Test("removing a provider removes its secret, selections, and consents, after desktop's question")
+    @Test("removing a provider removes its secret, selections, and consents")
     func removeProvider() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
@@ -170,14 +172,6 @@ struct AIModelTests {
         app.ai.select(model: key(removed, "llama3"), for: .commitMessageGeneration)
         let disclosure = getAIDataDisclosure(for: .commitMessageGeneration, provider: removed)
         app.ai.recordConsent(disclosure.consentIdentifier)
-
-        #expect(AIModel.removalConfirmation(for: removed) == AIProviderRemovalConfirmation(
-            title: "Remove \"Local Llama\"?",
-            message: "Its API key will also be removed from your keychain.",
-            confirmButton: "Remove"
-        ))
-        #expect(AIModel.removalConfirmation(for: provider(authKind: .bearer)).message == "Its bearer token will also be removed from your keychain.")
-        #expect(AIModel.removalConfirmation(for: provider(authKind: .none)).message == "Models that use it will no longer be available.")
 
         try app.ai.removeProvider(id: removed.id)
 

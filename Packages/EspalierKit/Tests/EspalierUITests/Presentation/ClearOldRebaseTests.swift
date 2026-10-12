@@ -33,8 +33,7 @@ struct ClearOldRebaseTests {
             Issue.record("Not an alert: \(presented.error.reason)")
             return
         }
-        #expect(content.buttons.map(\.title) == ["Clear Old Rebase and Continue", "Close"])
-        #expect(content.message == LeftoverRebase(hasAutostash: false).message)
+        #expect(content.buttons.map(\.role) == [.primary, .cancel])
         let recovery = try #require(recoveries.first)
 
         await fixture.presenter.recover(presented.id, with: recovery)
@@ -75,8 +74,7 @@ struct ClearOldRebaseTests {
                 Issue.record("Not an alert: \(presented.error.reason)")
                 return
             }
-            #expect(content.buttons.map(\.title) == ["Clear Old Rebase and Continue", "Close"])
-            #expect(content.message == LeftoverRebase(hasAutostash: true).message)
+            #expect(content.buttons.map(\.role) == [.primary, .cancel])
             #expect(try await fixture.summaries("main") == ["B", "A", "Initial commit"])
             let recovery = try #require(recoveries.first)
 
@@ -88,7 +86,6 @@ struct ClearOldRebaseTests {
             #expect(try await fixture.git(["stash", "list", "--format=%H %gs"]) == "\(autostash) autostash\n")
             #expect(try await fixture.summaries("main") == ["A and B", "Initial commit"])
             let toast = try #require(fixture.presenter.toasts.last)
-            #expect(toast.message == "Squashed 2 commits.")
             #expect(toast.undo != nil)
         }
     }

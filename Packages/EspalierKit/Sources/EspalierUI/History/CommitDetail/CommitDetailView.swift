@@ -7,18 +7,10 @@ import EspalierCore
 import GitKit
 import SwiftUI
 
-extension EnvironmentValues {
-    /// The prefix the detail's inner splits (the files beside the diff)
-    /// remember their dividers under; snapshots use their own, so a
-    /// divider another test moved doesn't move theirs.
-    @Entry var historySplitAutosavePrefix = "Espalier.Split"
-}
-
 /// The detail of the selected commit, or of a contiguous range.
 struct CommitDetailView: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
-    @Environment(\.historySplitAutosavePrefix) private var autosavePrefix
 
     var body: some View {
         let history = repository.history
@@ -43,7 +35,7 @@ struct CommitDetailView: View {
             .padding(.top, Metrics.CommitDetail.topPadding)
             .padding(.bottom, Metrics.CommitDetail.bottomPadding)
             Hairline()
-            SplitView(autosaveName: "\(autosavePrefix).commitFiles", leadingColumn: Metrics.Column.commitFileList) {
+            SplitView(autosaveName: "Espalier.Split.commitFiles", leadingColumn: Metrics.Column.commitFileList) {
                 CommitFiles(repository: repository)
             } trailing: {
                 CommitDiff(repository: repository)

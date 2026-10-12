@@ -532,9 +532,8 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
 /// in a rectangle inset 6 from the column's edges with radius 9, never
 /// solid blue, so its text keeps its colors; selected neighbors join into
 /// one shape. Overriding `drawBackground(in:)` makes AppKit draw the row,
-/// selection included, through `draw(_:)`, which offscreen captures (the
-/// snapshots) include. The row draws no background of its own: the table's
-/// shows through. Its hover is a wash of its own, in the selection's shape,
+/// selection included, through `draw(_:)`. The row draws no background of
+/// its own: the table's shows through. Its hover is a wash of its own, in the selection's shape,
 /// that fades in and out where the pointer is. While its context menu is
 /// open it shows the accent ring in that shape.
 final class FileTableRowView: NSTableRowView, ContextMenuTargetRowView {

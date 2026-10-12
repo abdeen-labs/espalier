@@ -24,7 +24,6 @@ struct GraphTableView: NSViewRepresentable {
     let isLoadingMore: Bool
 
     @Environment(\.avatarLoader) private var avatarLoader
-    @Environment(\.fixedNow) private var fixedNow
     @Environment(\.dateTimeFormatting) private var dateTimeFormatting
     @Environment(\.timeZone) private var timeZone
 
@@ -62,9 +61,6 @@ struct GraphTableView: NSViewRepresentable {
         controller.avatarLoader = avatarLoader
         controller.dateFormatting = dateTimeFormatting
         controller.timeZone = timeZone
-        if controller.fixedNow != fixedNow {
-            controller.fixedNow = fixedNow
-        }
         controller.update(source: source, presentation: presentation, selection: selection, reorderInsertionRow: reorderInsertionRow)
     }
 }

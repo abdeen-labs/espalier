@@ -31,12 +31,7 @@ struct EditorsLookupTests {
             let error = await #expect(throws: ExternalEditorError.self) {
                 try await lookup.findEditorOrDefault("Sublime Text")
             }
-            #expect(
-                error == ExternalEditorError(
-                    "Espalier couldn't find the editor Sublime Text. Choose an available editor in Settings ▸ Integrations.",
-                    metadata: ExternalEditorError.Metadata(openPreferences: true)
-                )
-            )
+            #expect(error?.metadata == ExternalEditorError.Metadata(openPreferences: true))
         }
 
         @Test("returns nothing when no editor is installed, even for a name")

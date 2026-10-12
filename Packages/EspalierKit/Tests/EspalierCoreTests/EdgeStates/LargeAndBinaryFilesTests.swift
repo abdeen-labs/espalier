@@ -88,7 +88,7 @@ struct LargeAndBinaryFilesTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.commit.commit()
         }
-        #expect(error?.message.contains("a diff driver converts its text") == true)
+        #expect(error?.message == textConvertedMessage("notes.up", "committed"))
         #expect(try await fixture.commitCount() == 1)
 
         // The whole file commits as it is.

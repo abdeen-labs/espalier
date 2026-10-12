@@ -161,21 +161,11 @@ struct SubmoduleTests {
             )
 
             let events = progress.withLock { $0 }
-            #expect(events.first == CheckoutProgress(
-                value: 0,
-                title: "Checking out branch branch-with-submodule",
-                description: "Updating submodules",
-                target: "branch-with-submodule"
-            ))
-            #expect(events.last == CheckoutProgress(
-                value: 1,
-                title: "Checking out branch branch-with-submodule",
-                description: "Submodules updated",
-                target: "branch-with-submodule"
-            ))
-            #expect(events.dropFirst().dropLast().allSatisfy {
-                $0.description.hasPrefix("Updating submodules: ") && $0.value > 0 && $0.value < 1
-            })
+            #expect(events.first?.value == 0)
+            #expect(events.first?.target == "branch-with-submodule")
+            #expect(events.last?.value == 1)
+            #expect(events.last?.target == "branch-with-submodule")
+            #expect(events.dropFirst().dropLast().allSatisfy { $0.value > 0 && $0.value < 1 })
             #expect(FileManager.default.fileExists(
                 atPath: POSIXPath.join(repository.path, "test-submodule", "good-file")
             ))

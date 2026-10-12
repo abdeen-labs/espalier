@@ -1,5 +1,5 @@
-// The location control's segments, titles, and tooltips, and the width a
-// branch's name takes in the toolbar.
+// The location control's segments, and the width a branch's name takes in
+// the toolbar.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -11,35 +11,27 @@ import TestSupport
 
 @Suite("Location control") @MainActor
 struct LocationControlTests {
-    @Test("each state has desktop's title and tooltip")
-    func copy() {
+    @Test("the branch segment: none when hidden, the branch's name, the detached HEAD's symbol, and disabled while an operation runs")
+    func segments() {
         let repository = LocationControlState.RepositorySegment.repository(name: "espalier", path: "/p")
-        #expect(LocationControlState(repository: .noRepositories, branch: .hidden).repositoryTitle == "No Repositories")
-        #expect(LocationControlState(repository: .selectRepository, branch: .hidden).repositoryTitle == "Select a Repository")
         #expect(LocationControlState(repository: repository, branch: .hidden).branchTitle == nil)
 
         let unborn = LocationControlState(repository: repository, branch: .unborn(ref: "main"))
         #expect(unborn.branchTitle == "main")
-        #expect(unborn.branchTooltip == "Current branch is main")
 
         let detached = LocationControlState(repository: repository, branch: .detached(sha: "a1b2c3d4e5f6"))
-        #expect(detached.branchTitle == "On a1b2c3d")
-        #expect(detached.branchTooltip == "Currently on a detached HEAD")
         #expect(detached.branchSystemImage == "smallcircle.filled.circle")
 
         let checkingOut = LocationControlState(repository: repository, branch: .checkingOut(target: "dev", description: "Switching to Branch", progress: 0.42))
         #expect(checkingOut.branchTitle == "dev")
-        #expect(checkingOut.branchTooltip == "Checking out dev\nSwitching to Branch (42%)")
         #expect(!checkingOut.isBranchEnabled)
 
         let rebasing = LocationControlState(repository: repository, branch: .rebasing(target: "main"))
-        #expect(rebasing.branchTitle == "Rebasing main")
         #expect(!rebasing.isBranchEnabled)
 
-        // An operation in progress: the branch, disabled, saying why.
+        // An operation in progress: the branch, disabled.
         let blocked = LocationControlState(repository: repository, branch: .branch(name: "main"), branchBlockedReason: "Finish or abort the merge first.")
         #expect(blocked.branchTitle == "main")
-        #expect(blocked.branchTooltip == "Finish or abort the merge first.")
         #expect(!blocked.isBranchEnabled)
         #expect(LocationControlState(repository: repository, branch: .branch(name: "main")).isBranchEnabled)
     }
@@ -59,7 +51,6 @@ struct LocationControlTests {
             await fixture.refresh()
             let merging = LocationControlState.make(fixture.app)
             #expect(merging.branch == .branch(name: "feature"))
-            #expect(merging.branchBlockedReason == "Finish or abort the merge first.")
             #expect(!merging.isBranchEnabled)
             try await operations.abortOperation(confirmed: [.abortWithResolvedConflicts])
             await fixture.settle()

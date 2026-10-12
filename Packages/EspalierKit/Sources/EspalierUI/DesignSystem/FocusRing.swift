@@ -23,24 +23,16 @@ extension Metrics {
     }
 }
 
-extension EnvironmentValues {
-    /// Draws every focus ring below as if its control had keyboard focus:
-    /// snapshots of the rings, which tests can't give keyboard focus.
-    @Entry public var showsFocusRings = false
-}
-
 /// The ring in `shape`, `outset` outside it, while `isFocused`.
 struct FocusRing<RingShape: InsettableShape>: View {
     let isFocused: Bool
     let shape: RingShape
     var outset: CGFloat = 0
     @Environment(\.motion) private var motion
-    @Environment(\.showsFocusRings) private var showsFocusRings
 
     var body: some View {
-        let isShown = isFocused || showsFocusRings
         ZStack {
-            if isShown {
+            if isFocused {
                 shape
                     .inset(by: -outset)
                     .strokeBorder(Color.accent.opacity(Metrics.FocusRing.opacity), lineWidth: Metrics.FocusRing.lineWidth)
@@ -50,7 +42,7 @@ struct FocusRing<RingShape: InsettableShape>: View {
                     ))
             }
         }
-        .animation(motion.animation(isShown ? Motion.leave : Motion.focusOut), value: isShown)
+        .animation(motion.animation(isFocused ? Motion.leave : Motion.focusOut), value: isFocused)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

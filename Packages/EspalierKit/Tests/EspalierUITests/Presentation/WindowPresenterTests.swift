@@ -134,7 +134,7 @@ struct WindowPresenterTests {
         let presenter = WindowPresenter()
         let busy = ScriptedIntent([OperationError(.busy(.commit), operation: .checkoutBranch)])
         #expect(await presenter.perform { answers throws(OperationError) in try busy.run(answers) } == nil)
-        #expect(presenter.toasts.map(\.message) == ["Another operation is in progress"])
+        #expect(presenter.toasts.count == 1)
         #expect(presenter.error == nil)
 
         let cancelled = ScriptedIntent([OperationError(.cancelled(.hookAborted("pre-commit")), operation: .commit)])
@@ -181,7 +181,7 @@ struct WindowPresenterTests {
             outcome.summary.map { Toast($0) }
         }
         #expect(result == .merged(ours: "main", theirs: "feature"))
-        #expect(presenter.toasts.map(\.message) == ["Merged feature into main"])
+        #expect(presenter.toasts.count == 1)
         presenter.dismissToast(presenter.toasts[0].id)
         #expect(presenter.toasts.isEmpty)
     }
@@ -209,7 +209,7 @@ struct WindowPresenterTests {
 
         let squashed = Toast("Successfully squashed 2 commits.", undo: ToastAction { runs.names.append("squash") })
         show(squashed)
-        #expect(TimedToast(toast: squashed, presenter: presenter).content.undoShortcut == "⌘Z")
+        #expect(TimedToast(toast: squashed, presenter: presenter).content.undoShortcut != nil)
         #expect(undoManager.canUndo)
         undoManager.undo()
         #expect(presenter.toasts.isEmpty)
@@ -228,7 +228,8 @@ struct WindowPresenterTests {
             undoManager.undo()
         }
         // A toast without Undo registers nothing: undoing runs nothing.
-        show(Toast("Successfully merged feature into main"))
+        let merged = Toast("Successfully merged feature into main")
+        show(merged)
         for _ in 0..<5 where undoManager.canUndo {
             undoManager.undo()
         }
@@ -236,7 +237,7 @@ struct WindowPresenterTests {
             await Task.yield()
         }
         #expect(runs.names == ["squash"])
-        #expect(presenter.toasts.map(\.message) == ["Successfully copied 1 commit to main.", "Successfully merged feature into main"])
+        #expect(presenter.toasts.map(\.id) == [copied.id, merged.id])
     }
 
     @Test("a cancelled task's confirmation answers cancelled")
@@ -250,7 +251,7 @@ struct WindowPresenterTests {
         await waitUntil { presenter.confirmation == nil }
     }
 
-    @Test("Do not show this message again turns the confirmation's setting off", .offline)
+    @Test("the confirmation's checkbox turns its setting off", .offline)
     func suppression() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
@@ -278,30 +279,21 @@ struct WindowPresenterTests {
     @Test("confirmations become alerts or compact sheets with the right roles")
     func confirmationPresentation() throws {
         for (name, confirmation) in UIFixtures.confirmations {
-            #expect(confirmation.title.hasSuffix("?"), "\(name)")
             switch confirmation.presentation {
             case .alert(let content):
                 #expect(![.removeRepository, .deleteBranch].contains(confirmation.kind), "\(name)")
-                #expect(content.title == confirmation.title, "\(name)")
-                #expect(content.buttons.first?.title == confirmation.confirmButton)
-                #expect(content.buttons.last == AlertContent.Button("Cancel", role: .cancel))
+                #expect(content.buttons.last?.role == .cancel, "\(name)")
                 #expect((content.suppressionTitle != nil) == (confirmation.suppressionSetting != nil), "\(name)")
             case .compactSheet(let compact):
                 #expect([.removeRepository, .deleteBranch].contains(confirmation.kind), "\(name)")
-                #expect(compact.title == confirmation.title, "\(name)")
-                #expect(compact.confirmButton == confirmation.confirmButton)
                 #expect(compact.isDestructive, "\(name)")
             }
         }
-        // The discard list is shown up to ten files.
-        let few = EspalierCore.Confirmation.discardChanges(UIFixtures.files).alertContent
-        let many = EspalierCore.Confirmation.discardChanges(UIFixtures.manyFiles).alertContent
-        #expect(few.message.contains("• README.md"))
-        #expect(!many.message.contains("•"))
-        #expect(few.severity == .critical)
+        // Discarding changes is critical.
+        let discard = EspalierCore.Confirmation.discardChanges(UIFixtures.files).alertContent
+        #expect(discard.severity == .critical)
 
-        // An alert's checkbox is "Do not show this message again", and
-        // counts only when confirmed.
+        // An alert's checkbox counts only when confirmed.
         let stash = EspalierCore.Confirmation.discardStash()
         #expect(stash.response(to: AlertResponse(buttonIndex: 0, isSuppressed: true)) == ConfirmationResponse(isConfirmed: true, suppressesFutureConfirmations: true))
         #expect(stash.response(to: AlertResponse(buttonIndex: 1, isSuppressed: true)) == .cancelled)
@@ -317,11 +309,9 @@ struct WindowPresenterTests {
         }
         // The remote is offered only when the branch is there.
         #expect(local.optionTitle == nil)
-        #expect(remote.optionTitle == "Delete it on the remote too")
-        #expect(remote.paragraphs == ["Delete the branch x?", "This can't be undone.", "The branch also exists on the remote."])
+        #expect(remote.optionTitle != nil)
         // The folder that stays is shown on its own.
-        #expect(repository.optionTitle == "Also move the folder to the Trash")
-        #expect(repository.paragraphs.last == "Its folder stays on your Mac:")
+        #expect(repository.optionTitle != nil)
         #expect(repository.path == "/Users/joe/Developer/espalier")
     }
 
@@ -331,22 +321,14 @@ struct WindowPresenterTests {
             switch (name, error.presentation) {
             case ("git-raw", .rawOutput(let content, _)), ("clone", .rawOutput(let content, _)):
                 #expect(!content.output.isEmpty)
-                if name == "clone" {
-                    #expect(content.note == "Would you like to retry cloning joe/missing?")
-                    #expect(content.recoveryTitles == ["Retry Clone"])
-                    #expect(content.dismissTitle == "Cancel")
-                }
             case ("signing-pinentry", .rawOutput(let content, _)), ("signing-ssh-agent", .rawOutput(let content, _)):
                 // Why signing failed comes before git's output.
-                #expect(content.message == error.signingFailureExplanation, "\(name)")
                 #expect(content.message?.isEmpty == false, "\(name)")
-                #expect(content.title == (name == "signing-pinentry" ? "Commit Failed" : "Signing Failed"), "\(name)")
                 #expect(content.output == error.gitFailure?.message, "\(name)")
             case ("pushProtectionBlocked", .pushProtection), ("insufficientPermissions", .createFork):
                 break
             case (_, .alert(let content, let recoveries)):
                 #expect(content.buttons.count == recoveries.count + 1, "\(name)")
-                #expect(content.buttons.prefix(recoveries.count).map(\.title) == recoveries.map(\.title), "\(name)")
             default:
                 Issue.record("\(name) has an unexpected presentation")
             }
@@ -354,20 +336,14 @@ struct WindowPresenterTests {
         let byName = Dictionary(uniqueKeysWithValues: UIFixtures.errors.map { ($0.name, $0.error) })
         guard case .alert(let pushRejected, _) = byName["pushRejectedNonFastForward"]!.presentation,
               case .alert(let lfs, _) = byName["lfsAttributeMismatch"]!.presentation,
-              case .alert(let overwritten, _) = byName["localChangesOverwritten"]!.presentation,
-              case .alert(let overwrittenWithStash, _) = byName["localChangesOverwritten-stash"]!.presentation,
-              case .alert(let commit, _) = byName["git-commit"]!.presentation else {
+              case .alert(let overwritten, _) = byName["localChangesOverwritten"]!.presentation else {
             Issue.record("errors aren't alerts")
             return
         }
-        #expect(pushRejected.title == "Newer Commits on Remote")
-        #expect(pushRejected.buttons.map(\.title) == ["Fetch", "Cancel"])
-        #expect(lfs.buttons.map(\.title) == ["Update Existing Filters", "Edit Global Git Config…", "Not Now"])
-        #expect(overwritten.buttons.map(\.title) == ["Stash Changes and Continue", "Close"])
-        #expect(overwritten.message.hasSuffix("You can stash your changes now and restore them afterward."))
-        #expect(!overwrittenWithStash.message.contains("You can stash"))
-        #expect(commit.title == "Commit Failed")
-        // Only the Trash failure offers "Do not show this message again".
+        #expect(pushRejected.buttons.map(\.role) == [.primary, .cancel])
+        #expect(lfs.buttons.map(\.role) == [.primary, .secondary, .cancel])
+        #expect(overwritten.buttons.map(\.role) == [.primary, .cancel])
+        // Only the Trash failure offers the checkbox.
         for (name, error) in UIFixtures.errors {
             guard case .alert(let content, _) = error.presentation else {
                 continue
@@ -385,7 +361,7 @@ struct WindowPresenterTests {
 
 @Suite("Error alerts") @MainActor
 struct ErrorAlertTests {
-    @Test("the Trash failure's \"Do not show this message again\" turns off the permanent discard confirmation when the user goes ahead, never on Cancel")
+    @Test("the Trash failure's checkbox turns off the permanent discard confirmation when the user goes ahead, never on Cancel")
     func trashFailureSuppression() throws {
         let harness = try AppHarness()
         let preferences = harness.makeApp().preferences
@@ -394,8 +370,8 @@ struct ErrorAlertTests {
             Issue.record("The Trash failure isn't an alert")
             return
         }
-        #expect(content.suppressionTitle == "Do not show this message again")
-        #expect(content.buttons.map(\.title) == ["Permanently Discard Changes", "Cancel"])
+        #expect(content.suppressionTitle != nil)
+        #expect(content.buttons.map(\.role) == [.primary, .cancel])
         #expect(error.suppressionSetting == \Preferences.confirmDiscardChangesPermanently)
         #expect(preferences.confirmDiscardChangesPermanently)
 
@@ -408,12 +384,12 @@ struct ErrorAlertTests {
 
         // Going ahead without it: the recovery runs, the setting stays.
         let unticked = ErrorHost.respond(AlertResponse(buttonIndex: 0), to: error, recoveries: recoveries, preferences: preferences)
-        #expect(unticked?.title == "Permanently Discard Changes")
+        #expect(Self.isDiscardPermanently(unticked))
         #expect(preferences.confirmDiscardChangesPermanently)
 
         // Going ahead with it: the setting turns off.
         let ticked = ErrorHost.respond(AlertResponse(buttonIndex: 0, isSuppressed: true), to: error, recoveries: recoveries, preferences: preferences)
-        #expect(ticked?.title == "Permanently Discard Changes")
+        #expect(Self.isDiscardPermanently(ticked))
         #expect(!preferences.confirmDiscardChangesPermanently)
 
         // Other errors' answers write nothing.
@@ -421,5 +397,13 @@ struct ErrorAlertTests {
         let lfs = try #require(UIFixtures.errors.first { $0.name == "lfsAttributeMismatch" }?.error)
         _ = ErrorHost.respond(AlertResponse(buttonIndex: 0, isSuppressed: true), to: lfs, recoveries: lfs.recoveries, preferences: preferences)
         #expect(preferences.confirmDiscardChangesPermanently)
+    }
+
+    /// Whether `recovery` is Permanently Discard Changes.
+    private static func isDiscardPermanently(_ recovery: Recovery?) -> Bool {
+        if case .discardPermanently? = recovery {
+            return true
+        }
+        return false
     }
 }

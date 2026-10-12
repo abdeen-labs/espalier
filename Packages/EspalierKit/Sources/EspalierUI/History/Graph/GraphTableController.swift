@@ -26,13 +26,6 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     var actions = GraphTableActions()
     /// Where avatars come from (monograms when nil).
     var avatarLoader: (any AvatarLoading)?
-    /// The time relative dates are measured from; nil for the clock, with
-    /// visible dates refreshed once a minute.
-    var fixedNow: Date? {
-        didSet {
-            updateMinuteTimer()
-        }
-    }
     /// How dates show.
     var dateFormatting = DateTimeFormatting() {
         didSet {
@@ -125,6 +118,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         super.init()
         configureTable()
         observeSystem()
+        startMinuteTimer()
         tableView.setAccessibilityCustomRotors(GraphAccessibility.rotors(for: self))
     }
 
@@ -536,8 +530,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         guard let commit = source.commit(atRow: row) else {
             return .workingCopy(presentation.workingCopy)
         }
-        let now = fixedNow ?? Date()
-        let date = dates.entry(for: commit.sha, date: commit.author.date, now: now, formatting: dateFormatting, timeZone: timeZone)
+        let date = dates.entry(for: commit.sha, date: commit.author.date, now: Date(), formatting: dateFormatting, timeZone: timeZone)
         let track = source.graph[row].track
         let refs = refCapsules(source.refs(at: commit.sha), sha: commit.sha, track: track)
         var unpushed: String?
@@ -1130,12 +1123,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         reconfigureVisibleRows()
     }
 
-    private func updateMinuteTimer() {
-        minuteTimer?.invalidate()
-        minuteTimer = nil
-        guard fixedNow == nil else {
-            return
-        }
+    private func startMinuteTimer() {
         minuteTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.refreshVisibleDates()
@@ -1148,7 +1136,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         guard let source else {
             return
         }
-        let now = fixedNow ?? Date()
+        let now = Date()
         for row in Range(tableView.rows(in: tableView.visibleRect)) ?? 0..<0 where row < shownRowCount {
             guard let commit = source.commit(atRow: row),
                   let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? CommitRowCellView else {

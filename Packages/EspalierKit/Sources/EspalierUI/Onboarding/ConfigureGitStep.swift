@@ -38,7 +38,6 @@ final class ConfigureGitModel {
 
     @ObservationIgnored let app: AppModel
     @ObservationIgnored let presenter: WindowPresenter
-    @ObservationIgnored private let accountOverride: Account??
 
     var source: Source
     var manualName = ""
@@ -51,13 +50,10 @@ final class ConfigureGitModel {
     /// The global configuration when the step loaded it.
     private(set) var configured = GlobalGitSettings(name: nil, email: nil, defaultBranch: "main")
 
-    /// - Parameter account: The account to offer; the first signed-in one
-    ///   when not given (snapshots pass one).
-    init(app: AppModel, presenter: WindowPresenter, account: Account?? = nil) {
+    init(app: AppModel, presenter: WindowPresenter) {
         self.app = app
         self.presenter = presenter
-        accountOverride = account
-        let initial = account ?? app.accounts.accounts.first
+        let initial = app.accounts.accounts.first
         source = initial == nil ? .manual : .account
         if let initial {
             let preferred = lookupPreferredEmail(initial)
@@ -71,9 +67,10 @@ final class ConfigureGitModel {
 
     // MARK: Derived
 
-    /// The account whose name and addresses are offered.
+    /// The account whose name and addresses are offered: the first
+    /// signed-in one.
     var account: Account? {
-        accountOverride ?? app.accounts.accounts.first
+        app.accounts.accounts.first
     }
 
     /// "Use my GitHub account name and email address", or "… GitHub
@@ -233,9 +230,6 @@ struct ExampleCommitRow: View {
 struct ConfigureGitStep: View {
     @Bindable var model: ConfigureGitModel
     var back: @MainActor () -> Void = {}
-    /// Whether the step reads the configuration when it appears (snapshots
-    /// show fixed values).
-    var loadsOnAppear = true
 
     var body: some View {
         VStack(spacing: Metrics.Welcome.sectionSpacing) {
@@ -305,9 +299,7 @@ struct ConfigureGitStep: View {
         }
         .padding(Metrics.insetLarge * 2)
         .task {
-            if loadsOnAppear {
-                await model.load()
-            }
+            await model.load()
         }
     }
 

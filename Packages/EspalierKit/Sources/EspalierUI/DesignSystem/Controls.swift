@@ -460,7 +460,6 @@ public struct CapsuleProgressBar: View {
     private let value: Double?
     private let tint: NSColor
     @Environment(\.motion) private var motion
-    @Environment(\.fixedNow) private var fixedNow
 
     /// - Parameters:
     ///   - value: How far the work has got, 0 to 1; nil sweeps a segment
@@ -483,9 +482,7 @@ public struct CapsuleProgressBar: View {
                         .frame(width: max(proxy.size.height, proxy.size.width * value))
                         .opacity(value > 0 ? 1 : 0)
                         .motion(Motion.leave, value: value)
-                } else if motion.animates, fixedNow == nil {
-                    // Panes hosted in AppKit carry the fixed clock but not
-                    // the suppressed motion: still under either.
+                } else if motion.animates {
                     TimelineView(.animation) { context in
                         segment(color, width: proxy.size.width, position: Self.sweep(at: context.date))
                     }

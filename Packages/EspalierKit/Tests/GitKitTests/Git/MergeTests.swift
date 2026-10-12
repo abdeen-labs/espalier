@@ -110,7 +110,7 @@ struct MergeTests {
                 let error = await #expect(throws: GitError.self) {
                     try await abortMerge(repository)
                 }
-                #expect(error?.message.contains("There's no merge to abort") == true)
+                #expect(error?.result.gitError == .noMergeToAbort)
             }
         }
 
@@ -234,7 +234,6 @@ struct MergeTests {
                 try await merge(repository, "master", MergeOptions(squash: squash))
             }
             #expect(error?.result.gitError == .cannotMergeUnrelatedHistories)
-            #expect(error?.message == "These branches have unrelated histories and can't be merged.")
         }
 
         // No `--ff` option is passed, so the user's `merge.ff` applies.

@@ -263,14 +263,14 @@ struct KeywordTestHighlighter: SyntaxHighlighter {
 /// Builds diff tables for tests.
 @MainActor
 enum DiffTables {
-    /// A controller showing `content`, laid out at `size`, its document
-    /// built on the main actor.
-    static func controller(_ content: DiffTableContent, size: CGSize = CGSize(width: 720, height: 360)) -> DiffTableController {
+    /// A controller showing `content`, laid out at `size`, once its
+    /// document is built.
+    static func controller(_ content: DiffTableContent, size: CGSize = CGSize(width: 720, height: 360)) async -> DiffTableController {
         let controller = DiffTableController()
-        controller.buildsSynchronously = true
         controller.scrollView.frame = CGRect(origin: .zero, size: size)
         controller.scrollView.layoutSubtreeIfNeeded()
         controller.apply(content)
+        await controller.documentIdle()
         controller.scrollView.layoutSubtreeIfNeeded()
         return controller
     }

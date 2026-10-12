@@ -4,8 +4,8 @@
 // from the appearance, System, Light, or Dark). One look is current for
 // the process (`LookCenter`); reading it in a SwiftUI body makes the view
 // draw again when it changes, and `LookApplier` tells the AppKit views.
-// A task can draw in a look of its own (`Look.with(_:operation:)`), as
-// snapshots do, without touching the process's.
+// A task can draw in a look of its own (`Look.with(_:operation:)`) without
+// touching the process's.
 
 import EspalierCore
 import Foundation
@@ -41,9 +41,9 @@ nonisolated public struct Look: Sendable, Hashable {
 
     @TaskLocal private static var taskLook: Look?
 
-    /// Runs `operation` drawing in `look`, for its task alone: rendering
-    /// done synchronously inside it (a snapshot) reads `look` wherever it
-    /// reads the current one, while the process's stays as it is.
+    /// Runs `operation` drawing in `look`, for its task alone: what it
+    /// does synchronously reads `look` wherever it reads the current one,
+    /// while the process's stays as it is.
     public static func with<T>(_ look: Look, operation: () throws -> T) rethrows -> T {
         try $taskLook.withValue(look, operation: operation)
     }

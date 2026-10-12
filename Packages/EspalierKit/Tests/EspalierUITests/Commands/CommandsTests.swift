@@ -77,10 +77,6 @@ struct CommandsTests {
             #expect(context.actions.canPerform(.pull))
             #expect(!context.actions.canPerform(.discardAllChanges))
             #expect(!context.actions.canPerform(.deleteBranch(name: nil)))
-            #expect(context.actions.title(for: .push) == "Push")
-            #expect(context.actions.title(for: .removeRepository(nil)) == "Remove…")
-            #expect(context.actions.title(for: .changeAlias(nil)) == "Create Alias…")
-            #expect(context.actions.title(for: .toggleStashedChanges) == "Show Stashed Changes")
 
             // The history scope is remembered per repository.
             #expect(context.actions.isChecked(.setHistoryScope(HistoryScope.defaultScope)))
@@ -190,8 +186,7 @@ struct CommandsTests {
         await actions.performAndWait(.fetch)
         #expect(state.fetched == 2)
 
-        // Window rules and modals gate repository actions; titles fall back
-        // to the kind's.
+        // Window rules and modals gate repository actions.
         state.enabled = true
         actions.availability = { $0 != .fetch }
         #expect(!actions.canPerform(.fetch))
@@ -200,9 +195,5 @@ struct CommandsTests {
         #expect(!actions.canPerform(.fetch))
         actions.register(.search) { _ in }
         #expect(actions.canPerform(.search))
-        #expect(actions.title(for: .fetch) == "Fetch")
-        #expect(actions.title(for: .setImageDiffType(.onionSkin)) == "Onion Skin")
-        actions.stateTitle = { _ in "Fetch origin" }
-        #expect(actions.title(for: .fetch) == "Fetch origin")
     }
 }

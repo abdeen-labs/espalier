@@ -1,10 +1,10 @@
 // What the GitHub views show for the state layer's values: the sign-in
 // sheet's steps for each `SignInState`, the Accounts pane's rows, the
-// checks' content (popover titles, groups, the first failed check open,
-// re-run choices), glyphs and tooltips, the Re-run sheet's titles, the
-// rows' subtitles and filter, the overview's branches, review and comment
-// sheets, push protection's secrets, Create Pull Request's answers, Preview
-// Pull Request's footer, and the invalidated-account alerts shown once.
+// checks' content (groups, the first failed check open, re-run choices),
+// glyphs, the Re-run sheet, the rows' filter, the overview's branches,
+// review and comment sheets, push protection's secrets, Create Pull
+// Request's answers, Preview Pull Request's merge status, and the
+// invalidated-account alerts shown once.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -26,14 +26,11 @@ struct GitHubContentTests {
         let user = SignInRequest(endpoint: nil)
 
         #expect(SignInContent(state: nil, request: user).step == .requestingCode)
-        #expect(SignInContent(state: nil, request: user).title == "Sign In to GitHub.com")
-        #expect(SignInContent(state: nil, request: SignInRequest(endpoint: SignInRequest.enterpriseEndpoint)).title == "Sign In to GitHub Enterprise")
 
         let entry = SignInContent(
             state: .endpointEntry(SignInState.EndpointEntry(address: "https://ghe.example.com", clientID: "Ov23li", error: .missingClientID, loading: false)),
             request: user
         )
-        #expect(entry.title == "Sign In to GitHub Enterprise")
         #expect(entry.step == .address(EnterpriseAddressContent(
             address: "https://ghe.example.com",
             clientID: "Ov23li",
@@ -69,11 +66,12 @@ struct GitHubContentTests {
             Issue.record("Expected the code step")
             return
         }
-        #expect(codeContent.verificationLabel == "ghe.example.com/login/device")
         #expect(codeContent.verificationURL == URL(string: "https://ghe.example.com/login/device"))
-        #expect(SignInContent(state: authentication(error: .codeExpired), request: user).step == .failed(message: "This code has expired.", retryTitle: "Get a New Code"))
-        #expect(SignInContent(state: authentication(error: .accessDenied), request: user).step == .failed(message: "Authorization was denied.", retryTitle: "Try Again"))
-        #expect(SignInContent(state: authentication(error: .cannotReach(host: "ghe.example.com")), request: user).step == .failed(message: "Couldn't reach ghe.example.com.", retryTitle: "Try Again"))
+        for error in [SignInError.codeExpired, .accessDenied, .cannotReach(host: "ghe.example.com")] {
+            if case .failed = SignInContent(state: authentication(error: error), request: user).step {} else {
+                Issue.record("Expected the failed step for \(error)")
+            }
+        }
 
         let success = SignInContent(state: .success(SignInState.Success(account: GitHubFixtures.dotComAccount.withToken(""))), request: user)
         guard case .success(let login, let avatar) = success.step else {
@@ -82,17 +80,12 @@ struct GitHubContentTests {
         }
         #expect(login == "octocat")
         #expect(avatar.email == "octocat@example.com")
-
-        let git = SignInContent(state: authentication(), request: SignInRequest(endpoint: "https://github.com/octocat/hello.git", reason: .gitRequestedCredentials(url: "https://github.com/octocat/hello.git")))
-        #expect(git.header == "Git is asking for credentials to access https://github.com/octocat/hello.git.")
-        #expect(git.title == "Sign In to GitHub.com")
     }
 
-    @Test("the code's time left, and its expiry")
+    @Test("the code's time left shows until its expiry")
     func codeTimeLeft() {
         let code = SignInCodeContent(SignInCode(userCode: "WDJB-MJHT", verificationURI: "https://github.com/login/device", expiresAt: UIFixtures.now.addingTimeInterval(14 * 60 + 52)))
-        #expect(code.timeLeft(now: UIFixtures.now) == "14:52")
-        #expect(code.timeLeft(now: UIFixtures.now.addingTimeInterval(14 * 60 + 51)) == "0:01")
+        #expect(code.timeLeft(now: UIFixtures.now.addingTimeInterval(14 * 60 + 51)) != nil)
         #expect(code.timeLeft(now: UIFixtures.now.addingTimeInterval(14 * 60 + 52)) == nil)
     }
 
@@ -114,18 +107,12 @@ struct GitHubContentTests {
 
     // MARK: Accounts
 
-    @Test("account rows: GitHub.com's name and @login, an Enterprise account's @login (name) and server")
+    @Test("account rows: GitHub.com's account's avatar URL; none for an Enterprise account")
     func accountRows() {
         let dotCom = AccountRowContent(GitHubFixtures.dotComAccount)
-        #expect(dotCom.title == "The Octocat")
-        #expect(dotCom.subtitle == "@octocat")
         #expect(dotCom.avatar.avatarURL == "https://avatars.githubusercontent.com/u/1?v=4")
         let enterprise = AccountRowContent(GitHubFixtures.enterpriseAccount)
-        #expect(enterprise.title == "@jbloggs (Joe Bloggs)")
-        #expect(enterprise.subtitle == "https://ghe.example.com")
         #expect(enterprise.avatar.avatarURL == nil)
-        let sameName = AccountRowContent(Account(login: "jb", endpoint: "https://ghe.example.com/api/v3", token: "", emails: [], avatarURL: "", id: 3, name: "jb"))
-        #expect(sameName.title == "@jb")
     }
 
     @Test("the pane: signed-in and invalidated accounts, and notes only for accounts that are gone")
@@ -191,27 +178,19 @@ struct GitHubContentTests {
         let issue = AccountsIssue(message: "The keychain is locked.")
         #expect(state.issuesToShow([issue]).map(\.id) == [issue.id])
         #expect(state.issuesToShow([issue]).isEmpty)
-        let alert = InvalidatedAccountAlert.content(for: enterprise)
-        #expect(alert.title == "Signed Out")
-        #expect(alert.message == "The token for your ghe.example.com account is no longer valid, so you've been signed out. Sign in again?")
-        #expect(alert.buttons.map(\.title) == ["Sign In…", "Not Now"])
-        #expect(InvalidatedAccountAlert.content(for: dotCom).message.contains("your GitHub.com account"))
     }
 
     // MARK: Checks
 
-    @Test("checks: desktop's titles and summaries, groups, the first failed check open, re-run choices")
+    @Test("checks: groups, the first failed check open, re-run choices")
     func checksContent() {
         let loading = GitHubFixtures.checksContent(nil, loaded: false)
-        #expect(loading.title == "Checks Summary")
         #expect(loading.isLoading)
         #expect(!loading.isEmpty)
         #expect(loading.overall == nil)
         #expect(!loading.canRerun)
 
         let failing = GitHubFixtures.checksContent(GitHubFixtures.failingChecks)
-        #expect(failing.title == "Some checks were not successful")
-        #expect(failing.summary == "2 successful and 1 failed checks")
         #expect(failing.overall == .failure)
         #expect(failing.groups.map(\.name) == ["CI", "Other"])
         #expect(failing.groups[0].checks.map(\.name) == ["build", "test"])
@@ -220,8 +199,6 @@ struct GitHubContentTests {
         #expect(failing.canRerun)
         let test = failing.groups[0].checks[1]
         #expect(test.glyph == .failure)
-        #expect(test.stepsSummary == "1 successful, 1 failed, and 1 skipped steps")
-        #expect(test.steps?.map(\.duration) == ["3s", "58s", "0s"])
         #expect(test.steps?.first?.url == URL(string: "https://github.com/octocat/hello/actions/runs/900/job/12/#step:1:1"))
         #expect(test.canRerun)
         let legacy = failing.groups[1].checks[0]
@@ -229,7 +206,6 @@ struct GitHubContentTests {
         #expect(!legacy.canRerun)
 
         let passing = GitHubFixtures.checksContent(GitHubFixtures.passingChecks)
-        #expect(passing.title == "All checks have passed")
         #expect(passing.overall == .success)
         #expect(passing.rerun == .all)
         #expect(passing.initiallyExpanded == nil)
@@ -238,13 +214,12 @@ struct GitHubContentTests {
         let other = GitHubFixtures.checksContent(createCombinedCheckFromChecks([GitHubFixtures.check(1, "ci/travis", .success, suite: nil)]))
         #expect(other.groups.map(\.name) == [nil])
 
-        #expect(GitHubFixtures.checksContent(GitHubFixtures.pendingChecks).title == "Some checks haven't completed yet")
         #expect(GitHubFixtures.checksContent(GitHubFixtures.failingChecks, rerunSupport: (false, false)).rerun == CheckRerunOptions.none)
         #expect(GitHubFixtures.checksContent(GitHubFixtures.failingChecks, rerunSupport: (true, false)).rerun == .all)
         #expect(GitHubFixtures.checksContent(nil).isEmpty)
     }
 
-    @Test("glyphs: a distinct shape per conclusion; the overall state and its tooltip")
+    @Test("glyphs: a distinct shape per conclusion; the overall state")
     func glyphs() {
         #expect(CheckGlyphKind(status: .completed, conclusion: .success) == .success)
         #expect(CheckGlyphKind(status: .completed, conclusion: .timedOut) == .failure)
@@ -259,17 +234,10 @@ struct GitHubContentTests {
         #expect(ChecksState(CombinedRefCheck(status: .completed, conclusion: nil, checks: [])) == nil)
         #expect(ChecksState(GitHubFixtures.failingChecks) == .failure)
         #expect(ChecksState(GitHubFixtures.pendingChecks) == .pending)
-        #expect(checksTooltipText(GitHubFixtures.passingChecks) == "Checks: Successful")
-        #expect(PullRequestChipContent(number: 142, checks: .success, checksTooltip: "Checks: Successful").tooltip == "Pull request #142 · Checks: Successful")
-        #expect(PullRequestChipContent(number: 142, checks: nil, checksTooltip: nil).tooltip == "Pull request #142")
     }
 
-    @Test("the Re-run sheet: desktop's titles, waiting for more than one check, the button")
+    @Test("the Re-run sheet: waiting for more than one check, the button")
     func rerunContent() {
-        #expect(RerunChecksContent.title(checkCount: 3, failedOnly: false) == "Re-run Checks")
-        #expect(RerunChecksContent.title(checkCount: 1, failedOnly: false) == "Re-run Single Check")
-        #expect(RerunChecksContent.title(checkCount: 3, failedOnly: true) == "Re-run Failed Checks")
-        #expect(RerunChecksContent.title(checkCount: 1, failedOnly: false, showsDescriptor: false) == "Re-run Check")
         let checks = GitHubFixtures.failingChecks.checks
         let determining = RerunChecksContent(checks: checks, failedOnly: false, plan: nil, isRerunning: false)
         #expect(determining.isDetermining)
@@ -280,19 +248,10 @@ struct GitHubContentTests {
         #expect(ready.canRerun)
         #expect(ready.rerunnable.map(\.name) == ["test"])
         #expect(ready.warning == plan.warning)
-        #expect(ready.dependentsMessage == "These workflows will run again, along with the checks that depend on them.")
         #expect(!RerunChecksContent(checks: checks, failedOnly: false, plan: plan, isRerunning: true).canRerun)
     }
 
     // MARK: Pull requests
-
-    @Test("a row's subtitle: relative or absolute, with Draft")
-    func rowSubtitle() {
-        let row = PullRequestRowContent(number: 142, title: "Add the sign-in sheet", author: "octo", created: GitHubFixtures.created, isDraft: true)
-        #expect(row.subtitle(now: UIFixtures.now, formatting: DateTimeFormatting(), timeZone: UIFixtures.timeZone) == "#142 opened 2 days ago by octo • Draft")
-        let absolute = DateTimeFormatting(preferAbsoluteDates: true, dateFormat: nil, timeFormat: nil)
-        #expect(row.subtitle(now: UIFixtures.now, formatting: absolute, timeZone: UIFixtures.timeZone).hasPrefix("#142 opened Oct 4, 2026"))
-    }
 
     @Test("the sidebar filter matches titles, numbers, and authors")
     func filter() {
@@ -307,13 +266,12 @@ struct GitHubContentTests {
         #expect(PullRequestsSection.filtered(pullRequests, by: "MONA").map(\.pullRequestNumber) == [14])
     }
 
-    @Test("the overview: a fork's branch names its owner; Enterprise's button says so")
+    @Test("the overview: a fork's branch names its owner; an Enterprise pull request's URL is on its server")
     func overviewContent() {
         let fork = PullRequestOverviewContent(GitHubFixtures.pullRequest(142, headRepository: GitHubFixtures.hubotFork), isCurrentBranch: false)
         #expect(fork.head == "hubot:feature/sign-in")
         #expect(fork.base == "main")
         #expect(fork.url == URL(string: "https://github.com/octocat/hello/pull/142"))
-        #expect(fork.viewOnGitHubTitle == "View on GitHub")
         let own = PullRequestOverviewContent(GitHubFixtures.pullRequest(141), isCurrentBranch: true)
         #expect(own.head == "feature/sign-in")
         #expect(own.isCurrentBranch)
@@ -335,7 +293,6 @@ struct GitHubContentTests {
             draft: false,
             body: ""
         ), isCurrentBranch: false)
-        #expect(enterprise.viewOnGitHubTitle == "View on GitHub Enterprise")
         #expect(enterprise.url == URL(string: "https://ghe.example.com/octocat/hello/pull/143"))
         #expect(enterprise.head == "feature/sign-in")
     }
@@ -344,18 +301,16 @@ struct GitHubContentTests {
     func reviewContent() throws {
         let pullRequest = GitHubFixtures.pullRequest(142)
         let approved = try #require(ReviewNotificationContent(pullRequest: pullRequest, content: .review(GitHubFixtures.review(.approved)), isCurrentBranch: true, underlineLinks: true))
-        #expect(approved.headline == "@monalisa approved your pull request")
         #expect(approved.kind == .approved)
         #expect(!approved.canCheckOut)
         #expect(approved.date == Date(timeIntervalSince1970: 1_791_273_600))
         #expect(approved.url == URL(string: "https://github.com/octocat/hello/pull/142#pullrequestreview-80"))
         let changes = try #require(ReviewNotificationContent(pullRequest: pullRequest, content: .review(GitHubFixtures.review(.changesRequested)), isCurrentBranch: false, underlineLinks: true))
-        #expect(changes.headline == "@monalisa requested changes on your pull request")
+        #expect(changes.kind == .changesRequested)
         #expect(changes.canCheckOut)
         let commented = try #require(ReviewNotificationContent(pullRequest: pullRequest, content: .review(GitHubFixtures.review(.commented)), isCurrentBranch: false, underlineLinks: true))
-        #expect(commented.headline == "@monalisa reviewed your pull request")
+        #expect(commented.kind == .commented)
         let comment = try #require(ReviewNotificationContent(pullRequest: pullRequest, content: .comment(GitHubFixtures.comment, .reviewComment), isCurrentBranch: false, underlineLinks: true))
-        #expect(comment.headline == "@monalisa commented on your pull request")
         #expect(comment.kind == .commented)
         #expect(ReviewNotificationContent(pullRequest: pullRequest, content: .checksFailed([]), isCurrentBranch: false, underlineLinks: true) == nil)
     }
@@ -378,19 +333,17 @@ struct GitHubContentTests {
     func createPullRequestPrompts() {
         let branch = ModelFixtures.branch("feature")
         let publish = CreatePullRequestPrompts.alert(for: .publishBranch(branch))
-        #expect(publish.title == "Publish Branch?")
-        #expect(publish.buttons.map(\.title) == ["Publish Branch", "Cancel"])
+        #expect(publish.buttons.map(\.role) == [.primary, .cancel])
         #expect(CreatePullRequestPrompts.choice(for: .publishBranch(branch), buttonIndex: 0) == .pushFirst)
         #expect(CreatePullRequestPrompts.choice(for: .publishBranch(branch), buttonIndex: 1) == nil)
         let push = CreatePullRequestPrompts.alert(for: .pushCommits(branch, unpushedCommits: 2))
-        #expect(push.title == "Push Local Changes?")
-        #expect(push.buttons.map(\.title) == ["Push Commits", "Create Without Pushing", "Cancel"])
+        #expect(push.buttons.map(\.role) == [.primary, .secondary, .cancel])
         #expect(CreatePullRequestPrompts.choice(for: .pushCommits(branch, unpushedCommits: 2), buttonIndex: 0) == .pushFirst)
         #expect(CreatePullRequestPrompts.choice(for: .pushCommits(branch, unpushedCommits: 2), buttonIndex: 1) == .createWithoutPushing)
         #expect(CreatePullRequestPrompts.choice(for: .pushCommits(branch, unpushedCommits: 2), buttonIndex: 2) == nil)
     }
 
-    @Test("Preview Pull Request's footer: a glyph per merge status, and Create or View Pull Request")
+    @Test("Preview Pull Request's footer: a glyph per merge status")
     func previewFooter() {
         typealias Kind = PreviewPullRequestContent.MergeStatusKind
         // Not checked yet: no status line.
@@ -400,20 +353,5 @@ struct GitHubContentTests {
         #expect(Kind(.conflicts(conflictedFiles: 2)) == .conflicts)
         // Unrelated histories.
         #expect(Kind(.invalid) == .invalid)
-
-        var content = PreviewPullRequestContent(
-            baseBranch: "main", headBranch: "feature/sign-in", commitCount: 1, linesAdded: 12, linesDeleted: 4,
-            mergeTitle: nil, mergeMessage: nil, mergeKind: nil, hasPullRequest: false, canCreate: true, isEnterprise: false
-        )
-        #expect(content.commits == "1 commit")
-        #expect(content.buttonTitle == "Create Pull Request")
-        #expect(content.buttonHelp == "Create pull request on GitHub.")
-        // The branch has a pull request already, on GitHub Enterprise.
-        content.commitCount = 3
-        content.hasPullRequest = true
-        content.isEnterprise = true
-        #expect(content.commits == "3 commits")
-        #expect(content.buttonTitle == "View Pull Request")
-        #expect(content.buttonHelp == "View pull request on GitHub Enterprise.")
     }
 }

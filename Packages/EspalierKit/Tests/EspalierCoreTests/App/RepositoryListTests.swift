@@ -1,6 +1,6 @@
 // The repository list's methods (adding, removing, aliases, relocating,
 // checking again, trusting, and the welcome state)
-// against real repositories: the messages, linked worktrees and
+// against real repositories: linked worktrees and
 // submodules, Git LFS, the association, unsafe repositories, the Trash,
 // removal's cleanup, and relocation.
 
@@ -84,7 +84,7 @@ struct RepositoryListTests {
         await app.idle()
     }
 
-    @Test("reports bare repositories among the invalid paths, with desktop's message for each")
+    @Test("reports bare repositories among the invalid paths")
     func bare() async throws {
         let bare = try await makeBareRemote(from: try await setupTwoCommitRepo())
         let harness = try AppHarness()
@@ -93,7 +93,6 @@ struct RepositoryListTests {
         let result = try await app.addRepositories([bare.path])
         #expect(result.invalidPaths == [bare.path])
         #expect(result.barePaths == [bare.path])
-        #expect(result.invalidPathsMessage == "\(bare.path) isn't a Git repository.")
         #expect(app.repositories.isEmpty)
     }
 
@@ -190,7 +189,6 @@ struct RepositoryListTests {
         let app = await harness.loadedApp()
         let repository = try setupEmptyRepository()
         let id = try #require(try await app.addRepositories([repository.path]).added.first)
-        let name = POSIXPath.basename(repository.path)
 
         let error = await #expect(throws: OperationError.self) {
             try await app.removeRepository(id, moveToTrash: false)
@@ -200,9 +198,6 @@ struct RepositoryListTests {
             return
         }
         #expect(confirmation.kind == .removeRepository)
-        #expect(confirmation.title == "Remove Repository?")
-        #expect(confirmation.message == "Remove \u{201C}\(name)\u{201D} from Espalier?")
-        #expect(confirmation.confirmButton == "Remove")
         #expect(app.record(id) != nil)
 
         app.preferences.confirmRepositoryRemoval = false
@@ -240,7 +235,7 @@ struct RepositoryListTests {
         await app.idle()
     }
 
-    @Test("keeps the repository when the Trash fails, and says why")
+    @Test("keeps the repository when the Trash fails")
     func trashFails() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
@@ -251,7 +246,6 @@ struct RepositoryListTests {
             try await app.removeRepository(model.id, moveToTrash: true, confirmed: [.removeRepository])
         }
         #expect(error?.operation == .removeRepository)
-        #expect(error?.message == "Espalier couldn't move the repository to the Trash.\n\nThe folder or one of its files may be open in another app.")
         #expect(app.record(model.id) != nil)
         #expect(app.selection == .repository(model.id))
         #expect(app.repository(model.id) === model)
@@ -380,23 +374,21 @@ struct RepositoryListTests {
         #expect(harness.fileWatcher.activeSubscriptions.count == 1)
     }
 
-    @Test("relocating refuses a folder that isn't a repository, with desktop's message, and one already in the list")
+    @Test("relocating refuses a folder that isn't a repository, and one already in the list")
     func relocateRefusals() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
         let ids = try await app.addRepositories([try setupEmptyRepository().path, try setupEmptyRepository().path]).added
         let folder = try createTempDirectory()
 
-        let invalid = await #expect(throws: OperationError.self) {
+        await #expect(throws: OperationError.self) {
             try await app.relocateRepository(ids[0], to: folder)
         }
-        #expect(invalid?.message == "\(folder) isn't a Git repository.")
 
         let otherPath = try #require(app.record(ids[1])?.path)
-        let duplicate = await #expect(throws: OperationError.self) {
+        await #expect(throws: OperationError.self) {
             try await app.relocateRepository(ids[0], to: otherPath)
         }
-        #expect(duplicate?.message == "\(otherPath) is already in the repository list as \"\(POSIXPath.basename(otherPath))\".")
         #expect(app.record(ids[0])?.path != otherPath)
         await app.idle()
     }

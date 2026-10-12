@@ -49,7 +49,6 @@ struct ThemeCardPicker: View {
     @Binding var selection: DesignTheme
     /// Each theme's color, for its card.
     let colors: [DesignTheme: DesignThemeColor]
-    @Environment(\.showsFocusRings) private var showsFocusRings
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -90,7 +89,7 @@ struct ThemeCardPicker: View {
                         shape
                             .inset(by: -Metrics.FocusRing.outset)
                             .strokeBorder(
-                                Color.accent.opacity(isFocused || showsFocusRings ? 1 : Metrics.FocusRing.opacity),
+                                Color.accent.opacity(isFocused ? 1 : Metrics.FocusRing.opacity),
                                 lineWidth: Metrics.FocusRing.lineWidth
                             )
                     }
@@ -213,7 +212,6 @@ struct ThemePreview: View {
 struct ThemeColorPicker: View {
     let theme: DesignTheme
     @Binding var selection: DesignThemeColor
-    @Environment(\.showsFocusRings) private var showsFocusRings
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -253,7 +251,7 @@ struct ThemeColorPicker: View {
                     Circle()
                         .inset(by: -Metrics.FocusRing.outset)
                         .strokeBorder(
-                            Color.accent.opacity(isFocused || showsFocusRings ? 1 : Metrics.FocusRing.opacity),
+                            Color.accent.opacity(isFocused ? 1 : Metrics.FocusRing.opacity),
                             lineWidth: Metrics.FocusRing.lineWidth
                         )
                 }

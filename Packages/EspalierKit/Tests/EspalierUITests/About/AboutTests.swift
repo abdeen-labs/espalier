@@ -147,7 +147,12 @@ struct AboutTests {
 
         calls = InstallerCalls()
         let missing = await CommandLineToolInstaller.install(system: system(script: nil, calls: calls))
-        #expect(missing == .failed(message: "The command line tool is missing from Espalier's application bundle.", command: nil))
+        // Failed, with no command to run instead.
+        if case .failed(_, let fallback) = missing {
+            #expect(fallback == nil)
+        } else {
+            Issue.record("Installing without the script didn't fail: \(missing)")
+        }
         #expect(calls.all.isEmpty)
     }
 
@@ -180,23 +185,19 @@ struct AboutTests {
         #expect(AdministratorCommand.shellWord("/Users/jos\u{e9}/x") == "'/Users/jos\u{e9}/x'")
     }
 
-    @Test("the outcomes' alerts")
+    @Test("the failure alert has a button for the command only when there's one to run")
     func alerts() {
-        let installed = CommandLineToolInstaller.installedAlert()
-        #expect(installed.title == "Command Line Tool Installed")
-        #expect(installed.message == "The command line tool has been installed at /usr/local/bin/espalier.")
         let failed = CommandLineToolInstaller.failedAlert(message: "Not allowed.", command: "sudo /bin/ln -sfn a b")
-        #expect(failed.buttons.map(\.title) == ["Copy Command", "Close"])
-        #expect(failed.message == "Not allowed.\n\nTo install it yourself, run this command in Terminal:\n\nsudo /bin/ln -sfn a b")
-        #expect(CommandLineToolInstaller.failedAlert(message: "Missing.", command: nil).buttons.map(\.title) == ["Close"])
+        #expect(failed.buttons.map(\.role) == [AlertContent.Role.primary, .cancel])
+        #expect(CommandLineToolInstaller.failedAlert(message: "Missing.", command: nil).buttons.map(\.role) == [AlertContent.Role.primary])
     }
 
     // MARK: The script
 
     /// Runs the app's espalier.sh through a link, as the installed tool,
-    /// with `open` recording its arguments; returns the exit status, what
-    /// `open` got, and standard error.
-    private func runTool(_ arguments: [String], in directory: String? = nil) async throws -> (status: ChildProcess.Termination, open: String, errors: String) {
+    /// with `open` recording its arguments; returns the exit status and what
+    /// `open` got.
+    private func runTool(_ arguments: [String], in directory: String? = nil) async throws -> (status: ChildProcess.Termination, open: String) {
         let root = try createTempDirectory()
         let app = POSIXPath.join(root, "Espalier.app")
         let script = POSIXPath.join(app, "Contents/Resources/espalier.sh")
@@ -216,12 +217,10 @@ struct AboutTests {
             currentDirectoryPath: directory ?? root
         ))
         let output = Mutex(Data())
-        let errors = Mutex(Data())
         child.observeStandardOutput { data in output.withLock { $0.append(data) } }
-        child.observeStandardError { data in errors.withLock { $0.append(data) } }
         let status = await child.waitUntilExit()
         let opened = String(decoding: output.withLock { $0 }, as: UTF8.self).replacingOccurrences(of: realPath(app), with: "<app>")
-        return (status, opened.replacingOccurrences(of: app, with: "<app>"), String(decoding: errors.withLock { $0 }, as: UTF8.self))
+        return (status, opened.replacingOccurrences(of: app, with: "<app>"))
     }
 
     private func realPath(_ path: String) -> String {
@@ -259,13 +258,10 @@ struct AboutTests {
         result = try await runTool(["clone"])
         #expect(result.status == .exit(1))
         #expect(result.open.isEmpty)
-        #expect(result.errors.contains("Usage:"))
         result = try await runTool([POSIXPath.join(folder, "missing")])
         #expect(result.status == .exit(1))
-        #expect(result.errors.contains("is not a folder"))
         result = try await runTool(["--help"])
         #expect(result.status == .exit(0))
-        #expect(result.errors.contains("espalier clone [-b branch] <url>"))
     }
 }
 

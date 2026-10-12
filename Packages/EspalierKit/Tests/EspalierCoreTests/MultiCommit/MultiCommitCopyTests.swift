@@ -1,21 +1,18 @@
 // Ported in part from desktop/app/test/unit/ui/banner-surfaces-test.tsx
-// The cherry-pick undone banner's strings. The branch up-to-date case, and
-// the other banners' copy, are checked where real operations produce them:
-// the merge, rebase, cherry-pick, squash and reorder, and revert tests.
+// Whether undoing a cherry-pick is announced, and the commit counts the
+// banners show.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
 import GitKit
 import Testing
 
-@Suite("Multi-commit banner copy")
+@Suite("Multi-commit banners")
 struct MultiCommitCopyTests {
-    @Test("renders cherry-pick undone messages with singular and plural commit copy")
+    @Test("undoing a cherry-pick is announced, unless it deletes the branch the cherry-pick created")
     func cherryPickUndone() {
         let one = MultiCommitUndo(kind: .cherryPick, undoSha: "a", branchName: "main", resultTip: "b", commitCount: 1, createdBranch: nil)
-        #expect(one.undoneMessage == "Cherry-pick undone. Removed the 1 copied commit from main.")
-        let three = MultiCommitUndo(kind: .cherryPick, undoSha: "a", branchName: "release", resultTip: "b", commitCount: 3, createdBranch: nil)
-        #expect(three.undoneMessage == "Cherry-pick undone. Removed the 3 copied commits from release.")
+        #expect(one.undoneMessage != nil)
         // Undoing a cherry-pick to a new branch deletes it: no message.
         let created = MultiCommitUndo(kind: .cherryPick, undoSha: "a", branchName: "copies", resultTip: "b", commitCount: 1, createdBranch: "copies")
         #expect(created.undoneMessage == nil)

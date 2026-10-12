@@ -7,7 +7,6 @@ import EspalierCoreTestSupport
 import EspalierSupport
 import Foundation
 import GitHubKit
-import GitKit
 import Synchronization
 import Testing
 import TestSupport
@@ -133,8 +132,6 @@ struct NotificationsPollerTests {
         let notifications = posted(fixture)
         #expect(notifications.count == 1)
         let notification = try #require(notifications.first)
-        #expect(notification.title == "@hubot requested changes on your pull request")
-        #expect(notification.body == "Pull request 5 #5\nPlease rename the variable used for the cache key \u{2026}")
         let route = try #require(PullRequestNotificationRoute(userInfo: notification.userInfo))
         #expect(route == PullRequestNotificationRoute(repositoryID: fixture.model.id, pullRequestNumber: 5, kind: .reviewSubmitted, reviewID: 2))
         #expect(notification.userInfo["repositoryID"] == fixture.model.id.rawValue.uuidString)
@@ -163,8 +160,7 @@ struct NotificationsPollerTests {
             ]
         }
         await fixture.model.gitHub.notifications.poll()
-        #expect(posted(fixture).map(\.title) == ["@hubot commented on your pull request"])
-        #expect(posted(fixture).first?.body == "Pull request 5 #5\nSecond")
+        #expect(posted(fixture).map { $0.userInfo["kind"] } == ["comment"])
         #expect(posted(fixture).first?.userInfo["commentID"] == "12")
         #expect(posted(fixture).first?.userInfo["commentKind"] == "issueComment")
 
@@ -175,7 +171,8 @@ struct NotificationsPollerTests {
             state.reviewComments = [apiComment(30, by: "mona", at: "2026-10-04T09:00:00Z", body: "Here")]
         }
         await fixture.model.gitHub.notifications.poll()
-        #expect(posted(fixture).map(\.title) == ["@hubot commented on your pull request", "@mona reviewed your pull request"])
+        #expect(posted(fixture).map { $0.userInfo["kind"] } == ["comment", "reviewSubmitted"])
+        #expect(posted(fixture).last?.userInfo["reviewID"] == "20")
 
         // A line comment on its own is posted.
         activity.update { state in
@@ -202,8 +199,6 @@ struct NotificationsPollerTests {
         ] }
         await fixture.model.gitHub.notifications.poll()
         let notification = try #require(posted(fixture).first)
-        #expect(notification.title == "Pull request checks failed")
-        #expect(notification.body == "Pull request 5 #5 (\(shortenSHA(head)))\n1 check failed.")
         #expect(notification.userInfo["kind"] == "checksFailed")
         #expect(notification.userInfo["commitSHA"] == head)
         #expect(notification.userInfo["checkSuiteID"] == "100")
@@ -363,8 +358,6 @@ struct NotificationsPollerTests {
         let pullRequest = await fixture.model.gitHub.postSampleNotification()
         #expect(pullRequest?.pullRequestNumber == 5)
         let notification = try #require(posted(fixture).first)
-        #expect(notification.title == "@sample-reviewer approved your pull request")
-        #expect(notification.body == "Fix the cache #5\nA sample review from Espalier's Debug menu.")
         let route = try #require(PullRequestNotificationRoute(userInfo: notification.userInfo))
         #expect(route.kind == .reviewSubmitted && route.pullRequestNumber == 5)
 

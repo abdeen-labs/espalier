@@ -78,9 +78,7 @@ struct ChangesWindowFixture {
 
     /// Renders `view` in the window's environment.
     func render(_ view: some View, size: CGSize, appearance: SnapshotAppearance = .light) -> NSBitmapImageRep {
-        // The diff builds its rows off the main actor; the render needs
-        // them now.
-        Snapshot.render(view.environment(\.diffBuildsSynchronously, true).windowEnvironment(context), size: size, appearance: appearance)
+        Snapshot.render(view.windowEnvironment(context), size: size, appearance: appearance)
     }
 }
 
@@ -130,7 +128,7 @@ enum ChangesFixtures {
 
     /// The composer with `draft`'s text, in a column-sized frame.
     static func composer(_ content: ComposerContent, draft: CommitDraft = CommitDraft()) -> some View {
-        ComposerView(content, draft: .constant(draft))
+        ComposerView(content, draft: .constant(draft), actions: ComposerActions())
             .frame(width: Metrics.Column.changesFileList.ideal)
     }
 }

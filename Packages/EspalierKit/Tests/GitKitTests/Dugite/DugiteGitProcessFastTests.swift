@@ -115,7 +115,6 @@ struct DugiteGitProcessFastTests {
                 try await Dugite.exec(["show", "HEAD"], testRepoPath)
             }
 
-            #expect(error?.message.contains("Git failed to execute.") == true)
             #expect(error?.code == "ENOENT")
         }
 

@@ -139,8 +139,6 @@ struct AccountsActions {
     /// Forgets a signed-out account (by endpoint).
     var remove: (String) -> Void
     var open: (URL) -> Void
-
-    static let none = AccountsActions(signIn: { _ in }, signOut: { _ in }, remove: { _ in }, open: { _ in })
 }
 
 /// Settings ▸ Accounts.

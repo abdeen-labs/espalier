@@ -1,5 +1,5 @@
-// Fixed values for the repository flows' tests: accounts, rows, and a
-// window context on a hermetic app.
+// Fixed values for the repository flows' tests: accounts, and a window
+// context on a hermetic app.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -42,32 +42,6 @@ enum RepositoryFixtures {
         id: 7,
         name: "Joe Bloggs"
     )
-
-    // MARK: Rows
-
-    static func row(
-        _ title: String,
-        icon: RepositoryRowContent.Icon = .other,
-        subtitle: String? = nil,
-        changed: Int = 0,
-        ahead: Int = 0,
-        behind: Int = 0,
-        showsStatus: Bool = true
-    ) -> RepositoryRowContent {
-        RepositoryRowContent(
-            id: .repository(RepositoryID()),
-            title: title,
-            subtitle: subtitle,
-            icon: icon,
-            changedFileCount: changed,
-            ahead: ahead,
-            behind: behind,
-            showsStatus: showsStatus,
-            fullName: subtitle.map { "\($0)/\(title)" } ?? title,
-            alias: nil,
-            path: "/Users/joe/Developer/\(title)"
-        )
-    }
 
     // MARK: Apps
 

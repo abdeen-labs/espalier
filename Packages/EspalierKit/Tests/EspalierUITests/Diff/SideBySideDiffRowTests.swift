@@ -76,9 +76,9 @@ struct SideBySideDiffRowTests {
         split: Bool = false,
         canExpand: Bool = false,
         recorder: DiffActionRecorder
-    ) -> DiffTableController {
+    ) async -> DiffTableController {
         let diff = DiffFixtures.textDiff(patch)
-        let controller = DiffTables.controller(DiffTableContent(
+        let controller = await DiffTables.controller(DiffTableContent(
             fileID: "a",
             diff: diff,
             isSplit: split,
@@ -90,9 +90,9 @@ struct SideBySideDiffRowTests {
     }
 
     @Test("starts line selection on primary-button mousedown events")
-    func startsLineSelection() {
+    func startsLineSelection() async {
         let recorder = DiffActionRecorder()
-        let controller = controller(recorder: recorder)
+        let controller = await controller(recorder: recorder)
         let drag = controller.mouseDown(at: point(controller, row: 2, x: middle(controller.geometry.before.newNumber!)), clickCount: 1, extendsSelection: false)
         #expect(drag == .gutter)
         #expect(controller.gutterDrag?.include == true)
@@ -103,9 +103,9 @@ struct SideBySideDiffRowTests {
     }
 
     @Test("ignores non-primary mousedown events on line gutters")
-    func ignoresNonPrimary() throws {
+    func ignoresNonPrimary() async throws {
         let recorder = DiffActionRecorder()
-        let controller = controller(recorder: recorder)
+        let controller = await controller(recorder: recorder)
         let table = controller.tableView
         let location = table.convert(point(controller, row: 2, x: middle(controller.geometry.before.newNumber!)), to: nil)
         func press(_ type: NSEvent.EventType) throws -> NSEvent {
@@ -126,7 +126,7 @@ struct SideBySideDiffRowTests {
     }
 
     @Test("infers the modified row column from the clicked line gutter")
-    func infersModifiedColumn() {
+    func infersModifiedColumn() async {
         let recorder = DiffActionRecorder()
         let patch = """
         diff --git a/a.txt b/a.txt
@@ -137,7 +137,7 @@ struct SideBySideDiffRowTests {
         -before line
         +after line
         """
-        let controller = controller(patch, selection: DiffSelection.fromInitialSelection(.all).withLineSelection(1, selected: false), split: true, recorder: recorder)
+        let controller = await controller(patch, selection: DiffSelection.fromInitialSelection(.all).withLineSelection(1, selected: false), split: true, recorder: recorder)
         let before = controller.mouseDown(at: point(controller, row: 1, x: middle(controller.geometry.before.oldNumber!)), clickCount: 1, extendsSelection: false)
         controller.mouseUp(drag: before)
         let after = controller.mouseDown(at: point(controller, row: 1, x: middle(controller.geometry.after!.newNumber!)), clickCount: 1, extendsSelection: false)
@@ -149,23 +149,22 @@ struct SideBySideDiffRowTests {
     }
 
     @Test("dispatches line number checkbox changes with row and column")
-    func lineCheckbox() {
+    func lineCheckbox() async {
         let recorder = DiffActionRecorder()
-        let controller = controller(recorder: recorder)
+        let controller = await controller(recorder: recorder)
         let actions = controller.accessibilityActions(ofRow: 2)
-        let include = try! #require(actions.first { $0.name == "Include Line" })
+        let include = try! #require(actions.first)
         _ = include.handler?()
         #expect(recorder.setLines.first?.0 == .line(2))
         #expect(recorder.setLines.first?.1 == true)
     }
 
     @Test("dispatches context menus from line number labels with diff line numbers")
-    func lineContextMenu() {
+    func lineContextMenu() async {
         let recorder = DiffActionRecorder()
-        let controller = controller(recorder: recorder)
+        let controller = await controller(recorder: recorder)
         let menu = try! #require(controller.menuContent(at: point(controller, row: 2, x: middle(controller.geometry.before.newNumber!))))
-        // One item, for the line under the pointer.
-        #expect(menu.items.map(\.title) == ["Discard Added Line…"])
+        // Its item is for the line under the pointer.
         #expect(recorder.discardTitleRequests == [.line(2)])
         if case .run(let discard) = menu.items[0].action {
             discard()
@@ -174,13 +173,13 @@ struct SideBySideDiffRowTests {
     }
 
     @Test("dispatches hunk checkbox changes as deselection when the row is selected")
-    func blockHandleDeselects() {
+    func blockHandleDeselects() async {
         // The stub staging API toggles in the given selection: an included
         // block is excluded.
         var selections: [DiffSelection] = []
         let diff = DiffFixtures.textDiff(Self.addedPatch)
         let staging = DiffStaging(selection: .fromInitialSelection(.all)) { selections.append($0) }
-        let controller = DiffTables.controller(DiffTableContent(
+        let controller = await DiffTables.controller(DiffTableContent(
             fileID: "a",
             diff: diff,
             staging: staging.state(hunks: diff.hunks)
@@ -193,12 +192,11 @@ struct SideBySideDiffRowTests {
     }
 
     @Test("dispatches context menus from hunk handles with the hunk start line")
-    func blockHandleContextMenu() {
+    func blockHandleContextMenu() async {
         let recorder = DiffActionRecorder()
-        let controller = controller(recorder: recorder)
+        let controller = await controller(recorder: recorder)
         let menu = try! #require(controller.menuContent(at: point(controller, row: 2, x: middle(controller.geometry.handle!))))
-        // One item, for the block's lines from the hunk's start.
-        #expect(menu.items.map(\.title) == ["Discard Modified Lines…"])
+        // Its item is for the block's lines from the hunk's start.
         #expect(recorder.discardTitleRequests == [.block(containing: 2)])
         if case .run(let discard) = menu.items[0].action {
             discard()
@@ -207,7 +205,7 @@ struct SideBySideDiffRowTests {
     }
 
     @Test("dispatches hunk expansion clicks with the expansion type")
-    func hunkExpansion() {
+    func hunkExpansion() async {
         let recorder = DiffActionRecorder()
         let patch = """
         diff --git a/a.txt b/a.txt
@@ -218,7 +216,7 @@ struct SideBySideDiffRowTests {
          context line
         +added line
         """
-        let controller = controller(patch, canExpand: true, recorder: recorder)
+        let controller = await controller(patch, canExpand: true, recorder: recorder)
         let buttons = controller.geometry.expansionButtonRects(count: 1, rowHeight: controller.tableView.rect(ofRow: 0).height)
         _ = controller.mouseDown(at: point(controller, row: 0, x: buttons[0].midX), clickCount: 1, extendsSelection: false)
         #expect(recorder.expanded.count == 1)

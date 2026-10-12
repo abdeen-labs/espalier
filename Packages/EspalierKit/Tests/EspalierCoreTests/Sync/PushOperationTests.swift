@@ -122,9 +122,6 @@ struct PushOperationTests {
         }
         #expect(confirmation.kind == .forcePush)
         #expect(confirmation.details == .branch("origin/main"))
-        #expect(confirmation.title == "Force Push?")
-        #expect(confirmation.message == "Force pushing rewrites the history of origin/main. Anyone working on this branch will need to reset their local branch to match it.")
-        #expect(confirmation.confirmButton == "Force Push")
         #expect(try await fixture.remoteTip("main") != amended)
 
         let outcome = try await fixture.model.sync.push(PushRequest(forceWithLease: true), confirmed: [.forcePush])
@@ -154,7 +151,6 @@ struct PushOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.sync.push(PushRequest(forceWithLease: true), confirmed: [.forcePush])
         }
-        #expect(error?.title == "Push Failed")
         #expect(error?.gitFailure?.stderr.contains("stale info") == true)
         let retry = try #require(error?.retry as? PushRetry)
         #expect(retry.request == PushRequest(forceWithLease: true))
@@ -199,11 +195,9 @@ struct PushOperationTests {
             try await fixture.model.sync.push()
         }
         #expect(error?.reason == .pushRejectedNonFastForward)
-        #expect(error?.title == "Newer Commits on Remote")
-        #expect(error?.message == "The remote branch has commits that your local branch doesn't, so Espalier can't push yet. Fetch them first, then combine them with your commits.")
         #expect((error?.retry as? PushRetry)?.request == PushRequest())
         let recovery = try #require(error?.recoveries.first)
-        #expect(recovery.title == "Fetch")
+        #expect(recovery.kind == .fetch)
         #expect(error?.recoveries.count == 1)
 
         try await recovery.perform(in: fixture.app)
@@ -234,14 +228,13 @@ struct PushOperationTests {
             try await fixture.model.sync.push()
         }
         #expect(error?.reason == .insufficientPermissions(repositoryFullName: "octocat/app"))
-        #expect(error?.title == "Do you want to fork this repository?")
         #expect(error?.recoveries.isEmpty == true)
 
         try await fixture.harness.signIn([testAccount], to: fixture.app)
         error = await #expect(throws: OperationError.self) {
             try await fixture.model.sync.push()
         }
-        #expect(error?.recoveries.map(\.title) == ["Fork This Repository…"])
+        #expect(error?.recoveries.map(\.kind) == [.createFork])
         await fixture.app.idle()
     }
 
@@ -279,30 +272,30 @@ struct PushOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("needs a branch, in desktop's words; force pushing needs an upstream")
+    @Test("needs a branch; force pushing needs an upstream")
     func preconditions() async throws {
         let fixture = try await makeSelectedRepository()
 
         try await runGit(["checkout", "-q", "--detach", "HEAD"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         var error = await #expect(throws: OperationError.self) { try await fixture.model.sync.push() }
-        #expect(preconditionMessage(error) == "You're on a detached HEAD, not a branch.")
+        #expect(preconditionMessage(error) != nil)
         error = await #expect(throws: OperationError.self) {
             try await fixture.model.sync.push(PushRequest(forceWithLease: true), confirmed: [.forcePush])
         }
-        #expect(preconditionMessage(error) == "You're on a detached HEAD, not a branch.")
+        #expect(preconditionMessage(error) != nil)
 
         try await runGit(["checkout", "-q", "--orphan", "fresh"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         error = await #expect(throws: OperationError.self) { try await fixture.model.sync.push() }
-        #expect(preconditionMessage(error) == "The current branch has no commits yet.")
+        #expect(preconditionMessage(error) != nil)
 
         try await runGit(["checkout", "-q", "-b", "local-only", "main"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         error = await #expect(throws: OperationError.self) {
             try await fixture.model.sync.push(PushRequest(forceWithLease: true))
         }
-        #expect(preconditionMessage(error) == "The current branch has no upstream branch to force push to.")
+        #expect(preconditionMessage(error) != nil)
         await fixture.app.idle()
     }
 

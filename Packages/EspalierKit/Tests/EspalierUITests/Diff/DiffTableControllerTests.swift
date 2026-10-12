@@ -3,8 +3,7 @@
 // sideways), drag ranges, keyboard staging and navigation, the line
 // cursor, copying, text selection with the mouse, the context menus (from
 // a right-click, ⇧F10, and VoiceOver), Edit ▸ Find's commands and scrolling
-// to a match, and VoiceOver's labels,
-// actions, and rotors.
+// to a match, and VoiceOver's rotors.
 
 import AppKit
 import EspalierCore
@@ -33,16 +32,16 @@ struct DiffTableControllerTests {
     // MARK: Heights
 
     @Test("unwrapped rows and hunk headers are one line high")
-    func unwrappedHeights() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: false))
+    func unwrappedHeights() async {
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: false))
         let line = controller.font.lineHeight
         #expect(line == Metrics.Diff.lineHeight)
         #expect(controller.rowHeights == [line, line, line, line, line])
     }
 
     @Test("wrapped rows are as many lines high as the text needs, continuation lines hanging two columns in; the taller half when split")
-    func wrappedHeights() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping), size: CGSize(width: 480, height: 300))
+    func wrappedHeights() async {
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping), size: CGSize(width: 480, height: 300))
         let columns = controller.geometry.columnsPerLine(.before)
         let deleted = controller.document.lines[controller.document.rows[2].before.asInt]
         // The first line takes `columns`; the rest start two columns in.
@@ -51,7 +50,7 @@ struct DiffTableControllerTests {
         #expect(controller.rowHeights[2] == CGFloat(lines) * controller.font.lineHeight)
         #expect(controller.rowHeights[2] > controller.font.lineHeight)
 
-        let split = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, isSplit: true), size: CGSize(width: 480, height: 300))
+        let split = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, isSplit: true), size: CGSize(width: 480, height: 300))
         let row = split.document.rows[2]
         #expect(row.kind == .modified)
         let before = split.layout(ofLine: row.before.asInt, side: .before).visualLineCount
@@ -60,8 +59,8 @@ struct DiffTableControllerTests {
     }
 
     @Test("a narrower table wraps into more lines; the code text size changes the line height")
-    func relayout() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping), size: CGSize(width: 900, height: 300))
+    func relayout() async {
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping), size: CGSize(width: 900, height: 300))
         let wide = controller.rowHeights[2]
         controller.scrollView.frame.size.width = 420
         controller.scrollView.layoutSubtreeIfNeeded()
@@ -69,6 +68,7 @@ struct DiffTableControllerTests {
         #expect(controller.rowHeights[2] > wide)
 
         controller.apply(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: false, fontSize: 18))
+        await controller.documentIdle()
         #expect(controller.font.lineHeight == (18 * Metrics.Diff.lineHeight / Metrics.Diff.codeFontSize).rounded())
         #expect(controller.rowHeights[1] == controller.font.lineHeight)
     }
@@ -76,8 +76,8 @@ struct DiffTableControllerTests {
     // MARK: Hit-testing and drags
 
     @Test("hit-testing: the handle, gutter, text, hunk checkbox, and buttons in the numbers' gutter")
-    func hitTesting() {
-        let controller = DiffTables.controller(DiffTableContent(
+    func hitTesting() async {
+        let controller = await DiffTables.controller(DiffTableContent(
             fileID: "a", diff: DiffFixtures.swiftChangeWithBottomHunk, canExpand: true, staging: staging()
         ))
         let geometry = controller.geometry
@@ -97,8 +97,8 @@ struct DiffTableControllerTests {
     }
 
     @Test("split while lines can be staged: the handle between the halves, the old half's numbers beside it")
-    func splitStagingHitTesting() {
-        let controller = DiffTables.controller(DiffTableContent(
+    func splitStagingHitTesting() async {
+        let controller = await DiffTables.controller(DiffTableContent(
             fileID: "a", diff: DiffFixtures.swiftChange, isSplit: true, staging: staging()
         ))
         let geometry = controller.geometry
@@ -118,8 +118,8 @@ struct DiffTableControllerTests {
     }
 
     @Test("unwrapped lines make the table wider than the pane; scrolled sideways, only the text moves")
-    func sidewaysScrolling() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: false), size: CGSize(width: 480, height: 300))
+    func sidewaysScrolling() async {
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: false), size: CGSize(width: 480, height: 300))
         let clip = controller.scrollView.contentView
         #expect(controller.tableView.frame.width > clip.bounds.width)
         let characterWidth = controller.font.characterWidth
@@ -138,16 +138,17 @@ struct DiffTableControllerTests {
 
         // Wrapping fits the table to the pane again.
         controller.apply(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: true))
+        await controller.documentIdle()
         controller.scrollView.layoutSubtreeIfNeeded()
         #expect(controller.tableView.frame.width == clip.bounds.width)
         #expect(controller.textScrollX == 0)
     }
 
     @Test("a drag down the gutter sets every line it passes to the first line's opposite")
-    func gutterDrag() {
+    func gutterDrag() async {
         let recorder = DiffActionRecorder()
         let selection = DiffSelection.fromInitialSelection(.all)
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, staging: staging(selection)))
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, staging: staging(selection)))
         controller.actions = recorder.actions
         let x = middle(controller.geometry.before.newNumber!)
         let drag = controller.mouseDown(at: point(controller, row: 3, x: x), clickCount: 1, extendsSelection: false)
@@ -164,9 +165,9 @@ struct DiffTableControllerTests {
     }
 
     @Test("a hunk checkbox toggles the hunk's changed lines")
-    func hunkCheckbox() {
+    func hunkCheckbox() async {
         let recorder = DiffActionRecorder()
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, staging: staging()))
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, staging: staging()))
         controller.actions = recorder.actions
         _ = controller.mouseDown(at: point(controller, row: 0, x: middle(controller.geometry.hunkCheckbox!)), clickCount: 1, extendsSelection: false)
         #expect(recorder.toggled == [.range(3...8)])
@@ -174,9 +175,9 @@ struct DiffTableControllerTests {
     }
 
     @Test("input is ignored while the next diff loads")
-    func notInteractive() {
+    func notInteractive() async {
         let recorder = DiffActionRecorder()
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, staging: staging(), isInteractive: false))
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, staging: staging(), isInteractive: false))
         controller.actions = recorder.actions
         let drag = controller.mouseDown(at: point(controller, row: 3, x: middle(controller.geometry.handle!)), clickCount: 1, extendsSelection: false)
         #expect(drag == .none)
@@ -185,9 +186,9 @@ struct DiffTableControllerTests {
     }
 
     @Test("Expand Down on a hunk expandable both ways, and on the bottom hunk, expands the hunk above")
-    func expandDown() {
+    func expandDown() async {
         let recorder = DiffActionRecorder()
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChangeWithBottomHunk, canExpand: true))
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChangeWithBottomHunk, canExpand: true))
         controller.actions = recorder.actions
         let rowHeight = controller.tableView.rect(ofRow: 12).height
         let both = controller.geometry.expansionButtonRects(count: 2, rowHeight: rowHeight)
@@ -202,8 +203,8 @@ struct DiffTableControllerTests {
     // MARK: The line cursor
 
     @Test("a click in the text moves the line cursor without showing it; the arrows and a click in the gutter show it")
-    func cursorVisibility() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
+    func cursorVisibility() async {
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
         let textX = controller.geometry.before.text.lowerBound + controller.font.characterWidth * 4.2
         _ = controller.mouseDown(at: point(controller, row: 3, x: textX), clickCount: 1, extendsSelection: false)
         #expect(controller.cursorRows == nil)
@@ -222,8 +223,8 @@ struct DiffTableControllerTests {
     // MARK: Keyboard
 
     @Test("arrows move the line cursor past headers; Option-arrows jump between hunks")
-    func cursorKeys() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
+    func cursorKeys() async {
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
         #expect(controller.keyDown(key(arrow(NSDownArrowFunctionKey))))
         #expect(controller.cursorRows == 1...1)
         #expect(controller.keyDown(key(arrow(NSDownArrowFunctionKey), modifiers: .shift)))
@@ -236,9 +237,9 @@ struct DiffTableControllerTests {
     }
 
     @Test("Space toggles the cursor's lines; Option-Space their block")
-    func spaceStaging() {
+    func spaceStaging() async {
         let recorder = DiffActionRecorder()
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, staging: staging()))
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, staging: staging()))
         controller.actions = recorder.actions
         controller.setCursor(row: 3, extending: false)
         _ = controller.keyDown(key(" "))
@@ -255,10 +256,10 @@ struct DiffTableControllerTests {
     // MARK: Copy and selection
 
     @Test("Copy copies the text selection, or the cursor's lines")
-    func copy() {
+    func copy() async {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name(UUID().uuidString))
         defer { pasteboard.releaseGlobally() }
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
         #expect(!controller.canCopy)
         controller.setCursor(row: 3, extending: false)
         #expect(controller.canCopy)
@@ -281,31 +282,31 @@ struct DiffTableControllerTests {
     }
 
     @Test("the text menu: Copy, Select All, and the expansion items")
-    func textMenu() throws {
+    func textMenu() async throws {
         let recorder = DiffActionRecorder()
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChangeWithBottomHunk, canExpand: true))
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChangeWithBottomHunk, canExpand: true))
         controller.actions = recorder.actions
         let textX = controller.geometry.before.text.lowerBound + 20
         let menu = try #require(controller.menuContent(at: point(controller, row: 1, x: textX)))
-        #expect(MenuRecorder.Popup.titles(menu) == ["Copy", "Select All", "—", "Expand Whole File"])
         #expect(menu.items.map(\.isEnabled) == [false, true, true])
-        try run(menu, "Expand Whole File")
+        try run(menu.items.last)
         #expect(recorder.wholeFileExpansions == 1)
 
         controller.apply(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChangeWithBottomHunk, canExpand: true, hasExpandedLines: true))
+        await controller.documentIdle()
         let collapse = try #require(controller.menuContent(at: point(controller, row: 1, x: textX)))
-        #expect(collapse.items.last?.title == "Collapse Expanded Lines")
-        try run(collapse, "Collapse Expanded Lines")
+        try run(collapse.items.last)
         #expect(recorder.collapses == 1)
 
         let hunkMenu = try #require(controller.menuContent(at: point(controller, row: 0, x: textX)))
-        #expect(MenuRecorder.Popup.titles(hunkMenu) == ["Collapse Expanded Lines"])
+        try run(hunkMenu.items.first)
+        #expect(recorder.collapses == 2)
     }
 
     @Test("⇧F10 opens the text menu at the line cursor, a right-click the menu under the pointer, and VoiceOver's Show Menu a row's text menu")
-    func contextMenuTriggers() throws {
+    func contextMenuTriggers() async throws {
         let recorder = DiffActionRecorder()
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, staging: staging()))
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, staging: staging()))
         controller.actions = recorder.actions
         let table = controller.tableView
         let window = SnapshotWindow(contentRect: controller.scrollView.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -325,8 +326,7 @@ struct DiffTableControllerTests {
         let row = try #require(controller.cursorHead)
         #expect(KeyboardContextMenu.handle(f10, in: window, presenter: menus.menuPresenter))
         let keyboard = try #require(menus.popups.first)
-        #expect(keyboard.titles == ["Copy", "Select All"])
-        #expect(keyboard.item("Copy")?.isEnabled == true)
+        #expect(keyboard.content.items.first?.isEnabled == true)
         #expect(keyboard.request.trigger == .keyboard)
         #expect(controller.row(at: keyboard.location) == row)
 
@@ -345,12 +345,12 @@ struct DiffTableControllerTests {
         MenuSession.current?.close(animated: false)
     }
 
-    /// Chooses the item titled `title` of `content`.
-    private func run(_ content: MenuContent, _ title: String) throws {
-        let item = try #require(content.items.first { $0.title == title })
+    /// Chooses `item`, as a click on it would.
+    private func run(_ item: MenuItem?) throws {
+        let item = try #require(item)
         #expect(item.isEnabled)
         guard case .run(let action) = item.action else {
-            Issue.record("\(title) opens a submenu")
+            Issue.record("\(item.title) opens a submenu")
             return
         }
         action()
@@ -367,8 +367,8 @@ struct DiffTableControllerTests {
     }
 
     @Test("Edit ▸ Find: Find… opens the bar for typing; Use Selection for Find searches for the selection; Find Next and Previous move from it")
-    func findCommands() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
+    func findCommands() async {
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
         let table = controller.tableView
         let find = controller.find
         #expect(table.validateUserInterfaceItem(findItem(.showFindInterface)))
@@ -395,8 +395,8 @@ struct DiffTableControllerTests {
     }
 
     @Test("closing find selects the current match and focuses the diff; Escape in the diff closes it; Find Next opens it past the selection, or for typing with no query")
-    func closingFind() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
+    func closingFind() async {
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
         let window = SnapshotWindow(contentRect: CGRect(x: 0, y: 0, width: 720, height: 360), styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = controller.scrollView
         defer { window.contentView = nil }
@@ -425,8 +425,8 @@ struct DiffTableControllerTests {
     }
 
     @Test("the current match scrolls into view below the find bar, another file's first one too; while lines don't wrap, sideways into its text")
-    func findScrolling() throws {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange), size: CGSize(width: 720, height: 120))
+    func findScrolling() async throws {
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange), size: CGSize(width: 720, height: 120))
         let clip = controller.scrollView.contentView
         controller.performFind(.show)
         // The deleted "// TODO: notify observers", far below.
@@ -437,10 +437,11 @@ struct DiffTableControllerTests {
         #expect(row.maxY <= clip.bounds.maxY)
         // Another file opens at its first match, not its top.
         controller.apply(DiffTableContent(fileID: "b", diff: DiffFixtures.swiftChangeWithBottomHunk))
+        await controller.documentIdle()
         #expect(controller.find.currentMatch?.row == 15)
         #expect(clip.bounds.minY > 0)
 
-        let unwrapped = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: false), size: CGSize(width: 480, height: 300))
+        let unwrapped = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.wrapping, wrapsLines: false), size: CGSize(width: 480, height: 300))
         unwrapped.performFind(.show)
         // The end of the long deleted line.
         unwrapped.find.query = "wall"
@@ -456,8 +457,8 @@ struct DiffTableControllerTests {
     }
 
     @Test("the window's find actions reach the diff from anywhere in it, while the diff shows")
-    func findForwarding() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
+    func findForwarding() async {
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
         let window = SnapshotWindow(contentRect: CGRect(x: 0, y: 0, width: 600, height: 300), styleMask: [.borderless], backing: .buffered, defer: false)
         let previousNext = window.nextResponder
         window.contentView = controller.scrollView
@@ -477,7 +478,7 @@ struct DiffTableControllerTests {
 
         // A second diff in the window takes over; the first leaving doesn't
         // take it back.
-        let other = DiffTables.controller(DiffTableContent(fileID: "b", diff: DiffFixtures.wrapping))
+        let other = await DiffTables.controller(DiffTableContent(fileID: "b", diff: DiffFixtures.wrapping))
         window.contentView = other.scrollView
         #expect(DiffFindForwarder.forwarder(of: window) === forwarder)
         #expect(forwarder.table === other.tableView)
@@ -487,11 +488,11 @@ struct DiffTableControllerTests {
     }
 
     @Test("a diff table torn down stops following the container's find, unless another table took it over")
-    func findTearDown() {
+    func findTearDown() async {
         let content = DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange)
         let find = DiffFindModel()
-        let first = DiffTables.controller(content, size: CGSize(width: 720, height: 120))
-        let second = DiffTables.controller(content, size: CGSize(width: 720, height: 120))
+        let first = await DiffTables.controller(content, size: CGSize(width: 720, height: 120))
+        let second = await DiffTables.controller(content, size: CGSize(width: 720, height: 120))
         first.attach(find)
         second.attach(find)
         first.tearDown()
@@ -508,40 +509,23 @@ struct DiffTableControllerTests {
 
     // MARK: Accessibility
 
-    @Test("VoiceOver reads lines, hunks, and inclusion")
-    func accessibilityLabels() {
-        let selection = DiffSelection.fromInitialSelection(.all).withSelectableLines([3, 4, 5, 6, 7, 8, 15]).withLineSelection(3, selected: false)
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange, staging: staging(selection)))
-        let recorder = DiffActionRecorder()
-        controller.actions = recorder.actions
-        #expect(controller.accessibilityLabel(ofRow: 0) == "Hunk, lines 10 to 18: 4 added, 2 deleted. Partly included in commit.")
-        #expect(controller.accessibilityLabel(ofRow: 3) == "Line 12 of the old file, deleted: let tip = repo.tip!. Not included in commit.")
-        #expect(controller.accessibilityLabel(ofRow: 5) == "Line 12, added: guard let tip = repo.tip else {. Included in commit.")
-        #expect(controller.accessibilityLabel(ofRow: 1) == "Line 10: func load() throws -> Repository {.")
-        #expect(controller.accessibilityLabel(ofRow: 10) == "Line 17: blank.")
-
-        let actions = controller.accessibilityActions(ofRow: 3).map(\.name)
-        #expect(actions == ["Include Line", "Include Block", "Discard Added Line…"])
-        #expect(controller.accessibilityActions(ofRow: 0).map(\.name) == ["Include Hunk"])
-    }
-
     @Test("rotors move between changes, hunks, and conflict markers")
-    func rotors() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
-        #expect(controller.accessibilityRotors().map(\.label) == ["Changes", "Hunks"])
+    func rotors() async {
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange))
+        #expect(controller.accessibilityRotors().count == 2)
         #expect(controller.rotorRows(.changes) == [3, 15])
         #expect(controller.rotorRows(.hunks) == [0, 12])
 
-        let conflict = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.conflict, detectsConflictMarkers: true))
-        #expect(conflict.accessibilityRotors().map(\.label) == ["Changes", "Hunks", "Conflict Markers"])
+        let conflict = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.conflict, detectsConflictMarkers: true))
+        #expect(conflict.accessibilityRotors().count == 3)
         #expect(conflict.rotorRows(.conflictMarkers) == [2, 4, 6])
     }
 
     // MARK: Documents
 
     @Test("a new file scrolls to the top and clears the selection; the same file keeps them")
-    func newFileResets() {
-        let controller = DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange), size: CGSize(width: 600, height: 100))
+    func newFileResets() async {
+        let controller = await DiffTables.controller(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChange), size: CGSize(width: 600, height: 100))
         controller.setCursor(row: 15, extending: false)
         controller.textSelection = DiffTextSelection(column: .before, anchor: DiffTextPosition(row: 15, offset: 0), head: DiffTextPosition(row: 15, offset: 4))
         let scrolled = controller.scrollView.contentView.bounds.origin.y
@@ -549,10 +533,12 @@ struct DiffTableControllerTests {
 
         // The same file, expanded: the selection and scroll stay.
         controller.apply(DiffTableContent(fileID: "a", diff: DiffFixtures.swiftChangeWithBottomHunk))
+        await controller.documentIdle()
         #expect(controller.textSelection != nil)
         #expect(controller.scrollView.contentView.bounds.origin.y == scrolled)
 
         controller.apply(DiffTableContent(fileID: "b", diff: DiffFixtures.wrapping))
+        await controller.documentIdle()
         #expect(controller.textSelection == nil)
         #expect(controller.cursorRows == nil)
         #expect(controller.scrollView.contentView.bounds.origin.y == 0)

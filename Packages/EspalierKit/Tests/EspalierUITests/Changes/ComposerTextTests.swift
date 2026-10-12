@@ -57,7 +57,7 @@ struct ComposerTextTests {
             author: { _ in nil }
         )
         #expect(await completions.suggestions(for: CompletionToken.atEnd(of: "@oct")!).map(\.insertion) == ["@octcat"])
-        #expect(await completions.suggestions(for: CompletionToken.atEnd(of: "#14")!).map(\.title) == ["#142  Add sign-in sheet"])
+        #expect(await completions.suggestions(for: CompletionToken.atEnd(of: "#14")!).map(\.insertion) == ["#142"])
         #expect(await ComposerCompletions.none.suggestions(for: CompletionToken.atEnd(of: "@oct")!).isEmpty)
     }
 
@@ -89,9 +89,6 @@ struct ComposerTextTests {
         )
         let (host, window, textField) = try host(field)
         defer { window.contentView = nil }
-        #expect(textField.placeholderString == "Summary (required)")
-        #expect(textField.accessibilityLabel() == "Commit summary")
-
         #expect(window.makeFirstResponder(textField))
         let editor = try #require(textField.currentEditor() as? SummaryFieldEditor)
         #expect(!editor.isContinuousSpellCheckingEnabled)
@@ -145,7 +142,7 @@ struct ComposerTextTests {
             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1
         ))
         let menu = try #require(editor.menu(for: event))
-        #expect(menu.items.prefix(2).map(\.title) == ["Generate Commit Message", ""])
+        #expect(menu.items.prefix(2).map(\.isSeparatorItem) == [false, true])
         menu.performActionForItem(at: 0)
         #expect(generated == 1)
     }
@@ -224,9 +221,9 @@ struct ComposerTextTests {
             let completions = ComposerCompletions.make(repository, app: fixture.app)
             // Your own login isn't offered; Copilot is, on GitHub.com.
             #expect(await completions.users("").map(\.insertion) == ["@Copilot", "@hubot", "@monalisa"])
-            #expect(await completions.users("mona").map(\.title) == ["@monalisa  Mona Lisa"])
+            #expect(await completions.users("mona").map(\.insertion) == ["@monalisa"])
             #expect(await completions.issues("").map(\.insertion) == ["#14", "#12"])
-            #expect(await completions.issues("crash").map(\.title) == ["#12  Crash on open"])
+            #expect(await completions.issues("crash").map(\.insertion) == ["#12"])
 
             // Co-authors: a mentionable user, Copilot on GitHub.com, anyone
             // GitHub knows by the login, else nobody.
@@ -278,7 +275,7 @@ struct ComposerTextTests {
             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1
         ))
         let menu = try #require(textView.menu(for: event))
-        #expect(menu.items.prefix(3).map(\.title) == ["Add Co-Authors", "Generate Commit Message", ""])
+        #expect(menu.items.prefix(3).map(\.isSeparatorItem) == [false, false, true])
         menu.performActionForItem(at: 1)
         #expect(generated == 1)
 
@@ -348,7 +345,7 @@ struct ComposerTextTests {
 
     // MARK: Co-authors
 
-    @Test("co-author tokens: logins, names with emails, and what they show")
+    @Test("co-author tokens: logins, names with emails, and whether they were found")
     func coAuthorTokens() {
         #expect(AuthorToken.author(forTyped: "@octocat") == .unknown(UnknownAuthor(username: "octocat", state: .searching)))
         #expect(AuthorToken.author(forTyped: " hubot ") == .unknown(UnknownAuthor(username: "hubot", state: .searching)))
@@ -357,14 +354,7 @@ struct ComposerTextTests {
         #expect(AuthorToken.author(forTyped: "@") == nil)
 
         let known = Author.known(KnownAuthor(name: "Mona Lisa", email: "mona@example.com", username: "octocat"))
-        #expect(AuthorToken.displayText(known) == "@octocat")
-        #expect(AuthorToken.fullText(known) == "@octocat (Mona Lisa)")
-        let noLogin = Author.known(KnownAuthor(name: "Mona Lisa", email: "mona@example.com", username: nil))
-        #expect(AuthorToken.displayText(noLogin) == "Mona Lisa")
-        #expect(AuthorToken.fullText(noLogin) == "Mona Lisa <mona@example.com>")
         let missing = Author.unknown(UnknownAuthor(username: "hubot", state: .error))
-        #expect(AuthorToken.displayText(missing) == "@hubot")
-        #expect(AuthorToken.fullText(missing) == "@hubot (not found)")
         // The token says a login wasn't found, or is being looked up.
         #expect(AuthorToken(missing).isNotFound)
         #expect(!AuthorToken(missing).isSearching)

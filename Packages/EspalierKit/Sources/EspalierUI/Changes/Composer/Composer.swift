@@ -308,9 +308,6 @@ public struct ComposerActions {
     public var setSpellChecking: (Bool) -> Void = { _ in }
 
     public init() {}
-
-    /// Nothing happens (snapshots).
-    public static let none = ComposerActions()
 }
 
 /// The composer, from its content and the draft.
@@ -344,7 +341,7 @@ public struct ComposerView: View {
         hookOutput: TerminalOutputListener? = nil,
         completions: ComposerCompletions = .none,
         focusRequest: Int = 0,
-        actions: ComposerActions = .none
+        actions: ComposerActions
     ) {
         self.content = content
         _draft = draft

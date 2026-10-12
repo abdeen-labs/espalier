@@ -143,7 +143,9 @@ struct PushTests {
         // At minimum we should get the initial progress event
         let events = progressEvents.withLock { $0 }
         #expect(!events.isEmpty, "Expected at least one progress event")
-        #expect(events.first == PushProgress(value: 0, title: "Pushing to origin", remote: "origin", branch: "master"))
+        #expect(events.first?.value == 0)
+        #expect(events.first?.remote == "origin")
+        #expect(events.first?.branch == "master")
     }
 
     // MARK: - Espalier

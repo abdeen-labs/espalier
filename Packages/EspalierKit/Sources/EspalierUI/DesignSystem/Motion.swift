@@ -5,8 +5,9 @@
 // 0.15 s; a spinner's arc turns once every 0.9 s, and an indeterminate bar
 // sweeps every 1.4 s.
 // One answer to "animate?": never with Reduce Motion on (hover and
-// press included), never in a window that isn't on screen (snapshots and
-// tests draw offscreen), and never where motion is turned off (snapshots).
+// press included), never in a window that isn't on screen (tests draw
+// offscreen), and never where motion is turned off (menus and popovers
+// opened from such a window, a screen switching repositories).
 // Motion never changes a result: models update at once, and only drawing
 // animates.
 
@@ -88,8 +89,8 @@ public enum Motion {
     ///
     /// - Parameters:
     ///   - reduceMotion: The system's Reduce Motion setting.
-    ///   - isSuppressed: Motion is turned off here (snapshots), or the
-    ///     view isn't on screen.
+    ///   - isSuppressed: Motion is turned off here, or the view isn't on
+    ///     screen.
     nonisolated public static func allows(reduceMotion: Bool, isSuppressed: Bool) -> Bool {
         !reduceMotion && !isSuppressed
     }
@@ -174,7 +175,7 @@ extension Motion {
 nonisolated public struct MotionPolicy: Sendable, Equatable {
     /// The system's Reduce Motion setting.
     public var reduceMotion: Bool
-    /// Motion is turned off here (snapshots).
+    /// Motion is turned off here (`motionSuppressed`).
     public var isSuppressed: Bool
 
     public init(reduceMotion: Bool = false, isSuppressed: Bool = false) {
@@ -210,8 +211,9 @@ nonisolated public struct MotionPolicy: Sendable, Equatable {
 }
 
 extension EnvironmentValues {
-    /// Turns motion off below: snapshots set it, so a state change never
-    /// draws a frame from the middle of an animation.
+    /// Turns motion off below: the menus, popovers, and suggestion lists
+    /// opened from a window motion doesn't run in, and a screen for the
+    /// update in which it switches repositories (`motionScope(_:)`).
     @Entry public var motionSuppressed = false
 
     /// Whether motion runs here: off with Reduce Motion, and where it's

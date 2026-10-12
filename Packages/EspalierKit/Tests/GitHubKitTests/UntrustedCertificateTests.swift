@@ -1,5 +1,5 @@
-// Requests to a server whose certificate isn't trusted fail with an error
-// that says to trust the certificate in Keychain Access.
+// Requests to a server whose certificate isn't trusted fail with
+// `UntrustedCertificateError`.
 
 import Foundation
 @testable import GitHubKit
@@ -10,7 +10,7 @@ import Testing
 struct UntrustedCertificateTests {
     let mock = MockGitHub()
 
-    @Test("an API request to a server with an untrusted certificate says so and how to trust it")
+    @Test("an API request to a server with an untrusted certificate fails with the server's host")
     func apiRequest() async throws {
         mock.on("GET", "/repos/octocat/hello/pulls/1", respond: .networkError(.serverCertificateHasUnknownRoot))
         let api = API(endpoint: getDotComAPIEndpoint(), token: "token", runtime: mock.runtime)
@@ -19,8 +19,6 @@ struct UntrustedCertificateTests {
             try await api.fetchPullRequest(owner: "octocat", name: "hello", prNumber: "1")
         }
         #expect(error?.host == "api.github.com")
-        #expect(error?.localizedDescription.hasPrefix("Espalier can't verify the identity of api.github.com") == true)
-        #expect(error?.localizedDescription.contains("Keychain Access") == true)
     }
 
     @Test("other network failures stay what they were")

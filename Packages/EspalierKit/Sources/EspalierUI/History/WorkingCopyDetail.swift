@@ -52,7 +52,6 @@ struct WorkingCopyHeader: View {
 struct WorkingCopyDetail: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
-    @Environment(\.historySplitAutosavePrefix) private var autosavePrefix
 
     var body: some View {
         let changes = repository.changes
@@ -75,7 +74,7 @@ struct WorkingCopyDetail: View {
                 )
                 .fillingSpace()
             } else {
-                SplitView(autosaveName: "\(autosavePrefix).workingCopyFiles", leadingColumn: Metrics.Column.commitFileList) {
+                SplitView(autosaveName: "Espalier.Split.workingCopyFiles", leadingColumn: Metrics.Column.commitFileList) {
                     WorkingCopyFiles(repository: repository)
                 } trailing: {
                     WorkingCopyDiff(repository: repository)

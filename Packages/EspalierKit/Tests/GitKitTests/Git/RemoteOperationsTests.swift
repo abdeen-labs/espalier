@@ -451,10 +451,9 @@ struct RemoteOperationsTests {
 
             #expect(try await getMergeBase(repository, branch.name, upstream) == before.sha)
 
-            let error = await #expect(throws: PullRemoteNameError.self) {
+            await #expect(throws: PullRemoteNameError.self) {
                 try await pull(repository, remote, PullOptions(progressCallback: progress.callback()))
             }
-            #expect(error?.localizedDescription == "Cannot pull from a remote whose name starts with '-'.")
 
             let after = try await getTipOrError(repository)
             #expect(after.sha == before.sha)

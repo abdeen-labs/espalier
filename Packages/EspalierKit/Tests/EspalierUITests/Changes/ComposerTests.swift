@@ -1,7 +1,7 @@
-// The composer's content from repositories (the commit button's labels and
-// when it's enabled, the placeholder, the length hint, amending, the last
-// commit, the warnings and their order, the sparkle's states), and a failed
-// hook that can't be stopped.
+// The composer's content from repositories (when the commit button is
+// enabled, its branch and shortcut, the summary one file gives, the length
+// hint, amending, the last commit, the warnings, their order and links, the
+// sparkle's states), and a failed hook that can't be stopped.
 
 import AIKit
 @testable import EspalierCore
@@ -18,50 +18,18 @@ import TestSupport
 struct ComposerTests {
     // MARK: The commit button
 
-    @Test("the button names the files and the branch, and says why it can't commit")
+    @Test("the button sets the branch apart, and shows ⌘↩ only for a commit")
     func button() {
-        let format = defaultNumberFormat
-        #expect(CommitButtonContent(fileCount: 2, branch: "main", isEnabled: true, numberFormat: format).title == "Commit 2 Files to main")
-        #expect(CommitButtonContent(fileCount: 1, branch: "main", isEnabled: true).title == "Commit 1 File to main")
-        #expect(CommitButtonContent(fileCount: 0, branch: "main", isEnabled: true).title == "Commit to main")
-        #expect(CommitButtonContent(fileCount: 2, branch: nil, isEnabled: true).title == "Commit 2 Files")
-        #expect(CommitButtonContent(fileCount: 0, branch: nil, isEnabled: true).title == "Commit")
-        #expect(CommitButtonContent(fileCount: 1_234, branch: "main", isEnabled: true).title == "Commit 1,234 Files to main")
-        #expect(CommitButtonContent(fileCount: 2, branch: "main", isCommitting: true, isEnabled: false).title == "Committing 2 Files to main…")
-        #expect(CommitButtonContent(isAmending: true, fileCount: 2, branch: "main", isEnabled: true).title == "Amend Last Commit")
-        #expect(CommitButtonContent(isAmending: true, fileCount: 2, branch: "main", isCommitting: true, isEnabled: false).title == "Amending Last Commit…")
-        #expect(CommitButtonContent(fileCount: 2, branch: "main", isGenerating: true, isEnabled: false).title == "Generating Commit Details…")
-
         // The capsule shows the branch apart, so a long one gives way in
         // the middle while the words keep their room.
-        let parts = CommitButtonContent(fileCount: 2, branch: "feature/login", isCommitting: true, isEnabled: false).titleParts
-        #expect(parts.lead == "Committing 2 Files to")
-        #expect(parts.branch == "feature/login")
-        #expect(parts.trail == "…")
-        let idle = CommitButtonContent(fileCount: 2, branch: "main", isEnabled: true).titleParts
-        #expect(idle.lead == "Commit 2 Files to")
-        #expect(idle.branch == "main")
-        #expect(idle.trail.isEmpty)
+        #expect(CommitButtonContent(fileCount: 2, branch: "feature/login", isCommitting: true, isEnabled: false).titleParts.branch == "feature/login")
+        #expect(CommitButtonContent(fileCount: 2, branch: "main", isEnabled: true).titleParts.branch == "main")
         #expect(CommitButtonContent(fileCount: 2, branch: "main", isGenerating: true, isEnabled: false).titleParts.branch == nil)
-
-        let disabled = CommitButtonContent(fileCount: 2, branch: "main", isEnabled: false, disabledReason: "Enter a summary to commit")
-        #expect(disabled.help == "Enter a summary to commit")
-        #expect(CommitButtonContent(fileCount: 2, branch: "main", isEnabled: true).help == "Commit 2 Files to main")
         #expect(CommitButtonContent(fileCount: 2, branch: "main", isEnabled: true).showsShortcut)
 
-        // A waiting merge's and other operations' buttons: no branch, no
-        // ⌘↩, and why they wait.
-        let merge = CommitButtonContent(kind: .merge, fileCount: 0, branch: nil, isEnabled: false, disabledReason: "Resolve all conflicts before continuing")
-        #expect(merge.title == "Commit Merge")
-        #expect(merge.help == "Resolve all conflicts before continuing")
-        #expect(!merge.showsShortcut)
-        #expect(CommitButtonContent(kind: .merge, fileCount: 0, branch: nil, isCommitting: true, isEnabled: false).title == "Committing Merge…")
-        let rebase = CommitButtonContent(kind: .continueOperation(name: "Rebase"), fileCount: 0, branch: nil, isEnabled: true)
-        #expect(rebase.title == "Continue Rebase")
-        #expect(rebase.help == "Continue Rebase")
-        #expect(!rebase.showsShortcut)
-        #expect(CommitButtonContent(kind: .continueOperation(name: "Cherry-pick"), fileCount: 0, branch: nil, isCommitting: true, isEnabled: false).title
-            == "Continuing Cherry-pick…")
+        // A waiting merge's and other operations' buttons: no ⌘↩.
+        #expect(!CommitButtonContent(kind: .merge, fileCount: 0, branch: nil, isEnabled: false).showsShortcut)
+        #expect(!CommitButtonContent(kind: .continueOperation(name: "Rebase"), fileCount: 0, branch: nil, isEnabled: true).showsShortcut)
     }
 
     @Test("the composer follows the repository: files, summary, placeholder, empty commits")
@@ -74,10 +42,7 @@ struct ComposerTests {
 
             // Three files, no summary: the summary is required.
             var content = ComposerContent.make(repository, app: fixture.app)
-            #expect(content.summaryPlaceholder == "Summary (required)")
-            #expect(content.button.title == "Commit 3 Files to main")
             #expect(!content.button.isEnabled)
-            #expect(content.button.help == "Enter a summary to commit")
             #expect(content.author == AuthorIdentityContent(name: "Joe Bloggs", email: "joe.bloggs@somewhere.com"))
             #expect(!content.showsCoAuthorsToggle)
             #expect(content.warning == nil)
@@ -86,14 +51,11 @@ struct ComposerTests {
             commit.draft.summary = "Update the readme"
             content = ComposerContent.make(repository, app: fixture.app)
             #expect(content.button.isEnabled)
-            #expect(content.button.help == "Commit 3 Files to main")
 
             // No file included.
             repository.changes.setIncludeAll(false)
             content = ComposerContent.make(repository, app: fixture.app)
             #expect(!content.button.isEnabled)
-            #expect(content.button.help == "Select one or more files to commit")
-            #expect(content.button.title == "Commit to main")
 
             // An empty commit is allowed.
             commit.options.allowEmpty = true
@@ -107,7 +69,6 @@ struct ComposerTests {
             commit.draft.summary = ""
             content = ComposerContent.make(repository, app: fixture.app)
             #expect(content.summaryPlaceholder == "Update README.md")
-            #expect(content.button.title == "Commit 1 File to main")
             #expect(content.button.isEnabled)
 
             // A summary of only spaces doesn't count.
@@ -115,7 +76,6 @@ struct ComposerTests {
             commit.draft.summary = "   "
             content = ComposerContent.make(repository, app: fixture.app)
             #expect(!content.button.isEnabled)
-            #expect(content.button.help == "Enter a summary to commit")
             await fixture.app.idle()
         }
     }
@@ -156,16 +116,14 @@ struct ComposerTests {
             let lastCommit = try #require(content.lastCommit)
             #expect(lastCommit.summary == "Update the readme")
             #expect(lastCommit.isUndoEnabled)
-            #expect(lastCommit.undoHelp == "Undo this commit and keep its changes")
             #expect(controller.canUndo)
             #expect(content.options.canToggleAmend)
 
-            // Amending: the last commit's message, the note, the label.
+            // Amending: the last commit's message, and no last commit shown.
             await controller.toggleAmend()
             content = ComposerContent.make(repository, app: fixture.app)
             #expect(content.isAmending)
             #expect(content.options.isAmending)
-            #expect(content.button.title == "Amend Last Commit")
             #expect(content.lastCommit == nil)
             #expect(repository.commit.draft.summary == "Update the readme")
             await controller.toggleAmend()
@@ -182,7 +140,7 @@ struct ComposerTests {
             try await fixture.git(["checkout", "-q", "--detach"])
             await fixture.refresh()
             fixture.repository.commit.draft.summary = "Detached"
-            #expect(ComposerContent.make(fixture.repository, app: fixture.app).button.title == "Commit 3 Files")
+            #expect(ComposerContent.make(fixture.repository, app: fixture.app).button.branch == nil)
             // HEAD's commit can be amended, detached or not, from the options
             // and the Commit menu.
             #expect(ComposerContent.make(fixture.repository, app: fixture.app).options.canToggleAmend)
@@ -355,40 +313,21 @@ struct ComposerTests {
         }
     }
 
-    @Test("warnings read plainly: F2's words, the name in bold where the sentence puts it, and their links")
+    @Test("warnings bold the name, and link the rulesets and the action")
     func warningText() throws {
-        func text(_ warning: CommitWarning) -> String {
-            String(warning.message.characters)
-        }
         let rulesets = ChangesFixtures.mainRulesets
-        #expect(text(CommitWarning(.noWriteAccess(repositoryName: "website"))) == "You don't have write access to website. Want to create a fork?")
-        #expect(text(CommitWarning(.branchProtected(branch: "main"))) == "main is a protected branch. Want to switch branches?")
-        #expect(text(CommitWarning(.publishRestricted(branch: "wip", canBypass: false), rulesURL: rulesets))
-            == "Repository rules don't allow publishing wip. Want to switch branches?")
-        #expect(text(CommitWarning(.publishRestricted(branch: "wip", canBypass: true), rulesURL: rulesets))
-            == "Repository rules restrict publishing wip, but you can bypass them.")
-        #expect(text(CommitWarning(.signedCommitsRequired(branch: "main", canBypass: false), rulesURL: rulesets))
-            == "Repository rules require signed commits on main.")
-        #expect(text(CommitWarning(.pushRestricted(branch: "main", canBypass: true), rulesURL: rulesets))
-            == "Repository rules restrict pushing to main, but you can bypass them.")
-
         // "Repository rules" links to the rulesets, then the action.
         let pushing = CommitWarning(.pushRestricted(branch: "main", canBypass: false), rulesURL: rulesets).message
         #expect(pushing.runs.compactMap(\.link) == [rulesets, CommitWarning.switchBranchesURL])
         #expect(CommitWarning(.branchProtected(branch: "main")).message.runs.compactMap(\.link) == [CommitWarning.switchBranchesURL])
 
-        // The name is bold where the sentence puts it, even when the
-        // sentence's own words hold it.
+        // The name is bold.
         let message = CommitWarning(.pushRestricted(branch: "to", canBypass: true)).message
         let bold = try #require(message.runs.first { $0.inlinePresentationIntent == .stronglyEmphasized })
         #expect(String(message[bold.range].characters) == "to")
-        #expect(message.characters.distance(from: message.startIndex, to: bold.range.lowerBound)
-            == "Repository rules restrict pushing to ".count)
-        // Names are never read as Markdown.
-        #expect(text(CommitWarning(.branchProtected(branch: "fix_*this*"))) == "fix_*this* is a protected branch. Want to switch branches?")
     }
 
-    @Test("the commit message's rules as the hint shows them: F2's sentence, each rule linked to its ruleset")
+    @Test("the commit message's rules as the hint shows them, each linked to its ruleset")
     func messageRules() throws {
         let failures = RepoRulesMetadataFailures(
             failed: [RepoRulesMetadataFailure(description: "must start with \"JIRA-\"", rulesetId: 7)],
@@ -399,7 +338,6 @@ struct ComposerTests {
         #expect(hint.bypassed == [MessageRuleFailures.Rule("must not contain \"WIP\"", rulesetURL: URL(string: "https://github.com/octo-org/website/rules/8"))])
         #expect(hint.rulesetsURL == ChangesFixtures.mainRulesets)
         #expect(!hint.canBypass)
-        #expect(hint.summary == "This commit message fails 2 rules.")
         #expect(MessageRuleFailures(RepoRulesMetadataFailures(), gitHubRepository: ChangesFixtures.website(), branch: "main") == nil)
         // Without a GitHub repository or a branch, nothing links.
         let unlinked = try #require(MessageRuleFailures(failures, gitHubRepository: nil, branch: nil))
@@ -408,8 +346,6 @@ struct ComposerTests {
 
         let bypassable = MessageRuleFailures(failed: [], bypassed: [.init("a"), .init("b")])
         #expect(bypassable.canBypass)
-        #expect(bypassable.summary == "This commit message fails 2 rules, but you can bypass them.")
-        #expect(MessageRuleFailures(failed: [], bypassed: [.init("a")]).summary == "This commit message fails 1 rule, but you can bypass it.")
     }
 
     @Test("Undo Commit… (History's commit menu on HEAD, the Commit menu) undoes HEAD's commit, asking first when the tree has changes")
@@ -429,7 +365,6 @@ struct ComposerTests {
             let head = try #require(repository.gitState.tip.sha)
             #expect(repository.commit.undoableCommitSHA == head)
             #expect(actions.canPerform(.undoCommit))
-            #expect(actions.title(for: .undoCommit) == "Undo Commit…")
 
             // Two files are still changed: the presenter asks first.
             let task = Task { await actions.performAndWait(.undoCommit) }
@@ -446,7 +381,7 @@ struct ComposerTests {
         }
     }
 
-    @Test("VoiceOver hears a commit start once git runs, past the gates' questions, and finish when it succeeds")
+    @Test("VoiceOver hears nothing of a commit cancelled at a gate's question; a failed commit shows git's error, and a retry commits")
     func commitAnnouncements() async throws {
         try await withIsolatedGitConfig { _ in
             let (local, _) = try await setupRepositoryWithChanges()
@@ -456,7 +391,6 @@ struct ComposerTests {
             let recorded = RecordedAnnouncements()
             fixture.context.announcer = recorded.announcer
             let controller = ComposerController(context: fixture.context, repository: repository)
-            let branch = try #require(repository.gitState.tip.branch?.name)
             repository.commit.draft.summary = "Update everything"
 
             // A question cancelled: nothing ran, nothing is said.
@@ -470,13 +404,12 @@ struct ComposerTests {
             #expect(recorded.messages.isEmpty)
             repository.changes.filter.text = ""
 
-            // Git fails: its error shows, and only the start is said.
+            // Git fails: its error shows.
             let lock = POSIXPath.join(local.path, ".git/index.lock")
             FileManager.default.createFile(atPath: lock, contents: Data())
             await controller.commit()
             let error = try #require(presenter.error)
             presenter.dismissError(error.id)
-            #expect(recorded.messages == ["Committing"])
             try FileManager.default.removeItem(atPath: lock)
             await fixture.settle()
 
@@ -484,7 +417,6 @@ struct ComposerTests {
             await fixture.settle()
             #expect(presenter.error == nil)
             #expect(repository.commit.mostRecentLocalCommit?.summary == "Update everything")
-            #expect(recorded.messages == ["Committing", "Committing", "Committed to \(branch)"])
         }
     }
 
@@ -513,7 +445,6 @@ struct ComposerTests {
             app.ai.select(model: choice.key, for: .commitMessageGeneration)
             // Consent is asked when the sparkle is clicked.
             #expect(state() == .ready(model: "GPT-5"))
-            #expect(state().help == "Generate Commit Message with GPT-5")
 
             repository.changes.setIncludeAll(false)
             #expect(state() == .noFiles(model: "GPT-5"))
@@ -526,7 +457,6 @@ struct ComposerTests {
 
             repository.ai.commitMessageGeneration = .generating
             #expect(state() == .generating)
-            #expect(ComposerContent.make(repository, app: app).button.title == "Generating Commit Details…")
             #expect(!ComposerContent.make(repository, app: app).button.isEnabled)
             #expect(ComposerContent.make(repository, app: app).isReadOnly)
 

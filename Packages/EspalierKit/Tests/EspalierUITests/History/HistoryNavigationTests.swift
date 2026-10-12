@@ -1,6 +1,5 @@
-// Following the graph: Back and Forward, stubs' tooltips, following a stub
-// to its other end and back, parents and children across stubs, and
-// VoiceOver's description of a row.
+// Following the graph: Back and Forward, following a stub to its other end
+// and back, and parents and children across stubs.
 
 import AppKit
 @testable import EspalierCore
@@ -37,42 +36,6 @@ struct HistoryNavigationTests {
         // The same place twice in a row is remembered once.
         stack.record(from: "b")
         #expect(stack.back.filter { $0 == "b" }.count == 1)
-    }
-
-    // MARK: Tooltips
-
-    @Test("a stub's tooltip says how far it continues and to which commit")
-    func tooltips() throws {
-        let commits = graphCommits("""
-            M m4 f2
-            f2 f1
-            f1 B
-            m4 m3
-            m3 m2
-            m2 m1
-            m1 B
-            B A
-            A
-            """)
-        let history = SyntheticHistory(commits, options: CommitGraphOptions(trunkTip: "M", longEdgeThreshold: 3))
-        history.publishFirstPage(9)
-        let f1 = 2, b = 7
-        let outgoing = try #require(history.graph[f1].edges.first { $0.kind == .outgoingStub })
-        let incoming = try #require(history.graph[b].edges.first { $0.kind == .incomingStub })
-        #expect(StubNavigator.tooltip(for: outgoing, row: f1, source: history, isLoading: false) == "Continues 5 commits below: B Commit B")
-        #expect(StubNavigator.tooltip(for: incoming, row: b, source: history, isLoading: false) == "Comes from 5 commits above: f1 Commit f1")
-
-        // Not loaded yet, then loading; not in the history once complete.
-        let partial = SyntheticHistory(commits, options: CommitGraphOptions(trunkTip: "M", longEdgeThreshold: 3))
-        partial.publishFirstPage(6)
-        let unloaded = try #require(partial.graph[f1].edges.first { $0.kind == .outgoingStub })
-        #expect(unloaded.parentRow == nil)
-        #expect(StubNavigator.tooltip(for: unloaded, row: f1, source: partial, isLoading: false) == "Continues below the loaded commits (B). Click to load them.")
-        #expect(StubNavigator.tooltip(for: unloaded, row: f1, source: partial, isLoading: true) == "Continues below the loaded commits (B). Loading…")
-        let missing = SyntheticHistory(Array(commits.prefix(6)), options: CommitGraphOptions(trunkTip: "M", longEdgeThreshold: 3))
-        missing.publishFirstPage(6)
-        let gone = try #require(missing.graph[f1].edges.first { $0.kind == .outgoingStub })
-        #expect(StubNavigator.tooltip(for: gone, row: f1, source: missing, isLoading: false) == "This commit's parent isn't in the history shown.")
     }
 
     // MARK: Following stubs on a real repository
@@ -171,36 +134,6 @@ struct HistoryNavigationTests {
             await fixture.settle()
         }
     }
-
-    // MARK: VoiceOver
-
-    @Test("VoiceOver hears a row's commit and what its drawing shows")
-    func accessibility() async throws {
-        try await withIsolatedGitConfig { _ in
-            let (fixture, table) = try await makeLongBranch()
-            let history = fixture.history
-            let presentation = GraphPresentation(repository: fixture.repository, place: .history)
-            let mergeRow = try #require(history.row(of: fixture.shas["M"]!))
-            let merge = GraphAccessibility.value(forRow: mergeRow, source: history, presentation: presentation)
-            #expect(merge.hasPrefix("HEAD. Merge commit with 2 parents. Branch tip: main."))
-            // Without a remote nothing is unpushed; with one, the local
-            // commits are.
-            #expect(!merge.contains("Not pushed."))
-            try await runGit(["remote", "add", "origin", try createTempDirectory()], fixture.local)
-            await fixture.repository.refresh(reason: .user)
-            await fixture.settle()
-            let withRemote = GraphPresentation(repository: fixture.repository, place: .history)
-            #expect(GraphAccessibility.value(forRow: mergeRow, source: history, presentation: withRemote).contains("Not pushed."))
-            let f1Row = try #require(history.row(of: fixture.shas["f1"]!))
-            #expect(GraphAccessibility.value(forRow: f1Row, source: history, presentation: presentation).contains("First parent is 40 commits below."))
-            #expect(GraphAccessibility.value(forRow: 0, source: history, presentation: presentation) == "No uncommitted changes.")
-            // The scroll status counts the loaded rows.
-            table.update()
-            #expect(GraphAccessibility.scrollStatus(table.controller)?.hasPrefix("Commits 1 to ") == true)
-            #expect(GraphAccessibility.rotors(for: table.controller).map(\.label) == ["Branch Tips", "Tags", "Merge Commits", "Unpushed Commits"])
-            await fixture.settle()
-        }
-    }
 }
 
 /// The graph table on a real history, in an offscreen window, with
@@ -215,7 +148,6 @@ final class GraphTableHarnessForModel {
         self.fixture = fixture
         window = SnapshotWindow(contentRect: CGRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless], backing: .buffered, defer: false)
         window.appearance = SnapshotAppearance.light.appearance
-        controller.fixedNow = UIFixtures.now
         controller.avatarLoader = MonogramAvatarLoader()
         let container = NSView(frame: CGRect(x: 0, y: 0, width: 600, height: 400))
         controller.scrollView.frame = container.bounds

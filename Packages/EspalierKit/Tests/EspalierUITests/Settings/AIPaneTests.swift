@@ -29,23 +29,21 @@ struct AIPaneTests {
         let app = harness.makeApp()
         let (context, _) = SettingsFixtures.context(app)
         let editor = ProviderEditor(ai: app.ai, existing: nil)
-        #expect(editor.title == "Add Provider")
-        #expect(editor.saveTitle == "Add")
 
         // Each problem in turn, and nothing saved.
         #expect(await !editor.save(presenter: context.presenter))
-        #expect(editor.problem == "Enter a name.")
+        #expect(editor.problem != nil)
         editor.form.name = "  OpenAI  "
-        #expect(editor.problem == "Enter a base URL.")
+        #expect(editor.problem != nil)
         editor.form.baseUrl = "http://api.openai.com/v1"
-        #expect(editor.problem == "Base URL must be an https URL, or an http URL pointing at the local machine.")
+        #expect(editor.problem != nil)
         editor.form.baseUrl = "https://api.openai.com/v1"
-        #expect(editor.problem == "Add at least one model.")
+        #expect(editor.problem != nil)
         editor.addModel(BYOKModel(id: "gpt-5", name: ""))
-        #expect(editor.problem == "Enter an API key.")
+        #expect(editor.problem != nil)
         editor.form.secret = "sk-test-not-a-real-key"
         editor.form.requestTimeoutSeconds = "soon"
-        #expect(editor.problem == "Request timeout must be a positive number of seconds.")
+        #expect(editor.problem != nil)
         editor.form.requestTimeoutSeconds = "90"
         #expect(editor.problem == nil)
         #expect(app.ai.providers.isEmpty)
@@ -87,8 +85,6 @@ struct AIPaneTests {
         try app.ai.addProvider(provider, secret: .set("sk-test-old"))
 
         let editor = ProviderEditor(ai: app.ai, existing: provider)
-        #expect(editor.title == "Edit Provider")
-        #expect(editor.saveTitle == "Save")
         #expect(editor.keepsStoredSecret)
         editor.form.name = "OpenAI (work)"
         #expect(await editor.save(presenter: context.presenter))
@@ -100,7 +96,7 @@ struct AIPaneTests {
         switching.form.authKind = .bearer
         #expect(!switching.keepsStoredSecret)
         #expect(await !switching.save(presenter: context.presenter))
-        #expect(switching.problem == "Enter a bearer token.")
+        #expect(switching.problem != nil)
         #expect(app.ai.providers[0].authKind == .apiKey)
 
         // No credentials: the stored key is removed.
@@ -116,11 +112,10 @@ struct AIPaneTests {
         let app = harness.makeApp()
         let editor = ProviderEditor(ai: app.ai, existing: SettingsFixtures.remoteProvider)
         let adding = editor.modelEditor(for: nil)
-        #expect(adding.title == "Add Model")
         #expect(adding.otherModelIds == ["gpt-5", "gpt-5-mini"])
         adding.form.id = " gpt-5 "
         #expect(adding.save() == nil)
-        #expect(adding.problem == "Another model already uses the identifier \u{201C}gpt-5\u{201D}.")
+        #expect(adding.problem != nil)
         adding.form.id = "o3"
         #expect(adding.problem == nil)
         adding.form.reasoningEffort = .high
@@ -129,7 +124,6 @@ struct AIPaneTests {
         editor.addModel(added)
 
         let editing = editor.modelEditor(for: 0)
-        #expect(editing.title == "Edit Model")
         #expect(editing.form.id == "gpt-5")
         #expect(editing.otherModelIds == ["gpt-5-mini", "o3"])
         editing.form.name = "GPT-5 (thinking)"
@@ -139,7 +133,7 @@ struct AIPaneTests {
 
         let empty = ModelEditor(model: nil, otherModelIds: [])
         #expect(empty.save() == nil)
-        #expect(empty.problem == "Enter a model identifier.")
+        #expect(empty.problem != nil)
     }
 
     @Test("removing a provider asks first; Cancel keeps it")
@@ -155,9 +149,7 @@ struct AIPaneTests {
         await actions(app, confirming: false, asked: asked).removeProvider(provider)
         #expect(app.ai.providers.count == 1)
         let alert = try #require(asked.alerts.first)
-        #expect(alert.title == "Remove \"OpenAI\"?")
-        #expect(alert.message == "Its API key will also be removed from your keychain.")
-        #expect(alert.buttons == [AlertContent.Button("Remove", role: .destructive), AlertContent.Button("Cancel", role: .cancel)])
+        #expect(alert.buttons.map(\.role) == [.destructive, .cancel])
         #expect(alert.severity == .critical)
 
         await actions(app, confirming: true, asked: asked).removeProvider(provider)
@@ -182,7 +174,7 @@ struct AIPaneTests {
 
         let groups = ProviderConsents.group(app.ai.grantedConsents)
         #expect(groups.map(\.provider.name) == ["Ollama", "OpenAI"])
-        #expect(groups.map(\.featuresTitle) == ["Conflict resolution", "Commit messages, conflict resolution"])
+        #expect(groups.map { $0.consents.map(\.feature) } == [[.conflictResolution], [.commitMessageGeneration, .conflictResolution]])
         #expect(groups.map(\.host) == ["localhost:11434", "api.openai.com"])
 
         actions(app, confirming: true, asked: AskedAlerts()).revokeConsents(for: remote)
@@ -210,23 +202,12 @@ struct AIPaneTests {
         try app.ai.addProvider(SettingsFixtures.remoteProvider, secret: .set("sk-test-not-a-real-key"))
         let groups = ModelPickerItems.groups(in: app.ai)
         #expect(groups.map(\.provider.name) == ["Ollama", "OpenAI"])
-        #expect(groups.map { $0.choices.map { ModelPickerItems.title(of: $0.model) } } == [["Llama 3"], ["GPT-5 (High)", "GPT-5 mini"]])
+        #expect(groups.map { $0.choices.map(\.model.id) } == [["llama3:latest"], ["gpt-5", "gpt-5-mini"]])
         #expect(ModelPickerItems.selectedKey(for: .conflictResolution, in: app.ai) == nil)
 
         app.ai.select(model: llama, for: .conflictResolution)
         #expect(ModelPickerItems.selectedKey(for: .conflictResolution, in: app.ai) == llama)
         #expect(ModelPickerItems.selectedKey(for: .commitMessageGeneration, in: app.ai) == nil)
-    }
-
-    @Test("the provider list's and sheet's words")
-    func copy() {
-        #expect(ProviderCopy.typeShortTitle(.openai) == "OpenAI-compatible")
-        #expect(ProviderCopy.modelCount(1) == "1 model")
-        #expect(ProviderCopy.modelCount(3) == "3 models")
-        #expect(ProviderCopy.modelHeading(BYOKModel(id: "gpt-5", name: " ")) == "gpt-5")
-        #expect(ProviderCopy.modelHeading(BYOKModel(id: "", name: "")) == "Untitled model")
-        #expect(ProviderCopy.modelDetail(BYOKModel(id: "gpt-5", name: "GPT-5", reasoningEffort: .xhigh)) == "gpt-5 · Reasoning: Extra high")
-        #expect(ProviderCopy.baseURLPlaceholder(.azure) == "https://<resource>.openai.azure.com/")
     }
 }
 

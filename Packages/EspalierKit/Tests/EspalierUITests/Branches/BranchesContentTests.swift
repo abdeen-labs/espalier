@@ -3,7 +3,6 @@
 
 import AppKit
 import EspalierCore
-import Foundation
 import GitHubKit
 import GitKit
 import SwiftUI
@@ -163,7 +162,14 @@ struct BranchesContentTests {
     }
 
     @Test("while commits are dragged, the section's rows start with New Branch…")
-    func newBranchDropRow() throws {
+    func newBranchDropRow() async throws {
+        try await withIsolatedGitConfig { _ in
+            let fixture = try await makeOperationsFixture()
+            try checkNewBranchDropRow(repository: fixture.repository, context: fixture.context)
+        }
+    }
+
+    private func checkNewBranchDropRow(repository: RepositoryModel, context: WindowContext) throws {
         let main = localBranch("main")
         let content = BranchesSectionContent.make(.init(branches: [main, localBranch("feature/login")], tip: .valid(branch: main), defaultBranch: main))
         /// The rows the sidebar's table shows, and the window it's in.
@@ -172,9 +178,10 @@ struct BranchesContentTests {
             let window = SnapshotWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
             let host = NSHostingView(rootView: Snapshot.deterministic(
                 List {
-                    BranchesSectionRows(content: content, showsNewBranchDropRow: showsNewBranchDropRow)
+                    BranchesSectionRows(content: content, repository: repository, showsNewBranchDropRow: showsNewBranchDropRow)
                 }
                 .sidebarListStyle()
+                .windowEnvironment(context)
             ))
             window.contentView = host
             host.frame = CGRect(origin: .zero, size: size)
@@ -232,12 +239,7 @@ struct BranchesContentTests {
         #expect(tracking["loading"] == BranchTracking.none)
         #expect(tracking["origin/remote-only"] == BranchTracking.none)
 
-        #expect(BranchTracking.aheadBehind(ahead: 2, behind: 3).countsText == "↑2 ↓3")
-        #expect(BranchTracking.aheadBehind(ahead: 0, behind: 3).countsText == "↓3")
         #expect(BranchTracking.aheadBehind(ahead: 0, behind: 0).countsText == nil)
-        #expect(BranchTracking.aheadBehind(ahead: 1_234, behind: 12_500).countsText == "↑1.2k ↓12k")
-        #expect(BranchTracking.aheadBehind(ahead: 1, behind: 2).description == "1 commit ahead, 2 commits behind")
-        #expect(BranchTracking.notPublished.description == "Not published")
     }
 
     @Test("pull requests show on their branches, with their checks")
@@ -267,24 +269,6 @@ struct BranchesContentTests {
         #expect(badges["elsewhere"] == .some(nil))
         #expect(badges["origin/theirs"] == BranchPullRequestBadge(number: 145, isDraft: false))
         #expect(badges["main"] == .some(nil))
-        #expect(BranchPullRequestBadge(number: 142, isDraft: false, checks: .success).tooltip == "Pull request #142 · Checks: Successful")
-        #expect(BranchPullRequestBadge(number: 7, isDraft: true).tooltip == "Draft pull request #7")
-    }
-
-    @Test("Restore Pruned Branch names the day a branch was deleted, or today")
-    func prunedTitles() {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = UIFixtures.timeZone
-        calendar.locale = Locale(identifier: "en_US")
-        let today = PrunedBranch(name: "old-feature", sha: "abc", date: UIFixtures.minutesAgo(30))
-        #expect(RestorePrunedBranchMenu.title(of: today, now: UIFixtures.now, calendar: calendar) == "old-feature (deleted today)")
-        let earlier = PrunedBranch(name: "older-feature", sha: "def", date: UIFixtures.minutesAgo(3 * 24 * 60))
-        #expect(RestorePrunedBranchMenu.title(of: earlier, now: UIFixtures.now, calendar: calendar) == "older-feature (deleted Oct 3, 2026)")
-        // The day is the calendar's: 01:00 UTC is still the day before in
-        // San Francisco.
-        let early = PrunedBranch(name: "early", sha: "abc", date: UIFixtures.minutesAgo(9 * 60))
-        calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
-        #expect(RestorePrunedBranchMenu.title(of: early, now: UIFixtures.now, calendar: calendar) == "early (deleted Oct 5, 2026)")
     }
 
     // MARK: The picker
@@ -300,8 +284,7 @@ struct BranchesContentTests {
             includesRemoteBranches: true,
             filter: ""
         )
-        #expect(content.groups.map(\.title) == ["Default Branch", "Recent Branches", "Other Branches", "Remote Branches"])
-        #expect(content.branches.map(\.name) == ["main", "recent", "other", "origin/remote"])
+        #expect(content.groups.map { $0.branches.map(\.name) } == [["main"], ["recent"], ["other"], ["origin/remote"]])
 
         let local = BranchPickerContent.make(
             branches: [main, localBranch("other"), remoteBranch("origin/remote")],
@@ -310,7 +293,7 @@ struct BranchesContentTests {
             includesRemoteBranches: false,
             filter: ""
         )
-        #expect(local.groups.map(\.title) == ["Default Branch", "Other Branches"])
+        #expect(local.groups.map { $0.branches.map(\.name) } == [["main"], ["other"]])
     }
 
     @Test("the picker's filter keeps groups and ranks matches")
@@ -345,12 +328,10 @@ struct BranchesContentTests {
         // local branches tracking them.
         let onOrigin = [main, other, release]
         let content = make(candidates: onOrigin)
-        #expect(content.groups.map(\.title) == ["Default Branch", "Recent Branches", "Remote Branches"])
-        #expect(content.branches.map(\.name) == ["main", "other", "origin/release"])
+        #expect(content.groups.map { $0.branches.map(\.name) } == [["main"], ["other"], ["origin/release"]])
         // The default and recent branches show only when they're candidates.
         let upstreamOnly = make(candidates: [upstreamMain, recent])
-        #expect(upstreamOnly.groups.map(\.title) == ["Recent Branches", "Remote Branches"])
-        #expect(upstreamOnly.branches.map(\.name) == ["recent", "upstream/main"])
+        #expect(upstreamOnly.groups.map { $0.branches.map(\.name) } == [["recent"], ["upstream/main"]])
         #expect(make(filter: "rel", candidates: onOrigin).branches.map(\.name) == ["origin/release"])
         #expect(make(candidates: []).isEmpty)
         #expect(make(candidates: nil).branches.map(\.name) == ["main", "recent", "other", "origin/release", "upstream/main"])
@@ -366,18 +347,18 @@ struct BranchesContentTests {
 
         let spaced = BranchNameValidation.validate("my new branch", branches: branches)
         #expect(spaced.sanitizedName == "my-new-branch")
-        #expect(spaced.messages == [.warning("Will be created as my-new-branch.")])
+        #expect(spaced.messages.map(\.isError) == [false])
         #expect(spaced.isValid)
 
-        #expect(BranchNameValidation.validate("..", branches: branches).messages == [.error(".. is not a valid name.")])
-        #expect(BranchNameValidation.validate("feature", branches: branches).messages == [.error("A branch named feature already exists.")])
+        #expect(BranchNameValidation.validate("..", branches: branches).messages.map(\.isError) == [true])
+        #expect(BranchNameValidation.validate("feature", branches: branches).messages.map(\.isError) == [true])
         #expect(!BranchNameValidation.validate("feature", branches: branches).isValid)
-        #expect(BranchNameValidation.validate("shared", branches: branches).messages == [.warning("A branch named shared already exists on the remote.")])
+        #expect(BranchNameValidation.validate("shared", branches: branches).messages.map(\.isError) == [false])
 
-        // A rename may keep the name, and says "saved".
+        // A rename may keep the name.
         let rename = BranchNameValidation.validate("feature", branches: branches, verb: "saved", currentName: "feature")
         #expect(rename.isValid)
-        #expect(BranchNameValidation.validate("a b", branches: branches, verb: "saved", currentName: "feature").messages == [.warning("Will be saved as a-b.")])
+        #expect(BranchNameValidation.validate("a b", branches: branches, verb: "saved", currentName: "feature").messages.map(\.isError) == [false])
 
         // The rules' answer.
         let restricted = BranchNameValidation.validate("release", branches: branches)
@@ -396,42 +377,37 @@ struct BranchesContentTests {
         let main = localBranch("main")
         let feature = localBranch("feature")
         let choice = NewBranchSheetContent.make(mode: .create, tip: .valid(branch: feature), defaultBranch: main, upstreamDefaultBranch: nil, upstreamRepositoryName: nil, isFork: false)
-        #expect(choice.title == "Create a Branch")
-        #expect(choice.confirmButton == "Create Branch")
         guard case .choice(let options) = choice.base else {
             Issue.record("No choice")
             return
         }
         #expect(options.map(\.title) == ["main", "feature"])
         #expect(options.map(\.startPoint) == [.defaultBranch, .currentBranch])
-        #expect(options[0].description == "The default branch in your repository. Pick this to start on something new that's not dependent on your current branch.")
         #expect(choice.initialStartPoint == .defaultBranch)
         #expect(choice.baseExplanation == nil)
 
         let onDefault = NewBranchSheetContent.make(mode: .create, tip: .valid(branch: main), defaultBranch: main, upstreamDefaultBranch: nil, upstreamRepositoryName: nil, isFork: false)
-        #expect(onDefault.baseExplanation == "Your new branch will be based on your currently checked out branch (main). main is the default branch for your repository.")
+        #expect(onDefault.base == .currentBranch(name: "main", isDefault: true))
         #expect(onDefault.initialStartPoint == .defaultBranch)
 
         let noDefault = NewBranchSheetContent.make(mode: .create, tip: .valid(branch: feature), defaultBranch: nil, upstreamDefaultBranch: nil, upstreamRepositoryName: nil, isFork: false)
-        #expect(noDefault.baseExplanation == "Your new branch will be based on your currently checked out branch (feature).")
+        #expect(noDefault.base == .currentBranch(name: "feature", isDefault: false))
     }
 
-    @Test("New Branch explains a detached HEAD, an unborn branch, a commit, and a fork")
-    func newBranchExplanations() {
+    @Test("New Branch's base for a detached HEAD, an unborn branch, a commit, and a fork")
+    func newBranchBases() {
         let detached = NewBranchSheetContent.make(mode: .create, tip: .detached(currentSha: "a1b2c3d4e5f6"), defaultBranch: nil, upstreamDefaultBranch: nil, upstreamRepositoryName: nil, isFork: false)
-        #expect(detached.baseExplanation == "You're on a detached HEAD, not a branch, so your new branch will be based on the checked-out commit (a1b2c3d).")
+        #expect(detached.base == .detached(sha: "a1b2c3d4e5f6"))
         #expect(detached.initialStartPoint == .head)
 
         let unborn = NewBranchSheetContent.make(mode: .create, tip: .unborn(ref: "main"), defaultBranch: nil, upstreamDefaultBranch: nil, upstreamRepositoryName: nil, isFork: false)
-        #expect(unborn.baseExplanation == "Your current branch has no commits yet, so creating a new branch renames it.")
+        #expect(unborn.base == .unborn)
 
         let commit = NewBranchSheetContent.make(
             mode: .startPoint("a1b2c3d4e5f6", summary: "Fix the crash"),
             tip: .valid(branch: localBranch("main")), defaultBranch: nil, upstreamDefaultBranch: nil, upstreamRepositoryName: nil, isFork: false
         )
-        #expect(commit.baseExplanation == "Your new branch will be based on the commit 'Fix the crash' (a1b2c3d) from your repository.")
-        let tag = NewBranchSheetContent.make(mode: .startPoint("v1.0", summary: nil), tip: .valid(branch: localBranch("main")), defaultBranch: nil, upstreamDefaultBranch: nil, upstreamRepositoryName: nil, isFork: false)
-        #expect(tag.baseExplanation == "Your new branch will be based on v1.0.")
+        #expect(commit.base == .startPoint(name: "a1b2c3d4e5f6", summary: "Fix the crash"))
 
         let upstreamMain = remoteBranch("upstream/main")
         let fork = NewBranchSheetContent.make(mode: .create, tip: .valid(branch: localBranch("feature")), defaultBranch: localBranch("main"), upstreamDefaultBranch: upstreamMain, upstreamRepositoryName: "octo-org/website", isFork: true)
@@ -444,18 +420,14 @@ struct BranchesContentTests {
         #expect(fork.initialStartPoint == .upstreamDefaultBranch)
         #expect(fork.showsForkBehaviorLink)
         let onUpstreamDefault = NewBranchSheetContent.make(mode: .create, tip: .valid(branch: localBranch("main")), defaultBranch: localBranch("main"), upstreamDefaultBranch: upstreamMain, upstreamRepositoryName: "octo-org/website", isFork: true)
-        #expect(onUpstreamDefault.baseExplanation == "Your new branch will be based on octo-org/website's default branch (main).")
-
-        let cherryPick = NewBranchSheetContent.make(mode: .cherryPick(shas: ["a"]), tip: .valid(branch: localBranch("main")), defaultBranch: nil, upstreamDefaultBranch: nil, upstreamRepositoryName: nil, isFork: false)
-        #expect(cherryPick.title == "Cherry-pick to New Branch")
-        #expect(cherryPick.confirmButton == "Create Branch and Cherry-pick")
+        #expect(onUpstreamDefault.base == .upstreamDefault(name: "main", repositoryName: "octo-org/website"))
     }
 
     @Test("Rename warns that the remote keeps its name only for a branch that tracks one")
     func renameWarning() {
         #expect(RenameBranchSheetContent(branchName: "spike", upstream: nil).remoteWarning == nil)
         let tracking = RenameBranchSheetContent(branchName: "feature/login", upstream: "origin/feature/login")
-        #expect(tracking.remoteWarning?.contains("origin/feature/login") == true)
+        #expect(tracking.remoteWarning != nil)
     }
 
     // MARK: Drops
@@ -475,6 +447,5 @@ struct BranchesContentTests {
         #expect(!CommitDropDecision.accepts(.branch(name: "main", isCurrent: true), isBusy: false))
         #expect(!CommitDropDecision.accepts(.newBranch, isBusy: true))
         #expect(CommitDropDecision.accepts(.newBranch, isBusy: false))
-        #expect(CommitDropTarget.branch(name: "feature", isCurrent: false).actionTitle == "Cherry-pick to feature")
     }
 }

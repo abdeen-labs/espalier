@@ -372,7 +372,7 @@ nonisolated public enum SyncMenuItem: Sendable, Equatable {
 
 // MARK: - The view
 
-/// The sync button, value-driven: snapshots render every state. A capsule:
+/// The sync button, value-driven: it draws `SyncButtonState`. A capsule:
 /// prominent while there's something to push, pull, publish, or force
 /// push, and while that runs; quiet otherwise. With alternatives (Fetch,
 /// Force Push) or a background failure, a chevron opens its menu. While a
@@ -384,7 +384,6 @@ public struct SyncButtonView: View {
     private let onPrimary: () -> Void
     private let onMenuItem: (SyncMenuItem) -> Void
     private let onShowFailure: () -> Void
-    @Environment(\.fixedNow) private var fixedNow
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
 
@@ -446,7 +445,7 @@ public struct SyncButtonView: View {
 
     @ViewBuilder
     private var capsule: some View {
-        let detail = state.detail(now: fixedNow ?? Date(), formatting: formatting, timeZone: timeZone)
+        let detail = state.detail(now: Date(), formatting: formatting, timeZone: timeZone)
         if case .progress(_, let description, _, _) = state.kind {
             // While it runs: the capsule it was, legible, taking no clicks;
             // what runs and git's step are its tooltip.
@@ -605,7 +604,6 @@ enum BadgedSymbol {
 /// detail is the last fetch.
 public struct LastFetchedLabel: View {
     private let lastFetched: Date?
-    @Environment(\.fixedNow) private var fixedNow
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
 
@@ -621,7 +619,7 @@ public struct LastFetchedLabel: View {
     public var body: some View {
         if let lastFetched {
             TimelineView(.everyMinute) { context in
-                Text("Fetched \(RelativeTime.describe(lastFetched, now: fixedNow ?? context.date, formatting: formatting, timeZone: timeZone))")
+                Text("Fetched \(RelativeTime.describe(lastFetched, now: context.date, formatting: formatting, timeZone: timeZone))")
                     .font(Typography.meta)
                     .foregroundStyle(.text3)
                     .lineLimit(1)
@@ -659,12 +657,9 @@ public struct SyncButtonGroup: View {
     /// - Parameters:
     ///   - scope: What the state belongs to (the repository): what the
     ///     group showed for another doesn't stay while an operation runs.
-    ///   - shownWidth: The width to keep while loading before the group has
-    ///     shown anything.
     public init(
         _ state: SyncButtonState,
         scope: AnyHashable? = nil,
-        shownWidth: CGFloat? = nil,
         onPrimary: @escaping () -> Void = {},
         onMenuItem: @escaping (SyncMenuItem) -> Void = { _ in },
         onShowFailure: @escaping () -> Void = {}
@@ -674,7 +669,6 @@ public struct SyncButtonGroup: View {
         self.onPrimary = onPrimary
         self.onMenuItem = onMenuItem
         self.onShowFailure = onShowFailure
-        _shownWidth = State(initialValue: shownWidth)
     }
 
     public var body: some View {

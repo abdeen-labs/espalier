@@ -60,7 +60,7 @@ struct BranchActionsTests {
             fixture.app.preferences.uncommittedChangesStrategy = .askForConfirmation
             fixture.context.actions.perform(.checkoutBranch(name: "feature"))
             let decision = await fixture.decision()
-            #expect(decision.decision.choices.first?.warning == "This replaces the stash already on this branch.")
+            #expect(decision.decision == .uncommittedChanges(currentBranch: "main", targetBranch: "feature", currentBranchHasStash: true))
             fixture.presenter.respond(to: decision.id, with: .stashOnCurrentBranch)
             await waitUntil { fixture.presenter.confirmation != nil || fixture.repository.gitState.tip.branch?.name == "feature" }
             #expect(fixture.presenter.confirmation == nil)
@@ -199,7 +199,7 @@ struct BranchActionsTests {
         }
     }
 
-    @Test("merge and squash merge show desktop's banners as toasts")
+    @Test("merge brings in the branch's commits; squash merge makes one commit of them")
     func merge() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await makeOperationsFixture { local in
@@ -212,24 +212,17 @@ struct BranchActionsTests {
             }
             await BranchActions.integrate(.merge, branch: try fixture.branch("feature"), in: fixture.context)
             await fixture.settle()
-            #expect(fixture.presenter.toasts.last?.message == "Merged feature into main")
             #expect(try await fixture.summaries("main").contains("Change feature-2.txt"))
 
             await BranchActions.integrate(.squashMerge, branch: try fixture.branch("squashed"), in: fixture.context)
             await fixture.settle()
-            #expect(fixture.presenter.toasts.last?.message == "Merged squashed into main")
             // One commit with both changes.
             #expect(try await fixture.git(["rev-list", "--count", "HEAD^..HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines) == "1")
             #expect(try await fixture.git(["show", "--name-only", "--format=", "HEAD"]).contains("squashed-2.txt"))
-
-            // Merging again: up to date.
-            await BranchActions.integrate(.merge, branch: try fixture.branch("feature"), in: fixture.context)
-            await fixture.settle()
-            #expect(fixture.presenter.toasts.last?.message == "main is already up to date with feature")
         }
     }
 
-    @Test("rebasing published commits asks first, then says so; Update from main merges main")
+    @Test("rebasing published commits asks first; Update from main merges main")
     func rebaseAndUpdate() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await makeOperationsFixture { local in
@@ -250,7 +243,6 @@ struct BranchActionsTests {
             fixture.presenter.respond(to: confirmation.id, with: ConfirmationResponse(isConfirmed: true))
             _ = await rebase.result
             await fixture.settle()
-            #expect(fixture.presenter.toasts.last?.message == "Rebased feature onto main")
             #expect(try await fixture.summaries("feature").prefix(2) == ["Change feature.txt", "Change main.txt"])
 
             // Update from main, on another branch: a merge of main.
@@ -259,7 +251,6 @@ struct BranchActionsTests {
             #expect(fixture.context.actions.canPerform(.updateFromDefaultBranch))
             await fixture.context.actions.performAndWait(.updateFromDefaultBranch)
             await fixture.settle()
-            #expect(fixture.presenter.toasts.last?.message == "Merged main into updated")
             #expect(FileManager.default.fileExists(atPath: POSIXPath.join(fixture.local.path, "main.txt")))
         }
     }

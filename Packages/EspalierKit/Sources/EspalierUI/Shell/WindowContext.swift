@@ -21,7 +21,7 @@ public final class WindowContext {
     @ObservationIgnored public let modals: ModalPresenter
     /// Shows the prompts git waits on.
     @ObservationIgnored lazy var promptHost = PromptHost(context: self)
-    /// Where avatars come from (snapshots use monograms).
+    /// Where avatars come from.
     @ObservationIgnored public var avatarLoader: any AvatarLoading = GitHubAvatarLoader.shared
     /// Where VoiceOver announcements go.
     @ObservationIgnored var announcer: Announcer = .voiceOver

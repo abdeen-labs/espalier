@@ -16,7 +16,6 @@ public struct RadioList<Value: Hashable>: View {
     private let choices: [ChoiceListItem<Value>]
     @Binding private var selection: Value
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.showsFocusRings) private var showsFocusRings
     @FocusState private var isFocused: Bool
 
     /// - Parameter label: What VoiceOver calls the group.
@@ -64,7 +63,6 @@ public struct RadioList<Value: Hashable>: View {
         return HStack(alignment: .firstTextBaseline, spacing: Metrics.RadioList.markSpacing) {
             RadioMark(isSelected: isSelected)
                 .focusRing(isFocused && isSelected, in: Circle())
-                .environment(\.showsFocusRings, showsFocusRings && isSelected)
                 .alignmentGuide(.firstTextBaseline) { dimensions in
                     // The mark's center on the title's middle.
                     dimensions[VerticalAlignment.center] + markOffset

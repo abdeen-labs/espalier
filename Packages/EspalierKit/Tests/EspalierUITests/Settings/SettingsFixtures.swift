@@ -28,17 +28,6 @@ enum SettingsFixtures {
         name: "Joe Bloggs"
     )
 
-    /// A GitHub Enterprise account.
-    static let enterpriseAccount = Account(
-        login: "jbloggs",
-        endpoint: "https://ghe.example.com/api/v3",
-        token: "",
-        emails: [APIEmail(email: "joe.bloggs@corp.example.com", verified: true, primary: true, visibility: .public)],
-        avatarURL: "",
-        id: 42,
-        name: "Joe Bloggs"
-    )
-
     // MARK: AI providers
 
     /// A local OpenAI-compatible server without credentials.
@@ -66,17 +55,6 @@ enum SettingsFixtures {
             BYOKModel(id: "gpt-5", name: "GPT-5", reasoningEffort: .high),
             BYOKModel(id: "gpt-5-mini", name: "GPT-5 mini"),
         ]
-    )
-
-    /// An Azure provider with an API version and a bearer token.
-    static let azureProvider = BYOKProvider(
-        id: "8f0c1d2e-0000-4000-8000-000000000003",
-        name: "Contoso Azure",
-        type: .azure,
-        baseUrl: "https://contoso.openai.azure.com/",
-        azureApiVersion: "2024-10-21",
-        authKind: .bearer,
-        models: [BYOKModel(id: "gpt-4o-deployment", name: "GPT-4o")]
     )
 
     // MARK: Apps

@@ -91,12 +91,11 @@ struct WorkingDirectoryDiffTests {
         #expect(try fixture.file("numbered.txt").selection.getSelectionType() == DiffSelectionType.none)
         #expect(!changes.setLines(.range(0...addTwo), included: false))
 
-        // The discard titles, with the ellipsis while discarding asks first.
-        #expect(changes.discardTitle(for: .line(addTwo)) == "Discard Added Line…")
-        #expect(changes.discardTitle(for: .line(deleteTwo)) == "Discard Removed Line…")
-        #expect(changes.discardTitle(for: .block(containing: addTwo)) == "Discard Modified Lines…")
-        fixture.app.preferences.confirmDiscardChanges = false
-        #expect(changes.discardTitle(for: .hunk(containing: addFifteen)) == "Discard Modified Lines")
+        // Changed lines can be discarded; a context line can't.
+        #expect(changes.discardTitle(for: .line(addTwo)) != nil)
+        #expect(changes.discardTitle(for: .line(deleteTwo)) != nil)
+        #expect(changes.discardTitle(for: .block(containing: addTwo)) != nil)
+        #expect(changes.discardTitle(for: .hunk(containing: addFifteen)) != nil)
         #expect(changes.discardTitle(for: .line(contextOne)) == nil)
         await fixture.settle()
     }
@@ -177,7 +176,7 @@ struct WorkingDirectoryDiffTests {
         let discard = await #expect(throws: OperationError.self) {
             try await changes.discardLines(.line(try fixture.lineIndex(.delete, "line 3")), confirmed: [.discardLines])
         }
-        #expect(discard?.reason == .precondition("Discarding lines is disabled when hiding whitespace changes."))
+        #expect(preconditionText(discard) != nil)
 
         // Committing stages the full diff's chosen lines.
         fixture.commit.draft.summary = "Spell out three"

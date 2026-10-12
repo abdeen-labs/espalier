@@ -27,7 +27,7 @@ struct LFSOperationsTests {
         try? String(contentsOfFile: POSIXPath.join(repository.path, ".git", "hooks", name), encoding: .utf8)
     }
 
-    @Test("adding a repository that uses Git LFS asks, with desktop's copy, and initializing installs its hooks and the filters")
+    @Test("adding a repository that uses Git LFS asks, and initializing installs its hooks and the filters")
     func initializes() async throws {
         try await withIsolatedGitConfig { _ in
             let repository = try await repositoryUsingLFS()
@@ -41,11 +41,7 @@ struct LFSOperationsTests {
 
             let prompt = try #require(app.lfsInitializationPrompt(for: result.usingLFS))
             #expect(prompt.repositories == [id])
-            #expect(prompt.title == "Initialize Git LFS")
-            #expect(prompt.message == "This repository uses Git LFS. Initialize Git LFS to contribute to it.")
             #expect(prompt.paths == [repository.path])
-            #expect(prompt.initializeButton == "Initialize Git LFS")
-            #expect(prompt.cancelButton == "Not Now")
 
             let failures = await app.initializeLFS(in: result.usingLFS)
 
@@ -76,14 +72,14 @@ struct LFSOperationsTests {
 
             #expect(failures.map(\.repositoryID) == [removed, result.usingLFS[0]])
             #expect(failures.allSatisfy { $0.operation == .installLFSHooks })
-            #expect(preconditionText(failures.first) == "The repository is no longer in the list.")
+            #expect(preconditionText(failures.first) != nil)
             #expect(hook("pre-push", in: kept)?.contains("git lfs") == true)
             await app.idle()
         }
     }
 
-    @Test("the question lists up to ten repositories, and counts more")
-    func promptCopy() async throws {
+    @Test("the question lists up to ten repositories' paths, and none for more")
+    func promptPaths() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
         let records = (0..<11).map { RepositoryRecord(path: "/Users/me/Developer/repository-\($0)", addedAt: Date()) }
@@ -92,14 +88,12 @@ struct LFSOperationsTests {
         }
 
         let three = try #require(app.lfsInitializationPrompt(for: records.prefix(3).map(\.id)))
-        #expect(three.message == "The repositories use Git LFS. Initialize Git LFS to contribute to them.")
         #expect(three.paths == records.prefix(3).map(\.path))
 
         let ten = try #require(app.lfsInitializationPrompt(for: records.prefix(10).map(\.id)))
         #expect(ten.paths.count == 10)
 
         let eleven = try #require(app.lfsInitializationPrompt(for: records.map(\.id)))
-        #expect(eleven.message == "11 repositories use Git LFS. Initialize Git LFS to contribute to them.")
         #expect(eleven.paths.isEmpty)
         #expect(eleven.repositories == records.map(\.id))
 

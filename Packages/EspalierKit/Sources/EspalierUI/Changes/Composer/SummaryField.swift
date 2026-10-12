@@ -338,17 +338,16 @@ final class SummaryFieldEditor: EspalierFieldEditor {
     }
 }
 
-/// "Generating commit details…", shimmering slowly (still under Reduce
-/// Motion and in snapshots).
+/// "Generating commit details…", shimmering slowly (still where motion
+/// doesn't run).
 struct GeneratingText: View {
     @Environment(\.motion) private var motion
-    @Environment(\.fixedNow) private var fixedNow
 
     var body: some View {
         let text = Text("Generating commit details…")
             .font(Typography.row)
             .foregroundStyle(.secondary)
-        if !motion.animates || fixedNow != nil {
+        if !motion.animates {
             text
         } else {
             TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in

@@ -398,7 +398,6 @@ final class GitSettingsModel {
 /// the global configuration.
 struct GitPaneContent: View {
     @State private var settings: GitSettingsModel
-    private let loadsOnAppear: Bool
     /// The branch name field's focus (the author's fields keep their own).
     @FocusState private var focus: Field?
 
@@ -407,11 +406,8 @@ struct GitPaneContent: View {
         case name, email, branch
     }
 
-    /// - Parameter loadsOnAppear: Whether to read the configuration when
-    ///   the pane appears (snapshots apply fixed values instead).
-    init(settings: GitSettingsModel, loadsOnAppear: Bool = true) {
+    init(settings: GitSettingsModel) {
         _settings = State(initialValue: settings)
-        self.loadsOnAppear = loadsOnAppear
     }
 
     var body: some View {
@@ -533,9 +529,7 @@ struct GitPaneContent: View {
         .barMotion(preferences.hooksEnvEnabled)
         .barMotion(settings.showsEmailField)
         .task {
-            if loadsOnAppear {
-                await settings.load()
-            }
+            await settings.load()
         }
         .onChange(of: focus) { previous, _ in
             if let previous {

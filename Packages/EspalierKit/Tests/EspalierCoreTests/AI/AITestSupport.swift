@@ -513,6 +513,11 @@ func commit(_ files: [String: String], _ message: String, in repository: Reposit
     try await runGit(["commit", "-m", message], repository)
 }
 
+/// The message of an AI provider's failure, if the error is one.
+func providerFailureMessage(_ error: OperationError?) -> String? {
+    if case .ai(.provider(_, let message))? = error?.reason { message } else { nil }
+}
+
 /// Whether the error's only recovery opens Settings ▸ AI.
 func opensAISettings(_ error: OperationError?) -> Bool {
     guard let recoveries = error?.recoveries, recoveries.count == 1, case .openSettings(.ai) = recoveries[0] else {

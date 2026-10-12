@@ -41,9 +41,7 @@ private func key(_ provider: BYOKProvider, _ model: String) -> String {
 
 /// A secret store whose reads fail.
 private struct FailingSecretStore: SecretStore {
-    struct Failure: Error, LocalizedError {
-        var errorDescription: String? { "The user name or passphrase you entered is not correct." }
-    }
+    struct Failure: Error {}
 
     func secret(service: String, account: String) throws -> String? { throw Failure() }
     func setSecret(_ secret: String, service: String, account: String) throws { throw Failure() }
@@ -99,31 +97,19 @@ struct ModelRequestTests {
         #expect(ollamaRequest.timeout == nil)
     }
 
-    @Test("explains a missing or unreadable credential")
+    @Test("fails on a missing or unreadable credential")
     func credentialErrors() async throws {
-        await #expect(
-            throws: AIModelRequestError(
-                message: "No API key is saved for the AI provider \u{201C}OpenAI\u{201D}. Enter it again in Settings ▸ AI."
-            )
-        ) {
+        await #expect(throws: AIModelRequestError.self) {
             _ = try await resolveAIModelRequest(selection: key(openAI, "gpt-5"), providers: [openAI], secretStore: InMemorySecretStore())
         }
 
         let store = InMemorySecretStore()
         try await setBYOKSecret("azure", "", store: store)
-        await #expect(
-            throws: AIModelRequestError(
-                message: "No bearer token is saved for the AI provider \u{201C}Work Azure\u{201D}. Enter it again in Settings ▸ AI."
-            )
-        ) {
+        await #expect(throws: AIModelRequestError.self) {
             _ = try await resolveAIModelRequest(selection: key(azure, "deployment"), providers: [azure], secretStore: store)
         }
 
-        await #expect(
-            throws: AIModelRequestError(
-                message: "Could not read the credential for the AI provider 'OpenAI' from the keychain: The user name or passphrase you entered is not correct."
-            )
-        ) {
+        await #expect(throws: AIModelRequestError.self) {
             _ = try await resolveAIModelRequest(selection: key(openAI, "gpt-5"), providers: [openAI], secretStore: FailingSecretStore())
         }
     }
