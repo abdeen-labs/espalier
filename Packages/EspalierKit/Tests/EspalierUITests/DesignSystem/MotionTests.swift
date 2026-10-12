@@ -1,6 +1,6 @@
 // Espalier's motion. The one answer to "animate?" (never with Reduce Motion,
-// never where snapshots suppress it), and what an action during an
-// animation does: Undo on a leaving toast runs once.
+// never where motion is suppressed), and what an action during an animation
+// does: Undo on a leaving toast runs once.
 
 import EspalierCore
 import SwiftUI

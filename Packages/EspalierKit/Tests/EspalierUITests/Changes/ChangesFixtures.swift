@@ -78,7 +78,7 @@ struct ChangesWindowFixture {
 
     /// Renders `view` in the window's environment.
     func render(_ view: some View, size: CGSize, appearance: SnapshotAppearance = .light) -> NSBitmapImageRep {
-        // The diff builds its rows off the main actor; a snapshot needs
+        // The diff builds its rows off the main actor; the render needs
         // them now.
         Snapshot.render(view.environment(\.diffBuildsSynchronously, true).windowEnvironment(context), size: size, appearance: appearance)
     }
@@ -100,7 +100,7 @@ func setupRepositoryWithChanges() async throws -> (local: Repository, remote: Re
     return (local, remote)
 }
 
-/// Fixed values for the Changes place's snapshots.
+/// Fixed values for the Changes place's tests.
 @MainActor
 enum ChangesFixtures {
     static let author = AuthorIdentityContent(name: "Joe Bloggs", email: "joe@example.com")

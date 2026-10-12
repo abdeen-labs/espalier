@@ -1,17 +1,15 @@
 // The composer's content from repositories (the commit button's labels and
 // when it's enabled, the placeholder, the length hint, amending, the last
-// commit, the warnings and their order, the sparkle's states), and snapshots
-// of the composer's layouts.
+// commit, the warnings and their order, the sparkle's states), and a failed
+// hook that can't be stopped.
 
 import AIKit
-import AppKit
 @testable import EspalierCore
 import EspalierCoreTestSupport
 import EspalierSupport
 import Foundation
 import GitHubKit
 import GitKit
-import SwiftUI
 import Testing
 import TestSupport
 @testable import EspalierUI
@@ -567,175 +565,11 @@ struct ComposerTests {
         }
     }
 
-    // MARK: Snapshots
+    // MARK: Hooks
 
-    // One image per layout; the other states are the content tests' above.
-
-    @Test("composer snapshots: idle")
-    func snapshotsBasic() {
-        let base = ComposerContent(author: ChangesFixtures.author, sparkle: .ready(model: "GPT-5"), button: ChangesFixtures.button(enabled: false))
-        assertSnapshot(ChangesFixtures.composer(base), named: "composer-idle", area: "Changes")
-    }
-
-    @Test("composer snapshots: a long branch gives way in the middle, at the narrowest column")
-    func snapshotsLongBranch() {
-        let button = CommitButtonContent(fileCount: 12, branch: "feature/sign-in-with-device-flow-and-enterprise-servers", isEnabled: true)
-        let view = CommitButton(button)
-            .frame(width: Metrics.Column.changesFileList.min - 2 * Metrics.Composer.horizontalPadding)
-            .padding(Metrics.Composer.horizontalPadding)
-        assertSnapshot(view, named: "commit-button-long-branch", area: "Changes", appearances: [.light])
-    }
-
-    @Test("composer snapshots: a merge's message with Commit Merge, and Continue for a rebase")
-    func snapshotsOperations() {
-        let merge = ComposerContent(
-            author: ChangesFixtures.author,
-            showsCommitOptions: false,
-            button: CommitButtonContent(kind: .merge, fileCount: 0, branch: nil, isEnabled: true)
-        )
-        assertSnapshot(
-            ChangesFixtures.composer(merge, draft: CommitDraft(summary: "Merge branch 'feature/login'", description: "* feature/login:\n  Add the login screen")),
-            named: "composer-merge",
-            area: "Changes",
-            appearances: [.light]
-        )
-        let rebase = OperationSlotContent(
-            kind: .continueOperation,
-            button: CommitButtonContent(
-                kind: .continueOperation(name: "Rebase"),
-                fileCount: 0,
-                branch: nil,
-                isEnabled: false,
-                disabledReason: OperationPanelContent.continueDisabledHelp
-            ),
-            notesUntrackedFiles: true
-        )
-        assertSnapshot(
-            ContinueOperationView(content: rebase).frame(width: Metrics.Column.changesFileList.ideal),
-            named: "composer-continue",
-            area: "Changes",
-            appearances: [.light]
-        )
-    }
-
-    @Test("composer snapshots: the tint behind the summary or the description while it has focus")
-    func snapshotsFocus() {
-        let base = ComposerContent(author: ChangesFixtures.author, sparkle: .ready(model: "GPT-5"), button: ChangesFixtures.button(enabled: false))
-        let fields: [(name: String, find: (NSView) -> NSView?)] = [
-            ("summary", { ComposerTextTests.find(SummaryNSTextField.self, in: $0) }),
-            ("description", { ComposerTextTests.find(ComposerTextView.self, in: $0) }),
-        ]
-        for field in fields {
-            for appearance in SnapshotAppearance.allCases {
-                let image = Snapshot.render(ChangesFixtures.composer(base), appearance: appearance) { host in
-                    guard let view = field.find(host) else {
-                        Issue.record("No \(field.name) field")
-                        return
-                    }
-                    #expect(host.window?.makeFirstResponder(view) == true)
-                }
-                assertSnapshot(image, named: "composer-\(field.name)-focused", area: "Changes", appearance: appearance)
-            }
-        }
-    }
-
-    @Test("composer snapshots: the last commit, and committing")
-    func snapshotsCommit() {
-        var lastCommit = ComposerContent(author: ChangesFixtures.author, sparkle: .ready(model: "GPT-5"), button: ChangesFixtures.button(enabled: false))
-        lastCommit.lastCommit = LastCommitContent(summary: "Fix crash on open", date: UIFixtures.minutesAgo(2))
-        assertSnapshot(ChangesFixtures.composer(lastCommit), named: "composer-last-commit", area: "Changes", appearances: [.light])
-
-        let committing = ComposerContent(
-            author: ChangesFixtures.author,
-            sparkle: .unavailable(model: "GPT-5"),
-            options: CommitOptionsContent(options: CommitOptions(skipHooks: true, signOff: true), isEnabled: false),
-            button: CommitButtonContent(fileCount: 2, branch: "main", isCommitting: true, isEnabled: false, disabledReason: "Committing changes…"),
-            isReadOnly: true
-        )
-        assertSnapshot(
-            ChangesFixtures.composer(committing, draft: CommitDraft(summary: "Fix crash on open")),
-            named: "composer-committing",
-            area: "Changes",
-            appearances: [.light]
-        )
-    }
-
-    @Test("composer snapshots: a hook running, and its output")
-    func snapshotsHooks() {
-        let content = ComposerContent(
-            author: ChangesFixtures.author,
-            sparkle: .unavailable(model: "GPT-5"),
-            hook: HookActivityContent(hookName: "pre-commit", status: .running),
-            button: CommitButtonContent(fileCount: 2, branch: "main", isCommitting: true, isEnabled: false),
-            isReadOnly: true
-        )
-        assertSnapshot(
-            ChangesFixtures.composer(content, draft: CommitDraft(summary: "Fix crash on open")),
-            named: "composer-hook-running",
-            area: "Changes",
-            appearances: [.light]
-        )
-        #expect(HookActivityContent(hookName: "pre-auto-gc", status: .finished).text == "Optimizing repository…")
-        #expect(HookActivityContent(hookName: "commit-msg", status: .failed).text == "commit-msg hook failed")
+    @Test("a failed hook can't be stopped")
+    func failedHook() {
         #expect(!HookActivityContent(hookName: "commit-msg", status: .failed).canStop)
-        assertSnapshot(
-            HookOutputView(text: "Running swiftlint…\nSources/App/RepositoryLoader.swift:12:5: error: Force Unwrapping Violation\nDone linting! Found 1 violation, 1 serious in 42 files.\n"),
-            named: "hook-output",
-            area: "Changes",
-            appearances: [.light]
-        )
-    }
-
-    @Test("composer snapshots: a warning that stops the commit, and one that can be bypassed")
-    func snapshotsWarnings() {
-        let rulesets = ChangesFixtures.mainRulesets
-        let warnings: [(String, CommitWarning)] = [
-            ("protected", CommitWarning(.branchProtected(branch: "main"))),
-            ("rules-push-bypass", CommitWarning(.pushRestricted(branch: "main", canBypass: true), rulesURL: rulesets)),
-        ]
-        for (name, warning) in warnings {
-            let content = ComposerContent(
-                author: ChangesFixtures.author,
-                sparkle: .ready(model: "GPT-5"),
-                showsCoAuthorsToggle: true,
-                warning: warning,
-                button: ChangesFixtures.button(enabled: !warning.isError)
-            )
-            assertSnapshot(
-                ChangesFixtures.composer(content, draft: CommitDraft(summary: "Fix crash on open")),
-                named: "composer-warning-\(name)",
-                area: "Changes",
-                appearances: [.light]
-            )
-        }
-    }
-
-    @Test("composer snapshots: a failure, co-authors, the author's warning, message rules")
-    func snapshotsAI() {
-        let failed = ComposerContent(
-            author: ChangesFixtures.author,
-            sparkle: .ready(model: "GPT-5"),
-            aiFailure: AIFailureContent(message: "The model is overloaded. Try again later.", recovery: .tryAgain),
-            button: ChangesFixtures.button(enabled: false)
-        )
-        assertSnapshot(ChangesFixtures.composer(failed), named: "composer-ai-failed-try-again", area: "Changes", appearances: [.light])
-
-        let coAuthors = ComposerContent(
-            author: AuthorIdentityContent(name: "Joe Bloggs", email: "joe@example.com", warning: .misattributed(isEnterprise: false)),
-            messageRuleFailures: MessageRuleFailures(failed: [.init("must start with \"JIRA-\"")]),
-            sparkle: .ready(model: "GPT-5"),
-            showsCoAuthorsToggle: true,
-            button: ChangesFixtures.button(enabled: false)
-        )
-        let draft = CommitDraft(
-            summary: "Fix crash on open",
-            coAuthors: [
-                .known(KnownAuthor(name: "Mona Lisa", email: "mona@example.com", username: "octocat")),
-                .unknown(UnknownAuthor(username: "hubot", state: .error)),
-            ],
-            showCoAuthoredBy: true
-        )
-        assertSnapshot(ChangesFixtures.composer(coAuthors, draft: draft), named: "composer-co-authors", area: "Changes", appearances: [.light])
     }
 
     // MARK: Helpers

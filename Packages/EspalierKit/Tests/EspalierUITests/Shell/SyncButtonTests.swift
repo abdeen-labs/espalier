@@ -1,8 +1,8 @@
 // The sync button's nine states, their copy, menus, and counts, derived
-// from real repositories, and their snapshots; nothing, in the width it
-// last had, while the repository's state loads; the button, the last
-// fetch, and the width held while a push, pull, or fetch runs; what
-// VoiceOver hears when a push, fetch, or pull finishes.
+// from real repositories; nothing, in the width it last had, while the
+// repository's state loads; the button, the last fetch, and the width held
+// while a push, pull, or fetch runs; what VoiceOver hears when a push,
+// fetch, or pull finishes.
 
 import AppKit
 @testable import EspalierCore
@@ -268,46 +268,6 @@ struct SyncButtonTests {
         #expect(isBlank())
     }
 
-    @Test("the toolbar while the selected repository loads: nothing where the last fetch and the button were")
-    func loadingSnapshot() {
-        let fetch = SyncButtonState(kind: .fetch(remote: "origin"), lastFetched: UIFixtures.minutesAgo(5))
-        let fetchWidth = NSHostingView(rootView: Snapshot.deterministic(SyncButtonGroup(fetch))).fittingSize.width
-        let rows: [(LocationControlState, SyncButtonGroup)] = [
-            // The repository selected before, then the one selected now.
-            (
-                LocationControlState(repository: .repository(name: "meridian", path: "/Users/joe/Developer/meridian"), branch: .branch(name: "main")),
-                SyncButtonGroup(fetch)
-            ),
-            (
-                LocationControlState(repository: .repository(name: "forecast-kit", path: "/Users/joe/Developer/forecast-kit"), branch: .hidden),
-                SyncButtonGroup(SyncButtonState(kind: .loading), shownWidth: fetchWidth)
-            ),
-        ]
-        let view = VStack(spacing: 0) {
-            ForEach(rows.indices, id: \.self) { index in
-                HStack(spacing: 10) {
-                    LocationControlView(rows[index].0)
-                    Spacer(minLength: Metrics.insetMedium)
-                    CapsuleSearchField("Filter Changed Files", text: .constant(""), keyCap: "⌥⌘F")
-                        .controlSize(.large)
-                        .frame(width: Metrics.Toolbar.searchWidth)
-                    rows[index].1
-                    Button {} label: {
-                        Label("More", systemImage: "ellipsis.circle")
-                    }
-                    .buttonStyle(.icon)
-                }
-                .padding(.leading, 16)
-                .padding(.trailing, 14)
-                .frame(height: Metrics.Toolbar.height - 1)
-                Hairline()
-            }
-        }
-        .frame(width: 900)
-        .background(Color(espalier: Palette.background))
-        assertSnapshot(view, named: "loading", area: "SyncButton")
-    }
-
     // MARK: Progress
 
     @Test("while a push, pull, or fetch runs, the button and the last fetch stay as they were, and the group doesn't narrow")
@@ -383,26 +343,5 @@ struct SyncButtonTests {
         // hidden.
         let publishWidth = show(publish)
         #expect(show(publishing) == publishWidth)
-    }
-
-    // MARK: Snapshots
-
-    /// One state per layout: a push's progress on its blue capsule and a
-    /// fetch's before git reports a value (light and dark), a count, a
-    /// diverged pull's two counts, and a background failure. The other
-    /// states differ only in words and symbols (`copy` above).
-    nonisolated static let snapshotStates: [String: [SnapshotAppearance]] = [
-        "1-progress": SnapshotAppearance.allCases,
-        "1-progress-starting": SnapshotAppearance.allCases,
-        "8-push": [.light],
-        "7-pull-diverged": [.light],
-        "9-fetch-failure": [.light],
-    ]
-
-    @Test("each layout renders", arguments: SyncButtonTests.snapshotStates.keys.sorted())
-    func snapshot(name: String) throws {
-        let state = try #require(UIFixtures.syncStates.first { $0.name == name }?.state)
-        let appearances = try #require(Self.snapshotStates[name])
-        assertSnapshot(SyncButtonView(state).padding(Metrics.insetMedium), named: name, area: "SyncButton", appearances: appearances)
     }
 }

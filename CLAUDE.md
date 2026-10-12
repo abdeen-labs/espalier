@@ -127,9 +127,8 @@ My rule: rigor where a mistake hurts users, not everywhere.
 - You work in your own git worktree and commit to its branch with clear
   messages; the lead merges into `main`.
 - When done, run `swift build --build-tests` and only the suites your
-  change touches (`swift test --skip-build --filter "..."`, recording new
-  snapshots in that pass), then look at the snapshots you changed. If
-  anything fails, warns, or looks wrong, fix it and run again. Workers share
+  change touches (`swift test --skip-build --filter "..."`). If anything
+  fails or warns, fix it and run again. Workers share
   one Mac, so a run waits its turn: `lockf -k /tmp/espalier-swift-test.lock
   swift test ...`. The lead runs the full suite once on `main` after
   merging. Report the result honestly, with output for failures; the lead
@@ -222,11 +221,7 @@ My rule: rigor where a mistake hurts users, not everywhere.
   (EspalierCoreTestSupport, with `ManualFileWatcher` and recording
   services) and wait with `idle()` and `ManualScheduler`. `AppHarness`
   starts a background service only when given `backgroundServices:`.
-- UI: snapshot every state in light and dark with `assertSnapshot`
-  (references in `Tests/EspalierUITests/__Snapshots__`, recorded with
-  `ESPALIER_RECORD_SNAPSHOTS=1`, or only the missing ones with
-  `ESPALIER_RECORD_MISSING_SNAPSHOTS=1`, then a normal run must pass), and
-  look at the PNGs with the Read tool.
+- No screenshot tests.
 - Tests run in parallel in one process, so a test leaves process-wide state
   (`setenv`, `chdir`, `GitRuntime.configure`) alone.
 - Blocking work in a test (a blocking `read`, a semaphore wait,
@@ -242,8 +237,9 @@ My rule: rigor where a mistake hurts users, not everywhere.
   for the event itself (`AsyncEvent`, observation, a dispatch source) and
   end when the task is cancelled.
 - Cases of one shape are one `@Test(arguments:)` over `NamedCase`s.
-- A test earns its place by checking behavior: no tests of constants,
-  copied mapping tables, test doubles, or exact duplicates.
+- A test earns its place by checking behavior: no tests of strings the UI
+  shows, constants, copied mapping tables, test doubles, or exact
+  duplicates.
 
 ## Conventions
 

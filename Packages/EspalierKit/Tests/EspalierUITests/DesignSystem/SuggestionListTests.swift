@@ -1,11 +1,10 @@
 // The suggestion list: ↑ and ↓, Return and Tab, Escape, and typing going
 // on in the text; a click accepting a suggestion and a click elsewhere
 // closing the list; showing new suggestions keeping the highlighted one;
-// closing when editing ends; what VoiceOver hears; a SwiftUI field's
-// suggestions; and the card in light and dark.
+// closing when editing ends; what VoiceOver hears; and a SwiftUI field's
+// suggestions.
 
 import AppKit
-import SwiftUI
 import Testing
 import TestSupport
 @testable import EspalierUI
@@ -163,20 +162,5 @@ struct SuggestionListTests {
         controller.textChanged(to: "feature/logi", suggestions: ["feature/login"])
         #expect(controller.list.isOpen)
         controller.list.close()
-    }
-
-    // MARK: Snapshots
-
-    @Test("the card: suggestions with details, one highlighted; a field's suggestions as wide as it, scrolling past eight")
-    func snapshots() {
-        let model = SuggestionListModel()
-        model.suggestions = suggestions + [Suggestion(title: "#142", detail: "Crash when the repository has no commits yet, on opening it")]
-        model.highlighted = 1
-        assertSnapshot(SuggestionListCard(model: model), named: "suggestions", area: "Menus")
-
-        let branches = SuggestionListModel()
-        branches.suggestions = ["main", "feature/login", "feature/forecast", "fix/crash", "release/2.0", "origin/main", "origin/feature/login", "origin/fix/crash", "origin/release/2.0", "origin/gh-pages"].map { Suggestion(title: $0) }
-        branches.minimumWidth = 280
-        assertSnapshot(SuggestionListCard(model: branches), named: "suggestionsScrolling", area: "Menus")
     }
 }

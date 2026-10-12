@@ -1,6 +1,6 @@
-// Fixed values for the Settings tests and snapshots: accounts, AI providers
-// (mock ones; no key reaches a real server), and the Settings window's
-// context on a hermetic app.
+// Fixed values for the Settings tests: accounts, AI providers (mock ones;
+// no key reaches a real server), and the Settings window's context on a
+// hermetic app.
 
 import AIKit
 import EspalierCore

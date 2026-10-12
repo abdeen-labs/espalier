@@ -1,6 +1,5 @@
-// Espalier's links: a link button and a link in text, at rest, hovered,
-// pressed, focused, and disabled, in light and dark; and what the link
-// styling changes in an attributed string.
+// Espalier's links in text: what the link styling changes in an
+// attributed string, and Markdown's links.
 
 import SwiftUI
 import Testing
@@ -8,35 +7,6 @@ import Testing
 
 @Suite("Links") @MainActor
 struct TextLinkTests {
-    private let area = "Components"
-
-    @Test("links: a button at rest, hovered, pressed, focused, and disabled; links in text at rest and hovered")
-    func snapshot() {
-        var hoveredText = LinkedText(markdown: "New to GitHub? [Create your free account.](https://github.com/join)")
-        hoveredText.isHoveredOverride = true
-        let view = VStack(alignment: .leading, spacing: Metrics.insetMedium) {
-            HStack(spacing: Metrics.insetLarge) {
-                Button("Skip This Step") {}
-                    .buttonStyle(.textLink)
-                TextLinkBody(label: Text("Hovered"), isPressed: false, isHoveredOverride: true)
-                TextLinkBody(label: Text("Pressed"), isPressed: true)
-                Button("Disabled") {}
-                    .buttonStyle(.textLink)
-                    .disabled(true)
-            }
-            Button("Focused") {}
-                .buttonStyle(.textLink)
-                .environment(\.showsFocusRings, true)
-            LinkedText(markdown: "New to GitHub? [Create your free account.](https://github.com/join)")
-                .foregroundStyle(.text2)
-            hoveredText
-                .foregroundStyle(.text2)
-        }
-        .font(Typography.secondary)
-        .padding(Metrics.insetLarge)
-        assertSnapshot(view, named: "links", area: area)
-    }
-
     @Test("links in text take the link color and, while hovered, the underline; the rest of the text is as it was")
     func styling() throws {
         var text = AttributedString("Read the ")

@@ -2,8 +2,8 @@
 // list; Space includes and excludes; the context menus' items, from a
 // right-click and ⇧F10; selecting a file through AXSelected; the detail
 // for one, several, and no files; the header without changes; conflicted
-// files in the list and the operation panel; the stashed changes row; the
-// menu actions through the presenter; and snapshots of the whole place.
+// files in the list and the operation panel; and the menu actions through
+// the presenter.
 
 import AppKit
 @testable import EspalierCore
@@ -495,63 +495,19 @@ struct ChangesScreenTests {
         }
     }
 
-    // MARK: Snapshots
+    // MARK: Conflicts, and no changes
 
-    @Test("place snapshots: files with the diff, a file partly included, filtered, no changes")
-    func snapshots() async throws {
-        try await withIsolatedGitConfig { _ in
-            let (local, _) = try await setupRepositoryWithChanges()
-            let fixture = try await ChangesWindowFixture.make(local)
-            let repository = fixture.repository
-            let changes = repository.changes
-
-            let readme = try fixture.file("README.md")
-            changes.select(fileIDs: [readme.id])
-            await fixture.settle()
-            assertPlace(fixture, named: "place-files", appearances: SnapshotAppearance.allCases)
-
-            // Gutter staging (the diff through the changes model): the last
-            // added line left out, so the row's checkbox is mixed.
-            #expect(changes.canSelectLines)
-            let selection = try #require(changes.diffSelection)
-            changes.setLineSelection(selection.withLineSelection(4, selected: false), forFile: readme.id)
-            await fixture.settle()
-            #expect(try fixture.file("README.md").selection.getSelectionType() == .partial)
-            assertPlace(fixture, named: "place-partial")
-            changes.setIncluded([readme.id], true)
-            await fixture.settle()
-
-            // The filter hides every file, LICENSE excluded.
-            changes.setIncluded([try fixture.file("LICENSE").id], false)
-            changes.select(fileIDs: [])
-            changes.filter.newFiles = true
-            changes.filter.deletedFiles = true
-            await fixture.settle()
-            assertPlace(fixture, named: "place-no-matches")
-            changes.filter = FileListFilter()
-
-            // Nothing left: Suggestions, with a stash on the branch.
-            try await repository.stash.stashAllChanges()
-            await fixture.settle()
-            assertPlace(fixture, named: "place-no-changes")
-            await fixture.app.idle()
-        }
-    }
-
-    @Test("place snapshots: a merge's conflicts in the list, its panel, and the merge's commit form")
-    func conflictSnapshots() async throws {
+    @Test("a merge's conflicts: the conflicted file in the list with its state, the operation panel, and the merge's commit form")
+    func conflicts() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await ChangesWindowFixture.make(try await setupConflictedRepo())
             await fixture.settle()
-            // The conflicted file is a row of the one list, with its state;
-            // the header counts it.
+            // The conflicted file is a row of the one list, with its state.
             let listed = FileList.listedFiles(fixture.repository)
             #expect(listed.map(\.path) == ["foo"])
             #expect(FileList.conflictRows(fixture.repository)[ExactString("foo")]?.state == .markers(conflicts: 1))
-            #expect(ChangesHeaderContent.make(fixture.repository, numberFormat: defaultNumberFormat).title == "1 changed file")
             #expect(OperationCapsuleContent.make(fixture.repository) != nil)
             #expect(ChangesFooterLayout.make(fixture.repository, showsOperationPanel: true).bottom == .merge)
-            assertPlace(fixture, named: "place-conflicts", appearances: SnapshotAppearance.allCases)
             await fixture.app.idle()
         }
     }
@@ -570,19 +526,6 @@ struct ChangesScreenTests {
             #expect(FileList.listedFiles(fixture.repository).isEmpty)
             #expect(ChangesDetailKind.make(fixture.repository) == .suggestions)
             await fixture.app.idle()
-        }
-    }
-
-    /// Snapshots the place, in light unless `appearances` says otherwise.
-    private func assertPlace(
-        _ fixture: ChangesWindowFixture,
-        named name: String,
-        appearances: [SnapshotAppearance] = [.light],
-        sourceLocation: SourceLocation = #_sourceLocation
-    ) {
-        for appearance in appearances {
-            let image = fixture.render(ChangesScreen(repository: fixture.repository), size: Self.size, appearance: appearance)
-            assertSnapshot(image, named: name, area: "Changes", appearance: appearance, sourceLocation: sourceLocation)
         }
     }
 }

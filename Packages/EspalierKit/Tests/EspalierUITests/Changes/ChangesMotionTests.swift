@@ -190,7 +190,7 @@ struct ChangesMotionTests {
         presence.update(.afterDelay, scheduler: scheduler)
         #expect(presence.isShown(for: .afterDelay))
 
-        // Snapshots show delayed content at once.
+        // Delayed content can show at once.
         let fresh = OperationPanelPresence()
         #expect(fresh.isShown(for: .afterDelay, immediately: true))
     }

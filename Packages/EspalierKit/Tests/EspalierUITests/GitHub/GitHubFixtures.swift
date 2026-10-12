@@ -1,4 +1,4 @@
-// Fixed values for the GitHub tests and snapshots: accounts, pull requests,
+// Fixed values for the GitHub tests: accounts, pull requests,
 // checks with their workflows and steps, secrets, reviews and comments, and
 // a window on a GitHub repository cloned from a local remote, associated
 // through a mock GitHub (no request reaches the network).

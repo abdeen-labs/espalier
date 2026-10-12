@@ -212,7 +212,6 @@ let package = Package(
         .testTarget(
             name: "EspalierUITests",
             dependencies: ["EspalierUI", "EspalierCore", "TestSupport", "EspalierCoreTestSupport"],
-            exclude: ["__Snapshots__"],
             swiftSettings: approachable
         ),
     ]

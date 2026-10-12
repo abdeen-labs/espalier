@@ -1,5 +1,5 @@
-// Fixed values for the repository flows' tests and snapshots: accounts,
-// repositories to clone, rows, and a window context on a hermetic app.
+// Fixed values for the repository flows' tests: accounts, rows, and a
+// window context on a hermetic app.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -43,36 +43,6 @@ enum RepositoryFixtures {
         name: "Joe Bloggs"
     )
 
-    // MARK: Repositories to clone
-
-    static let apiRepositories: [APIRepository] = [
-        createMockAPIRepository(
-            cloneURL: "https://github.com/joe/dotfiles.git",
-            htmlURL: "https://github.com/joe/dotfiles",
-            name: "dotfiles",
-            owner: createMockAPIIdentity(id: 1234, login: "joe"),
-            isPrivate: true
-        ),
-        createMockAPIRepository(
-            cloneURL: "https://github.com/joe/desktop.git",
-            htmlURL: "https://github.com/joe/desktop",
-            name: "desktop",
-            owner: createMockAPIIdentity(id: 1234, login: "joe"),
-            fork: true,
-            archived: true
-        ),
-        createMockAPIRepository(
-            cloneURL: "https://github.com/octo-org/website.git",
-            htmlURL: "https://github.com/octo-org/website",
-            name: "website",
-            owner: createMockAPIIdentity(id: 99, login: "octo-org", type: .organization)
-        ),
-    ]
-
-    static var cloneListContent: CloneableListContent {
-        CloneableListContent(groups: groupRepositories(apiRepositories, login: "joe"))
-    }
-
     // MARK: Rows
 
     static func row(
@@ -107,13 +77,6 @@ enum RepositoryFixtures {
         let app = await harness.loadedApp()
         await app.accounts.idle()
         return app
-    }
-
-    /// Loads `account`'s repositories to clone from the mock GitHub.
-    static func loadRepositories(_ app: AppModel, harness: AppHarness, for account: Account) async {
-        harness.gitHub.on("GET", "/user/repos", respond: .json(encoding: apiRepositories))
-        app.accounts.apiRepositories.load(account)
-        await app.accounts.apiRepositories.idle()
     }
 
     /// A window context on `app`, with monogram avatars.

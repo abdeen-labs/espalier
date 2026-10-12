@@ -4,7 +4,8 @@
 // its keys from the ones below; a sheet's `onDismiss` runs once however it
 // closes; the layers follow the window's frame and corners; focus comes back
 // when a card closes; a confirmation in front of a write goes ahead only on
-// its default button. The windows are offscreen, so no panel is ordered in.
+// its default button; a sheet that fills the window sets its layer to fill
+// it. The windows are offscreen, so no panel is ordered in.
 
 import AppKit
 import EspalierCore
@@ -393,5 +394,19 @@ struct ModalLayerTests {
         #expect(panel.coveredWindow == nil)
         panel.sendEvent(try key("\u{1b}", in: panel))
         #expect(answers == [AlertResponse(buttonIndex: 1)])
+    }
+
+    @Test("a sheet that fills the window sets its layer to fill it")
+    func fillingSheet() async throws {
+        let (modals, window) = presenter()
+        defer { withExtendedLifetime(window) {} }
+        modals.presentSheet(id: "fill") {
+            Text("Sheet")
+                .modalCardFillsWindow()
+        }
+        let layer = try #require(modals.stack.layers.last)
+        layer.panel.contentView?.layoutSubtreeIfNeeded()
+        await waitUntil { layer.state.fillsWindow }
+        modals.dismissSheet(id: "fill")
     }
 }

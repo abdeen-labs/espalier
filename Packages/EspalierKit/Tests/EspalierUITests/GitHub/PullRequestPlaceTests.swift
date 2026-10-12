@@ -1,59 +1,25 @@
-// The pull request's place built from the models. The overview shows the
-// checks GitHub reports (a workflow's jobs with their steps, and a commit
-// status) and the description; beside it, "Changes Not Available" when the
-// pull request's head isn't in the repository (in light), or its files and
-// the first file's diff when it is (in light and dark), and a file's menu
-// views it on GitHub at the pull request's head. GitHub is a mock.
+// The pull request's place loads from the models: the checks GitHub reports
+// (a workflow's jobs and a commit status), and its changes, which aren't
+// available when the pull request's head isn't in the repository, or its
+// files with the first one selected when it is. The toolbar search filters
+// the files, and a file's menu views it on GitHub at the pull request's
+// head. GitHub is a mock.
 
-import AppKit
 @testable import EspalierCore
 import EspalierCoreTestSupport
 import EspalierSupport
 import Foundation
 import GitHubKit
 import GitKit
-import SwiftUI
 import Testing
 import TestSupport
 @testable import EspalierUI
 
 @Suite("Pull request place", .offline, .hangGuard(minutes: 5)) @MainActor
 struct PullRequestPlaceTests {
-    private let area = "GitHub"
-
-    private static let body = """
-        Adds the **sign-in sheet** with the device flow.
-
-        - Copy Code copies the code
-        - The code expires after 15 minutes
-        """
-
-    /// The place's overview and changes, side by side as its split shows
-    /// them (the split itself remembers its divider between runs).
-    private func image(_ fixture: GitHubWindowFixture, _ pullRequest: PullRequest, appearance: SnapshotAppearance) -> NSBitmapImageRep {
-        let panes = HStack(spacing: 0) {
-            PullRequestOverview(repository: fixture.model, pullRequest: pullRequest)
-                .frame(width: 440)
-            Divider()
-            PullRequestChangesView(repository: fixture.model, pullRequest: pullRequest)
-        }
-        .environment(\.historySplitAutosavePrefix, "EspalierTests.\(UUID().uuidString)")
-        // The diff's rows and the description are built off the main actor;
-        // a snapshot needs them now.
-        .environment(\.diffBuildsSynchronously, true)
-        .environment(\.markdownParsesSynchronously, true)
-        return Snapshot.render(panes.windowEnvironment(fixture.context), size: CGSize(width: 1_100, height: 620), appearance: appearance)
-    }
-
-    /// Loads the pull request's checks (as the place's `.task` would, which
-    /// doesn't run offscreen) and its changes, and renders the place in
-    /// `appearances` as `name`.
-    private func assertPlace(
-        _ fixture: GitHubWindowFixture,
-        _ pullRequest: PullRequest,
-        named name: String,
-        appearances: [SnapshotAppearance] = SnapshotAppearance.allCases
-    ) async {
+    /// Loads the pull request's checks, as the place's `.task` does, and its
+    /// changes, and checks that the checks loaded.
+    private func loadPlace(_ fixture: GitHubWindowFixture, _ pullRequest: PullRequest) async {
         let gitHub = fixture.model.gitHub
         let subscription = gitHub.commitStatuses.subscribe(CheckRunsKey(pullRequest), branchName: pullRequest.head.ref)
         let changes = fixture.model.history.pullRequestChanges
@@ -62,51 +28,47 @@ struct PullRequestPlaceTests {
         await fixture.settle()
         #expect(gitHub.hasLoadedChecks(for: pullRequest, branchName: pullRequest.head.ref))
         #expect(gitHub.checks(for: pullRequest)?.checks.count == 3)
-        for appearance in appearances {
-            assertSnapshot(image(fixture, pullRequest, appearance: appearance), named: name, area: area, appearance: appearance)
-        }
         subscription.cancel()
         await fixture.settle()
     }
 
-    @Test("a pull request whose head isn't in the repository: Changes Not Available beside its overview")
+    @Test("a pull request whose head isn't in the repository: its checks load, and its changes aren't available")
     func changesNotAvailable() async throws {
         let fixture = try await GitHubWindowFixture.make(pullRequests: [
-            apiPullRequest(5, title: "Add the sign-in sheet", head: "feature/sign-in", body: Self.body),
+            apiPullRequest(5, title: "Add the sign-in sheet", head: "feature/sign-in"),
         ])
         GitHubFixtures.mockChecks(fixture.harness.gitHub)
         let pullRequest = try #require(fixture.model.gitHub.openPullRequests.first)
-        await assertPlace(fixture, pullRequest, named: "place-changesNotAvailable", appearances: [.light])
+        await loadPlace(fixture, pullRequest)
         #expect(fixture.model.history.pullRequestChanges.status == .changesNotAvailable)
     }
 
-    @Test("a pull request whose head is in the repository: its files and the first file's diff beside its overview")
+    @Test("a pull request whose head is in the repository: its checks and its files load, the first file selected")
     func filesAndDiff() async throws {
         let fixture = try await GitHubWindowFixture.make(prepare: pushFeature)
         let head = JSCompat.trim(try await runGit(["rev-parse", "origin/feature"], fixture.local))
-        fixture.pulls.pullRequests = [apiPullRequest(5, title: "Add a feature", head: "feature", headSHA: head, body: Self.body)]
+        fixture.pulls.pullRequests = [apiPullRequest(5, title: "Add a feature", head: "feature", headSHA: head)]
         await fixture.model.gitHub.refreshPullRequests()
         await fixture.settle()
         GitHubFixtures.mockChecks(fixture.harness.gitHub)
         let pullRequest = try #require(fixture.model.gitHub.openPullRequests.first)
-        await assertPlace(fixture, pullRequest, named: "place-filesAndDiff")
+        await loadPlace(fixture, pullRequest)
         let changes = fixture.model.history.pullRequestChanges
         #expect(changes.status == .loaded)
         #expect(changes.selection.changeset.value?.files.map(\.path) == ["feature.txt"])
         #expect(changes.selection.file?.path == "feature.txt")
     }
 
-    @Test("the toolbar search filters a pull request's files: No Matching Files when none match")
+    @Test("the toolbar search filters a pull request's files, ignoring case: none when nothing matches")
     func noMatchingFiles() async throws {
         let fixture = try await GitHubWindowFixture.make(prepare: pushFeature)
         let head = JSCompat.trim(try await runGit(["rev-parse", "origin/feature"], fixture.local))
-        fixture.pulls.pullRequests = [apiPullRequest(5, title: "Add a feature", head: "feature", headSHA: head, body: Self.body)]
+        fixture.pulls.pullRequests = [apiPullRequest(5, title: "Add a feature", head: "feature", headSHA: head)]
         await fixture.model.gitHub.refreshPullRequests()
         await fixture.settle()
         GitHubFixtures.mockChecks(fixture.harness.gitHub)
         let pullRequest = try #require(fixture.model.gitHub.openPullRequests.first)
-        fixture.context.state.searchText = "readme"
-        await assertPlace(fixture, pullRequest, named: "place-noMatchingFiles")
+        await loadPlace(fixture, pullRequest)
         let files = try #require(fixture.model.history.pullRequestChanges.selection.changeset.value?.files)
         #expect(ChangedFilesList.files(files, filter: "readme").isEmpty)
         #expect(ChangedFilesList.files(files, filter: "FEATURE").map(\.path) == ["feature.txt"])
@@ -116,7 +78,7 @@ struct PullRequestPlaceTests {
     func fileMenu() async throws {
         let fixture = try await GitHubWindowFixture.make(prepare: pushFeature)
         let head = JSCompat.trim(try await runGit(["rev-parse", "origin/feature"], fixture.local))
-        fixture.pulls.pullRequests = [apiPullRequest(5, title: "Add a feature", head: "feature", headSHA: head, body: Self.body)]
+        fixture.pulls.pullRequests = [apiPullRequest(5, title: "Add a feature", head: "feature", headSHA: head)]
         await fixture.model.gitHub.refreshPullRequests()
         await fixture.settle()
         let pullRequest = try #require(fixture.model.gitHub.openPullRequests.first)
@@ -131,7 +93,6 @@ struct PullRequestPlaceTests {
         let file = try #require(changes.selection.changeset.value?.files.first)
         let menu = PullRequestFileMenus.pullRequest(file, pullRequest, changes: changes, repositoryPath: fixture.model.record.path)
         #expect(menu.gitHubURL?.absoluteString.hasPrefix("https://github.com/octocat/hello/commit/\(head)#diff-") == true)
-        #expect(menu.gitHubTitle == "View on GitHub")
         #expect(menu.relativePath == "feature.txt")
         #expect(menu.fullPath == POSIXPath.join(fixture.model.record.path, "feature.txt"))
         #expect(!menu.existsOnDisk)

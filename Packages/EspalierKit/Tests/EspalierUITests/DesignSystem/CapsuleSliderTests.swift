@@ -1,5 +1,5 @@
-// The capsule slider: its states in light and dark, where a press on the
-// track puts the knob, and the keyboard's steps.
+// The capsule slider: where a press on the track puts the knob, and the
+// keyboard's steps.
 
 import SwiftUI
 import Testing
@@ -7,25 +7,6 @@ import Testing
 
 @Suite("Capsule slider") @MainActor
 struct CapsuleSliderTests {
-    private let area = "Components"
-
-    @Test("the slider: at its ends and between, hovered, pressed, focused, and disabled")
-    func snapshot() {
-        let view = VStack(alignment: .leading, spacing: Metrics.insetMedium) {
-            CapsuleSliderDrawing(fraction: 0)
-            CapsuleSliderDrawing(fraction: 0.4)
-            CapsuleSliderDrawing(fraction: 1)
-            CapsuleSliderDrawing(fraction: 0.4, isHovered: true)
-            CapsuleSliderDrawing(fraction: 0.4, isPressed: true)
-            CapsuleSliderDrawing(fraction: 0.4, isFocused: true)
-            CapsuleSlider("Opacity", value: .constant(0.4))
-                .disabled(true)
-        }
-        .frame(width: 200)
-        .padding(Metrics.insetLarge)
-        assertSnapshot(view, named: "capsuleSlider", area: area)
-    }
-
     @Test("a press on the track puts the knob's center under the pointer, kept to the track")
     func pressPosition() {
         let width: CGFloat = 216

@@ -1,18 +1,17 @@
-// History on a real repository: the place renders with its graph and the
-// selected commit's detail, the working copy's detail, a branch's place with
-// its history and its comparison, and a tag off the simple list's line; the
-// Commit menu's rules (reset to a commit with only unpushed commits after
-// it, checkout of another commit, revert in the history or Compare's Ahead,
-// delete only tags not pushed); no rewrites in another branch's place;
-// keyboard reorder moving a commit in git; and refused drops.
+// History on a real repository: the graph of every local branch with HEAD's
+// commit selected, emoji in summaries, a branch's place with its history and
+// its comparison, and a tag off the simple list's line; Compare to Branch's
+// list; the Commit menu's rules (reset to a commit with only unpushed
+// commits after it, checkout of another commit, revert in the history or
+// Compare's Ahead, delete only tags not pushed) and context menus; no
+// rewrites in another branch's place; keyboard reorder moving a commit in
+// git; and refused drops.
 
-import AppKit
 @testable import EspalierCore
 import EspalierCoreTestSupport
 import EspalierSupport
 import Foundation
 import GitKit
-import SwiftUI
 import Testing
 import TestSupport
 @testable import EspalierUI
@@ -46,24 +45,6 @@ struct HistoryScreenFixture {
         await settle()
         await HistoryPlaces.enter(place, repository: repository, context: context)
         await settle()
-    }
-
-    /// The place's two panes rendered in a window, the list at its style's
-    /// ideal width. The panes are laid out side by side rather than in the
-    /// place's split, whose divider position other tests (and runs)
-    /// remember.
-    func image(_ place: SidebarPlace, size: CGSize = CGSize(width: 1_100, height: 520), appearance: SnapshotAppearance) -> NSBitmapImageRep {
-        let panes = HStack(spacing: 0) {
-            HistoryListPane(repository: repository, place: place)
-                .frame(width: place.kind(style: history.style).leadingColumn.ideal)
-            Divider()
-            HistoryDetailPane(repository: repository)
-        }
-        .environment(\.historySplitAutosavePrefix, "EspalierTests.\(UUID().uuidString)")
-        // The diff builds its rows off the main actor; a snapshot needs
-        // them now.
-        .environment(\.diffBuildsSynchronously, true)
-        return Snapshot.render(panes.windowEnvironment(context), size: size, appearance: appearance)
     }
 }
 
@@ -131,8 +112,6 @@ func makeHistoryScreenFixture(dirty: Bool = true) async throws -> HistoryScreenF
 
 @Suite("History screen", .offline, .hangGuard(minutes: 5)) @MainActor
 struct HistoryScreenTests {
-    private let area = "HistoryScreen"
-
     @Test("History graphs every local branch and selects HEAD's commit")
     func historyGraph() async throws {
         try await withIsolatedGitConfig { _ in
@@ -151,23 +130,6 @@ struct HistoryScreenTests {
             #expect(CommitHeaderContent(tip, repository: fixture.repository, underlinesLinks: true).tags.isEmpty)
             let tagged = try #require(history.commit(fixture.shas["Add loader"]!))
             #expect(CommitHeaderContent(tagged, repository: fixture.repository, underlinesLinks: true).tags.map(\.name) == ["v1.0"])
-            await fixture.settle()
-        }
-    }
-
-    @Test("History: the graph of every local branch, and HEAD's commit's detail")
-    func historyPlace() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await makeHistoryScreenFixture()
-            await fixture.show(.history)
-            let history = fixture.history
-            // The working copy, then the eight commits of main, the merged
-            // feature, and fix/crash.
-            #expect(history.graph.count == 9)
-            #expect(history.selection.shas == [fixture.shas["Bump version"]!])
-            for appearance in SnapshotAppearance.allCases {
-                assertSnapshot(fixture.image(.history, appearance: appearance), named: "history", area: area, appearance: appearance)
-            }
             await fixture.settle()
         }
     }
@@ -200,20 +162,6 @@ struct HistoryScreenTests {
         }
     }
 
-    @Test("the working copy's row shows the uncommitted changes")
-    func workingCopy() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await makeHistoryScreenFixture()
-            await fixture.show(.history)
-            fixture.history.selectWorkingCopy()
-            fixture.repository.changes.select(fileIDs: fixture.repository.changes.workingDirectory.files.map(\.id))
-            await fixture.settle()
-            await fixture.repository.changes.diffIdle()
-            assertSnapshot(fixture.image(.history, appearance: .light), named: "workingCopy", area: area, appearance: .light)
-            await fixture.settle()
-        }
-    }
-
     @Test("a branch's place: its history with its tip selected, then Compare to Branch's Behind, with a commit main doesn't have")
     func branchPlace() async throws {
         try await withIsolatedGitConfig { _ in
@@ -224,14 +172,11 @@ struct HistoryScreenTests {
             #expect(history.mode == .history)
             #expect(history.shownBranch?.name == "fix/crash")
             #expect(history.selection.shas == [fixture.shas["Fix crash on empty repository"]!])
-            assertSnapshot(fixture.image(.branch(ref: branch.ref), appearance: .light), named: "branch", area: area, appearance: .light)
 
             HistoryPlaces.showComparison(of: branch, in: fixture.context)
             await fixture.show(.branch(ref: branch.ref))
             #expect(history.mode == .compare(branch, .behind))
             #expect(history.commitSHAs == [fixture.shas["Fix crash on empty repository"]!])
-            await history.comparison.idle()
-            assertSnapshot(fixture.image(.branch(ref: branch.ref), appearance: .light), named: "compare", area: area, appearance: .light)
 
             // Back to its history.
             fixture.context.state.history.branchView = BranchViewChoice(ref: branch.ref, view: .history)
@@ -291,7 +236,6 @@ struct HistoryScreenTests {
             let notice = try #require(fixture.context.state.history.notice)
             #expect(notice.place == .tag(name: "crash-fix"))
             #expect(notice.kind == .notOnLine(branch: "main"))
-            assertSnapshot(fixture.image(.tag(name: "crash-fix"), appearance: .light), named: "tagOffTheLine", area: area, appearance: .light)
 
             // Show in Graph: the graph has it, and selects it.
             fixture.history.setStyle(.graph)

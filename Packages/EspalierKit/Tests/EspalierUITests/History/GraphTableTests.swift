@@ -1,9 +1,8 @@
 // The history graph's table: rows and pages, reloads that keep the view in
 // place, selection both ways, the context menu from a right-click, the
 // keyboard, and VoiceOver, and its row's ring, ref capsules, the unpushed
-// arrow, search dimming, the loading footer, drags, the columns narrow rows
-// hide, and how rows look (in light and dark, the narrowest rows and the
-// emphasis in light).
+// arrow, search dimming, the loading footer, drags, and the columns narrow
+// rows hide.
 
 import AppKit
 @testable import EspalierCore
@@ -24,11 +23,10 @@ final class GraphTableHarness {
     private(set) var selections: [(shas: [String], contiguous: Bool)] = []
     private(set) var workingCopySelections = 0
 
-    init(_ source: SyntheticHistory, presentation: GraphPresentation = GraphPresentation(), size: CGSize = CGSize(width: 640, height: 260), appearance: SnapshotAppearance = .light) {
+    init(_ source: SyntheticHistory, presentation: GraphPresentation = GraphPresentation(), size: CGSize = CGSize(width: 640, height: 260)) {
         self.source = source
         self.presentation = presentation
         window = SnapshotWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
-        window.appearance = appearance.appearance
         controller.fixedNow = UIFixtures.now
         controller.timeZone = UIFixtures.timeZone
         controller.avatarLoader = MonogramAvatarLoader()
@@ -45,7 +43,7 @@ final class GraphTableHarness {
         controller.scrollView.autoresizingMask = [.width, .height]
         container.addSubview(controller.scrollView)
         window.contentView = container
-        // Focused, so a selection draws in the accent color.
+        // Focused, so keys reach the table.
         window.makeFirstResponder(controller.tableView)
         update()
     }
@@ -69,18 +67,10 @@ final class GraphTableHarness {
     func cell(_ row: Int) -> CommitRowCellView? {
         table.view(atColumn: 0, row: row, makeIfNecessary: false) as? CommitRowCellView
     }
-
-    /// The window drawn into a 1x sRGB bitmap, as every snapshot is.
-    func image() -> NSBitmapImageRep {
-        layout()
-        return Snapshot.image(of: window.contentView!)
-    }
 }
 
 @Suite("History graph table") @MainActor
 struct GraphTableTests {
-    private let area = "HistoryTable"
-
     /// A main line with a feature branch, merged, and uncommitted work.
     private func featureHistory() -> SyntheticHistory {
         let commits = graphCommits("""
@@ -313,22 +303,6 @@ struct GraphTableTests {
         #expect(requests.map(\.clicked) == [5, 2])
     }
 
-    @Test("the row a context menu acts on shows the accent ring, unselected and selected")
-    func snapshotContextTarget() {
-        for appearance in SnapshotAppearance.allCases {
-            let history = featureHistory()
-            history.publishFirstPage(7)
-            let harness = GraphTableHarness(history, appearance: appearance)
-            harness.selection = GraphSelection(shas: ["f2"])
-            harness.update()
-            let unmark = harness.table.contextMenuTarget.mark(4)
-            assertSnapshot(harness.image(), named: "context-target", area: area, appearance: appearance)
-            unmark()
-            _ = harness.table.contextMenuTarget.mark(2)
-            assertSnapshot(harness.image(), named: "context-target-selected", area: area, appearance: appearance)
-        }
-    }
-
     // MARK: Row content
 
     @Test("refs show as capsules: the current branch first, with its upstream; then branches, remote branches, and tags")
@@ -468,63 +442,5 @@ struct GraphTableTests {
         #expect(try payload(5)?.shas == ["m2"])
         // The working copy can't be dragged.
         #expect(try payload(0) == nil)
-    }
-
-    // MARK: Snapshots
-
-    @Test("rows: the working copy, HEAD with refs, a merge, unpushed commits, and selection")
-    func snapshotRows() {
-        for appearance in SnapshotAppearance.allCases {
-            let history = featureHistory()
-            history.publishFirstPage(7)
-            history.localSHAs = ["M", "f2"]
-            history.refsBySHA = [
-                "M": [
-                    HistoryRef(kind: .localBranch, fullName: "refs/heads/main", name: "main", upstream: "refs/remotes/origin/main"),
-                    HistoryRef(kind: .remoteBranch, fullName: "refs/remotes/origin/main", name: "origin/main"),
-                ],
-                "f2": [HistoryRef(kind: .localBranch, fullName: "refs/heads/feature/login", name: "feature/login")],
-                "m2": [
-                    HistoryRef(kind: .remoteBranch, fullName: "refs/remotes/origin/release", name: "origin/release"),
-                    HistoryRef(kind: .tag, fullName: "refs/tags/v1.2", name: "v1.2"),
-                    HistoryRef(kind: .tag, fullName: "refs/tags/v1.1", name: "v1.1"),
-                    HistoryRef(kind: .tag, fullName: "refs/tags/v1.0", name: "v1.0"),
-                ],
-            ]
-            var presentation = GraphPresentation()
-            presentation.headSHA = "M"
-            presentation.currentBranch = "main"
-            presentation.remoteNames = ["origin"]
-            presentation.workingCopy = WorkingCopySummary(changedFiles: 3)
-            let harness = GraphTableHarness(history, presentation: presentation, size: CGSize(width: 640, height: 200), appearance: appearance)
-            harness.selection = GraphSelection(shas: ["f1"])
-            harness.update()
-            assertSnapshot(harness.image(), named: "rows", area: area, appearance: appearance)
-        }
-    }
-
-    @Test("the narrowest rows: no author, avatar, or date")
-    func snapshotNarrow() {
-        let history = featureHistory()
-        history.publishFirstPage(7)
-        var presentation = GraphPresentation()
-        presentation.headSHA = "M"
-        presentation.workingCopy = WorkingCopySummary(changedFiles: 2, conflictedFiles: 1)
-        let harness = GraphTableHarness(history, presentation: presentation, size: CGSize(width: 360, height: 200))
-        assertSnapshot(harness.image(), named: "narrow-360", area: area, appearance: .light)
-    }
-
-    @Test("a clean working copy, a search, and a focused branch")
-    func snapshotEmphasis() {
-        let history = featureHistory()
-        history.publishFirstPage(7)
-        var search = HistorySearch(query: "f")
-        search.matchingRows = [2, 3]
-        var presentation = GraphPresentation()
-        presentation.headSHA = "M"
-        presentation.search = search
-        presentation.focusedSHA = "f2"
-        let harness = GraphTableHarness(history, presentation: presentation, size: CGSize(width: 640, height: 200))
-        assertSnapshot(harness.image(), named: "search-focus", area: area, appearance: .light)
     }
 }

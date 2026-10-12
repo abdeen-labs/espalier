@@ -1,10 +1,9 @@
 # Espalier's look
 
 The visual design I chose: a flat, precise skeleton with
-personality. New UI follows it. The values are `DesignSystem`'s tokens, and
-the app's snapshots show it in light and dark. This describes Classic, the
-default theme, in SF Pro and SF Mono; the other themes change what their
-tokens say (Themes, below).
+personality. New UI follows it. The values are `DesignSystem`'s tokens.
+This describes Classic, the default theme, in SF Pro and SF Mono; the
+other themes change what their tokens say (Themes, below).
 
 ## Principles
 
@@ -133,8 +132,7 @@ current look.
 - **The fonts** are `AppFont`'s (the sans) and `CodeFont`'s (the mono)
   faces (DesignSystem/Fonts), in `Typography` and `AppKitTypography`.
 - **The look** (`Look`: theme, color, app font, code font) is the
-  process's (`LookCenter`), or a task's own (`Look.with`), which snapshots
-  use; snapshots in another look add it to their names.
+  process's (`LookCenter`), or a task's own (`Look.with`).
 - **Islands** is calm and friendly: the panes float as white cards on a
   cool sage backdrop (`#E3E9E5`, `#0E1210` in dark), and controls are soft
   pills with bold titles. Quiet capsules on the backdrop (the toolbar's)
@@ -192,7 +190,7 @@ token, `Motion`.
 
 - **Reduce Motion:** nothing animates, hover and press included; a jump
   keeps its still outline. Models update at once; only drawing animates.
-  Snapshots and offscreen windows draw none.
+  Offscreen windows draw none.
 - **Controls** move as AppKit's controls do. Capsules fade their
   hover, ease a press, and crossfade when their kind changes (the sync
   button quiet ↔ blue). A menu (and a suggestion list) fades in over
@@ -218,8 +216,8 @@ token, `Motion`.
   screens. Hover in lists fades, row by row.
 - **Work that runs moves:** the arc turns once every 0.9 s, the bar's
   segment sweeps every 1.4 s, and the shimmer passes over a message being
-  generated. Under Reduce Motion and in snapshots they stand still: the
-  arc at twelve o'clock, the segment in the middle.
+  generated. Under Reduce Motion they stand still: the arc at twelve
+  o'clock, the segment in the middle.
 - **Instant:** selection and arrow-key browsing, and what follows them; a
   slider's knob, dragged or stepped; navigating between repositories and
   places, and the reload after a branch switch; typing-driven updates;

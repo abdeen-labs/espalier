@@ -1,4 +1,5 @@
-// The location control's segments, titles, and tooltips.
+// The location control's segments, titles, and tooltips, and the width a
+// branch's name takes in the toolbar.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -112,17 +113,6 @@ struct LocationControlTests {
         }
     }
 
-    /// One state per layout: a branch (light and dark), checking out with
-    /// its progress, and with a spinner before git reports a value (light
-    /// and dark), and no repositories. The other states differ only in
-    /// words (`copy` above).
-    nonisolated static let snapshotStates: [String: [SnapshotAppearance]] = [
-        "branch": SnapshotAppearance.allCases,
-        "checkingOut": [.light],
-        "checkingOut-starting": SnapshotAppearance.allCases,
-        "noRepositories": [.light],
-    ]
-
     @Test("in the toolbar, a branch's name shows whole at any width proposed", arguments: [
         NamedCase("main", "main"),
         NamedCase("a hyphenated name", "ui-audit"),
@@ -158,10 +148,4 @@ struct LocationControlTests {
         return laidOut
     }
 
-    @Test("each layout renders", arguments: LocationControlTests.snapshotStates.keys.sorted())
-    func snapshot(name: String) throws {
-        let state = try #require(UIFixtures.locationStates.first { $0.name == name }?.state)
-        let appearances = try #require(Self.snapshotStates[name])
-        assertSnapshot(LocationControlView(state).padding(Metrics.insetMedium), named: name, area: "LocationControl", appearances: appearances)
-    }
 }

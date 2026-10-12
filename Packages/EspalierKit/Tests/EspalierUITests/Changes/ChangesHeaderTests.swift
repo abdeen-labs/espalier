@@ -1,6 +1,5 @@
 // The Changes header's content from repositories: its count line, the
-// include-all checkbox, and the filter options' counts. The Changes place's
-// snapshots show the header.
+// include-all checkbox, and the filter options' counts.
 
 import AppKit
 @testable import EspalierCore

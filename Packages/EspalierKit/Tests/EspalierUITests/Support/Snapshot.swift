@@ -1,18 +1,16 @@
-// Rendering views to PNG without a running app. SwiftUI views go into an
+// Hosting and drawing views without a running app. SwiftUI views go into an
 // `NSHostingView` in an offscreen key window with an explicit appearance;
-// AppKit views (tables) go straight into the same kind of window.
-// Images are rendered at 1x in sRGB, so the references stay small and don't
-// depend on the display: a bitmap made from the window
-// (`bitmapImageRepForCachingDisplay`) takes the screen's color profile and
-// scale, so the same table would draw its accent blue in different numbers
-// with another main display connected.
+// AppKit views (tables) go straight into the same kind of window. Images
+// are drawn at 1x in sRGB, so they don't depend on the display: a bitmap
+// made from the window (`bitmapImageRepForCachingDisplay`) takes the
+// screen's color profile and scale.
 
 import AppKit
 import EspalierSupport
 import SwiftUI
 @testable import EspalierUI
 
-/// The appearances snapshots are rendered in.
+/// The appearances views are drawn in.
 enum SnapshotAppearance: String, CaseIterable, Sendable {
     case light, dark
 
@@ -34,9 +32,9 @@ final class SnapshotWindow: NSWindow {
     }
 }
 
-/// An empty defaults domain of the test run's own, for views a snapshot
-/// draws outside a window context: no state the developer's or another
-/// run's tests saved changes what they draw.
+/// An empty defaults domain of the test run's own, for views drawn outside
+/// a window context: no state the developer's or another run's tests saved
+/// changes what they draw.
 enum SnapshotDefaults {
     nonisolated(unsafe) static let empty: UserDefaults = {
         let suiteName = POSIXPath.join(NSTemporaryDirectory(), "EspalierSnapshotDefaults-\(UUID().uuidString)")
@@ -44,10 +42,10 @@ enum SnapshotDefaults {
     }()
 }
 
-/// Renders views to bitmaps.
+/// Hosts and draws views offscreen.
 @MainActor
 enum Snapshot {
-    /// The environment every snapshot gets: a fixed clock and time zone,
+    /// The environment every hosted view gets: a fixed clock and time zone,
     /// English, monograms, delayed content shown at once, and no motion (a
     /// state change never draws a frame from the middle of an animation).
     static func deterministic(_ view: some View) -> some View {
@@ -73,7 +71,6 @@ enum Snapshot {
         appearance: SnapshotAppearance,
         prepare: (NSView) -> Void = { _ in }
     ) -> NSBitmapImageRep {
-        _ = SnapshotReferences.reviewLook
         let root = deterministic(view)
             .background(Color(nsColor: Palette.background))
         let host = NSHostingView(rootView: root)
@@ -105,29 +102,8 @@ enum Snapshot {
         container.addSubview(view)
         window.contentView = container
         defer { window.contentView = nil }
-        if SnapshotReferences.reviewLook != nil {
-            // A view made before the review look was the process's.
-            LookApplier.refresh(container)
-        }
         container.layoutSubtreeIfNeeded()
         return cache(container, appearance: appearance, fillsBackground: true)
-    }
-
-    /// Renders an alert's card, with its shadow, on the window background.
-    static func render(_ content: AlertContent, appearance: SnapshotAppearance, prepare: (AlertCardModel) -> Void = { _ in }) -> NSBitmapImageRep {
-        let model = AlertCardModel(content)
-        prepare(model)
-        let state = ModalLayerState(coversWindow: false, title: content.title)
-        state.phase = .shown
-        return render(ModalLayerView(state: state, content: AnyView(AlertCard(model: model))), appearance: appearance)
-    }
-
-    /// `content` in a popover's card, as a popover shows it, with the margin
-    /// its shadow draws in.
-    static func popoverCard<Content: View>(@ViewBuilder _ content: @escaping () -> Content) -> PopoverCardView {
-        PopoverCardView(model: PopoverCardModel {
-            AnyView(content())
-        })
     }
 
     /// Draws `view` as it's laid out into a 1x sRGB bitmap: the same pixels
@@ -159,7 +135,7 @@ enum Snapshot {
     }
 
     /// An empty 1x bitmap in sRGB.
-    static func bitmap(_ size: CGSize) -> NSBitmapImageRep {
+    private static func bitmap(_ size: CGSize) -> NSBitmapImageRep {
         let width = max(Int(size.width.rounded(.up)), 1)
         let height = max(Int(size.height.rounded(.up)), 1)
         let rep = NSBitmapImageRep(

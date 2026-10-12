@@ -1,4 +1,4 @@
-// Fixed diffs for the diff view's tests and snapshots.
+// Fixed diffs for the diff view's tests.
 
 import AppKit
 import EspalierCore
@@ -150,30 +150,6 @@ enum DiffFixtures {
         textDiff(conflictPatch)
     }
 
-    /// The conflict with the common ancestor's side too (`diff3`): ours,
-    /// base, and theirs.
-    static let conflictWithBasePatch = """
-    diff --git a/Sources/App/Config.swift b/Sources/App/Config.swift
-    index 1111111..2222222 100644
-    --- a/Sources/App/Config.swift
-    +++ b/Sources/App/Config.swift
-    @@ -1,4 +1,10 @@
-     let name = "espalier"
-    +<<<<<<< HEAD
-     let timeout = 30
-    +||||||| base
-    +let timeout = 10
-    +=======
-    +let timeout = 60
-    +>>>>>>> feature/longer-timeout
-     let retries = 3
-     let verbose = false
-    """
-
-    static var conflictWithBase: TextDiff {
-        textDiff(conflictWithBasePatch)
-    }
-
     /// A last line without a newline, changed to have one.
     static let noNewlinePatch = """
     diff --git a/notes.txt b/notes.txt
@@ -284,7 +260,7 @@ struct KeywordTestHighlighter: SyntaxHighlighter {
     }
 }
 
-/// Builds diff tables for tests and snapshots.
+/// Builds diff tables for tests.
 @MainActor
 enum DiffTables {
     /// A controller showing `content`, laid out at `size`, its document

@@ -1,16 +1,14 @@
 // The primary suggestion for real repositories, in order (the stash,
 // publishing the repository, publishing the branch, pulling, pushing, a
 // pull request), and none before the repository's state has loaded; the
-// cards' words and shortcuts, and snapshots.
+// cards' words and shortcuts.
 
-import AppKit
 @testable import EspalierCore
 import EspalierCoreTestSupport
 import EspalierSupport
 import Foundation
 import GitHubKit
 import GitKit
-import SwiftUI
 import Testing
 import TestSupport
 @testable import EspalierUI
@@ -194,24 +192,5 @@ struct SuggestionsTests {
         #expect(content.gitHubCard == nil)
         #expect(SuggestionsContent.Primary.viewStash.card(numberFormat: format).discoverability == "View menu or ⌃H")
         #expect(SuggestionsContent.Primary.pullRequest(branch: "f", choice: .createPullRequest).card(numberFormat: format).discoverability == "Branch menu or ⌘R")
-    }
-
-    @Test("suggestions snapshots: a primary card with the editor and GitHub, and none")
-    func snapshots() {
-        // The other cards differ only in their words (`cards` above).
-        let primaries: [(String, SuggestionsContent.Primary?)] = [
-            ("none", nil),
-            ("push", .push(remote: "origin", ahead: 2, tags: 0, isGitHub: true)),
-        ]
-        for (name, primary) in primaries {
-            let content = SuggestionsContent(primary: primary, editorTitle: name == "none" ? nil : "Open in Xcode", isGitHub: true)
-            assertSnapshot(
-                NoChangesSuggestions(content),
-                named: "suggestions-\(name)",
-                area: "Changes",
-                size: CGSize(width: 640, height: 520),
-                appearances: [.light]
-            )
-        }
     }
 }

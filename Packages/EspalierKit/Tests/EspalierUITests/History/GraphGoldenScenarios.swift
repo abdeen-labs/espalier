@@ -1,10 +1,9 @@
 // The commit graph engine's 22 golden histories
 // (Tests/EspalierCoreTests/History/CommitGraphLayoutTests.swift,
 // `scenarios`), so the drawing is checked against the layouts the engine's
-// ASCII goldens check. Every one is checked for where its stubs are drawn;
-// the nine in `GraphDrawingTests.drawnGoldens` are also drawn as reference
-// images. Keep the two lists the same: a history changed or added there
-// changes or adds one here.
+// ASCII goldens check. Every one is checked for where its stubs are drawn.
+// Keep the two lists the same: a history changed or added there changes or
+// adds one here.
 
 import EspalierCore
 import Foundation
@@ -29,14 +28,6 @@ struct GraphGoldenScenario: Sendable, CustomTestStringConvertible {
     /// The finished layout, as the engine's tests lay it out.
     var layout: CommitGraphLayout {
         graphLayout(commits, options)
-    }
-
-    /// A file name for the scenario's reference image.
-    var fileName: String {
-        name.replacingOccurrences(of: ",", with: "")
-            .replacingOccurrences(of: "'", with: "")
-            .split(separator: " ")
-            .joined(separator: "-")
     }
 }
 

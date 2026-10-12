@@ -1,6 +1,6 @@
 // What the diff container shows below its header for each state of the
 // diff, which message a text diff with no hunks shows for each status, and
-// how a submodule's commit changed. The snapshots draw one of each.
+// how a submodule's commit changed.
 
 import EspalierCore
 import GitKit

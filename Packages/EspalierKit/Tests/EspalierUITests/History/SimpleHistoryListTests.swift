@@ -1,9 +1,8 @@
-// History's simple list on a real repository: how it looks, in light and
-// dark, collapsed and with a merge expanded; its rows (merges' titles, the
-// unpushed arrow, file counts, tags, the time); the rail (the branch's line
-// with the graph's nodes, where it started, merges' stubs); selection both
-// ways and which selections are contiguous; expanding and collapsing a merge
-// with the keyboard, its chevron, and VoiceOver; the commit menu of a
+// History's simple list on a real repository: its rows (merges' titles,
+// the unpushed arrow, file counts, tags, the time); the rail (the branch's
+// line with the graph's nodes, where it started, merges' stubs); selection
+// both ways and which selections are contiguous; expanding and collapsing a
+// merge with the keyboard, its chevron, and VoiceOver; the commit menu of a
 // merge's commit, from ⇧F10, and a merge's from a right-click, each ringing
 // its row; and where drops go.
 
@@ -36,11 +35,6 @@ struct SimpleListFixture {
         await app.idle()
         await repository.operations.enrichmentIdle()
         await history.idle()
-    }
-
-    /// The simple list rendered alone (the header is History's).
-    func image(size: CGSize = CGSize(width: 400, height: 640), appearance: SnapshotAppearance) -> NSBitmapImageRep {
-        Snapshot.render(SimpleHistoryList(repository: repository).windowEnvironment(context), size: size, appearance: appearance)
     }
 
     /// The list's table in an offscreen window, laid out.
@@ -152,36 +146,6 @@ func makeSimpleListFixture() async throws -> SimpleListFixture {
 
 @Suite("Simple history list", .offline, .hangGuard(minutes: 5)) @MainActor
 struct SimpleHistoryListTests {
-    private let area = "SimpleHistory"
-
-    @Test("the list: the base's notice, then the branch's commits one after another, merges as one row")
-    func list() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await makeSimpleListFixture()
-            fixture.history.select(shas: [fixture.shas["Fetch hourly data from the forecast API"]!], contiguous: true)
-            await fixture.settle()
-            for appearance in SnapshotAppearance.allCases {
-                assertSnapshot(fixture.image(appearance: appearance), named: "list", area: area, appearance: appearance)
-            }
-            await fixture.settle()
-        }
-    }
-
-    @Test("a merge expanded: the commits it brought in, indented under it")
-    func expandedMerge() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await makeSimpleListFixture()
-            let merge = try #require(fixture.history.row(of: fixture.shas["Merge pull request #209 from jonas/widget-refresh"]!))
-            fixture.history.setMergeExpanded(true, row: merge)
-            fixture.history.select(shas: [fixture.shas["Use the new widget sizes"]!], contiguous: true)
-            await fixture.settle()
-            for appearance in SnapshotAppearance.allCases {
-                assertSnapshot(fixture.image(appearance: appearance), named: "expanded", area: area, appearance: appearance)
-            }
-            await fixture.settle()
-        }
-    }
-
     @Test("rows: merges named for what they merged, the unpushed mark, file counts, tags, and what VoiceOver reads")
     func rows() async throws {
         try await withIsolatedGitConfig { _ in

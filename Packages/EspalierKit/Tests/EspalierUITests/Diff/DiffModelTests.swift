@@ -1,8 +1,8 @@
 // The diff view on real repositories: the gutter's gestures through
 // `DiffLines`, discarding lines through the presenter, hidden whitespace,
-// the session's contents (the bottom hunk, expansion, and collapsing),
-// syntax highlighting from the test highlighter, and the container in a
-// window.
+// the session's contents (the bottom hunk, expansion, and collapsing), and
+// syntax highlighting from the test highlighter; and the line filters that
+// say which lines of each version to read.
 
 import AppKit
 @testable import EspalierCore
@@ -10,7 +10,6 @@ import EspalierCoreTestSupport
 import EspalierSupport
 import Foundation
 import GitKit
-import SwiftUI
 import Testing
 import TestSupport
 @testable import EspalierUI
@@ -224,22 +223,6 @@ struct DiffModelTests {
             session.fileDidChange(DiffFileInfo(path: "other.txt", status: .modified))
             #expect(session.contents == nil)
             #expect(session.tokens.isEmpty)
-            await fixture.model.idle()
-        }
-    }
-
-    @Test("the container in a window: header, staging gutter, and contents")
-    func containerInWindow() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await NumberedFixture.make()
-            _ = try await fixture.selectFile()
-            let context = WindowContext(app: fixture.app)
-            let changes = fixture.model.changes
-            let view = DiffContainer(changes.diff, file: DiffFileInfo(try fixture.file), context: .changes, staging: DiffStaging(changes: changes))
-                .environment(\.diffBuildsSynchronously, true)
-                .windowEnvironment(context)
-                .frame(width: 640, height: 420)
-            assertSnapshot(view, named: "container-changes", area: "Diff", size: CGSize(width: 640, height: 420), appearances: [.light])
             await fixture.model.idle()
         }
     }

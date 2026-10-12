@@ -1,10 +1,10 @@
 // The design system's values: the track palette and its contrast, status
-// colors, monograms, and every SF Symbol EspalierUI's sources name (avatar
-// URLs are AvatarLoaderTests').
+// colors, monograms, every SF Symbol EspalierUI's sources name (avatar URLs
+// are AvatarLoaderTests'), a centered message's minimum height, and how
+// AppKit lays out ref capsules.
 
 import AppKit
 import EspalierSupport
-import GitHubKit
 import SwiftUI
 import Testing
 @testable import EspalierUI
@@ -151,49 +151,10 @@ struct DesignSystemTests {
         #expect(NSHostingController(rootView: message.fillingSpace()).sizeThatFits(in: narrow).height == 0)
     }
 
-    // MARK: Snapshots
+    // MARK: Ref capsules
 
-    @Test("status and checks glyphs render")
-    func glyphs() {
-        let view = VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-            HStack(spacing: Metrics.insetSmall) {
-                ForEach(FileStatusKind.allCases, id: \.self) { kind in
-                    StatusGlyph(kind)
-                }
-            }
-            HStack(spacing: Metrics.insetSmall) {
-                ForEach(ChecksState.allCases, id: \.self) { state in
-                    ChecksGlyph(state)
-                }
-                WarningGlyph()
-            }
-        }
-        .padding(Metrics.insetMedium)
-        assertSnapshot(view, named: "glyphs", area: "DesignSystem")
-    }
-
-    @Test("ref capsules render in SwiftUI")
-    func refCapsules() {
-        let refs = [
-            RefCapsuleContent(name: "main", kind: .currentBranch, track: 0),
-            RefCapsuleContent(name: "feature/login", kind: .localBranch, track: 1),
-            RefCapsuleContent(name: "main", kind: .localBranchWithUpstream(remote: "origin"), track: 0),
-            RefCapsuleContent(name: "origin/feature", kind: .remoteBranch, track: 2),
-            RefCapsuleContent(name: "v1.2.0", kind: .tag, track: 0),
-            RefCapsuleContent(name: "HEAD", kind: .detachedHead, track: 0),
-        ]
-        let view = VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-            HStack(spacing: Metrics.RefCapsule.spacing) {
-                ForEach(refs) { RefCapsule($0) }
-            }
-            RefCapsuleList(refs)
-        }
-        .padding(Metrics.insetMedium)
-        assertSnapshot(view, named: "refCapsules", area: "DesignSystem")
-    }
-
-    @Test("ref capsules draw in AppKit")
-    func refCapsulesAppKit() {
+    @Test("AppKit's ref capsules: at most three, then a capsule counting the rest, and fewer when the width runs out")
+    func refCapsuleLayout() {
         let refs = [
             RefCapsuleContent(name: "main", kind: .currentBranch, track: 0),
             RefCapsuleContent(name: "feature/login", kind: .localBranch, track: 1),
@@ -205,39 +166,5 @@ struct DesignSystemTests {
         #expect(items.count == 4)
         #expect(items.last?.overflowCount == 2)
         #expect(RefCapsuleRenderer.layout(refs, maximumWidth: 60).count == 2)
-        assertSnapshot({ RefCapsuleDrawingView(items: items) }, named: "refCapsules-appkit", area: "DesignSystem", size: CGSize(width: 320, height: 28))
-    }
-
-    @Test("monograms and avatars render")
-    func avatars() {
-        let view = HStack(spacing: Metrics.insetSmall) {
-            Avatar(AvatarUser(email: "joe@example.com", avatarURL: nil, name: "Joe Bloggs", endpoint: nil))
-            Avatar(AvatarUser(email: "octo@example.com", avatarURL: nil, name: "Octocat", endpoint: nil), size: 24)
-            MonogramView(name: "", email: "", size: 32)
-            Image(decorative: MonogramRenderer.image(name: "Mary Jane", pointSize: 32, scale: 1)!, scale: 1)
-        }
-        .padding(Metrics.insetMedium)
-        assertSnapshot(view, named: "avatars", area: "DesignSystem", appearances: [.light])
-    }
-}
-
-/// Draws laid-out ref capsules, as a graph cell would.
-private final class RefCapsuleDrawingView: NSView {
-    let items: [RefCapsuleRenderer.Item]
-
-    init(items: [RefCapsuleRenderer.Item]) {
-        self.items = items
-        super.init(frame: .zero)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError()
-    }
-
-    override var isFlipped: Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        RefCapsuleRenderer.draw(items, at: CGPoint(x: 6, y: 6), appearance: effectiveAppearance)
     }
 }
