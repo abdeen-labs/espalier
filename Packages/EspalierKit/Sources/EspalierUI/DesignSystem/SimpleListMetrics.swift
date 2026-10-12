@@ -28,8 +28,8 @@ extension Metrics {
         public static let railWidth: CGFloat = 40
         /// The branch's line, from the rail's leading edge, and a merge's
         /// commits' line, 16 to its right.
-        public static let lineX: CGFloat = 13
-        public static let mergedLineX: CGFloat = 29
+        public static let lineX: CGFloat = 18
+        public static let mergedLineX: CGFloat = 34
         /// A merged commit's avatar sits this much further in.
         public static let mergedIndent: CGFloat = 6
         /// Between the title and the meta line.
