@@ -1120,3 +1120,9 @@ voice:
   GitHub's output, AI prompts, logs, GitHub's push-protection bypass
   wording, and alerts' "Do not show this message again" (AppKit's
   wording).
+- Where desktop's text printed JavaScript's `null`, `undefined`, or
+  `Infinity` by accident, logs and messages say what's missing instead:
+  an editor not found, a git error without a description, no sign-in
+  step, a shell killed by a signal, an unhandled rebase result in words
+  rather than JSON, and a Retry-After too large to be a wait ("try again
+  later").
