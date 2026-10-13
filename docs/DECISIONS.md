@@ -451,6 +451,9 @@ immediately; importing desktop's repository list and settings (my call).
   actions in the row and in its context menu.
 - **With no changes the header stays** ("0 changed files") over the empty
   list; "No Local Changes" shows only beside it.
+- **The pull request suggestion reads "Open a pull request,"** whether its
+  button previews or creates one: desktop's "Preview the Pull Request from
+  your current branch" ran to three lines beside the button.
 - **A stash's files are the Changes rows, read-only,** under a header with
   Restore and Discard….
 - **The diff is laid out as desktop's:** the expansion buttons in the hunk

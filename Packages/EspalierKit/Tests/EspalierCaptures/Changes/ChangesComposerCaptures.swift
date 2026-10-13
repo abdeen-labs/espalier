@@ -209,11 +209,18 @@ struct ChangesComposerCaptures {
 
     // MARK: Suggestions
 
-    @Test("Suggestions: a primary card with the editor and GitHub, and none")
+    @Test("Suggestions: each primary card with the editor and GitHub, and none")
     func suggestions() {
         let primaries: [(String, SuggestionsContent.Primary?)] = [
             ("none", nil),
+            ("stash", .viewStash),
+            ("publish-repository", .publishRepository),
+            ("publish-branch", .publishBranch(branch: "ui-audit", isGitHub: true)),
+            ("pull", .pull(branch: "ui-audit", remote: "origin", behind: 3, isGitHub: true)),
             ("push", .push(remote: "origin", ahead: 2, tags: 0, isGitHub: true)),
+            ("push-tags", .push(remote: "origin", ahead: 2, tags: 1, isGitHub: true)),
+            ("preview-pull-request", .pullRequest(branch: "ui-audit", choice: .previewPullRequest)),
+            ("create-pull-request", .pullRequest(branch: "ui-audit", choice: .createPullRequest)),
         ]
         for (name, primary) in primaries {
             let content = SuggestionsContent(primary: primary, editorTitle: name == "none" ? nil : "Open in Xcode", isGitHub: true)

@@ -159,7 +159,7 @@ extension SuggestionsContent.Primary {
             )
         case .pullRequest(let branch, .previewPullRequest):
             return SuggestionCard(
-                title: "Preview the pull request from your current branch",
+                title: "Open a pull request",
                 description: "The current branch (\(branch)) is already published to GitHub. Preview the changes a pull request would propose.",
                 discoverability: discoverability(.previewPullRequest),
                 buttonTitle: "Preview Pull Request",
@@ -167,7 +167,7 @@ extension SuggestionsContent.Primary {
             )
         case .pullRequest(let branch, .createPullRequest):
             return SuggestionCard(
-                title: "Create a pull request from your current branch",
+                title: "Open a pull request",
                 description: "The current branch (\(branch)) is already published to GitHub. Create a pull request to propose and discuss your changes.",
                 discoverability: discoverability(.createPullRequest),
                 buttonTitle: "Create Pull Request",
