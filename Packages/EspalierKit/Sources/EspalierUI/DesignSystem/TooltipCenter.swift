@@ -363,10 +363,39 @@ final class TooltipCenter {
         CGRect(x: location.x, y: location.y - cursorDepth, width: 0, height: cursorDepth)
     }
 
-    /// How far the current cursor reaches below its hotspot.
+    /// How far the current cursor draws below its hotspot: to the bottom
+    /// of what it draws, not of its image, whose transparent margin runs
+    /// well below the arrow.
     static func currentCursorDepth() -> CGFloat {
         let cursor = NSCursor.current
-        return min(max(cursor.image.size.height - cursor.hotSpot.y, 0), Metrics.Tooltip.maximumCursorDepth)
+        let bottom = drawnBottom(of: cursor.image) ?? cursor.image.size.height
+        return min(max(bottom - cursor.hotSpot.y, 0), Metrics.Tooltip.maximumCursorDepth)
+    }
+
+    /// The bottom of the lowest row `image` draws at least half opaque
+    /// (its soft shadow left out), in points from its top; nil when it
+    /// can't be read or draws nothing.
+    private static func drawnBottom(of image: NSImage) -> CGFloat? {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil), cgImage.height > 0 else {
+            return nil
+        }
+        let width = cgImage.width
+        let height = cgImage.height
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width,
+            space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue
+        ), let data = context.data else {
+            return nil
+        }
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        // The buffer's first row is the image's top.
+        let alpha = data.bindMemory(to: UInt8.self, capacity: width * height)
+        for row in stride(from: height - 1, through: 0, by: -1) {
+            for column in 0..<width where alpha[row * width + column] >= 128 {
+                return CGFloat(row + 1) * image.size.height / CGFloat(height)
+            }
+        }
+        return nil
     }
 }
 
@@ -378,6 +407,9 @@ final class ShownTooltip {
     /// Where the card opens from, in the view's coordinates.
     let anchor: CGRect
     let panel = AnchoredPanel(interaction: .none)
+    /// The panel's content: a plain view holding the card, as a menu's and
+    /// a popover's do, so the card's hosting view never resizes the panel.
+    private let container = NSView()
     private let hosting: NSHostingView<TooltipCard>
 
     init(target: TooltipCenter.Target, text: String, anchor: CGRect) {
@@ -386,6 +418,8 @@ final class ShownTooltip {
         self.anchor = anchor
         hosting = NSHostingView(rootView: TooltipCard(text: text))
         hosting.sizingOptions = [.intrinsicContentSize]
+        hosting.autoresizingMask = [.width, .height]
+        container.addSubview(hosting)
         panel.contentInsets = Metrics.Tooltip.shadowInsets
     }
 
@@ -416,7 +450,9 @@ final class ShownTooltip {
     private func layOut(in view: NSView) {
         let fitting = hosting.fittingSize
         let size = CGSize(width: ceil(fitting.width), height: ceil(fitting.height))
-        panel.show(hosting, contentSize: size, anchor: anchor, in: view, placement: TooltipCenter.placement)
+        container.frame = CGRect(origin: .zero, size: size)
+        hosting.frame = container.bounds
+        panel.show(container, contentSize: size, anchor: anchor, in: view, placement: TooltipCenter.placement)
     }
 }
 
