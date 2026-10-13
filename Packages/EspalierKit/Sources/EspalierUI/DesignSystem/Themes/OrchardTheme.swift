@@ -136,7 +136,6 @@ nonisolated private struct OrchardColor {
             self.color = .teal
             accent = ThemeColor.fixed(0x1C7773, 0x6BC6BF)
             ink = ThemeColor.fixed(0x19706C, 0x6BC6BF)
-            // The mockup's dark #1F8681 is 4.39:1 under white text.
             prominent = ThemeColor.fixed(0x19706C, 0x1E837E)
             prominentText = .white
             selectionAlpha = (0.10, 0.14)

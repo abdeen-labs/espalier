@@ -7,8 +7,8 @@ other themes change what their tokens say (Themes, below).
 
 ## Principles
 
-- **Espalier draws its own UI, never stock.** Simple, clean, and modern,
-  with personality: not elaborate, and not default controls with minimal
+- **Espalier draws its own UI.** Simple, clean, and modern, with
+  personality: not elaborate, and not default controls with minimal
   touches. The system's own pieces (the window's chrome, Quick Look, the
   open and save panels) stay macOS's.
 - **Flat.** Opaque surfaces, hairline dividers, and soft shadows only on
@@ -22,13 +22,13 @@ other themes change what their tokens say (Themes, below).
   scrim (black 20%, 45% in dark) that covers the window in its corners. An
   alert has no icon; a critical one has the warning glyph before its title.
 - **Selection is Espalier's own:** a selected row draws its tint in its
-  rounded shape (the soft accent; the sidebar's neutral wash), never the
-  system's highlight (`selectableRow(isSelected:)` in a SwiftUI list, a row
-  view's `drawSelection` in an AppKit table). The row a context menu acts
+  rounded shape (the soft accent; the sidebar's neutral wash):
+  `selectableRow(isSelected:)` in a SwiftUI list, a row view's
+  `drawSelection` in an AppKit table. The row a context menu acts
   on shows a thin accent ring in its shape while the menu is open.
 - **The focus ring is Espalier's:** a 2-point accent ring at 55% in the
-  control's own shape (`FocusRing`), never the system's. A field and a
-  pop-up draw it on their edge; a control with a fill of its own (a
+  control's own shape (`FocusRing`). A field and a pop-up draw it on their
+  edge; a control with a fill of its own (a
   capsule, a switch, a checkbox's box, a radio mark, the slider's knob)
   1 point outside it; a list of choices around the chosen row (cards) or
   its mark (flat rows); a bare symbol or row around its frame.
@@ -77,8 +77,7 @@ other themes change what their tokens say (Themes, below).
   with the floating shadow, holding the search field (its count, "3 of
   12", in SF Mono), the chevrons, and Done. Every match is a neutral wash
   in a rounded shape over its line's tint; the current one is the accent,
-  as the selection it becomes when find closes. Nothing dims, and nothing
-  bounces.
+  as the selection it becomes when find closes.
 - **Personality comes from:** the capsule controls, the transit-map graph,
   the diff's tinted gutter, monospaced IDs and counts, visible key caps, the
   colored repository badges, and branch colors.
@@ -94,10 +93,9 @@ other themes change what their tokens say (Themes, below).
   development.
 - **Buttons come in three styles:** quiet, prominent (one per area), and
   secondary (Cancel in sheets, Undo).
-- **Progress is the arc and the bar,** never the system's spinner or bars.
-  The arc is about a quarter of a faint ring, turning clockwise while how
-  far the work has got isn't known and filling the ring from twelve
-  o'clock once it is; mini in a symbol's place, small beside text, large
+- **Progress is the arc and the bar.** The arc is about a quarter of a
+  faint ring, turning clockwise while how far the work has got isn't known
+  and filling the ring from twelve o'clock once it is; mini in a symbol's place, small beside text, large
   alone in a pane. The bar is a thin capsule on a faint track, its segment
   sweeping until it fills. Both are neutral gray, white on a prominent
   capsule.
@@ -109,77 +107,15 @@ other themes change what their tokens say (Themes, below).
 
 Settings ▸ Appearance picks a theme (Classic, Orchard, Islands, Pop), the
 theme's color, the appearance, the app font, and the code font, each apart
-from the others. Views never pick a theme: they use the tokens, which read the
-current look.
+from the others. Views use the tokens, which read the current look.
 
-- **The tokens** are `Theme` (DesignSystem/Themes/Theme.swift): surfaces,
-  text, the accent and its fills, the prominent fill and its text, links,
-  status, the diff's tints, branch colors, selection (the sidebar's fill,
-  text, symbol, weight, and counts; lists'), the sidebar's tertiary text,
-  the ahead count, section labels, radii, the commit title, button weights,
-  the graph (line width, lane pitch, nodes), ref tags, file badges, avatars
-  (shape, monograms' tone), the selection marks (Orchard's raised card,
-  Pop's leading bar), quiet controls (their fill, raised or flat) and the
-  selected segment, the marks on the accent (a check, a radio's dot, the
-  switch's knob while on: white, but on a near-white accent), syntax
-  colors, the control style (a shadow under prominent capsules, quiet
-  capsules flat in floating cards), and the pane layout with its backdrop.
-  `Palette`, `DiffColors`, `TrackPalette`, `Typography`, `Metrics`, and
-  `TokenTheme` read them.
-- **Each theme is one file** in DesignSystem/Themes (ClassicTheme.swift,
-  OrchardTheme.swift, IslandsTheme.swift, PopTheme.swift), its colors in
-  light and dark; Increase Contrast is derived as Classic's is.
-- **The fonts** are `AppFont`'s (the sans) and `CodeFont`'s (the mono)
-  faces (DesignSystem/Fonts), in `Typography` and `AppKitTypography`.
-- **The look** (`Look`: theme, color, app font, code font) is the
-  process's (`LookCenter`), or a task's own (`Look.with`).
-- **Islands** is calm and friendly: the panes float as white cards on a
-  cool sage backdrop (`#E3E9E5`, `#0E1210` in dark), and controls are soft
-  pills with bold titles. Quiet capsules on the backdrop (the toolbar's)
-  are white and raised, those in a card flat on the field fill; search
-  fields on the backdrop are raised quiet capsules; the prominent capsule
-  casts a small shadow. Section labels are bold, uppercase, and tracked;
-  the sidebar's selected item is bold, its counts in the selection's ink.
-  Avatars are rounded squares, file badges round and tinted, ref tags
-  rounded rectangles tinted with the branch's color (the current branch's
-  the prominent fill), the graph dots on 3.25-point lines, and a commit's
-  title 18 bold. The marks on the accent are white in light and the card's
-  dark in dark. Colors: Lagoon (the default; a deep sea blue-green,
-  `#0B7A8C`), Indigo (`#4447C9`), Berry (`#B8255F`, its deletions
-  vermilion, away from the accent).
-- **The floating layout** (`PaneLayout.floatingCards`, Islands;
-  Shell/FloatingPanes.swift): the window is the backdrop, the toolbar and
-  the sidebar sit on it with no hairlines, and each pane is a card, the
-  background fill at the card radius (14) with the raised ring and a soft
-  shadow 1 point down, blurred 3 (none in dark), everything in it clipped
-  to it. Cards are 8 apart, with no margin above them (the toolbar's band
-  ends where they start), 2 after the sidebar, and 10 at the window's
-  edges; a card draws its ring and shadow in the 2 points inside its
-  frame. A place's two panes are the cards of its split: the split's
-  divider is the gap, and the whole gap drags it; the panes' content keeps
-  its flat widths. A destination with one pane, Commit Info, and the
-  operation panel (above the place's cards) are cards too; a split inside
-  a card (a commit's files beside its diff) stays flat. Settings' pane is a
-  card under its header band, and the theme picker's preview shows the
-  card. Switching between flat and floating keeps every view as it is.
-- **Pop** is bright and confident: white panes beside a sidebar tinted with
-  the accent, and saturated color in solid shapes. Section labels are bold,
-  uppercase, and tracked, in the accent's ink three quarters over the
-  sidebar; the sidebar's counts, pull request numbers, and header buttons
-  are its ink at 70%, and ahead counts its ink itself. A selected row is a
-  tint with a 3-point accent bar at its leading edge (the sidebar, History,
-  the file lists); the sidebar's selected item is bold, it and its counts in
-  the selection's ink. Ref tags are solid, white on the branch color in
-  light and near-black on it in dark, the current branch's the prominent
-  fill; file badges are solid, their letters white or near-black, whichever
-  reads. Buttons are semibold and the prominent one bold; the marks on the
-  accent (checks, radio dots, the switch's knob) are near-black on
-  Tangerine, as its prominent text is, and on the others white in light and
-  near-black in dark. Monograms are saturated, the graph bold (4-point
-  lines, filled dots, a halo on the current commit), and a commit's title 18
-  bold. Colors: Tangerine (the default; `#FF6A1F` with near-black text),
-  Electric, Magenta; deletions turn raspberry (Tangerine) or vermilion
-  (Magenta), away from the accent.
+- **Orchard** is warm and crafted: paper and stone instead of gray, flat
+  stone pills, a raised card for the sidebar's selection, and orchard
+  colors for branches and code.
+- **Islands** is calm and friendly: the panes float as cards on a sage
+  backdrop (the floating layout), with soft pills and bold titles.
+- **Pop** is bright and confident: a sidebar tinted with the accent, a bar
+  beside the selected row, and saturated color in solid shapes.
 
 ## Motion
 
@@ -211,9 +147,9 @@ token, `Motion`.
   what's below moves, and leave quicker. Simple ↔ Graph and Unified ↔
   Split crossfade, and the shimmer crossfades into a generated message. A
   diff crossfades to its expanded lines, and a sidebar section's rows
-  animate in and out as it opens and closes. The diff's find bar fades in, settling from 97%, and fades
-  out; the next match scrolls into view, easing when it's within three
-  screens. Hover in lists fades, row by row.
+  animate in and out as it opens and closes. The diff's find bar fades
+  in, settling from 97%, and fades out; the next match scrolls into view,
+  easing when it's within three screens. Hover in lists fades, row by row.
 - **Work that runs moves:** the arc turns once every 0.9 s, the bar's
   segment sweeps every 1.4 s, and the shimmer passes over a message being
   generated. Under Reduce Motion they stand still: the arc at twelve
@@ -222,38 +158,3 @@ token, `Motion`.
   slider's knob, dragged or stepped; navigating between repositories and
   places, and the reload after a branch switch; typing-driven updates;
   enabled ↔ disabled; paging; ticking times.
-
-## Orchard
-
-Warm and crafted: paper and stone instead of gray, one accent, orchard
-colors for branches, soft and generous shapes. Its colors are Plum, Clay,
-Ink (the default), Teal, and Espresso; the values are OrchardTheme.swift's.
-
-- **Surfaces are paper and stone:** paper for the panes, the toolbar,
-  sheets, and popovers; stone for the sidebar; warm white for
-  menus, cards, toasts, and tooltips. Lines and text are warm too.
-- **Controls are flat stone pills,** with no ring or shadow: quiet and
-  secondary buttons alike, the location control, co-author tokens,
-  fields, search fields, pop-ups, and the segmented control's track. The
-  selected segment is a paper card raised by a soft warm shadow.
-- **The sidebar's selection is a raised card:** paper on the stone, with
-  a soft warm shadow and ring (the ring alone in dark), its symbol in the
-  text color.
-- **Section labels are sentence case,** 12 semibold, tertiary; a commit's
-  title is 18 semibold.
-- **One accent per color** marks selection, the current branch, focus,
-  checks, and switches; the prominent fill is a shade deeper. Ink is a deep
-  warm navy. Espresso has no hue: warm black, cream in dark, with
-  coffee-brown links.
-- **Marks on the accent** (checks, radio dots, the switch's knob while on)
-  are white in light and the dark paper in dark, on dark's light accents.
-- **Branches take orchard colors:** leaf green for the default branch
-  (orange in Teal); orange, rose, plum, sky (periwinkle in Teal), teal, or
-  leaf for the others, without those beside the color's accent, its
-  deletions, or its default branch. Ref tags are the branch's color at 15%
-  (22% in dark), their text mixed toward ink; the current branch's tag is
-  the prominent fill.
-- **The graph is dots,** 3.5 wide, lanes 17 apart.
-- **The diff** tints in leaf green and brick (rose red in Clay), and code
-  takes the orchard's colors: plum keywords, brick strings, warm gray
-  comments, ochre numbers, teal types, and sky functions.

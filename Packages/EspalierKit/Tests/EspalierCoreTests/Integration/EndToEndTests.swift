@@ -15,8 +15,8 @@ import GitKit
 import Testing
 import TestSupport
 
-@Suite("Phase 3 gate", .offline) @MainActor
-struct PhaseGateTests {
+@Suite("End to end", .offline) @MainActor
+struct EndToEndTests {
     @Test("stages, commits, branches, merges, and pushes to a local bare remote, and the list survives a relaunch")
     func gate() async throws {
         try await withIsolatedGitConfig { _ in
