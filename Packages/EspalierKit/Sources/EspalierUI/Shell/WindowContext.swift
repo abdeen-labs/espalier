@@ -59,6 +59,9 @@ public final class WindowContext {
         self.actions = actions
         presenter = WindowPresenter(app: app, actions: actions)
         modals = ModalPresenter()
+        if uiDefaults.bool(forKey: WindowState.sidebarHiddenKey) {
+            state.columnVisibility = .detailOnly
+        }
 
         actions.availability = { [weak self] kind in
             guard let self else {

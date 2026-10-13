@@ -13,6 +13,8 @@ import UniformTypeIdentifiers
 /// The main window's content once the app has loaded.
 struct MainWindow: View {
     @Environment(WindowContext.self) private var context
+    /// Whether the sidebar was last hidden, for the next window.
+    @AppStorage(WindowState.sidebarHiddenKey) private var isSidebarHidden = false
 
     var body: some View {
         @Bindable var state = context.state
@@ -58,6 +60,9 @@ struct MainWindow: View {
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .onChange(of: context.app.selection, initial: true) {
             restorePlace()
+        }
+        .onChange(of: state.columnVisibility) {
+            isSidebarHidden = state.columnVisibility == .detailOnly
         }
         .dropDestination(for: URL.self) { urls, _ in
             let folders = urls.filter(\.hasDirectoryPath).map { $0.path(percentEncoded: false) }
