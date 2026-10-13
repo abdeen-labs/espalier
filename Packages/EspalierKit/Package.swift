@@ -218,7 +218,7 @@ let package = Package(
         // only when ESPALIER_CAPTURES names a folder (scripts/capture.sh).
         .testTarget(
             name: "EspalierCaptures",
-            dependencies: ["EspalierUI", "EspalierCore", "GitKit", "GitHubKit", "TestSupport", "EspalierCoreTestSupport"],
+            dependencies: ["EspalierUI", "EspalierCore", "GitKit", "GitHubKit", "AIKit", "TestSupport", "EspalierCoreTestSupport"],
             swiftSettings: approachable
         ),
     ]
