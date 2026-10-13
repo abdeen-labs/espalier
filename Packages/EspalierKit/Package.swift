@@ -214,5 +214,12 @@ let package = Package(
             dependencies: ["EspalierUI", "EspalierCore", "TestSupport", "EspalierCoreTestSupport"],
             swiftSettings: approachable
         ),
+        // Captures: views drawn to PNGs to look at, never compared. They run
+        // only when ESPALIER_CAPTURES names a folder (scripts/capture.sh).
+        .testTarget(
+            name: "EspalierCaptures",
+            dependencies: ["EspalierUI", "EspalierCore", "GitKit", "GitHubKit", "TestSupport", "EspalierCoreTestSupport"],
+            swiftSettings: approachable
+        ),
     ]
 )

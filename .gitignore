@@ -6,3 +6,4 @@ DerivedData/
 /Vendor/
 .claude/worktrees/
 *.profraw
+/.captures/

@@ -39,7 +39,8 @@ Packages/EspalierKit/        All real code, in one library product named Espalie
   Vendor/Grammars/           Five tree-sitter grammars vendored (see its README).
   Tests/TestSupport/         Test-only helpers and desktop's fixture repositories.
   Tests/<Module>Tests/       Swift Testing suites, many ported from desktop/app/test/unit.
-scripts/                     fetch-git.sh, embed-git.sh, git-version, git-checksums.
+  Tests/EspalierCaptures/    Captures: views drawn to PNGs to look at, never compared.
+scripts/                     fetch-git.sh, embed-git.sh, git-version, git-checksums, capture.sh.
 Vendor/git/                  The bundled git (gitignored, installed by scripts/fetch-git.sh).
 docs/                        What's left, decisions, design.
 ```
@@ -73,6 +74,17 @@ cd Packages/EspalierKit && swift test
 
 `swift test --skip-build` needs every test bundle built first
 (`swift build --build-tests`).
+
+Captures draw Espalier's views offscreen to PNGs, in light and dark, to
+look at with the Read tool. `scripts/capture.sh` writes every capture, or
+those matching a filter, to `.captures/` (gitignored) and prints the
+folder; `--look` draws them in another look (`orchard-ink`,
+`pop-magenta-fixel`, `islands-lagoon-warm`, or `all`). The test suite
+skips them.
+
+```bash
+scripts/capture.sh --look pop-tangerine Gallery
+```
 
 App build, then verify the embedded git and the signature:
 
@@ -134,6 +146,8 @@ My rule: rigor where a mistake hurts users, not everywhere.
   merging. Report the result honestly, with output for failures; the lead
   takes it as fact and doesn't re-run it. Changes that touch no code
   (comments, docs) get no build or test run.
+- When a change shows in the UI, capture what it changed and look at it;
+  a view or state with no capture gets one (`Tests/EspalierCaptures`).
 - Keep reports to one screen: what you did, what you left out and why, and
   follow-ups.
 
@@ -222,7 +236,8 @@ My rule: rigor where a mistake hurts users, not everywhere.
   services) and wait with `idle()` and `ManualScheduler`. `AppHarness`
   starts a background service only when given `backgroundServices:`.
 - Never write screenshot, snapshot, or string tests (tests of strings the
-  UI shows).
+  UI shows). Captures aren't tests: they compare nothing and keep no
+  reference images.
 - Tests run in parallel in one process, so a test leaves process-wide state
   (`setenv`, `chdir`, `GitRuntime.configure`) alone.
 - Blocking work in a test (a blocking `read`, a semaphore wait,
