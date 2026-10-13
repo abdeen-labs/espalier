@@ -2,12 +2,19 @@
 // the rubber band while scrolling, but AppKit's momentum can still carry
 // the content past an end, in a plain table too, and not always through
 // `scrollWheel(with:)` or `constrainBoundsRect(_:)`. So the clip view never
-// takes an origin outside the content, however it's moved.
+// takes an origin outside the content, however it's moved, and scrolling
+// stays on the main thread, where that holds: AppKit's responsive scrolling
+// moves the content on its own thread first, so a hard flick would show it
+// past the end for a frame at a time, then back.
 
 import AppKit
 
 /// A scroll view that doesn't bounce past its content's edges.
 final class UnbouncedScrollView: NSScrollView {
+    override class var isCompatibleWithResponsiveScrolling: Bool {
+        false
+    }
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         contentView = EdgeClampingClipView(frame: contentView.frame)
