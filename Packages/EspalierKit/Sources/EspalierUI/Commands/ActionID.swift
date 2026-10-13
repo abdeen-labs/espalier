@@ -56,6 +56,7 @@ nonisolated public enum ActionID: Sendable {
     /// History from Changes and elsewhere, Changes from History (⇧⌃⇥).
     case showPreviousPlace
     case selectPlace(SidebarPlace)
+    case toggleSidebar
     case filterSidebar
     case search
     case toggleInspector
@@ -196,6 +197,7 @@ nonisolated public enum ActionID: Sendable {
         case .showNextPlace: .showNextPlace
         case .showPreviousPlace: .showPreviousPlace
         case .selectPlace: .selectPlace
+        case .toggleSidebar: .toggleSidebar
         case .filterSidebar: .filterSidebar
         case .search: .search
         case .toggleInspector: .toggleInspector
@@ -318,7 +320,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
     case about, installCommandLineTool, reportIssue, showKeyboardShortcuts, showLogsInFinder, openSettings
     case newRepository, addLocalRepository, cloneRepository, addRepositories
     case deleteSelection, copyPath
-    case showChanges, showHistory, showNextPlace, showPreviousPlace, selectPlace, filterSidebar, search, toggleInspector
+    case showChanges, showHistory, showNextPlace, showPreviousPlace, selectPlace, toggleSidebar, filterSidebar, search, toggleInspector
     case toggleSplitDiff, toggleHideWhitespace, toggleWrapLines, setImageDiffType, setHistoryScope
     case toggleStashedChanges, increaseCodeTextSize, decreaseCodeTextSize, resetCodeTextSize
     case goBack, goForward, goToCommit, goToFirstParent, goToSecondParent, goToChild
@@ -359,6 +361,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .showNextPlace: "Next Place"
         case .showPreviousPlace: "Previous Place"
         case .selectPlace: "Show Place"
+        case .toggleSidebar: "Show Sidebar"
         case .filterSidebar: "Filter Sidebar"
         case .search: "Search"
         case .toggleInspector: "Show Inspector"
@@ -477,6 +480,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .createPullRequest: MenuShortcut("r")
         case .previewPullRequest: MenuShortcut("p", [.command, .option])
         case .stashAllChanges: MenuShortcut("s", [.command, .shift])
+        case .toggleSidebar: MenuShortcut("s")
         case .toggleStashedChanges: MenuShortcut("h", [.control])
         case .discardAllChanges: MenuShortcut(.delete, [.command, .shift])
         case .openInEditor: MenuShortcut("a", [.command, .shift])
@@ -515,7 +519,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         switch self {
         case .about, .installCommandLineTool, .reportIssue, .showKeyboardShortcuts, .showLogsInFinder, .openSettings,
              .newRepository, .addLocalRepository, .cloneRepository, .addRepositories,
-             .switchRepository, .filterSidebar, .search, .toggleSplitDiff, .toggleHideWhitespace,
+             .switchRepository, .toggleSidebar, .filterSidebar, .search, .toggleSplitDiff, .toggleHideWhitespace,
              .toggleWrapLines, .setImageDiffType, .increaseCodeTextSize, .decreaseCodeTextSize,
              .resetCodeTextSize, .signIn, .runBenchmark, .checkMenuShortcuts:
             false

@@ -19,7 +19,6 @@ public struct EspalierCommands: Commands {
 
     public var body: some Commands {
         let target = MenuTarget(focused: focused, main: mainWindowContext())
-        SidebarCommands()
         InspectorCommands()
         ToolbarCommands()
         TextEditingCommands()

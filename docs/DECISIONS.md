@@ -394,6 +394,8 @@ infrastructure. Each is recorded here with its purpose and license.
   Find Next and Previous, Go to Commit Message is ⌘J, View on GitHub ⌥⇧⌘G,
   Copy Path ⌥⌘C, and ⌘⌫ deletes the selection. ⌘P and ⇧⌘P stay Push and
   Pull, since Espalier doesn't print.
+- **⌘S shows and hides the sidebar,** in place of the system's ⌃⌘S;
+  Espalier has nothing to save.
 - **The working copy is always the graph's top node,** even with no
   changes, so rows stay stable as the tree goes from clean to dirty.
 - **The AI sparkle shows before any provider is set up** (it opens setup),

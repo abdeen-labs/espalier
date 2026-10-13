@@ -1,6 +1,6 @@
 // The actions the shell itself handles: navigation, the location control's
-// popovers, search and filter focus, the inspector, the sync button's fetch,
-// pull, and push, Settings, About, and Help.
+// popovers, the sidebar, search and filter focus, the inspector, the sync
+// button's fetch, pull, and push, Settings, About, and Help.
 
 import AppKit
 import EspalierCore
@@ -88,6 +88,16 @@ enum ShellActions {
         actions.register(.reviewChanges) { [weak context] _ in
             context?.select(.changes)
             context?.state.requestCommitMessageFocus()
+        }
+        actions.register(.toggleSidebar) { [weak context] _ in
+            guard let state = context?.state else {
+                return
+            }
+            let visibility: NavigationSplitViewVisibility = state.isSidebarHidden ? .all : .detailOnly
+            let animates = Motion.allows(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, isSuppressed: false)
+            withAnimation(animates ? Motion.animation(Motion.arrive) : nil) {
+                state.columnVisibility = visibility
+            }
         }
         actions.register(.filterSidebar) { [weak context] _ in
             context?.state.columnVisibility = .all

@@ -28,7 +28,6 @@ nonisolated struct ShortcutListing: Sendable, Identifiable {
             ShortcutListing(menu: "Edit", title: "Find…", symbols: "⌘F"),
             ShortcutListing(menu: "Edit", title: "Find Next", symbols: "⌘G"),
             ShortcutListing(menu: "Edit", title: "Find Previous", symbols: "⇧⌘G"),
-            ShortcutListing(menu: "View", title: "Show Sidebar", symbols: "⌃⌘S"),
             ShortcutListing(menu: "View", title: "Enter Full Screen", symbols: "⌃⌘F"),
             ShortcutListing(menu: "Espalier", title: "Settings…", symbols: "⌘,"),
             ShortcutListing(menu: "Lists", title: "Show Context Menu", symbols: "⇧F10"),

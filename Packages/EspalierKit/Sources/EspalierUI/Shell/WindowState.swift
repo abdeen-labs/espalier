@@ -59,6 +59,9 @@ public final class WindowState {
     public var place: SidebarPlace?
     /// Whether the sidebar shows (`.detailOnly` hidden).
     public var columnVisibility: NavigationSplitViewVisibility = .all
+    public var isSidebarHidden: Bool {
+        columnVisibility == .detailOnly
+    }
     /// Whether Commit Info shows (History-like places only).
     public var isInspectorPresented = false
     /// The toolbar search field's text: filters the list being shown.

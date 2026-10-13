@@ -94,6 +94,8 @@ struct CommandAvailability {
         case .squash(let shas, _):
             let count = shas?.count ?? context.repository?.history.selection.shas.count ?? 0
             return count > 1 ? "Squash \(count) Commits…" : "Squash Commits…"
+        case .toggleSidebar:
+            return context.state.isSidebarHidden ? "Show Sidebar" : "Hide Sidebar"
         case .toggleInspector:
             return context.state.isInspectorPresented ? "Hide Inspector" : "Show Inspector"
         default:

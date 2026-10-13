@@ -65,8 +65,9 @@ nonisolated public enum MenuCatalog {
         .item(.showPreviousPlace),
     ])
 
-    /// After the system's sidebar and inspector items.
+    /// After the system's inspector items.
     public static let view = MenuDefinition(title: "View", entries: [
+        .item(.toggleSidebar),
         .item(.filterSidebar),
         .item(.search),
         .separator,
