@@ -796,8 +796,10 @@ private struct SidebarHeaderButtonBody<Label: View>: View {
     /// Whether the button has keyboard focus.
     @Environment(\.isFocused) private var isFocused
     @Environment(\.isInSidebarSectionHeader) private var isInSidebarSectionHeader
+    @Environment(\.isMenuOpen) private var isMenuOpen
 
     var body: some View {
+        let isPressed = self.isPressed || isMenuOpen
         label
             .font(Typography.subheadline.weight(.semibold))
             .foregroundStyle(isInSidebarSectionHeader ? Color.sidebarText3 : Color.text3)

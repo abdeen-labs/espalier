@@ -56,7 +56,7 @@ public struct MenuRequest {
     /// Closes the popover the menu opened in, for items that close it
     /// before they act.
     public var closePopover: ClosePopoverAction?
-    /// Runs once when the menu closes.
+    /// Runs once when the menu closes, or at once when it doesn't open.
     public var onClose: (() -> Void)?
 
     public init(

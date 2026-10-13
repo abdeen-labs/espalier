@@ -63,11 +63,9 @@ final class MenuSession {
     @discardableResult
     static func open(_ request: MenuRequest) -> MenuSession? {
         current?.close(animated: false)
-        guard let view = request.view, view.window != nil else {
-            return nil
-        }
         let content = request.content.tidied
-        guard !content.isEmpty else {
+        guard let view = request.view, view.window != nil, !content.isEmpty else {
+            request.onClose?()
             return nil
         }
         let session = MenuSession(request: request)

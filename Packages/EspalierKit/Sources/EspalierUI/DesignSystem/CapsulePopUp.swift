@@ -72,6 +72,7 @@ private struct FieldCapsuleButtonBody<Label: View>: View {
     @Environment(\.isEnabled) private var isEnabled
     /// Whether the button has keyboard focus.
     @Environment(\.isFocused) private var isFocused
+    @Environment(\.isMenuOpen) private var isMenuOpen
     @State private var isHovered = false
 
     var body: some View {
@@ -84,7 +85,7 @@ private struct FieldCapsuleButtonBody<Label: View>: View {
             .background(Capsule(style: .circular).fill(.field))
             .overlay(
                 Capsule(style: .circular).fill(overlay)
-                    .pressMotion(isPressed)
+                    .pressMotion(isPressed || isMenuOpen)
                     .hoverMotion(isHovered)
                     .allowsHitTesting(false)
             )
@@ -100,7 +101,7 @@ private struct FieldCapsuleButtonBody<Label: View>: View {
         guard isEnabled else {
             return .clear
         }
-        if isPressed {
+        if isPressed || isMenuOpen {
             return Color(nsColor: Palette.hover).opacity(2)
         }
         return isHovered ? Color(nsColor: Palette.hover) : .clear

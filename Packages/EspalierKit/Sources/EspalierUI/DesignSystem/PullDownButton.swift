@@ -6,7 +6,8 @@
 // their leading edges aligned; releasing over an item chooses it, and
 // releasing in place leaves the menu open for a click. Space or Return on
 // the focused button, or VoiceOver's press, opens it with the first item
-// highlighted. VoiceOver sees the button as a menu button (a pop-up
+// highlighted. The button looks pressed while its menu is open
+// (`isMenuOpen`). VoiceOver sees the button as a menu button (a pop-up
 // button for a pop-up) with its label and value, through the AppKit view
 // behind it, where the menu opens.
 
@@ -60,13 +61,16 @@ struct MenuOpeningButton<Label: View>: View {
     /// The view the menu opens below, when it isn't the button (a split
     /// button's whole capsule).
     var placementView: WeakView<NSView>?
+    /// Told when the menu opens and closes (a split button draws its
+    /// chevron's state itself).
+    var onOpenChange: (Bool) -> Void = { _ in }
     let menu: () -> MenuContent
     @ViewBuilder let label: () -> Label
     @Environment(\.menuPresenter) private var presenter
     @Environment(\.closeEnclosingPopover) private var closePopover
     @Environment(\.isEnabled) private var isEnabled
     @State private var anchor = WeakView<MenuButtonAnchorView>()
-    @State private var isPressing = false
+    @State private var isOpen = false
 
     var body: some View {
         Button {
@@ -79,17 +83,14 @@ struct MenuOpeningButton<Label: View>: View {
         } label: {
             label()
         }
+        .environment(\.isMenuOpen, isOpen)
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .onChanged { _ in
-                    guard !isPressing else {
+                    guard !isOpen else {
                         return
                     }
-                    isPressing = true
                     open(.press)
-                }
-                .onEnded { _ in
-                    isPressing = false
                 }
         )
         .accessibilityHidden(true)
@@ -112,6 +113,7 @@ struct MenuOpeningButton<Label: View>: View {
             return
         }
         let view = placementView?.view ?? button
+        setOpen(true)
         presenter.present(MenuRequest(
             content: menu(),
             view: view,
@@ -119,9 +121,23 @@ struct MenuOpeningButton<Label: View>: View {
             minimumWidth: kind == .popUp ? view.bounds.width : 0,
             trigger: trigger,
             label: accessibilityLabel,
-            closePopover: closePopover
+            closePopover: closePopover,
+            onClose: { [self] in
+                setOpen(false)
+            }
         ))
     }
+
+    private func setOpen(_ isOpen: Bool) {
+        self.isOpen = isOpen
+        onOpenChange(isOpen)
+    }
+}
+
+extension EnvironmentValues {
+    /// Whether the menu of the button being drawn is open: menu buttons'
+    /// styles draw it pressed while it is.
+    @Entry var isMenuOpen = false
 }
 
 /// The AppKit view behind a menu's button: VoiceOver's menu button or

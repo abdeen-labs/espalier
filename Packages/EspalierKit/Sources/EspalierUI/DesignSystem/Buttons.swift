@@ -140,9 +140,11 @@ struct CapsuleButtonBody<Label: View>: View {
     /// Whether the button has keyboard focus.
     @Environment(\.isFocused) private var isFocused
     @Environment(\.isInPaneCard) private var isInPaneCard
+    @Environment(\.isMenuOpen) private var isMenuOpen
     @State private var isHovered = false
 
     var body: some View {
+        let isPressed = self.isPressed || isMenuOpen
         let appearance = CapsuleButtonAppearance(
             kind: kind,
             controlSize: controlSize,
@@ -219,6 +221,7 @@ public struct SplitCapsuleButton<Label: View>: View {
     @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
     @State private var isChevronHovered = false
+    @State private var isMenuOpen = false
     @FocusState private var focusedPart: Part?
     /// The whole capsule, which the menu opens below.
     @State private var capsule = WeakView<NSView>()
@@ -266,7 +269,7 @@ public struct SplitCapsuleButton<Label: View>: View {
                 .frame(width: 1, height: 16)
                 .accessibilityHidden(true)
 
-            MenuOpeningButton(kind: .pullDown, accessibilityLabel: menuLabel, placementView: capsule, menu: menu) {
+            MenuOpeningButton(kind: .pullDown, accessibilityLabel: menuLabel, placementView: capsule, onOpenChange: { isMenuOpen = $0 }, menu: menu) {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(kind == .prominent ? Color.prominentText : .text3)
@@ -298,9 +301,10 @@ public struct SplitCapsuleButton<Label: View>: View {
                 .allowsHitTesting(false)
         )
         .overlay(
-            Capsule(style: .circular).fill(CapsuleButtonAppearance(kind: kind, controlSize: controlSize, isHovered: isChevronHovered, isEnabled: isEnabled).stateOverlay)
+            Capsule(style: .circular).fill(CapsuleButtonAppearance(kind: kind, controlSize: controlSize, isPressed: isMenuOpen, isHovered: isChevronHovered, isEnabled: isEnabled).stateOverlay)
                 .allowsHitTesting(false)
-                .opacity(isHovered ? 0 : 1)
+                .opacity(isHovered && !isMenuOpen ? 0 : 1)
+                .pressMotion(isMenuOpen)
                 .hoverMotion(isChevronHovered)
         )
         .opacity(appearance.opacity)
@@ -367,9 +371,11 @@ private struct IconButtonBody<Label: View>: View {
     @Environment(\.isEnabled) private var isEnabled
     /// Whether the button has keyboard focus.
     @Environment(\.isFocused) private var isFocused
+    @Environment(\.isMenuOpen) private var isMenuOpen
     @State private var isHovered = false
 
     var body: some View {
+        let isPressed = self.isPressed || isMenuOpen
         let shape = RoundedRectangle(cornerRadius: size == .regular ? 7 : Metrics.Radius.small, style: .continuous)
         sized(label.labelStyle(.iconOnly))
             .foregroundStyle(.text2)
