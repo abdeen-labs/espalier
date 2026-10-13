@@ -1,8 +1,9 @@
-// The design themes and fonts: every theme's colors read (text 4.5:1 on
-// the background and the sidebar, secondary text 4.5:1, the prominent
-// fill's text 4.5:1, the accent 3:1 as a mark, the marks on the accent, the
-// sidebar's selection text 4.5:1 on its selection, monograms' white
-// initials 3:1), each app font and code font is its bundled family at the
+// The design themes and fonts: every theme's colors read in every
+// background tint (text 4.5:1 on the background and the sidebar, secondary
+// text 4.5:1, the prominent fill's text 4.5:1, the accent 3:1 as a mark, the
+// marks on the accent, the sidebar's selection text 4.5:1 on its selection,
+// monograms' white initials 3:1), a tint keeps the surfaces' luminance and
+// leaves washes alone, each app font and code font is its bundled family at the
 // weights asked for, whatever the other is, a task's look leaves the
 // process's alone, and the look follows Settings.
 
@@ -13,19 +14,29 @@ import Testing
 import TestSupport
 @testable import EspalierUI
 
-/// A theme in one of its colors, in one appearance.
+/// A theme in one of its colors and background tints, in one appearance.
 struct ThemeVariant: Sendable {
     let theme: DesignTheme
     let color: DesignThemeColor?
+    let background: BackgroundTint
     let variant: AppearanceVariant
 
-    /// Every theme in every color, in every appearance.
+    /// Every theme in every color and background tint, in every appearance.
     static let all: [NamedCase<ThemeVariant>] = DesignTheme.allCases.flatMap { theme in
         (theme.colors.isEmpty ? [nil] : theme.colors.map(Optional.some)).flatMap { color in
-            AppearanceVariant.allCases.map { variant in
-                NamedCase("\(theme.rawValue) \(color?.rawValue ?? "accent") \(variant.rawValue)", ThemeVariant(theme: theme, color: color, variant: variant))
+            BackgroundTint.allCases.flatMap { background in
+                AppearanceVariant.allCases.map { variant in
+                    NamedCase(
+                        "\(theme.rawValue) \(color?.rawValue ?? "accent") \(background.rawValue) \(variant.rawValue)",
+                        ThemeVariant(theme: theme, color: color, background: background, variant: variant)
+                    )
+                }
             }
         }
+    }
+
+    var themeValue: Theme {
+        Theme.named(theme, color: color, background: background)
     }
 }
 
@@ -34,7 +45,7 @@ struct DesignThemeTests {
     @Test("text, secondary text, the prominent fill's text, the accent, and the marks on it reach their contrast", arguments: ThemeVariant.all)
     func contrast(_ testCase: NamedCase<ThemeVariant>) {
         let value = testCase.value
-        let theme = Theme.named(value.theme, color: value.color)
+        let theme = value.themeValue
         let variant = value.variant
         for surface in [theme.background, theme.sidebar] {
             #expect(ContrastCheck.ratio(theme.text, against: surface, in: variant) >= 4.5, "text")
@@ -60,13 +71,51 @@ struct DesignThemeTests {
     @Test("the sidebar's selected item's text, which its counts take too, reaches 4.5:1 on the selection", arguments: ThemeVariant.all)
     func sidebarSelectionContrast(_ testCase: NamedCase<ThemeVariant>) {
         let value = testCase.value
-        let theme = Theme.named(value.theme, color: value.color)
+        let theme = value.themeValue
         guard let text = theme.sidebarSelectionText else {
             return
         }
         let variant = value.variant
         let selection = ColorContrast.composite(theme.sidebarSelection.resolved(in: variant), over: theme.sidebar.resolved(in: variant))
         #expect(ContrastCheck.ratio(text, against: selection, in: variant) >= 4.5)
+    }
+
+    @Test("a background tint keeps each surface's luminance (near white, as much as its hue allows), and leaves washes and Pop's sidebar alone", arguments: DesignTheme.allCases)
+    func backgroundTints(_ theme: DesignTheme) {
+        let own = Theme.named(theme)
+        for tint in BackgroundTint.allCases where tint != .own {
+            let tinted = Theme.named(theme, background: tint)
+            #expect(tinted.tint == tint)
+            for variant in [AppearanceVariant.light, .dark] {
+                var surfaces = [
+                    ("background", tinted.background, own.background), ("field", tinted.field, own.field),
+                    ("line", tinted.line, own.line), ("line2", tinted.line2, own.line2),
+                ]
+                if theme == .pop {
+                    // Pop's sidebar keeps its accent.
+                    #expect(tinted.sidebar.resolved(in: variant) == own.sidebar.resolved(in: variant), "\(tint) \(variant)")
+                } else {
+                    surfaces.append(("sidebar", tinted.sidebar, own.sidebar))
+                }
+                for (name, surface, ownSurface) in surfaces {
+                    let color = surface.resolved(in: variant)
+                    let ownColor = ownSurface.resolved(in: variant)
+                    let luminance = ColorContrast.luminance(color)
+                    let ownLuminance = ColorContrast.luminance(ownColor)
+                    let channels = [color.redComponent, color.greenComponent, color.blueComponent]
+                    let spread = channels.max()! - channels.min()!
+                    // Kept; or, near white, too light to carry the hue: as
+                    // light as the hue allows.
+                    let isKept = abs(luminance - ownLuminance) < 0.0005
+                    #expect(isKept || (luminance < ownLuminance && luminance > 0.93), "\(tint) \(name) \(variant)")
+                    #expect(tint == .neutral ? spread < 0.002 : spread > 0.005, "\(tint) \(name) \(variant)")
+                }
+                // Classic's sidebar selection is a translucent wash.
+                if theme == .classic {
+                    #expect(tinted.sidebarSelection.resolved(in: variant) == own.sidebarSelection.resolved(in: variant))
+                }
+            }
+        }
     }
 
     @Test("a theme's monograms keep white initials at 3:1, whatever the person's hue")
@@ -191,7 +240,7 @@ struct DesignThemeTests {
         #expect(Theme.named(.pop, color: .magenta) === Theme.named(.pop, color: .magenta))
     }
 
-    @Test("the look follows the theme, color, app font, and code font chosen in Settings", .hangGuard(minutes: 5))
+    @Test("the look follows the theme, color, background tint, app font, and code font chosen in Settings", .hangGuard(minutes: 5))
     func applier() async throws {
         let temporary = try TemporaryDefaults()
         defer { temporary.remove() }
@@ -206,9 +255,10 @@ struct DesignThemeTests {
         #expect(center.look == Look(theme: .islands, color: .lagoon))
 
         preferences.designThemeColor = .berry
+        preferences.designThemeBackground = .rose
         preferences.appFont = .fixel
         preferences.codeFont = .geistMono
-        await waitUntil { applier.look == Look(theme: .islands, color: .berry, appFont: .fixel, codeFont: .geistMono) }
+        await waitUntil { applier.look == Look(theme: .islands, color: .berry, background: .rose, appFont: .fixel, codeFont: .geistMono) }
         #expect(center.look == applier.look)
         withExtendedLifetime(applier) {}
     }
@@ -219,9 +269,10 @@ struct DesignThemeTests {
         defer { temporary.remove() }
         temporary.defaults.set("pop", forKey: PreferenceKey.designTheme)
         temporary.defaults.set("magenta", forKey: PreferenceKey.designThemeColor(.pop))
+        temporary.defaults.set("sage", forKey: PreferenceKey.designThemeBackground(.pop))
         temporary.defaults.set("martian", forKey: PreferenceKey.appFont)
         temporary.defaults.set("atkinsonmono", forKey: PreferenceKey.codeFont)
-        #expect(Look.stored(in: PreferenceStore(temporary.defaults)) == Look(theme: .pop, color: .magenta, appFont: .martian, codeFont: .atkinsonMono))
+        #expect(Look.stored(in: PreferenceStore(temporary.defaults)) == Look(theme: .pop, color: .magenta, background: .sage, appFont: .martian, codeFont: .atkinsonMono))
 
         temporary.defaults.set("sepia", forKey: PreferenceKey.designTheme)
         temporary.defaults.set("comic", forKey: PreferenceKey.appFont)

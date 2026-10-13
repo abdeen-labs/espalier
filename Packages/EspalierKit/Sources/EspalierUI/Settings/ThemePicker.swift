@@ -1,10 +1,11 @@
-// Settings ▸ Appearance's theme and color pickers, Espalier's own controls.
-// The theme is four cards, each a small preview drawn in its theme's
-// colors (the sidebar with its selection, a selected row, the prominent
-// capsule) with the theme's name under it; the chosen card has the
-// focus-ring-style accent ring. A theme's colors are round swatches, the
-// chosen one ringed. Each picker is one stop in the key view loop: the left
-// and right arrows move the choice, and VoiceOver sees a radio group.
+// Settings ▸ Appearance's theme, color, and background pickers, Espalier's
+// own controls. The theme is four cards, each a small preview drawn in its
+// theme's colors and background (the sidebar with its selection, a selected
+// row, the prominent capsule) with the theme's name under it; the chosen
+// card has the focus-ring-style accent ring. A theme's colors and its
+// background tints are round swatches, the chosen one ringed. Each picker
+// is one stop in the key view loop: the left and right arrows move the
+// choice, and VoiceOver sees a radio group.
 
 import EspalierCore
 import SwiftUI
@@ -28,8 +29,31 @@ extension DesignThemeColor {
     }
 }
 
+extension BackgroundTint {
+    /// The tint's name in Settings.
+    var title: String {
+        switch self {
+        case .own: "Default"
+        case .neutral: "Neutral"
+        case .warm: "Warm"
+        case .cool: "Cool"
+        case .sage: "Sage"
+        case .rose: "Rose"
+        case .lavender: "Lavender"
+        }
+    }
+}
+
+extension Theme {
+    /// The background swatch: the field fill as light draws it, its tint
+    /// three times as strong, so tints this faint tell apart.
+    var backgroundSwatch: NSColor {
+        OKLCH.saturated(field.resolved(in: .light), by: 3)
+    }
+}
+
 extension Metrics {
-    /// The theme and color pickers.
+    /// The theme, color, and background pickers.
     public enum ThemePicker {
         /// Between the cards, and between the swatches.
         public static let cardSpacing: CGFloat = 12
@@ -47,8 +71,9 @@ extension Metrics {
 /// The four themes as cards.
 struct ThemeCardPicker: View {
     @Binding var selection: DesignTheme
-    /// Each theme's color, for its card.
+    /// Each theme's color and background tint, for its card.
     let colors: [DesignTheme: DesignThemeColor]
+    let backgrounds: [DesignTheme: BackgroundTint]
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -80,7 +105,7 @@ struct ThemeCardPicker: View {
         let isSelected = theme == selection
         let shape = RoundedRectangle(cornerRadius: Metrics.ThemePicker.previewRadius, style: .continuous)
         return VStack(spacing: Metrics.ThemePicker.nameSpacing) {
-            ThemePreview(theme: Theme.named(theme, color: colors[theme]))
+            ThemePreview(theme: Theme.named(theme, color: colors[theme], background: backgrounds[theme] ?? .own))
                 .frame(height: Metrics.ThemePicker.previewHeight)
                 .clipShape(shape)
                 .overlay(shape.strokeBorder(.line, lineWidth: 1))
@@ -208,16 +233,28 @@ struct ThemePreview: View {
     }
 }
 
-/// A theme's colors as round swatches, the chosen one ringed.
-struct ThemeColorPicker: View {
-    let theme: DesignTheme
-    @Binding var selection: DesignThemeColor
+/// Choices as round swatches, the chosen one ringed: a theme's colors, or
+/// its background tints.
+struct SwatchPicker<Value: Hashable>: View {
+    private let label: String
+    private let values: [Value]
+    @Binding private var selection: Value
+    private let title: (Value) -> String
+    private let fill: (Value) -> NSColor
     @FocusState private var isFocused: Bool
+
+    init(_ label: String, values: [Value], selection: Binding<Value>, title: @escaping (Value) -> String, fill: @escaping (Value) -> NSColor) {
+        self.label = label
+        self.values = values
+        _selection = selection
+        self.title = title
+        self.fill = fill
+    }
 
     var body: some View {
         HStack(spacing: Metrics.ThemePicker.swatchSpacing) {
-            ForEach(theme.colors, id: \.self) { color in
-                swatch(color)
+            ForEach(values, id: \.self) { value in
+                swatch(value)
             }
         }
         .padding(Metrics.FocusRing.outset)
@@ -231,19 +268,19 @@ struct ThemeColorPicker: View {
             move(by: 1)
         }
         .accessibilityRepresentation {
-            Picker("Color", selection: $selection) {
-                ForEach(theme.colors, id: \.self) { color in
-                    Text(color.title).tag(color)
+            Picker(label, selection: $selection) {
+                ForEach(values, id: \.self) { value in
+                    Text(title(value)).tag(value)
                 }
             }
             .pickerStyle(.radioGroup)
         }
     }
 
-    private func swatch(_ color: DesignThemeColor) -> some View {
-        let isSelected = color == selection
+    private func swatch(_ value: Value) -> some View {
+        let isSelected = value == selection
         return Circle()
-            .fill(Color(nsColor: Theme.named(theme, color: color).accent))
+            .fill(Color(nsColor: fill(value)))
             .overlay(Circle().strokeBorder(.line, lineWidth: 1))
             .frame(width: Metrics.ThemePicker.swatchSize, height: Metrics.ThemePicker.swatchSize)
             .overlay {
@@ -258,18 +295,18 @@ struct ThemeColorPicker: View {
             }
             .contentShape(Circle())
             .onTapGesture {
-                selection = color
+                selection = value
             }
-            .tooltip(color.title)
+            .tooltip(title(value))
     }
 
     private func move(by offset: Int) -> KeyPress.Result {
-        guard let index = theme.colors.firstIndex(of: selection) else {
+        guard let index = values.firstIndex(of: selection) else {
             return .ignored
         }
         let next = index + offset
-        if theme.colors.indices.contains(next) {
-            selection = theme.colors[next]
+        if values.indices.contains(next) {
+            selection = values[next]
         }
         return .handled
     }

@@ -60,8 +60,20 @@ reason.
   theme's own (Orchard: Plum, Clay, Ink, the default, Teal, Espresso;
   Islands: Berry, Lagoon, the default, Indigo; Pop: Tangerine, the
   default, Electric, Magenta), each theme with its own colors. Classic
-  follows the Mac's accent color. Theme, color, app font, and code font
-  are separate picks, and a theme keeps its color when another is chosen.
+  follows the Mac's accent color. Theme, color, background tint, app
+  font, and code font are separate picks, and a theme keeps its color and
+  its tint when another is chosen.
+- **The background tint is a setting** (my call): Settings ▸ Appearance's
+  Background swatches pick the theme's own backgrounds (Default), Neutral,
+  Warm, Cool, Sage, Rose, or Lavender. A tint re-hues the opaque surfaces
+  (panes, sidebar, fields, hunk headers, lines, cards, control fills) at
+  each one's own luminance, so text keeps its contrast; a surface too near
+  white for the hue is as light as the hue allows. Its chroma grows with a
+  surface's depth, as the themes' own tints do. Washes, text, the accent,
+  status colors, and Pop's accent-tinted sidebar (my call) stay the
+  theme's. A swatch is the theme's light field fill in that tint, its
+  chroma tripled, since the tints are too faint to tell apart at swatch
+  size.
 - **The app font and the code font are two settings** (my call), picked
   apart from each other and from the theme, any app font with any code
   font. The app font is all the interface's text: SF Pro (the default),
@@ -85,8 +97,9 @@ reason.
 - **Key caps stay SF Pro** whatever the app font: the other faces lack
   the keys' symbols. Bundled faces fall back on the system font's cascade
   list, so a missing glyph takes SF's line height.
-- **A change of theme, color, or fonts applies at once** to every open
-  window; menus, popovers, and tooltips take it when they next open.
+- **A change of theme, color, background tint, or fonts applies at
+  once** to every open window; menus, popovers, and tooltips take it when
+  they next open.
 - **Classic's dark prominent fill is the accent itself:** white on the
   default blue is 3.65:1, under the 4.5:1 every other theme's prominent
   fill reaches.
@@ -746,8 +759,9 @@ immediately; importing desktop's repository list and settings (my call).
 
 - **Code text size** (`diff-code-text-size`) steps through desktop's zoom
   factors; `diff-wrap-lines` and `ai-features-enabled` default to on.
-- **The design theme, its color, the app font, and the code font** are
-  Espalier's own settings (`design-theme`, one `design-theme-color-<theme>`
+- **The design theme, its color and background tint, the app font, and
+  the code font** are Espalier's own settings (`design-theme`, one
+  `design-theme-color-<theme>` and one `design-theme-background-<theme>`
   per theme, `app-font`, `code-font`); an unknown value, or another
   theme's color, reads as the default.
 - **The appearance** is Settings ▸ Appearance's System, Light, or Dark (`theme`,

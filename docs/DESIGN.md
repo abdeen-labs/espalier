@@ -106,8 +106,9 @@ other themes change what their tokens say (Themes, below).
 ## Themes, colors, and fonts
 
 Settings ▸ Appearance picks a theme (Classic, Orchard, Islands, Pop), the
-theme's color, the appearance, the app font, and the code font, each apart
-from the others. Views use the tokens, which read the current look.
+theme's color, its background tint, the appearance, the app font, and the
+code font, each apart from the others. Views use the tokens, which read the
+current look.
 
 - **Orchard** is warm and crafted: paper and stone instead of gray, flat
   stone pills, a raised card for the sidebar's selection, and orchard
@@ -116,6 +117,10 @@ from the others. Views use the tokens, which read the current look.
   backdrop (the floating layout), with soft pills and bold titles.
 - **Pop** is bright and confident: a sidebar tinted with the accent, a bar
   beside the selected row, and saturated color in solid shapes.
+- **A background tint** (Neutral, Warm, Cool, Sage, Rose, Lavender) gives
+  any theme's surfaces its hue in place of the theme's own, faint on white
+  and stronger toward gray, each surface as light as before. Pop's sidebar
+  keeps its accent.
 
 ## Motion
 

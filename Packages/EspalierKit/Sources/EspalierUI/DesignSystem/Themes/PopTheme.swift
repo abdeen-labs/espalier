@@ -18,6 +18,7 @@ nonisolated extension ThemeDefinition {
             color: palette.color,
             background: ThemeColor.surface(0xFFFFFF, 0x16161C),
             sidebar: palette.sidebar,
+            sidebarTakesTint: false,
             field: ThemeColor.fill(0xF1F1F5, 0x23232B),
             hunk: ThemeColor.surface(0xF5F5F9, 0x1C1C23),
             hover: ThemeColor.wash(.hex(0x141428), 0.045, .white, 0.05),

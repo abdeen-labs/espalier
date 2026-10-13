@@ -1,9 +1,9 @@
-// The look Espalier draws in: the design theme, its color, the app font,
-// and the code font, each picked in Settings ▸ Appearance apart from the
-// others (and
-// from the appearance, System, Light, or Dark). One look is current for
-// the process (`LookCenter`); reading it in a SwiftUI body makes the view
-// draw again when it changes, and `LookApplier` tells the AppKit views.
+// The look Espalier draws in: the design theme, its color, its background
+// tint, the app font, and the code font, each picked in Settings ▸
+// Appearance apart from the others (and from the appearance, System, Light,
+// or Dark). One look is current for the process (`LookCenter`); reading it
+// in a SwiftUI body makes the view draw again when it changes, and
+// `LookApplier` tells the AppKit views.
 // A task can draw in a look of its own (`Look.with(_:operation:)`) without
 // touching the process's.
 
@@ -12,25 +12,30 @@ import Foundation
 import Observation
 import Synchronization
 
-/// The design theme, its color, the app font, and the code font.
+/// The design theme, its color, its background tint, the app font, and the
+/// code font.
 nonisolated public struct Look: Sendable, Hashable {
     public var theme: DesignTheme
     /// The theme's color; nil for Classic.
     public var color: DesignThemeColor?
+    /// The tint of the theme's backgrounds.
+    public var background: BackgroundTint
     /// The interface's text.
     public var appFont: AppFont
     /// What's drawn monospaced.
     public var codeFont: CodeFont
 
     /// A look; a color that isn't the theme's is the theme's default.
-    public init(theme: DesignTheme = .classic, color: DesignThemeColor? = nil, appFont: AppFont = .sf, codeFont: CodeFont = .sfMono) {
+    public init(theme: DesignTheme = .classic, color: DesignThemeColor? = nil, background: BackgroundTint = .own, appFont: AppFont = .sf, codeFont: CodeFont = .sfMono) {
         self.theme = theme
         self.color = color.flatMap { theme.colors.contains($0) ? $0 : nil } ?? theme.defaultColor
+        self.background = background
         self.appFont = appFont
         self.codeFont = codeFont
     }
 
-    /// Classic in SF Pro and SF Mono: the look before themes.
+    /// Classic, its own backgrounds, in SF Pro and SF Mono: the look before
+    /// themes.
     public static let classic = Look()
 
     /// The look the current task draws in: its own (`with(_:operation:)`),

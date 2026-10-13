@@ -1,9 +1,10 @@
 // Settings ▸ Appearance: the theme (Classic, Orchard, Islands, Pop), its
-// color (Classic's is the Mac's accent color), the appearance (System,
-// Light, Dark), and the app font; code (the code font, its text size, the
-// diff's tab size), dates and numbers, accessibility, and the sidebar. Each
-// font's name in its pop-up is drawn in that font. The code text size
-// steps through the same sizes as View ▸ Bigger (⌘=) and Smaller (⌘−).
+// color (Classic's is the Mac's accent color), its background tint, the
+// appearance (System, Light, Dark), and the app font; code (the code font,
+// its text size, the diff's tab size), dates and numbers, accessibility, and
+// the sidebar. Each font's name in its pop-up is drawn in that font. The
+// code text size steps through the same sizes as View ▸ Bigger (⌘=) and
+// Smaller (⌘−).
 
 import EspalierCore
 import GitKit
@@ -67,9 +68,9 @@ enum AppearanceSettings {
     }
 }
 
-/// The Appearance pane: the theme, its color, the appearance, and the app
-/// font; code (its font, text size, and tab size), dates and numbers,
-/// accessibility, and the sidebar.
+/// The Appearance pane: the theme, its color and background tint, the
+/// appearance, and the app font; code (its font, text size, and tab size),
+/// dates and numbers, accessibility, and the sidebar.
 struct AppearanceForm: View {
     @Bindable var preferences: Preferences
     let openAppearanceSettings: () -> Void
@@ -80,8 +81,12 @@ struct AppearanceForm: View {
                 SettingsRow("Theme") {
                     EmptyView()
                 } footer: {
-                    ThemeCardPicker(selection: $preferences.designTheme, colors: preferences.designThemeColors)
-                        .padding(.vertical, Metrics.FocusRing.outset)
+                    ThemeCardPicker(
+                        selection: $preferences.designTheme,
+                        colors: preferences.designThemeColors,
+                        backgrounds: preferences.designThemeBackgrounds
+                    )
+                    .padding(.vertical, Metrics.FocusRing.outset)
                 }
                 if preferences.designTheme == .classic {
                     SettingsRow("Color", description: "Espalier follows your Mac's accent color.") {
@@ -90,7 +95,14 @@ struct AppearanceForm: View {
                     }
                 } else {
                     SettingsRow("Color", description: preferences.designThemeColor?.title) {
-                        ThemeColorPicker(theme: preferences.designTheme, selection: designThemeColor)
+                        SwatchPicker("Color", values: preferences.designTheme.colors, selection: designThemeColor, title: \.title) { color in
+                            Theme.named(preferences.designTheme, color: color).accent
+                        }
+                    }
+                }
+                SettingsRow("Background", description: preferences.designThemeBackground.title) {
+                    SwatchPicker("Background", values: BackgroundTint.allCases, selection: $preferences.designThemeBackground, title: \.title) { tint in
+                        Theme.named(preferences.designTheme, color: preferences.designThemeColor, background: tint).backgroundSwatch
                     }
                 }
                 SettingsRow("Appearance", labelsControl: true) {

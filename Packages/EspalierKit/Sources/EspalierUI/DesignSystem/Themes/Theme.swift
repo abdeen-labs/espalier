@@ -3,20 +3,23 @@
 // `TrackPalette`, `Typography`, and `Metrics` read the current theme
 // (`Theme.current`), so views never pick a theme themselves. Each theme is
 // defined in its own file (ClassicTheme.swift, OrchardTheme.swift,
-// IslandsTheme.swift, PopTheme.swift) from a `ThemeDefinition`; the colors
-// and marks derived from it (readable status colors, diff tints, branch
-// colors) are worked out once per theme and color.
+// IslandsTheme.swift, PopTheme.swift) from a `ThemeDefinition`, which a
+// background tint re-hues (BackgroundTints.swift); the colors and marks
+// derived from it (readable status colors, diff tints, branch colors) are
+// worked out once per theme, color, and tint.
 
 import AppKit
 import EspalierCore
 import Synchronization
 import SwiftUI
 
-/// Every token of one design theme in one of its colors.
+/// Every token of one design theme in one of its colors and background
+/// tints.
 nonisolated public final class Theme: Sendable {
-    /// The theme and color it's made of.
+    /// The theme, color, and background tint it's made of.
     public let theme: DesignTheme
     public let color: DesignThemeColor?
+    public let tint: BackgroundTint
 
     // MARK: Surfaces
 
@@ -180,6 +183,7 @@ nonisolated public final class Theme: Sendable {
     init(_ definition: ThemeDefinition) {
         theme = definition.theme
         color = definition.color
+        tint = definition.tint
         background = definition.background
         sidebar = definition.sidebar
         field = definition.field
@@ -325,18 +329,18 @@ nonisolated extension Theme {
     /// The theme the current look draws in.
     public static var current: Theme {
         let look = Look.current
-        return named(look.theme, color: look.color)
+        return named(look.theme, color: look.color, background: look.background)
     }
 
     /// `theme` in `color` (its default when nil or not one of its colors),
-    /// made once.
-    public static func named(_ theme: DesignTheme, color: DesignThemeColor? = nil) -> Theme {
+    /// its backgrounds in `background`, made once.
+    public static func named(_ theme: DesignTheme, color: DesignThemeColor? = nil, background: BackgroundTint = .own) -> Theme {
         let color = color.flatMap { theme.colors.contains($0) ? $0 : nil } ?? theme.defaultColor
-        let key = ThemeKey(theme: theme, color: color)
+        let key = ThemeKey(theme: theme, color: color, background: background)
         if let made = ThemeCache.themes.withLock({ $0[key] }) {
             return made
         }
-        let made = Theme(definition(theme, color: color))
+        let made = Theme(definition(theme, color: color).tinted(background))
         return ThemeCache.themes.withLock { themes in
             if let existing = themes[key] {
                 return existing
@@ -359,6 +363,7 @@ nonisolated extension Theme {
 nonisolated private struct ThemeKey: Hashable, Sendable {
     let theme: DesignTheme
     let color: DesignThemeColor?
+    let background: BackgroundTint
 }
 
 nonisolated private enum ThemeCache {
@@ -527,9 +532,14 @@ nonisolated public struct MonogramTone: Sendable, Equatable {
 nonisolated struct ThemeDefinition: Sendable {
     var theme: DesignTheme
     var color: DesignThemeColor?
+    /// Set by `tinted(_:)`.
+    var tint: BackgroundTint = .own
 
     var background: NSColor
     var sidebar: NSColor
+    /// Whether a background tint re-hues the sidebar; Pop's keeps its
+    /// accent.
+    var sidebarTakesTint = true
     var field: NSColor
     var hunk: NSColor
     var hover: NSColor

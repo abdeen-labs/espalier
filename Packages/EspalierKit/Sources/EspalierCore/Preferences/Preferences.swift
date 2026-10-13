@@ -42,6 +42,11 @@ public enum PreferenceKey {
     public static func designThemeColor(_ theme: DesignTheme) -> String {
         "design-theme-color-\(theme.rawValue)"
     }
+    /// The design theme's background tint, one key per theme
+    /// (`design-theme-background-orchard`), so each theme keeps its own.
+    public static func designThemeBackground(_ theme: DesignTheme) -> String {
+        "design-theme-background-\(theme.rawValue)"
+    }
     /// The app font (`AppFont`), Espalier's own.
     public static let appFont = "app-font"
     /// The code font (`CodeFont`), Espalier's own.
@@ -145,6 +150,14 @@ public enum DesignThemeColor: String, Sendable, Hashable, CaseIterable {
     case tangerine, electric, magenta
 }
 
+/// The tint of a design theme's backgrounds: its panes, sidebar, fields, and
+/// lines. The raw values are the ones stored.
+public enum BackgroundTint: String, Sendable, Hashable, CaseIterable {
+    /// The theme's own backgrounds.
+    case own
+    case neutral, warm, cool, sage, rose, lavender
+}
+
 /// The app font: every piece of the interface's text. The raw values are
 /// the ones stored.
 public enum AppFont: String, Sendable, Hashable, CaseIterable {
@@ -222,6 +235,7 @@ public final class Preferences {
         theme = Self.storedTheme(in: store)
         designTheme = Self.storedDesignTheme(in: store)
         designThemeColors = Self.storedDesignThemeColors(in: store)
+        designThemeBackgrounds = Self.storedDesignThemeBackgrounds(in: store)
         appFont = Self.storedAppFont(in: store)
         codeFont = Self.storedCodeFont(in: store)
         underlineLinks = store.getBoolean(PreferenceKey.underlineLinks, true)
@@ -452,6 +466,23 @@ public final class Preferences {
         }
     }
 
+    /// The background tint each design theme has, its own backgrounds
+    /// until the user picks another (`design-theme-background-<theme>`).
+    /// Only the themes whose tint changed are written.
+    public var designThemeBackgrounds: [DesignTheme: BackgroundTint] {
+        didSet {
+            for theme in DesignTheme.allCases where designThemeBackgrounds[theme] != oldValue[theme] {
+                store.setEnum(PreferenceKey.designThemeBackground(theme), designThemeBackgrounds[theme] ?? .own)
+            }
+        }
+    }
+
+    /// The current design theme's background tint.
+    public var designThemeBackground: BackgroundTint {
+        get { designThemeBackgrounds[designTheme] ?? .own }
+        set { designThemeBackgrounds[designTheme] = newValue }
+    }
+
     /// The app font (`app-font`; SF Pro by default).
     public var appFont: AppFont {
         didSet {
@@ -488,6 +519,14 @@ public final class Preferences {
             }
         }
         return colors
+    }
+
+    /// Each design theme's background tint stored in `store`: an unknown
+    /// one, or none, is the theme's own.
+    public static func storedDesignThemeBackgrounds(in store: PreferenceStore) -> [DesignTheme: BackgroundTint] {
+        Dictionary(uniqueKeysWithValues: DesignTheme.allCases.map { theme in
+            (theme, store.getEnum(PreferenceKey.designThemeBackground(theme), BackgroundTint.self) ?? .own)
+        })
     }
 
     /// The app font stored in `store`; an unknown one is SF Pro.

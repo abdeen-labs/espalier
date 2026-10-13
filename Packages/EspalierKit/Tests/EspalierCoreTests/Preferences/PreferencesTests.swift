@@ -162,13 +162,14 @@ struct PreferencesTests {
         }
     }
 
-    @Test("keeps the design theme, each theme's color, the app font, and the code font, and reads unknown ones as the defaults")
+    @Test("keeps the design theme, each theme's color and background tint, the app font, and the code font, and reads unknown ones as the defaults")
     func designTheme() throws {
         let temporary = try TemporaryDefaults()
         defer { temporary.remove() }
         let preferences = Preferences(store: PreferenceStore(temporary.defaults))
         #expect(preferences.designTheme == .classic)
         #expect(preferences.designThemeColor == nil)
+        #expect(preferences.designThemeBackground == .own)
         #expect(preferences.appFont == .sf)
         #expect(preferences.codeFont == .sfMono)
 
@@ -177,20 +178,29 @@ struct PreferencesTests {
         preferences.designThemeColor = .clay
         // A color of another theme isn't the theme's.
         preferences.designThemeColor = .berry
+        preferences.designThemeBackground = .warm
         preferences.designTheme = .pop
+        #expect(preferences.designThemeBackground == .own)
         preferences.designThemeColor = .magenta
+        preferences.designThemeBackground = .lavender
         preferences.appFont = .atkinson
         preferences.codeFont = .geistMono
-        #expect(storedKeys(temporary) == ["design-theme", "design-theme-color-orchard", "design-theme-color-pop", "app-font", "code-font"])
+        #expect(storedKeys(temporary) == [
+            "design-theme", "design-theme-color-orchard", "design-theme-color-pop",
+            "design-theme-background-orchard", "design-theme-background-pop", "app-font", "code-font",
+        ])
 
         // Switching back restores the theme's own color.
         let reloaded = Preferences(store: PreferenceStore(temporary.defaults))
         #expect(reloaded.designTheme == .pop)
         #expect(reloaded.designThemeColor == .magenta)
+        #expect(reloaded.designThemeBackground == .lavender)
         reloaded.designTheme = .orchard
         #expect(reloaded.designThemeColor == .clay)
+        #expect(reloaded.designThemeBackground == .warm)
         reloaded.designTheme = .islands
         #expect(reloaded.designThemeColor == .lagoon)
+        #expect(reloaded.designThemeBackground == .own)
         #expect(reloaded.appFont == .atkinson)
         #expect(reloaded.codeFont == .geistMono)
 
@@ -198,12 +208,14 @@ struct PreferencesTests {
         temporary.defaults.set("neon", forKey: "design-theme")
         temporary.defaults.set("berry", forKey: "design-theme-color-orchard")
         temporary.defaults.set("chartreuse", forKey: "design-theme-color-pop")
+        temporary.defaults.set("plaid", forKey: "design-theme-background-orchard")
         temporary.defaults.set("comic", forKey: "app-font")
         // A font of the other kind isn't one of these.
         temporary.defaults.set("atkinson", forKey: "code-font")
         let unknown = Preferences(store: PreferenceStore(temporary.defaults))
         #expect(unknown.designTheme == .classic)
         #expect(unknown.designThemeColors == [.orchard: .ink, .islands: .lagoon, .pop: .tangerine])
+        #expect(unknown.designThemeBackgrounds == [.classic: .own, .orchard: .own, .islands: .own, .pop: .lavender])
         #expect(unknown.appFont == .sf)
         #expect(unknown.codeFont == .sfMono)
     }
