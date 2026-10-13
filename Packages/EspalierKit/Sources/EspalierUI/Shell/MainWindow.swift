@@ -29,8 +29,12 @@ struct MainWindow: View {
                 .overlay(alignment: .bottom) {
                     FloatingStatus()
                 }
-                // The inspector's card keeps the gap after the cards.
-                .paneMargins(trailing: inspector.wrappedValue ? 0 : PaneCards.frameMargins.trailing)
+                // With the sidebar hidden, the cards keep the window's edge
+                // margin; the inspector's card keeps the gap after them.
+                .paneMargins(
+                    leading: state.columnVisibility == .detailOnly ? PaneCards.windowEdgeMargin : PaneCards.frameMargins.leading,
+                    trailing: inspector.wrappedValue ? 0 : PaneCards.frameMargins.trailing
+                )
                 .toolbarBand()
                 .inspector(isPresented: inspector) {
                     InspectorColumn()

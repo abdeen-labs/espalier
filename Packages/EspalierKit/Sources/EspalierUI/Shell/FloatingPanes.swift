@@ -37,10 +37,14 @@ enum PaneCards {
     /// The space between two cards' frames.
     static let frameGap = gap - 2 * inset
 
+    /// The margin around cards' frames at the window's edges: the cards are
+    /// 10 from them.
+    static let windowEdgeMargin = 10 - inset
+
     /// The detail area's margins around its cards' frames: the cards are
     /// none below the toolbar, 2 after the sidebar, and 10 from the
     /// window's trailing and bottom edges.
-    static let frameMargins = EdgeInsets(top: -inset, leading: 2 - inset, bottom: 10 - inset, trailing: 10 - inset)
+    static let frameMargins = EdgeInsets(top: -inset, leading: 2 - inset, bottom: windowEdgeMargin, trailing: windowEdgeMargin)
 
     /// A card's corner radius.
     static var radius: CGFloat {
@@ -113,18 +117,24 @@ extension View {
     }
 
     /// The detail area's margins around its cards' frames in the floating
-    /// layout; `trailing` replaces the trailing one.
-    func paneMargins(trailing: CGFloat = PaneCards.frameMargins.trailing) -> some View {
-        modifier(PaneMarginsModifier(trailing: trailing))
+    /// layout; `leading` and `trailing` replace the leading and trailing
+    /// ones.
+    func paneMargins(
+        leading: CGFloat = PaneCards.frameMargins.leading,
+        trailing: CGFloat = PaneCards.frameMargins.trailing
+    ) -> some View {
+        modifier(PaneMarginsModifier(leading: leading, trailing: trailing))
     }
 }
 
 /// The detail area's margins in the floating layout.
 private struct PaneMarginsModifier: ViewModifier {
+    let leading: CGFloat
     let trailing: CGFloat
 
     func body(content: Content) -> some View {
         var margins = PaneCards.frameMargins
+        margins.leading = leading
         margins.trailing = trailing
         return content.padding(PaneCards.floats ? margins : EdgeInsets())
     }
