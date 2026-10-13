@@ -102,7 +102,7 @@ public func formatCompactNumber(_ value: Double, _ fmt: CompactFormatOptions? = 
     let units = fmt?.units ?? defaultDecimalUnits
     let unitSeparator = fmt?.unitSeparator ?? ""
 
-    if abs < base {
+    if abs < base || units.isEmpty {
         let result = formatNumber(value, fmt?.numberFormat)
         // For byte formatting, always show units even for small values
         if let unit = units.first, !unit.isEmpty {
@@ -122,6 +122,5 @@ public func formatCompactNumber(_ value: Double, _ fmt: CompactFormatOptions? = 
     let decimals = fmt?.decimals ?? (Swift.abs(scaled) < 10 ? 1 : 0)
 
     let result = round(scaled, decimals)
-    let unit = units.indices.contains(unitIx) ? units[unitIx] : "undefined"
-    return "\(formatNumber(result, fmt?.numberFormat))\(unitSeparator)\(unit)"
+    return "\(formatNumber(result, fmt?.numberFormat))\(unitSeparator)\(units[unitIx])"
 }

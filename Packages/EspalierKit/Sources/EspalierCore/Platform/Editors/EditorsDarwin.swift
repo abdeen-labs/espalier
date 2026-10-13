@@ -102,9 +102,11 @@ func findApplication(_ editor: DarwinExternalEditor, locator: any ApplicationLoc
             return installPath
         }
 
-        logger.debug(
-            "App installation for \(editor.name, privacy: .public) not found at '\(installPath ?? "null", privacy: .private)'"
-        )
+        if let installPath {
+            logger.debug("App installation for \(editor.name, privacy: .public) not found at '\(installPath, privacy: .private)'")
+        } else {
+            logger.debug("App installation for \(editor.name, privacy: .public) not found")
+        }
     }
 
     return nil

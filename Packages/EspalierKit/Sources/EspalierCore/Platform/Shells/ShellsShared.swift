@@ -140,7 +140,7 @@ private func addErrorTracing(
             case let .exit(code):
                 logger.debug("[\(shell, privacy: .public)] exit code: \(code)")
             case let .signal(signal):
-                logger.debug("[\(shell, privacy: .public)] exit code: null (signal \(signal))")
+                logger.debug("[\(shell, privacy: .public)] killed by signal \(signal)")
             }
         }
     )

@@ -231,15 +231,15 @@ public struct AIErrorDisplayInfo: Sendable, Hashable {
 
 private let allDigits = JSCompat.regex(#"^[0-9]+\z"#)
 
-/// When to try again, from a `Retry-After` value. A number of seconds is
-/// written the way JavaScript's template literal writes `Number(retryAfter)`:
-/// in full below 10^21 (`12345678901234567000 seconds`), then in exponent
-/// form (`1e+21 seconds`), and `Infinity` past the largest double.
+/// When to try again, from a `Retry-After` value: a number of seconds, or
+/// the date as the server wrote it. A number too big for an `Int` is no
+/// real wait, so it's "later".
 func getRetryAfterMessage(_ retryAfter: String) -> String {
     if JS.test(allDigits, retryAfter) {
-        // All digits, so this is a number (infinity when it overflows).
-        let seconds = Double(retryAfter) ?? .infinity
-        return "You can try again in \(JS.numberToString(seconds)) \(seconds == 1 ? "second" : "seconds")."
+        guard let seconds = Int(retryAfter) else {
+            return "You can try again later."
+        }
+        return "You can try again in \(formatSeconds(seconds))."
     }
     return "You can try again after \(retryAfter)."
 }

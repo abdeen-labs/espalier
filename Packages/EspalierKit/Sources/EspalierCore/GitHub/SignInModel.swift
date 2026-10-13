@@ -362,7 +362,7 @@ public final class SignInModel {
     ///   assumed when it is the host git asked about).
     public func setEndpoint(_ address: String, clientID: String, isEndpointFromGit: Bool = false) async {
         guard let current = state, current.kind == .endpointEntry || current.kind == .existingAccountWarning else {
-            logger.error("Sign in step '\(self.state?.kind.rawValue ?? "null", privacy: .public)' not compatible with endpoint entry")
+            logger.error("Sign in step \(self.state.map { "'\($0.kind.rawValue)'" } ?? "(none)", privacy: .public) not compatible with endpoint entry")
             return
         }
         // The address is being checked already (the UI disables the step
@@ -449,7 +449,7 @@ public final class SignInModel {
             configuration = current.configuration
             isUnrecognizedEnterpriseServer = false
         default:
-            logger.error("Sign in step '\(self.state?.kind.rawValue ?? "null", privacy: .public)' not compatible with authentication")
+            logger.error("Sign in step \(self.state.map { "'\($0.kind.rawValue)'" } ?? "(none)", privacy: .public) not compatible with authentication")
             return
         }
         guard let accounts, let environment = accounts.environment else {
