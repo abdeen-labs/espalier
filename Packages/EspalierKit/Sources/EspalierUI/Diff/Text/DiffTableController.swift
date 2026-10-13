@@ -190,7 +190,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     override init() {
         let tableView = DiffTableView(frame: CGRect(x: 0, y: 0, width: 600, height: 400))
         self.tableView = tableView
-        scrollView = NSScrollView(frame: CGRect(x: 0, y: 0, width: 600, height: 400))
+        scrollView = UnbouncedScrollView(frame: CGRect(x: 0, y: 0, width: 600, height: 400))
         geometry = DiffRowGeometry(
             width: 600, isSplit: false, showsStaging: false, digits: 3,
             font: DiffFontMetrics(fontSize: Metrics.Diff.codeFontSize)
@@ -225,9 +225,6 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         scrollView.hasVerticalScroller = true
         // Shown while lines don't wrap and one is wider than the pane.
         scrollView.hasHorizontalScroller = true
-        // No bouncing past the edges.
-        scrollView.horizontalScrollElasticity = .none
-        scrollView.verticalScrollElasticity = .none
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
         scrollView.backgroundColor = Palette.background

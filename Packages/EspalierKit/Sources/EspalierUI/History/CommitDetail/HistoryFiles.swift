@@ -83,7 +83,7 @@ struct HistoryFileList: NSViewRepresentable {
 /// it keeps in step with the model's.
 final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     let tableView = HistoryFileTableView(frame: .zero)
-    let scrollView = NSScrollView(frame: .zero)
+    let scrollView = UnbouncedScrollView()
     private(set) var files: [HistoryFileContent] = []
     var actions = HistoryFilesActions()
     /// The file the model has selected.
@@ -119,9 +119,6 @@ final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableV
 
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
-        // No bouncing past the edges.
-        scrollView.verticalScrollElasticity = .none
-        scrollView.horizontalScrollElasticity = .none
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true

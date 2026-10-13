@@ -136,7 +136,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     override init() {
         tableView = SimpleNSTableView(frame: .zero)
-        scrollView = NSScrollView(frame: .zero)
+        scrollView = UnbouncedScrollView()
         super.init()
         configureTable()
         startMinuteTimer()
@@ -171,9 +171,6 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
 
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
-        // No bouncing past the edges.
-        scrollView.verticalScrollElasticity = .none
-        scrollView.horizontalScrollElasticity = .none
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true

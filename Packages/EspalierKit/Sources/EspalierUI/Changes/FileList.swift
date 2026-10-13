@@ -262,12 +262,9 @@ struct FileTable: NSViewRepresentable {
         tableView.doubleAction = #selector(FileTableCoordinator.doubleClicked(_:))
         coordinator.tableView = tableView
 
-        let scrollView = NSScrollView()
+        let scrollView = UnbouncedScrollView()
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
-        // No bouncing past the edges.
-        scrollView.verticalScrollElasticity = .none
-        scrollView.horizontalScrollElasticity = .none
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
         scrollView.backgroundColor = Palette.background

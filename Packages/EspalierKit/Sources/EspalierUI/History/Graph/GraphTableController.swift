@@ -105,7 +105,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     override init() {
         let table = GraphNSTableView(frame: .zero)
         tableView = table
-        scrollView = NSScrollView(frame: .zero)
+        scrollView = UnbouncedScrollView()
         let palette = TrackPalette.Resolved()
         style = GraphRowStyle(
             geometry: GraphGeometry(laneCount: 1, increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast),
@@ -152,9 +152,6 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
 
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
-        // No bouncing past the edges.
-        scrollView.verticalScrollElasticity = .none
-        scrollView.horizontalScrollElasticity = .none
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
