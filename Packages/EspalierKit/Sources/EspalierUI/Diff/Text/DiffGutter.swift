@@ -55,7 +55,7 @@ struct DiffFontMetrics: Sendable, Equatable {
 enum DiffTableMetrics {
     /// The handle's width: the bar beside changed lines while lines can be
     /// staged.
-    static let handleWidth: CGFloat = 4
+    static let handleWidth: CGFloat = 8
     /// How far beside the handle a click still takes it, each side.
     static let handleSlop: CGFloat = 4
     /// Padding on each side of a line number.
