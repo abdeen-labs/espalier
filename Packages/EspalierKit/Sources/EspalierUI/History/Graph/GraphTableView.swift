@@ -10,7 +10,7 @@ import SwiftUI
 /// The history graph's table.
 struct GraphTableView: NSViewRepresentable {
     /// The history shown.
-    let source: any GraphTableSource
+    let source: HistoryModel
     let presentation: GraphPresentation
     let selection: GraphSelection
     /// The keyboard reorder's insertion point, while reordering.
@@ -28,7 +28,7 @@ struct GraphTableView: NSViewRepresentable {
     @Environment(\.timeZone) private var timeZone
 
     init(
-        source: any GraphTableSource,
+        source: HistoryModel,
         presentation: GraphPresentation,
         selection: GraphSelection,
         reorderInsertionRow: Int? = nil,

@@ -4,6 +4,7 @@
 // (hitches), and reports the hitch time per second of scrolling.
 
 import AppKit
+import EspalierCore
 import QuartzCore
 
 /// Runs the History Scroll Benchmark in a window.
@@ -95,7 +96,7 @@ private final class ScrollRun: NSObject {
         let table = controller.tableView
         let clip = controller.scrollView.contentView
         let atBottom = clip.bounds.maxY >= table.frame.height - 1
-        let isComplete = controller.source?.isGraphComplete ?? true
+        let isComplete = controller.source?.isComplete ?? true
         if (atBottom && isComplete) || result.duration >= HistoryScrollBenchmark.maximumDuration {
             finish()
         }

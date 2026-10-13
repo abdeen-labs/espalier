@@ -528,26 +528,3 @@ struct GraphRowStyle {
     /// The backing scale avatars are drawn at.
     var scale: CGFloat
 }
-
-extension CommitRowCellView {
-    /// A trailing column of a commit's row.
-    enum TrailingColumn: Hashable {
-        case avatar, date, shortID
-    }
-
-    /// The columns the last layout shows besides the title: narrow rows
-    /// hide the short ID, then the avatar, then the time.
-    var shownTrailingColumns: Set<TrailingColumn> {
-        var shown: Set<TrailingColumn> = []
-        if !avatarView.isHidden {
-            shown.insert(.avatar)
-        }
-        if !dateLabel.isHidden {
-            shown.insert(.date)
-        }
-        if !shortIDLabel.isHidden {
-            shown.insert(.shortID)
-        }
-        return shown
-    }
-}

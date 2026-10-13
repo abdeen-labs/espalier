@@ -366,13 +366,6 @@ final class PendingExternalClones {
             self?.waiter = nil
         }
     }
-
-    /// Forgets the links waiting for Clone.
-    func stopWaiting() {
-        waiter?.cancel()
-        waiter = nil
-        waiting = []
-    }
 }
 
 /// Resumes a continuation once: the first answer wins.

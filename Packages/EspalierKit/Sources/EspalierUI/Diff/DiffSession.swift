@@ -271,12 +271,6 @@ final class DiffSession {
         }
     }
 
-    /// Waits for the contents and tokens in flight (tests).
-    func idle() async {
-        await contentsTask?.value
-        await highlightTask?.value
-    }
-
     // MARK: The DiffOpen interval
 
     private func beginOpen(_ fileID: String) {

@@ -1,43 +1,9 @@
-// What the history graph's table reads: the history model's rows, or a
-// test's synthetic ones, and the repository state its rows depend on.
+// The repository state the history graph's rows depend on besides the
+// history model.
 
 import AppKit
 import EspalierCore
 import GitKit
-
-/// The history a graph table shows: `HistoryModel`, or a test's synthetic
-/// history.
-@MainActor
-protocol GraphTableSource: AnyObject {
-    /// The laid-out rows.
-    var graph: CommitGraphLayout { get }
-    /// How the last change touched the rows.
-    var graphChange: HistoryGraphChange { get }
-    /// Whether every commit is loaded.
-    var isGraphComplete: Bool { get }
-    /// Whether older commits are loading.
-    var isLoadingMore: Bool { get }
-    /// The commit in `row`; nil for the working copy's row.
-    func commit(atRow row: Int) -> Commit?
-    /// The row of the loaded commit `sha`.
-    func row(of sha: String) -> Int?
-    /// The branches and tags pointing at `sha`.
-    func refs(at sha: String) -> [HistoryRef]
-    /// Whether `sha` hasn't been pushed.
-    func isLocalCommit(_ sha: String) -> Bool
-    /// Loads the next page of older commits.
-    func loadNextPage() async
-    /// Loads every older commit, page by page, until cancelled.
-    func loadRemainingPages() async
-    /// Stops loading older commits.
-    func cancelLoading()
-}
-
-extension HistoryModel: GraphTableSource {
-    var isGraphComplete: Bool {
-        isComplete
-    }
-}
 
 /// The repository state a graph's rows show besides the history: HEAD,
 /// the working copy, tags waiting to be pushed, the search, the focused
@@ -111,7 +77,7 @@ extension GraphPresentation {
     /// the accent, each track a local branch starts in that branch's color,
     /// and the rest in the colors no branch has.
     @MainActor
-    func palette(for source: any GraphTableSource) -> TrackPalette.Resolved {
+    func palette(for source: HistoryModel) -> TrackPalette.Resolved {
         let graph = source.graph
         func row(of sha: String) -> CommitGraphRow? {
             guard let index = source.row(of: sha), index < graph.count else {

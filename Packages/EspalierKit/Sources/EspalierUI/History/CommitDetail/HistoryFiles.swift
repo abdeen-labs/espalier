@@ -119,6 +119,9 @@ final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableV
 
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
+        // No bouncing past the edges.
+        scrollView.verticalScrollElasticity = .none
+        scrollView.horizontalScrollElasticity = .none
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
@@ -411,17 +414,25 @@ struct HistoryLineCounts: View {
 }
 
 /// The label over the files: "CHANGED FILES 3", and the lines added and
-/// removed, in a row as high as the list's header.
+/// removed, in a row as high as the list's header. The label is always
+/// whole; the line counts show when there's room for them.
 struct CommitFilesHeader: View {
     let summary: CommitFilesSummary
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
             SectionLabel("Changed Files", count: summary.fileCount)
+                .fixedSize()
                 .accessibilityLabel(summary.title)
             Spacer(minLength: Metrics.grid)
             if summary.linesAdded > 0 || summary.linesDeleted > 0 {
-                HistoryLineCounts(added: summary.linesAdded, deleted: summary.linesDeleted)
+                // Shown whole or not at all: a narrow column leaves the
+                // room to the label.
+                ViewThatFits(in: .horizontal) {
+                    HistoryLineCounts(added: summary.linesAdded, deleted: summary.linesDeleted)
+                    Color.clear
+                        .frame(width: 0, height: 0)
+                }
             }
         }
         .padding(.horizontal, Metrics.HistoryHeader.horizontalPadding)

@@ -38,8 +38,7 @@ final class ThemeApplier {
     @ObservationIgnored private let preferences: Preferences
     @ObservationIgnored private let target: any NSAppearanceCustomization
 
-    /// - Parameter target: What takes the appearance: the application, or a
-    ///   test's own window or view.
+    /// - Parameter target: What takes the appearance: the application.
     init(preferences: Preferences, target: any NSAppearanceCustomization) {
         self.preferences = preferences
         self.target = target

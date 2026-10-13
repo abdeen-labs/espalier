@@ -92,16 +92,6 @@ final class TooltipCenter {
         TooltipInput.register(self)
     }
 
-    /// The text of the tooltip showing.
-    var shownText: String? {
-        shown?.text
-    }
-
-    /// Whether a tooltip waits for the pointer to rest.
-    var isPending: Bool {
-        pending != nil
-    }
-
     // MARK: The pointer
 
     /// A tracker saw the pointer enter, move in, or leave its view, at

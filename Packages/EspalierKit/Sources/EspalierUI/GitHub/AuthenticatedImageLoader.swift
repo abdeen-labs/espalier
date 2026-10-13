@@ -93,15 +93,6 @@ nonisolated public final class AuthenticatedImageLoader: AvatarLoading, RemoteIm
         avatars.setAccounts(accounts)
     }
 
-    /// How many origins have a token (tests).
-    var tokenCount: Int {
-        tokens.withLock { $0.count }
-    }
-
-    /// Runs after each time `follow(_:)` applies the accounts (tests wait
-    /// on it: a change reaches the loader in a task).
-    var accountsFollowed: (@MainActor () -> Void)?
-
     /// Keeps the loader's tokens those of `accounts`' signed-in accounts.
     @MainActor
     public func follow(_ accounts: AccountsModel) {
@@ -116,7 +107,6 @@ nonisolated public final class AuthenticatedImageLoader: AvatarLoading, RemoteIm
             }
         }
         setAccounts(current)
-        accountsFollowed?()
     }
 
     // MARK: Avatars

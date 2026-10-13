@@ -1,5 +1,5 @@
-// Fixed values for the UI's tests: a fixed clock, files, confirmations, and
-// one value per error kind.
+// Fixed values for the UI's tests: files, confirmations, and one value per
+// error kind.
 
 import EspalierCore
 import Foundation
@@ -20,16 +20,6 @@ struct FixtureRetry: RetryableOperation {
 
 /// Fixed values for tests.
 enum UIFixtures {
-    // MARK: Time
-
-    /// The fixed "now": 6 October 2026, 10:00 UTC.
-    static let now = Date(timeIntervalSince1970: 1_791_280_800)
-    static let timeZone = TimeZone(identifier: "UTC")!
-
-    static func minutesAgo(_ minutes: Double) -> Date {
-        now.addingTimeInterval(-minutes * 60)
-    }
-
     // MARK: Identity
 
     static let repositoryID = RepositoryID(rawValue: UUID(uuidString: "2F1D2A6E-6C1B-4C6B-9C4E-7B0B5F1A9E01")!)

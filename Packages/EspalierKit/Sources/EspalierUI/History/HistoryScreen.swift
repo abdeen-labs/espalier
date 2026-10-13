@@ -314,7 +314,6 @@ struct HistoryListPane: View {
             } else {
                 HistoryHeaderContainer(repository: repository)
             }
-            Hairline()
             if let notice = state.notice, notice.place == place {
                 HistoryNoticeBanner(notice: notice) {
                     switch notice.kind {

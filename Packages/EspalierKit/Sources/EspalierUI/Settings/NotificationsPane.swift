@@ -174,15 +174,6 @@ final class NotificationSettings {
         NotificationStatusLine(permission, isEnabled: preferences.highSignalNotificationsEnabled)
     }
 
-    /// Writes the setting; turning it on asks for permission when the user
-    /// hasn't been asked yet.
-    func setEnabled(_ enabled: Bool) async {
-        preferences.highSignalNotificationsEnabled = enabled
-        if enabled {
-            await requestIfNotDetermined()
-        }
-    }
-
     /// Asks for permission when the user hasn't been asked yet.
     func requestIfNotDetermined() async {
         let current = await permissions.status()

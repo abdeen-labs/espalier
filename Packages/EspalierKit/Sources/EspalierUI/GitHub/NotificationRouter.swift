@@ -53,13 +53,6 @@ public final class NotificationRouter: NSObject {
         runPending()
     }
 
-    /// Waits until the clicks delivered so far are routed (tests).
-    func idle() async {
-        while let runner {
-            await runner.value
-        }
-    }
-
     private func runPending() {
         guard runner == nil, context != nil, !pending.isEmpty else {
             return

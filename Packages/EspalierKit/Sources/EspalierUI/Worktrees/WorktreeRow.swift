@@ -31,12 +31,6 @@ nonisolated struct WorktreeRowContent: Sendable, Equatable, Identifiable {
         POSIXPath.basename(path)
     }
 
-    /// Whether it can be renamed or deleted: not the main worktree, and not
-    /// locked.
-    var canRenameOrDelete: Bool {
-        !isMain && !isLocked
-    }
-
     /// The tooltip: the folder, and why it can't be renamed or deleted.
     var tooltip: String {
         if isLocked {

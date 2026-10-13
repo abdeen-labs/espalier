@@ -197,15 +197,6 @@ extension Acknowledgement {
         )
     }
 
-    /// The vendored grammars (Vendor/Grammars), by package identity.
-    static let vendoredGrammars: [String: String] = [
-        "tree-sitter-css": "TreeSitterCSS",
-        "tree-sitter-javascript": "TreeSitterJavaScript",
-        "tree-sitter-lua": "TreeSitterLua",
-        "tree-sitter-python": "TreeSitterPython",
-        "tree-sitter-yaml": "TreeSitterYAML",
-    ]
-
     private static func package(_ identity: String, name: String? = nil, version: String, license: String = "MIT License", url: String) -> Acknowledgement {
         Acknowledgement(
             id: identity,

@@ -45,11 +45,6 @@ extension NSView {
         setAccessibilityHelp(text)
     }
 
-    /// The view's tooltip over its whole bounds, if any.
-    public var tooltipText: String? {
-        tooltipTracker?.text
-    }
-
     /// Adds a tooltip area: `rect`, in the view's coordinates, whose text
     /// `owner` gives (for `tag`) as it's about to show. It shows below the
     /// area. An area takes the pointer from the view's whole-bounds tooltip

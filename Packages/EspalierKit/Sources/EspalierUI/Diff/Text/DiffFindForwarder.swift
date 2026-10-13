@@ -57,9 +57,4 @@ final class DiffFindForwarder: NSResponder, NSUserInterfaceValidations {
         }
         forwarder.table = nil
     }
-
-    /// The forwarder of a window (tests).
-    static func forwarder(of window: NSWindow) -> DiffFindForwarder? {
-        forwarders.object(forKey: window)
-    }
 }

@@ -264,7 +264,7 @@ final class StubNavigator {
 
     /// What a stub's tooltip says: where it continues, with the other end's
     /// commit.
-    static func tooltip(for edge: CommitGraphEdge, row: Int, source: any GraphTableSource, isLoading: Bool) -> String {
+    static func tooltip(for edge: CommitGraphEdge, row: Int, source: HistoryModel, isLoading: Bool) -> String {
         func describe(_ commit: Commit?) -> String {
             guard let commit else {
                 return ""
@@ -280,7 +280,7 @@ final class StubNavigator {
             if let parentRow = edge.parentRow {
                 return "Continues \(commits(parentRow - row)) below" + describe(source.commit(atRow: parentRow))
             }
-            if source.isGraphComplete {
+            if source.isComplete {
                 return "This commit's parent isn't in the history shown."
             }
             let parent = source.commit(atRow: row).flatMap { commit in

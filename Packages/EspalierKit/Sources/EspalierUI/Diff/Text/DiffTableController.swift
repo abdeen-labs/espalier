@@ -225,8 +225,9 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         scrollView.hasVerticalScroller = true
         // Shown while lines don't wrap and one is wider than the pane.
         scrollView.hasHorizontalScroller = true
-        // Bouncing past the edges would pull the numbers off the pane.
+        // No bouncing past the edges.
         scrollView.horizontalScrollElasticity = .none
+        scrollView.verticalScrollElasticity = .none
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
         scrollView.backgroundColor = Palette.background
@@ -305,11 +306,6 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         if shown.wrapsLines != content.wrapsLines {
             scrollText(toX: 0)
         }
-    }
-
-    /// Waits for the document being built (tests).
-    func documentIdle() async {
-        await buildTask?.value
     }
 
     private func buildDocument(for content: DiffTableContent) {

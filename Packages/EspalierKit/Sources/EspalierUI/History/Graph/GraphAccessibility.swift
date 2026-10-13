@@ -11,7 +11,7 @@ import GitKit
 /// VoiceOver's view of the history graph.
 enum GraphAccessibility {
     /// The facts a row's drawing shows, in reading order.
-    static func value(forRow row: Int, source: any GraphTableSource, presentation: GraphPresentation) -> String {
+    static func value(forRow row: Int, source: HistoryModel, presentation: GraphPresentation) -> String {
         guard let commit = source.commit(atRow: row) else {
             let summary = presentation.workingCopy
             return summary.isDirty ? "Uncommitted changes, \(summary.detail ?? "")." : "No uncommitted changes."
@@ -101,7 +101,7 @@ enum GraphAccessibility {
             }
         }
 
-        func matches(_ commit: Commit, source: any GraphTableSource, presentation: GraphPresentation) -> Bool {
+        func matches(_ commit: Commit, source: HistoryModel, presentation: GraphPresentation) -> Bool {
             switch self {
             case .branchTips: source.refs(at: commit.sha).contains { $0.kind != .tag }
             case .tags: source.refs(at: commit.sha).contains { $0.kind == .tag }

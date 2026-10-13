@@ -21,7 +21,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     let scrollView: NSScrollView
 
     /// The history the table shows.
-    private(set) weak var source: (any GraphTableSource)?
+    private(set) weak var source: (HistoryModel)?
     /// What the table asks of its screen.
     var actions = GraphTableActions()
     /// Where avatars come from (monograms when nil).
@@ -152,6 +152,9 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
 
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
+        // No bouncing past the edges.
+        scrollView.verticalScrollElasticity = .none
+        scrollView.horizontalScrollElasticity = .none
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
@@ -185,7 +188,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     /// Shows `source`'s rows with `presentation`, `selection` selected, and
     /// a keyboard reorder's insertion point, applying only what changed.
-    func update(source: any GraphTableSource, presentation: GraphPresentation, selection: GraphSelection, reorderInsertionRow: Int?) {
+    func update(source: HistoryModel, presentation: GraphPresentation, selection: GraphSelection, reorderInsertionRow: Int?) {
         if self.source !== source {
             // Another repository's history: from the top.
             self.source = source
@@ -568,7 +571,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     }
 
     /// What `row`'s graph draws.
-    func drawing(forRow row: Int, in source: any GraphTableSource) -> GraphRowDrawing {
+    func drawing(forRow row: Int, in source: HistoryModel) -> GraphRowDrawing {
         let graph = source.graph
         let headRow = presentation.headSHA.flatMap { source.row(of: $0) }
         return GraphRowDrawing(
@@ -793,7 +796,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         guard let row = hit.row, let stub = hit.stub else {
             return false
         }
-        if stub.edge.kind == .outgoingStub, stub.edge.parentRow == nil, source?.isGraphComplete == true {
+        if stub.edge.kind == .outgoingStub, stub.edge.parentRow == nil, source?.isComplete == true {
             // The parent isn't in the history: nothing to go to.
             return true
         }
@@ -845,7 +848,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// the end; when the user scrolls to the end itself, keeps loading pages
     /// until the history ends or Esc.
     func prefetchIfNeeded() {
-        guard let source, !source.isGraphComplete, shownRowCount > 0 else {
+        guard let source, !source.isComplete, shownRowCount > 0 else {
             return
         }
         let visible = tableView.rows(in: tableView.visibleRect)
@@ -865,7 +868,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// Loads every older page (End, or scrolling to the end), until the
     /// history ends or `cancelLoading()`.
     func loadRemainingPages() {
-        guard let source, !source.isGraphComplete, !isLoadingRemaining else {
+        guard let source, !source.isComplete, !isLoadingRemaining else {
             return
         }
         isLoadingRemaining = true

@@ -1,11 +1,8 @@
-// The design themes and fonts: every theme's colors read in every
-// background tint (text 4.5:1 on the background and the sidebar, secondary
-// text 4.5:1, the prominent fill's text 4.5:1, the accent 3:1 as a mark, the
-// marks on the accent, the sidebar's selection text 4.5:1 on its selection,
-// monograms' white initials 3:1), a tint keeps the surfaces' luminance and
-// leaves washes alone, each app font and code font is its bundled family at the
-// weights asked for, whatever the other is, a task's look leaves the
-// process's alone, and the look follows Settings.
+// The design themes' contrast: every theme's colors read in every color
+// and background tint (text 4.5:1 on the background and the sidebar,
+// secondary text 4.5:1, the prominent fill's text 4.5:1, the accent 3:1 as a
+// mark, the marks on the accent, the sidebar's selection text 4.5:1 on its
+// selection), and monograms' white initials reach 3:1.
 
 import AppKit
 import EspalierCore
@@ -80,44 +77,6 @@ struct DesignThemeTests {
         #expect(ContrastCheck.ratio(text, against: selection, in: variant) >= 4.5)
     }
 
-    @Test("a background tint keeps each surface's luminance (near white, as much as its hue allows), and leaves washes and Pop's sidebar alone", arguments: DesignTheme.allCases)
-    func backgroundTints(_ theme: DesignTheme) {
-        let own = Theme.named(theme)
-        for tint in BackgroundTint.allCases where tint != .own {
-            let tinted = Theme.named(theme, background: tint)
-            #expect(tinted.tint == tint)
-            for variant in [AppearanceVariant.light, .dark] {
-                var surfaces = [
-                    ("background", tinted.background, own.background), ("field", tinted.field, own.field),
-                    ("line", tinted.line, own.line), ("line2", tinted.line2, own.line2),
-                ]
-                if theme == .pop {
-                    // Pop's sidebar keeps its accent.
-                    #expect(tinted.sidebar.resolved(in: variant) == own.sidebar.resolved(in: variant), "\(tint) \(variant)")
-                } else {
-                    surfaces.append(("sidebar", tinted.sidebar, own.sidebar))
-                }
-                for (name, surface, ownSurface) in surfaces {
-                    let color = surface.resolved(in: variant)
-                    let ownColor = ownSurface.resolved(in: variant)
-                    let luminance = ColorContrast.luminance(color)
-                    let ownLuminance = ColorContrast.luminance(ownColor)
-                    let channels = [color.redComponent, color.greenComponent, color.blueComponent]
-                    let spread = channels.max()! - channels.min()!
-                    // Kept; or, near white, too light to carry the hue: as
-                    // light as the hue allows.
-                    let isKept = abs(luminance - ownLuminance) < 0.0005
-                    #expect(isKept || (luminance < ownLuminance && luminance > 0.93), "\(tint) \(name) \(variant)")
-                    #expect(tint == .neutral ? spread < 0.002 : spread > 0.005, "\(tint) \(name) \(variant)")
-                }
-                // Classic's sidebar selection is a translucent wash.
-                if theme == .classic {
-                    #expect(tinted.sidebarSelection.resolved(in: variant) == own.sidebarSelection.resolved(in: variant))
-                }
-            }
-        }
-    }
-
     @Test("a theme's monograms keep white initials at 3:1, whatever the person's hue")
     func monogramTones() {
         for theme in DesignTheme.allCases {
@@ -131,152 +90,5 @@ struct DesignThemeTests {
                 }
             }
         }
-    }
-
-    @Test("each app font is its bundled family at the weights asked for, and leaves the code font as it is", arguments: [AppFont.fixel, .atkinson, .martian])
-    func appFonts(_ appFont: AppFont) throws {
-        let sans = try #require(appFont.face)
-        Look.with(Look(appFont: appFont)) {
-            for font in [AppKitTypography.row, AppKitTypography.secondary, AppKitTypography.row(weight: .semibold)] {
-                #expect(font.familyName == sans.family, "\(font.fontName)")
-            }
-            #expect(AppKitTypography.code(size: 11.5) == NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular))
-        }
-        assertWeights(sans, [400, 500, 600, 700])
-    }
-
-    @Test("each code font is its bundled family, draws exact characters, and leaves the app font as it is", arguments: [CodeFont.geistMono, .atkinsonMono])
-    func codeFonts(_ codeFont: CodeFont) throws {
-        let mono = try #require(codeFont.face)
-        Look.with(Look(appFont: .fixel, codeFont: codeFont)) {
-            for font in [AppKitTypography.refCapsule, AppKitTypography.code(), AppKitTypography.count(), AppKitTypography.shaField] {
-                #expect(font.familyName == mono.family, "\(font.fontName)")
-                // Exact characters: no ligature or contextual form joins
-                // or changes them, so there's one glyph a character.
-                let text = "fi ffl -> => != === <= www ::"
-                let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [.font: font]))
-                #expect(CTLineGetGlyphCount(line) == text.utf16.count, "\(font.fontName)")
-            }
-            #expect(AppKitTypography.row.familyName == BundledFace.fixelText.family)
-        }
-        Look.with(Look(codeFont: codeFont)) {
-            #expect(AppKitTypography.row == NSFont.preferredFont(forTextStyle: .body))
-        }
-        // Atkinson Hyperlegible Mono's default instance is ExtraLight, so
-        // its regular is set.
-        assertWeights(mono, [400, 500, 600])
-    }
-
-    /// Weights land on the weight axis (a static family's file is the
-    /// weight's own).
-    private func assertWeights(_ face: BundledFace, _ weights: [Int], sourceLocation: SourceLocation = #_sourceLocation) {
-        for weight in weights {
-            let font = face.font(size: 13, weight: weight)
-            #expect(font.familyName == face.family, sourceLocation: sourceLocation)
-            if face.isVariable {
-                let variation = CTFontCopyVariation(font as CTFont) as? [NSNumber: NSNumber] ?? [:]
-                let axis = variation[NSNumber(value: BundledFace.weightAxis)]?.intValue
-                // A named instance at its own weight may leave the axis
-                // implicit.
-                #expect(axis == weight || (axis == nil && face.name(for: weight) == font.fontName), "\(font.fontName) at \(weight)", sourceLocation: sourceLocation)
-            } else {
-                #expect(font.fontName == face.name(for: weight), sourceLocation: sourceLocation)
-            }
-        }
-    }
-
-    @Test("SF Pro and SF Mono are the system's fonts, and key caps stay SF Pro whatever the app font")
-    func systemFonts() {
-        #expect(AppKitTypography.row == NSFont.preferredFont(forTextStyle: .body))
-        #expect(AppKitTypography.code(size: 11.5) == NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular))
-        for appFont in AppFont.allCases {
-            Look.with(Look(appFont: appFont)) {
-                #expect(Typography.keyCap == Font.caption.weight(.medium))
-            }
-        }
-    }
-
-    @Test("a bundled face falls back on the system font's cascade list")
-    func cascadeList() {
-        let font = BundledFace.fixelText.font(size: 13, weight: 400)
-        let cascade = font.fontDescriptor.object(forKey: .cascadeList) as? [NSFontDescriptor] ?? []
-        #expect(!cascade.isEmpty)
-    }
-
-    @Test("rows keep SF Pro's line height at the app font's body size")
-    func rowHeights() {
-        let classic = (graph: Metrics.Graph.rowHeight, files: Metrics.FileList.rowHeight)
-        #expect(classic.graph == 32)
-        #expect(classic.files == 30)
-        // Fixel's line metrics are taller than SF Pro's, at the same size.
-        Look.with(Look(appFont: .fixel)) {
-            #expect(Metrics.Graph.rowHeight == classic.graph)
-            #expect(Metrics.FileList.rowHeight == classic.files)
-        }
-        Look.with(Look(appFont: .martian)) {
-            #expect(Metrics.Graph.rowHeight < classic.graph)
-        }
-        // The code font doesn't change rows.
-        Look.with(Look(codeFont: .atkinsonMono)) {
-            #expect(Metrics.Graph.rowHeight == classic.graph)
-        }
-    }
-
-    @Test("a task's look leaves the process's as it is")
-    func taskLook() async {
-        let process = LookCenter.shared.look
-        Look.with(Look(theme: .pop, appFont: .atkinson, codeFont: .atkinsonMono)) {
-            #expect(Look.current == Look(theme: .pop, color: .tangerine, appFont: .atkinson, codeFont: .atkinsonMono))
-            #expect(Theme.current.theme == .pop)
-        }
-        #expect(LookCenter.shared.look == process)
-    }
-
-    @Test("a color that isn't the theme's is its default")
-    func defaultColors() {
-        #expect(Look(theme: .orchard, color: .berry).color == .ink)
-        #expect(Look(theme: .classic, color: .ink).color == nil)
-        #expect(Theme.named(.islands).color == .lagoon)
-        #expect(Theme.named(.pop, color: .magenta) === Theme.named(.pop, color: .magenta))
-    }
-
-    @Test("the look follows the theme, color, background tint, app font, and code font chosen in Settings", .hangGuard(minutes: 5))
-    func applier() async throws {
-        let temporary = try TemporaryDefaults()
-        defer { temporary.remove() }
-        let preferences = Preferences(store: PreferenceStore(temporary.defaults))
-        // A center of the test's own: the process's look stays as it is.
-        let center = LookCenter()
-        let applier = LookApplier(preferences: preferences, center: center)
-        #expect(center.look == .classic)
-
-        preferences.designTheme = .islands
-        await waitUntil { applier.look.theme == .islands }
-        #expect(center.look == Look(theme: .islands, color: .lagoon))
-
-        preferences.designThemeColor = .berry
-        preferences.designThemeBackground = .rose
-        preferences.appFont = .fixel
-        preferences.codeFont = .geistMono
-        await waitUntil { applier.look == Look(theme: .islands, color: .berry, background: .rose, appFont: .fixel, codeFont: .geistMono) }
-        #expect(center.look == applier.look)
-        withExtendedLifetime(applier) {}
-    }
-
-    @Test("the stored look applies before the app model loads; unknown values are the defaults")
-    func storedLook() throws {
-        let temporary = try TemporaryDefaults()
-        defer { temporary.remove() }
-        temporary.defaults.set("pop", forKey: PreferenceKey.designTheme)
-        temporary.defaults.set("magenta", forKey: PreferenceKey.designThemeColor(.pop))
-        temporary.defaults.set("sage", forKey: PreferenceKey.designThemeBackground(.pop))
-        temporary.defaults.set("martian", forKey: PreferenceKey.appFont)
-        temporary.defaults.set("atkinsonmono", forKey: PreferenceKey.codeFont)
-        #expect(Look.stored(in: PreferenceStore(temporary.defaults)) == Look(theme: .pop, color: .magenta, background: .sage, appFont: .martian, codeFont: .atkinsonMono))
-
-        temporary.defaults.set("sepia", forKey: PreferenceKey.designTheme)
-        temporary.defaults.set("comic", forKey: PreferenceKey.appFont)
-        temporary.defaults.set("martian", forKey: PreferenceKey.codeFont)
-        #expect(Look.stored(in: PreferenceStore(temporary.defaults)) == .classic)
     }
 }

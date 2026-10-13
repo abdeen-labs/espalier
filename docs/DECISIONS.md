@@ -901,6 +901,10 @@ immediately; importing desktop's repository list and settings (my call).
   later-named one.
 - **A commit's details show its tags, not branches** (my call; the rows show
   branches), and keep the "CHANGED FILES" label (my call).
+- **The "CHANGED FILES" label is always whole** (my call): the lines added
+  and removed beside it show only when the column has room for them.
+- **The diff, the file lists, and History's lists don't bounce** past
+  their edges (my call).
 - **No focus ring over a selection** (my call): History's commit and file
   rows, and the diff's line cursor, show only their accent tint, focused or
   not.

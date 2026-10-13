@@ -1,5 +1,5 @@
-// Fixtures for the Changes place's tests: repositories with changes, a
-// window context, and fixed content values.
+// Fixtures for the Changes place's tests: repositories with changes and a
+// window context.
 
 import AppKit
 @testable import EspalierCore
@@ -23,16 +23,10 @@ struct ChangesWindowFixture {
     /// The repository on disk.
     let local: Repository
 
-    /// Adds `local` to a new app signed in to `accounts`, selects it, and
-    /// makes a window showing Changes.
-    static func make(_ local: Repository, accounts: [Account] = []) async throws -> ChangesWindowFixture {
+    /// Adds `local` to a new app, selects it, and makes a window showing
+    /// Changes.
+    static func make(_ local: Repository) async throws -> ChangesWindowFixture {
         let harness = try AppHarness()
-        for account in accounts {
-            try await harness.environment.accountsStore.addAccount(account)
-            // The launch refresh of the accounts asks who they are.
-            harness.gitHub.on("GET", "/user", respond: .json(encoding: createMockAPIFullIdentity(id: account.id, login: account.login)))
-            harness.gitHub.on("GET", "/user/emails", respond: .json(encoding: account.emails))
-        }
         let app = await harness.loadedApp()
         await app.accounts.idle()
         app.preferences.hasShownWelcomeFlow = true
@@ -65,20 +59,9 @@ struct ChangesWindowFixture {
         try harness.write(path, contents, in: local)
     }
 
-    /// Runs git in the repository.
-    @discardableResult
-    func git(_ args: [String]) async throws -> String {
-        try await runGit(args, local)
-    }
-
     /// The changed file at `path`.
     func file(_ path: String, sourceLocation: SourceLocation = #_sourceLocation) throws -> WorkingDirectoryFileChange {
         try #require(repository.changes.workingDirectory.files.first { $0.path == path }, "No changed file \(path)", sourceLocation: sourceLocation)
-    }
-
-    /// Renders `view` in the window's environment.
-    func render(_ view: some View, size: CGSize, appearance: SnapshotAppearance = .light) -> NSBitmapImageRep {
-        Snapshot.render(view.windowEnvironment(context), size: size, appearance: appearance)
     }
 }
 
@@ -96,39 +79,4 @@ func setupRepositoryWithChanges() async throws -> (local: Repository, remote: Re
     try Data("struct Loader {}\n".utf8).write(to: URL(filePath: POSIXPath.join(local.path, "Sources/App/Loader.swift")))
     try FileManager.default.removeItem(atPath: POSIXPath.join(local.path, "LICENSE"))
     return (local, remote)
-}
-
-/// Fixed values for the Changes place's tests.
-@MainActor
-enum ChangesFixtures {
-    static let author = AuthorIdentityContent(name: "Joe Bloggs", email: "joe@example.com")
-
-    /// A GitHub.com account (no token: nothing reaches GitHub).
-    static let account = Account(
-        login: "joe",
-        endpoint: getDotComAPIEndpoint(),
-        token: "",
-        emails: [APIEmail(email: "joe@example.com", verified: true, primary: true, visibility: .public)],
-        avatarURL: "",
-        id: 1234,
-        name: "Joe Bloggs"
-    )
-
-    /// `octo-org/website` on GitHub.com.
-    static func website(_ permissions: GitHubRepositoryPermission = .write) -> GitHubRepository {
-        ModelFixtures.gitHubRepository(owner: "octo-org", name: "website", permissions: permissions)
-    }
-
-    /// The rulesets of `octo-org/website`'s main branch.
-    static let mainRulesets = URL(string: "https://github.com/octo-org/website/rules/?ref=refs%2Fheads%2Fmain")!
-
-    static func button(files: Int = 2, branch: String? = "main", enabled: Bool = true) -> CommitButtonContent {
-        CommitButtonContent(fileCount: files, branch: branch, isEnabled: enabled, disabledReason: enabled ? nil : "Enter a summary to commit")
-    }
-
-    /// The composer with `draft`'s text, in a column-sized frame.
-    static func composer(_ content: ComposerContent, draft: CommitDraft = CommitDraft()) -> some View {
-        ComposerView(content, draft: .constant(draft), actions: ComposerActions())
-            .frame(width: Metrics.Column.changesFileList.ideal)
-    }
 }
