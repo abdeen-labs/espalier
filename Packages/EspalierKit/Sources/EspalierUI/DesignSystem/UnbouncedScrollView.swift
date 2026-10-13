@@ -1,9 +1,8 @@
 // A scroll view that stops at its content's edges. Elasticity off stops
 // the rubber band while scrolling, but AppKit's momentum can still carry
-// the content past an end, sometimes outside `scrollWheel(with:)`. So the
-// clip view never takes an origin outside the content, however it's moved,
-// and a momentum event the scroll view sees that would carry past an end
-// is applied up to the end instead, without AppKit.
+// the content past an end, in a plain table too, and not always through
+// `scrollWheel(with:)` or `constrainBoundsRect(_:)`. So the clip view never
+// takes an origin outside the content, however it's moved.
 
 import AppKit
 
@@ -18,27 +17,6 @@ final class UnbouncedScrollView: NSScrollView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-
-    override func scrollWheel(with event: NSEvent) {
-        guard event.momentumPhase == .began || event.momentumPhase == .changed,
-              let clip = contentView as? EdgeClampingClipView else {
-            super.scrollWheel(with: event)
-            return
-        }
-        let origin = clip.bounds.origin
-        var target = origin
-        target.x -= event.scrollingDeltaX
-        target.y += clip.isFlipped ? -event.scrollingDeltaY : event.scrollingDeltaY
-        let clamped = clip.clamped(target)
-        guard clamped != target else {
-            super.scrollWheel(with: event)
-            return
-        }
-        if clamped != origin {
-            clip.scroll(to: clamped)
-            reflectScrolledClipView(clip)
-        }
     }
 }
 
@@ -61,7 +39,7 @@ final class EdgeClampingClipView: NSClipView {
 
     /// `origin` kept where a view of `size` (the clip view's) stays inside
     /// the document and the content insets.
-    func clamped(_ origin: NSPoint, size: NSSize? = nil) -> NSPoint {
+    private func clamped(_ origin: NSPoint, size: NSSize? = nil) -> NSPoint {
         guard let document = documentView?.frame else {
             return origin
         }
