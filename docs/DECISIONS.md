@@ -374,15 +374,19 @@ remotes from before the mark aren't migrated (my call).
   points elsewhere,** as the check at selection does: Update points it at
   the fork's parent, Ignore keeps it. Desktop overwrote it with the old
   origin URL.
-- **When a repository's only remote is `upstream`, Fork This Repository
-  renames it to `origin`, pointed at the fork, and adds `upstream` at the
-  original's URL** (my call): the usual fork layout, and the branches
-  that tracked `upstream` track `origin`. Desktop pointed
-  `upstream` at the fork, then back at the original, and associated the
-  repository with the fork, so the next push went to the original and
-  failed again. The fork's URL is written last: a failure after the
-  rename leaves `origin` at the original, with `upstream` added or not,
-  and forking again finishes. The error says the remote was renamed.
+- **When a repository's default remote is `upstream` and none is named
+  `origin`, Fork This Repository renames it to `origin`, pointed at the
+  fork, and adds `upstream` at the original's URL** (my call): the usual
+  fork layout, and the branches that tracked `upstream` track `origin`.
+  Other remotes, and the branches tracking them, stay as they are. An
+  `origin` with no URL is refused before GitHub is asked for the fork,
+  with an error that says to give it a URL or remove it and fork again.
+  Desktop pointed `upstream` at the fork, then back at the original, and
+  associated the repository with the fork, so the next push went to the
+  original and failed again. The fork's URL is written last: a failure
+  after the rename leaves `origin` at the original, with `upstream` added
+  or not, and forking again finishes. The error says the remote was
+  renamed.
 - **Clones can be cancelled** (desktop's can't): Cancel Clone, removing the
   clone, or quitting stops git's process group and removes what it cloned.
   Two clones into one folder are refused, and so is a relative path.

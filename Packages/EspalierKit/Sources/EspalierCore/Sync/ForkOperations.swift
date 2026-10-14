@@ -43,8 +43,9 @@ extension SyncModel {
     /// recovery for pushing without write access). See `convertToFork(_:)`.
     ///
     /// - Throws: `.precondition` without a GitHub repository or an account
-    ///   for it; `.api` with "Creating your fork <login>/<name> failed." and
-    ///   the error; `convertToFork`'s errors.
+    ///   for it, or, before GitHub is asked, when `convertToFork` would
+    ///   refuse an `origin` without a URL; `.api` with "Creating your fork
+    ///   <login>/<name> failed." and the error; `convertToFork`'s errors.
     public func createFork() async throws(OperationError) {
         guard let repository, let app = repository.app else {
             throw notInList(.convertToFork)
@@ -54,6 +55,17 @@ extension SyncModel {
         }
         guard let account = app.accounts.account(for: repository.record) else {
             throw precondition("Sign in to \(getHTMLURL(gitHubRepository.endpoint)) to fork this repository.", .convertToFork)
+        }
+
+        let gitRepository = repository.gitRepository
+        let originWithoutURL = await repository.environment.withRuntimes {
+            guard let remotes = try? await getRemotes(gitRepository) else {
+                return false
+            }
+            return (try? await originWithoutURLBlocksRename(gitRepository, remotes)) ?? false
+        }
+        if originWithoutURL {
+            throw precondition(originWithoutURLMessage, .convertToFork)
         }
 
         let api = API.fromAccount(account, runtime: repository.environment.gitHub)
@@ -81,11 +93,15 @@ extension SyncModel {
     /// remote points at the old URL (added when there's none), and the
     /// repository is associated with the fork. Returns after the refresh.
     ///
-    /// When the only remote is `upstream`, it's renamed to `origin`, which
-    /// moves its branches' tracking to `origin`; then `upstream` is added at
-    /// the old URL, and `origin` is pointed at the fork last. A failure after
-    /// the rename leaves `origin` at the old URL, which converting again
-    /// finishes; the error says the remote was renamed.
+    /// When the default remote is `upstream` (so no `origin` has a URL),
+    /// `upstream` is renamed to `origin`, which moves its branches' tracking
+    /// to `origin`; then `upstream` is added at the old URL, and `origin` is
+    /// pointed at the fork last. Other remotes and the branches tracking them
+    /// stay as they are. A failure after the rename leaves `origin` at the
+    /// old URL, which converting again finishes; the error says the remote
+    /// was renamed. An `origin` without a URL, which the rename would collide
+    /// with, is refused before anything changes, with a `.precondition`
+    /// saying to give it a URL or remove it.
     ///
     /// An `upstream` remote that points elsewhere (neither at the old URL nor
     /// at the repository being forked) is left as it is and becomes
@@ -111,9 +127,12 @@ extension SyncModel {
                 guard let defaultRemote = findDefaultRemote(remotes) else {
                     return .noRemote
                 }
-                // only `upstream`: make it `origin`, the fork, and add
-                // `upstream` back at the old URL
-                if remotes.count == 1, JSCompat.strictEquals(defaultRemote.name, upstreamRemoteName) {
+                if try await originWithoutURLBlocksRename(ctx.repository, remotes) {
+                    return .originWithoutURL
+                }
+                // `upstream` as the default (no `origin`): make it `origin`,
+                // the fork, and add `upstream` back at the old URL
+                if JSCompat.strictEquals(defaultRemote.name, upstreamRemoteName) {
                     try await renameRemote(ctx.repository, upstreamRemoteName, "origin")
                     progress.renamedUpstream = true
                     try await addRemote(ctx.repository, upstreamRemoteName, defaultRemote.url)
@@ -139,8 +158,13 @@ extension SyncModel {
                 underlying: error
             )
         }
-        if case .noRemote = conversion {
+        switch conversion {
+        case .noRemote:
             return
+        case .originWithoutURL:
+            throw precondition(originWithoutURLMessage, .convertToFork)
+        case .converted, .upstreamPointsElsewhere:
+            break
         }
         // update associated github repo
         associate(fork, endpoint: endpoint)
@@ -215,6 +239,9 @@ extension SyncModel {
 private enum ForkConversion: Sendable {
     /// Nothing: the repository has no remote.
     case noRemote
+    /// Nothing: `upstream`, the default remote, can't be renamed to `origin`,
+    /// which has no URL (`originWithoutURLBlocksRename`).
+    case originWithoutURL
     /// Converted, with `upstream` pointing at the old URL or the repository
     /// forked.
     case converted
@@ -225,8 +252,22 @@ private enum ForkConversion: Sendable {
 /// How far a fork conversion got, for its error.
 @MainActor
 private final class ForkConversionProgress {
-    /// Whether the only remote, `upstream`, was renamed to `origin`.
+    /// Whether the default remote, `upstream`, was renamed to `origin`.
     var renamedUpstream = false
+}
+
+/// Why a repository whose default remote is `upstream` can't be converted
+/// while a remote named `origin` has no URL.
+private let originWithoutURLMessage = "The origin remote has no URL. Give it a URL or remove it, then fork this repository again."
+
+/// Whether `upstream` is the default remote of `remotes`, the repository's
+/// remotes with URLs, while `git remote` names an `origin`, which then has
+/// no URL: renaming `upstream` to `origin` would collide with it.
+private func originWithoutURLBlocksRename(_ repository: Repository, _ remotes: [Remote]) async throws -> Bool {
+    guard let defaultRemote = findDefaultRemote(remotes), JSCompat.strictEquals(defaultRemote.name, upstreamRemoteName) else {
+        return false
+    }
+    return try await getRemoteNames(repository).contains { JSCompat.strictEquals($0, "origin") }
 }
 
 /// Sets the `upstream` remote's URL, adding the remote when there's none.
