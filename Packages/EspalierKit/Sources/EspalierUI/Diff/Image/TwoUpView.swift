@@ -10,6 +10,7 @@ import SwiftUI
 struct TwoUpView: View {
     let previousShown: ShownImage
     let currentShown: ShownImage
+    @Environment(\.numberFormat) private var numberFormat
 
     init(previous: ShownImage, current: ShownImage) {
         previousShown = previous
@@ -52,9 +53,9 @@ struct TwoUpView: View {
                 .font(Typography.heading)
             CheckeredImage(image: decoded, size: size)
                 .accessibilityElement()
-                .accessibilityLabel(imageAccessibilityLabel(title, image: decoded, bytes: image.bytes))
+                .accessibilityLabel(imageAccessibilityLabel(title, image: decoded, bytes: image.bytes, numberFormat: numberFormat))
                 .accessibilityAddTraits(.isImage)
-            Text(imageFooter(image: decoded, bytes: image.bytes))
+            Text(imageFooter(image: decoded, bytes: image.bytes, numberFormat: numberFormat))
                 .font(Typography.secondary.monospacedDigit())
                 .foregroundStyle(.secondary)
         }
@@ -67,7 +68,7 @@ struct TwoUpView: View {
         return HStack(spacing: Metrics.grid) {
             Text("Diff:")
             if diffBytes != 0 {
-                Text(sizeDifference)
+                Text(sizeDifference(numberFormat))
                     .foregroundStyle(Color(nsColor: diffBytes > 0 ? DiffColors.addedMarker : DiffColors.deletedMarker))
             } else {
                 Text("No size difference")
@@ -76,12 +77,12 @@ struct TwoUpView: View {
         .font(Typography.secondary.monospacedDigit())
     }
 
-    /// "+2.5 KiB (+20%)", "−1 KiB (−50%)"; without the percentage
-    /// when the old image was empty.
-    var sizeDifference: String {
+    /// "+2.5 KiB (+20%)", "−1 KiB (−50%)", the size in `numberFormat`;
+    /// without the percentage when the old image was empty.
+    func sizeDifference(_ numberFormat: NumberFormat) -> String {
         let diffBytes = current.bytes - previous.bytes
         let sign = diffBytes >= 0 ? "+" : "\u{2212}"
-        let size = "\(sign)\(formatBytes(Double(abs(diffBytes)), 2))"
+        let size = "\(sign)\(formatBytes(Double(abs(diffBytes)), 2, numberFormat: numberFormat))"
         guard let percent = percentChange(previous.bytes, current.bytes) else {
             return size
         }

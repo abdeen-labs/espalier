@@ -6,15 +6,16 @@
 // carries one dragging item, so the system draws no badge of its own.
 
 import AppKit
+import GitKit
 
 @MainActor
 enum CommitDragImage {
     /// Gives a drag of `count` commits out of `table` its image: the row
     /// under the pointer at `screenPoint` when it's dragged (one of
     /// `rows`, or selected), else the first of `rows`, as the session's one
-    /// dragging item. Items past the first, should there be any, show
-    /// nothing.
-    static func apply(to session: NSDraggingSession, in table: NSTableView, at screenPoint: NSPoint, rows: IndexSet, count: Int) {
+    /// dragging item, the count in `numberFormat`. Items past the first,
+    /// should there be any, show nothing.
+    static func apply(to session: NSDraggingSession, in table: NSTableView, at screenPoint: NSPoint, rows: IndexSet, count: Int, numberFormat: NumberFormat) {
         session.draggingFormation = .none
         let windowPoint = table.window?.convertPoint(fromScreen: screenPoint) ?? screenPoint
         let pointed = table.row(at: table.convert(windowPoint, from: nil))
@@ -23,7 +24,7 @@ enum CommitDragImage {
         guard let anchor, let rowView = table.rowView(atRow: anchor, makeIfNecessary: false) else {
             return
         }
-        let drag = make(from: rowView, count: max(count, 1))
+        let drag = make(from: rowView, count: max(count, 1), numberFormat: numberFormat)
         session.enumerateDraggingItems(options: [], for: table, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, index, _ in
             if index == 0 {
                 item.setDraggingFrame(drag.frame, contents: drag.image)
@@ -36,8 +37,8 @@ enum CommitDragImage {
     /// The image for a drag of `count` commits that starts on `row`, and
     /// its frame in `row`'s superview's coordinates (the table's), placed
     /// over the row.
-    static func make(from row: NSView, count: Int) -> (image: NSImage, frame: CGRect) {
-        let layout = Layout(rowSize: row.bounds.size, count: count)
+    static func make(from row: NSView, count: Int, numberFormat: NumberFormat) -> (image: NSImage, frame: CGRect) {
+        let layout = Layout(rowSize: row.bounds.size, count: count, numberFormat: numberFormat)
         let rowImage = snapshot(of: row)
         let scale = row.window?.backingScaleFactor ?? 2
         let image = image(rowImage: rowImage, layout: layout, appearance: row.effectiveAppearance, scale: scale)
@@ -166,16 +167,16 @@ extension CommitDragImage {
         let cardsBehind: [CGRect]
         /// The count badge, for several commits.
         let badge: CGRect?
-        /// The badge's text.
+        /// The badge's text: the count in `numberFormat`.
         let badgeText: String
 
-        init(rowSize: CGSize, count: Int) {
+        init(rowSize: CGSize, count: Int, numberFormat: NumberFormat) {
             let metrics = Metrics.CommitDragImage.self
             self.rowSize = rowSize
             let cardSize = CGSize(width: min(rowSize.width, metrics.maximumWidth), height: rowSize.height)
             let behind = min(max(count, 1), metrics.maximumCards) - 1
             let stack = CGFloat(behind) * metrics.stackOffset
-            badgeText = count.formatted()
+            badgeText = formatCount(count, numberFormat)
             var badgeSize = CGSize.zero
             if count > 1 {
                 let textWidth = NSAttributedString(string: badgeText, attributes: [.font: metrics.badgeFont]).size().width

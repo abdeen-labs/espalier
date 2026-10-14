@@ -116,11 +116,11 @@ enum ChangesApplyBenchmark {
         return nil
     }
 
-    /// The Debug menu's report.
-    static func run() -> String {
+    /// The Debug menu's report, counts in `numberFormat`.
+    static func run(numberFormat: NumberFormat) -> String {
         let results = sizes.map { measure(fileCount: $0) }
         let parts = results.map { result in
-            "\(formatNumber(Double(result.fileCount))) files \(milliseconds(result.apply)) ms"
+            "\(formatCount(result.fileCount, numberFormat)) files \(milliseconds(result.apply)) ms"
         }
         return "Changes Apply: " + parts.joined(separator: " · ") + " (median of 5)"
     }

@@ -32,13 +32,14 @@ nonisolated public struct WorkingCopySummary: Sendable, Equatable {
         isDirty ? "Uncommitted Changes" : "No Uncommitted Changes"
     }
 
-    /// The row's detail: the conflicts first, else the changed files.
-    public var detail: String? {
+    /// The row's detail: the conflicts first, else the changed files, the
+    /// count in `numberFormat`.
+    public func detail(_ numberFormat: NumberFormat) -> String? {
         if conflictedFiles > 0 {
-            return conflictedFiles == 1 ? "1 conflicted file" : "\(formatCount(conflictedFiles)) conflicted files"
+            return conflictedFiles == 1 ? "1 conflicted file" : "\(formatCount(conflictedFiles, numberFormat)) conflicted files"
         }
         if changedFiles > 0 {
-            return changedFiles == 1 ? "1 changed file" : "\(formatCount(changedFiles)) changed files"
+            return changedFiles == 1 ? "1 changed file" : "\(formatCount(changedFiles, numberFormat)) changed files"
         }
         return nil
     }
@@ -76,6 +77,9 @@ nonisolated public struct CommitRowContent: Sendable, Equatable {
     public var isMerge: Bool
     /// The current tip (HEAD's commit): its summary is semibold.
     public var isCurrentTip: Bool
+    /// The format the row's counts show in: the working copy's files, the
+    /// refs past the capsules shown, and the graph's stub counts.
+    public var numberFormat: NumberFormat
 
     public init(
         kind: Kind = .commit,
@@ -91,7 +95,8 @@ nonisolated public struct CommitRowContent: Sendable, Equatable {
         isDimmed: Bool = false,
         avatarEndpoint: String? = nil,
         isMerge: Bool = false,
-        isCurrentTip: Bool = false
+        isCurrentTip: Bool = false,
+        numberFormat: NumberFormat = defaultNumberFormat
     ) {
         self.kind = kind
         self.sha = sha
@@ -107,11 +112,12 @@ nonisolated public struct CommitRowContent: Sendable, Equatable {
         self.avatarEndpoint = avatarEndpoint
         self.isMerge = isMerge
         self.isCurrentTip = isCurrentTip
+        self.numberFormat = numberFormat
     }
 
-    /// The working copy's row.
-    public static func workingCopy(_ summary: WorkingCopySummary) -> CommitRowContent {
-        CommitRowContent(kind: .workingCopy(summary))
+    /// The working copy's row, its counts in `numberFormat`.
+    public static func workingCopy(_ summary: WorkingCopySummary, numberFormat: NumberFormat) -> CommitRowContent {
+        CommitRowContent(kind: .workingCopy(summary), numberFormat: numberFormat)
     }
 
     /// The summary as the row shows it.
@@ -139,11 +145,6 @@ nonisolated public struct CommitRowContent: Sendable, Equatable {
     var avatarUser: AvatarUser {
         AvatarUser(email: authorEmail, avatarURL: nil, name: authorName, endpoint: avatarEndpoint)
     }
-}
-
-/// Formats a count with grouping separators ("1,204").
-nonisolated func formatCount(_ count: Int) -> String {
-    count.formatted(.number.locale(Locale(identifier: "en_US")))
 }
 
 /// The parts History's commit rows share, so the graph's and the simple
@@ -304,6 +305,7 @@ final class CommitRowCellView: NSTableCellView {
             needsLayout = true
         }
         graphView.colors = style.colors
+        graphView.numberFormat = content.numberFormat
         graphView.drawing = drawing
         var emphasis = emphasis
         emphasis.isSelected = isSelectedRow
@@ -330,8 +332,9 @@ final class CommitRowCellView: NSTableCellView {
             summaryLabel.font = AppKitTypography.row
             summaryLabel.textColor = summary.isDirty ? Palette.text : Palette.text3
             summaryLabel.setTooltip(nil)
-            detailLabel.stringValue = summary.detail ?? ""
-            detailLabel.isHidden = summary.detail == nil
+            let detail = summary.detail(content.numberFormat)
+            detailLabel.stringValue = detail ?? ""
+            detailLabel.isHidden = detail == nil
             warningView.isHidden = summary.conflictedFiles == 0
             refsView.refs = []
             unpushedView.isHidden = true
@@ -347,6 +350,7 @@ final class CommitRowCellView: NSTableCellView {
             summaryLabel.setTooltip(content.displaySummary)
             detailLabel.isHidden = true
             warningView.isHidden = true
+            refsView.numberFormat = content.numberFormat
             refsView.refs = content.refs
             unpushedView.isHidden = content.unpushedTooltip == nil
             unpushedView.setTooltip(content.unpushedTooltip)
@@ -502,7 +506,7 @@ final class CommitRowCellView: NSTableCellView {
     override func accessibilityLabel() -> String? {
         switch content.kind {
         case .workingCopy(let summary):
-            summary.isDirty ? "Uncommitted changes, \(summary.detail ?? "")." : "No uncommitted changes."
+            summary.isDirty ? "Uncommitted changes, \(summary.detail(content.numberFormat) ?? "")." : "No uncommitted changes."
         case .commit:
             "\(content.displaySummary). \(content.authorName), \(content.date)."
         }

@@ -88,6 +88,6 @@ struct ChecksPopoverView: View {
         .frame(width: 400)
         .background(Color(espalier: Palette.background))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Checks for pull request \(number)")
+        .accessibilityLabel(Text(verbatim: "Checks for pull request \(number)"))
     }
 }

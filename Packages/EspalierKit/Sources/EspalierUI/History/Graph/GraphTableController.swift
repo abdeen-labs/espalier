@@ -45,6 +45,15 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         }
     }
 
+    /// How counts show.
+    var numberFormat = defaultNumberFormat {
+        didSet {
+            if numberFormat != oldValue {
+                reconfigureVisibleRows()
+            }
+        }
+    }
+
     // MARK: What the table shows
 
     private(set) var presentation = GraphPresentation()
@@ -456,7 +465,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             guard let self, let source = self.source, row < self.shownRowCount, row < source.graph.count else {
                 return nil
             }
-            return GraphAccessibility.value(forRow: row, source: source, presentation: self.presentation)
+            return GraphAccessibility.value(forRow: row, source: source, presentation: self.presentation, numberFormat: self.numberFormat)
         }
         cell.accessibilityActionsProvider = { [weak self] row in
             guard let self, row < self.shownRowCount else {
@@ -528,7 +537,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             return CommitRowContent()
         }
         guard let commit = source.commit(atRow: row) else {
-            return .workingCopy(presentation.workingCopy)
+            return .workingCopy(presentation.workingCopy, numberFormat: numberFormat)
         }
         let date = dates.entry(for: commit.sha, date: commit.author.date, now: Date(), formatting: dateFormatting, timeZone: timeZone)
         let track = source.graph[row].track
@@ -542,7 +551,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         } else {
             let tags = source.refs(at: commit.sha).filter { $0.kind == .tag && presentation.tagsToPush.contains($0.name) }.count
             if tags > 0 {
-                unpushed = tags == 1 ? "This commit has 1 tag to push" : "This commit has \(tags) tags to push"
+                unpushed = tags == 1 ? "This commit has 1 tag to push" : "This commit has \(formatCount(tags, numberFormat)) tags to push"
             }
         }
         return CommitRowContent(
@@ -558,7 +567,8 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             isDimmed: presentation.search.map { !$0.matches(row: row) } ?? false,
             avatarEndpoint: presentation.avatarEndpoint,
             isMerge: commit.parentSHAs.count > 1,
-            isCurrentTip: commit.sha == presentation.headSHA
+            isCurrentTip: commit.sha == presentation.headSHA,
+            numberFormat: numberFormat
         )
     }
 
@@ -814,7 +824,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             let summary = commit.summary.isEmpty ? CommitRowContent.emptySummary : RichText.emojified(commit.summary)
             return refs.isEmpty ? summary : "\(summary)\n\(refs.joined(separator: ", "))"
         }
-        return StubNavigator.tooltip(for: stub.edge, row: row, source: source, isLoading: loadingStubRow == row)
+        return StubNavigator.tooltip(for: stub.edge, row: row, source: source, isLoading: loadingStubRow == row, numberFormat: numberFormat)
     }
 
     /// Marks `row`'s stub as loading its other end (or stops, with nil).
@@ -978,7 +988,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint, forRowIndexes rowIndexes: IndexSet) {
         let payload = CommitDragPayload.read(from: session.draggingPasteboard)
-        CommitDragImage.apply(to: session, in: tableView, at: screenPoint, rows: rowIndexes, count: payload?.shas.count ?? rowIndexes.count)
+        CommitDragImage.apply(to: session, in: tableView, at: screenPoint, rows: rowIndexes, count: payload?.shas.count ?? rowIndexes.count, numberFormat: numberFormat)
         if let payload {
             actions.dragBegan(payload)
             watchDragEnd()

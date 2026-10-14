@@ -12,6 +12,7 @@
 // highlighted; the query stays for the next time it opens. The diff table draws the matches and scrolls the
 // current one into view as it's told (`connect(_:onChange:)`).
 
+import GitKit
 import Observation
 
 /// What changed in find, for the diff table.
@@ -60,8 +61,10 @@ final class DiffFindModel {
     /// The diff table told what changed, and how.
     @ObservationIgnored private weak var table: AnyObject?
     @ObservationIgnored private var onChange: @MainActor (DiffFindChange) -> Void = { _ in }
-    /// Where moving between matches is announced.
+    /// Where moving between matches is announced, and the format its
+    /// counts are in.
     @ObservationIgnored var announcer: Announcer = .voiceOver
+    @ObservationIgnored var numberFormat = defaultNumberFormat
     @ObservationIgnored private var document = DiffDocument.empty
     /// The document's searchable text, built on first use.
     @ObservationIgnored private var text: DiffFindText?
@@ -102,29 +105,29 @@ final class DiffFindModel {
         query.contains { !$0.isWhitespace }
     }
 
-    /// The count beside the field: "3 of 12", "No matches", or nil without
-    /// a query.
-    var countText: String? {
+    /// The count beside the field, in `numberFormat`: "3 of 12", "No
+    /// matches", or nil without a query.
+    func countText(_ numberFormat: NumberFormat) -> String? {
         guard hasQuery else {
             return nil
         }
         guard !matches.isEmpty else {
             return "No matches"
         }
-        return "\(formatCount((current ?? 0) + 1)) of \(totalText)"
+        return "\(formatCount((current ?? 0) + 1, numberFormat)) of \(totalText(numberFormat))"
     }
 
     /// What VoiceOver reads for the count: "Match 3 of 12".
-    var countAccessibilityLabel: String? {
-        guard let countText else {
+    func countAccessibilityLabel(_ numberFormat: NumberFormat) -> String? {
+        guard let countText = countText(numberFormat) else {
             return nil
         }
         return matches.isEmpty ? countText : "Match \(countText)"
     }
 
     /// The number of matches: "12", or "10,000+" past the limit.
-    private var totalText: String {
-        formatCount(matches.count) + (isCapped ? "+" : "")
+    private func totalText(_ numberFormat: NumberFormat) -> String {
+        formatCount(matches.count, numberFormat) + (isCapped ? "+" : "")
     }
 
     /// The matches on a row's side, while the bar shows.
@@ -226,7 +229,7 @@ final class DiffFindModel {
             }
             return
         }
-        announcer.announce("Result \(formatCount(current + 1)) of \(totalText) for \"\(query)\"")
+        announcer.announce("Result \(formatCount(current + 1, numberFormat)) of \(totalText(numberFormat)) for \"\(query)\"")
     }
 
     // MARK: The document

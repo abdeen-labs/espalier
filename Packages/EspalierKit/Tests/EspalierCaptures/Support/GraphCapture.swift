@@ -102,7 +102,7 @@ enum GraphCapture {
                     CGRect(x: 0, y: 0, width: width, height: geometry.rowHeight).fill()
                     emphasis.isSelected = true
                 }
-                GraphRenderer.draw(row.drawing, emphasis: emphasis, geometry: geometry, colors: colors, in: context)
+                GraphRenderer.draw(row.drawing, emphasis: emphasis, geometry: geometry, colors: colors, numberFormat: Capture.numberFormat, in: context)
                 let text = NSAttributedString(string: row.label, attributes: [
                     .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
                     .foregroundColor: Palette.text,

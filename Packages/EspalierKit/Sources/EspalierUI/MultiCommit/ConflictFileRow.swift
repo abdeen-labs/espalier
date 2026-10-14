@@ -82,11 +82,13 @@ nonisolated public struct ConflictFileRowContent: Sendable, Equatable, Identifia
     ///   - branches: The branches on each side, for the labels.
     ///   - offersSides: Whether a side can be picked (an operation is in
     ///     progress; a stash restore has none).
+    ///   - numberFormat: The format the conflicts' count is in.
     public static func make(
         _ file: WorkingDirectoryFileChange,
         manualResolution: ManualConflictResolution?,
         branches: ConflictBranches?,
-        offersSides: Bool = true
+        offersSides: Bool = true,
+        numberFormat: NumberFormat
     ) -> ConflictFileRowContent? {
         guard case .conflicted(let status) = file.status else {
             return nil
@@ -105,7 +107,7 @@ nonisolated public struct ConflictFileRowContent: Sendable, Equatable, Identifia
                 return ConflictFileRowContent(
                     path: file.path,
                     state: .markers(conflicts: conflicts),
-                    status: conflicts == 1 ? "1 conflict" : "\(conflicts) conflicts",
+                    status: conflicts == 1 ? "1 conflict" : "\(formatCount(conflicts, numberFormat)) conflicts",
                     oursLabel: oursLabel,
                     theirsLabel: theirsLabel
                 )

@@ -69,7 +69,7 @@ struct PullRequestChipLabel: View {
             Image(systemName: PullRequestGlyph.systemImage)
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)
-            Text("#\(content.number)")
+            Text(verbatim: "#\(content.number)")
                 .font(Typography.count)
             if let checks = content.checks {
                 ChecksGlyph(checks)

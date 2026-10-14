@@ -20,33 +20,34 @@ nonisolated public enum BranchTracking: Sendable, Equatable {
     /// The upstream is configured but gone from the remote.
     case upstreamGone
 
-    /// "↑2 ↓3", leaving out zero counts; nil when in sync or not tracking.
-    public var countsText: String? {
+    /// "↑2 ↓3", leaving out zero counts, in `numberFormat`; nil when in
+    /// sync or not tracking.
+    public func countsText(_ numberFormat: NumberFormat) -> String? {
         guard case .aheadBehind(let ahead, let behind) = self else {
             return nil
         }
         var parts: [String] = []
         if ahead > 0 {
-            parts.append("↑\(Self.formatCount(ahead))")
+            parts.append("↑\(Self.formatCompactCount(ahead, numberFormat))")
         }
         if behind > 0 {
-            parts.append("↓\(Self.formatCount(behind))")
+            parts.append("↓\(Self.formatCompactCount(behind, numberFormat))")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
-    /// What VoiceOver and the tooltip say.
-    public var description: String? {
+    /// What VoiceOver and the tooltip say, the counts in `numberFormat`.
+    public func description(_ numberFormat: NumberFormat) -> String? {
         switch self {
         case .none:
             return nil
         case .aheadBehind(let ahead, let behind):
             var parts: [String] = []
             if ahead > 0 {
-                parts.append("\(ahead) \(ahead == 1 ? "commit" : "commits") ahead")
+                parts.append("\(formatCount(ahead, numberFormat)) \(ahead == 1 ? "commit" : "commits") ahead")
             }
             if behind > 0 {
-                parts.append("\(behind) \(behind == 1 ? "commit" : "commits") behind")
+                parts.append("\(formatCount(behind, numberFormat)) \(behind == 1 ? "commit" : "commits") behind")
             }
             return parts.isEmpty ? "Up to date with its upstream" : parts.joined(separator: ", ")
         case .notPublished:
@@ -56,13 +57,10 @@ nonisolated public enum BranchTracking: Sendable, Equatable {
         }
     }
 
-    /// Counts past 999 shrink ("1.2k"), as the sync button's.
-    static func formatCount(_ count: Int) -> String {
-        guard count >= 1_000 else {
-            return "\(count)"
-        }
-        let thousands = Double(count) / 1_000
-        return thousands >= 10 ? "\(Int(thousands))k" : String(format: "%.1fk", thousands)
+    /// A count in `numberFormat`, shrunk past 999 ("1.2k") as the sync
+    /// button's.
+    static func formatCompactCount(_ count: Int, _ numberFormat: NumberFormat) -> String {
+        formatCompactNumber(Double(count), CompactFormatOptions(numberFormat: numberFormat))
     }
 }
 
@@ -147,8 +145,8 @@ nonisolated public struct BranchRowContent: Sendable, Equatable, Identifiable {
     }
 
     /// The row as VoiceOver reads it: the name, then what the trailing
-    /// glyphs say.
-    public var accessibilityLabel: String {
+    /// glyphs say, counts in `numberFormat`.
+    public func accessibilityLabel(_ numberFormat: NumberFormat) -> String {
         var parts = [name]
         if isCurrent {
             parts.append("current branch")
@@ -156,7 +154,7 @@ nonisolated public struct BranchRowContent: Sendable, Equatable, Identifiable {
         if let pullRequest {
             parts.append(pullRequest.tooltip)
         }
-        if let tracking = tracking.description {
+        if let tracking = tracking.description(numberFormat) {
             parts.append(tracking)
         }
         return parts.joined(separator: ", ")
@@ -170,6 +168,7 @@ public struct BranchRow: View {
     private let content: BranchRowContent
     private let dotColor: NSColor?
     @Environment(\.isSidebarRowSelected) private var isSelected
+    @Environment(\.numberFormat) private var numberFormat
 
     /// - Parameter dotColor: The branch's color in the graph; nil for
     ///   `content.fallbackColor`.
@@ -204,7 +203,7 @@ public struct BranchRow: View {
         }
         .tooltip(content.name)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(content.accessibilityLabel)
+        .accessibilityLabel(content.accessibilityLabel(numberFormat))
     }
 }
 
@@ -216,6 +215,7 @@ public struct BranchRow: View {
 struct BranchTrackingView: View {
     let tracking: BranchTracking
     @Environment(\.isSidebarRowSelected) private var isSelected
+    @Environment(\.numberFormat) private var numberFormat
 
     init(_ tracking: BranchTracking) {
         self.tracking = tracking
@@ -226,33 +226,33 @@ struct BranchTrackingView: View {
         case .none:
             EmptyView()
         case .aheadBehind(let ahead, let behind):
-            if tracking.countsText != nil {
+            if tracking.countsText(numberFormat) != nil {
                 HStack(spacing: Metrics.grid) {
                     if ahead > 0 {
-                        Text("↑\(BranchTracking.formatCount(ahead))")
+                        Text("↑\(BranchTracking.formatCompactCount(ahead, numberFormat))")
                             .font(Typography.aheadCount)
                             .foregroundStyle(.aheadText)
                     }
                     if behind > 0 {
-                        Text("↓\(BranchTracking.formatCount(behind))")
+                        Text("↓\(BranchTracking.formatCompactCount(behind, numberFormat))")
                             .font(Typography.secondaryCount)
                             .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
                     }
                 }
                 .lineLimit(1)
                 .fixedSize()
-                .tooltip(tracking.description)
+                .tooltip(tracking.description(numberFormat))
             }
         case .notPublished:
             // The words give way to the name in a narrow row.
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Metrics.grid) {
                     Image(systemName: "circle.dashed")
-                    Text(tracking.description ?? "")
+                    Text(tracking.description(numberFormat) ?? "")
                 }
                 .fixedSize()
                 Image(systemName: "circle.dashed")
-                    .tooltip(tracking.description)
+                    .tooltip(tracking.description(numberFormat))
             }
             .font(Typography.secondary)
             .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
@@ -261,7 +261,7 @@ struct BranchTrackingView: View {
             Image(systemName: "icloud.slash")
                 .font(Typography.secondary)
                 .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
-                .tooltip(tracking.description)
+                .tooltip(tracking.description(numberFormat))
         }
     }
 }

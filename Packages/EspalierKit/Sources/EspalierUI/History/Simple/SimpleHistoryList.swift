@@ -57,20 +57,22 @@ struct SimpleHistoryList: View {
 /// merges the base into the branch (Update from <base>).
 struct SimpleListBanner: View {
     let status: SimpleHistoryBaseStatus
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
-        HistoryBanner(systemImage: "arrow.down", message: Self.message(status)) {
+        HistoryBanner(systemImage: "arrow.down", message: Self.message(status, numberFormat: numberFormat)) {
             ActionButton(.updateFromDefaultBranch, title: "Update")
         }
     }
 
-    /// "**main** has 5 new commits since this branch started."
-    static func message(_ status: SimpleHistoryBaseStatus) -> AttributedString {
+    /// "**main** has 5 new commits since this branch started.", the count
+    /// in `numberFormat`.
+    static func message(_ status: SimpleHistoryBaseStatus, numberFormat: NumberFormat) -> AttributedString {
         var name = AttributedString(status.name)
         name.font = Typography.secondary.weight(.semibold)
         name.foregroundColor = .text
         let count = status.newCommitCount
-        let commits = count == 1 ? "1 new commit" : "\(formatCount(count)) new commits"
+        let commits = count == 1 ? "1 new commit" : "\(formatCount(count, numberFormat)) new commits"
         return name + AttributedString(" has \(commits) since this branch started.")
     }
 }

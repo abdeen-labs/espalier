@@ -21,17 +21,17 @@ nonisolated struct StashRowContent: Sendable, Equatable, Identifiable {
         branch
     }
 
-    /// The badge: the file count, once counted.
-    var badge: String? {
-        fileCount.map { "\($0)" }
+    /// The badge: the file count, once counted, in `numberFormat`.
+    func badge(_ numberFormat: NumberFormat) -> String? {
+        fileCount.map { formatCount($0, numberFormat) }
     }
 
-    /// What VoiceOver reads: "main, 4 files".
-    var accessibilityLabel: String {
+    /// What VoiceOver reads: "main, 4 files", the count in `numberFormat`.
+    func accessibilityLabel(_ numberFormat: NumberFormat) -> String {
         guard let fileCount else {
             return branch
         }
-        return "\(branch), \(StashFilesSummary.files(fileCount))"
+        return "\(branch), \(StashFilesSummary.files(fileCount, numberFormat))"
     }
 
     /// The rows for the branches with stashes: the current branch's first,
@@ -69,10 +69,11 @@ nonisolated struct StashRowContent: Sendable, Equatable, Identifiable {
 struct StashRow: View {
     let content: StashRowContent
     @Environment(\.isSidebarRowSelected) private var isSelected
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         SidebarRowLabel(content.branch, systemImage: "tray.full") {
-            if let badge = content.badge {
+            if let badge = content.badge(numberFormat) {
                 Text(badge)
                     .font(Typography.count)
                     .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
@@ -80,7 +81,7 @@ struct StashRow: View {
         }
         .tooltip(content.tooltip)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(content.accessibilityLabel)
+        .accessibilityLabel(content.accessibilityLabel(numberFormat))
     }
 }
 

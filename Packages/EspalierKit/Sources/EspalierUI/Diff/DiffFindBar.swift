@@ -37,6 +37,7 @@ extension Metrics {
 struct DiffFindBar: View {
     @Bindable var find: DiffFindModel
     @FocusState private var isFocused: Bool
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         HStack(spacing: Metrics.DiffFind.spacing) {
@@ -108,13 +109,13 @@ struct DiffFindBar: View {
                 .announcesFilterResults(find.query) { [find] in
                     find.matches.count
                 }
-            if let count = find.countText {
+            if let count = find.countText(numberFormat) {
                 Text(count)
                     .font(find.matches.isEmpty ? Typography.secondary : Typography.count)
                     .foregroundStyle(.text3)
                     .lineLimit(1)
                     .fixedSize()
-                    .accessibilityLabel(find.countAccessibilityLabel ?? count)
+                    .accessibilityLabel(find.countAccessibilityLabel(numberFormat) ?? count)
                     .accessibilityAddTraits(.updatesFrequently)
             }
         }

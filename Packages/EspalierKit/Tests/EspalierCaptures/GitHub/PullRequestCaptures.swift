@@ -1,6 +1,7 @@
 // The pull request surfaces: sidebar rows (drafts marked Draft, the current
 // branch's semibold, one selected, each checks state, a drop target), the
-// toolbar chip (and its tooltip while checks aren't done), the checks
+// toolbar chip (and its tooltip while checks aren't done), a four-digit
+// number in the row, the chip, and the overview's header, the checks
 // popover in its card, the overview (a draft with a description, and the
 // current branch's "Checked Out" in the narrowest column), a Markdown
 // description (its image as a link, and loaded), the Re-run sheet (failed
@@ -203,6 +204,47 @@ struct PullRequestCaptures {
             named: "overview-checkedOut",
             area: area,
             size: CGSize(width: Metrics.Column.pullRequestOverview.min, height: 260)
+        )
+    }
+
+    @Test("a pull request numbered past a thousand: its number ungrouped in the sidebar row, the chip, and the overview's header")
+    func fourDigitNumber() async {
+        let number = 1_234
+        await captureSettled(
+            {
+                sidebar {
+                    PullRequestRow(content: PullRequestRowContent(
+                        number: number,
+                        title: "Add the sign-in sheet",
+                        author: "octo",
+                        created: GitHubCaptureFixtures.created,
+                        checks: .success,
+                        checksTooltip: "Checks: Successful"
+                    ))
+                    .sidebarRow(.pullRequest(number: number))
+                }
+            },
+            named: "number-sidebarRow",
+            area: area,
+            size: CGSize(width: 260, height: 70)
+        )
+        capture(
+            Button {} label: { PullRequestChipLabel(content: PullRequestChipContent(number: number, checks: .success, checksTooltip: "Checks: Successful")) }
+                .padding(Metrics.insetSmall),
+            named: "number-chip",
+            area: area
+        )
+        let description = await MarkdownDocument.parseInBackground("", underlineLinks: true)
+        capture(
+            PullRequestOverviewView(
+                content: PullRequestOverviewContent(GitHubCaptureFixtures.pullRequest(number), isCurrentBranch: true),
+                checks: GitHubCaptureFixtures.checksContent(nil),
+                description: description,
+                actions: overviewActions
+            ),
+            named: "number-overview",
+            area: area,
+            size: CGSize(width: 460, height: 220)
         )
     }
 

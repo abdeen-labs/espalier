@@ -25,6 +25,7 @@ struct SimpleListTableView: NSViewRepresentable {
 
     @Environment(\.avatarLoader) private var avatarLoader
     @Environment(\.dateTimeFormatting) private var dateTimeFormatting
+    @Environment(\.numberFormat) private var numberFormat
     @Environment(\.timeZone) private var timeZone
 
     init(history: HistoryModel, presentation: SimpleListPresentation, selection: [String], reorderInsertionRow: Int?, actions: SimpleListActions) {
@@ -52,6 +53,7 @@ struct SimpleListTableView: NSViewRepresentable {
         controller.avatarLoader = avatarLoader
         controller.dateFormatting = dateTimeFormatting
         controller.timeZone = timeZone
+        controller.numberFormat = numberFormat
         controller.update(history: history, presentation: presentation, selection: selection, reorderInsertionRow: reorderInsertionRow)
     }
 }

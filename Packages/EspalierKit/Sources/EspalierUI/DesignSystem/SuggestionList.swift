@@ -16,6 +16,7 @@
 // `textFieldSuggestions(_:text:)` gives a SwiftUI text field the list.
 
 import AppKit
+import GitKit
 import SwiftUI
 
 /// A suggestion the list shows.
@@ -60,6 +61,8 @@ final class SuggestionList {
     private(set) var isOpen = false
     /// Says what VoiceOver hears (tests record it).
     var announcer = Announcer.voiceOver
+    /// The format VoiceOver hears the suggestions' count in.
+    var numberFormat = defaultNumberFormat
 
     /// The text whose typing the list follows: a field's editor for a
     /// field.
@@ -118,7 +121,7 @@ final class SuggestionList {
             open(for: textView, below: anchor, in: view)
         }
         if !wasOpen {
-            announcer.announce(suggestions.count == 1 ? "1 suggestion" : "\(suggestions.count) suggestions", priority: .medium)
+            announcer.announce(suggestions.count == 1 ? "1 suggestion" : "\(formatCount(suggestions.count, numberFormat)) suggestions", priority: .medium)
         }
     }
 
@@ -525,12 +528,16 @@ private struct TextFieldSuggestionsModifier: ViewModifier {
     let suggestions: [String]
     let text: String
     @State private var controller = TextFieldSuggestions()
+    @Environment(\.numberFormat) private var numberFormat
 
     func body(content: Content) -> some View {
         content
             .background {
                 SuggestionAnchorRepresentable(controller: controller)
                     .accessibilityHidden(true)
+            }
+            .onChange(of: numberFormat, initial: true) {
+                controller.list.numberFormat = numberFormat
             }
             .onChange(of: text) { _, text in
                 controller.textChanged(to: text, suggestions: suggestions)

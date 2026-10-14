@@ -422,10 +422,10 @@ public struct DiffContainer: View {
 
     /// A conflicted file's row in Changes, for what its message says.
     private func conflictRow(_ file: DiffFileInfo) -> ConflictFileRowContent? {
-        guard file.status == .conflicted, let repository = window?.repository else {
+        guard file.status == .conflicted, let window, let repository = window.repository else {
             return nil
         }
-        return FileList.conflictRows(repository)[ExactString(file.path)]
+        return FileList.conflictRows(repository, numberFormat: window.app.preferences.numberFormat)[ExactString(file.path)]
     }
 
     /// The text diff shown, if any.

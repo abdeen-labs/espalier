@@ -37,19 +37,19 @@ struct MultiCommitCaptures {
         let ahead = [CommitOneLine(sha: "a", summary: "One"), CommitOneLine(sha: "b", summary: "Two")]
         let behind = [CommitOneLine(sha: "c", summary: "Three"), CommitOneLine(sha: "d", summary: "Four"), CommitOneLine(sha: "e", summary: "Five")]
         let statuses: [IntegrateStatus] = [
-            .merge(current: "main", branch: "feature/login", preview: nil),
-            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .clean, commitCount: 3)),
-            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .clean, commitCount: 0)),
-            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .conflicts(conflictedFiles: 2), commitCount: 3)),
-            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .conflicts(conflictedFiles: 2), commitCount: nil)),
-            .merge(current: "main", branch: "unrelated", preview: MergePreview(status: .invalid, commitCount: 0)),
-            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: nil, commitCount: 3)),
-            .rebase(current: "feature/login", base: "main", preview: .loading),
-            .rebase(current: "feature/login", base: "main", preview: .clean(commitsAhead: ahead, commitsBehind: behind)),
-            .rebase(current: "feature/login", base: "main", preview: .clean(commitsAhead: [], commitsBehind: behind)),
-            .rebase(current: "feature/login", base: "main", preview: .clean(commitsAhead: ahead, commitsBehind: [])),
-            .rebase(current: "feature/login", base: "main", preview: .conflicts),
-            .rebase(current: "feature/login", base: "unrelated", preview: .invalid),
+            .merge(current: "main", branch: "feature/login", preview: nil, numberFormat: Capture.numberFormat),
+            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .clean, commitCount: 3), numberFormat: Capture.numberFormat),
+            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .clean, commitCount: 0), numberFormat: Capture.numberFormat),
+            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .conflicts(conflictedFiles: 2), commitCount: 3), numberFormat: Capture.numberFormat),
+            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .conflicts(conflictedFiles: 2), commitCount: nil), numberFormat: Capture.numberFormat),
+            .merge(current: "main", branch: "unrelated", preview: MergePreview(status: .invalid, commitCount: 0), numberFormat: Capture.numberFormat),
+            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: nil, commitCount: 3), numberFormat: Capture.numberFormat),
+            .rebase(current: "feature/login", base: "main", preview: .loading, numberFormat: Capture.numberFormat),
+            .rebase(current: "feature/login", base: "main", preview: .clean(commitsAhead: ahead, commitsBehind: behind), numberFormat: Capture.numberFormat),
+            .rebase(current: "feature/login", base: "main", preview: .clean(commitsAhead: [], commitsBehind: behind), numberFormat: Capture.numberFormat),
+            .rebase(current: "feature/login", base: "main", preview: .clean(commitsAhead: ahead, commitsBehind: []), numberFormat: Capture.numberFormat),
+            .rebase(current: "feature/login", base: "main", preview: .conflicts, numberFormat: Capture.numberFormat),
+            .rebase(current: "feature/login", base: "unrelated", preview: .invalid, numberFormat: Capture.numberFormat),
         ]
         let view = VStack(alignment: .leading, spacing: Metrics.insetSmall) {
             ForEach(Array(statuses.enumerated()), id: \.offset) { _, status in
@@ -199,20 +199,22 @@ struct MultiCommitCaptures {
             ("conflicts", .conflicts(
                 operation: "Rebase", isMerge: false, resolved: 1, total: 3, unresolved: 2, isContinuing: false,
                 hasUntrackedFiles: true, isRebaseFamily: true, showsResolveWithAI: true, canResolveWithAI: true,
-                step: OperationStep(position: 2, total: 4)
+                step: OperationStep(position: 2, total: 4), numberFormat: Capture.numberFormat
             ), nil),
             ("conflicts-resolved", .conflicts(
                 operation: "Rebase", isMerge: false, resolved: 3, total: 3, unresolved: 0, isContinuing: false,
                 hasUntrackedFiles: false, isRebaseFamily: true, showsResolveWithAI: true, canResolveWithAI: true,
-                step: OperationStep(position: 2, total: 4)
+                step: OperationStep(position: 2, total: 4), numberFormat: Capture.numberFormat
             ), nil),
             ("conflicts-none", .conflicts(
                 operation: "Merge", isMerge: true, resolved: 0, total: 0, unresolved: 0, isContinuing: false,
-                hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: true, canResolveWithAI: true
+                hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: true, canResolveWithAI: true,
+                numberFormat: Capture.numberFormat
             ), nil),
             ("conflicts-aiError", .conflicts(
                 operation: "Merge", isMerge: true, resolved: 0, total: 2, unresolved: 2, isContinuing: false,
-                hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: true, canResolveWithAI: true
+                hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: true, canResolveWithAI: true,
+                numberFormat: Capture.numberFormat
             ), "The provider rejected the API key. Check it in Settings ▸ AI."),
             // A stash restore's conflicts and an operation Espalier can't
             // finish (applying patches, a bisect) draw the same panel with

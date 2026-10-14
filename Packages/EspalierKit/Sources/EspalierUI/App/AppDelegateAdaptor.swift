@@ -148,7 +148,7 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
         guard let launched else {
             return .terminateNow
         }
-        let alert = isTerminating ? nil : QuitGuard.reasons(launched.model).alert
+        let alert = isTerminating ? nil : QuitGuard.reasons(launched.model).alert(launched.model.preferences.numberFormat)
         Task {
             if let alert {
                 let response = await presentQuitAlert(alert)

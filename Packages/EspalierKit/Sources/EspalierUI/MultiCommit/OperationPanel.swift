@@ -98,17 +98,17 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
     /// "2 conflicted files", "1 of 2 conflicted files has been resolved.",
     /// or "All conflicted files have been resolved."; nil without conflicted
     /// files.
-    public static func summary(resolved: Int, total: Int) -> String? {
+    public static func summary(resolved: Int, total: Int, numberFormat: NumberFormat) -> String? {
         if total == 0 {
             return nil
         }
         if resolved == 0 {
-            return total == 1 ? "1 conflicted file" : "\(total) conflicted files"
+            return total == 1 ? "1 conflicted file" : "\(formatCount(total, numberFormat)) conflicted files"
         }
         if resolved >= total {
             return "All conflicted files have been resolved."
         }
-        return "\(resolved) of \(total) conflicted files \(resolved == 1 ? "has" : "have") been resolved."
+        return "\(formatCount(resolved, numberFormat)) of \(formatCount(total, numberFormat)) conflicted files \(resolved == 1 ? "has" : "have") been resolved."
     }
 
     /// The operation's display name ("Rebase", "Cherry-pick", "Revert").
@@ -140,6 +140,7 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
     ///   - step: Which commit a rebase or cherry-pick stopped at
     ///     (`operations.stoppedStep`): with more than one, the line under
     ///     the title says which.
+    ///   - numberFormat: The format the counts are in.
     public static func conflicts(
         operation: String,
         isMerge: Bool,
@@ -152,10 +153,13 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         showsResolveWithAI: Bool,
         canResolveWithAI: Bool,
         mergeMessage: MergeMessage? = nil,
-        step: OperationStep? = nil
+        step: OperationStep? = nil,
+        numberFormat: NumberFormat
     ) -> OperationPanelContent {
         let lacksSummary = isMerge && (mergeMessage.map { $0.summary.unicodeScalars.allSatisfy(JSCompat.isWhitespace) } ?? false)
-        let stoppedAt = step.flatMap { $0.total > 1 ? "Stopped at commit \($0.position) of \($0.total)" : nil }
+        let stoppedAt = step.flatMap { step in
+            step.total > 1 ? "Stopped at commit \(formatCount(step.position, numberFormat)) of \(formatCount(step.total, numberFormat))" : nil
+        }
         let title = if total == 0 {
             "No conflicts to resolve"
         } else if unresolved > 0 {
@@ -165,7 +169,7 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         }
         return OperationPanelContent(
             title: title,
-            state: .conflicts(summary: summary(resolved: resolved, total: total)),
+            state: .conflicts(summary: summary(resolved: resolved, total: total, numberFormat: numberFormat)),
             abortTitle: "Abort \(operation)",
             continueTitle: isMerge ? "Commit Merge" : "Continue \(operation)",
             canContinue: unresolved == 0 && !isContinuing && !lacksSummary,
@@ -178,10 +182,11 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         )
     }
 
-    /// The panel for a repository, or nil when nothing runs, nothing waits
-    /// on conflicts, and no stash restore conflicted.
+    /// The panel for a repository, its counts in `numberFormat`, or nil when
+    /// nothing runs, nothing waits on conflicts, and no stash restore
+    /// conflicted.
     @MainActor
-    public static func make(_ repository: RepositoryModel, aiEnabled: Bool) -> OperationPanelContent? {
+    public static func make(_ repository: RepositoryModel, aiEnabled: Bool, numberFormat: NumberFormat = defaultNumberFormat) -> OperationPanelContent? {
         let operations = repository.operations
         let files = repository.changes.workingDirectory.files
         let unmerged = files.filter { $0.status.kind == .conflicted }
@@ -192,7 +197,7 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
             let name = name(of: current)
             switch current.phase {
             case .running(let progress), .continuing(let progress):
-                return running(name: name, progress: progress)
+                return running(name: name, progress: progress, numberFormat: numberFormat)
             case .interrupted:
                 return OperationPanelContent(
                     title: "\(name) interrupted",
@@ -215,7 +220,8 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
                     showsResolveWithAI: aiEnabled,
                     canResolveWithAI: repository.ai.canResolveConflicts,
                     mergeMessage: operations.mergeMessage,
-                    step: operations.stoppedStep
+                    step: operations.stoppedStep,
+                    numberFormat: numberFormat
                 )
             }
         }
@@ -234,13 +240,14 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
                 showsResolveWithAI: aiEnabled,
                 canResolveWithAI: repository.ai.canResolveConflicts,
                 mergeMessage: operations.mergeMessage,
-                step: operations.stoppedStep
+                step: operations.stoppedStep,
+                numberFormat: numberFormat
             )
         }
         if let local = repository.localOperation, let name = runningName(of: local.kind) {
             switch local.progress {
             case .multiCommitOperation(let progress)?:
-                return running(name: name, progress: progress)
+                return running(name: name, progress: progress, numberFormat: numberFormat)
             case .revert(let progress)?:
                 return OperationPanelContent(title: "\(name) in progress", state: .running(detail: progress.description, progress: progress.value))
             default:
@@ -260,10 +267,10 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         return nil
     }
 
-    private static func running(name: String, progress: MultiCommitOperationProgress) -> OperationPanelContent {
+    private static func running(name: String, progress: MultiCommitOperationProgress, numberFormat: NumberFormat) -> OperationPanelContent {
         var detail: String?
         if progress.totalCommitCount > 0 {
-            detail = "Commit \(progress.position) of \(progress.totalCommitCount)"
+            detail = "Commit \(formatCount(progress.position, numberFormat)) of \(formatCount(progress.totalCommitCount, numberFormat))"
             if !progress.currentCommitSummary.isEmpty {
                 detail! += " · \(progress.currentCommitSummary)"
             }
@@ -293,6 +300,7 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
 public struct OperationPanel: View {
     private let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
+    @Environment(\.numberFormat) private var numberFormat
 
     public init(repository: RepositoryModel) {
         self.repository = repository
@@ -306,7 +314,7 @@ public struct OperationPanel: View {
 
     public var body: some View {
         let aiEnabled = context.app.ai.isEnabled
-        if let content = OperationPanelContent.make(repository, aiEnabled: aiEnabled) {
+        if let content = OperationPanelContent.make(repository, aiEnabled: aiEnabled, numberFormat: numberFormat) {
             OperationPanelView(
                 content: content,
                 aiError: AIConflictFlow.state(in: context).startError(for: repository.id),

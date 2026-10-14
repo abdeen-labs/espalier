@@ -2,6 +2,7 @@
 // lists the rest. Drawn with the design system's `RefCapsuleRenderer`.
 
 import AppKit
+import GitKit
 import SwiftUI
 
 /// Draws a row's ref capsules.
@@ -21,6 +22,17 @@ final class RefCapsulesView: NSView {
     var palette = TrackPalette.Resolved() {
         didSet {
             needsDisplay = true
+        }
+    }
+
+    /// The format "+N" shows in.
+    var numberFormat = defaultNumberFormat {
+        didSet {
+            if numberFormat != oldValue {
+                items = []
+                laidOutWidth = nil
+                needsDisplay = true
+            }
         }
     }
 
@@ -52,7 +64,7 @@ final class RefCapsulesView: NSView {
             return 0
         }
         if laidOutWidth != maximumWidth || items.isEmpty || laidOutLook != Look.current {
-            items = RefCapsuleRenderer.layout(refs, maximumWidth: maximumWidth)
+            items = RefCapsuleRenderer.layout(refs, maximumWidth: maximumWidth, numberFormat: numberFormat)
             laidOutWidth = maximumWidth
             laidOutLook = Look.current
             needsDisplay = true

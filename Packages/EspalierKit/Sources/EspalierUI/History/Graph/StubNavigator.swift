@@ -263,8 +263,8 @@ final class StubNavigator {
     // MARK: Tooltips
 
     /// What a stub's tooltip says: where it continues, with the other end's
-    /// commit.
-    static func tooltip(for edge: CommitGraphEdge, row: Int, source: HistoryModel, isLoading: Bool) -> String {
+    /// commit; counts in `numberFormat`.
+    static func tooltip(for edge: CommitGraphEdge, row: Int, source: HistoryModel, isLoading: Bool, numberFormat: NumberFormat) -> String {
         func describe(_ commit: Commit?) -> String {
             guard let commit else {
                 return ""
@@ -273,7 +273,7 @@ final class StubNavigator {
             return ": \(shortenSHA(commit.sha)) \(summary)"
         }
         func commits(_ count: Int) -> String {
-            count == 1 ? "1 commit" : "\(formatCount(count)) commits"
+            count == 1 ? "1 commit" : "\(formatCount(count, numberFormat)) commits"
         }
         switch edge.kind {
         case .outgoingStub:

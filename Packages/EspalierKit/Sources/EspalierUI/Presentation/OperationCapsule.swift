@@ -38,10 +38,10 @@ extension OperationCapsuleContent {
         }
     }
 
-    /// The capsule for a repository's state, or nil when nothing runs and
-    /// nothing waits on conflicts.
+    /// The capsule for a repository's state, its counts in `numberFormat`,
+    /// or nil when nothing runs and nothing waits on conflicts.
     @MainActor
-    public static func make(_ repository: RepositoryModel) -> OperationCapsuleContent? {
+    public static func make(_ repository: RepositoryModel, numberFormat: NumberFormat = defaultNumberFormat) -> OperationCapsuleContent? {
         let operations = repository.operations
         if let current = operations.current {
             switch current.phase {
@@ -50,7 +50,7 @@ extension OperationCapsuleContent {
             case .interrupted:
                 return .interrupted(message: current.interruptedMessage)
             case .running(let progress), .continuing(let progress):
-                return running(name: name(of: current), progress: progress)
+                return running(name: name(of: current), progress: progress, numberFormat: numberFormat)
             }
         }
         if operations.conflictState != nil {
@@ -61,7 +61,7 @@ extension OperationCapsuleContent {
         }
         switch local.progress {
         case .multiCommitOperation(let progress)?:
-            return running(name: name, progress: progress)
+            return running(name: name, progress: progress, numberFormat: numberFormat)
         case .revert(let progress)?:
             return .running(title: "\(name) in progress", detail: progress.description, progress: progress.value)
         default:
@@ -69,10 +69,10 @@ extension OperationCapsuleContent {
         }
     }
 
-    private static func running(name: String, progress: MultiCommitOperationProgress) -> OperationCapsuleContent {
+    private static func running(name: String, progress: MultiCommitOperationProgress, numberFormat: NumberFormat) -> OperationCapsuleContent {
         var detail: String?
         if progress.totalCommitCount > 0 {
-            detail = "Commit \(progress.position) of \(progress.totalCommitCount)"
+            detail = "Commit \(formatCount(progress.position, numberFormat)) of \(formatCount(progress.totalCommitCount, numberFormat))"
             if !progress.currentCommitSummary.isEmpty {
                 detail! += " · \(RichText.emojified(progress.currentCommitSummary))"
             }

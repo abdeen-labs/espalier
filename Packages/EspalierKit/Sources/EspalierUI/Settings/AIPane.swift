@@ -7,6 +7,7 @@
 import AIKit
 import EspalierCore
 import EspalierSupport
+import GitKit
 import SwiftUI
 
 /// Settings ▸ AI.
@@ -244,6 +245,7 @@ struct ProviderRow: View {
     let provider: BYOKProvider
     let edit: () -> Void
     let remove: () -> Void
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         HStack(spacing: Metrics.SettingsWindow.rowSpacing) {
@@ -256,7 +258,7 @@ struct ProviderRow: View {
                         LocalBadge()
                     }
                 }
-                Text("\(ProviderCopy.typeShortTitle(provider.type)) · \(ProviderCopy.modelCount(provider.models.count))")
+                Text("\(ProviderCopy.typeShortTitle(provider.type)) · \(ProviderCopy.modelCount(provider.models.count, numberFormat))")
                     .font(Typography.secondary)
                     .foregroundStyle(.text3)
             }

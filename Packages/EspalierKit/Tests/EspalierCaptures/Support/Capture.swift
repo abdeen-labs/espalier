@@ -18,6 +18,7 @@ import AppKit
 import EspalierCore
 import EspalierSupport
 import Foundation
+import GitKit
 import SwiftUI
 import Testing
 @testable import EspalierUI
@@ -85,14 +86,18 @@ enum Capture {
     /// The scale images are drawn at.
     static let scale: CGFloat = 2
 
-    /// The environment every hosted view gets: English, monograms, and no
-    /// motion (a state change never draws a frame from the middle of an
-    /// animation).
+    /// The number format captures show counts in: English's.
+    static let numberFormat = NumberFormat(thousandsSeparator: .comma, decimalSeparator: .period)
+
+    /// The environment every hosted view gets: English and its number
+    /// format, monograms, and no motion (a state change never draws a frame
+    /// from the middle of an animation).
     static func prepared(_ view: some View) -> some View {
         view
             .environment(\.motionSuppressed, true)
             .environment(\.appearsActive, true)
             .environment(\.locale, Locale(identifier: "en_US"))
+            .environment(\.numberFormat, numberFormat)
             .environment(\.avatarLoader, MonogramAvatarLoader())
             .defaultAppStorage(CaptureDefaults.empty)
             .lookFont()

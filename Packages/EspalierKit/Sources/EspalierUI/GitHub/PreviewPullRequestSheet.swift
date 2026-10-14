@@ -47,9 +47,14 @@ nonisolated struct PreviewPullRequestContent: Sendable, Equatable {
         }
     }
 
-    /// "3 commits".
-    var commits: String {
-        "\(commitCount) commit\(commitCount == 1 ? "" : "s")"
+    /// "3 commits", the count in `numberFormat`.
+    func commits(_ numberFormat: NumberFormat) -> String {
+        "\(formatCount(commitCount, numberFormat)) commit\(commitCount == 1 ? "" : "s")"
+    }
+
+    /// "10 added lines, 2 removed lines", the counts in `numberFormat`.
+    func lines(_ numberFormat: NumberFormat) -> String {
+        "\(formatCount(linesAdded, numberFormat)) added lines, \(formatCount(linesDeleted, numberFormat)) removed lines"
     }
 
     /// The button's title and help.
@@ -69,6 +74,7 @@ struct PreviewPullRequestSheet: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
     @Environment(\.dismissModal) private var dismissModal
+    @Environment(\.numberFormat) private var numberFormat
     @State private var isPickingBase = false
     @State private var pickedBase: Branch?
     @State private var baseNote: String?
@@ -133,7 +139,7 @@ struct PreviewPullRequestSheet: View {
                 .foregroundStyle(.text)
                 .accessibilityAddTraits(.isHeader)
             HStack(spacing: Metrics.insetSmall) {
-                Text("Merge \(content.commits) into")
+                Text("Merge \(content.commits(numberFormat)) into")
                     .foregroundStyle(.text2)
                 Button {
                     isPickingBase = true
@@ -164,7 +170,7 @@ struct PreviewPullRequestSheet: View {
                 SignInInlineError(message: baseNote)
             }
             if preview.status == .loaded, !preview.commits.isEmpty {
-                Text("\(content.linesAdded) added lines, \(content.linesDeleted) removed lines")
+                Text(content.lines(numberFormat))
                     .font(Typography.meta)
                     .foregroundStyle(.text3)
             }

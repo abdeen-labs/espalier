@@ -18,8 +18,8 @@ nonisolated struct HistorySearchStatusContent: Sendable, Equatable {
             Part(text: text, isCount: false)
         }
 
-        static func count(_ count: Int) -> Part {
-            Part(text: formatCount(count), isCount: true)
+        static func count(_ count: Int, _ numberFormat: NumberFormat) -> Part {
+            Part(text: formatCount(count, numberFormat), isCount: true)
         }
     }
 
@@ -43,17 +43,18 @@ nonisolated struct HistorySearchStatusContent: Sendable, Equatable {
         self.commitID = commitID
     }
 
-    init(search: HistorySearch, loaded: Int, isComplete: Bool, isLoadingMore: Bool) {
-        let commits: [Part] = [.count(loaded), .words(loaded == 1 ? " loaded commit" : " loaded commits")]
+    /// The status of `search`, its counts in `numberFormat`.
+    init(search: HistorySearch, loaded: Int, isComplete: Bool, isLoadingMore: Bool, numberFormat: NumberFormat) {
+        let commits: [Part] = [.count(loaded, numberFormat), .words(loaded == 1 ? " loaded commit" : " loaded commits")]
         let count = search.matchCount
         let matches = count == 1 ? " match in " : " matches in "
         let parts: [Part]
         if count == 0 {
             parts = search.isSearching ? [.words("Searching…")] : [.words("No matches in ")] + commits
         } else if let current = search.currentMatch {
-            parts = [.count(current + 1), .words(" of "), .count(count), .words(matches)] + commits
+            parts = [.count(current + 1, numberFormat), .words(" of "), .count(count, numberFormat), .words(matches)] + commits
         } else {
-            parts = [.count(count), .words(matches)] + commits
+            parts = [.count(count, numberFormat), .words(matches)] + commits
         }
         self.init(
             parts: parts,
@@ -65,8 +66,14 @@ nonisolated struct HistorySearchStatusContent: Sendable, Equatable {
     }
 
     @MainActor
-    init(_ search: HistorySearch, history: HistoryModel) {
-        self.init(search: search, loaded: history.commitSHAs.count, isComplete: history.isComplete, isLoadingMore: history.isLoadingMore)
+    init(_ search: HistorySearch, history: HistoryModel, numberFormat: NumberFormat) {
+        self.init(
+            search: search,
+            loaded: history.commitSHAs.count,
+            isComplete: history.isComplete,
+            isLoadingMore: history.isLoadingMore,
+            numberFormat: numberFormat
+        )
     }
 
     /// The status as one string, as VoiceOver reads it.

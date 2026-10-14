@@ -264,6 +264,7 @@ struct CoAuthorEntry: NSViewRepresentable {
 
     func updateNSView(_ field: CoAuthorsTextField, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.list.numberFormat = context.environment.numberFormat
         field.focusBridge = focusBridge
         apply(to: field)
     }

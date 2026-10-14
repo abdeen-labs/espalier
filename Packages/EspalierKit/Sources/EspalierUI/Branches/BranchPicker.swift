@@ -581,6 +581,7 @@ struct BranchPickerRow: View {
     var counts: BranchComparisonCounts?
     /// The dot's color; nil uses its color by name.
     var dotColor: NSColor?
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
@@ -596,13 +597,13 @@ struct BranchPickerRow: View {
                 .accessibilityLabel(isCurrent ? "\(branch.name), current branch" : branch.name)
             Spacer(minLength: Metrics.insetSmall)
             if let counts {
-                Text(counts.text)
+                Text(counts.text(numberFormat))
                     .font(Typography.secondaryCount)
                     .foregroundStyle(.text2)
                     .lineLimit(1)
                     .fixedSize()
-                    .tooltip(counts.description)
-                    .accessibilityLabel(counts.description)
+                    .tooltip(counts.description(numberFormat))
+                    .accessibilityLabel(counts.description(numberFormat))
             }
             if let date {
                 RelativeTimeText(date)
@@ -632,17 +633,18 @@ nonisolated struct BranchComparisonCounts: Sendable, Equatable {
         self.currentBranch = currentBranch
     }
 
-    var text: String {
-        "↓\(formatCount(behind)) ↑\(formatCount(ahead))"
+    /// "↓3 ↑2", in `numberFormat`.
+    func text(_ numberFormat: NumberFormat) -> String {
+        "↓\(formatCount(behind, numberFormat)) ↑\(formatCount(ahead, numberFormat))"
     }
 
-    /// What the tooltip and VoiceOver say.
-    var description: String {
-        "\(currentBranch) is \(commits(behind)) behind and \(commits(ahead)) ahead"
+    /// What the tooltip and VoiceOver say, counts in `numberFormat`.
+    func description(_ numberFormat: NumberFormat) -> String {
+        "\(currentBranch) is \(commits(behind, numberFormat)) behind and \(commits(ahead, numberFormat)) ahead"
     }
 
-    private func commits(_ count: Int) -> String {
-        count == 1 ? "1 commit" : "\(formatCount(count)) commits"
+    private func commits(_ count: Int, _ numberFormat: NumberFormat) -> String {
+        count == 1 ? "1 commit" : "\(formatCount(count, numberFormat)) commits"
     }
 }
 

@@ -50,9 +50,9 @@ nonisolated struct CommitFilesSummary: Sendable, Equatable {
     var linesAdded: Int
     var linesDeleted: Int
 
-    /// "3 changed files".
-    var title: String {
-        fileCount == 1 ? "1 changed file" : "\(formatCount(fileCount)) changed files"
+    /// "3 changed files", the count in `numberFormat`.
+    func title(_ numberFormat: NumberFormat) -> String {
+        fileCount == 1 ? "1 changed file" : "\(formatCount(fileCount, numberFormat)) changed files"
     }
 }
 
@@ -61,6 +61,7 @@ nonisolated struct CommitFilesSummary: Sendable, Equatable {
 struct CommitFiles: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         let history = repository.history
@@ -74,7 +75,7 @@ struct CommitFiles: View {
                 ))
                 Hairline()
                 HistoryFileList(
-                    files: changeset.files.map { HistoryFileContent($0, in: changeset) },
+                    files: changeset.files.map { HistoryFileContent($0, in: changeset, numberFormat: numberFormat) },
                     selection: selection.file?.id,
                     actions: actions(changeset),
                     focusRequest: context.state.history.fileListFocusRequest

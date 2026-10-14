@@ -78,12 +78,14 @@ nonisolated public enum FileContextMenuContent {
     ///   - editorTitle: "Open in Xcode", or nil for the generic title.
     ///   - asksBeforeDiscarding: Whether discarding one file asks first
     ///     (several always do), for the ellipsis.
+    ///   - numberFormat: The format the files' count is in.
     public static func items(
         for files: [WorkingDirectoryFileChange],
         ignoreItems: [GitIgnoreMenuItem],
         editorTitle: String?,
         asksBeforeDiscarding: Bool,
-        isRebaseConflicts: Bool
+        isRebaseConflicts: Bool,
+        numberFormat: NumberFormat
     ) -> [FileMenuItem] {
         guard let first = files.first else {
             return []
@@ -97,12 +99,12 @@ nonisolated public enum FileContextMenuContent {
         if isRebaseConflicts {
             var items: [FileMenuItem] = []
             if first.status.kind == .untracked {
-                items += [discardItem(count: 1, asksFirst: asksBeforeDiscarding), .separator]
+                items += [discardItem(count: 1, asksFirst: asksBeforeDiscarding, numberFormat: numberFormat), .separator]
             }
             return items + copyOne + [.separator] + openItems
         }
 
-        var items = [discardItem(count: files.count, asksFirst: asksBeforeDiscarding || files.count > 1), .separator]
+        var items = [discardItem(count: files.count, asksFirst: asksBeforeDiscarding || files.count > 1, numberFormat: numberFormat), .separator]
         items += ignoreItems.map(item(for:))
         if files.count > 1 {
             items += [
@@ -138,10 +140,10 @@ nonisolated public enum FileContextMenuContent {
         return items.isEmpty ? [] : [.separator] + items
     }
 
-    /// "Discard Changes", "Discard 3 Selected Changes", with an ellipsis
-    /// when it asks first.
-    static func discardItem(count: Int, asksFirst: Bool) -> FileMenuItem {
-        let title = count == 1 ? "Discard Changes" : "Discard \(count) Selected Changes"
+    /// "Discard Changes", "Discard 3 Selected Changes" (the count in
+    /// `numberFormat`), with an ellipsis when it asks first.
+    static func discardItem(count: Int, asksFirst: Bool, numberFormat: NumberFormat) -> FileMenuItem {
+        let title = count == 1 ? "Discard Changes" : "Discard \(formatCount(count, numberFormat)) Selected Changes"
         return FileMenuItem(asksFirst ? "\(title)…" : title, .discard)
     }
 

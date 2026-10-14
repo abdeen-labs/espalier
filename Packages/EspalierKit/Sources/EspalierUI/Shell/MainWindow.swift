@@ -133,6 +133,7 @@ struct FloatingStatus: View {
 private struct FloatingStatusStack: View {
     @Environment(WindowContext.self) private var context
     @Environment(\.motion) private var motion
+    @Environment(\.numberFormat) private var numberFormat
     @Environment(\.undoManager) private var undoManager
 
     var body: some View {
@@ -170,6 +171,6 @@ private struct FloatingStatusStack: View {
         guard let repository = context.repository, repository.isUsable, context.state.place != .changes else {
             return nil
         }
-        return OperationCapsuleContent.make(repository)
+        return OperationCapsuleContent.make(repository, numberFormat: numberFormat)
     }
 }

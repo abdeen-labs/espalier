@@ -101,7 +101,7 @@ private struct MarkdownListMarker: View {
             case .bullet:
                 Text("•")
             case .number(let number):
-                Text("\(number).")
+                Text(verbatim: "\(number).")
                     .monospacedDigit()
             case .task(let done):
                 Image(systemName: done ? "checkmark.square.fill" : "square")

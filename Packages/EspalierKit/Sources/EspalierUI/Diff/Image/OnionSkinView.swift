@@ -11,6 +11,7 @@ import SwiftUI
 struct OnionSkinView: View {
     let previousShown: ShownImage
     let currentShown: ShownImage
+    @Environment(\.numberFormat) private var numberFormat
 
     /// - Parameter opacity: The new image's opacity at first.
     init(previous: ShownImage, current: ShownImage, opacity: Double = 0.01) {
@@ -48,8 +49,8 @@ struct OnionSkinView: View {
                 }
                 .frame(width: sizes.box.width, height: sizes.box.height, alignment: .topLeading)
                 .accessibilityElement()
-                .accessibilityLabel(imageAccessibilityLabel("Deleted", image: previousImage, bytes: previous.bytes)
-                    + "; " + imageAccessibilityLabel("Added", image: currentImage, bytes: current.bytes))
+                .accessibilityLabel(imageAccessibilityLabel("Deleted", image: previousImage, bytes: previous.bytes, numberFormat: numberFormat)
+                    + "; " + imageAccessibilityLabel("Added", image: currentImage, bytes: current.bytes, numberFormat: numberFormat))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

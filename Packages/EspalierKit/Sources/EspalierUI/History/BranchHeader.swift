@@ -21,15 +21,17 @@ nonisolated struct BranchHeaderContent: Sendable, Equatable {
     var canCompare: Bool
     /// The merge call to action, on Behind.
     var callToAction: MergeCallToActionContent?
+    /// The format the counts show in.
+    var numberFormat: NumberFormat
 
     /// "Behind (3)", or "Behind" until it's counted.
     var behindTitle: String {
-        behind.map { "Behind (\(formatCount($0)))" } ?? "Behind"
+        behind.map { "Behind (\(formatCount($0, numberFormat)))" } ?? "Behind"
     }
 
     /// "Ahead (2)", or "Ahead" until it's counted.
     var aheadTitle: String {
-        ahead.map { "Ahead (\(formatCount($0)))" } ?? "Ahead"
+        ahead.map { "Ahead (\(formatCount($0, numberFormat)))" } ?? "Ahead"
     }
 }
 
@@ -87,6 +89,7 @@ struct BranchHeaderContainer: View {
     let repository: RepositoryModel
     let branch: Branch
     @Environment(WindowContext.self) private var context
+    @Environment(\.numberFormat) private var numberFormat
     /// The counts loaded, for the two tips they're for.
     @State private var counted: (key: String, value: AheadBehind)?
 
@@ -105,7 +108,8 @@ struct BranchHeaderContainer: View {
                 behind: aheadBehind?.behind,
                 ahead: aheadBehind?.ahead,
                 canCompare: current != nil,
-                callToAction: view == .compare(.behind) && isShown ? MergeCallToActionContent(comparison: comparison) : nil
+                callToAction: view == .compare(.behind) && isShown ? MergeCallToActionContent(comparison: comparison) : nil,
+                numberFormat: numberFormat
             ),
             setView: { view in
                 state.branchView = BranchViewChoice(ref: branch.ref, view: view)

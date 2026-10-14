@@ -277,7 +277,7 @@ struct AIConflictSummary: View {
             }
             switch reference.kind {
             case .pullRequest(let number):
-                Text("#\(number)")
+                Text(verbatim: "#\(number)")
                     .foregroundStyle(.text2)
             case .commit(let shortSHA, let isOnRemote):
                 Text(shortSHA)

@@ -10,6 +10,7 @@
 import AppKit
 import EspalierCore
 import GitHubKit
+import GitKit
 
 /// What a row of the simple list shows.
 nonisolated struct SimpleRowContent: Sendable, Equatable {
@@ -50,6 +51,8 @@ nonisolated struct SimpleRowContent: Sendable, Equatable {
     var isDimmed = false
     /// The GitHub endpoint avatars load from.
     var avatarEndpoint: String?
+    /// The format the files' count shows in.
+    var numberFormat = defaultNumberFormat
 
     /// The summary as the row shows it.
     var displaySummary: String {
@@ -58,7 +61,7 @@ nonisolated struct SimpleRowContent: Sendable, Equatable {
 
     /// "4 files", or "1 file".
     var filesText: String {
-        changedFileCount == 1 ? "1 file" : "\(formatCount(changedFileCount)) files"
+        changedFileCount == 1 ? "1 file" : "\(formatCount(changedFileCount, numberFormat)) files"
     }
 
     /// "Maya Chen · 4 files".
@@ -230,6 +233,7 @@ final class SimpleRowCellView: NSTableCellView {
         }
         summaryLabel.setTooltip(content.displaySummary)
         summaryWidth = CommitRowParts.fittingWidth(summaryLabel)
+        refsView.numberFormat = content.numberFormat
         refsView.refs = content.tags.map { RefCapsuleContent(name: $0, kind: .tag) }
         unpushedArrow.isHidden = !content.isUnpushed
         metaLabel.stringValue = content.metaText

@@ -8,6 +8,7 @@
 
 import AppKit
 import EspalierCore
+import GitKit
 
 /// How a row's node is drawn.
 nonisolated struct GraphNode: Sendable, Equatable {
@@ -292,12 +293,14 @@ enum GraphRenderer {
     }
 
     /// Draws `drawing` into `context`, a flipped band with its top at
-    /// y = 0. Nothing is allocated for ordinary rows.
+    /// y = 0, the stubs' counts in `numberFormat`. Nothing is allocated for
+    /// ordinary rows.
     static func draw(
         _ drawing: GraphRowDrawing,
         emphasis: GraphEmphasis,
         geometry: GraphGeometry,
         colors: GraphColors,
+        numberFormat: NumberFormat,
         in context: CGContext
     ) {
         let row = drawing.row
@@ -419,13 +422,13 @@ enum GraphRenderer {
             let ends = layout.outgoingSidesDrawn.map { side in
                 (geometry.outgoingStubEnd(nodeX: nodeX, side: side), side)
             }
-            drawCount(layout.extraOutgoing, candidates: ends.reversed(), geometry: geometry, colors: colors, track: row.track, opacity: nodeOpacity(row, emphasis: emphasis), in: context)
+            drawCount(layout.extraOutgoing, candidates: ends.reversed(), geometry: geometry, colors: colors, numberFormat: numberFormat, track: row.track, opacity: nodeOpacity(row, emphasis: emphasis), in: context)
         }
         if layout.extraIncoming > 0 {
             let starts = layout.incomingSlotsDrawn.map { slot in
                 (geometry.incomingStubStart(nodeX: nodeX, side: slot.side), slot.side ?? 1)
             }
-            drawCount(layout.extraIncoming, candidates: starts.reversed(), geometry: geometry, colors: colors, track: row.track, opacity: nodeOpacity(row, emphasis: emphasis), in: context)
+            drawCount(layout.extraIncoming, candidates: starts.reversed(), geometry: geometry, colors: colors, numberFormat: numberFormat, track: row.track, opacity: nodeOpacity(row, emphasis: emphasis), in: context)
         }
 
         drawNode(drawing.node, row: row, at: CGPoint(x: nodeX, y: nodeY), emphasis: emphasis, geometry: geometry, colors: colors, in: context)
@@ -539,6 +542,7 @@ enum GraphRenderer {
         candidates: [(point: CGPoint, side: CGFloat)],
         geometry: GraphGeometry,
         colors: GraphColors,
+        numberFormat: NumberFormat,
         track: Int,
         opacity: CGFloat,
         in context: CGContext
@@ -548,7 +552,7 @@ enum GraphRenderer {
         }
         let color = colors.color(forTrack: track)
         let font = AppKitTypography.tinyCount
-        let text = NSAttributedString(string: "+\(count)", attributes: [
+        let text = NSAttributedString(string: "+\(formatCount(count, numberFormat))", attributes: [
             .font: font,
             .foregroundColor: NSColor(cgColor: color) ?? .secondaryLabelColor,
         ])

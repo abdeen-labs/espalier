@@ -29,7 +29,7 @@ struct ClearOldRebaseTests {
             try await fixture.repository.sync.pull()
         }
         let presented = try #require(fixture.presenter.error)
-        guard case .alert(let content, let recoveries) = presented.error.presentation else {
+        guard case .alert(let content, let recoveries) = presented.error.presentation(defaultNumberFormat) else {
             Issue.record("Not an alert: \(presented.error.reason)")
             return
         }
@@ -70,7 +70,7 @@ struct ClearOldRebaseTests {
 
             await MultiCommitActions.squash(plan, message: CommitContext(summary: "A and B", description: nil), in: fixture.context)
             let presented = try #require(fixture.presenter.error)
-            guard case .alert(let content, let recoveries) = presented.error.presentation else {
+            guard case .alert(let content, let recoveries) = presented.error.presentation(defaultNumberFormat) else {
                 Issue.record("Not an alert: \(presented.error.reason)")
                 return
             }

@@ -16,6 +16,8 @@ nonisolated public struct FilterMenuContent: Sendable, Equatable {
     public var newCount: Int
     public var modifiedCount: Int
     public var deletedCount: Int
+    /// The format the counts show in.
+    public var numberFormat: NumberFormat
 
     public init(
         filter: FileListFilter = FileListFilter(),
@@ -23,7 +25,8 @@ nonisolated public struct FilterMenuContent: Sendable, Equatable {
         excludedCount: Int = 0,
         newCount: Int = 0,
         modifiedCount: Int = 0,
-        deletedCount: Int = 0
+        deletedCount: Int = 0,
+        numberFormat: NumberFormat = defaultNumberFormat
     ) {
         self.filter = filter
         self.includedCount = includedCount
@@ -31,11 +34,13 @@ nonisolated public struct FilterMenuContent: Sendable, Equatable {
         self.newCount = newCount
         self.modifiedCount = modifiedCount
         self.deletedCount = deletedCount
+        self.numberFormat = numberFormat
     }
 
-    /// The counts over `visibleFiles`, the files the list shows.
-    public init(filter: FileListFilter, visibleFiles: [WorkingDirectoryFileChange]) {
-        self.init(filter: filter)
+    /// The counts over `visibleFiles`, the files the list shows, in
+    /// `numberFormat`.
+    public init(filter: FileListFilter, visibleFiles: [WorkingDirectoryFileChange], numberFormat: NumberFormat) {
+        self.init(filter: filter, numberFormat: numberFormat)
         for file in visibleFiles {
             if file.isExcludedFromCommit() {
                 excludedCount += 1
@@ -58,7 +63,7 @@ nonisolated public struct FilterMenuContent: Sendable, Equatable {
 
     /// The button's tooltip.
     public var help: String {
-        activeOptionCount > 0 ? "Filter Options (\(activeOptionCount) Applied)" : "Filter Options"
+        activeOptionCount > 0 ? "Filter Options (\(formatCount(activeOptionCount, numberFormat)) Applied)" : "Filter Options"
     }
 
     /// The button's symbol: in a circle, filled while options are on (one
@@ -70,11 +75,11 @@ nonisolated public struct FilterMenuContent: Sendable, Equatable {
     /// The menu's options, in order, with their titles.
     public var options: [FilterOption] {
         [
-            FilterOption(title: "Included in Commit (\(includedCount))", keyPath: \.includedInCommit),
-            FilterOption(title: "Excluded from Commit (\(excludedCount))", keyPath: \.excludedFromCommit),
-            FilterOption(title: "New Files (\(newCount))", keyPath: \.newFiles),
-            FilterOption(title: "Modified Files (\(modifiedCount))", keyPath: \.modifiedFiles),
-            FilterOption(title: "Deleted Files (\(deletedCount))", keyPath: \.deletedFiles),
+            FilterOption(title: "Included in Commit (\(formatCount(includedCount, numberFormat)))", keyPath: \.includedInCommit),
+            FilterOption(title: "Excluded from Commit (\(formatCount(excludedCount, numberFormat)))", keyPath: \.excludedFromCommit),
+            FilterOption(title: "New Files (\(formatCount(newCount, numberFormat)))", keyPath: \.newFiles),
+            FilterOption(title: "Modified Files (\(formatCount(modifiedCount, numberFormat)))", keyPath: \.modifiedFiles),
+            FilterOption(title: "Deleted Files (\(formatCount(deletedCount, numberFormat)))", keyPath: \.deletedFiles),
         ]
     }
 }

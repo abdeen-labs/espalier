@@ -10,18 +10,19 @@ import GitKit
 
 /// VoiceOver's view of the history graph.
 enum GraphAccessibility {
-    /// The facts a row's drawing shows, in reading order.
-    static func value(forRow row: Int, source: HistoryModel, presentation: GraphPresentation) -> String {
+    /// The facts a row's drawing shows, in reading order, counts in
+    /// `numberFormat`.
+    static func value(forRow row: Int, source: HistoryModel, presentation: GraphPresentation, numberFormat: NumberFormat) -> String {
         guard let commit = source.commit(atRow: row) else {
             let summary = presentation.workingCopy
-            return summary.isDirty ? "Uncommitted changes, \(summary.detail ?? "")." : "No uncommitted changes."
+            return summary.isDirty ? "Uncommitted changes, \(summary.detail(numberFormat) ?? "")." : "No uncommitted changes."
         }
         var facts: [String] = []
         if commit.sha == presentation.headSHA {
             facts.append("HEAD.")
         }
         if commit.parentSHAs.count > 1 {
-            facts.append("Merge commit with \(commit.parentSHAs.count) parents.")
+            facts.append("Merge commit with \(formatCount(commit.parentSHAs.count, numberFormat)) parents.")
         }
         let refs = source.refs(at: commit.sha)
         let branches = refs.filter { $0.kind != .tag }.map(\.name)
@@ -40,13 +41,13 @@ enum GraphAccessibility {
             case .outgoingStub:
                 let which = edge.parentIndex == 0 || edge.parentIndex == nil ? "First parent" : "Parent \((edge.parentIndex ?? 0) + 1)"
                 if let parentRow = edge.parentRow {
-                    facts.append("\(which) is \(commits(parentRow - row)) below.")
+                    facts.append("\(which) is \(commits(parentRow - row, numberFormat)) below.")
                 } else {
                     facts.append("\(which) isn't loaded.")
                 }
             case .incomingStub:
                 if let childRow = edge.childRow {
-                    facts.append("Continues from \(commits(row - childRow)) above.")
+                    facts.append("Continues from \(commits(row - childRow, numberFormat)) above.")
                 }
             default:
                 break
@@ -55,8 +56,8 @@ enum GraphAccessibility {
         return facts.joined(separator: " ")
     }
 
-    private static func commits(_ count: Int) -> String {
-        count == 1 ? "1 commit" : "\(formatCount(count)) commits"
+    private static func commits(_ count: Int, _ numberFormat: NumberFormat) -> String {
+        count == 1 ? "1 commit" : "\(formatCount(count, numberFormat)) commits"
     }
 
     /// "Commits 120 to 160 of 1,204 loaded", announced when scrolling stops
@@ -68,7 +69,8 @@ enum GraphAccessibility {
         }
         let first = visible.location + 1
         let last = min(visible.location + visible.length, controller.shownRowCount)
-        return "Commits \(formatCount(first)) to \(formatCount(last)) of \(formatCount(controller.shownRowCount)) loaded"
+        let format = controller.numberFormat
+        return "Commits \(formatCount(first, format)) to \(formatCount(last, format)) of \(formatCount(controller.shownRowCount, format)) loaded"
     }
 
     static func announceScrollStatus(_ controller: GraphTableController) {

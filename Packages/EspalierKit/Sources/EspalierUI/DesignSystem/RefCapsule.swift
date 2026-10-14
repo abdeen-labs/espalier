@@ -4,6 +4,7 @@
 // table cells.
 
 import AppKit
+import GitKit
 import SwiftUI
 
 /// One ref on a commit.
@@ -246,6 +247,7 @@ public struct RefCapsuleList: View {
     private let maximumVisible: Int
     private let palette: TrackPalette.Resolved
     @State private var isShowingOverflow = false
+    @Environment(\.numberFormat) private var numberFormat
 
     public init(_ refs: [RefCapsuleContent], maximumVisible: Int = Metrics.RefCapsule.maximumVisible, palette: TrackPalette.Resolved = TrackPalette.Resolved()) {
         self.refs = refs
@@ -262,7 +264,7 @@ public struct RefCapsuleList: View {
                 Button {
                     isShowingOverflow = true
                 } label: {
-                    Text("+\(refs.count - maximumVisible)")
+                    Text(verbatim: "+\(formatCount(refs.count - maximumVisible, numberFormat))")
                         .font(Typography.tinyCount)
                         .foregroundStyle(.text2)
                         .padding(.horizontal, Metrics.RefCapsule.horizontalPadding)
@@ -270,7 +272,7 @@ public struct RefCapsuleList: View {
                         .background(RefTagShape().fill(.field))
                 }
                 .buttonStyle(.bare(.capsule))
-                .accessibilityLabel("\(refs.count - maximumVisible) more refs")
+                .accessibilityLabel(Text(verbatim: "\(formatCount(refs.count - maximumVisible, numberFormat)) more refs"))
                 .popoverCard(isPresented: $isShowingOverflow, title: "More Refs") {
                     VStack(alignment: .leading, spacing: Metrics.RefCapsule.spacing) {
                         ForEach(refs.dropFirst(maximumVisible)) { ref in
@@ -294,16 +296,23 @@ public enum RefCapsuleRenderer {
     public struct Item: Equatable {
         public let content: RefCapsuleContent?
         public let overflowCount: Int
+        /// The overflow capsule's text: "+N".
+        public let overflowText: String
         public let frame: CGRect
     }
 
     /// Lays out `refs` from x = 0: at most `maximumVisible` capsules, then
-    /// "+N". Capsules that don't fit in `maximumWidth` move into the overflow.
+    /// "+N" in `numberFormat`. Capsules that don't fit in `maximumWidth`
+    /// move into the overflow.
     public static func layout(
         _ refs: [RefCapsuleContent],
         maximumWidth: CGFloat = .greatestFiniteMagnitude,
-        maximumVisible: Int = Metrics.RefCapsule.maximumVisible
+        maximumVisible: Int = Metrics.RefCapsule.maximumVisible,
+        numberFormat: NumberFormat
     ) -> [Item] {
+        func overflowText(_ count: Int) -> String {
+            "+\(formatCount(count, numberFormat))"
+        }
         var items: [Item] = []
         var x: CGFloat = 0
         let height = Metrics.RefCapsule.height
@@ -314,17 +323,18 @@ public enum RefCapsuleRenderer {
             }
             let width = capsuleWidth(ref)
             let remaining = refs.count - shown - 1
-            let reserve = remaining > 0 ? overflowWidth(remaining) + Metrics.RefCapsule.spacing : 0
+            let reserve = remaining > 0 ? overflowWidth(overflowText(remaining)) + Metrics.RefCapsule.spacing : 0
             if x + width + reserve > maximumWidth, shown > 0 {
                 break
             }
-            items.append(Item(content: ref, overflowCount: 0, frame: CGRect(x: x, y: 0, width: width, height: height)))
+            items.append(Item(content: ref, overflowCount: 0, overflowText: "", frame: CGRect(x: x, y: 0, width: width, height: height)))
             x += width + Metrics.RefCapsule.spacing
             shown += 1
         }
         if shown < refs.count {
             let count = refs.count - shown
-            items.append(Item(content: nil, overflowCount: count, frame: CGRect(x: x, y: 0, width: overflowWidth(count), height: height)))
+            let text = overflowText(count)
+            items.append(Item(content: nil, overflowCount: count, overflowText: text, frame: CGRect(x: x, y: 0, width: overflowWidth(text), height: height)))
         }
         return items
     }
@@ -348,7 +358,7 @@ public enum RefCapsuleRenderer {
             if let content = item.content {
                 drawCapsule(content, in: frame, palette: palette, variant: variant)
             } else {
-                drawOverflow(item.overflowCount, in: frame, variant: variant)
+                drawOverflow(item.overflowText, in: frame, variant: variant)
             }
         }
     }
@@ -389,11 +399,11 @@ public enum RefCapsuleRenderer {
         }
     }
 
-    private static func drawOverflow(_ count: Int, in frame: CGRect, variant: AppearanceVariant) {
+    private static func drawOverflow(_ string: String, in frame: CGRect, variant: AppearanceVariant) {
         let radius = RefTagShape.radius(height: frame.height)
         Palette.field.resolved(in: variant).setFill()
         NSBezierPath(roundedRect: frame, xRadius: radius, yRadius: radius).fill()
-        let text = NSAttributedString(string: "+\(count)", attributes: [
+        let text = NSAttributedString(string: string, attributes: [
             .font: AppKitTypography.tinyCount,
             .foregroundColor: Palette.text2.resolved(in: variant),
         ])
@@ -426,8 +436,8 @@ public enum RefCapsuleRenderer {
     /// Between a branch and its upstream's remote: "main│origin".
     private static let dividerText = "│"
 
-    private static func overflowWidth(_ count: Int) -> CGFloat {
-        let text = NSAttributedString(string: "+\(count)", attributes: [.font: AppKitTypography.tinyCount])
+    private static func overflowWidth(_ string: String) -> CGFloat {
+        let text = NSAttributedString(string: string, attributes: [.font: AppKitTypography.tinyCount])
         return ceil(text.size().width) + Metrics.RefCapsule.horizontalPadding * 2
     }
 

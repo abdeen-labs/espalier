@@ -25,26 +25,29 @@ nonisolated public struct ConflictsSectionContent: Sendable, Equatable {
 
     /// The section for the working directory's files: an operation's
     /// conflicts, with its manual resolutions and branches, or a stash
-    /// restore's (no sides to pick).
+    /// restore's (no sides to pick); counts in `numberFormat`.
     public static func make(
         files: [WorkingDirectoryFileChange],
         manualResolutions: [String: ManualConflictResolution],
         branches: ConflictBranches?,
-        offersSides: Bool
+        offersSides: Bool,
+        numberFormat: NumberFormat
     ) -> ConflictsSectionContent {
         ConflictsSectionContent(rows: files.compactMap { file in
             ConflictFileRowContent.make(
                 file,
                 manualResolution: manualResolutions[file.path],
                 branches: branches,
-                offersSides: offersSides
+                offersSides: offersSides,
+                numberFormat: numberFormat
             )
         })
     }
 
-    /// The section for a repository: nil when nothing is conflicted.
+    /// The section for a repository, counts in `numberFormat`: nil when
+    /// nothing is conflicted.
     @MainActor
-    public static func make(_ repository: RepositoryModel) -> ConflictsSectionContent? {
+    public static func make(_ repository: RepositoryModel, numberFormat: NumberFormat) -> ConflictsSectionContent? {
         let operations = repository.operations
         let files = repository.changes.workingDirectory.files
         if let conflictState = operations.conflictState {
@@ -52,14 +55,15 @@ nonisolated public struct ConflictsSectionContent: Sendable, Equatable {
                 files: files,
                 manualResolutions: conflictState.manualResolutions,
                 branches: operations.conflictBranches,
-                offersSides: true
+                offersSides: true,
+                numberFormat: numberFormat
             )
         }
         // A stash restore that conflicted: its files, with nothing to pick.
         guard repository.stash.conflictedRestore != nil || files.contains(where: { $0.status.kind == .conflicted }) else {
             return nil
         }
-        let content = make(files: files, manualResolutions: [:], branches: nil, offersSides: false)
+        let content = make(files: files, manualResolutions: [:], branches: nil, offersSides: false, numberFormat: numberFormat)
         return content.rows.isEmpty ? nil : content
     }
 }

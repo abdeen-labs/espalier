@@ -26,9 +26,15 @@ struct HistoryViewCaptures {
         let views = VStack(spacing: 0) {
             HistoryHeader(content: HistoryHeaderContent(style: .simple, scope: .localBranches, count: "", branchName: "feature/hourly-forecast"))
             Hairline()
-            HistoryHeader(content: HistoryHeaderContent(scope: .localBranches, count: HistoryHeaderContent.count(loaded: 1_204, total: 1_204, isComplete: true)))
+            HistoryHeader(content: HistoryHeaderContent(
+                scope: .localBranches,
+                count: HistoryHeaderContent.count(loaded: 1_204, total: 1_204, isComplete: true, numberFormat: Capture.numberFormat)
+            ))
             Hairline()
-            HistoryHeader(content: HistoryHeaderContent(scope: .allBranches, count: HistoryHeaderContent.count(loaded: 1_100, total: nil, isComplete: false)))
+            HistoryHeader(content: HistoryHeaderContent(
+                scope: .allBranches,
+                count: HistoryHeaderContent.count(loaded: 1_100, total: nil, isComplete: false, numberFormat: Capture.numberFormat)
+            ))
         }
         capture(views.frame(width: width), named: "header", area: area)
     }
@@ -45,10 +51,10 @@ struct HistoryViewCaptures {
         var sha = HistorySearch(query: "a1b2c3d4")
         sha.isSearching = false
         let contents = [
-            HistorySearchStatusContent(search: matches, loaded: 2_400, isComplete: false, isLoadingMore: false),
-            HistorySearchStatusContent(search: moved, loaded: 2_400, isComplete: true, isLoadingMore: false),
-            HistorySearchStatusContent(search: none, loaded: 2_400, isComplete: false, isLoadingMore: true),
-            HistorySearchStatusContent(search: sha, loaded: 2_400, isComplete: false, isLoadingMore: false),
+            HistorySearchStatusContent(search: matches, loaded: 2_400, isComplete: false, isLoadingMore: false, numberFormat: Capture.numberFormat),
+            HistorySearchStatusContent(search: moved, loaded: 2_400, isComplete: true, isLoadingMore: false, numberFormat: Capture.numberFormat),
+            HistorySearchStatusContent(search: none, loaded: 2_400, isComplete: false, isLoadingMore: true, numberFormat: Capture.numberFormat),
+            HistorySearchStatusContent(search: sha, loaded: 2_400, isComplete: false, isLoadingMore: false, numberFormat: Capture.numberFormat),
         ]
         let views = VStack(spacing: 0) {
             ForEach(Array(contents.enumerated()), id: \.offset) { _, content in
@@ -63,14 +69,15 @@ struct HistoryViewCaptures {
 
     @Test("a branch's header: History, Behind with each status of the call to action, Ahead, and on a detached HEAD")
     func branchHeader() {
-        func header(_ view: BranchView, _ cta: MergeCallToActionContent?, canCompare: Bool) -> some View {
+        func header(_ view: BranchView, _ cta: MergeCallToActionContent?, canCompare: Bool, behind: Int = 3, ahead: Int = 2) -> some View {
             BranchHeader(content: BranchHeaderContent(
                 branchName: "feature/login",
                 view: view,
-                behind: 3,
-                ahead: 2,
+                behind: behind,
+                ahead: ahead,
                 canCompare: canCompare,
-                callToAction: cta
+                callToAction: cta,
+                numberFormat: Capture.numberFormat
             ))
         }
         let views = VStack(spacing: 0) {
@@ -89,6 +96,8 @@ struct HistoryViewCaptures {
             header(.compare(.behind), MergeCallToActionContent(method: .rebase, status: .clean, message: "This will update main by applying its 2 commits on top of feature/login", canStart: true), canCompare: true)
             Divider()
             header(.compare(.ahead), nil, canCompare: true)
+            Divider()
+            header(.history, nil, canCompare: true, behind: 1_204, ahead: 12_317)
             Divider()
             header(.history, nil, canCompare: false)
         }
@@ -171,17 +180,17 @@ struct HistoryViewCaptures {
             CommittedFileRowContent(id: "7", path: "web/test/index.ts", status: .modified),
         ]
         let files = [
-            HistoryFileContent(file: rows[0], added: 6, deleted: 1),
-            HistoryFileContent(file: rows[1], added: 14, deleted: 0),
-            HistoryFileContent(file: rows[2], added: 0, deleted: 40),
-            HistoryFileContent(file: rows[3], added: 2, deleted: 2),
+            HistoryFileContent(file: rows[0], added: 6, deleted: 1, numberFormat: Capture.numberFormat),
+            HistoryFileContent(file: rows[1], added: 14, deleted: 0, numberFormat: Capture.numberFormat),
+            HistoryFileContent(file: rows[2], added: 0, deleted: 4, numberFormat: Capture.numberFormat),
+            HistoryFileContent(file: rows[3], added: 2, deleted: 2, numberFormat: Capture.numberFormat),
             // A binary file: no counts.
-            HistoryFileContent(file: rows[4]),
-            HistoryFileContent(file: rows[5], added: 3, deleted: 1),
-            HistoryFileContent(file: rows[6], added: 12, deleted: 0),
+            HistoryFileContent(file: rows[4], numberFormat: Capture.numberFormat),
+            HistoryFileContent(file: rows[5], added: 3, deleted: 1, numberFormat: Capture.numberFormat),
+            HistoryFileContent(file: rows[6], added: 12, deleted: 0, numberFormat: Capture.numberFormat),
         ]
         let view = VStack(spacing: 0) {
-            CommitFilesHeader(summary: CommitFilesSummary(fileCount: 7, linesAdded: 37, linesDeleted: 44))
+            CommitFilesHeader(summary: CommitFilesSummary(fileCount: 7, linesAdded: 37, linesDeleted: 8))
             Hairline()
             HistoryFileList(files: files, selection: "4")
         }
@@ -310,7 +319,7 @@ struct HistoryViewCaptures {
         for (name, count) in [("dragImage-one", 1), ("dragImage-several", 12)] {
             EspalierCaptures.capture(named: name, area: area) { appearance in
                 let rowSize = CGSize(width: 300, height: Metrics.Graph.rowHeight)
-                let layout = CommitDragImage.Layout(rowSize: rowSize, count: count)
+                let layout = CommitDragImage.Layout(rowSize: rowSize, count: count, numberFormat: Capture.numberFormat)
                 let row = Capture.render(DragImageRow().frame(width: rowSize.width, height: rowSize.height), size: rowSize, appearance: appearance)
                 let image = CommitDragImage.image(rowImage: row, layout: layout, appearance: appearance.appearance, scale: Capture.scale)
                 let view = NSImageView(frame: CGRect(origin: .zero, size: layout.size))

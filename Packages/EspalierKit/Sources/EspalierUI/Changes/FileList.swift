@@ -33,7 +33,7 @@ struct FileList: View {
             inclusion: changes.inclusionState(of:),
             isInclusionLocked: controller.isCommitting || controller.isRebaseConflicts,
             lineCounts: changes.lineCounts,
-            conflicts: FileList.conflictRows(repository),
+            conflicts: FileList.conflictRows(repository, numberFormat: context.app.preferences.numberFormat),
             conflictActions: { row in controller.conflictActions(for: row) },
             scope: FileTableScope(repository: ObjectIdentifier(repository), filter: changes.filter),
             actions: FileTableActions(
@@ -92,12 +92,12 @@ struct FileList: View {
 
     static let focusOwner = "changes"
 
-    /// The conflicted files' states and buttons, by path: while an
-    /// operation waits on conflicts, or a stash restore left some; empty
-    /// otherwise.
-    static func conflictRows(_ repository: RepositoryModel) -> [ExactString: ConflictFileRowContent] {
+    /// The conflicted files' states and buttons, by path, counts in
+    /// `numberFormat`: while an operation waits on conflicts, or a stash
+    /// restore left some; empty otherwise.
+    static func conflictRows(_ repository: RepositoryModel, numberFormat: NumberFormat) -> [ExactString: ConflictFileRowContent] {
         guard repository.operations.conflictState != nil || repository.stash.conflictedRestore != nil,
-              let content = ConflictsSectionContent.make(repository)
+              let content = ConflictsSectionContent.make(repository, numberFormat: numberFormat)
         else {
             return [:]
         }
@@ -232,7 +232,8 @@ struct FileTable: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        Self.makeScrollView(coordinator: context.coordinator, table: self)
+        context.coordinator.numberFormat = context.environment.numberFormat
+        return Self.makeScrollView(coordinator: context.coordinator, table: self)
     }
 
     /// The scroll view and table for `coordinator`, showing `table`.
@@ -276,6 +277,7 @@ struct FileTable: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.numberFormat = context.environment.numberFormat
         context.coordinator.update(self)
     }
 }
@@ -289,6 +291,8 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
     /// The files the table's rows show, by ID, in order; nil for a list
     /// too long to animate.
     private(set) var shownIDs: [ExactString]?
+    /// The format the line counts show in; the next update shows it.
+    var numberFormat = defaultNumberFormat
 
     init(_ parent: FileTable) {
         self.parent = parent
@@ -419,7 +423,13 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             let file = changes[row]
             let conflict = parent.conflicts.isEmpty ? nil : parent.conflicts[ExactString(file.path)]
             cell.configure(
-                FileRowContent(file, inclusion: parent.inclusion(file), lineCount: parent.lineCounts[ExactString(file.id)], conflict: conflict),
+                FileRowContent(
+                    file,
+                    inclusion: parent.inclusion(file),
+                    lineCount: parent.lineCounts[ExactString(file.id)],
+                    conflict: conflict,
+                    numberFormat: numberFormat
+                ),
                 repository: parent.scope.repository,
                 conflictActions: conflict.map(parent.conflictActions)
             )
@@ -982,9 +992,11 @@ struct ChangesController {
             ignoreItems: repository.gitIgnoreMenuItems(for: files.map(\.path)),
             editorTitle: context.app.integrations.editorLabel.map { "Open in \($0)" },
             asksBeforeDiscarding: context.app.preferences.confirmDiscardChanges,
-            isRebaseConflicts: isRebaseConflicts
+            isRebaseConflicts: isRebaseConflicts,
+            numberFormat: context.app.preferences.numberFormat
         )
-        if files.count == 1, let file = files.first, let conflict = FileList.conflictRows(repository)[ExactString(file.path)] {
+        if files.count == 1, let file = files.first,
+           let conflict = FileList.conflictRows(repository, numberFormat: context.app.preferences.numberFormat)[ExactString(file.path)] {
             items += FileContextMenuContent.conflictItems(for: conflict)
         }
         return items
@@ -1066,7 +1078,11 @@ struct ChangesController {
 
     /// Edit ▸ Delete's title for the selection.
     func discardTitle(count: Int) -> String {
-        FileContextMenuContent.discardItem(count: count, asksFirst: context.app.preferences.confirmDiscardChanges || count > 1).title
+        FileContextMenuContent.discardItem(
+            count: count,
+            asksFirst: context.app.preferences.confirmDiscardChanges || count > 1,
+            numberFormat: context.app.preferences.numberFormat
+        ).title
     }
 
     // MARK: Paths

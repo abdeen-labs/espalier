@@ -19,9 +19,9 @@ import SwiftUI
 
 /// How many files, in words.
 nonisolated enum StashFilesSummary {
-    /// "1 file", "4 files".
-    static func files(_ count: Int) -> String {
-        count == 1 ? "1 file" : "\(count) files"
+    /// "1 file", "4 files", the count in `numberFormat`.
+    static func files(_ count: Int, _ numberFormat: NumberFormat) -> String {
+        count == 1 ? "1 file" : "\(formatCount(count, numberFormat)) files"
     }
 }
 
@@ -49,10 +49,11 @@ nonisolated struct StashColumnContent: Sendable, Equatable {
     /// The selected file.
     var selectedFileID: String?
 
-    /// "On main · 4 files" ("On main" until the files load).
-    var subtitle: String {
+    /// "On main · 4 files" ("On main" until the files load), the count in
+    /// `numberFormat`.
+    func subtitle(_ numberFormat: NumberFormat) -> String {
         if case .loaded(_, let total) = files {
-            return "On \(branch) · \(StashFilesSummary.files(total))"
+            return "On \(branch) · \(StashFilesSummary.files(total, numberFormat))"
         }
         return "On \(branch)"
     }
@@ -110,10 +111,11 @@ struct StashHeader: View {
 /// does or why it can't.
 struct StashFooter: View {
     let content: StashColumnContent
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.grid / 2) {
-            Text(content.subtitle)
+            Text(content.subtitle(numberFormat))
                 .font(Typography.meta)
                 .foregroundStyle(.text2)
                 .lineLimit(1)

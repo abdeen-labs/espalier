@@ -36,9 +36,10 @@ nonisolated public struct SquashSheetContent: Sendable, Equatable {
         )
     }
 
-    /// "Squash 3 Commits": the title and the button.
-    public var title: String {
-        "Squash \(commitCount) Commits"
+    /// "Squash 3 Commits": the title and the button, the count in
+    /// `numberFormat`.
+    public func title(_ numberFormat: NumberFormat) -> String {
+        "Squash \(formatCount(commitCount, numberFormat)) Commits"
     }
 
     /// The squashed commit's message: the co-authors as `Co-Authored-By`
@@ -67,6 +68,7 @@ public struct SquashSheet: View {
     @State private var coAuthors: [KnownAuthor]
     @FocusState private var focusedField: SquashMessageField?
     @Environment(\.dismissModal) private var dismissModal
+    @Environment(\.numberFormat) private var numberFormat
 
     public init(_ content: SquashSheetContent, onSquash: @escaping (CommitContext) -> Void) {
         self.content = content
@@ -78,7 +80,7 @@ public struct SquashSheet: View {
 
     public var body: some View {
         let canSquash = !JSCompat.trim(summary).isEmpty
-        SheetScaffold(content.title) {
+        SheetScaffold(content.title(numberFormat)) {
             VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
                 FieldLabel("Message")
                 SquashMessageCard(summary: $summary, description: $description, focusedField: $focusedField)
@@ -90,7 +92,7 @@ public struct SquashSheet: View {
                 }
             }
         } buttons: {
-            SheetButtons(content.title, isConfirmDisabled: !canSquash, cancel: { dismissModal() }) {
+            SheetButtons(content.title(numberFormat), isConfirmDisabled: !canSquash, cancel: { dismissModal() }) {
                 squash()
             }
         }

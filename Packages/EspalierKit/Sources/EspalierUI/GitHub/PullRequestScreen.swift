@@ -325,7 +325,7 @@ struct PullRequestOverviewView: View {
                 }
             }
             HStack(spacing: Metrics.grid) {
-                Text("#\(content.number) opened")
+                Text(verbatim: "#\(content.number) opened")
                 RelativeTimeText(content.created)
                 Text("by")
                 Avatar(content.authorAvatar)

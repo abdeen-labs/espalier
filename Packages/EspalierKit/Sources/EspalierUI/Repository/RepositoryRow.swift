@@ -53,13 +53,13 @@ nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
 
     /// The tooltip for the ahead and behind arrows: "The currently checked
     /// out branch is 2 commits behind and 1 commit ahead of its tracked
-    /// branch."
-    var aheadBehindTooltip: String? {
+    /// branch.", the counts in `numberFormat`.
+    func aheadBehindTooltip(_ numberFormat: NumberFormat) -> String? {
         guard showsStatus, ahead > 0 || behind > 0 else {
             return nil
         }
         func commits(_ count: Int) -> String {
-            count == 1 ? "1 commit" : "\(count) commits"
+            count == 1 ? "1 commit" : "\(formatCount(count, numberFormat)) commits"
         }
         var text = "The currently checked out branch is"
         if behind > 0 {
@@ -77,8 +77,8 @@ nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
     /// The tooltip for the changes indicator.
     static let changesTooltip = "There are uncommitted changes in this repository"
 
-    /// What VoiceOver reads.
-    var accessibilityLabel: String {
+    /// What VoiceOver reads, the counts in `numberFormat`.
+    func accessibilityLabel(_ numberFormat: NumberFormat) -> String {
         var parts = [title]
         if let subtitle {
             parts.append(subtitle)
@@ -90,13 +90,13 @@ nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
         }
         if showsStatus {
             if changedFileCount > 0 {
-                parts.append(changedFileCount == 1 ? "1 changed file" : "\(changedFileCount) changed files")
+                parts.append(changedFileCount == 1 ? "1 changed file" : "\(formatCount(changedFileCount, numberFormat)) changed files")
             }
             if ahead > 0 {
-                parts.append("\(ahead) ahead")
+                parts.append("\(formatCount(ahead, numberFormat)) ahead")
             }
             if behind > 0 {
-                parts.append("\(behind) behind")
+                parts.append("\(formatCount(behind, numberFormat)) behind")
             }
         }
         return parts.joined(separator: ", ")
@@ -168,6 +168,7 @@ extension RepositoryRowContent {
 /// and the status indicators.
 struct RepositoryRow: View {
     let content: RepositoryRowContent
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
@@ -191,7 +192,7 @@ struct RepositoryRow: View {
         }
         .tooltip(content.tooltip)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(content.accessibilityLabel)
+        .accessibilityLabel(content.accessibilityLabel(numberFormat))
     }
 }
 
@@ -223,12 +224,13 @@ struct RepositoryRowIcon: View {
 /// tooltips.
 struct RepositoryStatusIndicators: View {
     let content: RepositoryRowContent
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         if content.showsStatus {
             HStack(spacing: Metrics.grid) {
                 if content.changedFileCount > 0 {
-                    Text(content.changedFileCount > 999 ? "999+" : "\(content.changedFileCount)")
+                    Text(verbatim: content.changedFileCount > 999 ? "999+" : formatCount(content.changedFileCount, numberFormat))
                         .font(Typography.tinyCount)
                         .foregroundStyle(.text2)
                         .padding(.horizontal, Metrics.grid + 1)
@@ -236,15 +238,15 @@ struct RepositoryStatusIndicators: View {
                         .background(Capsule(style: .circular).fill(.field))
                         .tooltip(RepositoryRowContent.changesTooltip)
                 }
-                if let tooltip = content.aheadBehindTooltip {
+                if let tooltip = content.aheadBehindTooltip(numberFormat) {
                     HStack(spacing: Metrics.grid) {
                         if content.ahead > 0 {
-                            Text("↑\(content.ahead)")
+                            Text(verbatim: "↑\(formatCount(content.ahead, numberFormat))")
                                 .font(Typography.aheadCount)
                                 .foregroundStyle(.aheadText)
                         }
                         if content.behind > 0 {
-                            Text("↓\(content.behind)")
+                            Text(verbatim: "↓\(formatCount(content.behind, numberFormat))")
                                 .font(Typography.secondaryCount)
                                 .foregroundStyle(.text3)
                         }

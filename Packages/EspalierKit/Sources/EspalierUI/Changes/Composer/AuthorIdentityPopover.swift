@@ -68,13 +68,13 @@ nonisolated public struct AuthorIdentityContent: Sendable, Equatable {
         return "No Author Set"
     }
 
-    /// What the warning says.
-    public var warningText: String? {
+    /// What the warning says, the count in `numberFormat`.
+    public func warningText(_ numberFormat: NumberFormat) -> String? {
         switch warning {
         case .misattributed(let isEnterprise)?:
             "This email address doesn't match your GitHub\(isEnterprise ? " Enterprise" : "") account. Your commits won't be attributed to you."
         case .disallowedEmail(let count, let canBypass)?:
-            "This email address fails \(count == 1 ? "1 rule" : "\(count) rules") for commits on this branch"
+            "This email address fails \(count == 1 ? "1 rule" : "\(formatCount(count, numberFormat)) rules") for commits on this branch"
                 + (canBypass ? ", but you can bypass \(count == 1 ? "it" : "them")." : ".")
         case nil:
             nil
@@ -226,6 +226,7 @@ public struct AuthorIdentityPopover: View {
     private let onOpenRepositorySettings: () -> Void
     private let onUpdateEmail: (String) -> Void
     @State private var accountEmail: String
+    @Environment(\.numberFormat) private var numberFormat
 
     public init(
         _ content: AuthorIdentityContent,
@@ -266,7 +267,7 @@ public struct AuthorIdentityPopover: View {
                     }
                 }
             }
-            if let warning = content.warningText {
+            if let warning = content.warningText(numberFormat) {
                 HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(Color(espalier: Palette.warning))

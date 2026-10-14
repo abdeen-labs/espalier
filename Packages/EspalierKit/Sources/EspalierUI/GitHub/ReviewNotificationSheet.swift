@@ -190,7 +190,7 @@ struct ReviewNotificationView: View {
                     .font(Typography.sheetTitle)
                     .foregroundStyle(.text)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("#\(content.pullRequestNumber)")
+                Text(verbatim: "#\(content.pullRequestNumber)")
                     .font(Typography.sheetTitle.monospaced())
                     .foregroundStyle(.text3)
             }

@@ -150,8 +150,11 @@ enum HistoryActions {
             guard case .reorder(let shas, _) = action else {
                 return nil
             }
-            let count = shas?.count ?? context?.repository?.history.selection.shas.count ?? 1
-            return count > 1 ? "Reorder \(formatCount(count)) Commits…" : "Reorder Commit"
+            guard let context else {
+                return nil
+            }
+            let count = shas?.count ?? context.repository?.history.selection.shas.count ?? 1
+            return count > 1 ? "Reorder \(formatCount(count, context.app.preferences.numberFormat)) Commits…" : "Reorder Commit"
         }) { [weak context] action in
             guard case .reorder(let shas, let before) = action, let context, let repository = context.repository else {
                 return

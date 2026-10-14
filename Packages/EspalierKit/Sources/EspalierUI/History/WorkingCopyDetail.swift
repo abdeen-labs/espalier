@@ -17,6 +17,7 @@ nonisolated struct WorkingCopyHeaderContent: Sendable, Equatable {
 struct WorkingCopyHeader: View {
     let content: WorkingCopyHeaderContent
     var reviewChanges: () -> Void = {}
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         HStack(alignment: .top, spacing: Metrics.insetSmall) {
@@ -24,7 +25,7 @@ struct WorkingCopyHeader: View {
                 Text(content.summary.title)
                     .font(Typography.commitSummary)
                     .foregroundStyle(content.summary.isDirty ? .text : .text3)
-                if let detail = content.summary.detail {
+                if let detail = content.summary.detail(numberFormat) {
                     Label {
                         Text(detail)
                     } icon: {
@@ -88,6 +89,7 @@ struct WorkingCopyDetail: View {
 private struct WorkingCopyFiles: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         let files = repository.changes.workingDirectory.files
@@ -96,12 +98,15 @@ private struct WorkingCopyFiles: View {
             Hairline()
             HistoryFileList(
                 files: files.map { file in
-                    HistoryFileContent(file: CommittedFileRowContent(
-                        id: file.id,
-                        path: file.path,
-                        oldPath: file.status.oldPath,
-                        status: FileStatusKind(file.status)
-                    ))
+                    HistoryFileContent(
+                        file: CommittedFileRowContent(
+                            id: file.id,
+                            path: file.path,
+                            oldPath: file.status.oldPath,
+                            status: FileStatusKind(file.status)
+                        ),
+                        numberFormat: numberFormat
+                    )
                 },
                 selection: selectedFileID,
                 actions: HistoryFilesActions(select: { id in

@@ -68,7 +68,7 @@ extension DiffTableController {
         if hunk.isBottomDummy {
             return "Unchanged lines \(first) to \(last), not shown."
         }
-        var label = "Hunk, lines \(first) to \(last): \(hunk.addedCount) added, \(hunk.deletedCount) deleted."
+        var label = "Hunk, lines \(first) to \(last): \(formatCount(hunk.addedCount, numberFormat)) added, \(formatCount(hunk.deletedCount, numberFormat)) deleted."
         if let inclusion = inclusion(ofHunk: hunk) {
             switch inclusion {
             case .all: label += " Included in commit."

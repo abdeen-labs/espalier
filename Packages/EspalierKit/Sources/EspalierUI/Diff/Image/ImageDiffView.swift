@@ -225,19 +225,20 @@ struct CheckeredImage: View {
     }
 }
 
-/// "Deleted image, 640 by 480 pixels, 24 KiB".
-func imageAccessibilityLabel(_ title: String, image: DecodedImage?, bytes: Int) -> String {
+/// "Deleted image, 640 by 480 pixels, 24 KiB", the size in `numberFormat`.
+func imageAccessibilityLabel(_ title: String, image: DecodedImage?, bytes: Int, numberFormat: NumberFormat) -> String {
     let kind = title == "Deleted" ? "Deleted image" : "Added image"
+    let size = formatBytes(Double(bytes), 2, numberFormat: numberFormat)
     guard let image else {
-        return "\(kind), \(formatBytes(Double(bytes), 2))"
+        return "\(kind), \(size)"
     }
-    return "\(kind), \(Int(image.pixelSize.width)) by \(Int(image.pixelSize.height)) pixels, \(formatBytes(Double(bytes), 2))"
+    return "\(kind), \(Int(image.pixelSize.width)) by \(Int(image.pixelSize.height)) pixels, \(size)"
 }
 
 /// "W: 640px | H: 480px | Size: 24 KiB", or "Size: 24 KiB" for an image
-/// that couldn't be decoded.
-func imageFooter(image: DecodedImage?, bytes: Int) -> String {
-    let size = "Size: \(formatBytes(Double(bytes), 2))"
+/// that couldn't be decoded; the size in `numberFormat`.
+func imageFooter(image: DecodedImage?, bytes: Int, numberFormat: NumberFormat) -> String {
+    let size = "Size: \(formatBytes(Double(bytes), 2, numberFormat: numberFormat))"
     guard let image else {
         return size
     }
@@ -248,6 +249,7 @@ func imageFooter(image: DecodedImage?, bytes: Int) -> String {
 struct SingleImagePane: View {
     let title: String
     let shown: ShownImage
+    @Environment(\.numberFormat) private var numberFormat
 
     init(title: String, image: ShownImage) {
         self.title = title
@@ -265,9 +267,9 @@ struct SingleImagePane: View {
                     .font(Typography.heading)
                 CheckeredImage(image: decoded, size: size)
                     .accessibilityElement()
-                    .accessibilityLabel(imageAccessibilityLabel(title, image: decoded, bytes: image.bytes))
+                    .accessibilityLabel(imageAccessibilityLabel(title, image: decoded, bytes: image.bytes, numberFormat: numberFormat))
                     .accessibilityAddTraits(.isImage)
-                Text(imageFooter(image: decoded, bytes: image.bytes))
+                Text(imageFooter(image: decoded, bytes: image.bytes, numberFormat: numberFormat))
                     .font(Typography.secondary.monospacedDigit())
                     .foregroundStyle(.secondary)
             }

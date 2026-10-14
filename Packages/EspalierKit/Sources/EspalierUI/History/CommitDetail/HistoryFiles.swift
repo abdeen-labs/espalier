@@ -17,6 +17,8 @@ nonisolated struct HistoryFileContent: Sendable, Equatable, Identifiable {
     /// Lines added and deleted; nil when unknown or binary.
     var added: Int?
     var deleted: Int?
+    /// The format the counts show in.
+    var numberFormat: NumberFormat
 
     var id: String {
         file.id
@@ -32,20 +34,21 @@ nonisolated struct HistoryFileContent: Sendable, Equatable, Identifiable {
             parts.append("in \(file.directory)")
         }
         if let added, added > 0 {
-            parts.append(added == 1 ? "1 added line" : "\(formatCount(added)) added lines")
+            parts.append(added == 1 ? "1 added line" : "\(formatCount(added, numberFormat)) added lines")
         }
         if let deleted, deleted > 0 {
-            parts.append(deleted == 1 ? "1 removed line" : "\(formatCount(deleted)) removed lines")
+            parts.append(deleted == 1 ? "1 removed line" : "\(formatCount(deleted, numberFormat)) removed lines")
         }
         return parts.joined(separator: ", ")
     }
 }
 
 extension HistoryFileContent {
-    /// A commit's file, with its counts from the changeset.
-    init(_ file: CommittedFileChange, in changeset: ChangesetData) {
+    /// A commit's file, with its counts from the changeset in
+    /// `numberFormat`.
+    init(_ file: CommittedFileChange, in changeset: ChangesetData, numberFormat: NumberFormat) {
         let counts = changeset.lineCounts[file.id]
-        self.init(file: CommittedFileRowContent(file), added: counts?.added, deleted: counts?.deleted)
+        self.init(file: CommittedFileRowContent(file), added: counts?.added, deleted: counts?.deleted, numberFormat: numberFormat)
     }
 }
 
@@ -338,7 +341,12 @@ final class HistoryFileCellView: NSTableCellView {
     }
 
     private static func row(_ content: HistoryFileContent) -> AnyView {
-        AnyView(HistoryFileRow(content: content).accessibilityHidden(true).lookFont())
+        AnyView(
+            HistoryFileRow(content: content)
+                .accessibilityHidden(true)
+                .environment(\.numberFormat, content.numberFormat)
+                .lookFont()
+        )
     }
 
     override func layout() {
@@ -393,19 +401,21 @@ struct HistoryFileRow: View {
     }
 }
 
-/// "+10 −2" in SF Mono, in the diff's colors; zero counts left out.
+/// "+10 −2" in SF Mono, in the diff's colors and the user's number format;
+/// zero counts left out.
 struct HistoryLineCounts: View {
     let added: Int?
     let deleted: Int?
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         HStack(spacing: Metrics.grid) {
             if let added, added > 0 {
-                Text("+\(formatCount(added))")
+                Text("+\(formatCount(added, numberFormat))")
                     .foregroundStyle(Color(espalier: DiffColors.addedMarker))
             }
             if let deleted, deleted > 0 {
-                Text("−\(formatCount(deleted))")
+                Text("−\(formatCount(deleted, numberFormat))")
                     .foregroundStyle(Color(espalier: DiffColors.deletedMarker))
             }
         }
@@ -413,7 +423,7 @@ struct HistoryLineCounts: View {
         .lineLimit(1)
         .fixedSize()
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(added ?? 0) added lines, \(deleted ?? 0) removed lines")
+        .accessibilityLabel(Text(verbatim: "\(formatCount(added ?? 0, numberFormat)) added lines, \(formatCount(deleted ?? 0, numberFormat)) removed lines"))
     }
 }
 
@@ -422,12 +432,13 @@ struct HistoryLineCounts: View {
 /// whole; the line counts show when there's room for them.
 struct CommitFilesHeader: View {
     let summary: CommitFilesSummary
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
             SectionLabel("Changed Files", count: summary.fileCount)
                 .fixedSize()
-                .accessibilityLabel(summary.title)
+                .accessibilityLabel(summary.title(numberFormat))
             Spacer(minLength: Metrics.grid)
             if summary.linesAdded > 0 || summary.linesDeleted > 0 {
                 // Shown whole or not at all: a narrow column leaves the

@@ -93,6 +93,7 @@ struct DescriptionEditor: NSViewRepresentable {
 
     func updateNSView(_ scrollView: ComposerScrollView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.session.list.numberFormat = context.environment.numberFormat
         guard let textView = context.coordinator.textView else {
             return
         }

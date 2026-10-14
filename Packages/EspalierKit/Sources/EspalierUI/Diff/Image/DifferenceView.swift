@@ -11,6 +11,7 @@ import SwiftUI
 struct DifferenceView: View {
     let previousShown: ShownImage
     let currentShown: ShownImage
+    @Environment(\.numberFormat) private var numberFormat
 
     init(previous: ShownImage, current: ShownImage) {
         previousShown = previous
@@ -49,8 +50,8 @@ struct DifferenceView: View {
             .compositingGroup()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityElement()
-            .accessibilityLabel("Difference of the images. " + imageAccessibilityLabel("Deleted", image: previousImage, bytes: previous.bytes)
-                + "; " + imageAccessibilityLabel("Added", image: currentImage, bytes: current.bytes))
+            .accessibilityLabel("Difference of the images. " + imageAccessibilityLabel("Deleted", image: previousImage, bytes: previous.bytes, numberFormat: numberFormat)
+                + "; " + imageAccessibilityLabel("Added", image: currentImage, bytes: current.bytes, numberFormat: numberFormat))
         }
         .padding(Metrics.insetLarge)
     }

@@ -230,6 +230,7 @@ struct DiffTextView: NSViewRepresentable {
     /// Find in the diff, which the container's bar shows.
     let find: DiffFindModel
     @Environment(\.announcer) private var announcer
+    @Environment(\.numberFormat) private var numberFormat
 
     func makeCoordinator() -> DiffTableController {
         DiffTableController()
@@ -243,6 +244,8 @@ struct DiffTextView: NSViewRepresentable {
         let controller = context.coordinator
         controller.actions = actions
         find.announcer = announcer
+        find.numberFormat = numberFormat
+        controller.numberFormat = numberFormat
         controller.attach(find)
         controller.apply(content)
     }

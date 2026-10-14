@@ -75,7 +75,7 @@ extension ChangesHeaderContent {
             included: files.isEmpty ? "" : included(count: includedCount, numberFormat: numberFormat),
             includeAll: changes.visibleIncludeAll,
             isIncludeAllEnabled: !files.isEmpty && !isCommitting && !isRebaseConflicts,
-            filter: FilterMenuContent(filter: changes.filter, visibleFiles: changes.visibleFiles),
+            filter: FilterMenuContent(filter: changes.filter, visibleFiles: changes.visibleFiles, numberFormat: numberFormat),
             repository: ObjectIdentifier(repository)
         )
     }

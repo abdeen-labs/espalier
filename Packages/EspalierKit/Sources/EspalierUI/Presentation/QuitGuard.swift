@@ -23,9 +23,9 @@ nonisolated public struct QuitGuardReasons: Sendable, Equatable {
         runningOperation == nil && repositoriesWithUnfinishedMessages.isEmpty
     }
 
-    /// The alert, or nil when there's nothing to ask: one alert covers both
-    /// reasons, with the operation's title.
-    public var alert: AlertContent? {
+    /// The alert, its counts in `numberFormat`, or nil when there's nothing
+    /// to ask: one alert covers both reasons, with the operation's title.
+    public func alert(_ numberFormat: NumberFormat) -> AlertContent? {
         var title: String?
         var messages: [String] = []
         if let runningOperation {
@@ -42,7 +42,7 @@ nonisolated public struct QuitGuardReasons: Sendable, Equatable {
             if drafts.count == 1 {
                 messages.append("Your commit message in \(drafts[0]) will be lost.")
             } else {
-                messages.append("Your commit messages in \(drafts.count) repositories will be lost.")
+                messages.append("Your commit messages in \(formatCount(drafts.count, numberFormat)) repositories will be lost.")
             }
         }
         guard let title else {

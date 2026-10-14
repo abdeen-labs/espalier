@@ -308,7 +308,7 @@ enum RepositoryActions {
     /// the recovery chosen, or nil when the user closed it. For flows that
     /// run a recovery themselves (Retry Clone).
     static func chooseRecovery(for error: OperationError, in context: WindowContext) async -> Recovery? {
-        switch error.presentation {
+        switch error.presentation(context.app.preferences.numberFormat) {
         case .alert(let content, let recoveries):
             let response = await context.modals.alert(content)
             return recoveries.indices.contains(response.buttonIndex) ? recoveries[response.buttonIndex] : nil

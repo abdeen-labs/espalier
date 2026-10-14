@@ -190,6 +190,7 @@ struct WindowEnvironment: ViewModifier {
                 dateFormat: preferences.dateFormat,
                 timeFormat: preferences.timeFormat
             ))
+            .environment(\.numberFormat, preferences.numberFormat)
             .environment(\.avatarLoader, context.avatarLoader)
             .environment(\.announcer, context.announcer)
             .environment(\.scheduler, context.app.environment.scheduler)

@@ -4,6 +4,7 @@
 
 import AppKit
 import EspalierCore
+import GitKit
 import QuartzCore
 import os
 
@@ -74,6 +75,15 @@ final class GraphCellView: NSView, TooltipOwner {
         }
     }
 
+    /// The format the stubs' counts draw in.
+    var numberFormat = defaultNumberFormat {
+        didSet {
+            if numberFormat != oldValue {
+                needsDisplay = true
+            }
+        }
+    }
+
     private var targetLayer: CAShapeLayer?
 
     override init(frame frameRect: NSRect) {
@@ -103,10 +113,10 @@ final class GraphCellView: NSView, TooltipOwner {
         let colors = colors ?? GraphColors(appearance: effectiveAppearance)
         if UISignposts.signposter.isEnabled {
             let state = UISignposts.begin(.graphCellDraw)
-            GraphRenderer.draw(drawing, emphasis: emphasis, geometry: geometry, colors: colors, in: context)
+            GraphRenderer.draw(drawing, emphasis: emphasis, geometry: geometry, colors: colors, numberFormat: numberFormat, in: context)
             UISignposts.end(.graphCellDraw, state)
         } else {
-            GraphRenderer.draw(drawing, emphasis: emphasis, geometry: geometry, colors: colors, in: context)
+            GraphRenderer.draw(drawing, emphasis: emphasis, geometry: geometry, colors: colors, numberFormat: numberFormat, in: context)
         }
     }
 

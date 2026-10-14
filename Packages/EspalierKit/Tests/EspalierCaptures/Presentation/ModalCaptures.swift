@@ -17,7 +17,7 @@ struct ModalCaptures {
     private let area = "Modals"
 
     private func confirmation(_ name: String) throws -> AlertContent {
-        try #require(UIFixtures.confirmations.first { $0.name == name }?.confirmation).alertContent
+        try #require(UIFixtures.confirmations.first { $0.name == name }?.confirmation).alertContent(Capture.numberFormat)
     }
 
     /// An alert's card on its layer, with its shadow; `prepare` sets its
@@ -41,7 +41,7 @@ struct ModalCaptures {
         }
         capture(card(ssh), named: "alert-plain", area: area)
         capture(card(try confirmation("discardChanges")), named: "alert-critical", area: area)
-        let quit = try #require(QuitGuardReasons(runningOperation: .rebase, repositoriesWithUnfinishedMessages: ["espalier"]).alert)
+        let quit = try #require(QuitGuardReasons(runningOperation: .rebase, repositoriesWithUnfinishedMessages: ["espalier"]).alert(Capture.numberFormat))
         capture(card(quit), named: "alert-destructive", area: area)
         let push = AlertContent(
             title: "Push Local Changes?",
@@ -64,7 +64,7 @@ struct ModalCaptures {
         let files = (1...12).map { "Sources/Feature/File\($0).swift" }
         let overwritten = AlertContent(
             title: "Checkout Failed",
-            message: AlertList.insert(files, intoMessage: "Your local changes to these files would be overwritten:\n\nYou can stash your changes now and restore them afterward."),
+            message: AlertList.insert(files, intoMessage: "Your local changes to these files would be overwritten:\n\nYou can stash your changes now and restore them afterward.", numberFormat: Capture.numberFormat),
             buttons: [AlertContent.Button("Stash Changes and Retry", role: .primary), AlertContent.Button("Close", role: .cancel)]
         )
         capture(card(overwritten), named: "alert-list", area: area)
@@ -150,7 +150,7 @@ struct ModalCaptures {
     @Test("a sheet in its card over the scrim, and an alert stacked over it")
     func sheetAndStackedAlert() async throws {
         let confirmation = try #require(UIFixtures.confirmations.first { $0.name == "removeRepository" }?.confirmation)
-        guard case .compactSheet(let compact) = confirmation.presentation else {
+        guard case .compactSheet(let compact) = confirmation.presentation(Capture.numberFormat) else {
             Issue.record("removeRepository is an alert, not a sheet")
             return
         }

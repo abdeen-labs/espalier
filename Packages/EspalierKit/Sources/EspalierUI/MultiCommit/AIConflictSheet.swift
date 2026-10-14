@@ -355,6 +355,7 @@ public struct AIConflictSheet: View {
 
     private let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
+    @Environment(\.numberFormat) private var numberFormat
 
     public init(repository: RepositoryModel) {
         self.repository = repository
@@ -368,7 +369,7 @@ public struct AIConflictSheet: View {
                 Color.clear
             case .resolving(let round):
                 AIConflictLoadingView(
-                    content: AIConflictLoadingContent(round, operationName: operationName),
+                    content: AIConflictLoadingContent(round, operationName: operationName, numberFormat: numberFormat),
                     onStop: { repository.ai.stopResolvingConflicts() },
                     onAbort: { AIConflictFlow.abort(in: context, repository: repository) }
                 )
@@ -379,7 +380,8 @@ public struct AIConflictSheet: View {
                         repository: repository,
                         operationName: operationName,
                         isContinuing: flow.isContinuing,
-                        error: flow.applyError
+                        error: flow.applyError,
+                        numberFormat: numberFormat
                     ),
                     repository: repository,
                     alwaysUseAI: alwaysUseAIBinding
@@ -469,7 +471,8 @@ nonisolated public struct AIConflictLoadingContent: Sendable, Equatable {
         self.abortTitle = abortTitle
     }
 
-    init(_ round: ConflictResolutionRound, operationName: String) {
+    /// The loading view for `round`, its counts in `numberFormat`.
+    init(_ round: ConflictResolutionRound, operationName: String, numberFormat: NumberFormat) {
         let gathering = round.phase == .gatheringContext
         let names = round.files.map { POSIXPath.basename($0) }
         var fallback: [String]
@@ -480,14 +483,16 @@ nonisolated public struct AIConflictLoadingContent: Sendable, Equatable {
             fallback = ["Cross-referencing related files", "Considering both sides of each conflict"]
             fallback += names.prefix(6).map { "Analyzing \($0)" }
             if names.count > 6 {
-                fallback.append("…and \(names.count - 6) more")
+                fallback.append("…and \(formatCount(names.count - 6, numberFormat)) more")
             }
         }
         self.init(
             title: "Resolving conflicts for \(operationName.lowercased())",
             modelLabel: aiModelLabel(round.model),
             phase: gathering ? "Gathering context…" : "Analyzing conflicts…",
-            progress: round.filesTotal > 0 ? "\(round.filesResolved) of \(round.filesTotal) \(round.filesTotal == 1 ? "file" : "files")" : nil,
+            progress: round.filesTotal > 0
+                ? "\(formatCount(round.filesResolved, numberFormat)) of \(formatCount(round.filesTotal, numberFormat)) \(round.filesTotal == 1 ? "file" : "files")"
+                : nil,
             reasoning: Array(round.reasoning.compactMap(Self.clean).suffix(Self.maxLines)),
             fallbackLines: fallback,
             abortTitle: "Abort \(operationName)"
@@ -666,24 +671,25 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
     public var isContinuing: Bool
     public var error: String?
 
-    /// "5 Conflicted files".
-    public var conflictedHeader: String {
-        "\(conflicted.count) Conflicted \(conflicted.count == 1 ? "file" : "files")"
+    /// "5 Conflicted files", the count in `numberFormat`.
+    public func conflictedHeader(_ numberFormat: NumberFormat) -> String {
+        "\(formatCount(conflicted.count, numberFormat)) Conflicted \(conflicted.count == 1 ? "file" : "files")"
     }
 
-    /// "1 Skipped by the model".
-    public var skippedHeader: String {
-        "\(skipped.count) Skipped by the model"
+    /// "1 Skipped by the model", the count in `numberFormat`.
+    public func skippedHeader(_ numberFormat: NumberFormat) -> String {
+        "\(formatCount(skipped.count, numberFormat)) Skipped by the model"
     }
 
-    /// "2 Couldn't be resolved".
-    public var failedHeader: String {
-        "\(failed.count) Couldn't be resolved"
+    /// "2 Couldn't be resolved", the count in `numberFormat`.
+    public func failedHeader(_ numberFormat: NumberFormat) -> String {
+        "\(formatCount(failed.count, numberFormat)) Couldn't be resolved"
     }
 
-    /// "2 files couldn't be resolved.", beside Try Again.
-    public var failedStatus: String {
-        failed.count == 1 ? "1 file couldn't be resolved." : "\(failed.count) files couldn't be resolved."
+    /// "2 files couldn't be resolved.", beside Try Again, the count in
+    /// `numberFormat`.
+    public func failedStatus(_ numberFormat: NumberFormat) -> String {
+        failed.count == 1 ? "1 file couldn't be resolved." : "\(formatCount(failed.count, numberFormat)) files couldn't be resolved."
     }
 
     /// The paths in the Changes tab: every file the results cover.
@@ -703,14 +709,15 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
         }
     }
 
-    /// The results for a repository.
+    /// The results for a repository, counts in `numberFormat`.
     @MainActor
     static func make(
         _ results: ConflictResolutionResults,
         repository: RepositoryModel,
         operationName: String,
         isContinuing: Bool,
-        error: String?
+        error: String?,
+        numberFormat: NumberFormat
     ) -> AIConflictResultsContent {
         let ai = repository.ai
         let branches = repository.operations.conflictBranches
@@ -761,8 +768,10 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
         }
 
         let retryProgress = results.retry.map { round in
-            let retrying = "Retrying \(round.files.count) \(round.files.count == 1 ? "file" : "files")…"
-            return round.filesTotal > 0 ? "\(retrying) \(round.filesResolved) of \(round.filesTotal)" : retrying
+            let retrying = "Retrying \(formatCount(round.files.count, numberFormat)) \(round.files.count == 1 ? "file" : "files")…"
+            return round.filesTotal > 0
+                ? "\(retrying) \(formatCount(round.filesResolved, numberFormat)) of \(formatCount(round.filesTotal, numberFormat))"
+                : retrying
         }
         let needingResolution = ai.filesNeedingResolution
         return AIConflictResultsContent(
@@ -903,6 +912,7 @@ struct AIConflictResultsView: View {
     @Binding var alwaysUseAI: Bool
     @State private var tab = Tab.summary
     @Environment(WindowContext.self) private var context
+    @Environment(\.numberFormat) private var numberFormat
 
     init(content: AIConflictResultsContent, repository: RepositoryModel, alwaysUseAI: Binding<Bool>) {
         self.content = content
@@ -970,12 +980,12 @@ struct AIConflictResultsView: View {
             AIConflictSummary(content: content.summary) { url in
                 context.app.integrations.openInBrowser(url)
             }
-            fileSection(header: content.conflictedHeader, systemImage: "doc.text", rows: content.conflicted)
+            fileSection(header: content.conflictedHeader(numberFormat), systemImage: "doc.text", rows: content.conflicted)
             if !content.skipped.isEmpty {
-                fileSection(header: content.skippedHeader, systemImage: "exclamationmark.triangle", rows: content.skipped)
+                fileSection(header: content.skippedHeader(numberFormat), systemImage: "exclamationmark.triangle", rows: content.skipped)
             }
             if !content.failed.isEmpty {
-                fileSection(header: content.failedHeader, systemImage: "xmark.octagon", rows: content.failed)
+                fileSection(header: content.failedHeader(numberFormat), systemImage: "xmark.octagon", rows: content.failed)
             }
         }
     }
@@ -985,7 +995,7 @@ struct AIConflictResultsView: View {
     private var failedBar: some View {
         HStack(spacing: Metrics.insetSmall) {
             Label {
-                Text(content.failedStatus)
+                Text(content.failedStatus(numberFormat))
                     .foregroundStyle(.text)
             } icon: {
                 Image(systemName: "xmark.octagon.fill")

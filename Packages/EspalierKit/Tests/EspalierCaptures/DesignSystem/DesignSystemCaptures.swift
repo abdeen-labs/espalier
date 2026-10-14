@@ -57,7 +57,7 @@ struct DesignSystemCaptures {
 
     @Test("ref capsules in AppKit, as a graph cell draws them: three, then a capsule counting the rest")
     func refCapsulesAppKit() {
-        let items = RefCapsuleRenderer.layout(refs)
+        let items = RefCapsuleRenderer.layout(refs, numberFormat: Capture.numberFormat)
         capture({ RefCapsuleDrawingView(items: items) }, named: "refCapsules-appkit", area: area, size: CGSize(width: 320, height: 28))
     }
 

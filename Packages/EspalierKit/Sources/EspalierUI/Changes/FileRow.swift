@@ -37,6 +37,8 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
     /// A conflicted file's state and what can be done with it, while an
     /// operation or a stash restore waits on its conflicts.
     public var conflict: ConflictFileRowContent?
+    /// The format the line counts show in.
+    public var numberFormat: NumberFormat
 
     public init(
         id: String,
@@ -48,7 +50,8 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
         inclusionHelp: String? = nil,
         lineCount: FileLineCount? = nil,
         showsCheckbox: Bool = true,
-        conflict: ConflictFileRowContent? = nil
+        conflict: ConflictFileRowContent? = nil,
+        numberFormat: NumberFormat = defaultNumberFormat
     ) {
         self.id = id
         self.path = path
@@ -60,6 +63,7 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
         self.lineCount = lineCount
         self.showsCheckbox = showsCheckbox
         self.conflict = conflict
+        self.numberFormat = numberFormat
     }
 
     /// The file's name.
@@ -92,13 +96,17 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
         }
     }
 
-    /// The lines added and removed: "+10" and "−2" (zero counts left out;
-    /// none without counts, or when the change adds and removes nothing).
+    /// The lines added and removed: "+10" and "−2" in `numberFormat` (zero
+    /// counts left out; none without counts, or when the change adds and
+    /// removes nothing).
     public var countParts: (added: String?, deleted: String?)? {
         guard let added = lineCount?.added, let deleted = lineCount?.deleted, added > 0 || deleted > 0 else {
             return nil
         }
-        return (added > 0 ? "+\(formatCount(added))" : nil, deleted > 0 ? "\u{2212}\(formatCount(deleted))" : nil)
+        return (
+            added > 0 ? "+\(formatCount(added, numberFormat))" : nil,
+            deleted > 0 ? "\u{2212}\(formatCount(deleted, numberFormat))" : nil
+        )
     }
 
     /// "+10 −2", as the row shows it, or nil.
@@ -117,7 +125,7 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
             label += ", from \(oldPath)"
         }
         if countParts != nil, let added = lineCount?.added, let deleted = lineCount?.deleted {
-            label += ", \(added) added lines, \(deleted) removed lines"
+            label += ", \(formatCount(added, numberFormat)) added lines, \(formatCount(deleted, numberFormat)) removed lines"
         }
         if let conflict {
             label += ", \(conflict.status)"
@@ -133,13 +141,14 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
 
 extension FileRowContent {
     /// The row for `file`, with its checkbox as the changes model shows it,
-    /// its line counts once they've loaded, and its conflict while it's
-    /// conflicted.
+    /// its line counts once they've loaded (in `numberFormat`), and its
+    /// conflict while it's conflicted.
     public init(
         _ file: WorkingDirectoryFileChange,
         inclusion: FileInclusionState,
         lineCount: FileLineCount? = nil,
-        conflict: ConflictFileRowContent? = nil
+        conflict: ConflictFileRowContent? = nil,
+        numberFormat: NumberFormat
     ) {
         self.init(
             id: file.id,
@@ -150,7 +159,8 @@ extension FileRowContent {
             isInclusionEnabled: inclusion.isEnabled,
             inclusionHelp: inclusion.help,
             lineCount: lineCount,
-            conflict: conflict
+            conflict: conflict,
+            numberFormat: numberFormat
         )
     }
 

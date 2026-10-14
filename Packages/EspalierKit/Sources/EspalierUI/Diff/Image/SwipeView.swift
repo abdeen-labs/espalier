@@ -11,6 +11,7 @@ import SwiftUI
 struct SwipeView: View {
     let previousShown: ShownImage
     let currentShown: ShownImage
+    @Environment(\.numberFormat) private var numberFormat
 
     /// - Parameter fraction: How much of the old image shows at first.
     init(previous: ShownImage, current: ShownImage, fraction: Double = 0) {
@@ -56,8 +57,8 @@ struct SwipeView: View {
                 }
                 .frame(width: box.width, height: box.height)
                 .accessibilityElement()
-                .accessibilityLabel(imageAccessibilityLabel("Deleted", image: previousImage, bytes: previous.bytes)
-                    + "; " + imageAccessibilityLabel("Added", image: currentImage, bytes: current.bytes))
+                .accessibilityLabel(imageAccessibilityLabel("Deleted", image: previousImage, bytes: previous.bytes, numberFormat: numberFormat)
+                    + "; " + imageAccessibilityLabel("Added", image: currentImage, bytes: current.bytes, numberFormat: numberFormat))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

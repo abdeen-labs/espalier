@@ -29,19 +29,20 @@ nonisolated struct HistoryHeaderContent: Sendable, Equatable {
     /// The search's status, while there is a query.
     var search: HistorySearchStatusContent?
 
-    /// The count for the loaded commits: the total when it's known.
-    static func count(loaded: Int, total: Int?, isComplete: Bool) -> String {
+    /// The count for the loaded commits: the total when it's known; in
+    /// `numberFormat`.
+    static func count(loaded: Int, total: Int?, isComplete: Bool, numberFormat: NumberFormat) -> String {
         if let total {
-            return total == 1 ? "1 commit" : "\(formatCount(total)) commits"
+            return total == 1 ? "1 commit" : "\(formatCount(total, numberFormat)) commits"
         }
         if isComplete || loaded == 0 {
             switch loaded {
             case 0: return "No commits"
             case 1: return "1 commit"
-            default: return "\(formatCount(loaded)) commits"
+            default: return "\(formatCount(loaded, numberFormat)) commits"
             }
         }
-        return "\(formatCount(loaded))+ commits"
+        return "\(formatCount(loaded, numberFormat))+ commits"
     }
 }
 
@@ -153,6 +154,7 @@ struct BranchNameLabel: View {
 struct HistoryHeaderContainer: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         let history = repository.history
@@ -163,10 +165,11 @@ struct HistoryHeaderContainer: View {
                 count: HistoryHeaderContent.count(
                     loaded: history.commitSHAs.count,
                     total: history.totalCommitCount,
-                    isComplete: history.isComplete
+                    isComplete: history.isComplete,
+                    numberFormat: numberFormat
                 ),
                 branchName: repository.gitState.tip.branch?.name,
-                search: history.search.map { HistorySearchStatusContent($0, history: history) }
+                search: history.search.map { HistorySearchStatusContent($0, history: history, numberFormat: numberFormat) }
             ),
             setStyle: { style in
                 history.setStyle(style)

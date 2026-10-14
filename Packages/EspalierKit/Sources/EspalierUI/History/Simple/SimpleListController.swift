@@ -97,6 +97,15 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         }
     }
 
+    /// How counts show.
+    var numberFormat = defaultNumberFormat {
+        didSet {
+            if numberFormat != oldValue {
+                reconfigureVisibleRows()
+            }
+        }
+    }
+
     /// The rows: the outline's items.
     private(set) var items: [SimpleHistoryItem] = []
     private(set) var presentation = SimpleListPresentation()
@@ -573,7 +582,8 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
             isUnpushed: presentation.hasRemote && simpleRow.isUnpushed,
             isCurrentTip: commit.sha == presentation.headSHA,
             isDimmed: isDimmed,
-            avatarEndpoint: presentation.avatarEndpoint
+            avatarEndpoint: presentation.avatarEndpoint,
+            numberFormat: numberFormat
         )
         return (content, rail, kind == .mergedCommit)
     }
@@ -617,7 +627,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         case .failed(let error):
             return ("The merged commits couldn\u{2019}t load.", error.message)
         case .loaded:
-            return ("The first \(formatCount(merged.count)) commits. Graph shows them all.", nil)
+            return ("The first \(formatCount(merged.count, numberFormat)) commits. Graph shows them all.", nil)
         }
     }
 
@@ -948,7 +958,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint, forRowIndexes rowIndexes: IndexSet) {
         let payload = CommitDragPayload.read(from: session.draggingPasteboard)
-        CommitDragImage.apply(to: session, in: tableView, at: screenPoint, rows: rowIndexes, count: payload?.shas.count ?? rowIndexes.count)
+        CommitDragImage.apply(to: session, in: tableView, at: screenPoint, rows: rowIndexes, count: payload?.shas.count ?? rowIndexes.count, numberFormat: numberFormat)
         if let payload {
             actions.dragBegan(payload)
             watchDragEnd()

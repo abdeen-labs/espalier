@@ -24,18 +24,19 @@ nonisolated public struct CherryPickTargetContent: Sendable, Equatable {
         self.commitsAreOnCurrentBranch = commitsAreOnCurrentBranch
     }
 
-    /// "Cherry-pick 2 commits to a branch".
-    public var title: String {
-        "Cherry-pick \(commitCount) \(commitCount == 1 ? "commit" : "commits") to a branch"
+    /// "Cherry-pick 2 commits to a branch", the count in `numberFormat`.
+    public func title(_ numberFormat: NumberFormat) -> String {
+        "Cherry-pick \(formatCount(commitCount, numberFormat)) \(commitCount == 1 ? "commit" : "commits") to a branch"
     }
 
-    /// The button: "Cherry-pick 2 Commits to main…", or "Cherry-pick to
-    /// New Branch" when nothing matches the filter.
-    public func confirmButton(target: String?, isCreatingBranch: Bool) -> String {
+    /// The button: "Cherry-pick 2 Commits to main…" (the count in
+    /// `numberFormat`), or "Cherry-pick to New Branch" when nothing matches
+    /// the filter.
+    public func confirmButton(target: String?, isCreatingBranch: Bool, numberFormat: NumberFormat) -> String {
         if isCreatingBranch {
             return "Cherry-pick to New Branch"
         }
-        let commits = "Cherry-pick \(commitCount) \(commitCount == 1 ? "Commit" : "Commits")"
+        let commits = "Cherry-pick \(formatCount(commitCount, numberFormat)) \(commitCount == 1 ? "Commit" : "Commits")"
         guard let target else {
             return commits
         }
@@ -75,6 +76,7 @@ public struct CherryPickTargetSheet: View {
     @State private var selection: Branch?
     @State private var filter = ""
     @Environment(\.dismissModal) private var dismissModal
+    @Environment(\.numberFormat) private var numberFormat
 
     /// The list's height.
     private static let listHeight = Metrics.BranchPicker.sheetListHeight
@@ -93,7 +95,7 @@ public struct CherryPickTargetSheet: View {
 
     public var body: some View {
         let isCreatingBranch = isCreateBranchState
-        SheetScaffold(content.title) {
+        SheetScaffold(content.title(numberFormat)) {
             BranchPicker(
                 repository: repository,
                 selection: $selection,
@@ -112,7 +114,7 @@ public struct CherryPickTargetSheet: View {
             .frame(height: Self.listHeight)
         } buttons: {
             SheetButtons(
-                content.confirmButton(target: selection?.name, isCreatingBranch: isCreatingBranch),
+                content.confirmButton(target: selection?.name, isCreatingBranch: isCreatingBranch, numberFormat: numberFormat),
                 isConfirmDisabled: !isCreatingBranch && !content.canCherryPick(onto: selection?.name),
                 confirmHelp: content.tooltip(target: selection?.name),
                 cancel: { dismissModal() }

@@ -91,8 +91,8 @@ enum ChangesActions {
             await controller.undo()
         }
 
-        Benchmarks.runners[.changesApply] = { _ in
-            ChangesApplyBenchmark.run()
+        Benchmarks.runners[.changesApply] = { context in
+            ChangesApplyBenchmark.run(numberFormat: context.app.preferences.numberFormat)
         }
     }
 

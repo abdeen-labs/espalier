@@ -29,7 +29,7 @@ struct RepositoryCaptures {
     func rows() {
         let rows = VStack(alignment: .leading, spacing: Metrics.grid) {
             RepositoryRow(content: RepositoryCaptureFixtures.row("espalier", icon: .current, changed: 3, ahead: 2))
-            RepositoryRow(content: RepositoryCaptureFixtures.row("desktop", behind: 14))
+            RepositoryRow(content: RepositoryCaptureFixtures.row("desktop", behind: 1_204))
             RepositoryRow(content: RepositoryCaptureFixtures.row("website", subtitle: "octo-org", changed: 1200, ahead: 1, behind: 3))
             RepositoryRow(content: RepositoryCaptureFixtures.row("website", subtitle: "~/Developer/forks"))
             RepositoryRow(content: RepositoryCaptureFixtures.row("dotfiles", icon: .missing, showsStatus: false))

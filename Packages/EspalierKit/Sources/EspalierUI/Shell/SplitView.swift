@@ -199,6 +199,7 @@ struct EnvironmentBridge: ViewModifier {
             .environment(windowContext)
             .environment(\.isInPaneCard, isInPaneCard)
             .environment(\.dateTimeFormatting, values.dateTimeFormatting)
+            .environment(\.numberFormat, values.numberFormat)
             .environment(\.avatarLoader, values.avatarLoader)
             .environment(\.timeZone, values.timeZone)
             .environment(\.locale, values.locale)

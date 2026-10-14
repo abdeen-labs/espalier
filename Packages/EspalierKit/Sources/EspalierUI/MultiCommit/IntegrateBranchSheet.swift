@@ -52,9 +52,9 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
     }
 
     /// What merging or squash merging `branch` into `current` would do,
-    /// and whether it can start (`MergePreview.canStart`). `preview` nil
-    /// means it's loading.
-    public static func merge(current: String, branch: String?, preview: MergePreview?) -> IntegrateStatus {
+    /// counts in `numberFormat`, and whether it can start
+    /// (`MergePreview.canStart`). `preview` nil means it's loading.
+    public static func merge(current: String, branch: String?, preview: MergePreview?, numberFormat: NumberFormat) -> IntegrateStatus {
         guard let branch, !JSCompat.strictEquals(branch, current) else {
             return IntegrateStatus()
         }
@@ -73,7 +73,7 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
             let files = count == 1 ? "file" : "files"
             return IntegrateStatus(
                 icon: .conflicts,
-                message: "There will be \(count) conflicted \(files) when merging \(branch) into \(current)",
+                message: "There will be \(formatCount(count, numberFormat)) conflicted \(files) when merging \(branch) into \(current)",
                 canStart: canStart
             )
         case (nil, _), (_, nil):
@@ -82,15 +82,15 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
             let commits = count == 1 ? "commit" : "commits"
             return IntegrateStatus(
                 icon: .clean,
-                message: "This will merge \(count) \(commits) from \(branch) into \(current)",
+                message: "This will merge \(formatCount(count, numberFormat)) \(commits) from \(branch) into \(current)",
                 canStart: canStart
             )
         }
     }
 
-    /// What rebasing `current` onto `base` would do. `preview` nil means
-    /// it's loading.
-    public static func rebase(current: String, base: String?, preview: RebasePreview?) -> IntegrateStatus {
+    /// What rebasing `current` onto `base` would do, counts in
+    /// `numberFormat`. `preview` nil means it's loading.
+    public static func rebase(current: String, base: String?, preview: RebasePreview?, numberFormat: NumberFormat) -> IntegrateStatus {
         guard let base else {
             return IntegrateStatus()
         }
@@ -114,7 +114,7 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
                 let commits = behind == 1 ? "commit" : "commits"
                 return IntegrateStatus(
                     icon: .clean,
-                    message: "This will fast-forward \(current) by \(behind) \(commits) to match \(base)",
+                    message: "This will fast-forward \(current) by \(formatCount(behind, numberFormat)) \(commits) to match \(base)",
                     canStart: true
                 )
             }
@@ -122,7 +122,7 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
                 let commits = ahead == 1 ? "commit" : "commits"
                 return IntegrateStatus(
                     icon: .clean,
-                    message: "This will update \(current) by applying its \(ahead) \(commits) on top of \(base)",
+                    message: "This will update \(current) by applying its \(formatCount(ahead, numberFormat)) \(commits) on top of \(base)",
                     canStart: true
                 )
             }
@@ -143,6 +143,7 @@ public struct IntegrateBranchSheet: View {
     @State private var mergePreview: MergePreview?
     @State private var rebasePreview: RebasePreview?
     @Environment(\.dismissModal) private var dismissModal
+    @Environment(\.numberFormat) private var numberFormat
 
     /// The list's height.
     private static let listHeight = Metrics.BranchPicker.sheetListHeight
@@ -201,9 +202,9 @@ public struct IntegrateBranchSheet: View {
     private func status(current: String) -> IntegrateStatus {
         switch method {
         case .merge, .squashMerge:
-            IntegrateStatus.merge(current: current, branch: selection?.name, preview: mergePreview)
+            IntegrateStatus.merge(current: current, branch: selection?.name, preview: mergePreview, numberFormat: numberFormat)
         case .rebase:
-            IntegrateStatus.rebase(current: current, base: selection?.name, preview: rebasePreview)
+            IntegrateStatus.rebase(current: current, base: selection?.name, preview: rebasePreview, numberFormat: numberFormat)
         }
     }
 

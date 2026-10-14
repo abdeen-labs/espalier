@@ -17,7 +17,7 @@ struct PresentationCaptures {
     @Test("the compact confirmation sheets", arguments: ["removeRepository", "deleteBranch-remote"])
     func confirmation(name: String) throws {
         let confirmation = try #require(UIFixtures.confirmations.first { $0.name == name }?.confirmation)
-        guard case .compactSheet(let compact) = confirmation.presentation else {
+        guard case .compactSheet(let compact) = confirmation.presentation(Capture.numberFormat) else {
             Issue.record("\(name) is an alert, not a sheet")
             return
         }
@@ -58,7 +58,7 @@ struct PresentationCaptures {
     @Test("git's raw output with a note and a recovery, below one line and below a few", arguments: ["clone", "signing-pinentry"])
     func rawOutput(name: String) throws {
         let error = try #require(UIFixtures.errors.first { $0.name == name }?.error)
-        guard case .rawOutput(let content, _) = error.presentation else {
+        guard case .rawOutput(let content, _) = error.presentation(Capture.numberFormat) else {
             Issue.record("\(name) isn't raw output")
             return
         }

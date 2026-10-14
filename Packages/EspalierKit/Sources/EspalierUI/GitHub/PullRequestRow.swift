@@ -96,7 +96,7 @@ struct PullRequestRow: View {
             }
             .font(Typography.secondary)
             .frame(width: Metrics.Sidebar.symbolWidth)
-            Text("#\(content.number)")
+            Text(verbatim: "#\(content.number)")
                 .font(Typography.count)
                 .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
             Text(content.title)

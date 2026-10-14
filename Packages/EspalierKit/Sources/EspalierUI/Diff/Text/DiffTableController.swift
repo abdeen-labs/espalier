@@ -185,6 +185,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     /// Find in the diff: the container's model once attached
     /// (`attach(_:)`, DiffTableFind.swift).
     var find = DiffFindModel()
+    /// The format VoiceOver hears counts in.
+    var numberFormat = defaultNumberFormat
 
     /// The popover offering to show whitespace changes, and where it was
     /// asked for.

@@ -13,6 +13,7 @@
 
 import AppKit
 import EspalierCore
+import GitKit
 import SwiftUI
 
 /// Espalier's fonts, for SwiftUI.
@@ -312,6 +313,7 @@ extension NSFont {
 public struct SectionLabel: View {
     private let title: String
     private let count: Int?
+    @Environment(\.numberFormat) private var numberFormat
 
     public init(_ title: String, count: Int? = nil) {
         self.title = title
@@ -326,7 +328,7 @@ public struct SectionLabel: View {
                 .tracking(Typography.sectionLabelTracking)
                 .textCase(style.isUppercase ? .uppercase : nil)
             if let count {
-                Text("\(count)")
+                Text(verbatim: formatCount(count, numberFormat))
                     .font(Typography.sectionCount)
                     .opacity(0.8)
             }
@@ -334,7 +336,7 @@ public struct SectionLabel: View {
         .foregroundStyle(Color(nsColor: style.color ?? Palette.text3))
         .lineLimit(1)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(count.map { "\(title), \($0)" } ?? title)
+        .accessibilityLabel(count.map { "\(title), \(formatCount($0, numberFormat))" } ?? title)
         .accessibilityAddTraits(.isHeader)
     }
 }

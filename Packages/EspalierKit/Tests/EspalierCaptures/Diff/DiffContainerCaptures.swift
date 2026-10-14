@@ -83,12 +83,12 @@ struct DiffContainerCaptures {
 
     // MARK: Find
 
-    /// Find open on the Swift change from its first added line, searching
-    /// for `query`.
-    private func find(_ query: String) -> DiffFindModel {
+    /// Find open on `diff` (the Swift change) from `row` (its first added
+    /// line), searching for `query`.
+    private func find(_ query: String, in diff: TextDiff = DiffCaptureFixtures.swiftChange, from row: Int = 5) -> DiffFindModel {
         let find = DiffFindModel()
-        find.documentDidChange(DiffDocument(input: DiffTableContent(fileID: "a", diff: DiffCaptureFixtures.swiftChange).documentInput), isNewFile: true)
-        find.show(focus: false, from: DiffFindPosition(row: 5, column: .before, offset: 0))
+        find.documentDidChange(DiffDocument(input: DiffTableContent(fileID: "a", diff: diff).documentInput), isNewFile: true)
+        find.show(focus: false, from: DiffFindPosition(row: row, column: .before, offset: 0))
         find.query = query
         return find
     }
@@ -102,6 +102,26 @@ struct DiffContainerCaptures {
         EspalierCaptures.capture(
             DiffFindBar(find: find(query.value)).frame(maxWidth: .infinity, maxHeight: .infinity),
             named: query.name,
+            area: area,
+            size: CGSize(width: 420, height: 90)
+        )
+    }
+
+    @Test("the find bar counting thousands of matches")
+    func findBarManyMatches() {
+        let lines = (1...1_500).map { "+let tip\($0) = \($0)" }
+        let patch = """
+        diff --git a/Tips.swift b/Tips.swift
+        new file mode 100644
+        index 0000000..1111111
+        --- /dev/null
+        +++ b/Tips.swift
+        @@ -0,0 +1,1500 @@
+
+        """ + lines.joined(separator: "\n")
+        EspalierCaptures.capture(
+            DiffFindBar(find: find("tip", in: DiffCaptureFixtures.textDiff(patch), from: 1_204)).frame(maxWidth: .infinity, maxHeight: .infinity),
+            named: "find-bar-many-matches",
             area: area,
             size: CGSize(width: 420, height: 90)
         )

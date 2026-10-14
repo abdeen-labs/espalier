@@ -42,9 +42,10 @@ nonisolated public struct CompactConfirmation: Sendable, Equatable {
 }
 
 extension Confirmation {
-    /// How the confirmation is shown.
+    /// How the confirmation is shown, the counts in its lists in
+    /// `numberFormat`.
     @MainActor
-    public var presentation: ConfirmationPresentation {
+    public func presentation(_ numberFormat: NumberFormat) -> ConfirmationPresentation {
         switch kind {
         case .removeRepository:
             var path: String?
@@ -74,18 +75,18 @@ extension Confirmation {
             ))
 
         default:
-            return .alert(alertContent)
+            return .alert(alertContent(numberFormat))
         }
     }
 
     /// The confirmation as an alert: the confirm button first (the default,
     /// red when destructive), then Cancel.
     @MainActor
-    public var alertContent: AlertContent {
+    public func alertContent(_ numberFormat: NumberFormat) -> AlertContent {
         let confirmRole: AlertContent.Role = isDestructive ? .destructive : .primary
         return AlertContent(
             title: title,
-            message: alertMessage,
+            message: alertMessage(numberFormat),
             buttons: [AlertContent.Button(confirmButton, role: confirmRole), AlertContent.Button("Cancel", role: .cancel)],
             suppressionTitle: suppressionSetting == nil ? nil : AlertContent.doNotShowAgain,
             severity: isCritical ? .critical : .standard
@@ -102,19 +103,19 @@ extension Confirmation {
 
     /// The message with its list (files, authors): listed when there are at
     /// most ten, counted in the question otherwise.
-    private var alertMessage: String {
+    private func alertMessage(_ numberFormat: NumberFormat) -> String {
         switch details {
         case .files(let paths):
             switch kind {
             case .discardChanges, .discardAllChanges:
-                return paths.count > AlertList.maximumItems ? message : AlertList.insert(paths, intoMessage: message)
+                return paths.count > AlertList.maximumItems ? message : AlertList.insert(paths, intoMessage: message, numberFormat: numberFormat)
             case .commitFilteredChanges:
                 return message
             default:
-                return AlertList.insert(paths, intoMessage: message)
+                return AlertList.insert(paths, intoMessage: message, numberFormat: numberFormat)
             }
         case .authors(let usernames):
-            return usernames.count > AlertList.maximumItems ? message : AlertList.insert(usernames, intoMessage: message)
+            return usernames.count > AlertList.maximumItems ? message : AlertList.insert(usernames, intoMessage: message, numberFormat: numberFormat)
         default:
             return message
         }
@@ -195,7 +196,7 @@ enum ConfirmationHost {
     static func present(_ pending: PendingConfirmation, in context: WindowContext) {
         let presenter = context.presenter
         let confirmation = pending.confirmation
-        switch confirmation.presentation {
+        switch confirmation.presentation(context.app.preferences.numberFormat) {
         case .alert(let content):
             Task {
                 let response = await context.modals.alert(content)

@@ -3,6 +3,7 @@
 // (`AlertCard`).
 
 import Foundation
+import GitKit
 
 /// An alert: a title, a message, buttons, and an optional suppression
 /// checkbox.
@@ -103,25 +104,26 @@ nonisolated enum AlertList {
     /// At most this many items are listed; the rest are counted.
     static let maximumItems = 10
 
-    /// The items as lines, at most `maximumItems`, then "and N more".
-    static func lines(_ items: [String]) -> String {
+    /// The items as lines, at most `maximumItems`, then "and N more" (the
+    /// count in `numberFormat`).
+    static func lines(_ items: [String], numberFormat: NumberFormat) -> String {
         var lines = items.prefix(maximumItems).map { "• \($0)" }
         if items.count > maximumItems {
-            lines.append("and \(items.count - maximumItems) more")
+            lines.append("and \(formatCount(items.count - maximumItems, numberFormat)) more")
         }
         return lines.joined(separator: "\n")
     }
 
     /// `message` with `items` listed after its first paragraph, right after
     /// the question.
-    static func insert(_ items: [String], intoMessage message: String) -> String {
+    static func insert(_ items: [String], intoMessage message: String, numberFormat: NumberFormat) -> String {
         guard !items.isEmpty else {
             return message
         }
         let paragraphs = message.components(separatedBy: "\n\n")
         guard let first = paragraphs.first else {
-            return lines(items)
+            return lines(items, numberFormat: numberFormat)
         }
-        return ([first, lines(items)] + paragraphs.dropFirst()).joined(separator: "\n\n")
+        return ([first, lines(items, numberFormat: numberFormat)] + paragraphs.dropFirst()).joined(separator: "\n\n")
     }
 }

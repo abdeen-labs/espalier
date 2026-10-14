@@ -224,7 +224,7 @@ private final class GalleryGraphView: NSView {
             context.saveGState()
             context.translateBy(x: 0, y: CGFloat(index) * geometry.rowHeight)
             context.clip(to: CGRect(x: 0, y: 0, width: bounds.width, height: geometry.rowHeight))
-            GraphRenderer.draw(row.drawing, emphasis: GraphEmphasis(), geometry: geometry, colors: colors, in: context)
+            GraphRenderer.draw(row.drawing, emphasis: GraphEmphasis(), geometry: geometry, colors: colors, numberFormat: Capture.numberFormat, in: context)
             context.restoreGState()
         }
     }

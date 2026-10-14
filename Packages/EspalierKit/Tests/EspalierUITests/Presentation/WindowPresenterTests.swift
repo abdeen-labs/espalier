@@ -302,7 +302,7 @@ struct WindowPresenterTests {
     @Test("confirmations become alerts or compact sheets with the right roles")
     func confirmationPresentation() throws {
         for (name, confirmation) in UIFixtures.confirmations {
-            switch confirmation.presentation {
+            switch confirmation.presentation(defaultNumberFormat) {
             case .alert(let content):
                 #expect(![.removeRepository, .deleteBranch].contains(confirmation.kind), "\(name)")
                 #expect(content.buttons.last?.role == .cancel, "\(name)")
@@ -313,7 +313,7 @@ struct WindowPresenterTests {
             }
         }
         // Discarding changes is critical.
-        let discard = EspalierCore.Confirmation.discardChanges(UIFixtures.files).alertContent
+        let discard = EspalierCore.Confirmation.discardChanges(UIFixtures.files).alertContent(defaultNumberFormat)
         #expect(discard.severity == .critical)
 
         // An alert's checkbox counts only when confirmed.
@@ -324,9 +324,9 @@ struct WindowPresenterTests {
 
     @Test("Delete Branch and Remove Repository are compact sheets with their option as the checkbox")
     func compactSheets() throws {
-        guard case .compactSheet(let local) = EspalierCore.Confirmation.deleteBranch("x", existsOnRemote: false).presentation,
-              case .compactSheet(let remote) = EspalierCore.Confirmation.deleteBranch("x", existsOnRemote: true).presentation,
-              case .compactSheet(let repository) = EspalierCore.Confirmation.removeRepository(name: "espalier", path: "/Users/joe/Developer/espalier").presentation else {
+        guard case .compactSheet(let local) = EspalierCore.Confirmation.deleteBranch("x", existsOnRemote: false).presentation(defaultNumberFormat),
+              case .compactSheet(let remote) = EspalierCore.Confirmation.deleteBranch("x", existsOnRemote: true).presentation(defaultNumberFormat),
+              case .compactSheet(let repository) = EspalierCore.Confirmation.removeRepository(name: "espalier", path: "/Users/joe/Developer/espalier").presentation(defaultNumberFormat) else {
             Issue.record("Delete Branch or Remove Repository isn't a compact sheet")
             return
         }
@@ -341,7 +341,7 @@ struct WindowPresenterTests {
     @Test("errors map to their presentations and recoveries")
     func errorPresentation() throws {
         for (name, error) in UIFixtures.errors {
-            switch (name, error.presentation) {
+            switch (name, error.presentation(defaultNumberFormat)) {
             case ("git-raw", .rawOutput(let content, _)), ("clone", .rawOutput(let content, _)):
                 #expect(!content.output.isEmpty)
             case ("signing-pinentry", .rawOutput(let content, _)), ("signing-ssh-agent", .rawOutput(let content, _)):
@@ -357,9 +357,9 @@ struct WindowPresenterTests {
             }
         }
         let byName = Dictionary(uniqueKeysWithValues: UIFixtures.errors.map { ($0.name, $0.error) })
-        guard case .alert(let pushRejected, _) = byName["pushRejectedNonFastForward"]!.presentation,
-              case .alert(let lfs, _) = byName["lfsAttributeMismatch"]!.presentation,
-              case .alert(let overwritten, _) = byName["localChangesOverwritten"]!.presentation else {
+        guard case .alert(let pushRejected, _) = byName["pushRejectedNonFastForward"]!.presentation(defaultNumberFormat),
+              case .alert(let lfs, _) = byName["lfsAttributeMismatch"]!.presentation(defaultNumberFormat),
+              case .alert(let overwritten, _) = byName["localChangesOverwritten"]!.presentation(defaultNumberFormat) else {
             Issue.record("errors aren't alerts")
             return
         }
@@ -368,13 +368,13 @@ struct WindowPresenterTests {
         #expect(overwritten.buttons.map(\.role) == [.primary, .cancel])
         // Only the Trash failure offers the checkbox.
         for (name, error) in UIFixtures.errors {
-            guard case .alert(let content, _) = error.presentation else {
+            guard case .alert(let content, _) = error.presentation(defaultNumberFormat) else {
                 continue
             }
             #expect((content.suppressionTitle != nil) == (name == "trashFailed"), "\(name)")
         }
         for silent in [OperationError(.missingRepository, operation: .fetch), OperationError(.cancelled(.userCancelled), operation: .clone)] {
-            guard case .none = silent.presentation else {
+            guard case .none = silent.presentation(defaultNumberFormat) else {
                 Issue.record("\(silent.reason) shows something")
                 continue
             }
@@ -389,7 +389,7 @@ struct ErrorAlertTests {
         let harness = try AppHarness()
         let preferences = harness.makeApp().preferences
         let error = try #require(UIFixtures.errors.first { $0.name == "trashFailed" }?.error)
-        guard case .alert(let content, let recoveries) = error.presentation else {
+        guard case .alert(let content, let recoveries) = error.presentation(defaultNumberFormat) else {
             Issue.record("The Trash failure isn't an alert")
             return
         }

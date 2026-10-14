@@ -6,6 +6,7 @@
 
 import AIKit
 import EspalierCore
+import GitKit
 import SwiftUI
 
 /// The provider sheet's fields and validation.
@@ -173,9 +174,9 @@ enum ProviderCopy {
         }
     }
 
-    /// "1 model", "3 models".
-    static func modelCount(_ count: Int) -> String {
-        count == 1 ? "1 model" : "\(count) models"
+    /// "1 model", "3 models", the count in `numberFormat`.
+    static func modelCount(_ count: Int, _ numberFormat: NumberFormat) -> String {
+        count == 1 ? "1 model" : "\(formatCount(count, numberFormat)) models"
     }
 
     /// A model row's heading: its name, else its identifier.

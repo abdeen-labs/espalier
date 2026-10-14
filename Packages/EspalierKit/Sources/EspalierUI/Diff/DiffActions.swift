@@ -132,7 +132,7 @@ enum DiffOpenBenchmark {
         let sorted = durations.sorted()
         let p50 = sorted[sorted.count / 2]
         let p95 = sorted[min(sorted.count - 1, Int((Double(sorted.count) * 0.95).rounded(.up)) - 1)]
-        return "Diff Open: \(sorted.count) files, p50 \(milliseconds(p50)) ms, p95 \(milliseconds(p95)) ms"
+        return "Diff Open: \(formatCount(sorted.count, context.app.preferences.numberFormat)) files, p50 \(milliseconds(p50)) ms, p95 \(milliseconds(p95)) ms"
     }
 
     private static func milliseconds(_ duration: Duration) -> String {

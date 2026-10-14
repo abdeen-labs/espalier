@@ -213,6 +213,7 @@ struct CommitInfoView: View {
 public struct CommitInspector: View {
     private let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
+    @Environment(\.numberFormat) private var numberFormat
 
     public init(repository: RepositoryModel) {
         self.repository = repository
@@ -224,7 +225,7 @@ public struct CommitInspector: View {
         if history.isWorkingCopySelected {
             PlaceholderNote("Uncommitted changes have no commit info")
         } else if shas.count > 1 {
-            PlaceholderNote("\(formatCount(shas.count)) commits selected")
+            PlaceholderNote("\(formatCount(shas.count, numberFormat)) commits selected")
         } else if let sha = shas.first, let commit = history.commit(sha) {
             CommitInfoView(content: CommitInfoContent(commit, repository: repository), palette: .history(of: repository)) { parent in
                 Task {

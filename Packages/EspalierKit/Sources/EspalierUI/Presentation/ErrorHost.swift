@@ -22,8 +22,8 @@ public enum ErrorPresentation {
 }
 
 extension OperationError {
-    /// How the error is shown.
-    public var presentation: ErrorPresentation {
+    /// How the error is shown, the counts in its lists in `numberFormat`.
+    public func presentation(_ numberFormat: NumberFormat) -> ErrorPresentation {
         switch reason {
         case .missingRepository, .unsafeRepository, .cancelled, .confirmationRequired, .decisionRequired:
             return .none
@@ -59,6 +59,7 @@ extension OperationError {
         } else {
             buttons.append(AlertContent.Button(dismissTitle, role: .cancel))
         }
+        let alertMessage = alertMessage(numberFormat)
         let message = leadMessage.map { "\($0)\n\n\(alertMessage)" } ?? alertMessage
         return .alert(
             AlertContent(
@@ -119,14 +120,14 @@ extension OperationError {
     }
 
     /// The message with the files listed.
-    private var alertMessage: String {
+    private func alertMessage(_ numberFormat: NumberFormat) -> String {
         switch reason {
         case .fileSizeLimitExceeded(let files) where !files.isEmpty:
-            return "\(message)\n\nFiles over the limit:\n\(AlertList.lines(files))"
+            return "\(message)\n\nFiles over the limit:\n\(AlertList.lines(files, numberFormat: numberFormat))"
         case .localChangesOverwritten(let files):
             var text = message
             if !files.isEmpty {
-                text += "\n\n\(AlertList.lines(files))"
+                text += "\n\n\(AlertList.lines(files, numberFormat: numberFormat))"
             }
             if recoveries.contains(where: { if case .stashChangesAndRetry = $0 { true } else { false } }) {
                 text += "\n\nYou can stash your changes now and restore them afterward."
@@ -152,7 +153,7 @@ enum ErrorHost {
         let presenter = context.presenter
         let modals = context.modals
         let id = presented.id
-        switch presented.error.presentation {
+        switch presented.error.presentation(context.app.preferences.numberFormat) {
         case .alert(let content, let recoveries):
             let preferences = context.app.preferences
             Task {
