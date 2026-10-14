@@ -631,6 +631,10 @@ immediately; importing desktop's repository list and settings (my call).
   arrow, and the selection. The simple rail draws the graph's nodes.
 - **Commit Info shows what the header doesn't:** dates, the committer,
   parents, branches, co-authors, and trailers.
+- **Commit Info keeps addresses on one line** (my call): the author's, the
+  committer's, the co-authors', and a trailer's that is `Name <email>`
+  (Signed-off-by, say) have their middle cut when too wide, and show
+  whole in the tooltip. Other trailers wrap.
 - **A tag off the simple line, or a ref outside the graph's scope,** says so
   above the list, with Show in Graph or Show All Branches.
 - **The squash sheet's message is a commit message card.**

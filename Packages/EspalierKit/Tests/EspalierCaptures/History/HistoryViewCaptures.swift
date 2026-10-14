@@ -230,7 +230,13 @@ struct HistoryViewCaptures {
             parents: [.init(sha: "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1", summary: "Bump version"), .init(sha: "c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2", summary: nil)],
             branches: [RefCapsuleContent(name: "main", kind: .currentBranch, track: 0)],
             coAuthors: ["Mary Jane <mary@example.com>"],
-            trailers: [.init(token: "Signed-off-by", value: "Joe Bloggs <joe@example.com>")]
+            trailers: [
+                .init(token: "Signed-off-by", value: "Joe Bloggs <joe@example.com>"),
+                // Too wide: one line, its middle cut.
+                .init(token: "Reviewed-by", value: "Maximilian Featherstonehaugh <maximilian.featherstonehaugh@example.com>"),
+                // Free text wraps.
+                .init(token: "Fixes", value: "the crash when a repository's only remote has no URL and the window opens"),
+            ]
         )
         capture(
             CommitInfoView(content: content),

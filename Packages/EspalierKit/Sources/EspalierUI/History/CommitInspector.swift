@@ -34,6 +34,12 @@ nonisolated struct CommitInfoContent: Sendable, Equatable {
         var id: String {
             "\(token): \(value)"
         }
+
+        /// Whether the value is a name with an address ("Name <email>"),
+        /// as Signed-off-by's is.
+        var isAddress: Bool {
+            GitAuthor.parse(value) != nil
+        }
     }
 
     var authorEmail: String
@@ -136,8 +142,12 @@ struct CommitInfoView: View {
                 ForEach(content.trailers) { trailer in
                     Hairline()
                     row(trailer.token) {
-                        Text(trailer.value)
-                            .textSelection(.enabled)
+                        if trailer.isAddress {
+                            address(trailer.value)
+                        } else {
+                            Text(trailer.value)
+                                .textSelection(.enabled)
+                        }
                     }
                 }
             }
