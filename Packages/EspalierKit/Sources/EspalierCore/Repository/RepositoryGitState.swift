@@ -68,7 +68,9 @@ public struct BranchesSnapshot: Sendable, Equatable {
     /// Local branches and the remote branches no local branch tracks
     /// (`mergeRemoteAndLocalBranches`).
     public var all: [Branch] = []
-    /// The default branch (`findDefaultBranch`).
+    /// The default branch (`findDefaultBranch`): a local branch, or a
+    /// remote branch, which `all` leaves out when a local branch of another
+    /// name tracks it.
     public var defaultBranch: Branch?
     /// The parent's default branch, for forks contributing to it.
     public var upstreamDefaultBranch: Branch?

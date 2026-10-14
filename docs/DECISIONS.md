@@ -254,11 +254,18 @@ remotes from before the mark aren't migrated (my call).
   while it was.
 - **`X-Poll-Interval` is read in seconds** (desktop compared it with
   milliseconds).
-- **The default branch is the local branch named like it,** then a local
-  branch tracking the remote's default branch, then the remote branch.
-  Desktop put the tracking branch first, so with `main` unpublished, a
-  branch made from `origin/main` with git (which tracks it) became the
-  default: it couldn't be deleted or updated from `main`.
+- **The default branch is the local branch named like it, else the remote's
+  default branch** (`origin/main`), even when a local branch of another
+  name tracks it; it's looked for among all branches, as the branch list
+  leaves out a remote branch a local branch tracks. Desktop took a local branch tracking
+  `origin/main` first, so with `main` unpublished or missing, a branch made
+  from `origin/main` with git (which tracks it) became the default: it
+  couldn't be deleted or updated from `main`. The cost: a local `master`
+  that tracks `origin/main` after the remote's default branch was renamed
+  isn't the default either; `origin/main` is.
+- **A new branch from a default branch that's a remote branch doesn't track
+  it,** as one from a fork's upstream default branch doesn't. Desktop's
+  tracked it, so pushing the new branch pushed to the default branch.
 - **A branch whose upstream is gone isn't published:** the menu's Pull,
   Compare on GitHub, and View Branch on GitHub are off for it, as the sync
   button offers Publish Branch. Desktop's menu went by the configured
@@ -367,6 +374,15 @@ remotes from before the mark aren't migrated (my call).
   points elsewhere,** as the check at selection does: Update points it at
   the fork's parent, Ignore keeps it. Desktop overwrote it with the old
   origin URL.
+- **When a repository's only remote is `upstream`, Fork This Repository
+  renames it to `origin`, pointed at the fork, and adds `upstream` at the
+  original's URL** (my call): the usual fork layout, and the branches
+  that tracked `upstream` track `origin`. Desktop pointed
+  `upstream` at the fork, then back at the original, and associated the
+  repository with the fork, so the next push went to the original and
+  failed again. The fork's URL is written last: a failure after the
+  rename leaves `origin` at the original, with `upstream` added or not,
+  and forking again finishes. The error says the remote was renamed.
 - **Clones can be cancelled** (desktop's can't): Cancel Clone, removing the
   clone, or quitting stops git's process group and removes what it cloned.
   Two clones into one folder are refused, and so is a relative path.

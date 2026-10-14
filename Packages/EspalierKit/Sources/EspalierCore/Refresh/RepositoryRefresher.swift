@@ -445,7 +445,10 @@ func loadBranches(_ repository: Repository, record: RepositoryRecord, defaultRem
         return nil
     }
     let allBranches = mergeRemoteAndLocalBranches(branches)
-    let defaultBranch = try? await findDefaultBranch(record, allBranches, defaultRemoteName)
+    // From every branch: the remote's default branch is the default even
+    // when a local branch of another name tracks it, which leaves it out of
+    // `allBranches`.
+    let defaultBranch = try? await findDefaultBranch(record, branches, defaultRemoteName)
     let upstreamDefaultBranch = await findUpstreamDefaultBranch(repository, record: record, branches: allBranches)
     let recent = recentBranches(await recentNames, allBranches: allBranches, defaultBranch: defaultBranch)
     let pullWithRebase = parsePullRebase(try? await getConfigValue(repository, "pull.rebase"))

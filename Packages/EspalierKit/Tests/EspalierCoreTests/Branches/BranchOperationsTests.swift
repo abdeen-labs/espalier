@@ -85,6 +85,24 @@ struct BranchOperationsTests {
         await fixture.app.idle()
     }
 
+    @Test("a branch from the default branch doesn't track it when it's the remote's")
+    func fromRemoteDefaultBranch() async throws {
+        // No local main; feature tracks origin/main.
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["checkout", "-q", "-b", "feature", "--track", "origin/main"], local)
+            try await runGit(["branch", "-D", "main"], local)
+        }
+        let branches = fixture.model.branches
+        let base = try #require(branches.branch(for: .defaultBranch))
+        #expect(base.name == "origin/main")
+        #expect(base.type == .remote)
+
+        let topic = try await branches.createBranch("topic", from: .defaultBranch, checkout: false)
+        #expect(topic.tip.sha == base.tip.sha)
+        #expect(topic.upstream == nil)
+        await fixture.app.idle()
+    }
+
     @Test("a taken name is refused")
     func nameTaken() async throws {
         let fixture = try await makeRepository()

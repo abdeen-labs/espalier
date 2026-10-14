@@ -81,6 +81,12 @@ extension SyncModel {
     /// remote points at the old URL (added when there's none), and the
     /// repository is associated with the fork. Returns after the refresh.
     ///
+    /// When the only remote is `upstream`, it's renamed to `origin`, which
+    /// moves its branches' tracking to `origin`; then `upstream` is added at
+    /// the old URL, and `origin` is pointed at the fork last. A failure after
+    /// the rename leaves `origin` at the old URL, which converting again
+    /// finishes; the error says the remote was renamed.
+    ///
     /// An `upstream` remote that points elsewhere (neither at the old URL nor
     /// at the repository being forked) is left as it is and becomes
     /// `upstreamRemoteConflict`, which asks whether to point it at the fork's
@@ -96,22 +102,42 @@ extension SyncModel {
         let endpoint = gitHubRepository.endpoint
 
         let descriptor = OperationDescriptor(kind: .convertToFork, lanes: [.network], refreshAfter: .full)
-        let conversion = try await repository.perform(descriptor) { ctx -> ForkConversion in
-            // make sure there is a default remote (there should be)
-            let remotes = try await getRemotes(ctx.repository)
-            guard let defaultRemote = findDefaultRemote(remotes) else {
-                return .noRemote
+        let progress = ForkConversionProgress()
+        let conversion: ForkConversion
+        do throws(OperationError) {
+            conversion = try await repository.perform(descriptor) { ctx -> ForkConversion in
+                // make sure there is a default remote (there should be)
+                let remotes = try await getRemotes(ctx.repository)
+                guard let defaultRemote = findDefaultRemote(remotes) else {
+                    return .noRemote
+                }
+                // only `upstream`: make it `origin`, the fork, and add
+                // `upstream` back at the old URL
+                if remotes.count == 1, JSCompat.strictEquals(defaultRemote.name, upstreamRemoteName) {
+                    try await renameRemote(ctx.repository, upstreamRemoteName, "origin")
+                    progress.renamedUpstream = true
+                    try await addRemote(ctx.repository, upstreamRemoteName, defaultRemote.url)
+                    try await GitKit.setRemoteURL(ctx.repository, "origin", fork.cloneURL)
+                    return .converted
+                }
+                // update default remote
+                try await GitKit.setRemoteURL(ctx.repository, defaultRemote.name, fork.cloneURL)
+                if let existing = remotes.first(where: { JSCompat.strictEquals($0.name, upstreamRemoteName) }),
+                   !JSCompat.strictEquals(existing.name, defaultRemote.name) {
+                    let pointsAtParent = JSCompat.strictEquals(existing.url, defaultRemote.url)
+                        || repositoryMatchesRemote(gitHubRepository, remoteURL: existing.url)
+                    return pointsAtParent ? .converted : .upstreamPointsElsewhere(existing)
+                }
+                try await ensureUpstreamRemoteURL(ctx.repository, defaultRemote.url)
+                return .converted
             }
-            // update default remote
-            try await GitKit.setRemoteURL(ctx.repository, defaultRemote.name, fork.cloneURL)
-            if let existing = remotes.first(where: { JSCompat.strictEquals($0.name, upstreamRemoteName) }),
-               !JSCompat.strictEquals(existing.name, defaultRemote.name) {
-                let pointsAtParent = JSCompat.strictEquals(existing.url, defaultRemote.url)
-                    || repositoryMatchesRemote(gitHubRepository, remoteURL: existing.url)
-                return pointsAtParent ? .converted : .upstreamPointsElsewhere(existing)
-            }
-            try await ensureUpstreamRemoteURL(ctx.repository, defaultRemote.url)
-            return .converted
+        } catch where progress.renamedUpstream && !error.isCancellation {
+            throw OperationError(
+                .other("The upstream remote is now named origin, but it still points at the original repository. Try forking again to finish. \(error.message)"),
+                operation: .convertToFork,
+                repositoryID: repository.id,
+                underlying: error
+            )
         }
         if case .noRemote = conversion {
             return
@@ -194,6 +220,13 @@ private enum ForkConversion: Sendable {
     case converted
     /// Converted, leaving the `upstream` remote, which points elsewhere.
     case upstreamPointsElsewhere(Remote)
+}
+
+/// How far a fork conversion got, for its error.
+@MainActor
+private final class ForkConversionProgress {
+    /// Whether the only remote, `upstream`, was renamed to `origin`.
+    var renamedUpstream = false
 }
 
 /// Sets the `upstream` remote's URL, adding the remote when there's none.

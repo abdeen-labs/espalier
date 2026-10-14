@@ -130,6 +130,15 @@ public func addRemote(_ repository: Repository, _ name: String, _ url: String) a
     return Remote(name: name, url: url)
 }
 
+/// Renames the remote `name` to `newName` (`git remote rename`). Git moves
+/// the remote's configuration, its remote-tracking branches, and the
+/// branches' tracking configuration with it.
+///
+/// - Throws: When there's no such remote, or `newName` is taken.
+public func renameRemote(_ repository: Repository, _ name: String, _ newName: String) async throws {
+    try await git(["remote", "rename", "--", name, newName], repository.path, "renameRemote")
+}
+
 /// Removes an existing remote, or silently errors if it doesn't exist
 public func removeRemote(_ repository: Repository, _ name: String) async throws {
     try await git(

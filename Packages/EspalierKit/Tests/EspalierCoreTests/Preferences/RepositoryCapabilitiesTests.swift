@@ -384,6 +384,23 @@ struct RepositoryCapabilitiesModelTests {
         #expect(!capabilities.canPull)
     }
 
+    @Test("a branch made from origin/main with no local main: delete, and update from origin/main")
+    func branchTrackingTheRemoteDefaultBranch() async throws {
+        let fixture = try await makeSelectedRepository { local in
+            // git makes the branch track origin/main.
+            try await runGit(["checkout", "-q", "-b", "feature", "origin/main"], local)
+            try await runGit(["branch", "-D", "main"], local)
+        }
+        fixture.app.preferences.hasShownWelcomeFlow = true
+        #expect(fixture.model.gitState.tip.branch?.upstream == "origin/main")
+
+        let capabilities = fixture.app.capabilities
+        #expect(capabilities.canDeleteBranch)
+        #expect(capabilities.canUpdateFromContributionTarget)
+        #expect(capabilities.contributionTargetDefaultBranch?.name == "origin/main")
+        await fixture.app.idle()
+    }
+
     @Test("a stash on the current branch shows the toggle")
     func stashPresent() async throws {
         let fixture = try await makeSelectedRepository()

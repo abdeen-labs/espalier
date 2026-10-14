@@ -120,6 +120,111 @@ struct ForkOperationTests {
         await fixture.app.idle()
     }
 
+    /// A repository whose only remote is `upstream`, octocat/app, which
+    /// refuses pushes as GitHub does without write access: cloned, `feature`
+    /// published, the remote renamed from `origin`, a commit on `main` not
+    /// pushed, then prepared by `prepare`. With the fork, mona/app, whose
+    /// clone URL is a bare copy of the original.
+    private func makeOnlyUpstreamRepository(
+        _ prepare: (Repository) async throws -> Void = { _ in }
+    ) async throws -> (fixture: SelectedRepository, fork: APIFullRepository, forkRemote: Repository) {
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["checkout", "-q", "-b", "feature"], local)
+            try await runGit(["push", "-q", "-u", "origin", "feature"], local)
+            try await runGit(["checkout", "-q", "main"], local)
+            try await runGit(["remote", "rename", "origin", "upstream"], local)
+            try await commitFile(local, "a.txt", "a\n")
+            try await prepare(local)
+        }
+        fixture.associate(parentGitHubRepository)
+        let forkRemote = try await makeBareRemote(from: fixture.remote)
+        try writeScript(
+            POSIXPath.join(fixture.remote.path, "hooks", "pre-receive"),
+            "#!/bin/sh\necho 'fatal: Authentication failed' >&2\nexit 1\n"
+        )
+        let fork = apiRepository(
+            owner: "mona",
+            name: "app",
+            cloneURL: forkRemote.path,
+            fork: true,
+            parent: apiRepositoryInfo(owner: "octocat", name: "app")
+        )
+        return (fixture, fork, forkRemote)
+    }
+
+    @Test("when the only remote is upstream, it becomes origin, pointing at the fork, with its branches; upstream is added at the old URL")
+    func onlyUpstreamBecomesOrigin() async throws {
+        let (fixture, fork, forkRemote) = try await makeOnlyUpstreamRepository()
+        let originalURL = fixture.remote.path
+
+        try await fixture.model.sync.convertToFork(fork)
+
+        #expect(try await remoteURLs(fixture.local) == ["origin": forkRemote.path, "upstream": originalURL])
+        #expect(try fixture.branch("main").upstream == "origin/main")
+        #expect(try fixture.branch("feature").upstream == "origin/feature")
+        #expect(fixture.model.record.gitHubRepository?.fullName == "mona/app")
+        #expect(fixture.model.sync.upstreamRemoteConflict == nil)
+        // Neither remote is a fork remote Espalier prunes.
+        #expect(try await getForkRemoteNames(fixture.local).isEmpty)
+        await fixture.app.idle()
+    }
+
+    @Test("when the only remote was upstream, pushing after converting goes to the fork")
+    func onlyUpstreamPushesToFork() async throws {
+        let (fixture, fork, forkRemote) = try await makeOnlyUpstreamRepository()
+        let originalTip = try await fixture.remoteTip("main")
+
+        try await fixture.model.sync.convertToFork(fork)
+        let outcome = try await fixture.model.sync.push()
+
+        #expect(outcome == .pushed(branch: "main", remote: "origin", tags: [], fetchFailure: nil))
+        #expect(try await resolveRef("refs/heads/main", in: forkRemote) == (try await fixture.head()))
+        #expect(try await fixture.remoteTip("main") == originalTip)
+        await fixture.app.idle()
+    }
+
+    @Test("when the only remote is upstream and adding it back after the rename fails, origin is left at the old URL with its branches; converting again finishes")
+    func onlyUpstreamFailsAfterRename() async throws {
+        let (fixture, fork, forkRemote) = try await makeOnlyUpstreamRepository { local in
+            // A setting of `upstream` in an included file, which the rename
+            // leaves behind, so git refuses to add `upstream` again.
+            let included = POSIXPath.join(local.path, ".git", "upstream.config")
+            try Data("[remote \"upstream\"]\n\ttagOpt = --no-tags\n".utf8).write(to: URL(exactFilePath: included))
+            try await runGit(["config", "include.path", "upstream.config"], local)
+        }
+        let originalURL = fixture.remote.path
+
+        await #expect(throws: OperationError.self) {
+            try await fixture.model.sync.convertToFork(fork)
+        }
+
+        #expect(try await remoteURLs(fixture.local) == ["origin": originalURL])
+        #expect(try await runGit(["config", "branch.main.remote"], fixture.local) == "origin\n")
+        #expect(try await runGit(["config", "branch.feature.remote"], fixture.local) == "origin\n")
+        #expect(fixture.model.record.gitHubRepository?.fullName == "octocat/app")
+
+        try await fixture.model.sync.convertToFork(fork)
+
+        #expect(try await remoteURLs(fixture.local) == ["origin": forkRemote.path, "upstream": originalURL])
+        #expect(fixture.model.record.gitHubRepository?.fullName == "mona/app")
+        await fixture.app.idle()
+    }
+
+    @Test("an only remote with another name keeps its name: it points at the fork, and upstream is added at the old URL")
+    func onlyRemoteWithAnotherName() async throws {
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["remote", "rename", "origin", "github"], local)
+        }
+        fixture.associate(parentGitHubRepository)
+        let originalURL = fixture.remote.path
+
+        try await fixture.model.sync.convertToFork(fork)
+
+        #expect(try await remoteURLs(fixture.local) == ["github": "https://github.com/mona/app.git", "upstream": originalURL])
+        #expect(try fixture.branch("main").upstream == "github/main")
+        await fixture.app.idle()
+    }
+
     @Test("a repository without a remote stays as it was, as in desktop")
     func noRemote() async throws {
         let fixture = try await makeSelectedRepository { local in

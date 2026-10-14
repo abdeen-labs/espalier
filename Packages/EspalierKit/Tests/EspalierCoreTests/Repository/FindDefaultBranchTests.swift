@@ -10,7 +10,13 @@ struct FindDefaultBranchTests {
     /// A clone of a two-commit repository: `origin/HEAD` is `origin/master`,
     /// and `master` tracks `origin/master`.
     private func makeClone() async throws -> Repository {
-        try await cloneRepository(try await setupTwoCommitRepo())
+        try await makeClones().clone
+    }
+
+    /// The two-commit repository and a clone of it.
+    private func makeClones() async throws -> (origin: Repository, clone: Repository) {
+        let origin = try await setupTwoCommitRepo()
+        return (origin, try await cloneRepository(origin))
     }
 
     private func run(_ repository: Repository, _ args: [String]) async throws {
@@ -21,59 +27,93 @@ struct FindDefaultBranchTests {
         try await findDefaultBranch(record, try await getBranches(record.gitRepository), defaultRemote)
     }
 
-    @Test("prefers the local branch named like the default branch, without an upstream, to another branch tracking the remote's")
-    func namedBranchFirst() async throws {
+    /// Git commands run in the origin, then in the clone, and the default
+    /// branch they leave.
+    struct RemoteCase: Sendable {
+        var origin: [[String]] = []
+        var clone: [[String]]
+        var expected = "origin/master"
+    }
+
+    @Test(
+        "the local branch named like the default branch is it, before another branch tracking the remote's",
+        arguments: [
+            NamedCase("tracking the remote's default branch", [
+                ["branch", "--track", "feature", "origin/master"],
+            ]),
+            NamedCase("without an upstream", [
+                ["branch", "--unset-upstream", "master"],
+                ["branch", "--track", "feature", "origin/master"],
+            ]),
+        ]
+    )
+    func namedBranchFirst(_ setup: NamedCase<[[String]]>) async throws {
         let clone = try await makeClone()
-        try await run(clone, ["branch", "--unset-upstream", "master"])
-        // A branch made from the remote's default branch tracks it.
-        try await run(clone, ["branch", "--track", "feature", "origin/master"])
+        for args in setup.value {
+            try await run(clone, args)
+        }
 
         let branch = try #require(try await findDefault(RepositoryRecord(path: clone.path)))
         #expect(branch.name == "master")
-        #expect(branch.upstream == nil)
-    }
-
-    @Test("without a local branch named like the default branch, prefers one tracking the remote's default branch")
-    func trackingBranch() async throws {
-        let clone = try await makeClone()
-        try await run(clone, ["checkout", "-b", "tracker", "--track", "origin/master"])
-        try await run(clone, ["branch", "-D", "master"])
-
-        let branch = try #require(try await findDefault(RepositoryRecord(path: clone.path)))
-        #expect(branch.name == "tracker")
         #expect(branch.type == .local)
     }
 
-    @Test("among tracking branches, prefers the one named like the default branch")
-    func trackingBranchWithTheName() async throws {
-        let clone = try await makeClone()
-        // `aaa` comes first in the list and tracks the default branch too.
-        try await run(clone, ["branch", "--track", "aaa", "origin/master"])
+    @Test(
+        "without a local branch named like the default branch, the remote's default branch is it",
+        arguments: [
+            NamedCase("when no branch tracks it", RemoteCase(clone: [
+                ["checkout", "-b", "other"],
+                ["branch", "-D", "master"],
+            ])),
+            NamedCase("when a branch of another name tracks it", RemoteCase(clone: [
+                ["checkout", "-b", "feature", "--track", "origin/master"],
+                ["branch", "-D", "master"],
+            ])),
+            // The remote's default branch was renamed, and the local branch
+            // with the old name tracks the new one.
+            NamedCase("when the remote's renamed default branch is tracked by the old name", RemoteCase(
+                origin: [
+                    ["branch", "-m", "master", "main"],
+                ],
+                clone: [
+                    ["fetch", "--prune", "origin"],
+                    ["remote", "set-head", "origin", "--auto"],
+                    ["branch", "--set-upstream-to", "origin/main", "master"],
+                ],
+                expected: "origin/main"
+            )),
+        ]
+    )
+    func remoteBranch(_ setup: NamedCase<RemoteCase>) async throws {
+        let (origin, clone) = try await makeClones()
+        for args in setup.value.origin {
+            try await run(origin, args)
+        }
+        for args in setup.value.clone {
+            try await run(clone, args)
+        }
 
         let branch = try #require(try await findDefault(RepositoryRecord(path: clone.path)))
-        #expect(branch.name == "master")
-        #expect(branch.upstream == "origin/master")
-    }
-
-    @Test("falls back to the local branch named like the default branch")
-    func localBranchWithTheName() async throws {
-        let clone = try await makeClone()
-        try await run(clone, ["branch", "--unset-upstream", "master"])
-
-        let branch = try #require(try await findDefault(RepositoryRecord(path: clone.path)))
-        #expect(branch.name == "master")
-        #expect(branch.upstream == nil)
-    }
-
-    @Test("falls back to the remote branch when no local branch matches")
-    func remoteBranch() async throws {
-        let clone = try await makeClone()
-        try await run(clone, ["checkout", "-b", "other"])
-        try await run(clone, ["branch", "-D", "master"])
-
-        let branch = try #require(try await findDefault(RepositoryRecord(path: clone.path)))
-        #expect(branch.name == "origin/master")
+        #expect(branch.name == setup.value.expected)
         #expect(branch.type == .remote)
+    }
+
+    @Test("without the remote's HEAD, only the local branch with the configured name is the default branch")
+    func remoteWithoutHEAD() async throws {
+        try await withIsolatedGitConfig { _ in
+            let clone = try await makeClone()
+            try await run(clone, ["remote", "set-head", "origin", "--delete"])
+            try await run(clone, ["branch", "--track", "feature", "origin/master"])
+            let record = RepositoryRecord(path: clone.path)
+
+            // `main`, which no branch is named.
+            #expect(try await findDefault(record) == nil)
+
+            try await setGlobalConfigValue("init.defaultBranch", "master")
+            let branch = try #require(try await findDefault(record))
+            #expect(branch.name == "master")
+            #expect(branch.type == .local)
+        }
     }
 
     @Test("without a remote HEAD, uses init.defaultBranch, else main")
