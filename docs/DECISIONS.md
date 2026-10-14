@@ -896,6 +896,15 @@ immediately; importing desktop's repository list and settings (my call).
   Trash failure partway finishes what's in the Trash before offering the
   rest; discarding lines is refused if the file changed since its diff was
   shown. Discard All always confirms.
+- **Committing or discarding some lines writes each in its place:** each
+  hunk of the patch starts where it lands once the patch's earlier hunks
+  are applied. Desktop kept the diff's start, which counts the changes left
+  out. `git apply` puts a hunk without context (`diff.context=0`) at that
+  line, so a chosen line went elsewhere or to the end of the file, and
+  looks for a hunk's context outward from it, so with any context a copy of
+  that context nearer the line got the change. The working directory diff
+  keeps desktop's arguments and the user's `diff.context`: forcing context
+  would change what the diff shows and still miss repeated blocks.
 - **A conflicted stash pop keeps the entry:** `git stash pop --quiet` exits 1
   with nothing on stderr, which desktop took for success, dropping the
   entry. A conflicted restore's entry is dropped once its files are

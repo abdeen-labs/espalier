@@ -123,6 +123,23 @@ private func formatHunkHeader(
     return "@@ -\(lineInfoBefore) +\(lineInfoAfter) @@\(heading)\n"
 }
 
+/// Where a patch hunk starts on the side it writes: where its lines land
+/// once the patch's earlier hunks are applied. `git apply` puts a hunk
+/// without context at this line, and looks for a hunk's context and removed
+/// lines outward from it. As in git's diffs, a side with no lines starts at
+/// the line before them.
+///
+/// - Parameters:
+///   - fromStartLine: Where the hunk starts in the file being patched.
+///   - fromLineCount: The number of lines the hunk covers in that file.
+///   - toLineCount: The number of lines the hunk writes.
+///   - lineDelta: The lines the patch's earlier hunks write less those they
+///     cover.
+private func patchedStartLine(_ fromStartLine: Int, _ fromLineCount: Int, _ toLineCount: Int, _ lineDelta: Int) -> Int {
+    let firstLine = (fromLineCount == 0 ? fromStartLine + 1 : fromStartLine) + lineDelta
+    return toLineCount == 0 ? firstLine - 1 : firstLine
+}
+
 /// Creates a GNU unified diff based on the original diff and a number
 /// of selected or unselected lines (from file.selection). The patch is
 /// formatted with the intention of being used for applying against an index
@@ -144,6 +161,8 @@ public func formatPatch(_ file: WorkingDirectoryFileChange, _ diff: some TextDif
     }
 
     var patch = ""
+    // The lines the hunks written so far add less those they remove.
+    var lineDelta = 0
 
     for hunk in diff.hunks {
         var hunkLines: [PatchLine] = []
@@ -211,8 +230,12 @@ public func formatPatch(_ file: WorkingDirectoryFileChange, _ diff: some TextDif
             continue
         }
 
-        patch += formatHunkHeader(hunk.header.oldStartLine, oldCount, hunk.header.newStartLine, newCount)
+        // Every line of the hunk's old side is kept, as context or a
+        // removal, so it starts where the diff's does.
+        let newStartLine = patchedStartLine(hunk.header.oldStartLine, oldCount, newCount, lineDelta)
+        patch += formatHunkHeader(hunk.header.oldStartLine, oldCount, newStartLine, newCount)
         patch += formatHunkLines(hunkLines)
+        lineDelta += newCount - oldCount
     }
 
     // If we get into this state we should never have been called in the first
@@ -274,6 +297,8 @@ public func formatPatchToDiscardChanges(
     _ selection: DiffSelection
 ) -> String? {
     var patch = ""
+    // The lines the hunks written so far add less those they remove.
+    var lineDelta = 0
 
     for hunk in diff.hunks {
         var hunkLines: [PatchLine] = []
@@ -328,8 +353,12 @@ public func formatPatchToDiscardChanges(
             continue
         }
 
-        patch += formatHunkHeader(hunk.header.newStartLine, newCount, hunk.header.oldStartLine, oldCount)
+        // Every line of the hunk's new side, the working copy's, is kept, as
+        // context or a removal, so it starts where the diff's does.
+        let oldStartLine = patchedStartLine(hunk.header.newStartLine, newCount, oldCount, lineDelta)
+        patch += formatHunkHeader(hunk.header.newStartLine, newCount, oldStartLine, oldCount)
         patch += formatHunkLines(hunkLines)
+        lineDelta += oldCount - newCount
     }
 
     if patch.isEmpty {
