@@ -127,15 +127,33 @@ private func importBaseName(_ path: String) -> String {
     JS.replaceFirst(JS.replaceFirst(path, importExtension, with: ""), directoryPrefix, with: "")
 }
 
+/// The most conflict content (`conflictContentSize`) one request carries:
+/// as much as one file may have (`MaxConflictContentSize`), so a request is
+/// never larger than the largest file the resolver accepts on its own.
+public let MaxChunkConflictContentSize = MaxConflictContentSize
+
+/// The size of a file's conflicts as `getHunkSkipReason` measures them: the
+/// ours, base, and theirs content of every hunk, in UTF-16 code units.
+func conflictContentSize(_ file: FileConflictContext) -> Int {
+    file.hunks.reduce(0) { total, hunk in
+        total + JS.length(hunk.oursContent) + JS.length(hunk.theirsContent) + JS.length(hunk.baseContent ?? "")
+    }
+}
+
 /// Groups files that share dependencies into clusters using union-find,
-/// then packs the clusters into chunks of `targetSize`. Files that import
-/// from each other or reference each other's exports stay in the same chunk
-/// so the model can reason about cross-file coherence.
+/// then packs the clusters into chunks of at most `targetSize` files and
+/// `maxContentSize` of conflict content (`conflictContentSize`); a single
+/// file larger than that is a chunk of its own. Files that import from each
+/// other or reference each other's exports stay in the same chunk so the
+/// model can reason about cross-file coherence, unless their group is too
+/// large for one chunk.
 public func createDependencyAwareChunks(
     _ files: [FileConflictContext],
-    _ targetSize: Int
+    _ targetSize: Int,
+    maxContentSize: Int = MaxChunkConflictContentSize
 ) -> [[FileConflictContext]] {
-    if files.count <= targetSize {
+    let sizes = files.map(conflictContentSize)
+    if files.count <= targetSize, sizes.reduce(0, +) <= maxContentSize {
         return [files]
     }
 
@@ -192,42 +210,52 @@ public func createDependencyAwareChunks(
 
     // Collect dependency groups, in order of each group's first file.
     var groupRoots: [Int] = []
-    var groups: [Int: [FileConflictContext]] = [:]
+    var groups: [Int: [Int]] = [:]
     for i in files.indices {
         let root = find(i)
         if groups[root] == nil {
             groupRoots.append(root)
         }
-        groups[root, default: []].append(files[i])
+        groups[root, default: []].append(i)
     }
 
     // Pack groups into chunks: large groups get split, small groups bin-pack.
     var result: [[FileConflictContext]] = []
-    var currentBin: [FileConflictContext] = []
+    var currentBin: [Int] = []
+    var currentSize = 0
+
+    func flush() {
+        if !currentBin.isEmpty {
+            result.append(currentBin.map { files[$0] })
+        }
+        currentBin = []
+        currentSize = 0
+    }
 
     for root in groupRoots {
         let group = groups[root] ?? []
-        if group.count >= targetSize {
-            if !currentBin.isEmpty {
-                result.append(currentBin)
-                currentBin = []
+        let groupSize = group.reduce(0) { $0 + sizes[$1] }
+        if group.count >= targetSize || groupSize > maxContentSize {
+            // In order, as many files to a chunk as fit.
+            flush()
+            for index in group {
+                if !currentBin.isEmpty, currentBin.count == targetSize || currentSize + sizes[index] > maxContentSize {
+                    flush()
+                }
+                currentBin.append(index)
+                currentSize += sizes[index]
             }
-            for start in stride(from: 0, to: group.count, by: targetSize) {
-                result.append(Array(group[start..<min(start + targetSize, group.count)]))
-            }
-        } else if currentBin.count + group.count > targetSize {
-            if !currentBin.isEmpty {
-                result.append(currentBin)
-            }
+            flush()
+        } else if currentBin.count + group.count > targetSize || currentSize + groupSize > maxContentSize {
+            flush()
             currentBin = group
+            currentSize = groupSize
         } else {
-            currentBin.append(contentsOf: group)
+            currentBin += group
+            currentSize += groupSize
         }
     }
-
-    if !currentBin.isEmpty {
-        result.append(currentBin)
-    }
+    flush()
 
     return result
 }

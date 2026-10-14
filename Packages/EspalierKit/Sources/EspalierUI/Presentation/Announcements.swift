@@ -34,11 +34,15 @@ struct Announcer: Sendable {
     }
 
     /// VoiceOver, through the key window (a popover or sheet in front),
-    /// else the main window.
+    /// else the main window, else the app. Nothing is said in a process
+    /// without an app (tests).
     static let voiceOver = Announcer(
         isListening: { NSWorkspace.shared.isVoiceOverEnabled },
         post: { message, priority in
-            let element: Any = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp as Any
+            guard let app = NSApp else {
+                return
+            }
+            let element: Any = app.keyWindow ?? app.mainWindow ?? app
             NSAccessibility.post(element: element, notification: .announcementRequested, userInfo: [
                 .announcement: message,
                 .priority: priority.level.rawValue,

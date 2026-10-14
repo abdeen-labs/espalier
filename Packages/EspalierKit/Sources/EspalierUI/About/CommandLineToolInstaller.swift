@@ -4,9 +4,11 @@
 // the script in Espalier's bundle (`Contents/Resources/espalier.sh`, from
 // the app target's espalier.sh), as the user, or after an administrator
 // prompt when that fails. Nothing happens when the link is already there.
-// Success says where the tool is; a failure shows the command to run
-// instead, with Copy Command. Cancelling the administrator prompt shows
-// nothing.
+// A link to another copy of Espalier is replaced; anything else there
+// (another link, a file) is replaced once the user confirms, and a folder
+// isn't. Success says where the tool is; a failure shows the command to run
+// instead, with Copy Command. Cancelling the confirmation or the
+// administrator prompt shows nothing.
 //
 // The system calls go through `CommandLineToolSystem`, so tests never
 // install anything.
@@ -21,12 +23,24 @@ import os
 
 private let logger = Log.logger(category: "command-line-tool")
 
+/// What's at the command line tool's path.
+enum CommandLineToolItem: Equatable {
+    /// Nothing.
+    case none
+    /// A symbolic link, to where it points (as written in the link).
+    case link(String)
+    /// A folder.
+    case folder
+    /// A file, or anything else that isn't a link or a folder.
+    case file
+}
+
 /// What installing the command line tool does to the system.
 struct CommandLineToolSystem: Sendable {
     /// The script in the bundle, if it's there.
     var scriptPath: @Sendable () -> String?
-    /// Where a symbolic link at a path points, or nil when there's none.
-    var readLink: @Sendable (String) -> String?
+    /// What's at a path, not following a link there.
+    var item: @Sendable (String) -> CommandLineToolItem
     /// Links `link` to `script` as the user: removes what's at `link`,
     /// makes its folder, and makes the link.
     var linkAsUser: @Sendable (_ script: String, _ link: String) async throws -> Void
@@ -38,8 +52,21 @@ struct CommandLineToolSystem: Sendable {
         scriptPath: {
             Bundle.main.path(forResource: "espalier", ofType: "sh")
         },
-        readLink: { path in
-            try? FileManager.default.destinationOfSymbolicLink(atPath: path)
+        item: { path in
+            var info = stat()
+            guard lstat(path, &info) == 0 else {
+                // Something that can't be looked at counts as a file, so
+                // replacing it asks first.
+                return errno == ENOENT || errno == ENOTDIR ? .none : .file
+            }
+            switch info.st_mode & S_IFMT {
+            case S_IFLNK:
+                return (try? FileManager.default.destinationOfSymbolicLink(atPath: path)).map { .link($0) } ?? .file
+            case S_IFDIR:
+                return .folder
+            default:
+                return .file
+            }
         },
         linkAsUser: { script, link in
             try await Task.detached {
@@ -144,19 +171,47 @@ enum CommandLineToolInstaller {
             guard let context else {
                 return
             }
-            let outcome = await install(system: .live)
-            await present(outcome, in: context)
+            let outcome = await context.presenter.perform { answers throws(OperationError) in
+                try await install(system: .live, confirmed: answers.confirmed)
+            }
+            if let outcome {
+                await present(outcome, in: context)
+            }
         }
     }
 
     /// Links the tool: nothing when it's linked already, else as the user,
-    /// else as an administrator.
-    static func install(system: CommandLineToolSystem, at link: String = installedPath) async -> Outcome {
+    /// else as an administrator. A link to another copy of Espalier's tool
+    /// is replaced; a folder is left alone.
+    ///
+    /// - Throws: `.confirmationRequired(.replaceCommandLineTool)` when a link
+    ///   elsewhere or a file is at `link` and replacing it isn't confirmed.
+    static func install(
+        system: CommandLineToolSystem,
+        at link: String = installedPath,
+        confirmed: Set<ConfirmationKind> = []
+    ) async throws(OperationError) -> Outcome {
         guard let script = system.scriptPath() else {
             return .failed(message: "The command line tool is missing from Espalier's application bundle.", command: nil)
         }
-        if system.readLink(link) == script {
+        let existing = system.item(link)
+        switch existing {
+        case .link(let destination) where destination == script:
             return .installed
+        case .none:
+            break
+        case .link(let destination) where isEspaliersTool(destination):
+            break
+        case .folder:
+            return .failed(message: "\(link) is a folder. Move or rename it, then try again.", command: nil)
+        case .link, .file:
+            guard confirmed.contains(.replaceCommandLineTool) else {
+                let destination: String? = if case .link(let destination) = existing { destination } else { nil }
+                throw OperationError(
+                    .confirmationRequired(.replaceCommandLineTool(path: link, linkDestination: destination)),
+                    operation: .installCommandLineTool
+                )
+            }
         }
         do {
             try await system.linkAsUser(script, link)
@@ -179,6 +234,12 @@ enum CommandLineToolInstaller {
                 return .failed(message: message, command: installCommand(script: script, link: link, sudo: true))
             }
         }
+    }
+
+    /// Whether a link to `destination` is the tool of a copy of Espalier: the
+    /// script in an app's resources, there or not.
+    static func isEspaliersTool(_ destination: String) -> Bool {
+        destination.hasSuffix(".app/Contents/Resources/espalier.sh")
     }
 
     /// The shell command that installs the tool (unlink, mkdir -p, and

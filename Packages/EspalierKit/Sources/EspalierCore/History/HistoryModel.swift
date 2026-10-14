@@ -256,6 +256,7 @@ public final class HistoryModel: RepositoryFeature {
             checkShownHistory()
         case .compare:
             refreshComparison()
+            comparison.resumeLoads()
         }
         // Loads stopped when the repository was deselected.
         selectionLoader.resumeLoads()

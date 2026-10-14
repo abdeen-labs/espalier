@@ -13,14 +13,6 @@ import TestSupport
 
 @Suite("Push and Force Push", .offline, .hangGuard(minutes: 5)) @MainActor
 struct PushActionsTests {
-    /// A selected repository whose window's announcements go nowhere (the
-    /// test process has no `NSApp` to post them through).
-    private func makeFixture() async throws -> OperationsFixture {
-        let fixture = try await makeOperationsFixture()
-        fixture.context.announcer = Announcer(isListening: { false }, post: { _, _ in })
-        return fixture
-    }
-
     /// `main` with a commit of its own and one from another clone fetched:
     /// diverged from `origin/main`. Returns the other clone's commit.
     private func diverge(_ fixture: OperationsFixture) async throws -> String {
@@ -38,7 +30,7 @@ struct PushActionsTests {
 
     @Test("on a diverged branch Push fails as non-fast-forward without asking, and the remote keeps its commits")
     func pushNeverForces() async throws {
-        let fixture = try await makeFixture()
+        let fixture = try await makeOperationsFixture()
         let actions = fixture.context.actions
         // Up to date: Force Push isn't offered.
         #expect(actions.isHidden(.forcePush))
@@ -59,7 +51,7 @@ struct PushActionsTests {
 
     @Test("Force Push asks first, then overwrites the remote branch")
     func forcePushAsks() async throws {
-        let fixture = try await makeFixture()
+        let fixture = try await makeOperationsFixture()
         fixture.app.preferences.confirmForcePush = true
         let theirs = try await diverge(fixture)
         let mine = try await fixture.sha("HEAD")

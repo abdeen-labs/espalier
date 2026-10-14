@@ -364,10 +364,11 @@ nonisolated func getTextDiffWithBottomDummyHunk(
     }
 
     // If the last hunk doesn't reach the end of the file, create a dummy hunk
-    // at the end to allow expanding the diff down.
+    // at the end to allow expanding the diff down. `lastHunkNewLine` is the
+    // line after the hunk.
     let lastHunkNewLine = lastHunk.header.newStartLine + lastHunk.header.newLineCount
 
-    if lastHunkNewLine >= numberOfNewLines {
+    if lastHunkNewLine > numberOfNewLines {
         return nil
     }
     let dummyOldStartLine = lastHunk.header.oldStartLine + lastHunk.header.oldLineCount

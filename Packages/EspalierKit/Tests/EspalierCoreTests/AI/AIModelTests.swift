@@ -74,6 +74,27 @@ struct AIModelTests {
         #expect(app.ai.selections == [.commitMessageGeneration: key(valid, "llama3")])
     }
 
+    // Desktop dropped such a provider for good at the next save, leaving its
+    // key in the keychain.
+    @Test("keeps a stored provider that doesn't load, and its key, through saves")
+    func keepsUnloadableProviders() async throws {
+        let harness = try AppHarness()
+        let newer = #"{"authKind":"apiKey","baseUrl":"https://example.com","id":"p9","models":[{"id":"m","name":"M"}],"name":"Newer","type":"gemini"}"#
+        harness.defaults.defaults.set("[\(newer)]", forKey: PreferenceKey.byokProviders)
+        try harness.secrets.setSecret("sk-newer", service: BYOKSecretService, account: "p9")
+        let app = await harness.loadedApp()
+        #expect(app.ai.providers.isEmpty)
+
+        let added = provider()
+        try app.ai.addProvider(added, secret: .set("sk-secret"))
+        try app.ai.removeProvider(id: added.id)
+
+        let stored = try #require(harness.defaults.defaults.string(forKey: PreferenceKey.byokProviders))
+        #expect(loadStoredBYOKProviders(from: Data(stored.utf8)).unloadable.count == 1)
+        #expect(stored.contains(#""id":"p9""#))
+        #expect(try harness.secrets.secret(service: BYOKSecretService, account: "p9") == "sk-newer")
+    }
+
     @Test("adds a provider, storing its key in the keychain and the provider in desktop's format")
     func addsProvider() async throws {
         let harness = try AppHarness()

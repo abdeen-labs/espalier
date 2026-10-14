@@ -273,7 +273,7 @@ struct RepositoryCaptures {
         )
     }
 
-    @Test("Open With: the installed editors")
+    @Test("Open With: the installed editors, the one chosen in Settings selected")
     func openWith() throws {
         let harness = try AppHarness()
         let app = harness.makeApp()
@@ -281,7 +281,8 @@ struct RepositoryCaptures {
             FoundEditor(editor: "Xcode", path: "/Applications/Xcode.app"),
             FoundEditor(editor: "Visual Studio Code", path: "/Applications/Visual Studio Code.app"),
         ]
-        let editors = OpenWithModel(integrations: app.integrations, path: "/Users/joe/Developer/espalier")
+        app.integrations.selectEditor("Visual Studio Code")
+        let editors = OpenWithModel(integrations: app.integrations, settings: app.preferences.integrations, path: "/Users/joe/Developer/espalier")
         capture(OpenWithForm(model: editors), named: "open-with", area: area)
     }
 

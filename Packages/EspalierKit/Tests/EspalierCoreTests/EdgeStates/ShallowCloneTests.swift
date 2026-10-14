@@ -139,6 +139,6 @@ struct ShallowCloneTests {
         await fixture.settleHistory()
         #expect(fixture.history.comparison.aheadBehind == AheadBehind(ahead: 1, behind: 1))
         #expect(fixture.historySummaries == ["Commit 4"])
-        #expect(fixture.history.comparison.mergeStatus != nil)
+        #expect(fixture.history.comparison.mergePreview?.status != nil)
     }
 }

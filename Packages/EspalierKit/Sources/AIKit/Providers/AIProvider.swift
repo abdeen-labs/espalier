@@ -135,6 +135,18 @@ public struct AIResponse: Sendable, Hashable {
         self.reasoning = reasoning
         self.stopReason = stopReason
     }
+
+    /// Whether the response ended because it reached a limit rather than
+    /// because the model finished: the output limit (Anthropic's
+    /// `max_tokens`, Chat Completions' `length`, the Responses API's
+    /// `max_output_tokens`) or the context window (Anthropic's
+    /// `model_context_window_exceeded`).
+    public var reachedOutputLimit: Bool {
+        switch stopReason {
+        case "max_tokens", "length", "max_output_tokens", "model_context_window_exceeded": true
+        default: false
+        }
+    }
 }
 
 /// An increment of a streamed response.

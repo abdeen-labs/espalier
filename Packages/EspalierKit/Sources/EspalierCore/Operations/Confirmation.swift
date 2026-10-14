@@ -10,6 +10,7 @@ public enum ConfirmationKind: String, Sendable, Hashable, CaseIterable {
     case forcePush, rewritePublishedCommits, undoCommitWithChanges, resetWithChanges, overwriteStash
     case commitFilteredChanges, commitWithUnknownCoAuthors, commitOversizedFiles, commitConflictMarkers
     case overwriteCommitMessage, removeWorktree, abortWithResolvedConflicts, deleteBranch, deleteRemoteBranch, deleteTag
+    case replaceCommandLineTool
 }
 
 /// A confirmation an intent requires, with its copy.
@@ -343,6 +344,26 @@ extension Confirmation {
             title: "Delete Tag?",
             message: "Are you sure you want to delete the tag \(name)?",
             confirmButton: "Delete"
+        )
+    }
+
+    /// Installing the command line tool over something else at its path: a
+    /// link elsewhere, or a file.
+    ///
+    /// - Parameters:
+    ///   - path: Where the tool goes (`/usr/local/bin/espalier`).
+    ///   - linkDestination: Where the link there points; nil for a file.
+    public static func replaceCommandLineTool(path: String, linkDestination: String?) -> Confirmation {
+        let message = if let linkDestination {
+            "\(path) is a link to \(linkDestination), not to Espalier's command line tool. Installing replaces the link."
+        } else {
+            "\(path) is a file other than Espalier's command line tool. Installing deletes it and puts the tool in its place."
+        }
+        return Confirmation(
+            kind: .replaceCommandLineTool,
+            title: "Replace Existing Command?",
+            message: message,
+            confirmButton: "Replace"
         )
     }
 }

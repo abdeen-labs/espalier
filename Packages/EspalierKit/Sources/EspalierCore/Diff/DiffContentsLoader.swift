@@ -210,9 +210,11 @@ private func isBinaryData(_ data: Data) -> Bool {
     data.prefix(binaryDetectionLength).contains(0)
 }
 
-/// Decodes UTF-8 (invalid sequences become U+FFFD) and splits on `\n` and
-/// `\r\n`, keeping a trailing empty line. A newline byte is never part of
-/// a longer UTF-8 sequence, so splitting the bytes first decodes the same.
+/// The file's lines: decodes UTF-8 (invalid sequences become U+FFFD) and
+/// splits on `\n` and `\r\n`. A final newline ends the last line rather
+/// than starting another, so empty contents have no lines. A newline byte is
+/// never part of a longer UTF-8 sequence, so splitting the bytes first
+/// decodes the same.
 func splitLines(_ data: Data) -> [String] {
     data.withUnsafeBytes { buffer -> [String] in
         let bytes = buffer.bindMemory(to: UInt8.self)
@@ -226,7 +228,9 @@ func splitLines(_ data: Data) -> [String] {
             lines.append(String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<end]), as: UTF8.self))
             start = index + 1
         }
-        lines.append(String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<bytes.count]), as: UTF8.self))
+        if start < bytes.count {
+            lines.append(String(decoding: UnsafeBufferPointer(rebasing: bytes[start..<bytes.count]), as: UTF8.self))
+        }
         return lines
     }
 }

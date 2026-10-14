@@ -322,9 +322,110 @@ struct ConflictResolverTests {
                 ConflictResolutionProgress(filesResolved: 0, filesTotal: 25),
                 ConflictResolutionProgress(filesResolved: 20, filesTotal: 25),
                 ConflictResolutionProgress(filesResolved: 25, filesTotal: 25),
-                ConflictResolutionProgress(filesResolved: 25, filesTotal: 25),
             ]
         )
+    }
+
+    @Test("fails only the files whose resolutions can't be used, asking about them again once, on their own")
+    func failsFilesOnTheirOwn() async throws {
+        let files = [conflictedFile("a.ts"), conflictedFile("b.ts"), conflictedFile("c.ts", hunks: 2)]
+        let provider = ScriptedProvider { request in
+            let asked = promptFiles(request.userPrompt).map(\.path)
+            if asked.count == 3 {
+                // a.ts is fine; b.ts has no hunks; c.ts is missing.
+                return .content(
+                    #"{"summary":"First.","resolutions":[{"path":"a.ts","hunks":[{"resolvedContent":"A"}],"reasoning":""},{"path":"b.ts","hunks":[],"reasoning":"r"}]}"#
+                )
+            }
+            // Asked again about b.ts and c.ts: only b.ts comes back right.
+            #expect(asked == ["b.ts", "c.ts"])
+            return .content(#"{"summary":"Second.","resolutions":[{"path":"b.ts","hunks":[{"resolvedContent":"B"}]}]}"#)
+        }
+
+        let response = try await resolveConflicts(context: context(files), model: scriptedModel(), using: provider)
+
+        #expect(provider.requests.count == 2)
+        #expect(response.resolutions.map(\.path) == ["a.ts", "b.ts"])
+        #expect(response.resolutions.map(\.resolvedContent) == ["line 0\nA\nend", "line 0\nB\nend"])
+        #expect(response.summaries == [AIChunkSummary(markdown: "First.", paths: ["a.ts"]), AIChunkSummary(markdown: "Second.", paths: ["b.ts"])])
+        let failure = try #require(response.failedFiles.first)
+        #expect(response.failedFiles.map(\.path) == ["c.ts"])
+        #expect(failure.error.stage == .validateResponse)
+        #expect(failure.error.retryState == .failedAfterValidationRetry)
+        #expect(failure.error.underlyingError is AIValidationError)
+    }
+
+    @Test("reports a response cut off at the output limit as that, without asking again for a single file", arguments: ["max_tokens", "length"])
+    func cutOff(stopReason: String) async throws {
+        for content in [#"{"resolutions":[{"path":"a.ts","hunks":[{"resolvedContent":"lo"#, ""] {
+            let provider = ScriptedProvider { _ in ScriptedTurn(response: AIResponse(content: content, stopReason: stopReason)) }
+
+            let error = await resolutionError {
+                _ = try await resolveConflicts(context: context([conflictedFile("a.ts")]), model: scriptedModel(), using: provider)
+            }
+
+            #expect((error?.underlyingError as? AIProviderError)?.kind == .outputLimitReached)
+            #expect(error?.stage == .streamResponse)
+            #expect(error?.retryState == .notRetried)
+            #expect(provider.requests.count == 1)
+        }
+    }
+
+    @Test("splits files the model can't take in one request, until each fits or fails alone", arguments: [
+        NamedCase("cut off at the output limit", AIResponse(content: #"{"resolutions":["#, stopReason: "max_tokens")),
+        NamedCase("too large", AIResponse(content: "")),
+    ])
+    func splits(_ testCase: NamedCase<AIResponse>) async throws {
+        let files = (0..<4).map { conflictedFile("file\($0).ts") }
+        // OpenAI's refusal of a request over the account's tokens per minute.
+        let tooLarge = parseProviderErrorResponse(
+            statusCode: 429,
+            responseText: #"{"error":{"message":"Request too large for gpt-4o in organization org-1 on tokens per min (TPM): Limit 30000, Requested 50000. The input or output tokens must be reduced in order to run successfully.","type":"tokens","param":null,"code":"rate_limit_exceeded"}}"#,
+            retryAfter: nil
+        )
+        #expect(tooLarge.kind == .requestTooLarge)
+        let provider = ScriptedProvider { request in
+            let asked = promptFiles(request.userPrompt).map(\.path)
+            // Two files at a time fit, but file3 is too large even alone.
+            if asked.count > 2 || asked.contains("file3.ts") {
+                if testCase.value.content.isEmpty {
+                    throw tooLarge
+                }
+                return ScriptedTurn(response: testCase.value)
+            }
+            return .content(resolvingEverything(request.userPrompt))
+        }
+
+        let response = try await resolveConflicts(context: context(files), model: scriptedModel(), using: provider)
+
+        #expect(provider.requests.map { promptFiles($0.userPrompt).map(\.path) } == [
+            ["file0.ts", "file1.ts", "file2.ts", "file3.ts"], ["file0.ts", "file1.ts"], ["file2.ts", "file3.ts"], ["file2.ts"], ["file3.ts"],
+        ])
+        #expect(response.resolutions.map(\.path) == ["file0.ts", "file1.ts", "file2.ts"])
+        #expect(response.failedFiles.map(\.path) == ["file3.ts"])
+        #expect(response.summaries.map(\.paths) == [["file0.ts", "file1.ts"], ["file2.ts"]])
+        let kind = (response.failedFiles.first?.error.underlyingError as? AIProviderError)?.kind
+        #expect(kind == (testCase.value.content.isEmpty ? .requestTooLarge : .outputLimitReached))
+        // Not an error that stops the other requests.
+        #expect(response.notAttemptedFiles.isEmpty)
+    }
+
+    @Test("sends no more conflict content in one request than one file may have")
+    func packsBySize() async throws {
+        // Three files of about 100,000 characters of conflicts each.
+        let side = (0..<1_000).map { _ in String(repeating: "x", count: 49) }.joined(separator: "\n")
+        let files = (0..<3).map { index in
+            let raw = "<<<<<<< HEAD\n\(side)\n=======\n\(side)\n>>>>>>> feature"
+            return FileConflictContext(path: "big\(index).txt", hunks: extractConflictHunks(raw), rawContent: raw)
+        }
+        let provider = ScriptedProvider { .content(resolvingEverything($0.userPrompt)) }
+
+        let response = try await resolveConflicts(context: context(files), model: scriptedModel(), using: provider)
+
+        // The chunks run concurrently, so their requests arrive in either order.
+        let chunks = provider.requests.map { promptFiles($0.userPrompt).map(\.path) }
+        #expect(chunks.sorted { $0.count > $1.count } == [["big0.txt", "big1.txt"], ["big2.txt"]])
+        #expect(response.resolutions.map(\.path) == ["big0.txt", "big1.txt", "big2.txt"])
     }
 
     @Test("runs at most five chunks at a time")
@@ -491,11 +592,11 @@ struct ConflictResolutionTurnTests {
         }
         let snippets = Locked([String]())
 
-        let content = try await runConflictResolutionTurn(provider: provider, request: testRequest()) { snippet in
+        let response = try await runConflictResolutionTurn(provider: provider, request: testRequest()) { snippet in
             snippets.withLock { $0.append(snippet) }
         }
 
-        #expect(content == "{}")
+        #expect(response.content == "{}")
         #expect(snippets.withLock { $0 } == ["Step 1. Look at the imports!", "Both sides", "add lines", "Late thought."])
     }
 }

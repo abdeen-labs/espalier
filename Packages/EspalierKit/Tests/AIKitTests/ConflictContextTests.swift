@@ -283,6 +283,11 @@ struct FormatConflictContextTests {
         #expect(result.contains("export default"))
         // No base section for a two-way conflict.
         #expect(!result.contains("Base (common ancestor)"))
+        // Each side is named by its label: in a rebase, ours is the branch
+        // being rebased onto, not the current branch.
+        #expect(result.contains("Ours (main):\n```ts\nconst x = 1\n```"))
+        #expect(result.contains("Theirs (feature):\n```ts\nconst x = 2\n```"))
+        #expect(!result.contains("current branch"))
     }
 
     @Test("uses language from file extension in code fences")

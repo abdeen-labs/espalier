@@ -99,10 +99,26 @@ public struct AIConflictReference: Sendable, Hashable {
     }
 }
 
+/// A resolution in the model's response that can't be used, under the path
+/// the model gave it.
+public struct AIInvalidFileResolution: Sendable, Hashable {
+    /// The path as the model wrote it.
+    public var path: String
+    public var error: AIValidationError
+
+    public init(path: String, error: AIValidationError) {
+        self.path = path
+        self.error = error
+    }
+}
+
 /// The model's complete conflict resolution response (raw model output).
 public struct AIConflictResolutionResponse: Sendable, Hashable {
-    /// Per-file resolution with per-hunk resolved content (before reassembly).
+    /// Per-file resolution with per-hunk resolved content (before reassembly),
+    /// under the paths the model wrote.
     public var resolutions: [RawFileResolution]
+    /// The resolutions that can't be used, each failing only its own file.
+    public var invalidResolutions: [AIInvalidFileResolution]
     /// Optional markdown summary of the conflict and the resolution strategy.
     /// The system prompt requires exactly two `###` headings
     /// (`### Conflicting changes` and `### Resolution`), but a missing or
@@ -353,36 +369,20 @@ private func normalizeLLMPath(_ raw: String) -> String {
 }
 
 private let repeatedSlashes = JSCompat.regex("//+")
-private let jsonFenceLazy = JSCompat.regex("```json" + JSCompat.whitespace + #"*([\s\S]*?)```"#)
-private let anyFenceLazy = JSCompat.regex("```" + JSCompat.whitespace + #"*([\s\S]*?)```"#)
-private let jsonFenceGreedy = JSCompat.regex("```json" + JSCompat.whitespace + #"*([\s\S]*)```"#)
-private let anyFenceGreedy = JSCompat.regex("```" + JSCompat.whitespace + #"*([\s\S]*)```"#)
 
 /// Parses the model's raw response into a structured conflict resolution
-/// response. Handles markdown code-block wrapping (```` ```json ... ``` ````)
-/// and validates all required fields.
+/// response. Handles markdown code-block wrapping (```` ```json ... ``` ````,
+/// see `parseModelResponseJSON`).
+///
+/// Throws `AIValidationError` only when the response as a whole can't be
+/// used: it isn't JSON, isn't an object, or has no `resolutions`. A
+/// resolution that's wrong only fails its own file: it's listed in
+/// `invalidResolutions` (one without a path can't be matched to a file and
+/// is left out). The reasoning only explains a resolution, so a missing or
+/// blank one is empty, and a delete-vs-modify resolution's `action` needs no
+/// `hunks`.
 public func parseAIConflictResolution(_ content: String) throws -> AIConflictResolutionResponse {
-    // Build a list of JSON candidates from the response, trying different
-    // extraction strategies. Non-greedy handles the common single-block and
-    // multi-block cases. Greedy handles triple backticks embedded inside JSON
-    // content. Raw content handles responses with no fences at all.
-    let nonGreedy = JSCompat.match(content, jsonFenceLazy) ?? JSCompat.match(content, anyFenceLazy)
-    let greedy = JSCompat.match(content, jsonFenceGreedy) ?? JSCompat.match(content, anyFenceGreedy)
-
-    var candidates: [String] = []
-    let nonGreedyCandidate = nonGreedy.map { JSCompat.trim($0[1] ?? "") }
-    if let nonGreedyCandidate {
-        candidates.append(nonGreedyCandidate)
-    }
-    if let greedy {
-        let greedyCandidate = JSCompat.trim(greedy[1] ?? "")
-        if nonGreedyCandidate.map({ !JSCompat.strictEquals(greedyCandidate, $0) }) ?? true {
-            candidates.append(greedyCandidate)
-        }
-    }
-    candidates.append(JSCompat.trim(content))
-
-    guard let parsed = candidates.lazy.compactMap({ try? JSONValue.parse($0) }).first else {
+    guard let parsed = parseModelResponseJSON(content) else {
         throw AIValidationError("The model returned invalid JSON for conflict resolution generation")
     }
 
@@ -432,76 +432,65 @@ public func parseAIConflictResolution(_ content: String) throws -> AIConflictRes
     }
 
     var validated: [RawFileResolution] = []
+    var invalid: [AIInvalidFileResolution] = []
 
-    for (i, entry) in resolutions.enumerated() {
-        guard entry.isObject else {
-            throw AIValidationError(
-                "The model returned an invalid conflict resolution payload: resolution at index \(i) must be an object"
-            )
+    for entry in resolutions {
+        guard entry.isObject, let path = entry["path"]?.stringValue, !JSCompat.trim(path).isEmpty else {
+            continue
         }
-
-        guard let path = entry["path"]?.stringValue, !JSCompat.trim(path).isEmpty else {
-            throw AIValidationError(
-                #"The model returned an invalid conflict resolution payload: "path" at index \#(i) must be a non-empty string"#
-            )
-        }
-
-        guard let rawHunks = entry["hunks"]?.arrayValue else {
-            throw AIValidationError(
-                #"The model returned an invalid conflict resolution payload: "hunks" at index \#(i) must be an array"#
-            )
-        }
-
-        let reasoning = entry["reasoning"]?.stringValue
-        let hasReasoning = reasoning.map { !JSCompat.trim($0).isEmpty } ?? false
+        let reasoning = entry["reasoning"]?.stringValue ?? ""
 
         // Delete-vs-modify resolutions use an action instead of hunks.
         if let action = entry["action"]?.stringValue.flatMap(DeleteConflictAction.init(rawValue:)) {
-            guard let reasoning, hasReasoning else {
-                throw AIValidationError(
-                    #"The model returned an invalid conflict resolution payload: "reasoning" at index \#(i) must be a non-empty string"#
-                )
-            }
-            validated.append(RawFileResolution(path: normalizeLLMPath(path), hunks: [], reasoning: reasoning, action: action))
+            validated.append(RawFileResolution(path: path, hunks: [], reasoning: reasoning, action: action))
             continue
         }
 
-        if rawHunks.isEmpty {
-            throw AIValidationError(
-                #"The model returned an invalid conflict resolution payload: "hunks" at index \#(i) must not be empty"#
-            )
+        do {
+            let hunks = try parseHunkResolutions(entry["hunks"], path: path)
+            validated.append(RawFileResolution(path: path, hunks: hunks, reasoning: reasoning))
+        } catch {
+            invalid.append(AIInvalidFileResolution(path: path, error: error))
         }
-
-        var validatedHunks: [HunkResolution] = []
-        for (j, hunkEntry) in rawHunks.enumerated() {
-            guard hunkEntry.isObject else {
-                throw AIValidationError(
-                    #"The model returned an invalid conflict resolution payload: hunk at index \#(j) of file "\#(path)" must be an object"#
-                )
-            }
-            guard let resolvedContent = hunkEntry["resolvedContent"]?.stringValue else {
-                throw AIValidationError(
-                    #"The model returned an invalid conflict resolution payload: "resolvedContent" at hunk \#(j) of file "\#(path)" must be a string"#
-                )
-            }
-            if containsConflictMarkers(resolvedContent) {
-                throw AIValidationError(
-                    #"The model returned an invalid conflict resolution payload: hunk \#(j) of file "\#(path)" still contains conflict markers"#
-                )
-            }
-            validatedHunks.append(HunkResolution(resolvedContent: resolvedContent))
-        }
-
-        guard let reasoning, hasReasoning else {
-            throw AIValidationError(
-                #"The model returned an invalid conflict resolution payload: "reasoning" at index \#(i) must be a non-empty string"#
-            )
-        }
-
-        validated.append(RawFileResolution(path: normalizeLLMPath(path), hunks: validatedHunks, reasoning: reasoning))
     }
 
-    return AIConflictResolutionResponse(resolutions: validated, summary: summary, references: references)
+    return AIConflictResolutionResponse(
+        resolutions: validated,
+        invalidResolutions: invalid,
+        summary: summary,
+        references: references
+    )
+}
+
+/// A text resolution's hunks: a non-empty array of objects, each with a
+/// string `resolvedContent` without conflict markers.
+private func parseHunkResolutions(_ value: JSONValue?, path: String) throws(AIValidationError) -> [HunkResolution] {
+    guard let rawHunks = value?.arrayValue else {
+        throw AIValidationError(#"The model returned an invalid conflict resolution payload: "hunks" of file "\#(path)" must be an array"#)
+    }
+    if rawHunks.isEmpty {
+        throw AIValidationError(#"The model returned an invalid conflict resolution payload: "hunks" of file "\#(path)" must not be empty"#)
+    }
+    var hunks: [HunkResolution] = []
+    for (j, hunkEntry) in rawHunks.enumerated() {
+        guard hunkEntry.isObject else {
+            throw AIValidationError(
+                #"The model returned an invalid conflict resolution payload: hunk at index \#(j) of file "\#(path)" must be an object"#
+            )
+        }
+        guard let resolvedContent = hunkEntry["resolvedContent"]?.stringValue else {
+            throw AIValidationError(
+                #"The model returned an invalid conflict resolution payload: "resolvedContent" at hunk \#(j) of file "\#(path)" must be a string"#
+            )
+        }
+        if containsConflictMarkers(resolvedContent) {
+            throw AIValidationError(
+                #"The model returned an invalid conflict resolution payload: hunk \#(j) of file "\#(path)" still contains conflict markers"#
+            )
+        }
+        hunks.append(HunkResolution(resolvedContent: resolvedContent))
+    }
+    return hunks
 }
 
 /// `/^\d{1,9}$/`
@@ -543,59 +532,140 @@ private func containsConflictMarkers(_ content: String) -> Bool {
     return hasOpening && hasSeparator
 }
 
-/// Validates that a parsed resolution response matches the expected set of
-/// file paths and hunk counts. Throws `AIValidationError` on unexpected
-/// paths, duplicates, missing files, wrong hunk counts, or an `action` for a
-/// file that isn't a delete-vs-modify conflict.
-public func validateResolutionPaths(_ resolutions: [RawFileResolution], _ expectedFiles: [FileConflictContext]) throws {
-    let expectedPaths = expectedFiles.map(\.path)
-    let expectedPathKeys = expectedPaths.exactSet
-    var expectedFilesByPath: [ExactString: FileConflictContext] = [:]
-    for file in expectedFiles {
-        expectedFilesByPath[ExactString(file.path)] = file
+/// A file a response didn't resolve, and why.
+public struct AIUnresolvedFile: Sendable, Hashable {
+    /// Repository-relative path, as the file was sent.
+    public var path: String
+    public var error: AIValidationError
+    /// Where it failed: `validateResponse`, or `reassembleResponse` when the
+    /// resolution couldn't be spliced into the file.
+    public var stage: AIConflictResolutionFailureStage
+
+    public init(path: String, error: AIValidationError, stage: AIConflictResolutionFailureStage) {
+        self.path = path
+        self.error = error
+        self.stage = stage
+    }
+}
+
+/// What a response resolved of the files it was asked about.
+public struct CheckedConflictResolutions: Sendable, Hashable {
+    /// The files it resolved, in the order of the files asked about, each
+    /// under its own path with its complete reassembled content.
+    public var resolutions: [FileResolution]
+    /// The files it didn't, in the same order.
+    public var unresolved: [AIUnresolvedFile]
+}
+
+/// Matches a parsed response's resolutions to the files that were sent, and
+/// checks and reassembles each file's on its own, so one wrong resolution
+/// fails only its file.
+///
+/// A resolution belongs to the file with exactly its path, else to the one
+/// file whose path reads the same once both are normalized as the prompt and
+/// the model change paths: line breaks and backticks dropped (the prompt's
+/// headings leave them out), surrounding spaces trimmed, backslashes as
+/// slashes, no leading `./` or doubled slashes, and Unicode composed. A
+/// resolution matching no file, or several, is ignored.
+///
+/// A file fails when it has no resolution, more than one, an invalid one
+/// (`AIConflictResolutionResponse.invalidResolutions`), an `action` without
+/// being a delete-vs-modify conflict, the wrong number of hunks, no original
+/// content to splice into, or a conflict marker left after splicing (so a
+/// file with markers is never reported as resolved, even when the model
+/// writes a single one; `buildConflictContext` skips files with markers
+/// outside their blocks).
+public func checkResolutions(
+    _ response: AIConflictResolutionResponse,
+    _ expectedFiles: [FileConflictContext]
+) -> CheckedConflictResolutions {
+    var exact: [ExactString: Int] = [:]
+    var normalized: [ExactString: [Int]] = [:]
+    for (index, file) in expectedFiles.enumerated() where exact[ExactString(file.path)] == nil {
+        exact[ExactString(file.path)] = index
+        normalized[ExactString(pathMatchKey(file.path)), default: []].append(index)
+    }
+    func fileIndex(_ path: String) -> Int? {
+        if let index = exact[ExactString(path)] {
+            return index
+        }
+        guard let candidates = normalized[ExactString(pathMatchKey(path))], candidates.count == 1 else {
+            return nil
+        }
+        return candidates[0]
     }
 
-    var returnedPathKeys = Set<ExactString>()
-    for resolution in resolutions {
-        if returnedPathKeys.insert(ExactString(resolution.path)).inserted,
-           !expectedPathKeys.contains(ExactString(resolution.path))
-        {
-            throw AIValidationError("The model returned resolution for unexpected file: \(resolution.path)")
+    var matches = [[Result<RawFileResolution, AIValidationError>]](repeating: [], count: expectedFiles.count)
+    for resolution in response.resolutions {
+        if let index = fileIndex(resolution.path) {
+            matches[index].append(.success(resolution))
+        }
+    }
+    for invalid in response.invalidResolutions {
+        if let index = fileIndex(invalid.path) {
+            matches[index].append(.failure(invalid.error))
         }
     }
 
-    if returnedPathKeys.count != resolutions.count {
-        throw AIValidationError("The model returned duplicate file paths in resolutions")
-    }
+    var checked = CheckedConflictResolutions(resolutions: [], unresolved: [])
+    var seen = Set<ExactString>()
+    for (file, fileMatches) in zip(expectedFiles, matches) where seen.insert(ExactString(file.path)).inserted {
+        func fail(_ message: String, _ stage: AIConflictResolutionFailureStage = .validateResponse) {
+            checked.unresolved.append(AIUnresolvedFile(path: file.path, error: AIValidationError(message), stage: stage))
+        }
 
-    var seenMissing = Set<ExactString>()
-    let missingPaths = expectedPaths.filter { path in
-        let key = ExactString(path)
-        return !returnedPathKeys.contains(key) && seenMissing.insert(key).inserted
-    }
-    if !missingPaths.isEmpty {
-        throw AIValidationError("The model did not return resolutions for: \(missingPaths.joined(separator: ", "))")
-    }
-
-    for resolution in resolutions {
-        let expected = expectedFilesByPath[ExactString(resolution.path)]
-        // Delete-vs-modify resolutions use an action instead of hunks; skip
-        // the count check. Only those conflicts may have one.
-        if resolution.action != nil {
-            guard expected?.deletedSide != nil else {
-                throw AIValidationError(
-                    #"The model returned an action for "\#(resolution.path)", which is not a delete-vs-modify conflict"#
-                )
-            }
+        guard let match = fileMatches.first else {
+            fail(#"The model did not return a resolution for "\#(file.path)""#)
             continue
         }
-        let expectedCount = expected?.hunks.count ?? 0
-        if resolution.hunks.count != expectedCount {
-            throw AIValidationError(
-                #"The model returned \#(resolution.hunks.count) hunk(s) for "\#(resolution.path)" but expected \#(expectedCount)"#
-            )
+        if fileMatches.count > 1 {
+            fail(#"The model returned more than one resolution for "\#(file.path)""#)
+            continue
         }
+        let raw: RawFileResolution
+        switch match {
+        case .success(let resolution):
+            raw = resolution
+        case .failure(let error):
+            checked.unresolved.append(AIUnresolvedFile(path: file.path, error: error, stage: .validateResponse))
+            continue
+        }
+
+        // Delete-vs-modify resolutions carry an action, not hunk content.
+        // Only those conflicts may have one. They're applied as a manual
+        // conflict resolution, not a file write.
+        if let action = raw.action {
+            guard file.deletedSide != nil else {
+                fail(#"The model returned an action for "\#(file.path)", which is not a delete-vs-modify conflict"#)
+                continue
+            }
+            checked.resolutions.append(
+                FileResolution(path: file.path, resolvedContent: "", reasoning: raw.reasoning, deleteConflictAction: action)
+            )
+            continue
+        }
+
+        if raw.hunks.count != file.hunks.count {
+            fail(#"The model returned \#(raw.hunks.count) hunk(s) for "\#(file.path)" but expected \#(file.hunks.count)"#)
+            continue
+        }
+        guard let rawContent = file.rawContent else {
+            fail(#"Cannot reassemble resolution for "\#(file.path)": original file content is unavailable"#, .reassembleResponse)
+            continue
+        }
+        let resolvedContent = reassembleResolvedFile(rawContent, raw.hunks)
+        if containsOpeningOrClosingMarker(resolvedContent) {
+            fail(#"The resolved content of "\#(file.path)" still contains conflict markers"#, .reassembleResponse)
+            continue
+        }
+        checked.resolutions.append(FileResolution(path: file.path, resolvedContent: resolvedContent, reasoning: raw.reasoning))
     }
+    return checked
+}
+
+/// A path as `checkResolutions` compares it when it isn't exactly a file's.
+private func pathMatchKey(_ path: String) -> String {
+    normalizeLLMPath(sanitizeForMarkdown(path)).precomposedStringWithCanonicalMapping
 }
 
 // MARK: Reassembly
@@ -692,48 +762,6 @@ private func splitLinesKeepingEndings(_ string: String) -> [(text: String, endin
     }
     lines.append((String(current), ""))
     return lines
-}
-
-/// Combines the model's raw per-hunk resolutions with the original file
-/// contexts to produce the final `FileResolution` array the rest of the app
-/// expects (each entry has the complete reassembled file content).
-///
-/// Throws `AIValidationError` when a reassembled file still has a line that
-/// opens or closes a conflict (`<<<<<<<` or `>>>>>>>`), so a file with
-/// conflict markers is never reported as resolved, even when the model
-/// writes a single marker. (`buildConflictContext` skips files with markers
-/// outside their blocks.)
-public func reassembleResolutions(
-    _ rawResolutions: [RawFileResolution],
-    _ fileContexts: [FileConflictContext]
-) throws -> [FileResolution] {
-    var contextByPath: [ExactString: FileConflictContext] = [:]
-    for context in fileContexts {
-        contextByPath[ExactString(context.path)] = context
-    }
-
-    return try rawResolutions.map { raw in
-        // Delete-vs-modify resolutions carry an action, not hunk content.
-        // Pass them through without reassembly; the resolution is applied as
-        // a manual conflict resolution, not a file write.
-        if let action = raw.action {
-            return FileResolution(path: raw.path, resolvedContent: "", reasoning: raw.reasoning, deleteConflictAction: action)
-        }
-
-        guard let rawContent = contextByPath[ExactString(raw.path)]?.rawContent else {
-            throw AIValidationError(
-                #"Cannot reassemble resolution for "\#(raw.path)": original file content is unavailable"#
-            )
-        }
-
-        let resolvedContent = reassembleResolvedFile(rawContent, raw.hunks)
-        if containsOpeningOrClosingMarker(resolvedContent) {
-            throw AIValidationError(
-                #"The resolved content of "\#(raw.path)" still contains conflict markers"#
-            )
-        }
-        return FileResolution(path: raw.path, resolvedContent: resolvedContent, reasoning: raw.reasoning)
-    }
 }
 
 // MARK: References

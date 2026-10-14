@@ -120,12 +120,13 @@ extension Confirmation {
         }
     }
 
-    /// Discards, deletions, and aborts are destructive.
+    /// Discards, deletions, aborts, and replacing what's at the command line
+    /// tool's path are destructive.
     private var isDestructive: Bool {
         switch kind {
         case .discardChanges, .discardAllChanges, .discardLines, .discardStash, .overwriteCommitMessage,
              .removeWorktree, .abortWithResolvedConflicts, .deleteBranch, .deleteRemoteBranch, .deleteTag,
-             .removeRepository, .leaveCommitsBehind:
+             .removeRepository, .leaveCommitsBehind, .replaceCommandLineTool:
             true
         default:
             false

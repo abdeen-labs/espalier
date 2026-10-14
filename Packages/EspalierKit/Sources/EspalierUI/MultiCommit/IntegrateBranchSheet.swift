@@ -34,6 +34,8 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
     /// The line's symbol.
     public enum Icon: Sendable, Equatable {
         case loading, clean, conflicts, invalid
+        /// Git couldn't check: a question mark.
+        case unknown
     }
 
     public var icon: Icon?
@@ -49,8 +51,9 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
         self.buttonHelp = buttonHelp
     }
 
-    /// What merging or squash merging `branch` into `current` would do.
-    /// `preview` nil means it's loading.
+    /// What merging or squash merging `branch` into `current` would do,
+    /// and whether it can start (`MergePreview.canStart`). `preview` nil
+    /// means it's loading.
     public static func merge(current: String, branch: String?, preview: MergePreview?) -> IntegrateStatus {
         guard let branch, !JSCompat.strictEquals(branch, current) else {
             return IntegrateStatus()
@@ -58,26 +61,29 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
         guard let preview else {
             return IntegrateStatus(icon: .loading, message: "Checking whether Git can merge automatically…")
         }
-        switch preview.status {
-        case .loading:
+        let canStart = preview.canStart
+        switch (preview.status, preview.commitCount) {
+        case (.loading?, _):
             return IntegrateStatus(icon: .loading, message: "Checking whether Git can merge automatically…")
-        case .clean where preview.commitCount == 0:
+        case (.invalid?, _):
+            return IntegrateStatus(icon: .invalid, message: "These branches have unrelated histories and can't be merged")
+        case (_, 0?):
             return IntegrateStatus(icon: .clean, message: "\(current) is already up to date with \(branch)")
-        case .clean:
-            let commits = preview.commitCount == 1 ? "commit" : "commits"
+        case (nil, _), (_, nil):
+            return IntegrateStatus(icon: .unknown, message: "Couldn't check whether this merges cleanly", canStart: canStart)
+        case (.clean?, let count?):
+            let commits = count == 1 ? "commit" : "commits"
             return IntegrateStatus(
                 icon: .clean,
-                message: "This will merge \(preview.commitCount) \(commits) from \(branch) into \(current)",
-                canStart: true
+                message: "This will merge \(count) \(commits) from \(branch) into \(current)",
+                canStart: canStart
             )
-        case .invalid:
-            return IntegrateStatus(icon: .invalid, message: "These branches have unrelated histories and can't be merged")
-        case .conflicts(let count):
+        case (.conflicts(let count)?, _):
             let files = count == 1 ? "file" : "files"
             return IntegrateStatus(
                 icon: .conflicts,
                 message: "There will be \(count) conflicted \(files) when merging \(branch) into \(current)",
-                canStart: true
+                canStart: canStart
             )
         }
     }
@@ -282,7 +288,7 @@ struct IntegrateStatusLine: View {
 }
 
 /// The status line's symbol: the arc while checking, then a check, a
-/// warning, or a cross.
+/// warning, a cross, or a question mark.
 struct IntegrateStatusIcon: View {
     let icon: IntegrateStatus.Icon
 
@@ -301,6 +307,10 @@ struct IntegrateStatusIcon: View {
             Image(systemName: "xmark.circle.fill")
                 .foregroundStyle(Color(espalier: Palette.error))
                 .accessibilityLabel("Unavailable")
+        case .unknown:
+            Image(systemName: "questionmark.circle.fill")
+                .foregroundStyle(.text3)
+                .accessibilityLabel("Unknown")
         }
     }
 }

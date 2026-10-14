@@ -31,7 +31,7 @@ nonisolated struct MergeCallToActionContent: Sendable, Equatable {
         case .clean?: .clean
         case .conflicts?: .conflicts
         case .invalid?: .invalid
-        case nil: nil
+        case nil: comparison.isMergeCheckFailed ? .unknown : nil
         }
         self.init(method: comparison.method, status: message == nil ? nil : status, message: message, canStart: comparison.canStart)
     }

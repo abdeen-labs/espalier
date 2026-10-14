@@ -71,12 +71,17 @@ public final class AIModel {
     @ObservationIgnored weak var app: AppModel?
     @ObservationIgnored private let store: PreferenceStore
     @ObservationIgnored private let consentStore: AIConsentStore
+    /// Stored providers that didn't load (a newer version's, say), written
+    /// back with every save so they and their secrets aren't lost.
+    @ObservationIgnored private var unloadableProviders: [Data] = []
 
     init(environment: AppEnvironment) {
         self.environment = environment
         store = PreferenceStore(environment.defaults.defaults)
         consentStore = AIConsentStore(store: store)
-        providers = loadBYOKProviders(from: storedProvidersData())
+        let stored = loadStoredBYOKProviders(from: storedProvidersData())
+        providers = stored.providers
+        unloadableProviders = stored.unloadable
         // A selection naming a deleted provider or model is dropped when
         // providers change; one left over from before (a provider dropped as
         // invalid when loading) is dropped here, in memory.
@@ -298,7 +303,7 @@ public final class AIModel {
     /// the stored value, the keychain, and memory as they were.
     private func encode(_ updated: [BYOKProvider], _ provider: BYOKProvider) throws(OperationError) -> Data? {
         do {
-            return try saveBYOKProviders(updated)
+            return try saveBYOKProviders(updated, keeping: unloadableProviders)
         } catch {
             throw OperationError(
                 .other("Couldn't save \"\(provider.name)\". \(aiErrorDescription(error))"),

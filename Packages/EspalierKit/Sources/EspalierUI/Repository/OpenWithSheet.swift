@@ -21,11 +21,22 @@ final class OpenWithModel {
     /// The custom fields' check, once it has run for them.
     private(set) var validation: CustomIntegrationValidation?
 
-    init(integrations: IntegrationsModel, path: String) {
+    /// Preselects the editor chosen in Settings: the custom editor, with
+    /// its path and arguments, or the selected editor when it's installed.
+    /// Without either, the first editor; with none installed, the custom
+    /// editor's fields.
+    init(integrations: IntegrationsModel, settings: IntegrationSettings, path: String) {
         self.integrations = integrations
         self.path = path
-        // The first editor; with none, the custom editor.
-        choice = integrations.availableEditors.first.map { .named($0.editor) } ?? .configure
+        if let custom = settings.activeCustomEditor {
+            choice = .configure
+            customPath = custom.path
+            customArguments = custom.arguments
+        } else if let selected = integrations.editorResolution.selectedEditor {
+            choice = .named(selected.editor)
+        } else {
+            choice = integrations.availableEditors.first.map { .named($0.editor) } ?? .configure
+        }
     }
 
     var editors: [FoundEditor] {
@@ -170,7 +181,7 @@ struct OpenWithSheet: View {
     }
 
     static func present(path: String, in context: WindowContext) {
-        let model = OpenWithModel(integrations: context.app.integrations, path: path)
+        let model = OpenWithModel(integrations: context.app.integrations, settings: context.app.preferences.integrations, path: path)
         context.modals.presentSheet(id: sheetID) {
             OpenWithSheet(model: model)
         }

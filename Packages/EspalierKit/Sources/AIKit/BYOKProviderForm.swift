@@ -15,7 +15,7 @@ public struct BYOKProviderForm: Sendable, Hashable {
     public var name: String
     public var type: BYOKProviderType
     public var baseUrl: String
-    /// Saved for the `openai` type only.
+    /// Saved for the `openai` and `azure` types.
     public var wireApi: BYOKWireApi
     /// Saved for the `azure` type only, when it isn't blank.
     public var azureApiVersion: String
@@ -129,8 +129,9 @@ public func validateBYOKProviderForm(_ form: BYOKProviderForm, existing: BYOKPro
 ///
 /// Text fields and the secret are trimmed; models without an ID are
 /// dropped, and a model without a name is named after its ID; the API
-/// format is kept for OpenAI providers and the API version (when not blank)
-/// for Azure ones; the timeout is read as JavaScript's `Number` reads it.
+/// format is kept for OpenAI and Azure providers and the API version (when
+/// not blank) for Azure ones; the timeout is read as JavaScript's `Number`
+/// reads it.
 ///
 /// - Parameters:
 ///   - existing: The provider being edited, whose ID is kept, or `nil` when
@@ -155,7 +156,7 @@ public func makeBYOKProvider(
         name: JSCompat.trim(form.name),
         type: form.type,
         baseUrl: JSCompat.trim(form.baseUrl),
-        wireApi: form.type == .openai ? form.wireApi : nil,
+        wireApi: form.type == .anthropic ? nil : form.wireApi,
         azureApiVersion: form.type == .azure && !azureApiVersion.isEmpty ? azureApiVersion : nil,
         authKind: form.authKind,
         requestTimeoutSeconds: timeout.isEmpty ? nil : JS.number(timeout),

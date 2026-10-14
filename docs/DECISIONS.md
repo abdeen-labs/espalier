@@ -552,7 +552,11 @@ immediately; importing desktop's repository list and settings (my call).
   delete/modify conflict (desktop sent it to the command line, though its
   row resolves it); an image that can't be decoded has no "W: 0px"; 2-Up
   gives the change in size (+20%), not the ratio (120%); the line endings
-  warning says CRLF becomes LF when the file is committed.
+  warning says CRLF becomes LF when the file is committed; expanding a diff
+  stops at the file's last line (desktop counted the empty text after a
+  final newline as a line, so expanding to the end showed a line the file
+  doesn't have, and a file without a final newline couldn't show its last
+  line).
 
 **History**
 
@@ -616,6 +620,14 @@ immediately; importing desktop's repository list and settings (my call).
 - **The current branch, worktree, repository, or pull request has a
   semibold title,** and nothing else marks it; a checked-out pull request
   says "Checked Out".
+- **Merge and Squash and Merge wait for git's check, in Compare and the
+  merge sheet alike:** they start once git has checked the merge, the
+  branch brings in commits, and the histories are related. A check git
+  can't make reads "Couldn't check whether this merges cleanly" and leaves
+  them enabled; the merge itself says what's wrong. Desktop's Compare
+  enabled Merge while checking, and both read a failed check as clean, or
+  commits it couldn't count as up to date. A check stopped when the
+  repository is deselected runs again when its history shows.
 
 **Repositories**
 
@@ -626,8 +638,8 @@ immediately; importing desktop's repository list and settings (my call).
 - **Creating a repository commits only the README, .gitignore, and license
   it writes,** and makes no commit when it writes none; the folder's other
   files stay uncommitted, in Changes, and the sheet says how many (as git
-  will list them, with the Git Ignore template chosen). No .gitattributes
-  (my call).
+  will list them, with the Git Ignore template chosen in place of the
+  folder's own top-level .gitignore). No .gitattributes (my call).
 - **The .gitignore templates and licenses** come from desktop's static
   folder (github/gitignore, CC0; choosealicense.com, MIT), credited in
   Acknowledgements.
@@ -647,7 +659,9 @@ immediately; importing desktop's repository list and settings (my call).
 - **The command line tool** is `espalier.sh` in the bundle (`espalier`,
   `espalier open [path]`, `espalier clone [-b branch] <url or owner/name>`),
   linked at `/usr/local/bin/espalier` as the user or after an administrator
-  prompt.
+  prompt. A link to another copy of Espalier's tool is replaced; anything
+  else there asks first (Replace Existing Command?), and a folder isn't
+  touched (desktop replaced whatever was there).
 - **Move to Applications** isn't offered in Debug builds; as the user it
   puts an older copy in the Trash, as an administrator it replaces it.
 - **Desktop bugs fixed:** owners sort ignoring case in the repository list
@@ -671,7 +685,10 @@ immediately; importing desktop's repository list and settings (my call).
   (my call). Opening in an editor or a shell looks them up again too.
 - **One author form** (desktop's `GitConfigUserForm`) in Settings ▸ Git,
   Repository Settings, and Configure Git. Open With and Settings choose an
-  editor with the same pop-up.
+  editor with the same pop-up; Open With starts on the editor chosen in
+  Settings.
+- **Settings ▸ Git suggests the account's name, or its login without one,**
+  as the welcome flow does (desktop's Settings suggested the login).
 - **Sheets label their fields in a column beside them** (Clone's is
   "Repository URL"); a plain choice of two is a radio list, choices with
   descriptions are cards.
@@ -938,11 +955,18 @@ immediately; importing desktop's repository list and settings (my call).
 ## AIKit
 
 - **Prompts are desktop's, byte for byte,** except that the commit prompt's
-  attribution says "AI".
+  attribution says "AI", a long diff is cut down (below), and the conflict
+  prompt names each side by its label ("Ours (main):"), where desktop's
+  "Ours (current branch)" is the other way round in a rebase.
 - **Providers:** OpenAI-compatible Chat Completions (default) and Responses
   (`store: false`), Azure (deployment URLs or the v1 routes), and Anthropic
   Messages (adaptive thinking and effort for current Claude models, budgets
-  for older ones).
+  for older ones). Azure offers the API format as OpenAI does (desktop's
+  form saved it for OpenAI only, though Azure has the Responses routes).
+- **A stored provider that doesn't load is kept** (a newer version's, say):
+  every save writes it back after the others, so it isn't lost and its key
+  isn't left in the keychain without it. Desktop dropped it at the next
+  save.
 - **Safety:** base URLs are validated with Foundation's parser (what
   `URLSession` uses), so `http://localhost\@evil.com` can't pass as local;
   `http://` only for local hosts; redirects are refused so credentials never
@@ -958,7 +982,41 @@ immediately; importing desktop's repository list and settings (my call).
   600 s for conflicts, or the provider's own), shared by every attempt.
   Retries follow the OpenAI and Anthropic SDKs: at most twice, for 408, 409,
   429, 5xx, and connection failures, honoring `x-should-retry` and
-  `Retry-After`; only before a stream starts.
+  `Retry-After`; only before a stream starts. A request too large isn't
+  retried: OpenAI's 429 "Request too large" (over the account's tokens per
+  minute) counts as too large, not as a rate limit, so it doesn't stop later
+  chunks either.
+- **Provider errors:** an HTML page or JSON without a message (a proxy's or
+  gateway's) is described by its status rather than shown raw.
+- **A response cut off at the output limit** reads "Response cut off" in
+  both features, not as invalid JSON, and isn't sent again unchanged.
+- **Commit messages:** a `"description": null` is no description and the
+  title is trimmed (desktop rejected the message); the JSON is found as
+  conflict resolution finds it. The diff sent is at most 128 KB, about
+  35,000 tokens: within every current hosted model's context with the
+  prompt and the output limit, and cheap per click. A longer one keeps the
+  file list and every file's patch, the largest cut short with a note of
+  the lines left out, or with too many files, the first that fit and a
+  count of the rest. Changes with no diff say so (desktop did nothing).
+- **Conflict requests sized for the model:** a chunk holds at most 20 files
+  (15 above 100) and no more conflict content than one file may have
+  (256K characters), so files that each fit don't go out together as
+  megabytes. A chunk the provider calls too large, or whose response is cut
+  off at the output limit, is split in two until each part fits; a single
+  file fails with that reason.
+- **One bad resolution fails one file:** a resolution with a blank or
+  missing reasoning, or a delete-vs-modify action without `hunks`, is
+  accepted; one that's missing, doubled, or invalid fails only its file,
+  and those files are asked about again once on their own (desktop failed
+  the whole chunk). A round with any file resolved shows its results, a
+  single prompt's too.
+- **Paths from the model** match a file's exact path first, else the one
+  file whose path reads the same with line breaks and backticks dropped
+  (the prompt's headings drop them), spaces trimmed, backslashes as
+  slashes, `./` and doubled slashes removed, and Unicode composed; a
+  resolution is always written under the file's own path. Desktop compared
+  the normalized path exactly, so a path with a backslash, backtick, or
+  surrounding space never matched.
 - **Every request's summary shows:** when conflicts go to the model in
   several requests, the results show each request's summary under the names
   of the files it covers (my call). Context lists every request's

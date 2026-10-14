@@ -428,6 +428,55 @@ struct CreateRepositoryTests {
         }
     }
 
+    @Test("with a template chosen, the count reads the template in place of the folder's top-level .gitignore, and the .gitignore files below it")
+    func countsWithTemplateReplacingGitIgnore() async throws {
+        try await withIsolatedGitConfig { _ in
+            let base = try createTempDirectory()
+            let folder = POSIXPath.join(base, "project")
+            for (name, text) in [
+                // The folder's own .gitignore ignores the JavaScript and the
+                // docs, and keeps a log the template ignores.
+                (".gitignore", "*.js\n!keep.log\ndocs/\n"),
+                ("README.md", "# Old\n"),
+                ("index.js", "console.log(1)\n"),
+                ("keep.log", "log\n"),
+                // A .gitignore in the folder the old one ignored.
+                ("docs/.gitignore", "*.tmp\n"),
+                ("docs/guide.md", "guide\n"),
+                ("docs/draft.tmp", "draft\n"),
+                // A .gitignore whose negation wins over the template's *.log.
+                ("src/.gitignore", "generated/\n!debug.log\n"),
+                ("src/app.js", "app\n"),
+                ("src/debug.log", "debug\n"),
+                ("src/generated/gen.js", "gen\n"),
+                // A folder whose name reads as a pattern.
+                ("notes [1]/.gitignore", "*.tmp\n"),
+                ("notes [1]/today.md", "today\n"),
+                ("notes [1]/scratch.tmp", "scratch\n"),
+                ("node_modules/left-pad/index.js", "module.exports = 1\n"),
+            ] {
+                try FileManager.default.createDirectory(atPath: POSIXPath.dirname(POSIXPath.join(folder, name)), withIntermediateDirectories: true)
+                try write(text, to: POSIXPath.join(folder, name))
+            }
+
+            // .gitignore and README.md, which creating overwrites, index.js,
+            // docs/.gitignore, docs/guide.md, src/.gitignore, src/app.js,
+            // src/debug.log, notes [1]/.gitignore, and notes [1]/today.md.
+            let node = await checkCreateRepositoryExistingFiles(folder, gitIgnore: "Node")
+            #expect(node == CreateRepositoryExistingFiles(count: 10, filesItWrites: [".gitignore", "README.md"]))
+            let request = CreateRepositoryRequest(name: "project", basePath: base, createsReadme: true, gitIgnore: "Node")
+            #expect(node.uncommittedCount(request) == 8)
+
+            let harness = try AppHarness()
+            let app = await harness.loadedApp()
+            let result = try await app.createRepository(request)
+            #expect(result.failures.isEmpty)
+            let untracked = try await runGit(["ls-files", "--others", "--exclude-standard"], Repository(path: folder))
+            #expect(untracked == "docs/.gitignore\ndocs/guide.md\nindex.js\nnotes [1]/.gitignore\nnotes [1]/today.md\nsrc/.gitignore\nsrc/app.js\nsrc/debug.log\n")
+            await app.idle()
+        }
+    }
+
     @Test("the files left in Changes are the folder's, less those it overwrites")
     func uncommittedFiles() {
         let files = CreateRepositoryExistingFiles(count: 10, filesItWrites: ["README.md", ".gitignore"])

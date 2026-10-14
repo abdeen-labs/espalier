@@ -55,6 +55,19 @@ struct ProviderRetryTests {
         }
     }
 
+    @Test("doesn't retry a 429 for a request too large for the account's limits, which would fail again")
+    func noRetryForRequestsTooLarge() async throws {
+        let server = MockServer()
+        server.enqueue(
+            transient(429, "Request too large for gpt-4o in organization org-1 on tokens per min (TPM): Limit 30000, Requested 50000."),
+            chatCompletion
+        )
+        let provider = try makeProvider(configuration(server, .openai), server)
+
+        #expect(await providerError { _ = try await provider.stream(testRequest()) { _ in } }?.kind == .requestTooLarge)
+        #expect(server.requests.count == 1)
+    }
+
     @Test("does what x-should-retry says")
     func shouldRetryHeader() async throws {
         let server = MockServer()

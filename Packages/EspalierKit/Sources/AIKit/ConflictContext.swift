@@ -639,7 +639,7 @@ public func formatConflictContextForPrompt(_ context: ConflictResolutionContext)
                 parts.append("")
             }
 
-            parts.append("Ours (current branch):")
+            parts.append("Ours (\(context.ourLabel)):")
             parts.append(makeFencedBlock(hunk.oursContent, lang))
             parts.append("")
 
@@ -649,7 +649,7 @@ public func formatConflictContextForPrompt(_ context: ConflictResolutionContext)
                 parts.append("")
             }
 
-            parts.append("Theirs (incoming branch):")
+            parts.append("Theirs (\(context.theirLabel)):")
             parts.append(makeFencedBlock(hunk.theirsContent, lang))
             parts.append("")
 
@@ -716,6 +716,6 @@ private func makeFencedBlock(_ content: String, _ lang: String = "") -> String {
 
 /// Strips characters that could break markdown structure when used in
 /// headings and labels.
-private func sanitizeForMarkdown(_ text: String) -> String {
+func sanitizeForMarkdown(_ text: String) -> String {
     String(String.UnicodeScalarView(text.unicodeScalars.filter { $0 != "\r" && $0 != "\n" && $0 != "`" }))
 }

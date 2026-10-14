@@ -218,11 +218,19 @@ struct SettingsCaptures {
         capture(window(.ai) { AIForm(preferences: app.preferences, ai: app.ai, actions: nil) }, named: "ai-providers", area: area)
     }
 
-    @Test("the provider sheet: adding one, and one Espalier can't save")
+    @Test("the provider sheet: adding one, an Azure one, and one Espalier can't save")
     func providerSheet() throws {
         let harness = try AppHarness()
         let app = app(harness)
         capture(ProviderSheet(editor: ProviderEditor(ai: app.ai, existing: nil)), named: "provider-add", area: area)
+
+        let azure = ProviderEditor(ai: app.ai, existing: nil)
+        azure.form.name = "Work Azure"
+        azure.form.type = .azure
+        azure.form.baseUrl = "https://work.openai.azure.com/"
+        azure.form.wireApi = .responses
+        azure.form.azureApiVersion = "2025-04-01-preview"
+        capture(ProviderSheet(editor: azure), named: "provider-azure", area: area)
 
         let anthropic = ProviderEditor(ai: app.ai, existing: nil)
         anthropic.form.name = "Anthropic"

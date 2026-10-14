@@ -229,7 +229,7 @@ struct ProviderSheet: View {
                     TextField("Base URL", text: $editor.form.baseUrl, prompt: Text(ProviderCopy.baseURLPlaceholder(editor.form.type)))
                         .labelsHidden()
                 }
-                if editor.form.type == .openai {
+                if editor.form.type != .anthropic {
                     LabeledContent("API Format") {
                         CapsulePopUp("API Format", selection: $editor.form.wireApi, title: ProviderCopy.wireApiTitle(editor.form.wireApi)) {
                             for wireApi in BYOKWireApi.allCases {

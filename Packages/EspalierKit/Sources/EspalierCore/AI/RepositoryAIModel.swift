@@ -53,7 +53,7 @@ public final class RepositoryAIModel: RepositoryFeature {
     @ObservationIgnored weak var repository: RepositoryModel?
 
     /// The generation in flight.
-    @ObservationIgnored private var generation: (id: UInt64, task: Task<Result<AICommitMessage?, OperationError>, Never>)?
+    @ObservationIgnored private var generation: (id: UInt64, task: Task<Result<AICommitMessage, OperationError>, Never>)?
     @ObservationIgnored private var generationCount: UInt64 = 0
 
     /// The round or retry in flight.
@@ -101,7 +101,9 @@ public final class RepositoryAIModel: RepositoryFeature {
     ///   description has text and `confirmCommitMessageOverride` is on;
     ///   `.ai(.consentRequired)` before the first request to the provider
     ///   (`app.ai.disclosure(for: .commitMessageGeneration)`); `.busy` while
-    ///   generating or committing; `.precondition` without changes;
+    ///   generating or committing; `.precondition` without changes, also
+    ///   kept in `commitMessageGeneration` as `.failed` when the included
+    ///   changes turn out to have no diff;
     ///   `.cancelled(.userCancelled)` after `cancelGeneration()` (or when the
     ///   calling task is cancelled); the provider's failure as `.ai(...)`,
     ///   also kept in `commitMessageGeneration` as `.failed`.
@@ -150,14 +152,16 @@ public final class RepositoryAIModel: RepositoryFeature {
         generationCount &+= 1
         let generationID = generationCount
         commitMessageGeneration = .generating
-        let task = Task { @MainActor [weak ai] () -> Result<AICommitMessage?, OperationError> in
+        let task = Task { @MainActor [weak ai] () -> Result<AICommitMessage, OperationError> in
             do {
                 let diff = try await environment.withRuntimes {
                     try await CommitMessageGenerator.diff(gitRepository, files: files, amending: amending)
                 }
                 try Task.checkCancellation()
                 if diff.isEmpty {
-                    return .success(nil)
+                    // The included files match HEAD again, or the commit
+                    // being amended changed nothing.
+                    return .failure(fail(.precondition("There are no changes to describe.")))
                 }
                 let instructions = await CommitMessageGenerator.readRepositoryInstructions(repositoryPath: gitRepository.path)
                 let request = try await CommitMessageGenerator.modelRequest(selection, secrets: environment.secrets)
@@ -200,7 +204,7 @@ public final class RepositoryAIModel: RepositoryFeature {
             // The result replaces the summary and description. One made
             // before HEAD moved (a commit), or for an amend that ended or
             // another commit, describes other changes: it's dropped.
-            if let message, repository.commit.amending?.sha == amending?.sha, repository.gitState.tip.sha == tipSHA {
+            if repository.commit.amending?.sha == amending?.sha, repository.gitState.tip.sha == tipSHA {
                 var draft = repository.commit.draft
                 draft.summary = message.title
                 draft.description = message.description

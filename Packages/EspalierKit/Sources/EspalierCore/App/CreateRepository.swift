@@ -336,8 +336,12 @@ public func checkCreateRepositoryDestination(_ fullPath: String) async -> Create
 /// repository created with the Git Ignore template `gitIgnore`: git lists
 /// them (`ls-files --others --exclude-standard`) with the folder as the work
 /// tree of an empty repository made for the purpose, and the template's
-/// patterns added. Cancelling the task stops git. Nothing for a folder that
-/// doesn't exist or can't be listed.
+/// patterns added. The template replaces the folder's own top-level
+/// .gitignore, so git then reads no .gitignore file, and the template is
+/// followed by the patterns of the .gitignore files below the top level,
+/// made relative to the folder (`gitIgnorePatterns(_:in:)`). Cancelling the
+/// task stops git. Nothing for a folder that doesn't exist or can't be
+/// listed.
 public func checkCreateRepositoryExistingFiles(_ folder: String, gitIgnore: String?) async -> CreateRepositoryExistingFiles {
     guard await directoryExists(folder) else {
         return CreateRepositoryExistingFiles()
@@ -357,9 +361,38 @@ public func checkCreateRepositoryExistingFiles(_ folder: String, gitIgnore: Stri
         let gitDir = POSIXPath.join(repository, ".git")
         var args = ["--git-dir=\(gitDir)", "--work-tree=\(folder)", "ls-files", "--others", "--exclude-standard", "-z"]
         if let gitIgnore, let template = RepositoryTemplates.gitIgnoreText(named: gitIgnore) {
-            let templatePath = POSIXPath.join(scratch, "gitignore")
-            try await writeFile(templatePath, template)
-            args.append("--exclude-from=\(templatePath)")
+            let excludesPath = POSIXPath.join(scratch, "gitignore")
+            var excludes = Data(template.utf8)
+            if !excludes.isEmpty, excludes.last != UInt8(ascii: "\n") {
+                excludes.append(UInt8(ascii: "\n"))
+            }
+            try writeData(excludesPath, excludes)
+            if isRegularFile(POSIXPath.join(folder, gitIgnoreName)) {
+                args.append("--no-exclude-per-directory")
+                // The .gitignore files below the top level, which git would
+                // read: those in folders the template and the user's
+                // excludes leave. The shallower come first, so the deeper
+                // ones' patterns win, as they would in their own folders.
+                let listed = try await git(
+                    args + ["--exclude-from=\(excludesPath)", "--", ":(glob)**/\(gitIgnoreName)"],
+                    folder,
+                    "listNestedGitIgnores"
+                )
+                let nested = listed.stdoutData.split(separator: 0)
+                    .map { String(decoding: $0, as: UTF8.self) }
+                    .filter { $0.contains("/") }
+                    .sorted { depth($0) < depth($1) }
+                for path in nested {
+                    let fullPath = POSIXPath.join(folder, path)
+                    // Git doesn't follow a .gitignore that's a link.
+                    guard isRegularFile(fullPath), let contents = FileManager.default.contents(atPath: fullPath) else {
+                        continue
+                    }
+                    excludes.append(gitIgnorePatterns(contents, in: POSIXPath.dirname(path)))
+                }
+                try writeData(excludesPath, excludes)
+            }
+            args.append("--exclude-from=\(excludesPath)")
         }
         let result = try await git(args, folder, "listExistingFiles")
         let paths = result.stdoutData.split(separator: 0).map { String(decoding: $0, as: UTF8.self) }
@@ -372,6 +405,102 @@ public func checkCreateRepositoryExistingFiles(_ folder: String, gitIgnore: Stri
         logger.error("Unable to list the existing files: \(error.localizedDescription, privacy: .public)")
         return CreateRepositoryExistingFiles()
     }
+}
+
+/// The patterns of a .gitignore file in `directory` (relative to the work
+/// tree), rewritten to apply from the top of the work tree, one per line:
+/// git's comments and blank lines are left out, and its trailing spaces
+/// trimmed. A pattern with a slash before its end is relative to the
+/// .gitignore's folder, so it's prefixed with the folder; one without
+/// matches at any depth below it (`<directory>/**/`).
+func gitIgnorePatterns(_ contents: Data, in directory: String) -> Data {
+    var prefix: [UInt8] = []
+    for byte in directory.utf8 {
+        // Escaped, so the folder's name matches only itself.
+        if "\\*?[]!#".utf8.contains(byte) {
+            prefix.append(UInt8(ascii: "\\"))
+        }
+        prefix.append(byte)
+    }
+    var bytes = [UInt8](contents)
+    if bytes.starts(with: [0xEF, 0xBB, 0xBF]) {
+        bytes.removeFirst(3)
+    }
+    var patterns = Data()
+    for var line in bytes.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: false).map(Array.init) {
+        guard line.first != UInt8(ascii: "#") else {
+            continue
+        }
+        if line.last == UInt8(ascii: "\r") {
+            line.removeLast()
+        }
+        trimTrailingSpaces(&line)
+        let isNegated = line.first == UInt8(ascii: "!")
+        var pattern = isNegated ? Array(line.dropFirst()) : line
+        let slash = UInt8(ascii: "/")
+        let withoutTrailingSlash = pattern.last == slash ? pattern.dropLast() : pattern[...]
+        guard !withoutTrailingSlash.isEmpty else {
+            continue
+        }
+        if withoutTrailingSlash.contains(slash) {
+            if pattern.first == slash {
+                pattern.removeFirst()
+            }
+            pattern = prefix + [slash] + pattern
+        } else {
+            pattern = prefix + Array("/**/".utf8) + pattern
+        }
+        if isNegated {
+            patterns.append(UInt8(ascii: "!"))
+        }
+        patterns.append(contentsOf: pattern)
+        patterns.append(UInt8(ascii: "\n"))
+    }
+    return patterns
+}
+
+/// Trims a pattern's trailing spaces that aren't escaped with a backslash,
+/// as git's `trim_trailing_spaces` does.
+private func trimTrailingSpaces(_ line: inout [UInt8]) {
+    var lastSpace: Int?
+    var index = 0
+    while index < line.count {
+        switch line[index] {
+        case UInt8(ascii: " "):
+            if lastSpace == nil {
+                lastSpace = index
+            }
+        case UInt8(ascii: "\\"):
+            index += 1
+            if index == line.count {
+                return
+            }
+            lastSpace = nil
+        default:
+            lastSpace = nil
+        }
+        index += 1
+    }
+    if let lastSpace {
+        line.removeSubrange(lastSpace...)
+    }
+}
+
+/// How many folders deep a relative path is.
+private func depth(_ path: String) -> Int {
+    path.utf8.count { $0 == UInt8(ascii: "/") }
+}
+
+/// Whether `path` is a regular file, not following a link.
+private func isRegularFile(_ path: String) -> Bool {
+    var info = stat()
+    return lstat(path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG
+}
+
+/// Writes `data` to `path`, replacing what's there. The path stays a
+/// string: `URL(filePath:)` decomposes non-ASCII names.
+private func writeData(_ path: String, _ data: Data) throws {
+    try (data as NSData).write(toFile: path, options: [])
 }
 
 /// Makes an empty folder in the temporary directory.

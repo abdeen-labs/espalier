@@ -248,6 +248,25 @@ struct CommitMessageGenerationTests {
         #expect(preconditionText(error) != nil)
     }
 
+    @Test("says so, without asking the model, when the changes have no diff")
+    func emptyDiff() async throws {
+        let fixture = try await AIFixture.make { repository in
+            try await commit(["base.txt": "base\n"], "Initial commit", in: repository)
+            try await runGit(["commit", "--allow-empty", "-m", "Empty commit"], repository)
+        }
+        try fixture.addProvider()
+        try await fixture.model.commit.startAmending()
+        await fixture.settle()
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.ai.generateCommitMessage(confirmed: [.overwriteCommitMessage])
+        }
+
+        #expect(preconditionText(error) != nil)
+        #expect(fixture.ai.commitMessageGeneration == .failed(try #require(error)))
+        #expect(fixture.server.requests.isEmpty)
+    }
+
     @Test("sends the repository's commit message rules and its instructions for AI tools")
     func rulesAndInstructions() async throws {
         let fixture = try await AIFixture.make { repository in

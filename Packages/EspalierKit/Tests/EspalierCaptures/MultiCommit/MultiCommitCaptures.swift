@@ -42,6 +42,7 @@ struct MultiCommitCaptures {
             .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .clean, commitCount: 0)),
             .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .conflicts(conflictedFiles: 2), commitCount: 3)),
             .merge(current: "main", branch: "unrelated", preview: MergePreview(status: .invalid, commitCount: 0)),
+            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: nil, commitCount: 3)),
             .rebase(current: "feature/login", base: "main", preview: .loading),
             .rebase(current: "feature/login", base: "main", preview: .clean(commitsAhead: ahead, commitsBehind: behind)),
             .rebase(current: "feature/login", base: "main", preview: .clean(commitsAhead: [], commitsBehind: behind)),

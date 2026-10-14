@@ -73,13 +73,13 @@ struct GitAuthorFormTests {
         #expect(gitEmailAttribution("jbloggs@ghe.example.com", accounts: [dotCom, enterprise])?.isAttributable == true)
     }
 
-    @Test("fills a missing name or email from the GitHub.com account, else the first")
+    @Test("fills a missing name or email from the GitHub.com account, else the first, with its name or else its login")
     func fillsAuthor() {
         let unset = GlobalGitSettings(name: nil, email: "", defaultBranch: "main")
         // The private primary address isn't preferred; with no noreply
         // address listed, GitHub's noreply form is.
         #expect(unset.fillingAuthor(from: [enterprise, dotCom]) == GlobalGitSettings(
-            name: "joe",
+            name: "Joe Bloggs",
             email: "1234+joe@users.noreply.github.com",
             defaultBranch: "main"
         ))

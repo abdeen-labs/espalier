@@ -72,6 +72,8 @@ enum UIFixtures {
         ("deleteBranch-remote", .deleteBranch("feature/login", existsOnRemote: true)),
         ("deleteRemoteBranch", .deleteRemoteBranch("origin/feature/login")),
         ("deleteTag", .deleteTag("v1.2.0")),
+        ("replaceCommandLineTool", .replaceCommandLineTool(path: "/usr/local/bin/espalier", linkDestination: "/opt/homebrew/bin/espalier")),
+        ("replaceCommandLineTool-file", .replaceCommandLineTool(path: "/usr/local/bin/espalier", linkDestination: nil)),
     ]
 
     // MARK: Decisions

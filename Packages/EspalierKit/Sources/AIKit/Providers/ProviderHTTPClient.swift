@@ -170,7 +170,7 @@ struct ProviderHTTPClient: Sendable {
                     responseText: String(decoding: data, as: UTF8.self),
                     retryAfter: Self.retryAfter(http)
                 )
-                try await wait(toRetry: failure, for: statusRetryDelay(http, retry: retry), retry: &retry, deadline: deadline)
+                try await wait(toRetry: failure, for: statusRetryDelay(http, failure, retry: retry), retry: &retry, deadline: deadline)
                 continue
             }
             return data
@@ -259,7 +259,7 @@ struct ProviderHTTPClient: Sendable {
                 responseText: String(decoding: body, as: UTF8.self),
                 retryAfter: Self.retryAfter(http)
             )
-            try await wait(toRetry: failure, for: statusRetryDelay(http, retry: retry), retry: &retry, deadline: deadline)
+            try await wait(toRetry: failure, for: statusRetryDelay(http, failure, retry: retry), retry: &retry, deadline: deadline)
         }
     }
 
@@ -292,8 +292,14 @@ struct ProviderHTTPClient: Sendable {
         }
     }
 
-    private func statusRetryDelay(_ response: HTTPURLResponse, retry: Int) -> Duration? {
-        retryPolicy.delay(
+    /// The wait before retrying an error response, or `nil`. A request too
+    /// large for the model or the account's limits fails the same way every
+    /// time, so it isn't retried.
+    private func statusRetryDelay(_ response: HTTPURLResponse, _ failure: AIProviderError, retry: Int) -> Duration? {
+        guard failure.kind != .requestTooLarge else {
+            return nil
+        }
+        return retryPolicy.delay(
             afterStatus: response.statusCode,
             header: { response.value(forHTTPHeaderField: $0) },
             retry: retry,

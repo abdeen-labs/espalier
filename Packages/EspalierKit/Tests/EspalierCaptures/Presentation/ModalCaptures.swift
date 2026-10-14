@@ -32,7 +32,7 @@ struct ModalCaptures {
 
     // MARK: The alert
 
-    @Test("alerts: plain, critical with a list and the checkbox, a destructive default, three buttons")
+    @Test("alerts: plain, critical with a list and the checkbox, a destructive default, three buttons, replacing the command line tool")
     func alerts() throws {
         let prompt = try #require(UIFixtures.prompts.first { $0.name == "addSSHHost" }?.prompt)
         guard case .alert(let ssh, _) = PromptPresentation.make(prompt, finish: { _ in }) else {
@@ -53,6 +53,8 @@ struct ModalCaptures {
             ]
         )
         capture(card(push), named: "alert-threeButtons", area: area)
+        capture(card(try confirmation("replaceCommandLineTool")), named: "alert-replaceCommandLineTool", area: area)
+        capture(card(try confirmation("replaceCommandLineTool-file")), named: "alert-replaceCommandLineTool-file", area: area)
     }
 
     @Test("alerts: the checkbox on, a list of ten and the rest counted, a long URL")

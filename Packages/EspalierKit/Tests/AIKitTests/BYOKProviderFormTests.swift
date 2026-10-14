@@ -115,13 +115,15 @@ struct BYOKProviderFormTests {
         )
         #expect(secret == .set("sk-test"))
 
-        // Azure keeps its API version (when not blank) and no API format.
+        // Azure keeps its API format (it has a Responses route too) and its
+        // API version, when not blank.
         var azure = BYOKProviderForm(editing: existing)
+        azure.wireApi = .responses
         azure.azureApiVersion = " 2025-04-01-preview\n"
         azure.requestTimeoutSeconds = ""
         let (edited, unchanged) = makeBYOKProvider(from: azure, existing: existing, newID: { "unused" })
         #expect(edited.id == "p1")
-        #expect(edited.wireApi == nil)
+        #expect(edited.wireApi == .responses)
         #expect(edited.azureApiVersion == "2025-04-01-preview")
         #expect(edited.requestTimeoutSeconds == nil)
         #expect(unchanged == .keep)
@@ -129,10 +131,19 @@ struct BYOKProviderFormTests {
         #expect(makeBYOKProvider(from: azure, existing: existing).provider.azureApiVersion == nil)
 
         // Saving the form for a provider, unchanged, keeps the provider and
-        // its secret as they were.
+        // its secret as they were, with the format it had by default written
+        // out.
         let untouched = makeBYOKProvider(from: BYOKProviderForm(editing: existing), existing: existing)
-        #expect(untouched.provider == existing)
+        var withFormat = existing
+        withFormat.wireApi = .completions
+        #expect(untouched.provider == withFormat)
         #expect(untouched.secret == .keep)
+
+        // Anthropic has no API format.
+        var anthropic = validForm()
+        anthropic.type = .anthropic
+        anthropic.wireApi = .responses
+        #expect(makeBYOKProvider(from: anthropic, existing: nil).provider.wireApi == nil)
 
         // A new provider gets the defaults (OpenAI, Chat Completions, an API
         // key) and a lowercase UUID.

@@ -2,6 +2,7 @@
 
 @testable import AIKit
 import Testing
+import TestSupport
 
 private func parse(_ text: String, status: Int = 402, retryAfter: String? = nil) -> AIProviderError {
     parseProviderErrorResponse(statusCode: status, responseText: text, retryAfter: retryAfter)
@@ -9,11 +10,16 @@ private func parse(_ text: String, status: Int = 402, retryAfter: String? = nil)
 
 @Suite("parseProviderErrorResponse")
 struct ParseProviderErrorTests {
-    @Test("preserves array responses as raw text")
-    func arrayResponses() {
-        let response = #"[{"message":"Not a top-level error"}]"#
-        let error = parse(response)
-        #expect(error.message == response)
+    @Test("describes the failure when the body has no message to show", arguments: [
+        NamedCase("an array", (body: #"[{"message":"Not a top-level error"}]"#, status: 402)),
+        NamedCase("an array error without a top-level message", (body: #"{"error":[{"code":"quota_exceeded"}]}"#, status: 402)),
+        NamedCase("a blank message", (body: #"{"error":{"message":" "}}"#, status: 500)),
+        NamedCase("a gateway's HTML page", (body: "<html>\n<head><title>502 Bad Gateway</title></head>\n<body>nginx</body>\n</html>", status: 502)),
+        NamedCase("an HTML page with a doctype", (body: "  <!DOCTYPE html><html><body>Not Found</body></html>", status: 404)),
+    ])
+    func noMessage(_ testCase: NamedCase<(body: String, status: Int)>) {
+        let error = parse(testCase.value.body, status: testCase.value.status)
+        #expect(error.message == getFallbackErrorMessage(error.kind))
         #expect(error.code == nil)
     }
 
@@ -21,14 +27,6 @@ struct ParseProviderErrorTests {
     func nestedArray() {
         let error = parse(#"{"message":"Billing unavailable","error":[{"code":"quota_exceeded","message":"Nested message"}]}"#)
         #expect(error.message == "Billing unavailable")
-        #expect(error.code == nil)
-    }
-
-    @Test("preserves raw text when an array error has no top-level message")
-    func nestedArrayWithoutMessage() {
-        let response = #"{"error":[{"code":"quota_exceeded"}]}"#
-        let error = parse(response)
-        #expect(error.message == response)
         #expect(error.code == nil)
     }
 
@@ -88,6 +86,7 @@ struct ParseProviderErrorTests {
             (400, "{}", .badRequest),
             (400, #"{"error":{"message":"prompt is too long: 250000 tokens > 200000 maximum"}}"#, .requestTooLarge),
             (400, #"{"error":{"message":"x","code":"context_length_exceeded"}}"#, .requestTooLarge),
+            (400, #"{"type":"error","error":{"type":"invalid_request_error","message":"input length and `max_tokens` exceed context limit: 188240 + 64000 > 200000, decrease input length or `max_tokens` and try again"}}"#, .requestTooLarge),
             (401, "", .authentication),
             (402, "", .billing),
             (403, "", .permissionDenied),
@@ -96,17 +95,14 @@ struct ParseProviderErrorTests {
             (413, "", .requestTooLarge),
             (429, "", .rateLimited),
             (429, #"{"error":{"message":"You exceeded your current quota.","code":"insufficient_quota"}}"#, .quotaExceeded),
+            (429, #"{"error":{"message":"Rate limit reached for gpt-4o on tokens per min (TPM): Limit 30000, Used 29000, Requested 2000.","type":"tokens","code":"rate_limit_exceeded"}}"#, .rateLimited),
+            (429, #"{"error":{"message":"Request too large for gpt-4o on tokens per min (TPM): Limit 30000, Requested 50000. The input or output tokens must be reduced in order to run successfully.","type":"tokens","code":"rate_limit_exceeded"}}"#, .requestTooLarge),
             (500, "", .server),
             (302, "", .invalidResponse),
         ]
         for (status, body, kind) in cases {
             #expect(parse(body, status: status).kind == kind, "\(status) \(body)")
         }
-    }
-
-    @Test("keeps the raw body when its message is blank")
-    func blankMessage() {
-        #expect(parse(#"{"error":{"message":" "}}"#, status: 500).message == #"{"error":{"message":" "}}"#)
     }
 }
 

@@ -6,6 +6,7 @@
 @testable import EspalierCore
 import EspalierCoreTestSupport
 import EspalierSupport
+import Foundation
 import GitKit
 import Testing
 import TestSupport
@@ -50,14 +51,14 @@ struct CompareModelTests {
         #expect(history.trunkTip == feature.tip.sha)
         #expect(history.graphChange.kind == .reload)
         #expect(history.selection.shas == [feature.tip.sha])
-        #expect(history.comparison.mergeStatus == .clean)
+        #expect(history.comparison.mergePreview?.status == .clean)
         #expect(history.comparison.canStart)
 
         try await history.compare(with: feature, direction: .ahead)
         await fixture.settle()
         #expect(history.mode == .compare(feature, .ahead))
         #expect(fixture.summaries == ["M2", "M1"])
-        #expect(history.comparison.mergeStatus == .clean)
+        #expect(history.comparison.mergePreview?.status == .clean)
 
         history.resetToHistoryMode()
         await fixture.settle()
@@ -78,7 +79,7 @@ struct CompareModelTests {
 
         try await history.compare(with: conflict, direction: .behind)
         await fixture.settle()
-        #expect(history.comparison.mergeStatus == .conflicts(conflictedFiles: 1))
+        #expect(history.comparison.mergePreview?.status == .conflicts(conflictedFiles: 1))
         #expect(history.comparison.canStart)
 
         // Start comparing with the conflicting branch, then with the clean
@@ -96,17 +97,17 @@ struct CompareModelTests {
         await fixture.settle()
         #expect(history.mode == .compare(feature, .behind))
         #expect(history.comparison.branch?.name == "feature")
-        #expect(history.comparison.mergeStatus == .clean)
+        #expect(history.comparison.mergePreview?.status == .clean)
         #expect(fixture.summaries == ["F3", "F2", "F1"])
 
         // The first comparison landed and its merge check is still running
         // when the second starts.
         history.resetToHistoryMode()
         try await history.compare(with: conflict, direction: .behind)
-        #expect(history.comparison.mergeStatus == .loading)
+        #expect(history.comparison.mergePreview?.status == .loading)
         try await history.compare(with: feature, direction: .behind)
         await fixture.settle()
-        #expect(history.comparison.mergeStatus == .clean)
+        #expect(history.comparison.mergePreview?.status == .clean)
     }
 
     @Test("nothing to merge when the current branch isn't behind")
@@ -121,7 +122,7 @@ struct CompareModelTests {
         await fixture.settle()
         let comparison = fixture.history.comparison
         #expect(comparison.aheadBehind == AheadBehind(ahead: 1, behind: 0))
-        #expect(comparison.mergeStatus == nil)
+        #expect(comparison.mergePreview == nil)
         #expect(comparison.statusMessage == nil)
         #expect(comparison.canStart == false)
         #expect(fixture.history.commitSHAs.isEmpty)
@@ -144,8 +145,48 @@ struct CompareModelTests {
         try await fixture.history.compare(with: try fixture.branch("unrelated"), direction: .behind)
         await fixture.settle()
         let comparison = fixture.history.comparison
-        #expect(comparison.mergeStatus == .invalid)
+        #expect(comparison.mergePreview?.status == .invalid)
         #expect(comparison.canStart == false)
+    }
+
+    @Test("a merge git can't check says so, and can still start")
+    func mergeCheckFails() async throws {
+        let fixture = try await makeRepository()
+        // Merging `feature` into `main` needs both versions of a file, and
+        // the feature's is gone from the object database.
+        try await fixture.git(["checkout", "-q", "feature"])
+        try await fixture.commit("main.txt", "feature's\n", message: "F4")
+        try await fixture.git(["checkout", "-q", "main"])
+        let blob = JSCompat.trim(try await fixture.git(["rev-parse", "feature:main.txt"]))
+        try FileManager.default.removeItem(atPath: POSIXPath.join(fixture.local.path, ".git", "objects", String(blob.prefix(2)), String(blob.dropFirst(2))))
+        await fixture.refresh()
+        await fixture.activate()
+
+        try await fixture.history.compare(with: try fixture.branch("feature"), direction: .behind)
+        await fixture.settle()
+        let comparison = fixture.history.comparison
+        #expect(comparison.mergePreview == MergePreview(status: nil, commitCount: 4))
+        #expect(comparison.isMergeCheckFailed)
+        #expect(comparison.statusMessage != nil)
+        #expect(comparison.canStart)
+    }
+
+    @Test("a merge check stopped when the repository is deselected runs again when its history is shown")
+    func resumesMergeCheck() async throws {
+        let fixture = try await makeRepository()
+        await fixture.activate()
+        let history = fixture.history
+        try await history.compare(with: try fixture.branch("feature"), direction: .behind)
+        #expect(history.comparison.mergePreview?.status == .loading)
+
+        history.repositoryDidBecomeInactive()
+        #expect(history.comparison.mergePreview == nil)
+        #expect(history.comparison.canStart == false)
+
+        await fixture.activate()
+        await fixture.settle()
+        #expect(history.comparison.mergePreview?.status == .clean)
+        #expect(history.comparison.canStart)
     }
 
     @Test("the rebase preview says what a rebase would apply")
@@ -170,7 +211,7 @@ struct CompareModelTests {
         #expect(comparison.canStart)
     }
 
-    @Test("a status shows while the merge check loads, none while the rebase preview does, and an empty list has a message")
+    @Test("a status shows while the merge check loads, none while the rebase preview does, neither can start yet, and an empty list has a message")
     func loadingStatus() async throws {
         let fixture = try await makeRepository()
         await fixture.activate()
@@ -179,10 +220,12 @@ struct CompareModelTests {
         let feature = try fixture.branch("feature")
         try await fixture.history.compare(with: feature, direction: .behind)
         // The merge status is worked out after the comparison lands.
-        #expect(comparison.mergeStatus == .loading)
+        #expect(comparison.mergePreview?.status == .loading)
         #expect(comparison.statusMessage != nil)
+        #expect(comparison.canStart == false)
         comparison.method = .squashMerge
         #expect(comparison.statusMessage != nil)
+        #expect(comparison.canStart == false)
         // A rebase's commits are counted from its preview, so nothing shows
         // while it loads.
         comparison.method = .rebase
@@ -190,8 +233,9 @@ struct CompareModelTests {
         #expect(comparison.statusMessage == nil)
         #expect(comparison.canStart == false)
         await fixture.settle()
-        #expect(comparison.mergeStatus == .clean)
+        #expect(comparison.mergePreview?.status == .clean)
         comparison.method = .merge
+        #expect(comparison.canStart)
 
         try await fixture.history.compare(with: feature, direction: .ahead)
         #expect(comparison.direction == .ahead)
@@ -223,7 +267,7 @@ struct CompareModelTests {
         #expect(history.comparison.aheadBehind == AheadBehind(ahead: 2, behind: 4))
         #expect(fixture.summaries == ["F4", "F3", "F2", "F1"])
         #expect(history.comparison.branch?.tip.sha == (try await fixture.sha("feature")))
-        #expect(history.comparison.mergeStatus == .clean)
+        #expect(history.comparison.mergePreview?.status == .clean)
 
         // The compared branch is deleted.
         try await fixture.git(["branch", "-q", "-D", "feature"])

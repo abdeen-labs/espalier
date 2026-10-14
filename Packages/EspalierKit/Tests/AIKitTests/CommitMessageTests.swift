@@ -49,7 +49,24 @@ struct CommitMessageTests {
             try parseAICommitMessage(#"{"title":1}"#)
         }
         #expect(throws: AIResponseError.self) {
-            try parseAICommitMessage(#"{"title":"T","description":null}"#)
+            try parseAICommitMessage(#"{"title":"T","description":2}"#)
         }
+    }
+
+    @Test("takes a null description as none, and trims the title")
+    func nullDescription() throws {
+        #expect(
+            try parseAICommitMessage(#"{"title":" Fix token renewal\n","description":null}"#)
+                == AICommitMessage(title: "Fix token renewal", description: "")
+        )
+    }
+
+    @Test("finds the JSON as the conflict parser does: past a broken first block, or with fences inside it")
+    func sharedExtraction() throws {
+        // The first block isn't JSON; the response as a whole is.
+        #expect(try parseAICommitMessage(#"{"title":"Add a ```fenced``` example"}"#).title == "Add a ```fenced``` example")
+        // The description has a code block of its own.
+        let fenced = "```json\n{\"title\":\"T\",\"description\":\"Run:\\n```\\nmake\\n```\"}\n```"
+        #expect(try parseAICommitMessage(fenced) == AICommitMessage(title: "T", description: "Run:\n```\nmake\n```"))
     }
 }

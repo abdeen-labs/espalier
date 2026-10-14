@@ -68,6 +68,14 @@ private func expectValidationError(
     }
 }
 
+/// The paths of the resolutions in `json` that the parser set aside as
+/// invalid, checking that it found no valid ones.
+private func invalidPaths(_ json: String, sourceLocation: SourceLocation = #_sourceLocation) throws -> [String] {
+    let result = try parseAIConflictResolution(json)
+    #expect(result.resolutions.isEmpty, sourceLocation: sourceLocation)
+    return result.invalidResolutions.map(\.path)
+}
+
 // MARK: parseAIConflictResolution
 
 @Suite("parseCopilotConflictResolution")
@@ -109,35 +117,36 @@ struct ParseConflictResolutionTests {
         }
     }
 
-    @Test("throws on missing path")
-    func missingPath() {
-        let json = payload([["hunks": [["resolvedContent": "c"]], "reasoning": "r"]])
-        expectValidationError { _ = try parseAIConflictResolution(json) }
-    }
-
-    @Test("throws on empty path")
-    func emptyPath() {
-        let json = payload([["path": "  ", "hunks": [["resolvedContent": "c"]], "reasoning": "r"]])
-        expectValidationError { _ = try parseAIConflictResolution(json) }
-    }
-
-    @Test("throws on missing hunks")
-    func missingHunks() {
-        expectValidationError {
-            _ = try parseAIConflictResolution(#"{"resolutions":[{"path":"a.ts","reasoning":"r"}]}"#)
+    @Test("leaves out a resolution without a path, which no file can claim")
+    func missingPath() throws {
+        for entry: JSONValue in [
+            ["hunks": [["resolvedContent": "c"]], "reasoning": "r"],
+            ["path": "  ", "hunks": [["resolvedContent": "c"]], "reasoning": "r"],
+            "a.ts",
+        ] {
+            let result = try parseAIConflictResolution(payload([entry, makeResolution("b.ts", "c", "r")]))
+            #expect(result.resolutions.map(\.path) == ["b.ts"])
+            #expect(result.invalidResolutions.isEmpty)
         }
     }
 
-    @Test("throws on empty hunks array")
-    func emptyHunks() {
-        let json = payload([["path": "a.ts", "hunks": [], "reasoning": "r"]])
-        expectValidationError { _ = try parseAIConflictResolution(json) }
+    @Test("sets aside, under its path, a text resolution without hunks, beside the valid ones")
+    func missingHunks() throws {
+        let result = try parseAIConflictResolution(
+            payload([["path": "a.ts", "reasoning": "r"], ["path": "b.ts", "hunks": [], "reasoning": "r"], makeResolution("c.ts", "c", "r")])
+        )
+        #expect(result.resolutions.map(\.path) == ["c.ts"])
+        #expect(result.invalidResolutions.map(\.path) == ["a.ts", "b.ts"])
     }
 
-    @Test("throws on missing reasoning")
-    func missingReasoning() {
-        let json = payload([["path": "a.ts", "hunks": [["resolvedContent": "c"]]]])
-        expectValidationError { _ = try parseAIConflictResolution(json) }
+    @Test("accepts a missing, blank, or mistyped reasoning as none")
+    func missingReasoning() throws {
+        for reasoning: JSONValue? in [nil, "", "  ", 3] {
+            var entry: JSONObject = ["path": "a.ts", "hunks": [["resolvedContent": "c"]]]
+            entry["reasoning"] = reasoning
+            let result = try parseAIConflictResolution(payload([.object(entry)]))
+            #expect(result.resolutions.map(\.reasoning) == [reasoning?.stringValue ?? ""])
+        }
     }
 
     @Test("allows empty resolvedContent in a hunk (intentional deletion)")
@@ -168,10 +177,10 @@ struct ParseConflictResolutionTests {
         #expect(try parseAIConflictResolution(json).resolutions[0].path == "a.ts")
     }
 
-    @Test("throws on truncated conflict markers (opening + separator without closing)")
-    func truncatedMarkers() {
+    @Test("sets aside truncated conflict markers (opening + separator without closing)")
+    func truncatedMarkers() throws {
         let json = payload([makeResolution("a.ts", "<<<<<<< HEAD\nours\n=======\ntheirs but truncated", "truncated")])
-        expectValidationError { _ = try parseAIConflictResolution(json) }
+        #expect(try invalidPaths(json) == ["a.ts"])
     }
 
     @Test("parses JSON block followed by another code block")
@@ -181,28 +190,10 @@ struct ParseConflictResolutionTests {
         #expect(try parseAIConflictResolution(content).resolutions[0].path == "a.ts")
     }
 
-    @Test("trims whitespace from path values")
-    func trimsPaths() throws {
-        let result = try parseAIConflictResolution(payload([makeResolution("  src/file.ts  ", "content", "reason")]))
-        #expect(result.resolutions[0].path == "src/file.ts")
-    }
-
-    @Test("normalizes Windows-style backslash separators")
-    func backslashes() throws {
-        let result = try parseAIConflictResolution(payload([makeResolution("src\\lib\\file.ts", "content", "reason")]))
-        #expect(result.resolutions[0].path == "src/lib/file.ts")
-    }
-
-    @Test("strips leading ./ from paths")
-    func leadingDotSlash() throws {
-        let result = try parseAIConflictResolution(payload([makeResolution("./src/file.ts", "content", "reason")]))
-        #expect(result.resolutions[0].path == "src/file.ts")
-    }
-
-    @Test("collapses redundant path separators")
-    func redundantSeparators() throws {
-        let result = try parseAIConflictResolution(payload([makeResolution("src//lib///file.ts", "content", "reason")]))
-        #expect(result.resolutions[0].path == "src/lib/file.ts")
+    @Test("keeps each path as the model wrote it, for matching to the files")
+    func rawPaths() throws {
+        let result = try parseAIConflictResolution(payload([makeResolution(" ./src\\lib//file.ts ", "content", "reason")]))
+        #expect(result.resolutions[0].path == " ./src\\lib//file.ts ")
     }
 
     @Test("returns null summary when missing, mistyped, or blank")
@@ -296,24 +287,30 @@ struct ParseConflictResolutionTests {
         #expect(result.resolutions[0].hunks.count == 1)
     }
 
-    @Test("throws when action resolution has empty reasoning")
-    func actionEmptyReasoning() {
-        let json = payload([["path": "a.ts", "hunks": [], "reasoning": "", "action": "keep"]])
-        expectValidationError { _ = try parseAIConflictResolution(json) }
+    @Test("accepts a delete-vs-modify resolution with an empty reasoning or no hunks")
+    func actionWithoutReasoningOrHunks() throws {
+        let json = payload([
+            ["path": "a.ts", "hunks": [], "reasoning": "", "action": "keep"],
+            ["path": "b.ts", "reasoning": "Gone upstream.", "action": "delete"],
+        ])
+        let result = try parseAIConflictResolution(json)
+        #expect(result.resolutions == [
+            RawFileResolution(path: "a.ts", hunks: [], reasoning: "", action: .keep),
+            RawFileResolution(path: "b.ts", hunks: [], reasoning: "Gone upstream.", action: .delete),
+        ])
+        #expect(result.invalidResolutions.isEmpty)
     }
 
     @Test("finds conflict markers after any JavaScript line terminator")
-    func markersAfterLineTerminators() {
+    func markersAfterLineTerminators() throws {
         for content in [
             "x\r<<<<<<< a\r=======\r>>>>>>> b", "<<<<<<<\n=======", "x\u{2028}<<<<<<< a\u{2029}=======",
         ] {
-            let json = payload([makeResolution("a.ts", content, "r")])
-            expectValidationError { _ = try parseAIConflictResolution(json) }
+            #expect(try invalidPaths(payload([makeResolution("a.ts", content, "r")])) == ["a.ts"], "\(content.debugDescription)")
         }
         for content in ["<<<<<<<x\n=======", " <<<<<<< a\n=======", "<<<<<<< a\n========", "<<<<<<< a\n=======x"] {
-            #expect(throws: Never.self, "\(content.debugDescription)") {
-                _ = try parseAIConflictResolution(payload([makeResolution("a.ts", content, "r")]))
-            }
+            let result = try parseAIConflictResolution(payload([makeResolution("a.ts", content, "r")]))
+            #expect(result.invalidResolutions.isEmpty, "\(content.debugDescription)")
         }
     }
 }
@@ -520,137 +517,144 @@ struct ReassembleResolvedFileTests {
     }
 }
 
-// MARK: validateResolutionPaths
+// MARK: checkResolutions
 
-@Suite("validateResolutionPaths")
-struct ValidateResolutionPathsTests {
-    @Test("validates hunk count for regular resolutions alongside action files")
-    func validatesRegularCounts() {
-        let resolutions = [
-            RawFileResolution(path: "text.ts", hunks: [HunkResolution(resolvedContent: "x")], reasoning: "merged"),
-            RawFileResolution(path: "deleted.ts", hunks: [], reasoning: "keep it", action: .keep),
-        ]
-        let expectedFiles = [makeFile("text.ts", "a", "b"), FileConflictContext(path: "deleted.ts", hunks: [], deletedSide: .theirs)]
-        #expect(throws: Never.self) { try validateResolutionPaths(resolutions, expectedFiles) }
+/// A parsed response with these resolutions.
+private func response(_ resolutions: [RawFileResolution], invalid: [AIInvalidFileResolution] = []) -> AIConflictResolutionResponse {
+    AIConflictResolutionResponse(resolutions: resolutions, invalidResolutions: invalid, summary: nil, references: [])
+}
+
+private func hunks(_ contents: String...) -> [HunkResolution] {
+    contents.map(HunkResolution.init(resolvedContent:))
+}
+
+/// A text conflict with one hunk, and its file content.
+private func conflicted(_ path: String) -> FileConflictContext {
+    var file = makeFile(path, "ours", "theirs")
+    file.rawContent = ["a", "<<<<<<< HEAD", "ours", "=======", "theirs", ">>>>>>> feature", "b"].joined(separator: "\n")
+    return file
+}
+
+@Suite("checkResolutions")
+struct CheckResolutionsTests {
+    @Test("reassembles text resolutions and passes delete-vs-modify actions through, in the files' order")
+    func mixed() {
+        let checked = checkResolutions(
+            response([
+                RawFileResolution(path: "deleted.ts", hunks: [], reasoning: "keep file", action: .keep),
+                RawFileResolution(path: "text.ts", hunks: hunks("merged"), reasoning: "combined both"),
+            ]),
+            [conflicted("text.ts"), FileConflictContext(path: "deleted.ts", hunks: [], deletedSide: .ours)]
+        )
+        #expect(
+            checked.resolutions == [
+                FileResolution(path: "text.ts", resolvedContent: "a\nmerged\nb", reasoning: "combined both"),
+                FileResolution(path: "deleted.ts", resolvedContent: "", reasoning: "keep file", deleteConflictAction: .keep),
+            ]
+        )
+        #expect(checked.unresolved.isEmpty)
     }
 
-    @Test("still catches wrong hunk count for non-action resolutions")
-    func wrongCount() {
-        let resolutions = [
-            RawFileResolution(
-                path: "text.ts",
-                hunks: [HunkResolution(resolvedContent: "x"), HunkResolution(resolvedContent: "y")],
-                reasoning: "merged"
+    @Test("fails only the files whose resolution is missing, doubled, invalid, or of the wrong shape")
+    func failsFilesOnTheirOwn() {
+        let files = ["ok.ts", "missing.ts", "twice.ts", "invalid.ts", "count.ts", "action.ts"].map(conflicted)
+        let checked = checkResolutions(
+            response(
+                [
+                    RawFileResolution(path: "ok.ts", hunks: hunks("merged"), reasoning: "r"),
+                    RawFileResolution(path: "twice.ts", hunks: hunks("one"), reasoning: "r"),
+                    RawFileResolution(path: "twice.ts", hunks: hunks("two"), reasoning: "r"),
+                    RawFileResolution(path: "count.ts", hunks: hunks("x", "y"), reasoning: "r"),
+                    RawFileResolution(path: "action.ts", hunks: [], reasoning: "r", action: .delete),
+                    RawFileResolution(path: "unexpected.ts", hunks: hunks("x"), reasoning: "r"),
+                ],
+                invalid: [AIInvalidFileResolution(path: "invalid.ts", error: AIValidationError("No hunks"))]
             ),
-        ]
-        expectValidationError {
-            try validateResolutionPaths(resolutions, [makeFile("text.ts", "a", "b")])
-        }
-    }
-
-    @Test("rejects unexpected, duplicate, and missing paths")
-    func pathSets() {
-        let expected = [makeFile("a.ts", "a", "b"), makeFile("b.ts", "a", "b")]
-        let a = RawFileResolution(path: "a.ts", hunks: [HunkResolution(resolvedContent: "x")], reasoning: "r")
-        let b = RawFileResolution(path: "b.ts", hunks: [HunkResolution(resolvedContent: "x")], reasoning: "r")
-        let c = RawFileResolution(path: "c.ts", hunks: [HunkResolution(resolvedContent: "x")], reasoning: "r")
-        expectValidationError { try validateResolutionPaths([a, c], expected) }
-        expectValidationError { try validateResolutionPaths([a, a, b], expected) }
-        expectValidationError { try validateResolutionPaths([a], expected) }
-    }
-
-    @Test("compares paths by code units, as JavaScript does")
-    func exactPaths() {
-        let composed = RawFileResolution(path: "caf\u{E9}.ts", hunks: [HunkResolution(resolvedContent: "x")], reasoning: "r")
-        expectValidationError {
-            try validateResolutionPaths([composed], [makeFile("cafe\u{301}.ts", "a", "b")])
-        }
+            files
+        )
+        #expect(checked.resolutions.map(\.path) == ["ok.ts"])
+        #expect(checked.unresolved.map(\.path) == ["missing.ts", "twice.ts", "invalid.ts", "count.ts", "action.ts"])
+        #expect(checked.unresolved.allSatisfy { $0.stage == .validateResponse })
+        #expect(checked.unresolved[2].error == AIValidationError("No hunks"))
     }
 
     @Test("accepts an action only for a delete-vs-modify conflict")
     func actionsOnlyForDeleteConflicts() {
-        let keep = RawFileResolution(path: "text.ts", hunks: [], reasoning: "keep it", action: .keep)
-        expectValidationError {
-            try validateResolutionPaths([keep], [makeFile("text.ts", "a", "b")])
-        }
-        let delete = RawFileResolution(path: "text.ts", hunks: [], reasoning: "drop it", action: .delete)
-        expectValidationError {
-            try validateResolutionPaths([delete], [makeFile("text.ts", "a", "b")])
-        }
-        #expect(throws: Never.self) {
-            try validateResolutionPaths([keep], [FileConflictContext(path: "text.ts", hunks: [], deletedSide: .theirs)])
+        for action in [DeleteConflictAction.keep, .delete] {
+            let resolution = RawFileResolution(path: "text.ts", hunks: [], reasoning: "r", action: action)
+            #expect(checkResolutions(response([resolution]), [conflicted("text.ts")]).resolutions.isEmpty)
+            let deleted = FileConflictContext(path: "text.ts", hunks: [], deletedSide: .theirs)
+            #expect(checkResolutions(response([resolution]), [deleted]).resolutions.map(\.deleteConflictAction) == [action])
         }
     }
-}
 
-// MARK: reassembleResolutions
-
-@Suite("reassembleResolutions")
-struct ReassembleResolutionsTests {
-    @Test("handles mixed action and text resolutions")
-    func mixed() throws {
-        let rawContent = ["line 1", "<<<<<<< HEAD", "our change", "=======", "their change", ">>>>>>> feature", "line 2"]
-            .joined(separator: "\n")
-
-        var textFile = makeFile("text.ts", "our change", "their change")
-        textFile.rawContent = rawContent
-        let result = try reassembleResolutions(
-            [
-                RawFileResolution(path: "text.ts", hunks: [HunkResolution(resolvedContent: "merged")], reasoning: "combined both"),
-                RawFileResolution(path: "deleted.ts", hunks: [], reasoning: "keep file", action: .keep),
-            ],
-            [textFile, FileConflictContext(path: "deleted.ts", hunks: [], deletedSide: .ours)]
-        )
-        #expect(result.count == 2)
-
-        // The text resolution was reassembled.
-        #expect(result[0].deleteConflictAction == nil)
-        #expect(result[0].resolvedContent.contains("merged"))
-
-        // The action resolution was passed through.
-        #expect(result[1].deleteConflictAction == .keep)
-        #expect(result[1].resolvedContent == "")
-    }
-
-    @Test("fails when the original content is unavailable")
+    @Test("fails a file without its original content, at the reassembly stage")
     func missingRawContent() {
-        expectValidationError {
-            _ = try reassembleResolutions(
-                [RawFileResolution(path: "a.ts", hunks: [HunkResolution(resolvedContent: "x")], reasoning: "r")],
-                [makeFile("a.ts", "a", "b")]
-            )
-        }
+        let checked = checkResolutions(
+            response([RawFileResolution(path: "a.ts", hunks: hunks("x"), reasoning: "r")]),
+            [makeFile("a.ts", "a", "b")]
+        )
+        #expect(checked.resolutions.isEmpty)
+        #expect(checked.unresolved.map(\.stage) == [.reassembleResponse])
     }
 
     @Test("never reports a file as resolved while it still has conflict markers")
     func leftoverMarkers() {
-        let rawContent = ["a", "<<<<<<< HEAD", "ours", "=======", "theirs", ">>>>>>> feature", "b"].joined(separator: "\n")
-        var file = makeFile("a.ts", "ours", "theirs")
-        file.rawContent = rawContent
+        let file = conflicted("a.ts")
 
         // A single marker is enough to reject the file.
         for marker in ["<<<<<<< HEAD", ">>>>>>> feature", "<<<<<<<", ">>>>>>>\u{2003}x"] {
-            let resolution = RawFileResolution(path: "a.ts", hunks: [HunkResolution(resolvedContent: "merged\n\(marker)")], reasoning: "r")
-            expectValidationError {
-                _ = try reassembleResolutions([resolution], [file])
-            }
+            let resolution = RawFileResolution(path: "a.ts", hunks: hunks("merged\n\(marker)"), reasoning: "r")
+            let checked = checkResolutions(response([resolution]), [file])
+            #expect(checked.resolutions.isEmpty)
+            #expect(checked.unresolved.map(\.stage) == [.reassembleResponse])
         }
 
         // A marker outside the file's blocks stays in the file too.
         var stray = file
-        stray.rawContent = rawContent + "\n<<<<<<< leftover"
-        expectValidationError {
-            _ = try reassembleResolutions(
-                [RawFileResolution(path: "a.ts", hunks: [HunkResolution(resolvedContent: "merged")], reasoning: "r")],
-                [stray]
-            )
-        }
+        stray.rawContent = (file.rawContent ?? "") + "\n<<<<<<< leftover"
+        #expect(checkResolutions(response([RawFileResolution(path: "a.ts", hunks: hunks("merged"), reasoning: "r")]), [stray]).resolutions.isEmpty)
 
         // Separator lines alone are ordinary text (a Markdown heading).
-        let heading = RawFileResolution(path: "a.ts", hunks: [HunkResolution(resolvedContent: "Title\n=======")], reasoning: "r")
-        #expect(throws: Never.self) {
-            _ = try reassembleResolutions([heading], [file])
-        }
+        let heading = RawFileResolution(path: "a.ts", hunks: hunks("Title\n======="), reasoning: "r")
+        #expect(checkResolutions(response([heading]), [file]).resolutions.count == 1)
+    }
+
+    @Test("matches a path the model changed to the one file it reads as", arguments: [
+        NamedCase("surrounding spaces", (model: "  src/file.ts  ", file: "src/file.ts")),
+        NamedCase("Windows separators", (model: "src\\lib\\file.ts", file: "src/lib/file.ts")),
+        NamedCase("a leading ./", (model: "./src/file.ts", file: "src/file.ts")),
+        NamedCase("doubled separators", (model: "src//lib///file.ts", file: "src/lib/file.ts")),
+        NamedCase("a backslash in the name", (model: "src/a/b.ts", file: "src/a\\b.ts")),
+        NamedCase("a backtick the prompt dropped", (model: "src/file.ts", file: "src/fi`le.ts")),
+        NamedCase("a leading space the model trimmed", (model: "notes.md", file: " notes.md")),
+        NamedCase("a trailing space the model trimmed", (model: "notes.md", file: "notes.md ")),
+        NamedCase("composed accents", (model: "caf\u{E9}.ts", file: "cafe\u{301}.ts")),
+    ])
+    func normalizedPaths(_ testCase: NamedCase<(model: String, file: String)>) {
+        let checked = checkResolutions(
+            response([RawFileResolution(path: testCase.value.model, hunks: hunks("merged"), reasoning: "r")]),
+            [conflicted(testCase.value.file)]
+        )
+        // Resolved under the file's own path, never the model's.
+        #expect(checked.resolutions.map { Array($0.path.unicodeScalars) } == [Array(testCase.value.file.unicodeScalars)])
+    }
+
+    @Test("matches the exact path first, and never guesses between files that read the same")
+    func ambiguousPaths() {
+        let files = [conflicted("a/b.ts"), conflicted("a\\b.ts")]
+        let exact = checkResolutions(
+            response([
+                RawFileResolution(path: "a\\b.ts", hunks: hunks("backslash"), reasoning: "r"),
+                RawFileResolution(path: "a/b.ts", hunks: hunks("slash"), reasoning: "r"),
+            ]),
+            files
+        )
+        #expect(exact.resolutions.map(\.resolvedContent) == ["a\nslash\nb", "a\nbackslash\nb"])
+
+        let guessed = checkResolutions(response([RawFileResolution(path: "./a/b.ts", hunks: hunks("x"), reasoning: "r")]), files)
+        #expect(guessed.resolutions.isEmpty)
+        #expect(guessed.unresolved.map(\.path) == ["a/b.ts", "a\\b.ts"])
     }
 }
 
@@ -917,6 +921,24 @@ struct DependencyAwareChunksTests {
         for chunk in chunks {
             #expect(chunk.count <= 3, "chunk has \(chunk.count) files, expected <= 3")
         }
+    }
+
+    @Test("packs chunks by conflict size as well as file count, a file too large for any chunk on its own")
+    func packsBySize() {
+        // Ours (starting with `ours`) and theirs of `size` units in all.
+        func sized(_ path: String, _ size: Int, ours: String = "") -> FileConflictContext {
+            makeFile(path, ours + String(repeating: "y", count: size / 2 - ours.count), String(repeating: "z", count: size - size / 2))
+        }
+        let files = [sized("a.ts", 40), sized("b.ts", 50), sized("c.ts", 30), sized("big.ts", 150), sized("d.ts", 20)]
+        #expect(files.map(conflictContentSize) == [40, 50, 30, 150, 20])
+
+        #expect(paths(createDependencyAwareChunks(files, 10, maxContentSize: 100)) == [["a.ts", "b.ts"], ["c.ts"], ["big.ts"], ["d.ts"]])
+        // Within both limits, everything goes in one request.
+        #expect(paths(createDependencyAwareChunks(files, 10, maxContentSize: 290)) == [files.map(\.path)])
+
+        // A dependency group too large for one chunk is split in order.
+        let group = (0..<4).map { sized("g\($0).ts", 100, ours: "export function shared\($0)() {} new shared\(($0 + 1) % 4)()\n") }
+        #expect(paths(createDependencyAwareChunks(group + [sized("e.ts", 10)], 10, maxContentSize: 250)) == [["g0.ts", "g1.ts"], ["g2.ts", "g3.ts"], ["e.ts"]])
     }
 }
 
