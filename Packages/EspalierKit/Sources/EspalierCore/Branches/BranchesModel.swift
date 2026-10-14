@@ -43,7 +43,13 @@ public final class BranchesModel: RepositoryFeature {
             return []
         }
         let state = repository.gitState
-        return groupBranches(state.branches.defaultBranch, state.tip.branch, state.branches.all, state.branches.recent)
+        return groupBranches(
+            state.branches.defaultBranch,
+            state.tip.branch,
+            state.branches.all,
+            state.branches.recent,
+            forkRemoteNames: state.remotes.forkRemoteNames
+        )
     }
 
     func repositoryDidRefresh(_ update: RefreshUpdate) {

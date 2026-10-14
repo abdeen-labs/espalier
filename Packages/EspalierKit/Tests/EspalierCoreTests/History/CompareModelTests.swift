@@ -233,10 +233,12 @@ struct CompareModelTests {
         #expect(history.commitSHAs.contains(try await fixture.sha("main")))
     }
 
-    @Test("the branches to compare with leave out the current branch and fork remotes")
+    @Test("the branches to compare with leave out the current branch and the marked fork remotes")
     func comparableBranches() async throws {
         let fixture = try await makeRepository()
-        try await fixture.git(["update-ref", "refs/remotes/github-desktop-octocat/feature", "feature"])
+        try await fixture.git(["remote", "add", "espalier-octocat", "https://github.com/octocat/app.git"])
+        try await fixture.git(["config", "remote.espalier-octocat.espalierFork", "true"])
+        try await fixture.git(["update-ref", "refs/remotes/espalier-octocat/feature", "feature"])
         try await fixture.git(["update-ref", "refs/remotes/origin/main", "main"])
         await fixture.refresh()
         let history = fixture.history

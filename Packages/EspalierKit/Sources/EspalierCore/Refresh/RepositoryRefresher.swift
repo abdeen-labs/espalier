@@ -143,9 +143,12 @@ final class RepositoryRefresher {
         // 4. Remotes.
         if scope.contains(.remotes) {
             do {
-                let remotes = try await environment.withRuntimes { try await getRemotes(repository) }
+                let (remotes, forkRemoteNames) = try await environment.withRuntimes {
+                    (try await getRemotes(repository), await loadForkRemoteNames(repository))
+                }
                 guard token.isCurrent else { return }
-                assign(\.remotes, remotesSnapshot(remotes, tip: state.tip, record: model.record), in: state)
+                let snapshot = remotesSnapshot(remotes, forkRemoteNames: forkRemoteNames, tip: state.tip, record: model.record)
+                assign(\.remotes, snapshot, in: state)
                 applied.insert(.remotes)
             } catch {
                 guard token.isCurrent else { return }
@@ -311,8 +314,14 @@ final class RepositoryRefresher {
 
     // MARK: Remotes
 
-    /// The remotes: all, default, current, upstream.
-    private func remotesSnapshot(_ remotes: [Remote], tip: Tip, record: RepositoryRecord) -> RemotesSnapshot {
+    /// The remotes: all, default, current, upstream, and Espalier's fork
+    /// remotes.
+    private func remotesSnapshot(
+        _ remotes: [Remote],
+        forkRemoteNames: Set<ExactString>,
+        tip: Tip,
+        record: RepositoryRecord
+    ) -> RemotesSnapshot {
         let defaultRemote = findDefaultRemote(remotes)
 
         // Load the remote that the current branch is tracking. If the branch
@@ -324,7 +333,13 @@ final class RepositoryRefresher {
         } ?? defaultRemote
 
         let upstreamRemote = record.gitHubRepository?.parent.flatMap { findUpstreamRemote($0, remotes) }
-        return RemotesSnapshot(all: remotes, defaultRemote: defaultRemote, currentRemote: currentRemote, upstreamRemote: upstreamRemote)
+        return RemotesSnapshot(
+            all: remotes,
+            defaultRemote: defaultRemote,
+            currentRemote: currentRemote,
+            upstreamRemote: upstreamRemote,
+            forkRemoteNames: forkRemoteNames
+        )
     }
 
     // MARK: Failures
@@ -456,6 +471,18 @@ func trackedUpstreams(_ branches: [Branch]) -> [ExactString: Branch] {
         }
     }
     return upstreams
+}
+
+/// The fork remotes Espalier marked; none when the marks can't be read, so
+/// nothing is hidden.
+@concurrent
+private func loadForkRemoteNames(_ repository: Repository) async -> Set<ExactString> {
+    do {
+        return try await getForkRemoteNames(repository)
+    } catch {
+        logger.error("Could not read the fork remotes' marks: \(error.localizedDescription, privacy: .public)")
+        return []
+    }
 }
 
 @concurrent

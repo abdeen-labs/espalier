@@ -274,20 +274,20 @@ public final class ChangesModel: RepositoryFeature {
         }
     }
 
-    /// Applies a loaded diff, pruning the file's partial selection to the
-    /// lines that can still be selected.
+    /// Applies a loaded diff, carrying the file's partial selection over to
+    /// its lines (`carrySelection`).
     func diffDidLoad(_ loaded: LoadedDiffs, for file: WorkingDirectoryFileChange, hidesWhitespace: Bool) {
-        // The selectable lines were collected, and the selection pruned and
-        // compared, off the main actor: for a 10,000,000-line diff, either
-        // blocked it for seconds. The file's selection is still the one the
-        // load started with unless the user changed it meanwhile (comparing
-        // a selection with itself is quick).
+        // The selectable lines were collected, and the selection carried
+        // over and compared, off the main actor: for a 10,000,000-line diff,
+        // either blocked it for seconds. The file's selection is still the
+        // one the load started with unless the user changed it meanwhile
+        // (comparing a selection with itself is quick).
         let selection: DiffSelection
         let changed: Bool
-        if let pruning = loaded.pruning, pruning.base == file.selection {
-            (selection, changed) = (pruning.pruned, pruning.changed)
+        if let carried = loaded.carried, carried.base == file.selection {
+            (selection, changed) = (carried.carried, carried.changed)
         } else {
-            selection = file.selection.withSelectableLines(loaded.selectableLines)
+            selection = carrySelection(file.selection, to: loaded.full, selectableLines: loaded.selectableLines)
             changed = selection != file.selection
         }
         if changed {
@@ -312,9 +312,15 @@ public final class ChangesModel: RepositoryFeature {
     }
 
     /// Sets `fullDiff`, bumping `diffGeneration` unless its lines stay the
-    /// same (a refresh reloading an unchanged file keeps the generation).
+    /// same (a refresh reloading an unchanged file keeps the generation, and
+    /// the diff already there, whose hunks a partial selection's
+    /// `diffHunks` share).
     private func setFullDiff(_ full: Diff?) {
-        if !hasSameLines(fullDiff, full) {
+        let sameLines = hasSameLines(fullDiff, full)
+        if sameLines, textDiffData(full) != nil {
+            return
+        }
+        if !sameLines {
             diffGeneration &+= 1
         }
         fullDiff = full

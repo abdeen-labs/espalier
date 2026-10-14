@@ -96,7 +96,7 @@ public final class WindowPresenter {
     private var decisions: [PendingDecision] = []
     private var errors: [PresentedError] = []
     @ObservationIgnored private var confirmationWaiters: [UUID: CheckedContinuation<ConfirmationResponse, Never>] = [:]
-    @ObservationIgnored private var decisionWaiters: [UUID: CheckedContinuation<UncommittedChangesStrategy?, Never>] = [:]
+    @ObservationIgnored private var decisionWaiters: [UUID: CheckedContinuation<DecisionAnswer?, Never>] = [:]
 
     @ObservationIgnored weak var app: AppModel?
     @ObservationIgnored weak var actions: WindowActions?
@@ -154,6 +154,7 @@ public final class WindowPresenter {
         _ intent: @escaping @MainActor (IntentAnswers) async throws(OperationError) -> T
     ) async throws(OperationError) -> T? {
         var answers = IntentAnswers()
+        var hasChosenEditor = false
         while true {
             do throws(OperationError) {
                 return try await intent(answers)
@@ -181,16 +182,26 @@ public final class WindowPresenter {
                     }
 
                 case .decisionRequired(let decision):
-                    guard answers.strategy == nil else {
+                    let isAnswered = switch decision {
+                    case .uncommittedChanges: answers.strategy != nil
+                    case .externalEditor: hasChosenEditor
+                    }
+                    guard !isAnswered else {
                         logger.error("An intent asked again for a decision it was given")
                         throw error
                     }
-                    guard let strategy = await decide(decision) else {
+                    switch await decide(decision) {
+                    case nil:
                         return nil
+                    case .strategy(let strategy):
+                        answers.strategy = strategy
+                        // A choice that warned confirms what it warned about.
+                        answers.confirmed.formUnion(decision.confirmations(answeredBy: strategy))
+                    case .editor(let name):
+                        // The editor chosen is saved; the intent finds it.
+                        hasChosenEditor = true
+                        app?.integrations.selectEditor(name)
                     }
-                    answers.strategy = strategy
-                    // A choice that warned confirms what it warned about.
-                    answers.confirmed.formUnion(decision.confirmations(answeredBy: strategy))
 
                 case .cancelled:
                     return nil
@@ -246,10 +257,10 @@ public final class WindowPresenter {
     // MARK: Decisions
 
     /// Shows `decision` and waits for the answer (nil: cancelled).
-    public func decide(_ decision: Decision) async -> UncommittedChangesStrategy? {
+    public func decide(_ decision: Decision) async -> DecisionAnswer? {
         let pending = PendingDecision(decision: decision)
         return await withTaskCancellationHandler {
-            await withCheckedContinuation { (continuation: CheckedContinuation<UncommittedChangesStrategy?, Never>) in
+            await withCheckedContinuation { (continuation: CheckedContinuation<DecisionAnswer?, Never>) in
                 if Task.isCancelled {
                     continuation.resume(returning: nil)
                     return
@@ -265,9 +276,9 @@ public final class WindowPresenter {
     }
 
     /// Answers the decision `id` (nil: cancelled).
-    public func respond(to id: PendingDecision.ID, with strategy: UncommittedChangesStrategy?) {
+    public func respond(to id: PendingDecision.ID, with answer: DecisionAnswer?) {
         decisions.removeAll { $0.id == id }
-        decisionWaiters.removeValue(forKey: id)?.resume(returning: strategy)
+        decisionWaiters.removeValue(forKey: id)?.resume(returning: answer)
     }
 
     // MARK: Errors

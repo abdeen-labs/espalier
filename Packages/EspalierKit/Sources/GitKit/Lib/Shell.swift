@@ -13,10 +13,26 @@ private let logger = Log.logger(category: "shell")
 /// that printed them rather than the user's environment: its directory
 /// (`PWD` is `/`, where the app runs, and git and the hooks it runs would
 /// get that instead of their own), `OLDPWD`, its nesting level, and `_`,
-/// the last command (awk).
-let excludedEnvironmentVars: Set<String> = [
+/// the last command (awk); and the variables that locate a repository
+/// (`repositoryLocationVariables`).
+let excludedEnvironmentVars = Set([
     "LOCAL_GIT_DIRECTORY", GitLocation.overrideVariable,
     "PWD", "OLDPWD", "SHLVL", "_",
+]).union(repositoryLocationVariables)
+
+/// The variables of `git rev-parse --local-env-vars` that tell git where a
+/// repository or one of its parts is; from the shell, they would point
+/// every git call and hook at that repository instead of the one it runs
+/// in. Neither the git environment nor a hook's takes them from the shell
+/// (`HooksProxy`). The
+/// list's configuration variables (`GIT_CONFIG_PARAMETERS`,
+/// `GIT_CONFIG_COUNT`, `GIT_CONFIG`) and its other settings
+/// (`GIT_IMPLICIT_WORK_TREE`, `GIT_NO_REPLACE_OBJECTS`,
+/// `GIT_REPLACE_REF_BASE`) aren't among them.
+let repositoryLocationVariables: Set<String> = [
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_GRAFT_FILE", "GIT_SHALLOW_FILE", "GIT_PREFIX",
 ]
 
 /// Inspect whether the current process needs to be patched to get important

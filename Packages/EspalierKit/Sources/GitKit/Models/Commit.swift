@@ -26,30 +26,80 @@ public struct CommitContext: Hashable, Sendable {
     }
 }
 
-/// Extract any Co-Authored-By trailers from an array of arbitrary
-/// trailers.
-private func extractCoAuthors(_ trailers: [Trailer]) -> [GitAuthor] {
+/// The co-authors among `trailers`, and `body` without their lines: each
+/// `Co-authored-by` trailer whose value is `Name <email>` and whose lines
+/// are found in `body` (the last such lines, with any continuation lines).
+/// Every other line, other trailers and co-author trailers that don't parse
+/// included, stays as written, so each co-author is either in the list or
+/// in the body, never both or neither.
+private func extractCoAuthors(_ trailers: [Trailer], _ body: String) -> (coAuthors: [GitAuthor], body: String) {
+    var lines = JSCompat.split(body, "\n")
+    var removed = Set<Int>()
     var coAuthors: [GitAuthor] = []
 
     for trailer in trailers where isCoAuthoredByTrailer(trailer) {
-        if let author = GitAuthor.parse(trailer.value) {
-            coAuthors.append(author)
+        guard let author = GitAuthor.parse(trailer.value),
+              let range = lastCoAuthorTrailer(trailer.value, in: lines, skipping: removed)
+        else {
+            continue
         }
+        removed.formUnion(range)
+        coAuthors.append(author)
     }
 
-    return coAuthors
+    guard !removed.isEmpty else {
+        return (coAuthors, body)
+    }
+    lines = lines.indices.filter { !removed.contains($0) }.map { lines[$0] }
+    return (coAuthors, lines.joined(separator: "\n"))
 }
 
-private func trimCoAuthorsTrailers(_ trailers: [Trailer], _ body: String) -> String {
-    var trimmedCoAuthors = body
-
-    for trailer in trailers where isCoAuthoredByTrailer(trailer) {
-        // Like JavaScript's `replace` with a string pattern, this removes
-        // only the first occurrence.
-        trimmedCoAuthors = JSCompat.replaceFirst(trimmedCoAuthors, "\(trailer.token): \(trailer.value)", with: "")
+/// The lines of the last `Co-authored-by` trailer in `lines` with `value`:
+/// a line `Co-authored-by: <value>` (the token in any case, with or without
+/// spaces around the colon) and the continuation lines after it, which git
+/// unfolds into the value. Lines in `skipping` are already taken.
+private func lastCoAuthorTrailer(_ value: String, in lines: [String], skipping: Set<Int>) -> Range<Int>? {
+    let expected = ExactString(value)
+    for start in lines.indices.reversed() where !skipping.contains(start) {
+        guard let rest = coAuthorTrailerValue(lines[start]) else {
+            continue
+        }
+        // Continuation lines start with whitespace and aren't blank; git
+        // joins each to the value with one space.
+        var end = start + 1
+        var unfolded = rest
+        while end < lines.count, !skipping.contains(end), let first = lines[end].unicodeScalars.first,
+              first == " " || first == "\t", !JSCompat.trim(lines[end]).isEmpty {
+            unfolded += " " + String(lines[end].unicodeScalars.drop { $0 == " " || $0 == "\t" })
+            end += 1
+        }
+        if ExactString(JSCompat.trim(unfolded)) == expected {
+            return start..<end
+        }
     }
+    return nil
+}
 
-    return trimmedCoAuthors
+/// What follows the colon of a `Co-authored-by` trailer line (the token in
+/// any case, optionally followed by spaces or tabs before the colon), or nil
+/// for any other line.
+private func coAuthorTrailerValue(_ line: String) -> String? {
+    var scalars = line.unicodeScalars[...]
+    for expected in "co-authored-by".unicodeScalars {
+        guard let scalar = scalars.popFirst(), asciiLowercased(scalar) == expected else {
+            return nil
+        }
+    }
+    scalars = scalars.drop { $0 == " " || $0 == "\t" }
+    guard scalars.popFirst() == ":" else {
+        return nil
+    }
+    return String(scalars)
+}
+
+/// `scalar` with A to Z lowercased.
+private func asciiLowercased(_ scalar: Unicode.Scalar) -> Unicode.Scalar {
+    ("A"..."Z").contains(scalar) ? Unicode.Scalar(scalar.value + 0x20)! : scalar
 }
 
 /// A minimal shape of data to represent a commit, for situations where the
@@ -93,11 +143,12 @@ public struct Commit: Hashable, Sendable {
     /// Tags associated with this commit.
     public let tags: [String]
 
-    /// A list of co-authors parsed from the commit message
-    /// trailers.
+    /// The co-authors from the commit message's `Co-authored-by` trailers
+    /// that are `Name <email>`, as `bodyNoCoAuthors` leaves them out.
     public let coAuthors: [GitAuthor]
 
-    /// The commit body after removing coauthors
+    /// The commit body without the lines of the trailers in `coAuthors`;
+    /// every other line as written.
     public let bodyNoCoAuthors: String
 
     /// A value indicating whether the author and the committer
@@ -141,13 +192,14 @@ public struct Commit: Hashable, Sendable {
         self.trailers = trailers
         self.tags = tags
 
-        self.coAuthors = extractCoAuthors(trailers)
+        let extracted = extractCoAuthors(trailers, body)
+        self.coAuthors = extracted.coAuthors
 
         self.authoredByCommitter =
             JSCompat.strictEquals(author.name, committer.name)
             && JSCompat.strictEquals(author.email, committer.email)
 
-        self.bodyNoCoAuthors = trimCoAuthorsTrailers(trailers, body)
+        self.bodyNoCoAuthors = extracted.body
 
         self.isMergeCommit = parentSHAs.count > 1
     }

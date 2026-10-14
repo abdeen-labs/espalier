@@ -154,7 +154,7 @@ struct RebaseOperationTests {
         #expect(result == .rebased(targetBranch: "feature", baseBranch: "main"))
         // Diverged from its upstream, rewritten by Espalier: force push.
         #expect(fixture.model.gitState.aheadBehind == AheadBehind(ahead: 2, behind: 1))
-        #expect(operations.rewrittenBranches["feature"] == (try await fixture.head()))
+        #expect(operations.rewrittenBranches["feature"] == (try await fixture.sha("feature@{upstream}")))
         #expect(operations.forcePushState == .recommended)
         await fixture.app.idle()
     }
@@ -234,6 +234,37 @@ struct RebaseOperationTests {
         #expect(operations.forcePushState == .recommended)
         // Continuing selects the new tip in history.
         #expect(fixture.model.history.selection.shas == [try await fixture.head()])
+        await fixture.app.idle()
+    }
+
+    @Test("a collaborator's push fetched while the rebase waits on its conflicts: no force push is recommended afterwards")
+    func remoteMovedDuringRebase() async throws {
+        let fixture = try await makeRepository(conflicting: true, publishFeature: true)
+        let operations = fixture.model.operations
+        let published = try await fixture.sha("origin/feature")
+        #expect(try await operations.rebase(onto: try fixture.branch("main"), confirmed: [.rewritePublishedCommits]) == .conflicted)
+
+        // A collaborator pushes to feature, and a fetch brings it in.
+        let other = try await cloneRepository(fixture.remote)
+        try await runGit(["checkout", "-q", "feature"], other)
+        try await commitFile(other, "theirs.txt", "theirs\n")
+        try await runGit(["push", "-q", "origin", "feature"], other)
+        try await runGit(["fetch", "-q"], fixture.local)
+        await fixture.model.refresh(.full, reason: .user)
+
+        operations.setManualResolution(.theirs, forPath: "README.md")
+        _ = try await operations.continueOperation()
+
+        let aheadBehind = try #require(fixture.model.gitState.aheadBehind)
+        #expect(aheadBehind.ahead > 0 && aheadBehind.behind > 0)
+        #expect(operations.rewrittenBranches == ["feature": published])
+        #expect(operations.forcePushState == .available)
+        if case .pull = fixture.model.sync.action {} else {
+            Issue.record("Unexpected action \(fixture.model.sync.action)")
+        }
+        // The next load of the branches forgets the rewrite.
+        await fixture.model.refresh(.full, reason: .user)
+        #expect(operations.rewrittenBranches.isEmpty)
         await fixture.app.idle()
     }
 

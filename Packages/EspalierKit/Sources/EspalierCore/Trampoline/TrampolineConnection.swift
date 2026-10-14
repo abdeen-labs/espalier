@@ -27,6 +27,10 @@ final class TrampolineConnection: Sendable {
     /// Identifies the connection within its server.
     let id: UInt64
 
+    /// The process that started the helper, its parent, or nil when it
+    /// can't be found: for an askpass request, the ssh or ssh-keygen asking.
+    let parentProcessID: pid_t?
+
     /// The helper's standard input, when its request forwards it. Finishes at
     /// the helper's end of input, and throws `TrampolineConnectionClosedError`
     /// if the connection closes first. Finishes immediately when the request
@@ -73,10 +77,28 @@ final class TrampolineConnection: Sendable {
     init(id: UInt64, fileDescriptor: Int32, maximumStandardInputLength: Int) {
         self.id = id
         descriptor = fileDescriptor
+        parentProcessID = Self.parentProcessID(ofPeerOf: fileDescriptor)
         queue = DispatchQueue(label: "dev.abdeen.espalier.trampoline.connection", qos: .userInitiated)
         _ = fcntl(fileDescriptor, F_SETFL, fcntl(fileDescriptor, F_GETFL) | O_NONBLOCK)
         state = Mutex(State(parser: TrampolineCommandParser(maximumStandardInputLength: maximumStandardInputLength)))
         (standardInput, standardInputContinuation) = AsyncThrowingStream.makeStream(of: Data.self)
+    }
+
+    /// The parent of the process that connected to the socket
+    /// `descriptor`. The helper waits for its answer, so it's still running
+    /// and its parent is the process that started it.
+    private static func parentProcessID(ofPeerOf descriptor: Int32) -> pid_t? {
+        var peer: pid_t = 0
+        var length = socklen_t(MemoryLayout<pid_t>.size)
+        guard getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERPID, &peer, &length) == 0, peer > 0 else {
+            return nil
+        }
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(peer, PROC_PIDTBSDINFO, 0, &info, size) == size else {
+            return nil
+        }
+        return pid_t(info.pbi_ppid)
     }
 
     deinit {

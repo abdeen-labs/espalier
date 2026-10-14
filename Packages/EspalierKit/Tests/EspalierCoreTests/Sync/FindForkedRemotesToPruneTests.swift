@@ -1,6 +1,7 @@
 // Ported from desktop/app/test/unit/find-forked-remotes-to-prune-test.ts
 
 @testable import EspalierCore
+import EspalierSupport
 import Foundation
 import GitHubKit
 import GitKit
@@ -46,13 +47,18 @@ struct FindForkedRemotesToPruneTests {
         ]
     }
 
+    /// The remotes the app added: marked in the repository's configuration.
+    var forkRemoteNames: Set<ExactString> {
+        [gitHubDesktopRemoteWithLocalBranch, gitHubDesktopRemoteWithPullRequest].exactSet
+    }
+
     private func getNamesFromRemotes(_ remotes: [Remote]) -> [String] {
         remotes.map(\.name)
     }
 
     @Test("never prunes remotes not created by the app")
     func neverPrunesOtherRemotes() {
-        let remotesToPrune = findForkedRemotesToPrune(remotes, [], [])
+        let remotesToPrune = findForkedRemotesToPrune(remotes, forkRemoteNames: forkRemoteNames, [], [])
 
         let names = getNamesFromRemotes(remotesToPrune)
         #expect(!names.isEmpty, "Expected the app's remotes to be pruned")
@@ -66,7 +72,7 @@ struct FindForkedRemotesToPruneTests {
             createSampleBranch("app-store-refactor", "\(gitHubDesktopRemoteWithLocalBranch)/app-store-refactor"),
         ]
 
-        let remotesToPrune = findForkedRemotesToPrune(remotes, [], allBranches)
+        let remotesToPrune = findForkedRemotesToPrune(remotes, forkRemoteNames: forkRemoteNames, [], allBranches)
 
         #expect(!getNamesFromRemotes(remotesToPrune).contains(gitHubDesktopRemoteWithLocalBranch))
     }
@@ -78,14 +84,14 @@ struct FindForkedRemotesToPruneTests {
             createSamplePullRequest(forkRepository, testUserName, "my-cool-feature"),
         ]
 
-        let remotesToPrune = findForkedRemotesToPrune(remotes, openPRs, [])
+        let remotesToPrune = findForkedRemotesToPrune(remotes, forkRemoteNames: forkRemoteNames, openPRs, [])
 
         #expect(!getNamesFromRemotes(remotesToPrune).contains(gitHubDesktopRemoteWithPullRequest))
     }
 
     @Test("prunes remotes without pull requests or local branches")
     func prunesUnusedRemotes() {
-        let remotesToPrune = findForkedRemotesToPrune(remotes, [], [])
+        let remotesToPrune = findForkedRemotesToPrune(remotes, forkRemoteNames: forkRemoteNames, [], [])
 
         let remoteNames = getNamesFromRemotes(remotesToPrune)
         #expect(remoteNames.contains(gitHubDesktopRemoteWithPullRequest))
@@ -94,18 +100,16 @@ struct FindForkedRemotesToPruneTests {
 
     // MARK: - Espalier
 
-    @Test("prunes Espalier's espalier- fork remotes like desktop's")
-    func prunesEspalierRemotes() throws {
-        let forkRepository = gitHubRepoFixture(owner: "mona", name: "desktop")
+    @Test("prunes only the remotes the app marked, whatever their names")
+    func prunesOnlyMarkedRemotes() {
         let remotes = [
+            Remote(name: "espalier-mirror", url: "https://github.com/mirror/desktop.git"),
+            Remote(name: "github-desktop-old", url: "https://github.com/old/desktop.git"),
             Remote(name: "espalier-unused", url: "https://github.com/unused/desktop.git"),
-            Remote(name: "espalier-mona", url: try #require(forkRepository.cloneURL)),
-            Remote(name: "espalier-tracked", url: "https://github.com/tracked/desktop.git"),
-            Remote(name: "espalier", url: "https://github.com/espalier/desktop.git"),
+            Remote(name: "renamed-fork", url: "https://github.com/renamed/desktop.git"),
         ]
-        let openPRs = [createSamplePullRequest(forkRepository, "mona", "main")]
-        let branches = [createSampleBranch("topic", "espalier-tracked/topic")]
+        let marked = ["espalier-unused", "renamed-fork"].exactSet
 
-        #expect(getNamesFromRemotes(findForkedRemotesToPrune(remotes, openPRs, branches)) == ["espalier-unused"])
+        #expect(getNamesFromRemotes(findForkedRemotesToPrune(remotes, forkRemoteNames: marked, [], [])) == ["espalier-unused", "renamed-fork"])
     }
 }

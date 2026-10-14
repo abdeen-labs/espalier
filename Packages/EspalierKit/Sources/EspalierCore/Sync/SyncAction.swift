@@ -24,8 +24,9 @@ public enum SyncAction: Sendable, Equatable {
     case detachedHead(rebaseInProgress: Bool)
     /// 5. The branch has no upstream: "Publish branch".
     case publishBranch(remote: String, isGitHubRepository: Bool)
-    /// 7. The branch was rewritten (rebase, squash, reorder, amend) and has
-    /// diverged from its upstream: "Force push <remote>".
+    /// 7. Espalier rewrote the branch (rebase, squash, reorder, amend), its
+    /// remote branch hasn't moved since, and it has diverged from its
+    /// upstream: "Force push <remote>".
     case forcePush(remote: String, aheadBehind: AheadBehind, tagsToPush: Int)
     /// 8. The branch is behind: "Pull <remote>", or "Pull <remote> with
     /// rebase" when `pull.rebase` says so.

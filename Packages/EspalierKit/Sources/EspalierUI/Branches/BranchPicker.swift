@@ -38,13 +38,15 @@ nonisolated public struct BranchPickerContent: Sendable, Equatable {
     }
 
     /// The groups for `filter`, with the remote branches in their own group
-    /// at the end. With `candidates`, only those branches are listed: the
+    /// at the end, without the branches of Espalier's fork remotes
+    /// (`forkRemoteNames`). With `candidates`, only those branches are listed: the
     /// default and recent branches among them in their groups, the others
     /// after.
     public static func make(
         branches: [Branch],
         defaultBranch: Branch?,
         recentBranches: [Branch],
+        forkRemoteNames: Set<ExactString>,
         includesRemoteBranches: Bool,
         filter: String,
         candidates: [Branch]? = nil
@@ -60,7 +62,7 @@ nonisolated public struct BranchPickerContent: Sendable, Equatable {
         }
         let filter = filter.trimmingCharacters(in: .whitespaces)
         var groups: [Group] = []
-        for group in groupBranches(defaultBranch, nil, branches, recentBranches) {
+        for group in groupBranches(defaultBranch, nil, branches, recentBranches, forkRemoteNames: forkRemoteNames) {
             switch group.identifier {
             case .defaultBranch:
                 groups.append(Group(title: "Default Branch", branches: group.branches.filter { includesRemoteBranches || $0.type == .local }))
@@ -237,6 +239,7 @@ public struct BranchPicker: View {
                 branches: state.branches.all,
                 defaultBranch: state.branches.defaultBranch,
                 recentBranches: state.branches.recent,
+                forkRemoteNames: state.remotes.forkRemoteNames,
                 includesRemoteBranches: includesRemoteBranches,
                 filter: filter,
                 candidates: candidates

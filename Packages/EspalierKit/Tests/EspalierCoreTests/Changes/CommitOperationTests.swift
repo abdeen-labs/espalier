@@ -229,7 +229,8 @@ struct CommitOperationTests {
         #expect(repository.commit.amending == nil)
         #expect(try await commitCount(local) == 1)
         #expect(try await lastMessage(local) == "Initial commit, amended\n")
-        #expect(repository.operations.rewrittenBranches == ["main": result.sha])
+        // Recorded with the remote branch's tip: the commit amended.
+        #expect(repository.operations.rewrittenBranches == ["main": tip.sha])
         await app.idle()
     }
 

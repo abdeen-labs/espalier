@@ -1,3 +1,4 @@
+import EspalierSupport
 @testable import GitKit
 import Testing
 
@@ -67,19 +68,22 @@ struct BranchBehaviorTests {
         #expect(branch("main", type: .remote, ref: "refs/remotes/main").nameWithoutRemote == "main")
     }
 
-    @Test("fork remotes are named espalier-<owner>, and their remote branches recognized with desktop's github-desktop- ones")
-    func forkRemotes() {
-        #expect(forkPullRequestRemoteName("octocat") == "espalier-octocat")
-        #expect(isForkedRemoteName("espalier-octocat"))
-        #expect(isForkedRemoteName("github-desktop-octocat"))
-        #expect(!isForkedRemoteName("origin"))
-        #expect(!isForkedRemoteName("my-espalier-octocat"))
-        for name in [forkPullRequestRemoteName("foo") + "/main", "github-desktop-octocat/main"] {
-            #expect(branch(name, type: .remote, ref: "refs/remotes/\(name)").isDesktopForkRemoteBranch)
-            // A local branch with the same name isn't one.
-            #expect(!branch(name, type: .local, ref: "refs/heads/\(name)").isDesktopForkRemoteBranch)
+    @Test("a fork remote's branch is a remote branch of a marked remote, whatever its name")
+    func forkRemoteBranches() {
+        let marked = ["espalier-octocat", "team/fork"].exactSet
+        func isForkRemoteBranch(_ name: String, type: BranchType = .remote) -> Bool {
+            let ref = type == .remote ? "refs/remotes/\(name)" : "refs/heads/\(name)"
+            return branch(name, type: type, ref: ref).isForkRemoteBranch(marked)
         }
-        #expect(!branch("origin/espalier-main", type: .remote, ref: "refs/remotes/origin/espalier-main").isDesktopForkRemoteBranch)
+        #expect(isForkRemoteBranch("espalier-octocat/main"))
+        #expect(isForkRemoteBranch("team/fork/main"))
+        // A local branch with the same name isn't one.
+        #expect(!isForkRemoteBranch("espalier-octocat/main", type: .local))
+        // Unmarked remotes, and names that only start like a marked one.
+        #expect(!isForkRemoteBranch("espalier-mirror/main"))
+        #expect(!isForkRemoteBranch("github-desktop-octocat/main"))
+        #expect(!isForkRemoteBranch("espalier-octocat2/main"))
+        #expect(!isForkRemoteBranch("team/main"))
     }
 
     private func branch(

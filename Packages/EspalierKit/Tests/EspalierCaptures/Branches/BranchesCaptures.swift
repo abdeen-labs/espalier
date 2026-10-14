@@ -163,6 +163,7 @@ struct BranchesCaptures {
             branches: branches,
             defaultBranch: branches.first,
             recentBranches: Array(branches.dropFirst().prefix(2)),
+            forkRemoteNames: [],
             includesRemoteBranches: true,
             filter: filter
         )
@@ -206,6 +207,7 @@ struct BranchesCaptures {
             branches: branches,
             defaultBranch: branches[0],
             recentBranches: [branches[2]],
+            forkRemoteNames: [],
             includesRemoteBranches: true,
             filter: "",
             candidates: branches.filter { $0.name != "feature/login" }

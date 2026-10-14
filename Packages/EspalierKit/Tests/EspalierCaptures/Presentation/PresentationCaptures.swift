@@ -1,6 +1,6 @@
 // What Espalier draws as sheets, through the same mappings the hosts use:
 // the compact confirmations (with and without the extra choice), the
-// decision with the stash warning, the prompts (a secret, a username and
+// decision with the stash warning, the editor question, the prompts (a secret, a username and
 // password, a failed hook's output), git's raw output (one line and a few,
 // with a note and a recovery) and output longer than the terminal, the
 // toast with Undo and without, the operation capsule running and waiting on
@@ -29,6 +29,17 @@ struct PresentationCaptures {
         let name = "uncommittedChanges-stash"
         let decision = try #require(UIFixtures.decisions.first { $0.name == name }?.decision)
         capture(DecisionSheet(decision) { _ in }, named: name, area: "Decisions")
+    }
+
+    @Test("the editor question, before and after one is picked")
+    func editorDecision() throws {
+        let decision = try #require(UIFixtures.decisions.first { $0.name == "externalEditor" }?.decision)
+        guard case .externalEditor(let editors) = decision else {
+            Issue.record("Not the editor decision")
+            return
+        }
+        capture(EditorDecisionSheet(decision, editors: editors) { _ in }, named: "externalEditor", area: "Decisions")
+        capture(EditorDecisionSheet(decision, editors: editors, selection: "Zed") { _ in }, named: "externalEditor-chosen", area: "Decisions")
     }
 
     @Test("the prompt sheets: a secret, a username and password, a failed hook's output", arguments: ["sshKeyPassphrase", "genericGitAuthentication", "hookFailed"])

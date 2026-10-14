@@ -100,12 +100,23 @@ public struct RemotesSnapshot: Sendable, Equatable {
     public var currentRemote: Remote?
     /// The remote pointing at a fork's parent (`findUpstreamRemote`).
     public var upstreamRemote: Remote?
+    /// The names of the fork remotes Espalier added, which the repository's
+    /// configuration marks (`getForkRemoteNames`): their branches are hidden
+    /// and they're pruned once unused. Empty when the marks can't be read.
+    public var forkRemoteNames: Set<ExactString>
 
-    public init(all: [Remote] = [], defaultRemote: Remote? = nil, currentRemote: Remote? = nil, upstreamRemote: Remote? = nil) {
+    public init(
+        all: [Remote] = [],
+        defaultRemote: Remote? = nil,
+        currentRemote: Remote? = nil,
+        upstreamRemote: Remote? = nil,
+        forkRemoteNames: Set<ExactString> = []
+    ) {
         self.all = all
         self.defaultRemote = defaultRemote
         self.currentRemote = currentRemote
         self.upstreamRemote = upstreamRemote
+        self.forkRemoteNames = forkRemoteNames
     }
 }
 

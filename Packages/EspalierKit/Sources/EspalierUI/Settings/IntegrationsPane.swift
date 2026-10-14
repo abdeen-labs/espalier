@@ -42,7 +42,7 @@ nonisolated enum IntegrationChoice: Hashable, Sendable {
     case custom
     /// "Configure Custom Editor…" (or Shell…): opens the sheet.
     case configure
-    /// No editor is installed or selected.
+    /// No editor is selected, and there isn't exactly one installed.
     case none
 }
 
@@ -112,8 +112,10 @@ nonisolated struct IntegrationsContent: Equatable, Sendable {
             if !editors.contains(selected) {
                 missingEditor = selected
             }
-        } else if let first = editors.first {
-            editorSelection = .named(first)
+        } else if let only = integrations.editorResolution.defaultEditor {
+            // With one editor installed, it's the one used; with several,
+            // none is until opening asks.
+            editorSelection = .named(only.editor)
         }
 
         let shells = integrations.availableShells.map(\.shell.rawValue)

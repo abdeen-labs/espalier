@@ -28,6 +28,20 @@ final class TrampolineInvocation: Sendable {
         var mostRecentSSHCredential: SSHCredentialEntry?
         var genericPassword: (endpoint: String, login: String, password: String?)?
         var signingKeyPassphrases: [String: String] = [:]
+        var storedSSHSecretsGiven: Set<StoredSSHSecretGiven> = []
+    }
+
+    /// A stored SSH secret, and the process it was given to.
+    private struct StoredSSHSecretGiven: Hashable {
+        let store: String
+        let key: String
+        let process: pid_t?
+    }
+
+    /// Records that `process` was given the stored secret `key` in `store`.
+    /// Returns false if it was given it before during this git command.
+    func recordStoredSSHSecret(store: String, key: String, givenTo process: pid_t?) -> Bool {
+        state.withLock { $0.storedSSHSecretsGiven.insert(StoredSSHSecretGiven(store: store, key: key, process: process)).inserted }
     }
 
     /// The passphrase the user entered for the signing key at `keyPath`
@@ -152,7 +166,8 @@ public final class TrampolineEnvironment: GitTrampoline {
     /// when invoking a Git subcommand that needs to use the trampoline
     /// (mainly git operations requiring an askpass script) and with a token
     /// to use in the trampoline server. It will handle saving SSH key
-    /// passphrases when needed if the git operation succeeds.
+    /// passphrases when needed if the git operation succeeds, and deleting a
+    /// stored signing key passphrase ssh-keygen rejected.
     ///
     /// - Parameters:
     ///   - path: The path git runs in.
@@ -211,20 +226,12 @@ public final class TrampolineEnvironment: GitTrampoline {
                 storePendingSSHCredential(invocation, secrets)
                 return result
             } catch {
-                if !isBackgroundTask {
-                    // If the operation fails with an SSHAuthenticationFailed
-                    // error, we assume that it's because the last credential
-                    // we provided via the askpass handler was rejected.
-                    // That's not necessarily the case but for practical
-                    // purposes, it's as good as we can get with the
-                    // information we have. We're limited by the ASKPASS flow
-                    // here.
-                    //
-                    // ssh-keygen, signing a commit, says so when it rejects
-                    // a stored passphrase.
-                    if isSSHAuthFailure(error) || isSigningKeyPassphraseRejected(error) {
-                        deleteMostRecentSSHCredential(invocation, secrets)
-                    }
+                // ssh-keygen, signing a commit or tag, says so when it
+                // rejects a stored passphrase. (A stored secret ssh rejects
+                // is deleted when ssh asks for it again, in
+                // `TrampolineAskpassHandler`.)
+                if isSigningKeyPassphraseRejected(error) {
+                    deleteMostRecentSSHCredential(invocation, secrets)
                 }
 
                 // We catch the error git gives when the credential helper

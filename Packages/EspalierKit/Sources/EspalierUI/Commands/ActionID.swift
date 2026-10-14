@@ -461,7 +461,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .showPreviousPlace: MenuShortcut(.tab, [.control, .shift])
         case .switchRepository: MenuShortcut("t")
         case .switchBranch: MenuShortcut("b")
-        case .push, .forcePush: MenuShortcut("p")
+        case .push: MenuShortcut("p")
         case .pull: MenuShortcut("p", [.command, .shift])
         case .fetch: MenuShortcut("t", [.command, .shift])
         case .newRepository: MenuShortcut("n")

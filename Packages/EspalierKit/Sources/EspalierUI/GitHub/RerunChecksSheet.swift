@@ -183,7 +183,7 @@ struct RerunChecksView: View {
                         ForEach(content.rerunnable) { check in
                             HStack(spacing: Metrics.insetSmall) {
                                 CheckGlyph(kind: check.glyph)
-                                    .tooltip(getCheckRunConclusionAdjective(check.glyph.conclusion))
+                                    .tooltip(check.glyph.adjective)
                                 Text(check.name)
                                     .foregroundStyle(.text)
                                     .lineLimit(1)

@@ -6,7 +6,6 @@ import EspalierCoreTestSupport
 import EspalierSupport
 import Foundation
 import GitKit
-import Synchronization
 import Testing
 import TestSupport
 
@@ -28,11 +27,51 @@ struct IntegrationsModelTests {
         #expect(integrations.hasLoadedIntegrations)
         #expect(integrations.availableEditors.map(\.editor) == ["Visual Studio Code", "Zed"])
         #expect(integrations.availableShells.map(\.shell) == [.terminal, .iTerm2])
-        // The first installed editor is the default; nothing is written.
-        #expect(integrations.resolvedEditor?.editor == "Visual Studio Code")
-        #expect(integrations.editorLabel == "Visual Studio Code")
+        // With several installed and none chosen, opening asks; nothing is
+        // written.
+        #expect(integrations.resolvedEditor == nil)
+        #expect(integrations.asksForEditor)
+        #expect(integrations.isEditorAvailable)
+        #expect(integrations.editorLabel == nil)
         #expect(fixture.app.preferences.integrations.selectedExternalEditor == nil)
         #expect(fixture.harness.defaults.defaults.object(forKey: "externalEditor") == nil)
+
+        // With one installed, it's the editor, and named.
+        let one = try await makeIntegrationsFixture(editors: [zed])
+        #expect(one.integrations.resolvedEditor?.editor == "Zed")
+        #expect(!one.integrations.asksForEditor)
+        #expect(one.integrations.editorLabel == "Zed")
+    }
+
+    @Test("looks up the installed editors and shells again each time Espalier becomes active, and when asked")
+    func looksAgain() async throws {
+        let harness = try AppHarness()
+        let applications = try createTempDirectory()
+        let locator = MutableApplicationLocator()
+        var environment = harness.environment
+        environment.editors = ExternalEditorLookup(locator: locator)
+        environment.shells = ShellLookup(locator: locator)
+        let app = AppModel(environment: environment)
+        await app.load()
+        await app.integrations.launchIdle()
+        #expect(app.integrations.availableEditors.isEmpty)
+        #expect(app.integrations.availableShells.isEmpty)
+
+        locator.install(zed.bundleID, at: try makeFakeApplication(in: applications, named: zed.name, bundleIdentifier: zed.bundleID))
+        locator.install(iTerm.bundleID, at: try makeFakeApplication(in: applications, named: iTerm.name, bundleIdentifier: iTerm.bundleID))
+        app.setActive(false)
+        app.setActive(true)
+        await app.idle()
+        #expect(app.integrations.availableEditors.map(\.editor) == ["Zed"])
+        #expect(app.integrations.availableShells.map(\.shell) == [.iTerm2])
+        #expect(app.integrations.editorLabel == "Zed")
+
+        // Settings opening looks again too.
+        locator.remove(zed.bundleID)
+        app.integrations.lookUpIntegrationsAgain()
+        await app.integrations.launchIdle()
+        #expect(app.integrations.availableEditors.isEmpty)
+        #expect(app.integrations.editorLabel == nil)
     }
 
     @Test("resolves the selected editor, and keeps a selected editor that isn't installed")
@@ -166,13 +205,32 @@ struct IntegrationsModelTests {
 
     // MARK: Opening in the editor
 
-    @Test("opens a path in the default editor with open -a")
-    func opensInDefaultEditor() async throws {
-        let fixture = try await makeIntegrationsFixture(editors: [zed, vsCode])
+    @Test("with no editor chosen, opens a path in the only one installed with open -a, without asking or saving it")
+    func opensInOnlyEditor() async throws {
+        let fixture = try await makeIntegrationsFixture(editors: [zed])
 
         try await fixture.integrations.openInEditor("/repo")
 
-        #expect(fixture.launcher.commands == [openApplicationCommand(fixture.applicationPath(vsCode.name), ["/repo"])])
+        #expect(fixture.launcher.commands == [openApplicationCommand(fixture.applicationPath(zed.name), ["/repo"])])
+        #expect(fixture.app.preferences.integrations.selectedExternalEditor == nil)
+    }
+
+    @Test("with no editor chosen and several installed, asks which one, then opens in the editor chosen")
+    func asksForEditor() async throws {
+        let fixture = try await makeIntegrationsFixture(editors: [zed, vsCode])
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.integrations.openInEditor("/repo")
+        }
+        #expect(error?.reason == .decisionRequired(.externalEditor(editors: ["Visual Studio Code", "Zed"])))
+        #expect(error?.operation == .openInEditor)
+        #expect(fixture.launcher.commands.isEmpty)
+
+        // The answer is saved as the editor, and opening runs again.
+        fixture.integrations.selectEditor("Zed")
+        try await fixture.integrations.openInEditor("/repo")
+        #expect(fixture.launcher.commands == [openApplicationCommand(fixture.applicationPath(zed.name), ["/repo"])])
+        #expect(fixture.harness.defaults.defaults.string(forKey: "externalEditor") == "Zed")
     }
 
     @Test("opens a path in the custom editor, with the path in its arguments")
@@ -497,19 +555,5 @@ struct IntegrationsModelTests {
             // The filters are left to the user.
             #expect(try await getGlobalConfigValue("filter.lfs.clean") == "git-lfs clean --other -- %f")
         }
-    }
-}
-
-/// An application locator whose applications can be installed while a test
-/// runs.
-private final class MutableApplicationLocator: ApplicationLocator {
-    private let paths = Mutex<[String: String]>([:])
-
-    func install(_ bundleIdentifier: String, at path: String) {
-        paths.withLock { $0[bundleIdentifier] = path }
-    }
-
-    func appPath(_ bundleIdentifier: String) -> String? {
-        paths.withLock { $0[bundleIdentifier] }
     }
 }

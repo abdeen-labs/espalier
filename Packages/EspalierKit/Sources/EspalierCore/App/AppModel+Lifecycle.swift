@@ -17,8 +17,8 @@ extension AppModel {
         loadState = .loading
 
         async let loadResult = listStore.load()
-        async let loadedAccounts = environment.accountsStore.getAll()
-        let (result, accounts) = await (loadResult, loadedAccounts)
+        async let loadedAccounts = environment.accountsStore.getAllWithUnreadable()
+        let (result, (accounts, unreadableAccounts)) = await (loadResult, loadedAccounts)
 
         switch result {
         case .empty:
@@ -33,7 +33,7 @@ extension AppModel {
         case .unreadable(let reason):
             persistenceIssue = .repositoryListInaccessible(reason)
         }
-        self.accounts.load(accounts)
+        self.accounts.load(accounts, unreadable: unreadableAccounts)
         loadState = .ready
         logger.info("Loaded \(self.repositories.count) repositories and \(accounts.count) accounts")
 
@@ -59,15 +59,15 @@ extension AppModel {
 
     /// Espalier became, or stopped being, the active app. Becoming active
     /// refreshes the selected repository in full, takes GitHub Desktop's
-    /// links back while the setting is on, and resumes the services that
-    /// pause while inactive.
+    /// links back while the setting is on, looks up the installed editors
+    /// and shells again, and resumes the services that pause while inactive.
     public func setActive(_ active: Bool) {
         guard active != isActive else {
             return
         }
         isActive = active
         if active {
-            integrations.reclaimGitHubDesktopLinks()
+            integrations.applicationDidBecomeActive()
         }
         if active, let selected = selectedRepository {
             if selected.record.isMissing {

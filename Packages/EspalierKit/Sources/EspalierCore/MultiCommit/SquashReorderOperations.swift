@@ -311,7 +311,8 @@ extension MultiCommitOperationsModel {
                         repositoryID: id
                     )
                 }
-                let operation = makeOperation(original)
+                var operation = makeOperation(original)
+                operation.originalUpstreamTip = await getUpstreamTip(ctx.repository, branchName: branch.name)
 
                 logger.info("[\(name, privacy: .public)] starting rebase for \(branch.name, privacy: .private) at \(original, privacy: .public)")
                 logger.info("[\(name, privacy: .public)] to restore the previous state if this completed rebase is unsatisfactory:")

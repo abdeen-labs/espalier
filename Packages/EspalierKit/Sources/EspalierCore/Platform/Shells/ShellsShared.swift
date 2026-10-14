@@ -4,7 +4,6 @@ import EspalierSupport
 import Foundation
 import GitKit
 import os
-import Synchronization
 
 private let logger = Log.logger(category: "integrations")
 
@@ -26,34 +25,19 @@ public struct FoundShell: Sendable, Hashable {
 }
 
 /// Finds the installed shells.
-///
-/// The installed shells are cached, even when none are found; the app
-/// keeps one `ShellLookup` for its life.
 public final class ShellLookup: Sendable {
     private let locator: any ApplicationLocator
-    private let shellCache = Mutex<[FoundShell]?>(nil)
 
     /// - Parameter locator: Finds applications. By default, Launch Services.
     public init(locator: any ApplicationLocator = LaunchServicesApplicationLocator()) {
         self.locator = locator
     }
 
-    /// Get the shells available for the user.
+    /// Get the shells available for the user. Each call looks again, so a
+    /// shell installed or removed since is found or left out.
     @concurrent
     public func getAvailableShells() async -> [FoundShell] {
-        if let cached = shellCache.withLock({ $0 }) {
-            return cached
-        }
-
-        let shells = await getAvailableShellsDarwin(locator: locator)
-        shellCache.withLock { $0 = shells }
-        return shells
-    }
-
-    /// Find the given shell; `nil` when it isn't installed.
-    @concurrent
-    public func findShell(_ shell: Shell) async -> FoundShell? {
-        await getAvailableShells().first { $0.shell == shell }
+        await getAvailableShellsDarwin(locator: locator)
     }
 }
 

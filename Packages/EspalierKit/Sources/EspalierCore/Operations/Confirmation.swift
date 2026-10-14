@@ -349,8 +349,10 @@ extension Confirmation {
 
 // MARK: - Decisions
 
-/// A choice an intent needs before it can run, made by calling it again with
-/// an explicit argument (checkout's `strategy:`).
+/// A choice an intent needs before it can run, answered with a
+/// `DecisionAnswer`: checkout is called again with an explicit argument
+/// (`strategy:`); an editor answer is saved as the editor, and the intent
+/// called again.
 public enum Decision: Sendable, Equatable {
     /// Switching branches with uncommitted changes and the "ask" strategy:
     /// leave the changes on the current branch (stash them there) or bring
@@ -360,10 +362,17 @@ public enum Decision: Sendable, Equatable {
     ///   replace the current branch's stash (the choice's warning).
     case uncommittedChanges(currentBranch: String, targetBranch: String, currentBranchHasStash: Bool)
 
+    /// Opening in the external editor with no editor chosen and several
+    /// installed: which one to use, from now on.
+    ///
+    /// - Parameter editors: The installed editors' names, in order.
+    case externalEditor(editors: [String])
+
     /// The dialog's title.
     public var title: String {
         switch self {
         case .uncommittedChanges: "Switch Branch"
+        case .externalEditor: "Choose an Editor"
         }
     }
 
@@ -372,12 +381,17 @@ public enum Decision: Sendable, Equatable {
         switch self {
         case .uncommittedChanges:
             "You have changes on this branch. What would you like to do with them?"
+        case .externalEditor:
+            "Espalier found more than one editor on your Mac. Which one should it open repositories and files in?"
         }
     }
 
-    /// The answers. Each one's `strategy` is the argument to pass back.
+    /// The answers to `uncommittedChanges`. Each one's `strategy` is the
+    /// argument to pass back. An editor's answers are its `editors`.
     public var choices: [DecisionChoice] {
         switch self {
+        case .externalEditor:
+            []
         case .uncommittedChanges(let currentBranch, let targetBranch, let hasStash):
             [
                 DecisionChoice(
@@ -400,6 +414,7 @@ public enum Decision: Sendable, Equatable {
     public var confirmButton: String {
         switch self {
         case .uncommittedChanges: "Switch Branch"
+        case .externalEditor: "Open"
         }
     }
 
@@ -411,8 +426,18 @@ public enum Decision: Sendable, Equatable {
         switch self {
         case .uncommittedChanges(_, _, let hasStash):
             hasStash && strategy == .stashOnCurrentBranch ? [.overwriteStash] : []
+        case .externalEditor:
+            []
         }
     }
+}
+
+/// The user's answer to a `Decision`.
+public enum DecisionAnswer: Sendable, Equatable {
+    /// What to do with uncommitted changes (`uncommittedChanges`).
+    case strategy(UncommittedChangesStrategy)
+    /// The editor to use, by name (`externalEditor`).
+    case editor(String)
 }
 
 /// One answer to a `Decision`.

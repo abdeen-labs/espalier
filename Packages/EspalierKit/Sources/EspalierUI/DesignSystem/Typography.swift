@@ -33,6 +33,9 @@ public enum Typography {
     }
     /// Headings inside panes and sheets.
     public static var heading: Font { sans(.headline) }
+    /// A heading within a block of text, such as a section of the model's
+    /// conflict summary (12, semibold).
+    public static var textHeading: Font { sans(.callout, weight: .semibold) }
     /// A Settings pane's name in its header band (13, bold: the headline).
     public static var paneTitle: Font { sans(.headline) }
     /// A Settings row's title (13, medium).

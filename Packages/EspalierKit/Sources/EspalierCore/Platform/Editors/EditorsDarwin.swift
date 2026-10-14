@@ -19,7 +19,7 @@ struct DarwinExternalEditor: Sendable, Hashable {
 /// This list contains all the external editors supported on macOS. Add a new
 /// entry here to add support for your favorite editor.
 ///
-/// The order matters: the first installed editor is the default.
+/// The installed editors are listed in this order.
 let darwinExternalEditors: [DarwinExternalEditor] = [
     DarwinExternalEditor(name: "Atom", bundleIdentifiers: ["com.github.atom"]),
     DarwinExternalEditor(name: "Aptana Studio", bundleIdentifiers: ["aptana.studio"]),

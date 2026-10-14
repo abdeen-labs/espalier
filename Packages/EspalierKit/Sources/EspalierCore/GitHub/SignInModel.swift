@@ -758,9 +758,9 @@ public final class SignInModel {
     }
 
     /// The client ID of the OAuth app the endpoint's account signs in with,
-    /// signed in or signed out.
+    /// signed in, signed out, or with a token the keychain won't give.
     private func knownClientID(for endpoint: String) -> String? {
-        let candidates = (accounts?.accounts ?? []) + (accounts?.invalidatedAccounts ?? [])
+        let candidates = (accounts?.accounts ?? []) + (accounts?.unreadableAccounts ?? []) + (accounts?.invalidatedAccounts ?? [])
         return candidates.first { $0.endpoint == endpoint }?.endpointConfiguration?.clientID
     }
 

@@ -45,8 +45,8 @@ func setSSHCredential(_ invocation: TrampolineInvocation, _ store: String, _ key
     invocation.setMostRecentSSHCredential(SSHCredentialEntry(store: store, key: key, pendingSecret: password))
 }
 
-/// Keeps the SSH credential details in memory to be deleted later if the
-/// ongoing git operation fails to authenticate.
+/// Keeps the details of the stored SSH credential just given, to be deleted
+/// if ssh-keygen rejects it.
 ///
 /// - Parameters:
 ///   - invocation: The ongoing git operation.
@@ -63,13 +63,18 @@ func removeMostRecentSSHCredential(_ invocation: TrampolineInvocation) {
     invocation.setMostRecentSSHCredential(nil)
 }
 
-/// Deletes the SSH credential from the store. Used when the git operation
-/// fails to authenticate.
+/// Deletes the most recent SSH credential from the store. Used when
+/// ssh-keygen rejects it.
 func deleteMostRecentSSHCredential(_ invocation: TrampolineInvocation, _ secrets: any SecretStore) {
     guard let entry = invocation.mostRecentSSHCredential else { return }
-    logger.info("SSH auth failed, deleting credential for \(entry.store, privacy: .public)")
+    deleteSSHCredential(entry.store, entry.key, secrets)
+}
+
+/// Deletes a stored SSH credential that was rejected.
+func deleteSSHCredential(_ store: String, _ key: String, _ secrets: any SecretStore) {
+    logger.info("SSH credential rejected, deleting it from \(store, privacy: .public)")
     do {
-        try secrets.deleteSecret(service: entry.store, account: entry.key)
+        try secrets.deleteSecret(service: store, account: key)
     } catch {
         logger.error("Could not delete SSH credential: \(error.localizedDescription, privacy: .public)")
     }

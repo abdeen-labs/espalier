@@ -45,8 +45,12 @@ public struct RepositoryCapabilities: Sendable, Equatable {
     /// flow and any modal: the Repository and Branch menus' commands apply.
     public let isRepositoryActive: Bool
 
-    /// Push, or force push (`isForcePush`).
+    /// Push: on a branch, with no network operation running. Push never
+    /// forces.
     public let canPush: Bool
+    /// Force Push: as Push, and the current branch can be force pushed
+    /// (`isForcePushAvailable`).
+    public let canForcePush: Bool
     /// Pull: the current branch is published.
     public let canPull: Bool
     /// Fetch: the repository has a remote.
@@ -124,12 +128,11 @@ public struct RepositoryCapabilities: Sendable, Equatable {
 
     // MARK: Labels
 
-    /// "Push", or "Force Push…" / "Force Push" (asking first or not) when
-    /// the current branch has diverged from its upstream.
-    public let pushTitle: String
-    /// Whether Push force pushes: the branch can be force pushed
-    /// (`ForcePushBranchState` available or recommended).
-    public let isForcePush: Bool
+    /// Whether Force Push is offered: the current branch has diverged from
+    /// its upstream (`ForcePushBranchState` available or recommended).
+    public let isForcePushAvailable: Bool
+    /// "Force Push…" when force pushing asks first, else "Force Push".
+    public let forcePushTitle: String
     /// "Remove…" when removing asks first, else "Remove".
     public let removeRepositoryTitle: String
     /// "Change Alias" when the repository has an alias, else "Create Alias"
@@ -381,6 +384,9 @@ extension RepositoryCapabilities {
         canCreatePullRequest = canBranch && isHostedOnGitHub
         canPreviewPullRequest = canBranch && isHostedOnGitHub
         canPush = canBranch && !networkActionInProgress
+        let forcePushState = repository?.forcePushState ?? .notAvailable
+        isForcePushAvailable = forcePushState != .notAvailable
+        canForcePush = canPush && isForcePushAvailable
         canPull = active && hasPublishedBranch && !networkActionInProgress
         canFetch = active && hasRemote && !networkActionInProgress
         canCreateBranch = active && !tipStateIsUnknown && !branchIsUnborn && !rebaseInProgress && !operationInProgress
@@ -392,9 +398,7 @@ extension RepositoryCapabilities {
         // Labels: without a repository's state (none, cloning, missing) they
         // take their defaults.
         let repositoryState = repository
-        let forcePushState = repositoryState?.forcePushState ?? .notAvailable
-        isForcePush = forcePushState != .notAvailable
-        pushTitle = isForcePush ? (state.confirmForcePush ? "Force Push…" : "Force Push") : "Push"
+        forcePushTitle = state.confirmForcePush ? "Force Push…" : "Force Push"
         removeRepositoryTitle = state.confirmRepositoryRemoval ? "Remove…" : "Remove"
         aliasTitle = state.alias == nil ? "Create Alias" : "Change Alias"
         openInShellTitle = "Open in \(state.shellLabel ?? "Shell")"

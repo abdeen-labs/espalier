@@ -49,7 +49,8 @@ struct ConflictResolutionRoundTests {
         #expect(results.resolutions.map(\.path) == ["a.txt", "b.txt"])
         #expect(results.resolution(forPath: "a.txt")?.resolvedContent == "first\nresolved a.txt 0\nlast\n")
         #expect(results.resolution(forPath: "a.txt")?.reasoning == "Combined both sides of a.txt.")
-        #expect(results.summary.markdown?.contains("### Resolution") == true)
+        #expect(results.summary.summaries.map(\.paths) == [["a.txt", "b.txt"]])
+        #expect(results.summary.summaries.first?.markdown.contains("### Resolution") == true)
         #expect(results.summary.ourLabel == "main")
         #expect(results.summary.theirLabel == "feature")
         #expect(results.skippedFiles.isEmpty)
@@ -328,7 +329,10 @@ struct ConflictResolutionRoundTests {
         #expect(Set(merged.resolutions.map(\.path)) == Set(paths))
         #expect(merged.failedFiles.isEmpty)
         #expect(merged.notAttemptedFiles.isEmpty)
-        #expect(merged.summary == results.summary)
+        // The retry's summaries follow the round's, together covering every
+        // file.
+        #expect(Array(merged.summary.summaries.prefix(results.summary.summaries.count)) == results.summary.summaries)
+        #expect(merged.summary.summaries.flatMap(\.paths).sorted() == paths)
         #expect(fixture.ai.filesNeedingResolution.isEmpty)
 
         let applied = try await fixture.ai.applyResolutions()

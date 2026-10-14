@@ -12,18 +12,26 @@ private let logger = Log.logger(category: "forks")
 /// referenced anymore (by pull requests or local branches) and can be removed
 /// from a repository.
 ///
-/// Fork remotes are named `espalier-<owner>` or `github-desktop-<owner>`.
+/// Fork remotes are the ones Espalier marked when it added them
+/// (`markForkRemote`); a remote without the mark is the user's, whatever its
+/// name.
 ///
 /// - Parameters:
 ///   - remotes: All remotes available in the repository.
+///   - forkRemoteNames: The remotes Espalier marked (`getForkRemoteNames`).
 ///   - openPRs: All open pull requests available in the repository.
 ///   - allBranches: All branches available in the repository.
-public func findForkedRemotesToPrune(_ remotes: [Remote], _ openPRs: [PullRequest], _ allBranches: [Branch]) -> [Remote] {
+public func findForkedRemotesToPrune(
+    _ remotes: [Remote],
+    forkRemoteNames: Set<ExactString>,
+    _ openPRs: [PullRequest],
+    _ allBranches: [Branch]
+) -> [Remote] {
     let prRemoteUrls = openPRs.compactMap(\.head.gitHubRepository.cloneURL).exactSet
     let branchRemotes = allBranches.compactMap(\.upstreamRemoteName).exactSet
 
     return remotes.filter { remote in
-        isForkedRemoteName(remote.name)
+        forkRemoteNames.contains(ExactString(remote.name))
             && !prRemoteUrls.contains(ExactString(remote.url))
             && !branchRemotes.contains(ExactString(remote.name))
     }
@@ -70,11 +78,14 @@ extension SyncModel {
 
     /// Makes `fork` the repository's default remote and GitHub repository:
     /// the default remote's URL becomes the fork's clone URL, the `upstream`
-    /// remote points at the old URL (added, or updated when it exists), and
-    /// the repository is associated with the fork. Returns after the refresh.
+    /// remote points at the old URL (added when there's none), and the
+    /// repository is associated with the fork. Returns after the refresh.
     ///
-    /// Nothing happens without a remote. GitHub creates forks
-    /// asynchronously; nothing waits for it.
+    /// An `upstream` remote that points elsewhere (neither at the old URL nor
+    /// at the repository being forked) is left as it is and becomes
+    /// `upstreamRemoteConflict`, which asks whether to point it at the fork's
+    /// parent, unless the user chose to ignore it. Nothing happens without a
+    /// remote. GitHub creates forks asynchronously; nothing waits for it.
     public func convertToFork(_ fork: APIFullRepository) async throws(OperationError) {
         guard let repository else {
             throw notInList(.convertToFork)
@@ -85,27 +96,53 @@ extension SyncModel {
         let endpoint = gitHubRepository.endpoint
 
         let descriptor = OperationDescriptor(kind: .convertToFork, lanes: [.network], refreshAfter: .full)
-        let converted = try await repository.perform(descriptor) { ctx -> Bool in
+        let conversion = try await repository.perform(descriptor) { ctx -> ForkConversion in
             // make sure there is a default remote (there should be)
             let remotes = try await getRemotes(ctx.repository)
             guard let defaultRemote = findDefaultRemote(remotes) else {
-                return false
+                return .noRemote
             }
             // update default remote
             try await GitKit.setRemoteURL(ctx.repository, defaultRemote.name, fork.cloneURL)
+            if let existing = remotes.first(where: { JSCompat.strictEquals($0.name, upstreamRemoteName) }),
+               !JSCompat.strictEquals(existing.name, defaultRemote.name) {
+                let pointsAtParent = JSCompat.strictEquals(existing.url, defaultRemote.url)
+                    || repositoryMatchesRemote(gitHubRepository, remoteURL: existing.url)
+                return pointsAtParent ? .converted : .upstreamPointsElsewhere(existing)
+            }
             try await ensureUpstreamRemoteURL(ctx.repository, defaultRemote.url)
-            return true
+            return .converted
         }
-        guard converted else {
+        if case .noRemote = conversion {
             return
         }
         // update associated github repo
         associate(fork, endpoint: endpoint)
+        if case .upstreamPointsElsewhere(let existing) = conversion {
+            raiseUpstreamRemoteConflict(existing)
+        }
         await repository.awaitOperationRefresh(covering: .full)
     }
 
-    /// Removes the fork remotes nothing uses any more; it runs whenever the
-    /// open pull requests are loaded. Background work: skipped behind another
+    /// Asks about the `upstream` remote `existing`, which a fork conversion
+    /// left pointing elsewhere (`upstreamRemoteConflict`), unless the user
+    /// chose to ignore it or the fork's parent isn't known.
+    private func raiseUpstreamRemoteConflict(_ existing: Remote) {
+        guard let repository, !repository.record.ignoresExistingUpstreamRemote,
+              let parent = repository.record.gitHubRepository?.parent
+        else {
+            return
+        }
+        upstreamRemoteConflict = UpstreamRemoteConflict(
+            repositoryName: repository.record.name,
+            parentFullName: parent.fullName,
+            existingRemote: existing,
+            expectedURL: parent.cloneURL ?? ""
+        )
+    }
+
+    /// Removes the fork remotes Espalier added that nothing uses any more; it
+    /// runs whenever the open pull requests are loaded. Background work: skipped behind another
     /// network operation, failures only logged.
     func pruneForkedRemotes(openPullRequests: [PullRequest]) async {
         guard let repository else {
@@ -116,7 +153,8 @@ extension SyncModel {
         do {
             let removed = try await repository.performIfIdle(descriptor) { ctx -> Int in
                 let remotes = try await getRemotes(ctx.repository)
-                let remotesToPrune = findForkedRemotesToPrune(remotes, openPullRequests, branches)
+                let forkRemoteNames = try await getForkRemoteNames(ctx.repository)
+                let remotesToPrune = findForkedRemotesToPrune(remotes, forkRemoteNames: forkRemoteNames, openPullRequests, branches)
                 for remote in remotesToPrune {
                     try await removeRemote(ctx.repository, remote.name)
                 }
@@ -140,6 +178,17 @@ extension SyncModel {
         let associated = app.upsertGitHubRepository(endpoint, apiRepository)
         app.setGitHubRepository(associated, for: repository.id)
     }
+}
+
+/// What converting to a fork did.
+private enum ForkConversion: Sendable {
+    /// Nothing: the repository has no remote.
+    case noRemote
+    /// Converted, with `upstream` pointing at the old URL or the repository
+    /// forked.
+    case converted
+    /// Converted, leaving the `upstream` remote, which points elsewhere.
+    case upstreamPointsElsewhere(Remote)
 }
 
 /// Sets the `upstream` remote's URL, adding the remote when there's none.

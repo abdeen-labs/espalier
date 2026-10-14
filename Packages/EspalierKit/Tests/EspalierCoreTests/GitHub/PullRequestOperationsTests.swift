@@ -83,7 +83,7 @@ struct PullRequestOperationsTests {
         await fixture.settle()
     }
 
-    @Test("checks out a fork's pull request as pr/<number>, adding the fork as a remote and fetching it")
+    @Test("checks out a fork's pull request as pr/<number>, adding the fork as a marked remote and fetching it")
     func fork() async throws {
         let fixture = try await makeGitHubFixture { _, _ in }
         let fork = try await Self.makeFork(of: fixture.local)
@@ -99,11 +99,13 @@ struct PullRequestOperationsTests {
         #expect(branch.name == "pr/7")
         #expect(branch.upstream == "espalier-hubot/patch")
         #expect(try await remoteURLs(fixture.local)["espalier-hubot"] == fork.path)
+        #expect(try await getForkRemoteNames(fixture.local) == ["espalier-hubot"].exactSet)
+        #expect(fixture.model.gitState.remotes.forkRemoteNames == ["espalier-hubot"].exactSet)
         #expect(FileManager.default.fileExists(atPath: POSIXPath.join(fixture.local.path, "patch.txt")))
         await fixture.settle()
     }
 
-    @Test("a fork's remote that's there already is used, and its pull request's branch is found again")
+    @Test("a fork's remote that's there already is used, unmarked, and its pull request's branch is found again")
     func existingForkRemote() async throws {
         let fixture = try await makeGitHubFixture(mock: { _, pulls in
             pulls.open = [apiPullRequest(7, head: "patch", headRepository: hubotFork, author: "hubot")]
@@ -119,6 +121,7 @@ struct PullRequestOperationsTests {
         _ = try await fixture.model.gitHub.checkout(pr)
         #expect(fixture.model.gitState.tip.branch?.name == "pr/7")
         #expect(try await remoteURLs(fixture.local).keys.sorted() == ["espalier-hubot", "origin"])
+        #expect(try await getForkRemoteNames(fixture.local).isEmpty)
         await fixture.settle()
     }
 
@@ -237,6 +240,8 @@ struct PullRequestOperationsTests {
         #expect(branch.name == "pr/7")
         #expect(branch.upstream == "espalier-hubot/patch")
         #expect(try await remoteURLs(fixture.local)["espalier-hubot"] == fork.path)
+        #expect(try await getForkRemoteNames(fixture.local) == ["espalier-hubot"].exactSet)
+        #expect(fixture.model.gitState.remotes.forkRemoteNames == ["espalier-hubot"].exactSet)
         #expect(FileManager.default.fileExists(atPath: POSIXPath.join(fixture.local.path, "patch.txt")))
         await fixture.settle()
     }

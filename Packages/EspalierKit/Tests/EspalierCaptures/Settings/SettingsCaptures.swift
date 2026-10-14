@@ -108,7 +108,7 @@ struct SettingsCaptures {
 
     // MARK: Integrations
 
-    @Test("Integrations: editors and shells found with GitHub Desktop links on, and none with them off")
+    @Test("Integrations: editors and shells found with GitHub Desktop links on, several editors and none chosen, and none with them off")
     func integrations() {
         let cases: [(String, IntegrationsContent)] = [
             ("found", IntegrationsContent(
@@ -116,6 +116,11 @@ struct SettingsCaptures {
                 shell: IntegrationPopUp(installed: ["Terminal", "iTerm2", "Ghostty"], selection: .named("Terminal")),
                 showsNoEditorsHint: false,
                 opensGitHubDesktopLinks: true
+            )),
+            ("notChosen", IntegrationsContent(
+                editor: IntegrationPopUp(installed: ["Cursor", "Visual Studio Code", "Xcode"], selection: .none),
+                shell: IntegrationPopUp(installed: ["Terminal", "iTerm2"], selection: .named("Terminal")),
+                showsNoEditorsHint: false
             )),
             ("none", IntegrationsContent(
                 editor: IntegrationPopUp(installed: [], selection: .none),

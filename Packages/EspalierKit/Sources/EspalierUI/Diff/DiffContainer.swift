@@ -332,7 +332,11 @@ public struct DiffContainer: View {
     @ViewBuilder
     private func textContent(_ text: TextDiff, isLarge: Bool, settings: DiffSettings, isInteractive: Bool) -> some View {
         if text.hunks.isEmpty {
-            NoHunksView(status: shownFile?.appStatus, hidesWhitespace: settings.hidesWhitespace == true)
+            NoHunksView(
+                status: shownFile?.appStatus,
+                hidesWhitespace: settings.hidesWhitespace == true,
+                conflict: shownFile.flatMap(conflictRow)
+            )
         } else {
             let shown = session.displayDiff(for: text, isLarge: isLarge)
             let stagingState = stagingEnabled ? staging?.state : nil
@@ -416,7 +420,7 @@ public struct DiffContainer: View {
         return { window?.actions.perform(.openWithDefaultProgram(path: path)) }
     }
 
-    /// A conflicted file's row in Changes, for what its image says.
+    /// A conflicted file's row in Changes, for what its message says.
     private func conflictRow(_ file: DiffFileInfo) -> ConflictFileRowContent? {
         guard file.status == .conflicted, let repository = window?.repository else {
             return nil
@@ -583,6 +587,9 @@ nonisolated func lineCounts(_ hunks: [DiffHunk]) -> (added: Int, deleted: Int) {
 struct NoHunksView: View {
     let status: AppFileStatus?
     let hidesWhitespace: Bool
+    /// A conflicted file's row in Changes: whether a side can be picked, or
+    /// was.
+    var conflict: ConflictFileRowContent?
 
     /// Which state shows.
     enum Message: Equatable {
@@ -592,7 +599,8 @@ struct NoHunksView: View {
         case renamed
         /// A rename with changes git found no hunks for.
         case renamedWithChanges
-        /// A conflict the command line must resolve.
+        /// A conflict without markers (binary, deleted on one side), whose
+        /// working copy is HEAD's: resolved by picking a side.
         case manualConflict
         /// Whitespace changes, hidden.
         case onlyWhitespace
@@ -625,7 +633,7 @@ struct NoHunksView: View {
             case .renamed:
                 CenteredMessage("The file was renamed but not changed", systemImage: "rectangle.and.pencil.and.ellipsis")
             case .manualConflict:
-                CenteredMessage("This file has a conflict that must be resolved on the command line", systemImage: "exclamationmark.triangle", tint: Color(espalier: Palette.warningMark))
+                ConflictedFileMessage("This file has a conflict", conflict: conflict)
             case .onlyWhitespace:
                 CenteredMessage("Only whitespace changes found", systemImage: "text.alignleft")
             case .noContentChanges:
@@ -633,5 +641,43 @@ struct NoHunksView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A conflicted file without conflict markers to show: that it's in
+/// conflict, and how to resolve it.
+struct ConflictedFileMessage: View {
+    let title: String
+    /// The file's row in Changes.
+    let conflict: ConflictFileRowContent?
+
+    init(_ title: String, conflict: ConflictFileRowContent?) {
+        self.title = title
+        self.conflict = conflict
+    }
+
+    var body: some View {
+        CenteredMessage(
+            title,
+            systemImage: "exclamationmark.triangle",
+            description: description,
+            tint: Color(espalier: Palette.warningMark)
+        )
+    }
+
+    /// Resolve while a side can be picked (the row's menu), the side once
+    /// one was; nothing when the row offers neither (a stash restore).
+    private var description: String? {
+        guard let conflict else {
+            return nil
+        }
+        switch conflict.state {
+        case .manual where conflict.oursLabel != nil:
+            return "Choose the version to keep from Resolve in the file list."
+        case .resolved(isUndoable: true):
+            return "\(conflict.status)."
+        default:
+            return nil
+        }
     }
 }

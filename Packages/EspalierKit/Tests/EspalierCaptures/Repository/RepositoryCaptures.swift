@@ -163,7 +163,7 @@ struct RepositoryCaptures {
 
     // MARK: Create
 
-    @Test("Create: empty; filled over a folder with a README; a failure")
+    @Test("Create: empty; over a folder with files, plain and filled over its README, .gitignore, and LICENSE; a failure")
     func create() async throws {
         try await withIsolatedGitConfig { _ in
             let harness = try AppHarness()
@@ -175,15 +175,23 @@ struct RepositoryCaptures {
             capture(CreateRepositoryForm(model: empty), named: "create-empty", area: area)
 
             let notes = POSIXPath.join(try createTempDirectory(), "notes")
-            try FileManager.default.createDirectory(atPath: notes, withIntermediateDirectories: true)
-            try Data("# Notes\n".utf8).write(to: URL(filePath: POSIXPath.join(notes, "README.md")))
+            try FileManager.default.createDirectory(atPath: POSIXPath.join(notes, "Drafts"), withIntermediateDirectories: true)
+            for (name, text) in [("README.md", "# Notes\n"), (".gitignore", "*.tmp\n"), ("LICENSE", "All rights reserved.\n"), ("Drafts/ideas.md", "- one\n"), ("todo.txt", "write\n"), ("draft.tmp", "ignored\n")] {
+                try Data(text.utf8).write(to: URL(filePath: POSIXPath.join(notes, name)))
+            }
+            let plain = CreateRepositorySheetModel(app: app, folder: notes)
+            await plain.checkDestination()
+            await plain.listExistingFiles()
+            capture(CreateRepositoryForm(model: plain), named: "create-existing-files", area: area)
+
             let filled = CreateRepositorySheetModel(app: app, folder: notes)
             filled.description = "My notes"
             filled.createsReadme = true
             filled.gitIgnore = "Swift"
             filled.license = "MIT License"
             await filled.checkDestination()
-            capture(CreateRepositoryForm(model: filled), named: "create-readme-warning", area: area)
+            await filled.listExistingFiles()
+            capture(CreateRepositoryForm(model: filled), named: "create-overwrite-warnings", area: area)
 
             let failed = CreateRepositorySheetModel(app: app)
             failed.name = "locked"

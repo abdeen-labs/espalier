@@ -694,15 +694,16 @@ public final class HistoryModel: RepositoryFeature {
     }
 
     /// The branches the current branch can be compared with: every branch
-    /// except the current one and the branches of fork remotes
-    /// (`isDesktopForkRemoteBranch`).
+    /// except the current one and the branches of Espalier's fork remotes
+    /// (`isForkRemoteBranch`).
     public var comparableBranches: [Branch] {
         guard let repository else {
             return []
         }
         let current = repository.gitState.tip.branch?.name
+        let forkRemoteNames = repository.gitState.remotes.forkRemoteNames
         return repository.gitState.branches.all.filter { branch in
-            branch.name != current && !branch.isDesktopForkRemoteBranch
+            branch.name != current && !branch.isForkRemoteBranch(forkRemoteNames)
         }
     }
 

@@ -10,12 +10,15 @@ import GitHubKit
 import SwiftUI
 
 /// A check's or a step's state, as its glyph shows it.
-nonisolated enum CheckGlyphKind: String, Sendable, Equatable, CaseIterable {
-    case success, failure, actionRequired, cancelled, neutral, skipped, stale, pending
+nonisolated enum CheckGlyphKind: Sendable, Equatable {
+    case success, failure, actionRequired, cancelled, neutral, skipped, stale
+    /// Not concluded yet: queued, waiting, or in progress, as the status
+    /// says.
+    case pending(APICheckStatus)
 
     init(status: APICheckStatus, conclusion: APICheckConclusion?) {
         guard status == .completed || conclusion != nil, let conclusion else {
-            self = .pending
+            self = .pending(status)
             return
         }
         switch conclusion {
@@ -66,9 +69,10 @@ extension ChecksState {
     }
 }
 
-/// The tooltip of a pull request's checks glyph: "Checks: Successful".
+/// The tooltip of a pull request's checks glyph: "Checks: Successful",
+/// "Checks: Queued".
 nonisolated func checksTooltipText(_ check: CombinedRefCheck) -> String {
-    "Checks: \(getCheckRunConclusionAdjective(check.conclusion))"
+    "Checks: \(getCombinedCheckAdjective(check))"
 }
 
 /// A check's or a step's glyph.
@@ -78,12 +82,21 @@ struct CheckGlyph: View {
     var body: some View {
         Image(systemName: kind.systemImage)
             .foregroundStyle(Color(espalier: Palette.checks(kind.tone)))
-            .accessibilityLabel(getCheckRunConclusionAdjective(kind.conclusion))
+            .accessibilityLabel(kind.adjective)
     }
 }
 
 extension CheckGlyphKind {
-    /// The conclusion the kind stands for, for its words.
+    /// What the kind stands for, in the words of the check's or step's row:
+    /// "Successful", "Queued", "In progress".
+    nonisolated var adjective: String {
+        if case .pending(let status) = self {
+            return getCheckRunAdjective(status, nil)
+        }
+        return getCheckRunConclusionAdjective(conclusion)
+    }
+
+    /// The conclusion the kind stands for.
     nonisolated var conclusion: APICheckConclusion? {
         switch self {
         case .success: .success

@@ -18,18 +18,27 @@ private func persistedUsers(_ dataStore: any DataStore) throws -> [JSONValue] {
 
 private struct KeychainUnavailableError: Error {}
 
-/// An in-memory secure store whose writes can be made to fail.
+/// An in-memory secure store whose writes, or reads of some services, can be
+/// made to fail, as a locked keychain's or a denied access prompt's do.
 private final class FailingSecretStore: SecretStore {
     private let inner = InMemorySecretStore()
     private let failing = Mutex(false)
+    private let unreadable = Mutex<Set<String>>([])
 
     var failWrites: Bool {
         get { failing.withLock { $0 } }
         set { failing.withLock { $0 = newValue } }
     }
 
+    /// The services whose reads fail.
+    var unreadableServices: Set<String> {
+        get { unreadable.withLock { $0 } }
+        set { unreadable.withLock { $0 = newValue } }
+    }
+
     func secret(service: String, account: String) throws -> String? {
-        try inner.secret(service: service, account: account)
+        if unreadableServices.contains(service) { throw KeychainUnavailableError() }
+        return try inner.secret(service: service, account: account)
     }
 
     func setSecret(_ secret: String, service: String, account: String) throws {
@@ -335,6 +344,146 @@ struct AccountsStoreTests {
                 return
             }
             #expect(error as? AccountCredentialError == AccountCredentialError())
+        }
+    }
+
+    // A keychain that won't give a token: locked, or access denied.
+
+    @Suite("tokens the keychain won't give")
+    struct UnreadableTokens {
+        let enterpriseEndpoint = "https://ghe.example.com/api/v3"
+        let otherEndpoint = "https://other.example.com/api/v3"
+
+        func account(_ login: String, endpoint: String = getDotComAPIEndpoint(), id: Int = 1, token: String = "token") -> Account {
+            Account(login: login, endpoint: endpoint, token: token, emails: [], avatarURL: "", id: id, name: login, clientID: "client-id")
+        }
+
+        /// A store that saved `accounts` with their tokens, and one started
+        /// again on the same stores, after reads of `unreadable` start to
+        /// fail.
+        fileprivate func restarted(
+            with accounts: [Account],
+            unreadable: [Account],
+            runtime: GitHubRuntime = .current
+        ) async throws -> (store: AccountsStore, data: InMemoryDataStore, secure: FailingSecretStore) {
+            let data = InMemoryDataStore()
+            let secure = FailingSecretStore()
+            let first = AccountsStore(dataStore: data, secureStore: secure)
+            for account in accounts {
+                try await first.addAccount(account)
+            }
+            secure.unreadableServices = Set(unreadable.map(getKeyForAccount))
+            return (AccountsStore(dataStore: data, secureStore: secure, runtime: runtime), data, secure)
+        }
+
+        @Test("keeps an account whose token can't be read, saved but unused")
+        func keepsUnreadableAccount() async throws {
+            let mock = MockGitHub()
+            mock.on("GET", "/user", respond: .json(encoding: createMockAPIFullIdentity(id: 1, login: "octocat")))
+            let octocat = account("octocat")
+            let enterprise = account("joan", endpoint: enterpriseEndpoint, id: 2)
+            let (store, data, _) = try await restarted(with: [octocat, enterprise], unreadable: [octocat], runtime: mock.runtime)
+
+            #expect(await store.getAll() == [enterprise])
+            let loaded = await store.getAllWithUnreadable()
+            #expect(loaded.accounts == [enterprise])
+            #expect(loaded.unreadable == [octocat.withToken("")])
+
+            // Refreshing, adding, and signing out others save it with them,
+            // and nothing asks GitHub about it without its token.
+            await store.refresh()
+            try await store.addAccount(account("monalisa", endpoint: otherEndpoint, id: 3))
+            try await store.removeAccount(enterprise)
+            #expect(try persistedUsers(data).map { $0["login"] } == ["octocat", "monalisa"])
+            #expect(mock.requests("GET", "/user").isEmpty)
+
+            // A rejected token for its server doesn't sign it out.
+            try await store.invalidateToken(endpoint: getDotComAPIEndpoint(), token: "")
+            #expect(await store.getAllWithUnreadable().unreadable.map(\.login) == ["octocat"])
+        }
+
+        @Test("reports a token it can't read")
+        func reportsUnreadableToken() async throws {
+            let octocat = account("octocat")
+            let (store, _, _) = try await restarted(with: [octocat], unreadable: [octocat])
+
+            #expect(await store.getAll() == [])
+            let reported = await store.events.first { event in
+                if case .didError = event { return true }
+                return false
+            }
+            #expect(reported != nil)
+        }
+
+        @Test("uses an account again once its token reads, in its place in the list")
+        func retries() async throws {
+            let first = account("first", endpoint: enterpriseEndpoint, id: 2, token: "first-token")
+            let second = account("second", endpoint: otherEndpoint, id: 3, token: "second-token")
+            let (store, data, secure) = try await restarted(with: [first, second], unreadable: [first])
+            #expect(await store.getAll() == [second])
+
+            // Still locked: nothing changes.
+            await store.retryUnreadableAccounts()
+            #expect(await store.getAll() == [second])
+            #expect(await store.getAllWithUnreadable().unreadable.map(\.login) == ["first"])
+
+            secure.unreadableServices = []
+            await store.retryUnreadableAccounts()
+            #expect(await store.getAll() == [first, second])
+            #expect(await store.getAllWithUnreadable().unreadable.isEmpty)
+            #expect(try persistedUsers(data).map { $0["login"] } == ["first", "second"])
+        }
+
+        @Test("signs out an account whose token expired while it couldn't be read")
+        func retryExpired() async throws {
+            let now = Date(timeIntervalSince1970: 1_800_000_000)
+            let data = InMemoryDataStore()
+            let secure = FailingSecretStore()
+            let expiring = account("octocat").withToken("token", expiresAt: now.addingTimeInterval(60))
+            try await AccountsStore(dataStore: data, secureStore: secure, now: { now }).addAccount(expiring)
+            secure.unreadableServices = [getKeyForAccount(expiring)]
+            let clock = TestClock(now: now)
+            let store = AccountsStore(dataStore: data, secureStore: secure, now: clock.now)
+            #expect(await store.getAllWithUnreadable().unreadable.map(\.login) == ["octocat"])
+
+            clock.advance(by: 120)
+            secure.unreadableServices = []
+            await store.retryUnreadableAccounts()
+
+            #expect(await store.getAllWithUnreadable() == ([], []))
+            #expect(try secure.secret(service: getKeyForAccount(expiring), account: "octocat") == nil)
+            #expect(data.getItem("users") == "[]")
+            let expired = await store.events.first { event in
+                if case .tokenExpired = event { return true }
+                return false
+            }
+            #expect(expired != nil)
+        }
+
+        @Test("signing in to its server again replaces an account whose token can't be read")
+        func signInReplaces() async throws {
+            let octocat = account("octocat")
+            let (store, _, _) = try await restarted(with: [octocat], unreadable: [octocat])
+            let monalisa = account("monalisa", id: 2, token: "new")
+
+            try await store.addAccount(monalisa)
+
+            #expect(await store.getAll() == [monalisa])
+            #expect(await store.getAllWithUnreadable().unreadable.isEmpty)
+        }
+
+        @Test("signs out an account whose token can't be read")
+        func signsOut() async throws {
+            let octocat = account("octocat")
+            let (store, data, secure) = try await restarted(with: [octocat], unreadable: [octocat])
+            let unreadable = try #require(await store.getAllWithUnreadable().unreadable.first)
+
+            try await store.removeAccount(unreadable)
+
+            #expect(await store.getAllWithUnreadable() == ([], []))
+            #expect(data.getItem("users") == "[]")
+            secure.unreadableServices = []
+            #expect(try secure.secret(service: getKeyForAccount(octocat), account: "octocat") == nil)
         }
     }
 }

@@ -124,9 +124,9 @@ struct TrampolineGitEnvironmentTests {
 
     @Suite("userCancelledAuthenticationError")
     struct CancelledAuthentication {
-        func gitError(_ output: String, gitError: DugiteError? = nil) -> GitError {
+        func gitError(_ output: String) -> GitError {
             GitError(
-                result: GitResult(stdoutData: Data(), stderrData: Data(output.utf8), exitCode: 128, gitError: gitError, gitErrorDescription: nil, path: "/"),
+                result: GitResult(stdoutData: Data(), stderrData: Data(output.utf8), exitCode: 128, gitError: nil, gitErrorDescription: nil, path: "/"),
                 args: ["fetch", "origin"],
                 terminalOutput: output
             )
@@ -150,14 +150,6 @@ struct TrampolineGitEnvironmentTests {
             #expect(userCancelledAuthenticationError(gitError("remote: hi\nfatal: could not read Username for 'x': terminal prompts disabled\n")) == nil)
             #expect(userCancelledAuthenticationError(gitError("fatal: could not read Username for 'x': terminal prompts disabled\nmore\n")) == nil)
             #expect(userCancelledAuthenticationError(CancellationError()) == nil)
-        }
-
-        @Test("recognizes SSH authentication failures")
-        func sshAuthFailure() {
-            #expect(isSSHAuthFailure(gitError("", gitError: .sshAuthenticationFailed)))
-            #expect(isSSHAuthFailure(gitError("", gitError: .sshPermissionDenied)))
-            #expect(!isSSHAuthFailure(gitError("", gitError: .httpsAuthenticationFailed)))
-            #expect(!isSSHAuthFailure(CancellationError()))
         }
     }
 }

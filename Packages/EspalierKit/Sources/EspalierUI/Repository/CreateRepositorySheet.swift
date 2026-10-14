@@ -2,9 +2,11 @@
 // checkbox, Git Ignore and License (featured licenses first, then a
 // divider), "The repository will be created at <path>.", and its warnings:
 // the folder is a repository already (with Add This Repository Instead),
-// it's inside one, or a README would be overwritten. Creating is the app's
-// intent (`createRepository`); its errors show in the sheet, and the
-// failures of later steps once it closes.
+// it's inside one, or a README, .gitignore, or LICENSE would be
+// overwritten. A folder with files says how many will wait in Changes, as
+// git would list them with the Git Ignore template chosen. Creating is the
+// app's intent (`createRepository`); its errors show in the sheet,
+// and the failures of later steps once it closes.
 
 import AppKit
 import EspalierCore
@@ -29,6 +31,10 @@ final class CreateRepositorySheetModel {
     private(set) var destination = CreateRepositoryDestination()
     /// The folder `destination` is for.
     private(set) var checkedPath: String?
+    /// The files already in the folder, as last listed.
+    private(set) var existingFiles = CreateRepositoryExistingFiles()
+    /// The folder and Git Ignore template `existingFiles` are for.
+    private(set) var listedFor: ExistingFilesKey?
     private(set) var isCreating = false
     /// Why creating failed, shown in the sheet.
     var problem: String?
@@ -74,7 +80,30 @@ final class CreateRepositorySheetModel {
         fullPath != nil && !isCreating && !currentDestination.isRepository
     }
 
-    /// Checks the folder: whether it's a repository, and has a README.
+    /// What the existing files are listed for: the folder and the Git Ignore
+    /// template.
+    var existingFilesKey: ExistingFilesKey? {
+        fullPath.map { ExistingFilesKey(path: $0, gitIgnore: gitIgnore) }
+    }
+
+    /// The note about the folder's files that will wait in Changes ("This
+    /// folder already has 3 files, …"); nil when there are none, or before
+    /// they're listed.
+    var existingFilesNote: String? {
+        guard let key = existingFilesKey, listedFor == key, !currentDestination.isRepository else {
+            return nil
+        }
+        let count = existingFiles.uncommittedCount(request)
+        guard count > 0 else {
+            return nil
+        }
+        let other = existingFiles.overwrittenCount(request) > 0 ? " other" : ""
+        let files = count == 1 ? "1\(other) file" : "\(formatNumber(Double(count), app.preferences.numberFormat))\(other) files"
+        return "This folder already has \(files), which you can commit from Changes."
+    }
+
+    /// Checks the folder: whether it's a repository, and which of the files
+    /// creating writes it has.
     func checkDestination() async {
         guard let path = fullPath else {
             checkedPath = nil
@@ -88,13 +117,31 @@ final class CreateRepositorySheetModel {
         record(destination, for: path)
     }
 
-    /// Checks the folder again each time Espalier becomes active while the
-    /// sheet shows: a README may have been added or removed meanwhile, or the
-    /// folder made a repository. Runs until the calling task is cancelled.
+    /// Lists the folder's files that would wait in Changes, with the Git
+    /// Ignore template chosen.
+    func listExistingFiles() async {
+        guard let key = existingFilesKey else {
+            listedFor = nil
+            return
+        }
+        let files = await checkCreateRepositoryExistingFiles(key.path, gitIgnore: key.gitIgnore)
+        // Only if they're still what we were listing them for.
+        guard !Task.isCancelled, existingFilesKey == key else {
+            return
+        }
+        existingFiles = files
+        listedFor = key
+    }
+
+    /// Checks the folder and lists its files again each time Espalier
+    /// becomes active while the sheet shows: files may have been added or
+    /// removed meanwhile, or the folder made a repository. Runs until the
+    /// calling task is cancelled.
     func checkOnActivation() async {
         let app = app
         await Observing.eachActivation({ app.isActive }) {
             await checkDestination()
+            await listExistingFiles()
         }
     }
 
@@ -125,6 +172,14 @@ final class CreateRepositorySheetModel {
     }
 }
 
+/// What a folder's existing files are listed for.
+struct ExistingFilesKey: Hashable {
+    /// The folder.
+    var path: String
+    /// The Git Ignore template, whose patterns are added.
+    var gitIgnore: String?
+}
+
 /// The Create sheet.
 struct CreateRepositorySheet: View {
     static let sheetID = "repository.create"
@@ -137,6 +192,9 @@ struct CreateRepositorySheet: View {
         CreateRepositoryForm(model: model, cancel: { dismiss() }, create: create, addInstead: addInstead)
             .task(id: model.fullPath) {
                 await model.checkDestination()
+            }
+            .task(id: model.existingFilesKey) {
+                await model.listExistingFiles()
             }
             .task {
                 await model.checkOnActivation()
@@ -207,6 +265,9 @@ struct CreateRepositoryForm: View {
                     }
                 }
                 warnings
+                if let note = model.existingFilesNote {
+                    FieldMessage(note, kind: .note)
+                }
                 Toggle("Initialize this repository with a README", isOn: $model.createsReadme)
                     .toggleStyle(.checkboxMark)
                 if model.createsReadme, model.currentDestination.readmeExists {
@@ -226,6 +287,12 @@ struct CreateRepositoryForm: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                if model.gitIgnore != nil, model.currentDestination.gitIgnoreExists {
+                    FieldMessage(
+                        "This folder already has a .gitignore file, which will be overwritten.",
+                        kind: .warning
+                    )
+                }
                 LabeledContent("License") {
                     CapsulePopUp("License", selection: $model.license, title: model.license ?? "None") {
                         MenuChoice("None", value: String?.none)
@@ -238,6 +305,12 @@ struct CreateRepositoryForm: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if model.license != nil, model.currentDestination.licenseExists {
+                    FieldMessage(
+                        "This folder already has a LICENSE file, which will be overwritten.",
+                        kind: .warning
+                    )
                 }
             }
             .formStyle(.columns)

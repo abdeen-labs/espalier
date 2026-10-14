@@ -3,6 +3,7 @@
 @testable import AIKit
 import Foundation
 import Testing
+import TestSupport
 
 // MARK: Helpers
 
@@ -381,6 +382,94 @@ struct ReassembleResolvedFileTests {
             reassembleResolvedFile(raw, [HunkResolution(resolvedContent: "merged")])
                 == ["line 1", "merged", "line 2"].joined(separator: "\r\n")
         )
+    }
+
+    @Test("keeps each line's own ending; spliced lines take the ending of the line before their block, a resolution's final one ending its last line", arguments: [
+        NamedCase(
+            "an LF file with CRLF lines elsewhere keeps both",
+            (raw: "a\r\nb\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\nc\r\nd\n", resolutions: ["x\ny"], expected: "a\r\nb\nx\ny\nc\r\nd\n")
+        ),
+        NamedCase(
+            "a CRLF region of an LF file splices CRLF lines",
+            (
+                raw: "a\nb\r\n<<<<<<< HEAD\r\nours\r\n=======\r\ntheirs\r\n>>>>>>> feature\r\nc\n",
+                resolutions: ["x\ny"],
+                expected: "a\nb\r\nx\r\ny\r\nc\n"
+            )
+        ),
+        NamedCase(
+            "two blocks in regions with different endings",
+            (
+                raw: "a\n<<<<<<< HEAD\no\n=======\nt\n>>>>>>> f\nb\r\n<<<<<<< HEAD\r\no\r\n=======\r\nt\r\n>>>>>>> f\r\nc",
+                resolutions: ["x", "y"],
+                expected: "a\nx\nb\r\ny\r\nc"
+            )
+        ),
+        NamedCase(
+            "an all-CRLF file with a final newline",
+            (
+                raw: "a\r\n<<<<<<< HEAD\r\nours\r\n=======\r\ntheirs\r\n>>>>>>> feature\r\nb\r\n",
+                resolutions: ["merged"],
+                expected: "a\r\nmerged\r\nb\r\n"
+            )
+        ),
+        NamedCase(
+            "an all-CRLF file whose block ends it",
+            (raw: "a\r\n<<<<<<< HEAD\r\nours\r\n=======\r\ntheirs\r\n>>>>>>> feature\r\n", resolutions: ["x\ny"], expected: "a\r\nx\r\ny\r\n")
+        ),
+        NamedCase(
+            "a block at the start of the file takes the opening marker's ending",
+            (raw: "<<<<<<< HEAD\r\nours\r\n=======\r\ntheirs\r\n>>>>>>> feature\r\nb\n", resolutions: ["x"], expected: "x\r\nb\n")
+        ),
+        NamedCase(
+            "a file without a final newline keeps its last line as it was",
+            (raw: "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\nb", resolutions: ["merged"], expected: "a\nmerged\nb")
+        ),
+        NamedCase(
+            "a block that ends a file without a final newline leaves it without one",
+            (raw: "a\r\n<<<<<<< HEAD\r\nours\r\n=======\r\ntheirs\r\n>>>>>>> feature", resolutions: ["x\ny"], expected: "a\r\nx\r\ny")
+        ),
+        NamedCase(
+            "deleting a block that ends a file leaves the line before it as it was",
+            (raw: "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature", resolutions: [""], expected: "a\n")
+        ),
+        NamedCase(
+            "a resolution written with CRLF takes the file's ending",
+            (raw: "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\nb\n", resolutions: ["x\r\ny"], expected: "a\nx\ny\nb\n")
+        ),
+        NamedCase(
+            "a trailing LF in a resolution ends its last line",
+            (raw: "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\nb\n", resolutions: ["x\ny\n"], expected: "a\nx\ny\nb\n")
+        ),
+        NamedCase(
+            "a trailing CRLF in a resolution ends its last line",
+            (
+                raw: "a\r\n<<<<<<< HEAD\r\nours\r\n=======\r\ntheirs\r\n>>>>>>> feature\r\nb\r\n",
+                resolutions: ["x\r\n"],
+                expected: "a\r\nx\r\nb\r\n"
+            )
+        ),
+        NamedCase(
+            "two trailing newlines in a resolution keep one blank line",
+            (raw: "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\nb\n", resolutions: ["x\n\n"], expected: "a\nx\n\nb\n")
+        ),
+        NamedCase(
+            "a resolution of only a line ending is an empty line",
+            (raw: "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\nb\n", resolutions: ["\n"], expected: "a\n\nb\n")
+        ),
+        NamedCase(
+            "a trailing newline in the last block of a file without a final newline leaves it without one",
+            (raw: "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature", resolutions: ["x\n"], expected: "a\nx")
+        ),
+        NamedCase(
+            "a lone CR is part of its line",
+            (raw: "a\rb\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\nc\r", resolutions: ["x"], expected: "a\rb\nx\nc\r")
+        ),
+    ])
+    func lineEndings(_ testCase: NamedCase<(raw: String, resolutions: [String], expected: String)>) {
+        let (raw, resolutions, expected) = testCase.value
+        let resolved = reassembleResolvedFile(raw, resolutions.map(HunkResolution.init(resolvedContent:)))
+        #expect(Array(resolved.utf8) == Array(expected.utf8))
     }
 
     @Test("preserves file with no conflicts unchanged")

@@ -30,10 +30,11 @@ struct LoadedDiffs: Sendable, Equatable {
     /// with the load, off the main actor.
     let selectableLines: Set<Int>
     /// The file's selection when the load started, and that selection
-    /// pruned to `selectableLines`, with whether pruning changed it: worked
-    /// out off the main actor, since comparing two selections of a
-    /// 10,000,000-line diff takes seconds. Nil without a file.
-    let pruning: (base: DiffSelection, pruned: DiffSelection, changed: Bool)?
+    /// carried over to `full` (`carrySelection`), with whether that changed
+    /// it: worked out off the main actor, since carrying a selection over or
+    /// comparing two selections of a 10,000,000-line diff takes seconds. Nil
+    /// without a file.
+    let carried: (base: DiffSelection, carried: DiffSelection, changed: Bool)?
 
     init(shown: Diff, full: Diff, isTextConverted: Bool = false, for file: WorkingDirectoryFileChange? = nil) {
         self.shown = shown
@@ -41,9 +42,9 @@ struct LoadedDiffs: Sendable, Equatable {
         self.isTextConverted = isTextConverted
         let lines = EspalierCore.selectableLines(in: full)
         selectableLines = lines
-        pruning = file.map { file in
-            let pruned = file.selection.withSelectableLines(lines)
-            return (file.selection, pruned, pruned != file.selection)
+        carried = file.map { file in
+            let carried = carrySelection(file.selection, to: full, selectableLines: lines)
+            return (file.selection, carried, carried != file.selection)
         }
     }
 
@@ -96,16 +97,18 @@ func hasSameLines(_ x: Diff?, _ y: Diff?) -> Bool {
 /// diff (`hunk.unifiedDiffStart` plus the line's index in its hunk): added
 /// and deleted lines of a text diff; other diffs have none.
 func selectableLines(in diff: Diff?) -> Set<Int> {
+    textDiffData(diff).map { includeableLineIndexes($0.hunks) } ?? []
+}
+
+/// `selection` as a selection of `diff`'s lines, whose selectable lines
+/// are `selectableLines`: carried over by the lines themselves to a text
+/// diff (`DiffSelection.carried(to:selectableLines:)`), pruned to none
+/// for another kind of diff.
+func carrySelection(_ selection: DiffSelection, to diff: Diff, selectableLines: Set<Int>) -> DiffSelection {
     guard let text = textDiffData(diff) else {
-        return []
+        return selection.withSelectableLines(selectableLines)
     }
-    var lines = Set<Int>()
-    for hunk in text.hunks {
-        for (index, line) in hunk.lines.enumerated() where line.isIncludeableLine() {
-            lines.insert(hunk.unifiedDiffStart + index)
-        }
-    }
-    return lines
+    return selection.carried(to: text.hunks, selectableLines: selectableLines)
 }
 
 /// Lines of the selected file's diff, by their index in the full diff
@@ -176,8 +179,8 @@ extension ChangesModel {
     /// A load that's no longer the latest never applies (a newer selection,
     /// status, or whitespace setting started another), and a result applies
     /// only while its file is still the one selected. The file's partial
-    /// selection is then pruned to the lines that can still be selected,
-    /// computed from the full diff.
+    /// selection is then carried over to the full diff's lines
+    /// (`carrySelection`).
     func loadSelectedDiff() {
         guard case .workingDirectory(let fileIDs) = selection, fileIDs.count == 1,
               let file = workingDirectory.findFileWithID(fileIDs[0]), let repository
@@ -311,8 +314,9 @@ extension ChangesModel {
             return false
         }
         let selection = file.selection
-            .withSelectableLines(fullDiffSelectableLines)
+            .carried(to: text.hunks, selectableLines: fullDiffSelectableLines)
             .withRangeSelection(from: range.lowerBound, length: range.count, selected: included)
+            .withDiffHunks(text.hunks)
         guard selection != file.selection else {
             return false
         }

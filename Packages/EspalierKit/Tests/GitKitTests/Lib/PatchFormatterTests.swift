@@ -254,8 +254,99 @@ struct PatchFormatterTests {
 
             let patch = try formatPatch(file, diff)
 
-            #expect(patch.contains("\\ No newline at end of file"))
-            #expect(patch.contains("+it could be"))
+            // The old last line stays, now followed by a line, so it gains
+            // its newline: git would otherwise join the next line to it.
+            #expect(patch == """
+                --- a/file.md
+                +++ b/file.md
+                @@ -23,5 +24,6 @@
+                \u{20}
+                \u{20}
+                \u{20}
+                \u{20}
+                -and fun stuff? I dnno
+                \\ No newline at end of file
+                +and fun stuff? I dnno
+                +it could be,
+
+                """)
+        }
+    }
+
+    // A line without a newline ends its file: a selection that puts a line
+    // after it gives it one, and one that leaves it last keeps it without.
+    @Suite("a last line without a newline")
+    struct NoTrailingNewline {
+        /// HEAD's contents, the working copy's, the lines chosen (as the
+        /// diff shows them, "+" or "-" first), and the expected result.
+        typealias Case = (head: String, working: String, lines: [String], expected: String)
+
+        @Test("commits the chosen lines without joining any", arguments: [
+            NamedCase("lines added after it", (head: "a\nlast", working: "a\nlast\nnew1\nnew2\n", lines: ["+new1", "+new2"], expected: "a\nlast\nnew1\nnew2\n")),
+            NamedCase("the first line added after it", (head: "a\nlast", working: "a\nlast\nnew1\nnew2\n", lines: ["+new1"], expected: "a\nlast\nnew1\n")),
+            NamedCase("the second line added after it", (head: "a\nlast", working: "a\nlast\nnew1\nnew2\n", lines: ["+new2"], expected: "a\nlast\nnew2\n")),
+            NamedCase("its newline alone", (head: "a\nlast", working: "a\nlast\nnew1\nnew2\n", lines: ["-last", "+last"], expected: "a\nlast\n")),
+            NamedCase("the new copy of it alone", (head: "a\nlast", working: "a\nlast\nnew1\nnew2\n", lines: ["+last"], expected: "a\nlast\nlast\n")),
+            NamedCase("its removal alone", (head: "a\nlast", working: "a\nlast\nnew1\nnew2\n", lines: ["-last"], expected: "a\n")),
+            NamedCase("a line added after it, changed but not chosen", (head: "a\nlast", working: "a\nLAST\nnew1\n", lines: ["+new1"], expected: "a\nlast\nnew1\n")),
+            NamedCase("its change alone", (head: "a\nlast", working: "a\nLAST\nnew1\n", lines: ["-last", "+LAST"], expected: "a\nLAST\n")),
+            NamedCase("its replacement added after it", (head: "a\nlast", working: "a\nLAST\nnew1\n", lines: ["+LAST"], expected: "a\nlast\nLAST\n")),
+            NamedCase("its removal and a line added", (head: "a\nlast", working: "a\nLAST\nnew1\n", lines: ["-last", "+new1"], expected: "a\nnew1\n")),
+            NamedCase("deleted", (head: "a\nlast", working: "a\n", lines: ["-last"], expected: "a\n")),
+            NamedCase("a replacement without a newline added after it", (head: "a\nb", working: "a\nB", lines: ["+B"], expected: "a\nb\nB")),
+            NamedCase("its replacement's removal alone", (head: "a\nb", working: "a\nB", lines: ["-b"], expected: "a\n")),
+            NamedCase("a new last line without a newline", (head: "a\nlast", working: "a\nlast\nnew1", lines: ["+new1"], expected: "a\nlast\nnew1")),
+        ])
+        func commit(_ testCase: NamedCase<Case>) async throws {
+            let (repository, file, diff) = try await setup(testCase.value)
+            try await applyPatchToIndex(repository, file.withSelection(selection(of: testCase.value.lines, in: diff)))
+            let staged = try await Dugite.exec(["show", ":file.txt"], repository.path)
+            #expect(String(decoding: staged.stdout, as: UTF8.self) == testCase.value.expected)
+        }
+
+        @Test("discards the chosen lines without joining any", arguments: [
+            NamedCase("lines added after it", (head: "a\nlast", working: "a\nlast\nnew1\nnew2\n", lines: ["+new1", "+new2"], expected: "a\nlast\n")),
+            NamedCase("its newline while lines follow it", (head: "a\nlast", working: "a\nlast\nnew1\nnew2\n", lines: ["-last", "+last"], expected: "a\nlast\nnew1\nnew2\n")),
+            NamedCase("every change", (head: "a\nlast", working: "a\nlast\nnew1\nnew2\n", lines: ["-last", "+last", "+new1", "+new2"], expected: "a\nlast")),
+            NamedCase("its removal alone", (head: "a\nlast", working: "a\nlast\nnew1\nnew2\n", lines: ["-last"], expected: "a\nlast\nlast\nnew1\nnew2\n")),
+            NamedCase("its change, keeping a line added after it", (head: "a\nlast", working: "a\nLAST\nnew1\n", lines: ["-last", "+LAST"], expected: "a\nlast\nnew1\n")),
+            NamedCase("a line added after its change", (head: "a\nlast", working: "a\nLAST\nnew1\n", lines: ["+new1"], expected: "a\nLAST\n")),
+            NamedCase("a new last line without a newline", (head: "a\nb\n", working: "a\nb\nc", lines: ["+c"], expected: "a\nb\n")),
+            NamedCase("its removal, keeping its replacement", (head: "a\nb", working: "a\nX", lines: ["-b"], expected: "a\nb\nX")),
+            NamedCase("its replacement", (head: "a\nb", working: "a\nX", lines: ["+X"], expected: "a\n")),
+        ])
+        func discard(_ testCase: NamedCase<Case>) async throws {
+            let (repository, _, diff) = try await setup(testCase.value)
+            try await discardChangesFromSelection(repository, "file.txt", diff, selection(of: testCase.value.lines, in: diff))
+            let working = try Data(contentsOf: URL(filePath: POSIXPath.join(repository.path, "file.txt")))
+            #expect(String(decoding: working, as: UTF8.self) == testCase.value.expected)
+        }
+
+        /// A repository whose file.txt has `head` committed and `working`
+        /// in the working copy, with the file's change and diff.
+        private func setup(_ value: Case) async throws -> (Repository, WorkingDirectoryFileChange, TextDiff) {
+            let repository = try setupEmptyRepository()
+            try await makeCommit(repository, Tree(entries: [TreeEntry(path: "file.txt", contents: value.head)]))
+            try Data(value.working.utf8).write(to: URL(filePath: POSIXPath.join(repository.path, "file.txt")))
+            let status = try await getStatusOrThrow(repository)
+            let file = try #require(status.workingDirectory.files.first)
+            return (repository, file, try await getTextDiff(repository, file))
+        }
+
+        /// The selection of `lines` (each once) in `diff`.
+        private func selection(of lines: [String], in diff: TextDiff) -> DiffSelection {
+            var selection = DiffSelection.fromInitialSelection(.none)
+            var remaining = lines
+            for hunk in diff.hunks {
+                for (index, line) in hunk.lines.enumerated() where line.isIncludeableLine() {
+                    if let found = remaining.firstIndex(of: line.text) {
+                        remaining.remove(at: found)
+                        selection = selection.withLineSelection(hunk.unifiedDiffStart + index, selected: true)
+                    }
+                }
+            }
+            #expect(remaining.isEmpty, "Lines not in the diff: \(remaining)")
+            return selection
         }
     }
 

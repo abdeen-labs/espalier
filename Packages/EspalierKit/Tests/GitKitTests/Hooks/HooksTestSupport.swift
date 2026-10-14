@@ -34,16 +34,20 @@ func makeStandInShell(_ body: String) throws -> String {
     return path
 }
 
-/// Returns once a process has opened the FIFO at `path` for writing and
-/// closed it again. The blocking open and read run on a thread of their own,
-/// off the concurrency pool and dispatch's.
+/// Returns once a process has written a byte to the FIFO at `path`. The
+/// blocking open and read run on a thread of their own, off the concurrency
+/// pool and dispatch's.
+///
+/// The writer writes rather than only opening and closing the FIFO: under
+/// load, macOS can leave the read waiting with no writer left instead of
+/// reporting end of file. A written byte stays in the FIFO until it's read.
 func waitForFIFOWriter(_ path: String) async {
     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
         Thread.detachNewThread {
             let descriptor = open(path, O_RDONLY)
             if descriptor >= 0 {
                 var byte: UInt8 = 0
-                while read(descriptor, &byte, 1) > 0 {}
+                _ = read(descriptor, &byte, 1)
                 close(descriptor)
             }
             continuation.resume()

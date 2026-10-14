@@ -1,11 +1,13 @@
 // The diff container's layouts: the header, the previous file's diff while
 // the next loads, a text diff with its warnings and with find open, the find
 // bar's states, a large diff, a binary file, a submodule's change, a failed
-// diff, empty states, the image modes with their picker, an image that
-// can't be decoded, a conflicted image, and a working directory file of a
+// diff, empty states, the image modes with their picker, overlaid images of
+// different sizes, an image that can't be decoded, a conflicted image, a
+// conflicted file with nothing to diff, and a working directory file of a
 // real repository with its staging gutter, contents, and syntax color. A
 // text diff, find, the loading header, the binary file, the two-up image,
-// and the image states in light and dark, the rest in light.
+// the overlaid images, the image states, and the conflicted states in light
+// and dark, the rest in light.
 
 import AppKit
 @testable import EspalierCore
@@ -165,6 +167,33 @@ struct DiffContainerCaptures {
         )
     }
 
+    @Test("a conflicted file with nothing to diff: a side to choose, a side chosen, and none to choose (a stash restore)", arguments: [
+        NamedCase(
+            "empty-conflicted",
+            ConflictFileRowContent(
+                path: "notes.txt", state: .manual, status: "File does not exist on feature.",
+                oursLabel: "Use the modified file from main", theirsLabel: "Do not include this file on main"
+            )
+        ),
+        NamedCase(
+            "empty-conflicted-chosen",
+            ConflictFileRowContent(path: "notes.txt", state: .resolved(isUndoable: true), status: "Using the modified file from main")
+        ),
+        NamedCase("empty-conflicted-restore", ConflictFileRowContent(path: "notes.txt", state: .manual, status: "File does not exist on stash.")),
+    ])
+    func conflictedWithoutDiff(_ row: NamedCase<ConflictFileRowContent>) {
+        capture(
+            NoHunksView(
+                status: .conflicted(.manualConflict(entry: ManualConflictEntry(action: .deletedByThem))),
+                hidesWhitespace: false,
+                conflict: row.value
+            ),
+            named: row.name,
+            size: CGSize(width: 560, height: 240),
+            appearances: CaptureAppearance.allCases
+        )
+    }
+
     @Test("a failed diff")
     func failed() {
         let error = OperationError(.other("Could not read the file."), operation: .loadDiff)
@@ -181,6 +210,34 @@ struct DiffContainerCaptures {
             size: CGSize(width: 560, height: 300),
             appearances: mode == .twoUp ? CaptureAppearance.allCases : [.light]
         )
+    }
+
+    /// Swipe halfway, Onion Skin at half, and Difference, of a wide old
+    /// image and a tall new one: each at its own size from the top-left
+    /// corner, at the size that fits and scaled down together.
+    @Test("overlaid images of different sizes, at their size and scaled down together", arguments: [
+        NamedCase("image-overlaid-swipe", ImageDiffType.swipe),
+        NamedCase("image-overlaid-onionSkin", ImageDiffType.onionSkin),
+        NamedCase("image-overlaid-difference", ImageDiffType.difference),
+    ])
+    func overlaidImages(_ mode: NamedCase<ImageDiffType>) {
+        let previous = ShownImage(DiffCaptureImages.image(DiffCaptureImages.png(width: 160, height: 100, color: .systemBlue, inset: 10)))
+        let current = ShownImage(DiffCaptureImages.image(DiffCaptureImages.png(width: 120, height: 140, color: .systemOrange, inset: 8)))
+        @ViewBuilder func view() -> some View {
+            switch mode.value {
+            case .swipe: SwipeView(previous: previous, current: current, fraction: 0.5)
+            case .onionSkin: OnionSkinView(previous: previous, current: current, opacity: 0.5)
+            default: DifferenceView(previous: previous, current: current)
+            }
+        }
+        for (suffix, size) in [("", CGSize(width: 480, height: 280)), ("-scaled", CGSize(width: 240, height: 170))] {
+            capture(
+                view().background(Color(nsColor: Palette.background)),
+                named: mode.name + suffix,
+                size: size,
+                appearances: CaptureAppearance.allCases
+            )
+        }
     }
 
     @Test("an image that can't be decoded: added alone, and beside the old one in 2-Up")
@@ -265,6 +322,42 @@ struct DiffContainerCaptures {
             capture(
                 DiffContainer(changes.diff, file: DiffFileInfo(file), context: .conflict).windowEnvironment(fixture.context),
                 named: "container-image-conflicted",
+                size: CGSize(width: 640, height: 300),
+                appearances: CaptureAppearance.allCases
+            )
+            await fixture.app.idle()
+        }
+    }
+
+    @Test("a file modified on the branch and deleted by the merged one, in a window: how to resolve it")
+    func deleteModifyConflictInMerge() async throws {
+        try await withIsolatedGitConfig { _ in
+            let local = try setupEmptyRepository()
+            let notes = URL(exactFilePath: POSIXPath.join(local.path, "notes.txt"))
+            try Data("one\n".utf8).write(to: notes)
+            try await runGit(["add", "notes.txt"], local)
+            try await runGit(["commit", "-m", "Add notes"], local)
+            try await runGit(["branch", "feature"], local)
+            try Data("one\ntwo\n".utf8).write(to: notes)
+            try await runGit(["commit", "-am", "Add a line"], local)
+            try await runGit(["checkout", "feature"], local)
+            try await runGit(["rm", "notes.txt"], local)
+            try await runGit(["commit", "-m", "Remove the notes"], local)
+            try await runGit(["checkout", "master"], local)
+            // Git leaves the branch's version, which has no diff.
+            _ = try await Dugite.exec(["merge", "feature"], local.path)
+            let fixture = try await ChangesCaptureRepository.make(local)
+            let changes = fixture.repository.changes
+            let file = try #require(changes.workingDirectory.files.first { $0.path == "notes.txt" })
+            changes.select(fileIDs: [file.id])
+            await changes.diffIdle()
+            guard case .loaded(.text(let text)) = changes.diff, text.hunks.isEmpty else {
+                Issue.record("Expected a text diff without hunks: \(changes.diff)")
+                return
+            }
+            capture(
+                DiffContainer(changes.diff, file: DiffFileInfo(file), context: .conflict).windowEnvironment(fixture.context),
+                named: "container-delete-modify-conflicted",
                 size: CGSize(width: 640, height: 300),
                 appearances: CaptureAppearance.allCases
             )

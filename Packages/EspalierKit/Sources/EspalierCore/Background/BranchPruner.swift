@@ -19,8 +19,9 @@ private let logger = Log.logger(category: "branch-pruner")
 /// reserved one (`main`, `master`, `gh-pages`, `develop`, `dev`,
 /// `development`, `trunk`, `devel`, `release`); never a branch checked out
 /// in the last 14 days or in any worktree; only a branch merged into the
-/// default branch that has an upstream configured whose remote branch is
-/// gone; never a branch a rebase in progress in any worktree is rebasing
+/// default branch whose upstream names a remote-tracking branch that no
+/// longer exists (a branch tracking a local branch is never pruned for its
+/// upstream); never a branch a rebase in progress in any worktree is rebasing
 /// (HEAD is detached then, so it isn't the current branch), stopped or
 /// interrupted. Each deletion (`git branch -D`) is logged and recorded in
 /// `sync.prunedBranches` with its SHA, so it can be restored.
@@ -190,7 +191,6 @@ final class BranchPruner: SelectionScopedService {
         else {
             return []
         }
-        let allBranches = branchesState.all
 
         do {
             var mergedBranches = try await getMergedBranches(gitRepository, defaultBranch.name)
@@ -210,9 +210,11 @@ final class BranchPruner: SelectionScopedService {
             let recentlyCheckedOutCanonicalRefs = try await getBranchCheckouts(gitRepository, twoWeeksAgo)
                 .keys.map(formatAsLocalRef).exactSet
 
-            // get the locally cached branches of remotes (ie `remotes/origin/main`)
-            let remoteBranches = try await getBranches(gitRepository, "refs/remotes/")
-                .map { formatAsLocalRef($0.name) }.exactSet
+            // get the locally cached branches of remotes (ie `refs/remotes/origin/main`)
+            let remoteBranches = try await getBranches(gitRepository, "refs/remotes/").map(\.ref).exactSet
+
+            // and each local branch's upstream, as a full ref
+            let upstreamRefs = try await upstreamRefsByBranch(gitRepository)
 
             // get branches checked out in linked worktrees so we don't delete them
             let worktreeBranches = try await listWorktrees(gitRepository).compactMap(\.branch).exactSet
@@ -229,7 +231,9 @@ final class BranchPruner: SelectionScopedService {
                     || rebasingBranches.contains(key) {
                     return false
                 }
-                guard let upstreamRef = getUpstreamRefForLocalBranchRef(ref, allBranches) else {
+                // Only an upstream that names a remote-tracking branch can be
+                // gone; one that names a local branch never is.
+                guard let upstreamRef = upstreamRefs[key], JSCompat.startsWith(upstreamRef, "refs/remotes/") else {
                     return false
                 }
                 return !remoteBranches.contains(ExactString(upstreamRef))
@@ -320,22 +324,27 @@ func branchesBeingRebased(_ repository: Repository) async -> Set<ExactString> {
     return refs
 }
 
-/// The canonical upstream branch ref of the local branch `ref`, or nil if
-/// the upstream can't be reliably determined.
-///
-/// - Parameters:
-///   - ref: the canonical ref for a local branch
-///   - allBranches: a list of all branches in the Repository model
-func getUpstreamRefForLocalBranchRef(_ ref: String, _ allBranches: [Branch]) -> String? {
-    // if we can't find a branch model, we can't determine the ref's upstream
-    guard let branch = allBranches.first(where: { JSCompat.strictEquals(formatAsLocalRef($0.name), ref) }) else {
-        return nil
+/// Each local branch's upstream as a full ref, by the branch's ref:
+/// `refs/remotes/origin/feature` for a branch tracking a remote branch,
+/// `refs/heads/main` for one tracking a local branch (`branch.<name>.remote`
+/// is `.`). A branch without an upstream, or whose upstream git can't map
+/// to a ref (its remote has no fetch refspec for it), is left out.
+@concurrent
+private func upstreamRefsByBranch(_ repository: Repository) async throws -> [ExactString: String] {
+    let parser = createForEachRefParser([
+        UpstreamRefField.ref: "%(refname)",
+        .upstream: "%(upstream)",
+    ])
+    let result = try await git(["for-each-ref"] + parser.formatArgs + ["refs/heads"], repository.path, "branchPrunerUpstreams")
+    var upstreams: [ExactString: String] = [:]
+    for record in try parser.parse(result.stdout) where !record[.upstream].isEmpty {
+        upstreams[ExactString(record[.ref])] = record[.upstream]
     }
-    // if there's no upstream in the branch, there's nothing to lookup
-    guard let upstream = branch.upstream else {
-        return nil
-    }
-    return formatAsLocalRef(upstream)
+    return upstreams
+}
+
+private enum UpstreamRefField: Hashable, Sendable {
+    case ref, upstream
 }
 
 extension SyncModel {

@@ -1,7 +1,8 @@
 // Ported from desktop/app/src/lib/git/interpret-trailers.ts
 //
 // Only `Trailer` and `isCoAuthoredByTrailer`, which the models use.
-// GitInterpretTrailers.swift parses and merges trailers with git.
+// GitInterpretTrailers.swift parses unfolded trailers and merges trailers
+// with git.
 
 /// A representation of a Git commit message trailer.
 ///

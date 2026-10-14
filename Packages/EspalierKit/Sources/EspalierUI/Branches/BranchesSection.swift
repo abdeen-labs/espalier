@@ -123,6 +123,8 @@ nonisolated extension BranchesSectionContent {
         /// The pull requests' checks, by number, where they're loaded.
         public var checks: [Int: ChecksState]
         public var remotes: [Remote]
+        /// Espalier's fork remotes, whose branches are hidden.
+        public var forkRemoteNames: Set<ExactString>
         /// The sidebar filter's text.
         public var filter: String
 
@@ -136,6 +138,7 @@ nonisolated extension BranchesSectionContent {
             pullRequests: [PullRequest] = [],
             checks: [Int: ChecksState] = [:],
             remotes: [Remote] = [],
+            forkRemoteNames: Set<ExactString> = [],
             filter: String = ""
         ) {
             self.branches = branches
@@ -147,6 +150,7 @@ nonisolated extension BranchesSectionContent {
             self.pullRequests = pullRequests
             self.checks = checks
             self.remotes = remotes
+            self.forkRemoteNames = forkRemoteNames
             self.filter = filter
         }
     }
@@ -185,7 +189,7 @@ nonisolated extension BranchesSectionContent {
             ref == currentRef ? currentBranch ?? listed : listed
         }
         func take(_ branch: Branch?) -> BranchRowContent? {
-            guard let branch, !branch.isDesktopForkRemoteBranch else {
+            guard let branch, !branch.isForkRemoteBranch(inputs.forkRemoteNames) else {
                 return nil
             }
             let ref = ExactString(branch.ref)
@@ -206,7 +210,7 @@ nonisolated extension BranchesSectionContent {
             // Branches hidden or shown above are left out; a branch that
             // doesn't match the filter is still marked shown.
             let ref = ExactString(listed.ref)
-            guard !listed.isDesktopForkRemoteBranch, shown.insert(ref).inserted else {
+            guard !listed.isForkRemoteBranch(inputs.forkRemoteNames), shown.insert(ref).inserted else {
                 continue
             }
             let branch = fresh(listed, ref: ref)
@@ -701,6 +705,7 @@ nonisolated extension BranchesSectionContent {
                 pullRequests: repository.gitHub.openPullRequests,
                 checks: checksByPullRequest(repository),
                 remotes: state.remotes.all,
+                forkRemoteNames: state.remotes.forkRemoteNames,
                 filter: filter
             ))
         }

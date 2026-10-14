@@ -130,6 +130,20 @@ public struct AIFailedFile: Sendable {
     }
 }
 
+/// The summary the model wrote for one request, and the files it covers
+/// (the files that request resolved).
+public struct AIChunkSummary: Sendable, Hashable {
+    /// The model's Markdown.
+    public var markdown: String
+    /// Repository-relative paths, in the request's order.
+    public var paths: [String]
+
+    public init(markdown: String, paths: [String]) {
+        self.markdown = markdown
+        self.paths = paths
+    }
+}
+
 /// The conflict resolution response after reassembly: per-file resolutions
 /// contain the complete reassembled file content, and the files that failed
 /// or weren't attempted are listed. This is what the rest of the app (UI,
@@ -137,9 +151,11 @@ public struct AIFailedFile: Sendable {
 public struct ReassembledConflictResolutionResponse: Sendable {
     /// Reassembled per-file resolutions with full file content.
     public var resolutions: [FileResolution]
-    /// Optional markdown summary (passed through from the model).
-    public var summary: String?
-    /// Structured references (passed through from the model).
+    /// Each request's Markdown summary, with the files it covers, in the
+    /// order of the requests. Requests whose model wrote none have no entry.
+    public var summaries: [AIChunkSummary]
+    /// Structured references (passed through from the model), every
+    /// request's, in the order of the requests.
     public var references: [AIConflictReference]
     /// Files in chunks that failed while other chunks succeeded. Empty when
     /// every chunk succeeded. (When every chunk fails, resolution throws.)
@@ -153,13 +169,13 @@ public struct ReassembledConflictResolutionResponse: Sendable {
 
     public init(
         resolutions: [FileResolution],
-        summary: String?,
+        summaries: [AIChunkSummary],
         references: [AIConflictReference],
         failedFiles: [AIFailedFile] = [],
         notAttemptedFiles: [String] = []
     ) {
         self.resolutions = resolutions
-        self.summary = summary
+        self.summaries = summaries
         self.references = references
         self.failedFiles = failedFiles
         self.notAttemptedFiles = notAttemptedFiles
@@ -168,14 +184,14 @@ public struct ReassembledConflictResolutionResponse: Sendable {
     /// This response with the results of retrying some of its failed or
     /// unattempted files (`retry`, from a context restricted to those files)
     /// merged in. The retried files' resolutions are added and their old
-    /// entries replaced by the retry's; the summary and references are kept
-    /// unless this response had none.
+    /// entries replaced by the retry's; the retry's summaries follow this
+    /// response's, and its references not already here follow them.
     public func merging(_ retry: ReassembledConflictResolutionResponse) -> ReassembledConflictResolutionResponse {
         let retried = (retry.resolutions.map(\.path) + retry.failedFiles.map(\.path) + retry.notAttemptedFiles).exactSet
         return ReassembledConflictResolutionResponse(
             resolutions: resolutions.filter { !retried.contains(ExactString($0.path)) } + retry.resolutions,
-            summary: summary ?? retry.summary,
-            references: references.isEmpty ? retry.references : references,
+            summaries: summaries + retry.summaries,
+            references: references + retry.references.filter { !references.contains($0) },
             failedFiles: failedFiles.filter { !retried.contains(ExactString($0.path)) } + retry.failedFiles,
             notAttemptedFiles: notAttemptedFiles.filter { !retried.contains(ExactString($0)) } + retry.notAttemptedFiles
         )
@@ -194,8 +210,9 @@ public enum ConflictContextReference: Sendable, Hashable {
 /// The context needed to render the resolution summary card, captured once
 /// while the data is fresh.
 public struct AIResolutionSummary: Sendable, Hashable {
-    /// Markdown text written by the model. `nil` when the model omitted it.
-    public var markdown: String?
+    /// The Markdown the model wrote for each request, with the files it
+    /// covers. Empty when the model wrote none.
+    public var summaries: [AIChunkSummary]
     /// Display label for the *ours* (current) side.
     public var ourLabel: String
     /// Display label for the *theirs* (incoming) side.
@@ -204,8 +221,8 @@ public struct AIResolutionSummary: Sendable, Hashable {
     /// resolved against the gathered context: the "Context" list.
     public var references: [ConflictContextReference]
 
-    public init(markdown: String?, ourLabel: String, theirLabel: String, references: [ConflictContextReference]) {
-        self.markdown = markdown
+    public init(summaries: [AIChunkSummary], ourLabel: String, theirLabel: String, references: [ConflictContextReference]) {
+        self.summaries = summaries
         self.ourLabel = ourLabel
         self.theirLabel = theirLabel
         self.references = references
@@ -603,44 +620,78 @@ public func validateResolutionPaths(_ resolutions: [RawFileResolution], _ expect
 /// `findConflictBlocks`), so each resolution replaces exactly the lines its
 /// hunk showed the model.
 ///
+/// Every line copied through keeps its own ending (`\r\n`, `\n`, or none on
+/// a last line without a final newline). A resolution's lines end with the
+/// ending of the line before its block (the opening marker's at the start
+/// of the file), except that when the block ended the file without a final
+/// newline, its last line has none either. A line ending at the end of a
+/// resolution ends its last line rather than starting an empty one, so a
+/// resolution of only a line ending is one empty line.
+///
 /// - Parameters:
 ///   - rawContent: The full file content on disk, including conflict markers.
 ///   - hunkResolutions: Per-hunk resolved content, in the order they appear
 ///     in the file.
 /// - Returns: The reassembled file with all conflicts resolved.
 public func reassembleResolvedFile(_ rawContent: String, _ hunkResolutions: [HunkResolution]) -> String {
-    let eol = containsCRLF(rawContent) ? "\r\n" : "\n"
-    let lines = JS.splitLines(rawContent)
-    var resultLines: [String] = []
+    let lines = splitLinesKeepingEndings(rawContent)
+    var result = ""
     var next = 0
 
-    for (hunkIndex, block) in findConflictBlocks(lines).enumerated() {
-        resultLines.append(contentsOf: lines[next..<block.start])
+    func copy(_ range: Range<Int>) {
+        for line in lines[range] {
+            result += line.text
+            result += line.ending
+        }
+    }
+
+    for (hunkIndex, block) in findConflictBlocks(lines.map(\.text)).enumerated() {
+        copy(next..<block.start)
         // Splice in the resolved content for this hunk.
         if hunkIndex < hunkResolutions.count {
             let resolved = hunkResolutions[hunkIndex].resolvedContent
             if !resolved.isEmpty {
-                resultLines.append(contentsOf: JS.splitLines(resolved))
+                let ending = lines[max(block.start - 1, 0)].ending
+                var resolvedLines = JS.splitLines(resolved)
+                if resolvedLines.count > 1, resolvedLines.last == "" {
+                    resolvedLines.removeLast()
+                }
+                for (index, text) in resolvedLines.enumerated() {
+                    result += text
+                    if index < resolvedLines.count - 1 || !lines[block.end].ending.isEmpty {
+                        result += ending
+                    }
+                }
             }
         }
         // Skip through the entire conflict marker block.
         next = block.end + 1
     }
-    resultLines.append(contentsOf: lines[next...])
+    copy(next..<lines.count)
 
-    return resultLines.joined(separator: eol)
+    return result
 }
 
-/// `content.includes('\r\n')`, by scalars.
-private func containsCRLF(_ content: String) -> Bool {
-    var previous: Unicode.Scalar?
-    for scalar in content.unicodeScalars {
-        if previous == "\r", scalar == "\n" {
-            return true
+/// `JS.splitLines`, keeping each line's ending: `\r\n`, `\n`, or empty for
+/// the last line.
+private func splitLinesKeepingEndings(_ string: String) -> [(text: String, ending: String)] {
+    var lines: [(text: String, ending: String)] = []
+    var current = String.UnicodeScalarView()
+    for scalar in string.unicodeScalars {
+        if scalar == "\n" {
+            var ending = "\n"
+            if current.last == "\r" {
+                current.removeLast()
+                ending = "\r\n"
+            }
+            lines.append((String(current), ending))
+            current = String.UnicodeScalarView()
+        } else {
+            current.append(scalar)
         }
-        previous = scalar
     }
-    return false
+    lines.append((String(current), ""))
+    return lines
 }
 
 /// Combines the model's raw per-hunk resolutions with the original file

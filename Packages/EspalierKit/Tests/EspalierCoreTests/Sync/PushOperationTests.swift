@@ -29,7 +29,7 @@ struct PushOperationTests {
         try await runGit(["commit", "-q", "--amend", "-m", "Add a (amended)"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         let branch = try #require(fixture.model.gitState.tip.branch)
-        fixture.model.operations.recordRewrite(of: branch, previousTip: pushed)
+        await fixture.model.operations.recordRewrite(of: branch, previousTip: pushed, upstreamTip: pushed)
         return (fixture, try await fixture.head())
     }
 
@@ -157,7 +157,27 @@ struct PushOperationTests {
         #expect(retry.confirmed == [.forcePush])
         #expect(try await fixture.remoteTip("main") == theirs)
         #expect(try await fixture.head() == amended)
-        #expect(fixture.model.operations.rewrittenBranches["main"] == amended)
+        #expect(fixture.model.operations.rewrittenBranches["main"] == (try await fixture.localSHA("main@{upstream}")))
+        #expect(fixture.model.operations.forcePushState == .recommended)
+        await fixture.app.idle()
+    }
+
+    @Test("a collaborator's push fetched after the rewrite, before the refresh: the force push's lease refuses, and the remote keeps the commit")
+    func leaseUsesRecordedTip() async throws {
+        let (fixture, amended) = try await makeRewrittenRepository()
+        let theirs = try await pushCommitFromAnotherClone(fixture.remote, path: "theirs.txt", contents: "theirs\n")
+        // Fetched, but not yet refreshed: the toolbar still says Force Push,
+        // and git's own lease (the remote-tracking branch) would pass.
+        try await runGit(["fetch", "-q"], fixture.local)
+        #expect(fixture.model.operations.forcePushState == .recommended)
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.model.sync.push(PushRequest(forceWithLease: true), confirmed: [.forcePush])
+        }
+        #expect(error?.reason == .pushRejectedNonFastForward)
+        #expect(error?.gitFailure?.stderr.contains("stale info") == true)
+        #expect(try await fixture.remoteTip("main") == theirs)
+        #expect(try await fixture.head() == amended)
         await fixture.app.idle()
     }
 
@@ -171,7 +191,7 @@ struct PushOperationTests {
             try await fixture.model.sync.push(PushRequest(forceWithLease: true), confirmed: [.forcePush])
         }
         #expect(error?.gitFailure?.stderr.contains("pre-receive hook declined") == true)
-        #expect(fixture.model.operations.rewrittenBranches["main"] == amended)
+        #expect(fixture.model.operations.rewrittenBranches["main"] == (try await fixture.localSHA("main@{upstream}")))
         let retry = try #require(error?.retry)
 
         try FileManager.default.removeItem(atPath: preReceive)

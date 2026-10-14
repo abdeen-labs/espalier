@@ -244,7 +244,8 @@ struct TrampolineCredentialHelperTests {
                 parameters: ["get"],
                 environmentVariables: [:],
                 workingDirectory: "/",
-                forwardsStandardInput: true
+                forwardsStandardInput: true,
+                parentProcessID: nil
             )
 
             // An enterprise host without an account: sign in.

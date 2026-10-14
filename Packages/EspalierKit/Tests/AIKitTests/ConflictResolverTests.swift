@@ -117,7 +117,7 @@ struct ConflictResolverTests {
         #expect(response.resolutions[0].resolvedContent == "line 0\nresolved a.ts 0\nend")
         #expect(response.resolutions[1].resolvedContent == "line 0\nresolved b.ts 0\nline 1\nresolved b.ts 1\nend")
         #expect(response.resolutions[2].deleteConflictAction == .keep)
-        #expect(response.summary == "### Conflicting changes\nA.\n\n### Resolution\nB.")
+        #expect(response.summaries == [AIChunkSummary(markdown: "### Conflicting changes\nA.\n\n### Resolution\nB.", paths: ["a.ts", "b.ts", "c.ts"])])
         #expect(response.failedFiles.isEmpty)
         #expect(
             progress.all == [
@@ -284,14 +284,23 @@ struct ConflictResolverTests {
         #expect(provider.requests.count == 1)
     }
 
-    @Test("resolves larger sets in concurrent chunks and merges them in order")
+    @Test("resolves larger sets in concurrent chunks and merges them in order, with each chunk's summary and references")
     func chunks() async throws {
         let files = (0..<25).map { conflictedFile("file\($0).ts") }
         let gate = StartGate(holdingUntil: 2)
+        let commit = AIConflictReference(type: .commit, id: "abc1234")
+        let pullRequest = AIConflictReference(type: .pullRequest, id: "7")
         let provider = ScriptedProvider { request in
             await gate.enter()
             defer { gate.leave() }
-            return .content(resolvingEverything(request.userPrompt))
+            let first = promptFiles(request.userPrompt).first?.path ?? ""
+            return .content(
+                resolvingEverything(
+                    request.userPrompt,
+                    summary: "From \(first)",
+                    references: first == "file0.ts" ? [commit] : [commit, pullRequest]
+                )
+            )
         }
         let progress = ProgressLog()
 
@@ -301,6 +310,13 @@ struct ConflictResolverTests {
         #expect(gate.maxInFlight == 2)
         #expect(response.resolutions.map(\.path) == files.map(\.path))
         #expect(response.failedFiles.isEmpty)
+        #expect(
+            response.summaries == [
+                AIChunkSummary(markdown: "From file0.ts", paths: files.prefix(20).map(\.path)),
+                AIChunkSummary(markdown: "From file20.ts", paths: files.suffix(5).map(\.path)),
+            ]
+        )
+        #expect(response.references == [commit, pullRequest])
         #expect(
             progress.all == [
                 ConflictResolutionProgress(filesResolved: 0, filesTotal: 25),
@@ -349,7 +365,7 @@ struct ConflictResolverTests {
         let failure = try #require(response.failedFiles.first?.error)
         #expect(failure.stage == .streamResponse)
         #expect((failure.underlyingError as? AIProviderError)?.kind == .server)
-        #expect(response.summary != nil)
+        #expect(response.summaries.map(\.paths) == [files.prefix(20).map(\.path)])
 
         // Retry just the failed files and merge the results in.
         failing.withLock { $0 = false }
@@ -362,7 +378,7 @@ struct ConflictResolverTests {
         let merged = response.merging(retry)
         #expect(Set(merged.resolutions.map(\.path)) == Set(files.map(\.path)))
         #expect(merged.failedFiles.isEmpty)
-        #expect(merged.summary == response.summary)
+        #expect(merged.summaries.map(\.paths) == [files.prefix(20).map(\.path), files.suffix(5).map(\.path)])
     }
 
     @Test("stops starting chunks after an error that would fail them all")
@@ -504,22 +520,30 @@ struct ConflictResolutionOutcomeTests {
         let cited = makeConflictResolutionOutcome(
             ReassembledConflictResolutionResponse(
                 resolutions: [resolution],
-                summary: "S",
+                summaries: [AIChunkSummary(markdown: "S", paths: ["a.ts"])],
                 references: [AIConflictReference(type: .commit, id: "abc1234")]
             ),
             context: resolutionContext
         )
         #expect(cited.resolutions == [resolution])
-        #expect(cited.summary == AIResolutionSummary(markdown: "S", ourLabel: "main", theirLabel: "feature", references: [.commit(commit)]))
+        #expect(
+            cited.summary
+                == AIResolutionSummary(
+                    summaries: [AIChunkSummary(markdown: "S", paths: ["a.ts"])],
+                    ourLabel: "main",
+                    theirLabel: "feature",
+                    references: [.commit(commit)]
+                )
+        )
         #expect(cited.skippedFiles == [AISkippedFile(path: "big.js", reason: "File too large to resolve automatically")])
         #expect(cited.failedFiles.isEmpty)
 
         let uncited = makeConflictResolutionOutcome(
-            ReassembledConflictResolutionResponse(resolutions: [resolution], summary: nil, references: []),
+            ReassembledConflictResolutionResponse(resolutions: [resolution], summaries: [], references: []),
             context: resolutionContext
         )
         #expect(uncited.summary.references == [.commit(commit)])
-        #expect(uncited.summary.markdown == nil)
+        #expect(uncited.summary.summaries.isEmpty)
     }
 
     @Test("produces a complete, empty outcome for a round with nothing to resolve")
@@ -536,24 +560,35 @@ struct ConflictResolutionOutcomeTests {
 
         #expect(outcome.resolutions.isEmpty)
         #expect(outcome.failedFiles.isEmpty)
-        #expect(outcome.summary.markdown == nil)
+        #expect(outcome.summary.summaries.isEmpty)
         #expect(outcome.summary.references.isEmpty)
         #expect(outcome.skippedFiles == [AISkippedFile(path: "big.js", reason: "File could not be read")])
         #expect(provider.requests.isEmpty)
     }
 
-    @Test("merges a retry of failed files")
+    @Test("merges a retry of failed files, adding its summary and the references it adds")
     func merging() {
         let failure = AIConflictResolutionError(AIProviderError(kind: .server, message: "Down"), stage: .streamResponse)
+        let pullRequest = ConflictContextPullRequest(number: 7, title: "Greet in French", body: "")
         let first = ConflictResolutionOutcome(
             resolutions: [FileResolution(path: "a.ts", resolvedContent: "a", reasoning: "r")],
-            summary: AIResolutionSummary(markdown: nil, ourLabel: "main", theirLabel: "feature", references: []),
+            summary: AIResolutionSummary(
+                summaries: [AIChunkSummary(markdown: "A", paths: ["a.ts"])],
+                ourLabel: "main",
+                theirLabel: "feature",
+                references: [.commit(commit)]
+            ),
             skippedFiles: [AISkippedFile(path: "big.js", reason: "too large")],
             failedFiles: [AIFailedFile(path: "b.ts", error: failure), AIFailedFile(path: "c.ts", error: failure)]
         )
         let retry = ConflictResolutionOutcome(
             resolutions: [FileResolution(path: "b.ts", resolvedContent: "b", reasoning: "r")],
-            summary: AIResolutionSummary(markdown: "S", ourLabel: "main", theirLabel: "feature", references: [.commit(commit)]),
+            summary: AIResolutionSummary(
+                summaries: [AIChunkSummary(markdown: "B", paths: ["b.ts"])],
+                ourLabel: "main",
+                theirLabel: "feature",
+                references: [.pullRequest(pullRequest), .commit(commit)]
+            ),
             skippedFiles: [],
             failedFiles: [AIFailedFile(path: "c.ts", error: failure)]
         )
@@ -563,14 +598,14 @@ struct ConflictResolutionOutcomeTests {
         #expect(merged.resolutions.map(\.path) == ["a.ts", "b.ts"])
         #expect(merged.failedFiles.map(\.path) == ["c.ts"])
         #expect(merged.skippedFiles.map(\.path) == ["big.js"])
-        #expect(merged.summary.markdown == "S")
-        #expect(merged.summary.references == [.commit(commit)])
+        #expect(merged.summary.summaries == [AIChunkSummary(markdown: "A", paths: ["a.ts"]), AIChunkSummary(markdown: "B", paths: ["b.ts"])])
+        #expect(merged.summary.references == [.commit(commit), .pullRequest(pullRequest)])
     }
 
     @Test("merges a retry of unattempted files, comparing paths by code units")
     func mergingNotAttempted() {
         let failure = AIConflictResolutionError(AIProviderError(kind: .authentication, message: "Bad key"), stage: .streamResponse)
-        let summary = AIResolutionSummary(markdown: nil, ourLabel: "main", theirLabel: "feature", references: [])
+        let summary = AIResolutionSummary(summaries: [], ourLabel: "main", theirLabel: "feature", references: [])
         let first = ConflictResolutionOutcome(
             resolutions: [FileResolution(path: "a.ts", resolvedContent: "a", reasoning: "r")],
             summary: summary,

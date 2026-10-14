@@ -79,6 +79,7 @@ enum UIFixtures {
     static let decisions: [(name: String, decision: Decision)] = [
         ("uncommittedChanges", .uncommittedChanges(currentBranch: "main", targetBranch: "feature/login", currentBranchHasStash: false)),
         ("uncommittedChanges-stash", .uncommittedChanges(currentBranch: "main", targetBranch: "feature/login", currentBranchHasStash: true)),
+        ("externalEditor", .externalEditor(editors: ["Cursor", "Visual Studio Code", "Xcode", "Zed"])),
     ]
 
     // MARK: Prompts
@@ -204,7 +205,7 @@ enum UIFixtures {
                 operation: .publishRepository, repositoryID: id
             )),
             ("integration-editor", OperationError(
-                .integration(.editor(message: "Espalier couldn't find a supported editor. Install Visual Studio Code, then restart Espalier and try again.", suggestDefaultEditor: true, openPreferences: false)),
+                .integration(.editor(message: "Espalier couldn't find a supported editor. Install Visual Studio Code, then try again.", suggestDefaultEditor: true, openPreferences: false)),
                 operation: .openInEditor, recoveries: [.downloadSuggestedEditor, .openSettings(.integrations)]
             )),
             ("integration-shell", OperationError(

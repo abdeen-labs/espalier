@@ -199,7 +199,8 @@ public actor TrampolineServer {
             parameters: request.arguments,
             environmentVariables: request.environment,
             workingDirectory: request.workingDirectory,
-            forwardsStandardInput: request.forwardsStandardInput
+            forwardsStandardInput: request.forwardsStandardInput,
+            parentProcessID: connection.parentProcessID
         )
 
         // The handler is cancelled when the connection closes: the helper

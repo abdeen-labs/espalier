@@ -198,8 +198,10 @@ public final class Preferences {
     /// - Parameters:
     ///   - store: The settings' storage.
     ///   - homeDirectory: The home directory `lastCloneLocation`'s default is in.
-    public init(store: PreferenceStore, homeDirectory: String = NSHomeDirectory()) {
+    ///   - locale: The region `numberFormat`'s default follows.
+    public init(store: PreferenceStore, homeDirectory: String = NSHomeDirectory(), locale: Locale = .autoupdatingCurrent) {
         self.store = store
+        self.locale = locale
         defaultCloneLocation = POSIXPath.join(homeDirectory, "Developer")
 
         confirmRepositoryRemoval = store.getBoolean(PreferenceKey.confirmRepoRemoval, true)
@@ -241,8 +243,9 @@ public final class Preferences {
         underlineLinks = store.getBoolean(PreferenceKey.underlineLinks, true)
         preferAbsoluteDates = store.getBoolean(PreferenceKey.preferAbsoluteDates, false)
         tabSize = store.getNumber(PreferenceKey.tabSize, 4)
-        numberFormat = store.getString(PreferenceKey.numberFormat).flatMap { $0.isEmpty ? nil : numberFormatFromKey($0) }
-            ?? defaultNumberFormat
+        pickedNumberFormat = store.getString(PreferenceKey.numberFormat).flatMap { key in
+            numberFormats.first { numberFormatToKey($0) == key }
+        }
         dateFormat = store.getString(PreferenceKey.dateFormat)
         timeFormat = store.getString(PreferenceKey.timeFormat)
 
@@ -558,14 +561,27 @@ public final class Preferences {
         }
     }
 
-    /// The number format (`numberFormat`, stored as GitKit's
-    /// `numberFormatToKey`). GitKit's `getNumberFormatPreference()` reads it
-    /// from the standard defaults, which are this store's in the app.
-    public var numberFormat: NumberFormat {
+    /// The region the number format's default follows.
+    private let locale: Locale
+
+    /// The number format picked in Settings (`numberFormat`, stored as
+    /// GitKit's `numberFormatToKey`); nil until one is picked, or when the
+    /// stored one is empty or unknown.
+    private var pickedNumberFormat: NumberFormat? {
         didSet {
-            guard numberFormat != oldValue else { return }
-            store.setString(PreferenceKey.numberFormat, numberFormatToKey(numberFormat))
+            guard pickedNumberFormat != oldValue, let pickedNumberFormat else { return }
+            store.setString(PreferenceKey.numberFormat, numberFormatToKey(pickedNumberFormat))
         }
+    }
+
+    /// The number format: the one picked, else the nearest to the region's
+    /// separators (`nearestNumberFormat(to:)`), which follows the region as
+    /// it changes. Setting it picks it, the region's own format too. GitKit's
+    /// `getNumberFormatPreference()` reads it from the standard defaults,
+    /// which are this store's in the app.
+    public var numberFormat: NumberFormat {
+        get { pickedNumberFormat ?? nearestNumberFormat(to: locale) }
+        set { pickedNumberFormat = newValue }
     }
 
     /// The date format pattern (`dateFormat`), or nil for the default. The

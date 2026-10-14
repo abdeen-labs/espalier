@@ -118,10 +118,42 @@ public func getCheckRunAdjective(_ status: APICheckStatus, _ conclusion: APIChec
     if let conclusion {
         return getCheckRunConclusionAdjective(conclusion)
     }
-    switch status {
-    case .queued, .requested, .pending: return "Queued"
-    case .waiting: return "Waiting"
-    default: return "In progress"
+    return PendingCheckState(status).adjective
+}
+
+/// The user-facing adjective for a pull request's checks together: their
+/// combined conclusion's, or while some have none yet, "In progress" if
+/// any of those runs, else "Waiting" if any waits, else "Queued".
+public func getCombinedCheckAdjective(_ check: CombinedRefCheck) -> String {
+    if let conclusion = check.conclusion {
+        return getCheckRunConclusionAdjective(conclusion)
+    }
+    let pending = check.checks.filter { $0.conclusion == nil }.map { PendingCheckState($0.status) }
+    return (pending.max() ?? .inProgress).adjective
+}
+
+/// Where a check without a conclusion is, from the furthest from running.
+private enum PendingCheckState: Comparable {
+    /// Queued, requested, or pending: not started.
+    case queued
+    /// Waiting for a deployment's protection rules.
+    case waiting
+    case inProgress
+
+    init(_ status: APICheckStatus) {
+        switch status {
+        case .queued, .requested, .pending: self = .queued
+        case .waiting: self = .waiting
+        default: self = .inProgress
+        }
+    }
+
+    var adjective: String {
+        switch self {
+        case .queued: "Queued"
+        case .waiting: "Waiting"
+        case .inProgress: "In progress"
+        }
     }
 }
 

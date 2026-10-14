@@ -48,7 +48,17 @@ public struct DiffSelection: Hashable, Sendable {
             )
         }
 
-        return DiffSelection(defaultSelectionType: initialSelection, divergingLines: nil, selectableLines: nil)
+        return DiffSelection(defaultSelectionType: initialSelection, divergingLines: nil, selectableLines: nil, diffHunks: nil)
+    }
+
+    /// A selection of exactly `selected` among `selectableLines`.
+    static func selecting(_ selected: Set<Int>, of selectableLines: Set<Int>, in diffHunks: [DiffHunk]) -> DiffSelection {
+        DiffSelection(
+            defaultSelectionType: .none,
+            divergingLines: selected.isEmpty ? nil : selected,
+            selectableLines: selectableLines,
+            diffHunks: diffHunks
+        )
     }
 
     /// Either `.all` or `.none`.
@@ -57,15 +67,29 @@ public struct DiffSelection: Hashable, Sendable {
     private let divergingLines: Set<Int>?
     /// Optional set of line numbers which can be selected.
     private let selectableLines: Set<Int>?
+    /// The hunks of the diff whose lines the indexes name, which
+    /// `carried(to:selectableLines:)` uses to carry the selection over to
+    /// another diff of the file; nil when they name the lines of whichever
+    /// diff the selection is used with.
+    public let diffHunks: [DiffHunk]?
 
     private init(
         defaultSelectionType: DiffSelectionType,
         divergingLines: Set<Int>?,
-        selectableLines: Set<Int>?
+        selectableLines: Set<Int>?,
+        diffHunks: [DiffHunk]?
     ) {
         self.defaultSelectionType = defaultSelectionType
         self.divergingLines = divergingLines
         self.selectableLines = selectableLines
+        self.diffHunks = diffHunks
+    }
+
+    /// Hashes everything but `diffHunks`, which can be millions of lines.
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(defaultSelectionType)
+        hasher.combine(divergingLines)
+        hasher.combine(selectableLines)
     }
 
     /// Returns a value indicating the computed overall state of the selection
@@ -175,7 +199,8 @@ public struct DiffSelection: Hashable, Sendable {
             return DiffSelection(
                 defaultSelectionType: defaultSelectionType,
                 divergingLines: newDivergingLines.isEmpty ? nil : newDivergingLines,
-                selectableLines: selectableLines
+                selectableLines: selectableLines,
+                diffHunks: diffHunks
             )
         } else {
             var newDivergingLines = Set<Int>()
@@ -188,7 +213,8 @@ public struct DiffSelection: Hashable, Sendable {
             return DiffSelection(
                 defaultSelectionType: computedSelectionType,
                 divergingLines: newDivergingLines,
-                selectableLines: selectableLines
+                selectableLines: selectableLines,
+                diffHunks: diffHunks
             )
         }
     }
@@ -202,14 +228,16 @@ public struct DiffSelection: Hashable, Sendable {
         withLineSelection(lineIndex, selected: !isSelected(lineIndex))
     }
 
-    /// Returns a copy of this selection instance with all lines selected.
+    /// Returns a copy of this selection instance with all lines selected,
+    /// without `diffHunks`.
     public func withSelectAll() -> DiffSelection {
-        DiffSelection(defaultSelectionType: .all, divergingLines: nil, selectableLines: selectableLines)
+        DiffSelection(defaultSelectionType: .all, divergingLines: nil, selectableLines: selectableLines, diffHunks: nil)
     }
 
-    /// Returns a copy of this selection instance with no lines selected.
+    /// Returns a copy of this selection instance with no lines selected,
+    /// without `diffHunks`.
     public func withSelectNone() -> DiffSelection {
-        DiffSelection(defaultSelectionType: .none, divergingLines: nil, selectableLines: selectableLines)
+        DiffSelection(defaultSelectionType: .none, divergingLines: nil, selectableLines: selectableLines, diffHunks: nil)
     }
 
     /// Returns a copy of this selection instance with a specified set of
@@ -227,7 +255,19 @@ public struct DiffSelection: Hashable, Sendable {
         return DiffSelection(
             defaultSelectionType: defaultSelectionType,
             divergingLines: divergingLines,
-            selectableLines: selectableLines
+            selectableLines: selectableLines,
+            diffHunks: diffHunks
+        )
+    }
+
+    /// Returns a copy of this selection whose indexes name the lines of
+    /// `diffHunks`.
+    public func withDiffHunks(_ diffHunks: [DiffHunk]?) -> DiffSelection {
+        DiffSelection(
+            defaultSelectionType: defaultSelectionType,
+            divergingLines: divergingLines,
+            selectableLines: selectableLines,
+            diffHunks: diffHunks
         )
     }
 }

@@ -298,7 +298,7 @@ func findOnFirstParentLine(_ repository: Repository, _ sha: String, head: String
 /// `git merge-base --is-ancestor`: whether `ancestor` is in `descendant`'s
 /// history (a commit is in its own).
 @concurrent
-private func isAncestor(_ repository: Repository, _ ancestor: String, of descendant: String) async -> Bool {
+func isAncestor(_ repository: Repository, _ ancestor: String, of descendant: String) async -> Bool {
     guard let result = try? await git(
         ["merge-base", "--is-ancestor", "--end-of-options", ancestor, descendant],
         repository.path,

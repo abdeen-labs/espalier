@@ -1,6 +1,7 @@
 // The app's accounts on GitHubKit's store, whose own behavior
 // `AccountsStoreTests` covers: loading and refreshing, signing out, token
-// invalidation and expiry, and problems with the stored accounts.
+// invalidation and expiry, tokens the keychain won't give, and problems with
+// the stored accounts.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -29,6 +30,35 @@ private final class UndeletableSecretStore: SecretStore {
 
     func deleteSecret(service: String, account: String) throws -> Bool {
         throw DeleteFailed()
+    }
+}
+
+/// A secret store whose reads fail while it's locked, as the keychain's do
+/// when it's locked or the user denies access.
+private final class LockableSecretStore: SecretStore {
+    struct Locked: Error, CustomStringConvertible {
+        var description: String { "Keychain read failed: User interaction is not allowed." }
+    }
+
+    private let inner = InMemorySecretStore()
+    private let locked = Mutex(false)
+
+    var isLocked: Bool {
+        get { locked.withLock { $0 } }
+        set { locked.withLock { $0 = newValue } }
+    }
+
+    func secret(service: String, account: String) throws -> String? {
+        if isLocked { throw Locked() }
+        return try inner.secret(service: service, account: account)
+    }
+
+    func setSecret(_ secret: String, service: String, account: String) throws {
+        try inner.setSecret(secret, service: service, account: account)
+    }
+
+    func deleteSecret(service: String, account: String) throws -> Bool {
+        try inner.deleteSecret(service: service, account: account)
     }
 }
 
@@ -243,6 +273,67 @@ struct AccountsModelTests {
         let issue = try #require(app.accounts.issues.first)
         app.accounts.dismissIssue(issue.id)
         #expect(app.accounts.issues.isEmpty)
+        await settle(app, harness)
+    }
+
+    @Test("keeps an account whose token the keychain won't give, unused until it does")
+    func unreadableToken() async throws {
+        let harness = try AppHarness()
+        var environment = harness.environment
+        let secrets = LockableSecretStore()
+        let dataStore = UserDefaultsDataStore(harness.defaults.defaults)
+        try await AccountsStore(dataStore: dataStore, secureStore: secrets, runtime: harness.gitHub.runtime)
+            .addAccount(dotComAccount(token: "gho_secret"))
+        secrets.isLocked = true
+        let store = AccountsStore(dataStore: dataStore, secureStore: secrets, runtime: harness.gitHub.runtime)
+        environment.accountsStore = store
+        harness.mockUser("octocat", id: 1)
+        let app = AppModel(environment: environment)
+        await app.load()
+        await app.accounts.idle()
+        await waitForState { !app.accounts.issues.isEmpty }
+
+        #expect(app.accounts.accounts.isEmpty)
+        #expect(app.accounts.unreadableAccounts.map(\.login) == ["octocat"])
+        #expect(app.accounts.unreadableAccounts.first?.token == "")
+        #expect(app.accounts.invalidatedAccounts.isEmpty)
+        // Git gets no credentials from it.
+        #expect(await AccountsTrampolineProvider(store, runtime: harness.gitHub.runtime).getAll().isEmpty)
+
+        // Trying again while the keychain is still locked changes nothing.
+        await app.accounts.retryUnreadableAccounts()
+        #expect(app.accounts.unreadableAccounts.map(\.login) == ["octocat"])
+
+        secrets.isLocked = false
+        await app.accounts.retryUnreadableAccounts()
+
+        #expect(app.accounts.unreadableAccounts.isEmpty)
+        #expect(app.accounts.accounts.map(\.token) == ["gho_secret"])
+        #expect(await AccountsTrampolineProvider(store, runtime: harness.gitHub.runtime).getAll().map(\.token) == ["gho_secret"])
+        await settle(app, harness)
+    }
+
+    @Test("signs out an account whose token the keychain won't give")
+    func signOutUnreadable() async throws {
+        let harness = try AppHarness()
+        var environment = harness.environment
+        let secrets = LockableSecretStore()
+        let dataStore = UserDefaultsDataStore(harness.defaults.defaults)
+        try await AccountsStore(dataStore: dataStore, secureStore: secrets, runtime: harness.gitHub.runtime)
+            .addAccount(dotComAccount(token: "gho_secret"))
+        secrets.isLocked = true
+        environment.accountsStore = AccountsStore(dataStore: dataStore, secureStore: secrets, runtime: harness.gitHub.runtime)
+        let app = AppModel(environment: environment)
+        await app.load()
+        await app.accounts.idle()
+        let account = try #require(app.accounts.unreadableAccounts.first)
+
+        try await app.accounts.signOut(account)
+
+        #expect(app.accounts.unreadableAccounts.isEmpty)
+        #expect(app.accounts.accounts.isEmpty)
+        secrets.isLocked = false
+        #expect(try secrets.secret(service: "Espalier - https://api.github.com", account: "octocat") == nil)
         await settle(app, harness)
     }
 

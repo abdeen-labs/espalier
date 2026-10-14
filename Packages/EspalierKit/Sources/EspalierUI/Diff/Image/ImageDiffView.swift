@@ -3,7 +3,8 @@
 // Image diffs. A modified image shows in the mode chosen above it (2-Up,
 // Swipe, Onion Skin, Difference; the `image-diff-type` preference, also in
 // the View menu), an added or deleted one in a single pane, a conflicted one
-// as a message. Images sit on a checkerboard so transparency shows.
+// as a message (`ConflictedFileMessage`). Images sit on a checkerboard so
+// transparency shows.
 
 import AppKit
 import GitKit
@@ -100,42 +101,11 @@ struct ImageDiffView: View {
                 SingleImagePane(title: content.current != nil ? "Added" : "Deleted", image: image)
             } else if status == .conflicted {
                 // A conflicted image's diff carries neither version.
-                ConflictedImageMessage(conflict: conflict)
+                ConflictedFileMessage("This image has a conflict", conflict: conflict)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: Palette.background))
-    }
-}
-
-/// A conflicted image: that it's in conflict, and how to resolve it.
-struct ConflictedImageMessage: View {
-    /// The file's row in Changes.
-    let conflict: ConflictFileRowContent?
-
-    var body: some View {
-        CenteredMessage(
-            "This image has a conflict",
-            systemImage: "exclamationmark.triangle",
-            description: description,
-            tint: Color(espalier: Palette.warningMark)
-        )
-    }
-
-    /// Resolve while a side can be picked (the row's menu), the side once
-    /// one was; nothing when the row offers neither (a stash restore).
-    private var description: String? {
-        guard let conflict else {
-            return nil
-        }
-        switch conflict.state {
-        case .manual where conflict.oursLabel != nil:
-            return "Choose the version to keep from Resolve in the file list."
-        case .resolved(isUndoable: true):
-            return "\(conflict.status)."
-        default:
-            return nil
-        }
     }
 }
 
@@ -180,12 +150,35 @@ nonisolated func getAspectFitSize(_ imageSize: CGSize, _ containerSize: CGSize) 
     return CGSize(width: imageSize.width / ratio, height: imageSize.height / ratio)
 }
 
-/// Get the size which will fit the bigger of the two images while maintaining
-/// aspect ratio.
-nonisolated func getMaxFitSize(_ previousImageSize: CGSize, _ currentImageSize: CGSize, _ containerSize: CGSize) -> CGSize {
-    let previousSize = getAspectFitSize(previousImageSize, containerSize)
-    let currentSize = getAspectFitSize(currentImageSize, containerSize)
-    return CGSize(width: max(previousSize.width, currentSize.width), height: max(previousSize.height, currentSize.height))
+/// Two images overlaid from the same top-left corner (Swipe, Onion Skin,
+/// Difference): each at its own size, in a box as wide and as tall as the
+/// larger of them, all scaled down by one factor when the box doesn't fit.
+nonisolated struct OverlaidImageSizes: Equatable {
+    let box: CGSize
+    let previous: CGSize
+    let current: CGSize
+
+    /// - Parameters:
+    ///   - previous: The old image's size.
+    ///   - current: The new image's size.
+    ///   - available: The space for the box.
+    init(previous: CGSize, current: CGSize, available: CGSize) {
+        let box = CGSize(width: max(previous.width, current.width), height: max(previous.height, current.height))
+        let scale = min(1, available.width / max(box.width, 1), available.height / max(box.height, 1))
+        self.box = CGSize(width: box.width * scale, height: box.height * scale)
+        self.previous = CGSize(width: previous.width * scale, height: previous.height * scale)
+        self.current = CGSize(width: current.width * scale, height: current.height * scale)
+    }
+
+    /// The sizes of decoded images, or of the placeholder for one that
+    /// couldn't be decoded.
+    init(previous: DecodedImage?, current: DecodedImage?, available: CGSize) {
+        self.init(
+            previous: previous?.pixelSize ?? CGSize(width: 64, height: 64),
+            current: current?.pixelSize ?? CGSize(width: 64, height: 64),
+            available: CGSize(width: max(available.width, 1), height: max(available.height, 1))
+        )
+    }
 }
 
 // MARK: - Shared pieces

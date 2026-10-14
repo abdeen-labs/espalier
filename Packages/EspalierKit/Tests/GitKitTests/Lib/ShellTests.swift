@@ -1,7 +1,7 @@
 // The environment Espalier takes from the user's shell when it isn't
 // started from a terminal: what the shell prints, real zsh and bash
-// startup files, failures and the timeout, and how git's runtime layers
-// the variables.
+// startup files, the variables that would point git at another repository,
+// failures and the timeout, and how git's runtime layers the variables.
 
 import EspalierSupport
 import Foundation
@@ -31,6 +31,11 @@ struct ShellTests {
         NamedCase("leaves out records without a name, and the variables that locate git", (
             output: "\u{0}=x\u{0}\u{0}garbage\u{0}\u{0}ESPALIER_GIT_DIR=/tmp/git\u{0}\u{0}LOCAL_GIT_DIRECTORY=/tmp/git\u{0}\u{0}E=e\u{0}",
             expected: ["E": "e"]
+        )),
+        NamedCase("leaves out where a repository is, and keeps git's configuration", (
+            output: "\u{0}GIT_DIR=/r/.git\u{0}\u{0}GIT_WORK_TREE=/r\u{0}\u{0}GIT_INDEX_FILE=/r/i\u{0}\u{0}GIT_OBJECT_DIRECTORY=/r/o\u{0}"
+                + "\u{0}GIT_CONFIG_COUNT=1\u{0}\u{0}GIT_CONFIG_KEY_0=a.b\u{0}\u{0}GIT_CONFIG_VALUE_0=c\u{0}\u{0}GIT_EDITOR=vim\u{0}",
+            expected: ["GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "a.b", "GIT_CONFIG_VALUE_0": "c", "GIT_EDITOR": "vim"]
         )),
         NamedCase("leaves out the shell process's own directory, nesting level, and last command", (
             output: "\u{0}PWD=/\u{0}\u{0}OLDPWD=/Users/joe\u{0}\u{0}SHLVL=1\u{0}\u{0}_=/usr/bin/awk\u{0}\u{0}E=e\u{0}",
@@ -101,6 +106,41 @@ struct ShellTests {
 
         let fallback = try #require(await getEnvironmentFromShell(launchEnvironment(shell: "", home: home)))
         #expect(fallback["ESPALIER_SHELL_TEST"] == "from-bash")
+    }
+
+    @Test("git runs in its own repository whatever repository the shell's variables name")
+    func repositoryLocation() async throws {
+        let home = try createTempDirectory()
+        let repository = try setupEmptyRepository().path
+        let elsewhere = try setupEmptyRepository().path
+        try write("""
+            export GIT_DIR='\(elsewhere)/.git'
+            export GIT_WORK_TREE='\(elsewhere)'
+            export GIT_INDEX_FILE='\(elsewhere)/.git/index'
+            export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=espalier.fromshell GIT_CONFIG_VALUE_0=yes
+            """, to: POSIXPath.join(home, ".zshrc"))
+        let environment = launchEnvironment(shell: "/bin/zsh", home: home)
+        let shell = ShellEnvironment(scheduler: ManualScheduler()) {
+            await getEnvironmentFromShell(environment)
+        }
+        await shell.waitUntilLoaded()
+        var runtime = TestEnvironment.runtime
+        runtime.shellEnvironment = shell
+
+        try await GitRuntime.withRuntime(runtime) {
+            let located = try await git(["rev-parse", "--absolute-git-dir", "--show-toplevel"], repository, "repositoryLocation")
+            #expect(located.stdout == "\(POSIXPath.join(repository, ".git"))\n\(repository)\n")
+            // The shell's configuration still applies.
+            #expect(try await git(["config", "espalier.fromshell"], repository, "repositoryLocation").stdout == "yes\n")
+        }
+
+        // An index Espalier sets for a call still applies.
+        let index = POSIXPath.join(try createTempDirectory(), "index")
+        runtime.processEnvironment["GIT_INDEX_FILE"] = index
+        try await GitRuntime.withRuntime(runtime) {
+            let path = try await git(["rev-parse", "--git-path", "index"], repository, "repositoryLocation")
+            #expect(path.stdout == index + "\n")
+        }
     }
 
     @Test("gives nothing when the shell can't start, exits unsuccessfully, or takes too long")

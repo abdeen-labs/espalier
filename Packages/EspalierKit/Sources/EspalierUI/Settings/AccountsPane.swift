@@ -4,7 +4,8 @@
 // server) with Sign Out and Add GitHub Enterprise Account…, or a call to
 // sign in. Accounts signed out because their tokens stopped working offer
 // Sign In Again and Remove (they're kept for signing in again until the user
-// removes them). Sign Out asks nothing, and leaves a note with a link to the
+// removes them). An account whose token the keychain won't give says so,
+// with Sign Out and Try Again. Sign Out asks nothing, and leaves a note with a link to the
 // page where the user can revoke Espalier's access (signing out can't: it
 // needs a client secret). Signing in opens its sheet on the Settings window,
 // through the window's GitHub actions.
@@ -78,22 +79,29 @@ nonisolated struct SignedOutNote: Sendable, Equatable, Identifiable {
 /// What the Accounts pane shows.
 nonisolated struct AccountsContent: Sendable, Equatable {
     var dotCom: AccountRowContent?
+    /// GitHub.com's account, whose token the keychain won't give.
+    var unreadableDotCom: AccountRowContent?
     /// GitHub.com's account, signed out because its token stopped working.
     var invalidatedDotCom: AccountRowContent?
     var enterprise: [AccountRowContent]
+    var unreadableEnterprise: [AccountRowContent]
     var invalidatedEnterprise: [AccountRowContent]
     var notes: [SignedOutNote]
 
     init(
         dotCom: AccountRowContent? = nil,
+        unreadableDotCom: AccountRowContent? = nil,
         invalidatedDotCom: AccountRowContent? = nil,
         enterprise: [AccountRowContent] = [],
+        unreadableEnterprise: [AccountRowContent] = [],
         invalidatedEnterprise: [AccountRowContent] = [],
         notes: [SignedOutNote] = []
     ) {
         self.dotCom = dotCom
+        self.unreadableDotCom = unreadableDotCom
         self.invalidatedDotCom = invalidatedDotCom
         self.enterprise = enterprise
+        self.unreadableEnterprise = unreadableEnterprise
         self.invalidatedEnterprise = invalidatedEnterprise
         self.notes = notes
     }
@@ -101,15 +109,19 @@ nonisolated struct AccountsContent: Sendable, Equatable {
     @MainActor
     init(accounts: AccountsModel, notes: [SignedOutNote]) {
         let signedIn = accounts.accounts
+        let unreadable = accounts.unreadableAccounts
+        let saved = signedIn + unreadable
         let invalidated = accounts.invalidatedAccounts.filter { invalid in
-            !signedIn.contains { $0.endpoint == invalid.endpoint }
+            !saved.contains { $0.endpoint == invalid.endpoint }
         }
         self.init(
             dotCom: signedIn.first(where: isDotComAccount).map(AccountRowContent.init),
+            unreadableDotCom: unreadable.first(where: isDotComAccount).map(AccountRowContent.init),
             invalidatedDotCom: invalidated.first(where: isDotComAccount).map(AccountRowContent.init),
             enterprise: signedIn.filter(isEnterpriseAccount).map(AccountRowContent.init),
+            unreadableEnterprise: unreadable.filter(isEnterpriseAccount).map(AccountRowContent.init),
             invalidatedEnterprise: invalidated.filter(isEnterpriseAccount).map(AccountRowContent.init),
-            notes: notes.filter { note in !signedIn.contains { $0.endpoint == note.endpoint } }
+            notes: notes.filter { note in !saved.contains { $0.endpoint == note.endpoint } }
         )
     }
 
@@ -119,9 +131,9 @@ nonisolated struct AccountsContent: Sendable, Equatable {
     }
 
     /// Whether GitHub Enterprise shows its call to sign in: no account,
-    /// signed in or signed out.
+    /// signed in, unreadable, or signed out.
     var showsEnterpriseCallToAction: Bool {
-        enterprise.isEmpty && invalidatedEnterprise.isEmpty
+        enterprise.isEmpty && unreadableEnterprise.isEmpty && invalidatedEnterprise.isEmpty
     }
 
     /// Notes for Enterprise accounts that are gone.
@@ -136,6 +148,8 @@ struct AccountsActions {
     /// `SignInRequest.enterpriseEndpoint` for a new Enterprise account.
     var signIn: (String?) -> Void
     var signOut: (String) -> Void
+    /// Reads the tokens the keychain wouldn't give again.
+    var tryAgain: () -> Void
     /// Forgets a signed-out account (by endpoint).
     var remove: (String) -> Void
     var open: (URL) -> Void
@@ -165,7 +179,8 @@ public struct AccountsPane: View {
                 context?.actions.perform(.signIn(endpoint: endpoint, then: nil))
             },
             signOut: { endpoint in
-                guard let context, let account = accounts.accounts.first(where: { $0.endpoint == endpoint }) else {
+                let saved = accounts.accounts + accounts.unreadableAccounts
+                guard let context, let account = saved.first(where: { $0.endpoint == endpoint }) else {
                     return
                 }
                 Task {
@@ -173,6 +188,11 @@ public struct AccountsPane: View {
                         notes.removeAll { $0.endpoint == endpoint }
                         notes.append(note)
                     }
+                }
+            },
+            tryAgain: {
+                Task {
+                    await accounts.retryUnreadableAccounts()
                 }
             },
             remove: { endpoint in
@@ -219,6 +239,8 @@ struct AccountsForm: View {
                         }
                         .settingsButton()
                     }
+                } else if let account = content.unreadableDotCom {
+                    UnreadableAccountRow(account: account, actions: actions)
                 } else if let account = content.invalidatedDotCom {
                     InvalidatedAccountRow(account: account) {
                         actions.signIn(account.endpoint)
@@ -246,6 +268,9 @@ struct AccountsForm: View {
                         }
                         .settingsButton()
                     }
+                }
+                ForEach(content.unreadableEnterprise) { account in
+                    UnreadableAccountRow(account: account, actions: actions)
                 }
                 ForEach(content.invalidatedEnterprise) { account in
                     InvalidatedAccountRow(account: account) {
@@ -321,6 +346,29 @@ private struct InvalidatedAccountRow: View {
                 .settingsButton()
         } footer: {
             FieldMessage("Your account token is no longer valid, so you were signed out.", kind: .warning)
+        }
+    }
+}
+
+/// An account whose token the keychain won't give (it's locked, or access
+/// was denied): saved, but not used until Try Again reads the token.
+private struct UnreadableAccountRow: View {
+    let account: AccountRowContent
+    let actions: AccountsActions
+
+    var body: some View {
+        AccountRow(account: account) {
+            Button("Sign Out") {
+                actions.signOut(account.endpoint)
+            }
+            .settingsButton()
+            Button("Try Again", action: actions.tryAgain)
+                .settingsButton()
+        } footer: {
+            FieldMessage(
+                "Espalier couldn't read this account's token from your keychain. Make sure your login keychain is unlocked, then try again.",
+                kind: .warning
+            )
         }
     }
 }

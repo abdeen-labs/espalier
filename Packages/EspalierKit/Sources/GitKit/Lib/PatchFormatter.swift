@@ -146,7 +146,7 @@ public func formatPatch(_ file: WorkingDirectoryFileChange, _ diff: some TextDif
     var patch = ""
 
     for hunk in diff.hunks {
-        var hunkBuf = ""
+        var hunkLines: [PatchLine] = []
 
         var oldCount = 0
         var newCount = 0
@@ -164,14 +164,14 @@ public func formatPatch(_ file: WorkingDirectoryFileChange, _ diff: some TextDif
             // Context lines can always be let through, they will
             // never appear for new files.
             if line.type == .context {
-                hunkBuf.appendLine(line.text)
+                hunkLines.append(PatchLine(line, " "))
                 oldCount += 1
                 newCount += 1
             } else if file.selection.isSelected(absoluteIndex) {
                 // A line selected for inclusion.
 
                 // Use the line as-is
-                hunkBuf.appendLine(line.text)
+                hunkLines.append(PatchLine(line, line.type == .add ? "+" : "-"))
 
                 if line.type == .add {
                     newCount += 1
@@ -200,13 +200,9 @@ public func formatPatch(_ file: WorkingDirectoryFileChange, _ diff: some TextDif
                 // An unselected deleted line has never happened as far as this patch
                 // is concerned which means that we should treat it as if it's still
                 // in the old file so we'll convert it to a context line.
-                hunkBuf.appendLine(line.text, replacingPrefixWith: " ")
+                hunkLines.append(PatchLine(line, " "))
                 oldCount += 1
                 newCount += 1
-            }
-
-            if line.noTrailingNewLine {
-                hunkBuf += "\\ No newline at end of file\n"
             }
         }
 
@@ -216,7 +212,7 @@ public func formatPatch(_ file: WorkingDirectoryFileChange, _ diff: some TextDif
         }
 
         patch += formatHunkHeader(hunk.header.oldStartLine, oldCount, hunk.header.newStartLine, newCount)
-        patch += hunkBuf
+        patch += formatHunkLines(hunkLines)
     }
 
     // If we get into this state we should never have been called in the first
@@ -280,7 +276,7 @@ public func formatPatchToDiscardChanges(
     var patch = ""
 
     for hunk in diff.hunks {
-        var hunkBuf = ""
+        var hunkLines: [PatchLine] = []
 
         var oldCount = 0
         var newCount = 0
@@ -298,16 +294,16 @@ public func formatPatchToDiscardChanges(
             // Context lines can always be let through, they will
             // never appear for new files.
             if line.type == .context {
-                hunkBuf.appendLine(line.text)
+                hunkLines.append(PatchLine(line, " "))
                 oldCount += 1
                 newCount += 1
             } else if selection.isSelected(absoluteIndex) {
                 // Reverse the change (if it was an added line, treat it as removed and vice versa).
                 if line.type == .add {
-                    hunkBuf.appendLine(line.text, replacingPrefixWith: "-")
+                    hunkLines.append(PatchLine(line, "-"))
                     newCount += 1
                 } else {
-                    hunkBuf.appendLine(line.text, replacingPrefixWith: "+")
+                    hunkLines.append(PatchLine(line, "+"))
                     oldCount += 1
                 }
 
@@ -318,16 +314,12 @@ public func formatPatchToDiscardChanges(
                     // so we just print it untouched on the diff.
                     oldCount += 1
                     newCount += 1
-                    hunkBuf.appendLine(line.text, replacingPrefixWith: " ")
+                    hunkLines.append(PatchLine(line, " "))
                 } else {
                     // An unselected removed line has no impact on this patch since it's not
                     // found on the current working copy of the file, so we can ignore it.
                     continue
                 }
-            }
-
-            if line.noTrailingNewLine {
-                hunkBuf += "\\ No newline at end of file\n"
             }
         }
 
@@ -337,7 +329,7 @@ public func formatPatchToDiscardChanges(
         }
 
         patch += formatHunkHeader(hunk.header.newStartLine, newCount, hunk.header.oldStartLine, oldCount)
-        patch += hunkBuf
+        patch += formatHunkLines(hunkLines)
     }
 
     if patch.isEmpty {
@@ -348,18 +340,75 @@ public func formatPatchToDiscardChanges(
     return formatPatchHeader(filePath, filePath) + patch
 }
 
-extension String {
-    /// Appends `line` and a newline.
-    fileprivate mutating func appendLine(_ line: String) {
-        append(line)
-        append("\n")
-    }
+/// A line of a hunk being written: a diff line under the prefix it takes in
+/// the patch (" ", "+", or "-").
+private struct PatchLine {
+    let line: DiffLine
+    let prefix: Unicode.Scalar
 
-    /// Appends `line` with its first character replaced by `prefix`, and a
-    /// newline.
-    fileprivate mutating func appendLine(_ line: String, replacingPrefixWith prefix: Unicode.Scalar) {
-        unicodeScalars.append(prefix)
-        unicodeScalars.append(contentsOf: line.unicodeScalars.dropFirst())
+    init(_ line: DiffLine, _ prefix: Unicode.Scalar) {
+        self.line = line
+        self.prefix = prefix
+    }
+}
+
+/// The lines of a hunk, each with "No newline at end of file" after it
+/// where it ends its side of the file without one.
+///
+/// A line the diff marks as having no newline ends the file it comes from,
+/// so the marker always holds on the patch's old side. On the new side it
+/// holds only while no line follows there: an added line followed by
+/// another line on the new side is written with its newline, and a
+/// context line followed by one becomes a removal (with the marker) and an
+/// addition (with the newline). Otherwise git would join the next line to
+/// it.
+private func formatHunkLines(_ lines: [PatchLine]) -> String {
+    // A line before the last one on the new side (context or an addition)
+    // is followed by a line there.
+    let lastOnNewSide = lines.lastIndex { $0.prefix != "-" } ?? -1
+    var buf = ""
+    for (index, patchLine) in lines.enumerated() {
+        let line = patchLine.line
+        let newSideFollows = index < lastOnNewSide
+        switch patchLine.prefix {
+        case "-":
+            buf.appendLine(line.text, prefix: "-")
+            if line.noTrailingNewLine {
+                buf += noNewlineMarker
+            }
+        case "+":
+            buf.appendLine(line.text, prefix: "+")
+            if line.noTrailingNewLine, !newSideFollows {
+                buf += noNewlineMarker
+            }
+        default:
+            if line.noTrailingNewLine, newSideFollows {
+                buf.appendLine(line.text, prefix: "-")
+                buf += noNewlineMarker
+                buf.appendLine(line.text, prefix: "+")
+            } else {
+                buf.appendLine(line.text, prefix: " ")
+                if line.noTrailingNewLine {
+                    buf += noNewlineMarker
+                }
+            }
+        }
+    }
+    return buf
+}
+
+private let noNewlineMarker = "\\ No newline at end of file\n"
+
+extension String {
+    /// Appends `line` with `prefix` in place of its first character (its
+    /// own prefix), and a newline.
+    fileprivate mutating func appendLine(_ line: String, prefix: Unicode.Scalar) {
+        if line.unicodeScalars.first == prefix {
+            append(line)
+        } else {
+            unicodeScalars.append(prefix)
+            unicodeScalars.append(contentsOf: line.unicodeScalars.dropFirst())
+        }
         append("\n")
     }
 }

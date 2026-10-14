@@ -105,6 +105,7 @@ nonisolated public enum MenuCatalog {
 
     public static let repository = MenuDefinition(title: "Repository", entries: [
         .item(.push),
+        .item(.forcePush),
         .item(.pull),
         .item(.fetch),
         .separator,

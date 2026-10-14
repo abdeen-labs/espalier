@@ -1,9 +1,6 @@
 import EspalierSupport
 import Foundation
 import GitKit
-import os
-
-private let logger = Log.logger(category: "commit")
 
 /// Undoes the commit again, with the confirmations given the first time.
 public struct UndoCommitRetry: RetryableOperation {
@@ -111,7 +108,7 @@ extension CommitModel {
             )
         }
 
-        let restored = await restoredDraft(for: commit, in: repository)
+        let restored = restoredDraft(for: commit, in: repository)
         setAsideDraftForAmending()
         draft = restored
         draftLoadedForAmend = restored
@@ -205,7 +202,7 @@ extension CommitModel {
             }
         }
 
-        draft = await restoredDraft(for: commit, in: repository)
+        draft = restoredDraft(for: commit, in: repository)
         await repository.awaitOperationRefresh(covering: .status)
     }
 
@@ -259,40 +256,27 @@ extension CommitModel {
     // MARK: Messages
 
     /// The draft for a commit's message: its summary and body, and in GitHub
-    /// repositories its `Co-Authored-By` trailers moved out of the body into
-    /// the co-authors. Co-authors already in the draft stay when the commit
-    /// has none.
-    func restoredDraft(for commit: Commit, in repository: RepositoryModel) async -> CommitDraft {
+    /// repositories its co-authors (`Commit.coAuthors`) moved out of the body
+    /// into the co-authors. Co-authors already in the draft stay when the
+    /// commit has none.
+    func restoredDraft(for commit: Commit, in repository: RepositoryModel) -> CommitDraft {
         var restored = CommitDraft(
             summary: commit.summary,
             description: commit.body,
             coAuthors: draft.coAuthors,
             showCoAuthoredBy: draft.showCoAuthoredBy
         )
-        // Let's be safe about this since it's untried waters.
-        // If we can restore co-authors then that's fantastic
-        // but if we can't we shouldn't be throwing an error,
-        // let's just fall back to the old way of restoring the
-        // entire message
         guard repository.record.gitHubRepository != nil else {
             return restored
         }
-        let gitRepository = repository.gitRepository
-        let existing = draft.coAuthors
-        do {
-            let loaded = try await repository.environment.withRuntimes {
-                try await loadCommitAndCoAuthors(gitRepository, commit, existingCoAuthors: existing)
+        let message = restoredMessage(commit, existingCoAuthors: draft.coAuthors)
+        restored.summary = message.summary
+        restored.description = message.description
+        if let coAuthors = message.coAuthors {
+            restored.coAuthors = coAuthors
+            if !coAuthors.isEmpty {
+                restored.showCoAuthoredBy = true
             }
-            restored.summary = loaded.summary
-            restored.description = loaded.description
-            if let coAuthors = loaded.coAuthors {
-                restored.coAuthors = coAuthors
-                if !coAuthors.isEmpty {
-                    restored.showCoAuthoredBy = true
-                }
-            }
-        } catch {
-            logger.error("Failed to restore commit and co-authors, falling back: \(error.localizedDescription, privacy: .public)")
         }
         return restored
     }
@@ -460,127 +444,26 @@ struct RestoredMessage: Sendable, Equatable {
     let coAuthors: [Author]?
 }
 
-/// `/^co-authored-by(.)\s(.*)/i`
-private let coAuthorPattern = JSCompat.regex(
-    "(?i)^co-authored-by(\(JSCompat.dot))\(JSCompat.whitespace)(\(JSCompat.dot)*)"
-)
-
-/// Attempt to restore both the commit message and any co-authors in it
-/// after an undo operation.
-///
-/// This is a deceivingly simple task which complicated by the us wanting to
-/// follow the heuristics of Git when finding, and parsing trailers.
-@concurrent
-func loadCommitAndCoAuthors(
-    _ repository: Repository,
-    _ commit: Commit,
-    existingCoAuthors: [Author]
-) async throws -> RestoredMessage {
-    // git-interpret-trailers is really only made for working
-    // with full commit messages so let's start with that
-    let message = try await formatCommitMessage(repository, CommitContext(summary: commit.summary, description: commit.body))
-
-    // Next we extract any co-authored-by trailers we
-    // can find. We use interpret-trailers for this
-    let foundTrailers = try await parseTrailers(repository, message)
-    var coAuthorTrailers = foundTrailers.filter(isCoAuthoredByTrailer)
-
-    // This is the happy path, nothing more for us to do
-    if coAuthorTrailers.isEmpty {
+/// A commit's message with its co-authors (`Commit.coAuthors`) taken out of
+/// the body (`Commit.bodyNoCoAuthors`), for the draft after Undo Commit or
+/// when amending. A co-author already in the draft with the same name and
+/// email keeps its username.
+func restoredMessage(_ commit: Commit, existingCoAuthors: [Author]) -> RestoredMessage {
+    guard !commit.coAuthors.isEmpty else {
         return RestoredMessage(summary: commit.summary, description: commit.body, coAuthors: nil)
     }
 
-    // call interpret-trailers --unfold so that we can be sure each
-    // trailer sits on a single line
-    let unfolded = try await mergeTrailers(repository, message, [], unfold: true)
-    var lines = JSCompat.split(unfolded, "\n")
-
-    // We don't know (I mean, we're fairly sure) what the separator character
-    // used for the trailer is so we call out to git to get all possibilities
-    var separators: String?
-
-    // We know that what we've got now is well formed so we can capture the leading
-    // token, followed by the separator char and a single space, followed by the
-    // value
-    var extractedTrailers: [Trailer] = []
-
-    // Iterate backwards from the unfolded message and look for trailers that we've
-    // already seen when calling parseTrailers earlier.
-    for index in lines.indices.reversed() {
-        let line = lines[index]
-
-        // Not a trailer line, we're sure of that
-        guard let match = JSCompat.match(line, coAuthorPattern), let separator = match[1] else {
-            continue
-        }
-
-        // Only shell out for separators if we really need them
-        let knownSeparators: String
-        if let separators {
-            knownSeparators = separators
-        } else {
-            knownSeparators = try await getTrailerSeparatorCharacters(repository)
-            separators = knownSeparators
-        }
-
-        if !JSCompat.includes(knownSeparators, separator) {
-            continue
-        }
-
-        guard let trailer = parseSingleUnfoldedTrailer(line, separator) else {
-            continue
-        }
-
-        // We already know that the key is Co-Authored-By so we only
-        // need to compare by value. Let's see if we can find the thing
-        // that we believe to be a trailer among what interpret-trailers
-        // --parse told us was a trailer. This step is a bit redundant
-        // but it ensure we match exactly with what Git thinks is a trailer
-        guard let foundTrailerIndex = coAuthorTrailers.firstIndex(where: { JSCompat.strictEquals($0.value, trailer.value) }) else {
-            continue
-        }
-
-        // We're running backwards
-        extractedTrailers.insert(coAuthorTrailers[foundTrailerIndex], at: 0)
-
-        // Remove the trailer that matched so that we can be sure
-        // we're not picking it up again
-        coAuthorTrailers.remove(at: foundTrailerIndex)
-
-        // This line was a co-author trailer so we'll remove it to
-        // make sure it doesn't end up in the restored commit body
-        lines.remove(at: index)
+    let known = existingCoAuthors.compactMap { author -> KnownAuthor? in
+        if case .known(let known) = author { known } else { nil }
     }
-
-    // Get rid of the summary/title
-    lines.removeFirst(min(2, lines.count))
-
-    let newBody = JSCompat.trim(lines.joined(separator: "\n"))
-
-    let extractedAuthors = extractedTrailers.map { GitAuthor.parse($0.value) }
-    var newAuthors: [Author] = []
-
-    // Last step, phew! The most likely scenario where we
-    // get called is when someone has just made a commit and
-    // either forgot to add a co-author or forgot to remove
-    // someone so chances are high that we already have a
-    // co-author which includes a username. If we don't we'll
-    // add it without a username which is fine as well
-    for extractedAuthor in extractedAuthors {
-        // If GitAuthor failed to parse
-        guard let extractedAuthor else {
-            continue
-        }
-
-        let existing = existingCoAuthors.lazy.compactMap { author -> KnownAuthor? in
-            if case .known(let known) = author { known } else { nil }
-        }.first { known in
-            JSCompat.strictEquals(known.name, extractedAuthor.name)
-                && JSCompat.strictEquals(known.email, extractedAuthor.email)
+    let coAuthors = commit.coAuthors.map { coAuthor -> Author in
+        let existing = known.first { known in
+            JSCompat.strictEquals(known.name, coAuthor.name)
+                && JSCompat.strictEquals(known.email, coAuthor.email)
                 && known.username != nil
         }
-        newAuthors.append(.known(existing ?? KnownAuthor(name: extractedAuthor.name, email: extractedAuthor.email, username: nil)))
+        return .known(existing ?? KnownAuthor(name: coAuthor.name, email: coAuthor.email, username: nil))
     }
 
-    return RestoredMessage(summary: commit.summary, description: newBody, coAuthors: newAuthors)
+    return RestoredMessage(summary: commit.summary, description: JSCompat.trim(commit.bodyNoCoAuthors), coAuthors: coAuthors)
 }

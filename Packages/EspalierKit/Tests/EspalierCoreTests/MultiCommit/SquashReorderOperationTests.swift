@@ -164,6 +164,35 @@ struct SquashReorderOperationTests {
         await fixture.app.idle()
     }
 
+    @Test("squashing a branch already behind its remote branch (a collaborator's commit fetched, not pulled) recommends no force push, and a plain push fails as non-fast-forward")
+    func squashBehindRemote() async throws {
+        let fixture = try await makeRepository(publish: true)
+        let (base, a, _, c) = try await commits(fixture)
+        let theirs = try await pushCommitFromAnotherClone(fixture.remote, path: "theirs.txt", contents: "theirs\n")
+        try await runGit(["fetch", "-q"], fixture.local)
+        await fixture.model.refresh(.full, reason: .user)
+        #expect(fixture.model.gitState.aheadBehind == AheadBehind(ahead: 0, behind: 1))
+        let operations = fixture.model.operations
+
+        let message = CommitContext(summary: "Add a and c", description: nil)
+        #expect(try await operations.squash([c], into: a, lastRetainedCommitRef: base.sha, message: message, confirmed: [.rewritePublishedCommits]) == .squashed(count: 2))
+
+        let aheadBehind = try #require(fixture.model.gitState.aheadBehind)
+        #expect(aheadBehind.ahead > 0 && aheadBehind.behind > 0)
+        #expect(operations.rewrittenBranches.isEmpty)
+        #expect(operations.forcePushState == .available)
+        if case .pull = fixture.model.sync.action {} else {
+            Issue.record("Unexpected action \(fixture.model.sync.action)")
+        }
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.model.sync.push()
+        }
+        #expect(error?.reason == .pushRejectedNonFastForward)
+        #expect(try await fixture.remoteTip("main") == theirs)
+        await fixture.app.idle()
+    }
+
     @Test("squash conflicts stop it; continuing finishes it with its message")
     func squashConflicts() async throws {
         let fixture = try await makeRepository(conflicting: true)

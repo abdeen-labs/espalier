@@ -10,6 +10,11 @@ public struct PushOptions: Sendable {
     /// See https://git-scm.com/docs/git-push#Documentation/git-push.txt---no-force-with-lease
     public var forceWithLease: Bool
 
+    /// The commit the remote branch must still be at for `forceWithLease`
+    /// to overwrite it: `--force-with-lease=refs/heads/<remoteBranch>:<sha>`.
+    /// Without it the lease is git's default, the remote-tracking branch.
+    public var forceWithLeaseExpectedSHA: String?
+
     /// A branch to push instead of the current branch
     public var branch: Branch?
 
@@ -23,6 +28,7 @@ public struct PushOptions: Sendable {
 
     public init(
         forceWithLease: Bool = false,
+        forceWithLeaseExpectedSHA: String? = nil,
         branch: Branch? = nil,
         noVerify: Bool = false,
         onHookProgress: (@Sendable (HookProgress) -> Void)? = nil,
@@ -30,6 +36,7 @@ public struct PushOptions: Sendable {
         onTerminalOutputAvailable: TerminalOutputCallback? = nil
     ) {
         self.forceWithLease = forceWithLease
+        self.forceWithLeaseExpectedSHA = forceWithLeaseExpectedSHA
         self.branch = branch
         self.noVerify = noVerify
         self.onHookProgress = onHookProgress
@@ -67,7 +74,11 @@ public func push(
     if remoteBranch == nil || remoteBranch?.isEmpty == true {
         args.append("--set-upstream")
     } else if options?.forceWithLease == true {
-        args.append("--force-with-lease")
+        if let remoteBranch, let expected = options?.forceWithLeaseExpectedSHA {
+            args.append("--force-with-lease=refs/heads/\(remoteBranch):\(expected)")
+        } else {
+            args.append("--force-with-lease")
+        }
     }
 
     if options?.noVerify == true {

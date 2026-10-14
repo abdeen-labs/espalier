@@ -74,6 +74,10 @@ public final class CommitModel: RepositoryFeature {
     public var options = CommitOptions()
     /// The commit being amended, while amending.
     public private(set) var amending: Commit?
+    /// The tip of the current branch's upstream when amending started, which
+    /// the amend is recorded with for the force push recommendation
+    /// (`recordRewrite`).
+    @ObservationIgnored private var amendingUpstreamTip: String?
     /// The newest local commit (the first of `gitState.localCommitSHAs`),
     /// loaded for the Changes column's last-commit row and Undo.
     /// MostRecentLocalCommit.swift loads it after refreshes.
@@ -150,6 +154,7 @@ public final class CommitModel: RepositoryFeature {
 
         let options = options
         let amending = amending
+        let amendingUpstreamTip = amendingUpstreamTip
         let descriptor = OperationDescriptor(kind: .commit, gitContext: .commit, refreshOptions: .clearPartialSelections)
         let sha = try await repository.perform(descriptor) { ctx in
             let message = try await formatCommitMessage(ctx.repository, context)
@@ -166,6 +171,7 @@ public final class CommitModel: RepositoryFeature {
         }
 
         self.amending = nil
+        self.amendingUpstreamTip = nil
         self.options.allowEmpty = false
         draft.summary = ""
         draft.description = ""
@@ -181,7 +187,7 @@ public final class CommitModel: RepositoryFeature {
         // An amend that changed the tip needs a force push.
         if let amended = amending, let branch = repository.gitState.tip.branch,
            !JSCompat.strictEquals(branch.tip.sha, amended.sha) {
-            repository.operations.recordRewrite(of: branch, previousTip: amended.sha)
+            await repository.operations.recordRewrite(of: branch, previousTip: amended.sha, upstreamTip: amendingUpstreamTip)
         }
         return CommitResult(sha: sha, amended: amending != nil)
     }
@@ -193,6 +199,7 @@ public final class CommitModel: RepositoryFeature {
     /// one comes back.
     public func stopAmending() {
         amending = nil
+        amendingUpstreamTip = nil
         draftLoadedForAmend = nil
         if let setAside = setAsideDraft {
             draft = setAside
@@ -200,9 +207,13 @@ public final class CommitModel: RepositoryFeature {
         }
     }
 
-    /// Sets the commit to amend (`startAmending` calls it).
+    /// Sets the commit to amend (`startAmending` calls it), noting where the
+    /// current branch's upstream is as amending starts.
     func setAmending(_ commit: Commit?) {
         amending = commit
+        amendingUpstreamTip = commit == nil ? nil : repository.flatMap { repository in
+            repository.gitState.tip.branch.flatMap { repository.operations.upstreamTip(of: $0) }
+        }
     }
 
     /// Sets the user's message aside while amending loads the commit's.

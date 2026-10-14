@@ -1,7 +1,8 @@
 // The GitHub sheets and panes: the sign-in sheet's code, the Enterprise
 // address with an error, and success; Settings ▸ Accounts signed in to
-// GitHub.com and Enterprise; push protection with several secrets; the fork
-// sheet's question and settings; and a review's sheet.
+// GitHub.com and Enterprise, and with a token the keychain won't give; push
+// protection with several secrets; the fork sheet's question and settings;
+// and a review's sheet.
 
 import AppKit
 @testable import EspalierCore
@@ -64,15 +65,27 @@ struct GitHubCaptures {
         let harness = try AppHarness()
         let app = try await AccountCaptureFixtures.app(harness, signedIn: [GitHubCaptureFixtures.octocat, AccountCaptureFixtures.enterprise])
         let content = AccountsContent(accounts: app.accounts, notes: [])
-        let actions = AccountsActions(signIn: { _ in }, signOut: { _ in }, remove: { _ in }, open: { _ in })
-        // In the Settings window's layout, as the Settings captures draw
-        // their panes.
-        let window = SettingsLayout(selection: .constant(.accounts)) {
+        capture(accountsWindow(content), named: "accounts-signedIn", area: area)
+        await app.idle()
+    }
+
+    @Test("Settings ▸ Accounts: GitHub.com's token unreadable in the keychain, signed in to Enterprise")
+    func accountsUnreadable() {
+        let content = AccountsContent(
+            unreadableDotCom: AccountRowContent(GitHubCaptureFixtures.octocat),
+            enterprise: [AccountRowContent(AccountCaptureFixtures.enterprise)]
+        )
+        capture(accountsWindow(content), named: "accounts-unreadable", area: area)
+    }
+
+    /// The Accounts pane in the Settings window's layout, as the Settings
+    /// captures draw their panes.
+    private func accountsWindow(_ content: AccountsContent) -> some View {
+        let actions = AccountsActions(signIn: { _ in }, signOut: { _ in }, tryAgain: {}, remove: { _ in }, open: { _ in })
+        return SettingsLayout(selection: .constant(.accounts)) {
             AccountsForm(content: content, actions: actions)
         }
         .frame(width: Metrics.SettingsWindow.width)
-        capture(window, named: "accounts-signedIn", area: area)
-        await app.idle()
     }
 
     // MARK: Push protection

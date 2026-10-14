@@ -113,8 +113,9 @@ extension MultiCommitOperationsModel {
         let currentRemote = repository.gitState.remotes.currentRemote
         let id = repository.id
 
+        let upstreamTip: String?
         do {
-            try await repository.perform(OperationDescriptor(kind: .undoMultiCommitOperation)) { ctx in
+            upstreamTip = try await repository.perform(OperationDescriptor(kind: .undoMultiCommitOperation)) { ctx -> String? in
                 if await hasOperationInProgress(ctx.repository) {
                     throw OperationError(
                         .precondition("The \(undo.operationName) can no longer be undone: another operation is in progress."),
@@ -145,6 +146,8 @@ extension MultiCommitOperationsModel {
                 }
 
                 logger.info("[\(undo.operationName, privacy: .public)] undoing on \(undo.branchName, privacy: .private): \(undo.resultTip, privacy: .public) back to \(undo.undoSha, privacy: .public)")
+                // Where the remote branch is as the undo rewrites the branch.
+                let upstreamTip = await getUpstreamTip(ctx.repository, branchName: undo.branchName)
 
                 if let createdBranch = undo.createdBranch {
                     // If a new branch is created as part of the cherry-pick,
@@ -155,7 +158,7 @@ extension MultiCommitOperationsModel {
                         checkingOut: returnBranch,
                         in: ctx
                     )
-                    return
+                    return upstreamTip
                 }
 
                 _ = try await reset(ctx.repository, .hard, undo.undoSha)
@@ -168,6 +171,7 @@ extension MultiCommitOperationsModel {
                         logger.error("[cherryPick] undone, but could not return to the branch it started on: \(error.localizedDescription, privacy: .public)")
                     }
                 }
+                return upstreamTip
             }
         } catch {
             await repository.awaitOperationRefresh(covering: .full)
@@ -180,7 +184,7 @@ extension MultiCommitOperationsModel {
         // Cherry-pick doesn't require a force push but squash and reorder
         // may.
         if undo.kind == .squash || undo.kind == .reorder {
-            recordRewriteOfCurrentBranch(undo.branchName, previousTip: undo.resultTip)
+            await recordRewriteOfCurrentBranch(undo.branchName, previousTip: undo.resultTip, upstreamTip: upstreamTip)
         }
         return undo
     }

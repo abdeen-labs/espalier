@@ -13,6 +13,9 @@ import TestSupport
 /// octocat/app, the repository the user can't push to.
 private let parentGitHubRepository = ModelFixtures.gitHubRepository(owner: "octocat", name: "app", dbID: 1, permissions: .read)
 
+/// A third repository an `upstream` remote can point at.
+private let otherURL = "https://example.com/other.git"
+
 /// mona/app, a fork of octocat/app, as GitHub's API returns it.
 private let fork = apiRepository(
     owner: "mona",
@@ -46,16 +49,74 @@ struct ForkOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("an existing upstream remote gets the old URL")
-    func existingUpstreamRemote() async throws {
+    /// A repository whose `upstream` remote points at a third repository,
+    /// converted to the fork: `upstream` is kept and asked about.
+    private func convertWithUpstreamElsewhere() async throws -> SelectedRepository {
         let fixture = try await makeSelectedRepository { local in
-            try await runGit(["remote", "add", "upstream", "https://example.com/other.git"], local)
+            try await runGit(["remote", "add", "upstream", otherURL], local)
         }
         fixture.associate(parentGitHubRepository)
 
         try await fixture.model.sync.convertToFork(fork)
 
-        #expect(try await remoteURLs(fixture.local)["upstream"] == fixture.remote.path)
+        #expect(try await remoteURLs(fixture.local) == ["origin": "https://github.com/mona/app.git", "upstream": otherURL])
+        #expect(fixture.model.record.gitHubRepository?.fullName == "mona/app")
+        let conflict = try #require(fixture.model.sync.upstreamRemoteConflict)
+        #expect(conflict.existingRemote == Remote(name: "upstream", url: otherURL))
+        #expect(conflict.expectedURL == "https://github.com/octocat/app.git")
+        return fixture
+    }
+
+    @Test("an upstream remote pointing elsewhere is kept and asked about; updating points it at the parent")
+    func upstreamElsewhereUpdated() async throws {
+        let fixture = try await convertWithUpstreamElsewhere()
+
+        try await fixture.model.sync.updateUpstreamRemote()
+
+        #expect(try await remoteURLs(fixture.local)["upstream"] == "https://github.com/octocat/app.git")
+        #expect(fixture.model.sync.upstreamRemoteConflict == nil)
+        await fixture.app.idle()
+    }
+
+    @Test("an upstream remote pointing elsewhere is kept and asked about; ignoring keeps it as it is")
+    func upstreamElsewhereIgnored() async throws {
+        let fixture = try await convertWithUpstreamElsewhere()
+
+        fixture.model.sync.ignoreUpstreamRemote()
+        await fixture.model.refresh(.full, reason: .user)
+
+        #expect(try await remoteURLs(fixture.local)["upstream"] == otherURL)
+        #expect(fixture.model.sync.upstreamRemoteConflict == nil)
+        #expect(fixture.model.record.ignoresExistingUpstreamRemote)
+        await fixture.app.idle()
+    }
+
+    @Test("an upstream remote already pointing at the repository forked is left as it is, without asking")
+    func upstreamAtParent() async throws {
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["remote", "add", "upstream", "git@github.com:octocat/app.git"], local)
+        }
+        fixture.associate(parentGitHubRepository)
+
+        try await fixture.model.sync.convertToFork(fork)
+
+        #expect(try await remoteURLs(fixture.local)["upstream"] == "git@github.com:octocat/app.git")
+        #expect(fixture.model.sync.upstreamRemoteConflict == nil)
+        await fixture.app.idle()
+    }
+
+    @Test("an upstream remote the user chose to ignore is kept without asking")
+    func upstreamIgnoredBefore() async throws {
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["remote", "add", "upstream", otherURL], local)
+        }
+        fixture.associate(parentGitHubRepository)
+        fixture.app.updateRecord(fixture.model.id) { $0.ignoresExistingUpstreamRemote = true }
+
+        try await fixture.model.sync.convertToFork(fork)
+
+        #expect(try await remoteURLs(fixture.local)["upstream"] == otherURL)
+        #expect(fixture.model.sync.upstreamRemoteConflict == nil)
         await fixture.app.idle()
     }
 
@@ -128,14 +189,18 @@ struct ForkOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("prunes the fork remotes nothing uses, Espalier's and desktop's")
+    @Test("prunes the fork remotes Espalier marked that nothing uses; unmarked ones are the user's, whatever their names")
     func prunesForkedRemotes() async throws {
         let pullRequestFork = gitHubRepoFixture(owner: "hubot", name: "app")
         let fixture = try await makeSelectedRepository { local in
             try await runGit(["remote", "add", "espalier-unused", "https://github.com/unused/app.git"], local)
+            try await runGit(["remote", "add", "espalier-mirror", "https://github.com/mirror/app.git"], local)
             try await runGit(["remote", "add", "github-desktop-unused", "https://github.com/old/app.git"], local)
             try await runGit(["remote", "add", "espalier-hubot", try #require(pullRequestFork.cloneURL)], local)
             try await runGit(["remote", "add", "espalier-tracked", "https://github.com/tracked/app.git"], local)
+            for name in ["espalier-unused", "espalier-hubot", "espalier-tracked"] {
+                try await markForkRemote(local, name)
+            }
             try await runGit(["config", "branch.topic.remote", "espalier-tracked"], local)
             try await runGit(["config", "branch.topic.merge", "refs/heads/topic"], local)
             try await runGit(["branch", "topic"], local)
@@ -154,8 +219,10 @@ struct ForkOperationTests {
         await fixture.model.sync.pruneForkedRemotes(openPullRequests: [pullRequest])
         await fixture.model.idle()
 
-        #expect(try await remoteURLs(fixture.local).keys.sorted() == ["espalier-hubot", "espalier-tracked", "origin"])
+        #expect(try await remoteURLs(fixture.local).keys.sorted() == ["espalier-hubot", "espalier-mirror", "espalier-tracked", "github-desktop-unused", "origin"])
         #expect(!fixture.model.gitState.remotes.all.contains { $0.name == "espalier-unused" })
+        // Removing the remote removed its mark.
+        #expect(try await getForkRemoteNames(fixture.local) == ["espalier-hubot", "espalier-tracked"].exactSet)
         await fixture.app.idle()
     }
 }

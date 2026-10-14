@@ -134,18 +134,21 @@ enum ShellActions {
     // MARK: Sync
 
     private static func registerSync(into actions: WindowActions, context: WindowContext) {
+        // Push never forces: a diverged branch's push fails as
+        // non-fast-forward.
         actions.register(.push) { [weak context] _ in
             guard let context, let repository = context.repository else {
                 return
             }
-            // The menu offers a force push whenever one is possible.
-            let force = repository.operations.forcePushState != .notAvailable
             let outcome = await context.presenter.perform { answers throws(OperationError) in
-                try await repository.sync.push(PushRequest(forceWithLease: force), confirmed: answers.confirmed)
+                try await repository.sync.push(PushRequest(), confirmed: answers.confirmed)
             }
             finish(outcome, in: context)
         }
-        actions.register(.forcePush) { [weak context] _ in
+        // Offered only while the current branch can be force pushed.
+        actions.register(.forcePush, isHidden: { [weak context] _ in
+            !(context?.capabilities.isForcePushAvailable ?? false)
+        }) { [weak context] _ in
             guard let context, let repository = context.repository else {
                 return
             }

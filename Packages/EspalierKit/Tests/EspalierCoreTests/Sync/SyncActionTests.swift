@@ -5,6 +5,7 @@
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
+import EspalierSupport
 import Foundation
 import GitHubKit
 import GitKit
@@ -186,7 +187,9 @@ struct SyncActionTests {
         let fixture = try await makeRepository()
         setTip(fixture)
         fixture.model.gitState.aheadBehind = AheadBehind(ahead: 1, behind: 2)
-        fixture.model.operations.rewrittenBranches["main"] = sha
+        // Rewritten while origin/main was where it is.
+        let upstreamTip = try #require(fixture.model.gitState.branches.upstreams[ExactString("refs/heads/main")]?.tip.sha)
+        fixture.app.updateRecord(fixture.model.id) { $0.rewrittenBranches["main"] = upstreamTip }
         let action = fixture.model.sync.action
         #expect(action == .forcePush(remote: "origin", aheadBehind: AheadBehind(ahead: 1, behind: 2), tagsToPush: 0))
         #expect(action.description == nil)

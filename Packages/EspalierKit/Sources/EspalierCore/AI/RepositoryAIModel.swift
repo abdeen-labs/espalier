@@ -729,7 +729,7 @@ public final class RepositoryAIModel: RepositoryFeature {
             let wrapped = AIConflictResolutionError.wrapping(error, stage: .unknown)
             retryOutcome = ConflictResolutionOutcome(
                 resolutions: [],
-                summary: AIResolutionSummary(markdown: nil, ourLabel: context.ourLabel, theirLabel: context.theirLabel, references: []),
+                summary: AIResolutionSummary(summaries: [], ourLabel: context.ourLabel, theirLabel: context.theirLabel, references: []),
                 skippedFiles: [],
                 failedFiles: paths.map { AIFailedFile(path: $0, error: wrapped) }
             )

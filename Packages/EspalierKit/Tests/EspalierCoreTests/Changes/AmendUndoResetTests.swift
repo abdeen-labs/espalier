@@ -48,7 +48,8 @@ struct AmendUndoResetTests {
         #expect(try await fixture.lastMessage() == "Local one\n\nBody 1.\n")
         #expect(try await fixture.commitCount() == 2)
         #expect(fixture.commit.amending == nil)
-        #expect(fixture.model.operations.rewrittenBranches == ["main": result.sha])
+        let upstream = JSCompat.trim(try await fixture.git(["rev-parse", "main@{upstream}"]))
+        #expect(fixture.model.operations.rewrittenBranches == ["main": upstream])
     }
 
     @Test("amending a pushed commit asks first, unless the preference is off or HEAD is detached")
@@ -197,6 +198,36 @@ struct AmendUndoResetTests {
         #expect(fixture.commit.draft.description == "Co-Authored-By: Mona Lisa <mona@example.com>\n")
         #expect(fixture.commit.draft.coAuthors.isEmpty)
         await fixture.settle()
+    }
+
+    @Test("a co-author trailer that isn't Name <email> stays in the message, and one without a space isn't doubled, through amend and Undo Commit")
+    func coAuthorTrailersKept() async throws {
+        let (local, _) = try await setupRepositoryWithRemote()
+        try Data("pair\n".utf8).write(to: URL(filePath: POSIXPath.join(local.path, "pair.txt")))
+        try await runGit(["add", "pair.txt"], local)
+        let message = "Pair up\n\nWorked on together.\n\nCo-authored-by: bob@example.com\nCo-authored-by:Hubot <hubot@example.com>\n"
+        try await runGit(["commit", "-F", "-"], local, stdin: message)
+        let fixture = try await ChangesFixture.make(local)
+        fixture.app.updateRecord(fixture.model.id) { $0.gitHubRepository = ModelFixtures.gitHubRepository() }
+        let hubot = Author.known(KnownAuthor(name: "Hubot", email: "hubot@example.com", username: nil))
+        let description = "Worked on together.\n\nCo-authored-by: bob@example.com"
+        let committed = "Pair up\n\nWorked on together.\n\nCo-authored-by: bob@example.com\nCo-Authored-By: Hubot <hubot@example.com>\n"
+
+        try await fixture.commit.startAmending()
+        #expect(fixture.commit.draft.description == description)
+        #expect(fixture.commit.draft.coAuthors == [hubot])
+        _ = try await fixture.commit.commit()
+        await fixture.settle()
+        #expect(try await fixture.lastMessage() == committed)
+
+        try await fixture.commit.undo(try await getTipOrError(local))
+        await fixture.settle()
+        #expect(fixture.commit.draft.summary == "Pair up")
+        #expect(fixture.commit.draft.description == description)
+        #expect(fixture.commit.draft.coAuthors == [hubot])
+        _ = try await fixture.commit.commit()
+        await fixture.settle()
+        #expect(try await fixture.lastMessage() == committed)
     }
 
     // MARK: Undoing

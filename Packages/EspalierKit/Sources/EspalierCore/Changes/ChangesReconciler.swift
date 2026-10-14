@@ -18,9 +18,11 @@ struct ChangedFilesResult: Equatable {
 ///   `clearPartialState` (after a commit), a partially included one comes
 ///   back excluded.
 /// - A file whose ID changed because its status kind did (for example
-///   untracked to new after `git add`) is matched by path: a whole-file
-///   inclusion or exclusion carries over (a partial one resets), and a
-///   selected file stays selected.
+///   untracked to new after `git add`) is matched by path: its inclusion
+///   carries over, and a selected file stays selected. A partial selection
+///   that knows its diff's lines (`DiffSelection.diffHunks`) is carried
+///   over to the file's new diff when that loads, or at commit; one that
+///   doesn't resets.
 /// - Files are sorted with `caseInsensitiveCompare`, stably, because the
 ///   order is visible.
 func updateChangedFiles(
@@ -50,7 +52,7 @@ func updateChangedFiles(
             switch existing.selection.getSelectionType() {
             case .all: return file.withIncludeAll(true)
             case .none: return file.withIncludeAll(false)
-            case .partial: return file
+            case .partial: return existing.selection.diffHunks == nil ? file : file.withSelection(existing.selection)
             }
         }
         return file

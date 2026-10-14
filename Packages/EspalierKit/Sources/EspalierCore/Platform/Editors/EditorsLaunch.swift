@@ -14,8 +14,8 @@ private let logger = Log.logger(category: "integrations")
 ///   - editorPath: The application to open (with `spawnAsDarwinApp`), or the
 ///     executable to run.
 ///   - args: The arguments for the editor.
-///   - editorName: How messages name the editor: `'Visual Studio Code'`, or
-///     `custom editor at path '/usr/local/bin/code'`.
+///   - editorName: How messages name the editor: `Visual Studio Code`, or
+///     `the custom editor at /usr/local/bin/code`.
 ///   - spawnAsDarwinApp: Whether to open the application with `open -a`.
 ///   - editorNameIncludesPath: Whether `editorName` already ends with the
 ///     path, as a custom editor's does, so a missing editor's message
@@ -31,7 +31,7 @@ func launchEditor(
 ) async throws(ExternalEditorError) {
     let exists = await pathExists(editorPath)
     if !exists {
-        let editor = editorNameIncludesPath ? editorName : "\(editorName) at path '\(editorPath)'"
+        let editor = editorNameIncludesPath ? editorName : "\(editorName) at \(editorPath)"
         throw ExternalEditorError(
             "Espalier couldn't find \(editor). Choose an available editor in Settings ▸ Integrations.",
             metadata: ExternalEditorError.Metadata(openPreferences: true)
@@ -75,7 +75,7 @@ public func launchExternalEditor(
     _ editor: FoundEditor,
     launcher: any IntegrationLauncher = ChildProcessLauncher()
 ) async throws(ExternalEditorError) {
-    try await launchEditor(editor.path, [fullPath], "'\(editor.editor)'", true, launcher: launcher)
+    try await launchEditor(editor.path, [fullPath], editor.editor, true, launcher: launcher)
 }
 
 /// Open a given file or folder in the desired custom external editor.
@@ -105,7 +105,7 @@ public func launchCustomExternalEditor(
     // which will open the right executable file for us, we only need the path
     // to the editor .app folder.
     let spawnAsDarwinApp = customEditor.bundleID != nil
-    let editorName = "custom editor at path '\(customEditor.path)'"
+    let editorName = "the custom editor at \(customEditor.path)"
 
     try await launchEditor(
         customEditor.path,

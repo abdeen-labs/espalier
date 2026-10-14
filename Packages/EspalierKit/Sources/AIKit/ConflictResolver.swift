@@ -81,7 +81,8 @@ public func runConflictResolutionTurn(
 /// What a chunk produced.
 private struct ChunkResult: Sendable {
     var resolutions: [FileResolution]
-    var summary: String?
+    /// The model's summary, covering the chunk's files.
+    var summary: AIChunkSummary?
     var references: [AIConflictReference]
 }
 
@@ -122,7 +123,7 @@ public func resolveConflicts(
     onProgress: (@Sendable (ConflictResolutionProgress) -> Void)? = nil
 ) async throws -> ReassembledConflictResolutionResponse {
     if !context.files.contains(where: \.isResolvable) {
-        return ReassembledConflictResolutionResponse(resolutions: [], summary: nil, references: [])
+        return ReassembledConflictResolutionResponse(resolutions: [], summaries: [], references: [])
     }
     let provider: any AIProvider
     do {
@@ -152,7 +153,7 @@ public func resolveConflicts(
     let filesTotal = resolvableFiles.count
 
     if filesTotal == 0 {
-        return ReassembledConflictResolutionResponse(resolutions: [], summary: nil, references: [])
+        return ReassembledConflictResolutionResponse(resolutions: [], summaries: [], references: [])
     }
 
     onProgress?(ConflictResolutionProgress(filesResolved: 0, filesTotal: filesTotal))
@@ -187,7 +188,7 @@ public func resolveConflicts(
         onProgress?(ConflictResolutionProgress(filesResolved: filesTotal, filesTotal: filesTotal))
         return ReassembledConflictResolutionResponse(
             resolutions: chunk.resolutions,
-            summary: chunk.summary,
+            summaries: chunk.summary.map { [$0] } ?? [],
             references: chunk.references
         )
     }
@@ -200,8 +201,8 @@ public func resolveConflicts(
     var allResolutions: [FileResolution] = []
     var failedFiles: [AIFailedFile] = []
     var notAttemptedFiles: [String] = []
-    var firstSummary: String?
-    var firstReferences: [AIConflictReference] = []
+    var summaries: [AIChunkSummary] = []
+    var references: [AIConflictReference] = []
     var firstError: AIConflictResolutionError?
     var succeededChunks = 0
     // An error that would fail every further request (bad credentials, no
@@ -270,12 +271,10 @@ public func resolveConflicts(
                     count += chunk.resolutions.count
                     return count
                 }
-                if firstSummary == nil, let summary = chunk.summary {
-                    firstSummary = summary
+                if let summary = chunk.summary {
+                    summaries.append(summary)
                 }
-                if firstReferences.isEmpty, !chunk.references.isEmpty {
-                    firstReferences = chunk.references
-                }
+                references += chunk.references.filter { !references.contains($0) }
                 onProgress?(ConflictResolutionProgress(filesResolved: resolved, filesTotal: filesTotal))
             case .failure(let error):
                 if error is AIConflictResolutionAbortError {
@@ -305,8 +304,8 @@ public func resolveConflicts(
     onProgress?(ConflictResolutionProgress(filesResolved: filesResolved.withLock { $0 }, filesTotal: filesTotal))
     return ReassembledConflictResolutionResponse(
         resolutions: allResolutions,
-        summary: firstSummary,
-        references: firstReferences,
+        summaries: summaries,
+        references: references,
         failedFiles: failedFiles,
         notAttemptedFiles: notAttemptedFiles
     )
@@ -356,7 +355,11 @@ private func resolveChunk(
             stage = .reassembleResponse
             let resolutions = try reassembleResolutions(parsed.resolutions, expectedFiles)
 
-            return ChunkResult(resolutions: resolutions, summary: parsed.summary, references: parsed.references)
+            return ChunkResult(
+                resolutions: resolutions,
+                summary: parsed.summary.map { AIChunkSummary(markdown: $0, paths: resolutions.map(\.path)) },
+                references: parsed.references
+            )
         } catch {
             lastError = error
             lastStage = stage
@@ -423,18 +426,19 @@ public struct ConflictResolutionOutcome: Sendable {
 
     /// This outcome with a retry of some of its failed or unattempted files
     /// merged in: the retry's resolutions are added, the retried files' old
-    /// entries replaced by the retry's, and the summary kept (or taken from
-    /// the retry when this one has none). Paths are compared by code units.
+    /// entries replaced by the retry's, and the retry's summaries and the
+    /// references not already here added after this outcome's. Paths are
+    /// compared by code units.
     public func merging(_ retry: ConflictResolutionOutcome) -> ConflictResolutionOutcome {
         let retried = (retry.resolutions.map(\.path) + retry.failedFiles.map(\.path) + retry.notAttemptedFiles).exactSet
         let skipped = skippedFiles.map(\.path).exactSet
         return ConflictResolutionOutcome(
             resolutions: resolutions.filter { !retried.contains(ExactString($0.path)) } + retry.resolutions,
             summary: AIResolutionSummary(
-                markdown: summary.markdown ?? retry.summary.markdown,
+                summaries: summary.summaries + retry.summary.summaries,
                 ourLabel: summary.ourLabel,
                 theirLabel: summary.theirLabel,
-                references: summary.references.isEmpty ? retry.summary.references : summary.references
+                references: summary.references + retry.summary.references.filter { !summary.references.contains($0) }
             ),
             skippedFiles: skippedFiles + retry.skippedFiles.filter { !skipped.contains(ExactString($0.path)) },
             failedFiles: failedFiles.filter { !retried.contains(ExactString($0.path)) } + retry.failedFiles,
@@ -462,7 +466,7 @@ public func makeConflictResolutionOutcome(
     return ConflictResolutionOutcome(
         resolutions: response.resolutions,
         summary: AIResolutionSummary(
-            markdown: response.summary,
+            summaries: response.summaries,
             ourLabel: context.ourLabel,
             theirLabel: context.theirLabel,
             references: references

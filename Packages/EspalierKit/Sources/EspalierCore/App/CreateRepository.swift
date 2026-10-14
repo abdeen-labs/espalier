@@ -134,6 +134,12 @@ public func sanitizedRepositoryName(_ name: String) -> String {
 /// The README's file name.
 private let defaultReadmeName = "README.md"
 
+/// The .gitignore's file name.
+private let gitIgnoreName = ".gitignore"
+
+/// The license's file name.
+private let licenseName = "LICENSE"
+
 /// The README a new repository starts with: the name as a heading, then
 /// the description.
 func defaultReadmeContents(_ name: String, _ description: String?) -> String {
@@ -150,16 +156,9 @@ public func writeDefaultReadme(_ path: String, _ name: String, _ description: St
     try await writeFile(fullPath, defaultReadmeContents(name, description))
 }
 
-/// Write the .gitattributes file to the given repository.
-public func writeGitAttributes(_ path: String) async throws {
-    let fullPath = POSIXPath.join(path, ".gitattributes")
-    let contents = "# Auto detect text files and perform LF normalization\n* text=auto\n"
-    try await writeFile(fullPath, contents)
-}
-
 /// Write the license to the repository at the given path.
 public func writeLicense(_ repositoryPath: String, _ license: RepositoryLicense, _ fields: LicenseFields) async throws {
-    let fullPath = POSIXPath.join(repositoryPath, "LICENSE")
+    let fullPath = POSIXPath.join(repositoryPath, licenseName)
     try await writeFile(fullPath, licenseText(license, fields))
 }
 
@@ -167,7 +166,7 @@ public func writeLicense(_ repositoryPath: String, _ license: RepositoryLicense,
 ///
 /// - Throws: For a name that isn't one of `RepositoryTemplates.gitIgnoreNames`.
 public func writeGitIgnore(_ repositoryPath: String, _ name: String) async throws {
-    let fullPath = POSIXPath.join(repositoryPath, ".gitignore")
+    let fullPath = POSIXPath.join(repositoryPath, gitIgnoreName)
     guard let text = RepositoryTemplates.gitIgnoreText(named: name) else {
         throw CreateRepositoryStepError("Unknown gitignore: \(name). Only names returned from getGitIgnoreNames() can be used.")
     }
@@ -236,22 +235,70 @@ public struct CreateRepositoryDestination: Sendable, Equatable {
     /// The folder has a README.md that "Initialize this repository with a
     /// README" would overwrite.
     public var readmeExists: Bool
+    /// The folder has a .gitignore that a Git Ignore template would
+    /// overwrite.
+    public var gitIgnoreExists: Bool
+    /// The folder has a LICENSE that a license would overwrite.
+    public var licenseExists: Bool
 
-    public init(isRepository: Bool = false, isSubfolderOfRepository: Bool = false, readmeExists: Bool = false) {
+    public init(
+        isRepository: Bool = false,
+        isSubfolderOfRepository: Bool = false,
+        readmeExists: Bool = false,
+        gitIgnoreExists: Bool = false,
+        licenseExists: Bool = false
+    ) {
         self.isRepository = isRepository
         self.isSubfolderOfRepository = isSubfolderOfRepository
         self.readmeExists = readmeExists
+        self.gitIgnoreExists = gitIgnoreExists
+        self.licenseExists = licenseExists
     }
 }
 
-/// Checks the folder a repository would be created in.
+/// The files already in a folder that would wait in Changes once it's a
+/// repository: what `git status --untracked-files=all` would list there.
+public struct CreateRepositoryExistingFiles: Sendable, Equatable {
+    /// How many files git lists: each file the folder's .gitignore files,
+    /// the user's global excludes, and the Git Ignore template leave, and a
+    /// nested repository as one.
+    public var count: Int
+    /// The files creating writes (README.md, .gitignore, LICENSE) among
+    /// them, by the names they're written as.
+    public var filesItWrites: Set<String>
+
+    public init(count: Int = 0, filesItWrites: Set<String> = []) {
+        self.count = count
+        self.filesItWrites = filesItWrites
+    }
+
+    /// How many of them creating with `request` overwrites, and so commits.
+    public func overwrittenCount(_ request: CreateRepositoryRequest) -> Int {
+        [
+            request.createsReadme && filesItWrites.contains(defaultReadmeName),
+            request.gitIgnore != nil && filesItWrites.contains(gitIgnoreName),
+            request.license != nil && filesItWrites.contains(licenseName),
+        ].count { $0 }
+    }
+
+    /// How many of them wait in Changes after creating with `request`: all
+    /// but the ones it overwrites.
+    public func uncommittedCount(_ request: CreateRepositoryRequest) -> Int {
+        max(0, count - overwrittenCount(request))
+    }
+}
+
+/// Checks the folder a repository would be created in: whether it's a
+/// repository or inside one, and which of the files creating writes it has
+/// already.
 ///
 /// A folder git considers unsafe can't be asked, so it counts as a
 /// repository when it has a `.git`. A regular repository's folder is the
 /// repository when it's the top level, and a subfolder otherwise. Paths
 /// compare without a trailing slash: compared as typed, `name/` would make
 /// a repository's own folder look like a subfolder, and creating there
-/// would commit everything in it as "Initial commit".
+/// would write its files into that repository and commit them on its
+/// branch.
 public func checkCreateRepositoryDestination(_ fullPath: String) async -> CreateRepositoryDestination {
     let type: RepositoryType
     do {
@@ -280,7 +327,67 @@ public func checkCreateRepositoryDestination(_ fullPath: String) async -> Create
         destination.isSubfolderOfRepository = !destination.isRepository
     }
     destination.readmeExists = await pathExists(POSIXPath.join(fullPath, defaultReadmeName))
+    destination.gitIgnoreExists = await pathExists(POSIXPath.join(fullPath, gitIgnoreName))
+    destination.licenseExists = await pathExists(POSIXPath.join(fullPath, licenseName))
     return destination
+}
+
+/// The files already in `folder` that would wait in Changes once it's a
+/// repository created with the Git Ignore template `gitIgnore`: git lists
+/// them (`ls-files --others --exclude-standard`) with the folder as the work
+/// tree of an empty repository made for the purpose, and the template's
+/// patterns added. Cancelling the task stops git. Nothing for a folder that
+/// doesn't exist or can't be listed.
+public func checkCreateRepositoryExistingFiles(_ folder: String, gitIgnore: String?) async -> CreateRepositoryExistingFiles {
+    guard await directoryExists(folder) else {
+        return CreateRepositoryExistingFiles()
+    }
+    let scratch: String
+    do {
+        scratch = try makeScratchDirectory()
+    } catch {
+        logger.error("Unable to make a folder to list existing files: \(error.localizedDescription, privacy: .public)")
+        return CreateRepositoryExistingFiles()
+    }
+    defer { try? FileManager.default.removeItem(atPath: scratch) }
+
+    do {
+        let repository = POSIXPath.join(scratch, "repository")
+        try await git(["init", "--quiet", repository], scratch, "initScratchRepository")
+        let gitDir = POSIXPath.join(repository, ".git")
+        var args = ["--git-dir=\(gitDir)", "--work-tree=\(folder)", "ls-files", "--others", "--exclude-standard", "-z"]
+        if let gitIgnore, let template = RepositoryTemplates.gitIgnoreText(named: gitIgnore) {
+            let templatePath = POSIXPath.join(scratch, "gitignore")
+            try await writeFile(templatePath, template)
+            args.append("--exclude-from=\(templatePath)")
+        }
+        let result = try await git(args, folder, "listExistingFiles")
+        let paths = result.stdoutData.split(separator: 0).map { String(decoding: $0, as: UTF8.self) }
+        let written = [defaultReadmeName, gitIgnoreName, licenseName]
+        let filesItWrites = paths.compactMap { path in
+            written.first { $0.lowercased() == path.lowercased() }
+        }
+        return CreateRepositoryExistingFiles(count: paths.count, filesItWrites: Set(filesItWrites))
+    } catch {
+        logger.error("Unable to list the existing files: \(error.localizedDescription, privacy: .public)")
+        return CreateRepositoryExistingFiles()
+    }
+}
+
+/// Makes an empty folder in the temporary directory.
+private func makeScratchDirectory() throws -> String {
+    var parent = FileManager.default.temporaryDirectory.path(percentEncoded: false)
+    while parent.count > 1, parent.hasSuffix("/") {
+        parent.removeLast()
+    }
+    var template = Array("\(parent)/espalier-create-XXXXXX".utf8CString)
+    let created: String? = template.withUnsafeMutableBufferPointer { buffer in
+        mkdtemp(buffer.baseAddress!).map { String(cString: $0) }
+    }
+    guard let created else {
+        throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+    }
+    return created
 }
 
 /// Whether two paths name the same folder: normalized, without a trailing
@@ -300,9 +407,8 @@ public struct CreateRepositoryResult: Sendable, Equatable {
     /// The repository, added to the list and selected.
     public let repositoryID: RepositoryID
     /// The steps that failed once the repository existed (README,
-    /// .gitignore, description, LICENSE, .gitattributes, the initial
-    /// commit), in order. The rest went on; the sheet shows them once it
-    /// closes.
+    /// .gitignore, description, LICENSE, the initial commit), in order. The
+    /// rest went on; the sheet shows them once it closes.
     public let failures: [OperationError]
 
     public init(repositoryID: RepositoryID, failures: [OperationError]) {
@@ -322,11 +428,12 @@ extension AppModel {
     ///    with the default branch for new repositories;
     /// 2. adds the repository to the list (`addRepositories`);
     /// 3. writes the README, the .gitignore template, the description
-    ///    (`.git/description`), the license (with the repository's author),
-    ///    and a .gitattributes when there's none; a step that fails is
+    ///    (`.git/description`), and the license (with the repository's
+    ///    author), each replacing the folder's own; a step that fails is
     ///    reported and the rest go on;
-    /// 4. commits every file in the folder as "Initial commit", unless it's
-    ///    empty;
+    /// 4. commits the README, .gitignore, and license it wrote as "Initial
+    ///    commit", and nothing else: the folder's other files stay
+    ///    uncommitted. Without any of the three there's no commit;
     /// 5. remembers the base path for the next clone or create (unless the
     ///    sheet was opened for a folder), and selects the repository.
     ///
@@ -409,6 +516,8 @@ extension AppModel {
         let repository = ctx.repository
         let path = repository.path
         var failures: [OperationError] = []
+        // The files written, by the names they were written as.
+        var written: [String] = []
 
         func attempt(_ step: String, _ body: () async throws -> Void) async {
             do {
@@ -423,12 +532,14 @@ extension AppModel {
             await attempt("write README") {
                 // An empty description would leave a blank second line.
                 try await writeDefaultReadme(path, request.name, request.description.isEmpty ? nil : request.description)
+                written.append(defaultReadmeName)
             }
         }
 
         if let name = request.gitIgnore {
             await attempt("write .gitignore file") {
                 try await writeGitIgnore(path, name)
+                written.append(gitIgnoreName)
             }
         }
 
@@ -452,12 +563,7 @@ extension AppModel {
                     year: year
                 )
                 try await writeLicense(path, license, fields)
-            }
-        }
-
-        await attempt("write .gitattributes") {
-            if !(await pathExists(POSIXPath.join(path, ".gitattributes"))) {
-                try await writeGitAttributes(path)
+                written.append(licenseName)
             }
         }
 
@@ -467,7 +573,7 @@ extension AppModel {
             throw CreateRepositoryStepError("Unable to read the status of the new repository.")
         }
 
-        let files = status.workingDirectory.files
+        let files = filesToCommit(written, in: status.workingDirectory.files)
         if !files.isEmpty {
             let hooks = ctx.hooks
             await attempt("make the initial commit") {
@@ -493,6 +599,16 @@ extension AppModel {
             record: nil,
             context: ClassificationContext()
         )
+    }
+}
+
+/// The changes to commit for the files written, by the names they were
+/// written as: each one's change by that name, or, where there's none, by
+/// the same name in another case. Writing over a file named in another case
+/// (`readme.md`) on a case-insensitive volume keeps that file's name.
+private func filesToCommit(_ written: [String], in files: [WorkingDirectoryFileChange]) -> [WorkingDirectoryFileChange] {
+    written.compactMap { name in
+        files.first { $0.path == name } ?? files.first { $0.path.lowercased() == name.lowercased() }
     }
 }
 

@@ -4,6 +4,7 @@ import Foundation
 import GitKit
 import Testing
 
+/// A commit whose body ends with `trailers`, as git would find them.
 private func buildTestCommit(_ trailers: [Trailer]) -> Commit {
     let author = CommitIdentity(name: "test", email: "test", date: Date())
 
@@ -11,7 +12,7 @@ private func buildTestCommit(_ trailers: [Trailer]) -> Commit {
         sha: "test",
         shortSha: "test",
         summary: "test",
-        body: "test",
+        body: (["test", ""] + trailers.map { "\($0.token): \($0.value)" }).joined(separator: "\n"),
         author: author,
         committer: author,
         parentSHAs: [],

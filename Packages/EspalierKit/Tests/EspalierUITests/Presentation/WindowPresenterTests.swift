@@ -124,9 +124,32 @@ struct WindowPresenterTests {
         let task = Task { await presenter.perform { answers throws(OperationError) in try intent.run(answers) } }
         let pending = await self.decision(of: presenter)
         #expect(pending.decision == decision)
-        presenter.respond(to: pending.id, with: .moveToNewBranch)
+        presenter.respond(to: pending.id, with: .strategy(.moveToNewBranch))
         #expect(await task.value == "done")
         #expect(intent.calls.last?.strategy == .moveToNewBranch)
+    }
+
+    @Test("the editor question's answer is saved as the editor, then the intent runs again; cancelling saves nothing")
+    func choosesEditor() async throws {
+        let harness = try AppHarness()
+        let app = harness.makeApp()
+        let presenter = WindowPresenter(app: app)
+        let decision = Decision.externalEditor(editors: ["Visual Studio Code", "Zed"])
+
+        let cancelled = ScriptedIntent([OperationError(.decisionRequired(decision), operation: .openInEditor)])
+        let cancelledTask = Task { await presenter.perform { answers throws(OperationError) in try cancelled.run(answers) } }
+        presenter.respond(to: await self.decision(of: presenter).id, with: nil)
+        #expect(await cancelledTask.value == nil)
+        #expect(app.preferences.integrations.selectedExternalEditor == nil)
+
+        let intent = ScriptedIntent([OperationError(.decisionRequired(decision), operation: .openInEditor)])
+        let task = Task { await presenter.perform { answers throws(OperationError) in try intent.run(answers) } }
+        let pending = await self.decision(of: presenter)
+        #expect(pending.decision == decision)
+        presenter.respond(to: pending.id, with: .editor("Zed"))
+        #expect(await task.value == "done")
+        #expect(intent.calls.count == 2)
+        #expect(app.preferences.integrations.selectedExternalEditor == "Zed")
     }
 
     @Test("a busy repository shows a toast; a cancellation shows nothing")

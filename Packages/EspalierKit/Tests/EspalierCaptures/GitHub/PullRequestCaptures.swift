@@ -1,11 +1,13 @@
 // The pull request surfaces: sidebar rows (drafts marked Draft, the current
 // branch's semibold, one selected, each checks state, a drop target), the
-// toolbar chip, the checks popover in its card, the overview (a draft with
-// a description, and the current branch's "Checked Out" in the narrowest
-// column), a Markdown description (its image as a link, and loaded), the
-// Re-run sheet, and the pull request's place built from the models: its
-// overview beside "Changes Not Available", beside its files and the first
-// file's diff, and beside a filter that matches no file.
+// toolbar chip (and its tooltip while checks aren't done), the checks
+// popover in its card, the overview (a draft with a description, and the
+// current branch's "Checked Out" in the narrowest column), a Markdown
+// description (its image as a link, and loaded), the Re-run sheet (failed
+// checks, and pending ones with their glyphs' tooltips), and the pull
+// request's place built from the models: its overview beside "Changes Not
+// Available", beside its files and the first file's diff, and beside a
+// filter that matches no file.
 
 import AppKit
 @testable import EspalierCore
@@ -82,6 +84,31 @@ struct PullRequestCaptures {
             Button {} label: { PullRequestChipLabel(content: content) }
                 .padding(Metrics.insetSmall),
             named: "chip-failure",
+            area: area
+        )
+    }
+
+    @Test("the toolbar chip with checks not done, and its tooltip: all queued, queued and waiting, one running")
+    func chipPending() throws {
+        let fixtures = GitHubCaptureFixtures.self
+        let cases = [
+            [fixtures.check(31, "build", nil, status: .queued), fixtures.check(32, "test", nil, status: .queued)],
+            [fixtures.check(31, "build", .success), fixtures.check(32, "test", nil, status: .queued), fixtures.check(33, "deploy", nil, status: .waiting)],
+            [fixtures.check(31, "build", nil), fixtures.check(32, "test", nil, status: .queued)],
+        ]
+        let contents = try cases.map { checks in
+            let check = try #require(createCombinedCheckFromChecks(checks))
+            return PullRequestChipContent(number: 142, checks: ChecksState(check), checksTooltip: checksTooltipText(check))
+        }
+        capture(
+            VStack(alignment: .leading, spacing: Metrics.insetSmall) {
+                Button {} label: { PullRequestChipLabel(content: contents[0]) }
+                ForEach(contents.indices, id: \.self) { index in
+                    TooltipCard(text: contents[index].tooltip)
+                }
+            }
+            .padding(Metrics.insetSmall),
+            named: "chip-pending",
             area: area
         )
     }
@@ -217,6 +244,32 @@ struct PullRequestCaptures {
             isRerunning: false
         )
         capture(RerunChecksView(content: content, cancel: {}, rerun: {}), named: "rerun-failed", area: area)
+    }
+
+    @Test("the Re-run sheet: checks running, queued, and waiting, and their glyphs' tooltips")
+    func rerunPending() {
+        let checks = [
+            GitHubCaptureFixtures.check(21, "test", nil),
+            GitHubCaptureFixtures.check(22, "deploy", nil, status: .queued),
+            GitHubCaptureFixtures.check(23, "release", nil, status: .waiting),
+        ]
+        let content = RerunChecksContent(
+            checks: checks,
+            failedOnly: false,
+            plan: CheckRerunPlan(rerunnable: checks, nonRerunnable: [], failedOnly: false),
+            isRerunning: false
+        )
+        capture(RerunChecksView(content: content, cancel: {}, rerun: {}), named: "rerun-pending", area: area)
+        capture(
+            VStack(alignment: .leading, spacing: Metrics.insetSmall) {
+                ForEach(content.rerunnable) { check in
+                    TooltipCard(text: check.glyph.adjective)
+                }
+            }
+            .padding(Metrics.insetSmall),
+            named: "rerun-pendingTooltips",
+            area: area
+        )
     }
 
     // MARK: The place

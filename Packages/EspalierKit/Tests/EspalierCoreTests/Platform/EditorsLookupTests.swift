@@ -5,81 +5,59 @@ import TestSupport
 
 @Suite("Editor lookup")
 struct EditorsLookupTests {
-    @Suite("findEditorOrDefault")
-    struct FindEditorOrDefault {
-        @Test("finds the named editor, or the first one without a name")
-        func finds() async throws {
-            let directory = try createTempDirectory()
-            let code = try makeFakeApplication(in: directory, named: "Visual Studio Code.app")
-            let xcode = try makeFakeApplication(in: directory, named: "Xcode.app")
-            let lookup = ExternalEditorLookup(
-                locator: FakeApplicationLocator(["com.microsoft.VSCode": code, "com.apple.dt.Xcode": xcode])
-            )
+    @Test("each lookup looks again: an editor installed since is found, one removed is left out")
+    func looksAgain() async throws {
+        let directory = try createTempDirectory()
+        let code = try makeFakeApplication(in: directory, named: "Visual Studio Code.app")
+        let zed = try makeFakeApplication(in: directory, named: "Zed.app")
+        let locator = MutableApplicationLocator()
+        let lookup = ExternalEditorLookup(locator: locator)
+        #expect(await lookup.getAvailableEditors().isEmpty)
 
-            #expect(try await lookup.findEditorOrDefault("Xcode") == FoundEditor(editor: "Xcode", path: xcode))
-            #expect(try await lookup.findEditorOrDefault(nil) == FoundEditor(editor: "Visual Studio Code", path: code))
-            // An empty name counts as none.
-            #expect(try await lookup.findEditorOrDefault("") == FoundEditor(editor: "Visual Studio Code", path: code))
-        }
+        locator.install("dev.zed.Zed", at: zed)
+        #expect(await lookup.getAvailableEditors() == [FoundEditor(editor: "Zed", path: zed)])
 
-        @Test("throws when the named editor isn't installed")
-        func missing() async throws {
-            let directory = try createTempDirectory()
-            let code = try makeFakeApplication(in: directory, named: "Visual Studio Code.app")
-            let lookup = ExternalEditorLookup(locator: FakeApplicationLocator(["com.microsoft.VSCode": code]))
-
-            let error = await #expect(throws: ExternalEditorError.self) {
-                try await lookup.findEditorOrDefault("Sublime Text")
-            }
-            #expect(error?.metadata == ExternalEditorError.Metadata(openPreferences: true))
-        }
-
-        @Test("returns nothing when no editor is installed, even for a name")
-        func noEditors() async throws {
-            let lookup = ExternalEditorLookup(locator: FakeApplicationLocator())
-            #expect(try await lookup.findEditorOrDefault(nil) == nil)
-            #expect(try await lookup.findEditorOrDefault("Xcode") == nil)
-        }
+        locator.install("com.microsoft.VSCode", at: code)
+        locator.remove("dev.zed.Zed")
+        #expect(await lookup.getAvailableEditors() == [FoundEditor(editor: "Visual Studio Code", path: code)])
     }
 
-    @Suite("resolveExternalEditor")
+    @Suite("ExternalEditorResolution")
     struct Resolution {
-        @Test("returns the selected editor and the default editor separately")
-        func separate() async throws {
-            let directory = try createTempDirectory()
-            let code = try makeFakeApplication(in: directory, named: "Visual Studio Code.app")
-            let xcode = try makeFakeApplication(in: directory, named: "Xcode.app")
-            let lookup = ExternalEditorLookup(
-                locator: FakeApplicationLocator(["com.microsoft.VSCode": code, "com.apple.dt.Xcode": xcode])
-            )
-            let codeEditor = FoundEditor(editor: "Visual Studio Code", path: code)
-            let xcodeEditor = FoundEditor(editor: "Xcode", path: xcode)
+        private static let code = FoundEditor(editor: "Visual Studio Code", path: "/Applications/Visual Studio Code.app")
+        private static let xcode = FoundEditor(editor: "Xcode", path: "/Applications/Xcode.app")
 
+        @Test("finds the selected editor and the default editor separately; the default is the only one installed")
+        func separate() {
             #expect(
-                await lookup.resolveExternalEditor("Xcode")
-                    == ExternalEditorResolution(selectedEditor: xcodeEditor, defaultEditor: codeEditor)
+                ExternalEditorResolution(selectedEditor: "Xcode", installed: [Self.code, Self.xcode])
+                    == ExternalEditorResolution(selectedEditor: Self.xcode, defaultEditor: nil)
             )
             #expect(
-                await lookup.resolveExternalEditor(nil)
-                    == ExternalEditorResolution(selectedEditor: nil, defaultEditor: codeEditor)
+                ExternalEditorResolution(selectedEditor: "Xcode", installed: [Self.xcode])
+                    == ExternalEditorResolution(selectedEditor: Self.xcode, defaultEditor: Self.xcode)
+            )
+            // With several installed and none selected, there's no default:
+            // opening asks.
+            #expect(
+                ExternalEditorResolution(selectedEditor: nil, installed: [Self.code, Self.xcode])
+                    == ExternalEditorResolution(selectedEditor: nil, defaultEditor: nil)
+            )
+            // An empty name counts as none.
+            #expect(
+                ExternalEditorResolution(selectedEditor: "", installed: [Self.code])
+                    == ExternalEditorResolution(selectedEditor: nil, defaultEditor: Self.code)
             )
         }
 
         @Test("doesn't replace a selected editor that isn't installed")
-        func keepsMissingSelection() async throws {
-            let directory = try createTempDirectory()
-            let code = try makeFakeApplication(in: directory, named: "Visual Studio Code.app")
-            let lookup = ExternalEditorLookup(locator: FakeApplicationLocator(["com.microsoft.VSCode": code]))
-
+        func keepsMissingSelection() {
             #expect(
-                await lookup.resolveExternalEditor("Sublime Text")
-                    == ExternalEditorResolution(
-                        selectedEditor: nil,
-                        defaultEditor: FoundEditor(editor: "Visual Studio Code", path: code)
-                    )
+                ExternalEditorResolution(selectedEditor: "Sublime Text", installed: [Self.code])
+                    == ExternalEditorResolution(selectedEditor: nil, defaultEditor: Self.code)
             )
             #expect(
-                await ExternalEditorLookup(locator: FakeApplicationLocator()).resolveExternalEditor("Sublime Text")
+                ExternalEditorResolution(selectedEditor: "Sublime Text", installed: [])
                     == ExternalEditorResolution(selectedEditor: nil, defaultEditor: nil)
             )
         }

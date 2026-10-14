@@ -49,10 +49,12 @@ extension SyncModel {
     /// refresh.
     ///
     /// - A branch without an upstream is published: `--set-upstream`.
-    /// - `forceWithLease` force pushes with git's lease (the remote-tracking
-    ///   branch), asking first while `confirmForcePush` is on:
-    ///   `.forcePush` with the upstream's name. Afterwards the branch no
-    ///   longer needs a force push (`operations.forcePushState`).
+    /// - `forceWithLease` force pushes with a lease, asking first while
+    ///   `confirmForcePush` is on: `.forcePush` with the upstream's name. A
+    ///   branch Espalier rewrote leases against its remote branch's tip when
+    ///   the rewrite started (`operations.rewrittenBranches`), any other
+    ///   against the remote-tracking branch (git's default). Afterwards the
+    ///   branch no longer needs a force push (`operations.forcePushState`).
     /// - The `pre-push` hook is intercepted; aborting it surfaces as
     ///   `cancelled(.hookAborted)`, and the tags stay queued.
     /// - A repository without a remote can't push:
@@ -60,7 +62,8 @@ extension SyncModel {
     ///
     /// - Throws: preconditions (an unborn branch, a detached HEAD);
     ///   `.pushRejectedNonFastForward` with "Fetch" when the remote has
-    ///   commits the branch doesn't; the other push errors
+    ///   commits the branch doesn't, or a lease finds the remote branch
+    ///   moved; the other push errors
     ///   (`ErrorClassifier`), titled "Failed to push", with a Retry that
     ///   keeps the request.
     @discardableResult
@@ -109,8 +112,19 @@ extension SyncModel {
             refreshAfter: .full,
             showsProgressUntilRefreshed: true
         )
+        // A branch Espalier rewrote leases against its remote branch's tip
+        // when the rewrite started, so a remote branch that moved since is
+        // never overwritten, even before a fetch's refresh shows it.
+        let leaseTip = request.forceWithLease ? repository.operations.rewrittenBranches[branch.nameWithoutRemote] : nil
         let result = try await repository.perform(descriptor) { ctx in
-            try await self.pushPrimitive(branch, to: remote, forceWithLease: request.forceWithLease, in: ctx, progress: ctx.progress)
+            try await self.pushPrimitive(
+                branch,
+                to: remote,
+                forceWithLease: request.forceWithLease,
+                leaseTip: leaseTip,
+                in: ctx,
+                progress: ctx.progress
+            )
         }
 
         if request.forceWithLease {
@@ -147,6 +161,7 @@ extension SyncModel {
         _ branch: Branch,
         to remote: Remote,
         forceWithLease: Bool,
+        leaseTip: String? = nil,
         in ctx: OperationContext,
         progress: ProgressSink
     ) async throws -> PushResult {
@@ -183,6 +198,7 @@ extension SyncModel {
             tags.isEmpty ? nil : tags,
             PushOptions(
                 forceWithLease: forceWithLease,
+                forceWithLeaseExpectedSHA: leaseTip,
                 onHookProgress: ctx.hooks.onHookProgress,
                 onHookFailure: ctx.hooks.onHookFailure,
                 onTerminalOutputAvailable: ctx.hooks.onTerminalOutputAvailable

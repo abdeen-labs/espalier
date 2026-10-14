@@ -154,8 +154,15 @@ where desktop streams (conflict resolution shows the model's reasoning).
 
 Espalier names fork remotes `espalier-<owner>` and marks its automatic
 stashes `!!Espalier<branch>`, so nothing in a user's repository carries
-GitHub branding. It also recognizes desktop's `github-desktop-<owner>` and
-`!!GitHub_Desktop<branch>`, so both carry over.
+GitHub branding. It also recognizes desktop's `!!GitHub_Desktop<branch>`, so
+those stashes carry over.
+
+Each fork remote Espalier adds is marked in the repository's own config
+(`remote.<name>.espalierFork = true`); only marked remotes are pruned and
+have their branches hidden. A remote without the mark is the user's,
+whatever its name, and nothing named `github-desktop-` is treated as
+Espalier's (desktop pruned and hid remotes by that prefix). Unmarked
+remotes from before the mark aren't migrated (my call).
 
 ## The user's shell environment
 
@@ -171,6 +178,12 @@ GitHub branding. It also recognizes desktop's `github-desktop-<owner>` and
   longer loses the next variable; startup files that print are ignored; the
   shell's own `PWD`, `OLDPWD`, `SHLVL`, and `_` are left out (desktop gave
   git and binary hooks `PWD=/`).
+- **The shell's variables that locate a repository are left out**
+  (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, and the rest of
+  `git rev-parse --local-env-vars` that name a location), so a profile
+  exporting them can't point every git call at that repository. Hooks'
+  login shells leave them out too; what git sets for a hook reaches it.
+  The shell's `GIT_CONFIG_*` variables stay.
 
 ## Hooks
 
@@ -239,12 +252,30 @@ GitHub branding. It also recognizes desktop's `github-desktop-<owner>` and
 - **Branch pruning keeps desktop's safeguards,** runs as background work,
   records each deletion with its SHA (restorable), reads the branches itself
   and keeps one that moved since it was found merged, and writes the last
-  prune date only once a prune runs.
+  prune date only once a prune runs. An upstream is gone only when it names
+  a remote-tracking branch that no longer exists: a branch tracking a local
+  branch is never pruned for its upstream (desktop counted every local
+  upstream as gone).
 - **Background errors keep their side effects** (marking a repository
   missing) but are never presented.
 - **Retrying a push keeps its options** (desktop retried a force push as a
   normal push). **A force push forgets the rewrite only once it succeeds,**
   and only pushed tags leave the queue.
+- **Force push is recommended while the remote branch hasn't moved since
+  Espalier rewrote the branch,** whatever the local tip, and the
+  recommendation is saved with the repository list (my call; desktop's
+  lasted while the tip was the rewrite's, in memory). The remote branch's
+  tip is read when the rewrite starts (for a rebase Espalier took over,
+  when it finishes), and a rewrite is recorded only if the branch before
+  it contained that tip, so a fetch during a conflicted rebase, or a
+  branch already behind, leaves Pull recommended.
+- **A rewritten branch's force push leases against that recorded tip**
+  (`--force-with-lease=refs/heads/<branch>:<sha>`; GitKit's push port
+  otherwise passes desktop's bare `--force-with-lease`), so a remote
+  branch that moved since the rewrite is never overwritten, even between a
+  fetch and the refresh that ends the recommendation. A force push without
+  a record keeps git's lease. A lease git rejects ("stale info") reads as
+  newer commits on the remote, with Fetch.
 - **Hook aborts are `cancelled(.hookAborted)`,** never an error (desktop's
   pull showed git's error).
 - **Multi-commit undo is offered only while the tip is the operation's
@@ -279,8 +310,17 @@ GitHub branding. It also recognizes desktop's `github-desktop-<owner>` and
   success selects the new commit.
 - **Hiding whitespace keeps partial line selections;** staging always uses
   the full diff, and editing selections is disabled while whitespace is
-  hidden (desktop discarded partial staging). Whole-file inclusion survives
-  a change of status kind.
+  hidden (desktop discarded partial staging). Inclusion, whole or partial,
+  survives a change of status kind.
+- **A partial line selection follows its lines, not their positions.** When
+  the file's diff changes (an editor or formatter writes the file), a
+  deleted line keeps its choice by its number and text in the old file, an
+  added line by its text where identical lines can be told apart by the
+  lines around them; a line that can't be found, or told apart, is left
+  out. A commit carries the selection over to the diff it reads, so it
+  commits what was included even when the file changed after the last
+  refresh (desktop applied the stored indexes to whatever lines were there
+  by then).
 - **No tutorial** (my call): onboarding is signing in and adding repositories.
 - **The default clone folder is `~/Developer`** (my call), Apple's convention;
   the last folder used is remembered.
@@ -301,6 +341,10 @@ GitHub branding. It also recognizes desktop's `github-desktop-<owner>` and
   GitHub answers. **Repository rules:** RE2 patterns are translated to ICU
   (one that can't compile, or with an operator Espalier doesn't know,
   passes); a required pull request blocks the commit with a message.
+- **Fork This Repository asks before replacing an `upstream` remote that
+  points elsewhere,** as the check at selection does: Update points it at
+  the fork's parent, Ignore keeps it. Desktop overwrote it with the old
+  origin URL.
 - **Clones can be cancelled** (desktop's can't): Cancel Clone, removing the
   clone, or quitting stops git's process group and removes what it cloned.
   Two clones into one folder are refused, and so is a relative path.
@@ -394,6 +438,12 @@ infrastructure. Each is recorded here with its purpose and license.
   Find Next and Previous, Go to Commit Message is ⌘J, View on GitHub ⌥⇧⌘G,
   Copy Path ⌥⌘C, and ⌘⌫ deletes the selection. ⌘P and ⇧⌘P stay Push and
   Pull, since Espalier doesn't print.
+- **⌘P and Repository ▸ Push always push plainly,** and the item always
+  reads Push: a diverged branch's push fails as non-fast-forward. Force
+  Push is its own item in the Repository menu, without a shortcut, shown
+  while a force push is possible, and asks first per the setting. Desktop's
+  Push became Force Push for any diverged branch, ⌘P included, while the
+  toolbar said Pull.
 - **⌘S shows and hides the sidebar,** in place of the system's ⌃⌘S;
   Espalier has nothing to save.
 - **The working copy is always the graph's top node,** even with no
@@ -405,7 +455,8 @@ infrastructure. Each is recorded here with its purpose and license.
   order (`getAvatarUrlCandidates`), and the person's initials on their own
   color when none can supply one (including GitHub.com's one generated
   image for emails it doesn't know). **No Gravatar:** it would send
-  authors' emails to a third party.
+  authors' emails to a third party. GitHub is asked for avatars by email in
+  every repository, on GitHub or not (my call).
 
 **Added in Espalier:** the history graph with scope, search, and stub
 navigation (a Go menu); simple mode; a Tags section; every branch's stash
@@ -470,6 +521,9 @@ immediately; importing desktop's repository list and settings (my call).
 - **The diff's line cursor shows after the arrow keys or a gutter click,**
   not after a click in the text.
 - **Conflict regions:** ours mint, the common ancestor gray, theirs orange.
+- **Swipe, Onion Skin, and Difference draw each image at its real size from
+  the same top-left corner,** both scaled down by the same factor when the
+  pane is too small (my call).
 - **Lines that don't wrap scroll sideways under a scroller,** the line
   numbers fixed. A wrapped line continues at its indent plus two columns.
 - **A large diff shows no counts until it's shown.** The whitespace hint's
@@ -493,10 +547,12 @@ immediately; importing desktop's repository list and settings (my call).
   number, not the last line's; sizes and counts at a unit's edge move up a
   unit ("1 MiB", not "1,024 KiB"); mention suggestions sort ignoring case;
   a binary file offers Open with Default App only in Changes, for a file on
-  disk; a conflicted image says how to resolve it (desktop showed nothing);
-  an image that can't be decoded has no "W: 0px"; 2-Up gives the change in
-  size (+20%), not the ratio (120%); the line endings warning says CRLF
-  becomes LF when the file is committed.
+  disk; a conflicted image says how to resolve it (desktop showed nothing),
+  and so does a conflicted file with nothing to diff, such as a
+  delete/modify conflict (desktop sent it to the command line, though its
+  row resolves it); an image that can't be decoded has no "W: 0px"; 2-Up
+  gives the change in size (+20%), not the ratio (120%); the line endings
+  warning says CRLF becomes LF when the file is committed.
 
 **History**
 
@@ -512,6 +568,11 @@ immediately; importing desktop's repository list and settings (my call).
   applies to commits on it.
 - **Squash keeps co-authors in every repository** (desktop only in GitHub
   repositories); each can be removed in the sheet.
+- **Squash, amend, and Undo Commit move exactly the co-author trailers that
+  are `Name <email>`** out of the body and back as trailers; every other
+  line stays as written (desktop dropped `Co-authored-by: bob@example.com`,
+  doubled one without a space after the colon, and its Undo rewrote other
+  trailers' spacing).
 - **Undo Commit refuses a commit with tags everywhere** (desktop's History
   menu didn't). Undo needs the latest unpushed commit and no operation in
   progress; reset needs an ancestor with only unpushed commits after it.
@@ -560,8 +621,13 @@ immediately; importing desktop's repository list and settings (my call).
 
 - **Creating a repository refuses a repository's own folder** (desktop
   compared paths as typed, so `name/` committed an existing repository's
-  changes as "Initial commit"); an existing README is overwritten only after
-  a warning.
+  changes as "Initial commit"); an existing README, .gitignore, or LICENSE
+  is overwritten only after a warning.
+- **Creating a repository commits only the README, .gitignore, and license
+  it writes,** and makes no commit when it writes none; the folder's other
+  files stay uncommitted, in Changes, and the sheet says how many (as git
+  will list them, with the Git Ignore template chosen). No .gitattributes
+  (my call).
 - **The .gitignore templates and licenses** come from desktop's static
   folder (github/gitignore, CC0; choosealicense.com, MIT), credited in
   Acknowledgements.
@@ -591,8 +657,12 @@ immediately; importing desktop's repository list and settings (my call).
 **Settings**
 
 - **A missing editor or shell shows as not installed,** never replaced and
-  saved (desktop replaced it); with no choice, the default is the first
-  installed editor, looked up at each launch.
+  saved (desktop replaced it).
+- **Installed editors and shells are looked up again when Espalier becomes
+  active and when Settings opens** (desktop looked once per launch); with
+  no editor chosen, the first Open in External Editor asks which installed
+  editor to use and saves the answer, or uses the only one without asking
+  (my call). Opening in an editor or a shell looks them up again too.
 - **One author form** (desktop's `GitConfigUserForm`) in Settings ▸ Git,
   Repository Settings, and Configure Git. Open With and Settings choose an
   editor with the same pop-up.
@@ -639,7 +709,12 @@ immediately; importing desktop's repository list and settings (my call).
   matches Enterprise Server accounts; migrating a ghe.com account moves its
   token; a failed user fetch at the end of sign-in is an error; an API
   error leaves out empty messages ("Validation Failed (, )"); a queued
-  check reads Queued, not In progress.
+  or waiting check reads Queued or Waiting, not In progress, in its row
+  and in its glyph's label and tooltip, and a pull request's checks
+  tooltip says In progress only while one runs (else Waiting if one waits,
+  else Queued); an account whose token the keychain won't give (locked,
+  access denied) stays saved but unused, and Settings ▸ Accounts offers
+  Try Again (desktop dropped it from the saved list).
 - **A pull request's checks add up one way everywhere:** failed if any
   failed, timed out, or needs an action; else running if any runs; else not
   successful if any was cancelled or went stale; else passed (skipped and
@@ -777,6 +852,14 @@ immediately; importing desktop's repository list and settings (my call).
   revoked in 2023).
 - **SSH secrets are stored when the operation succeeds,** so a mistyped
   passphrase can be corrected (desktop stored them at once).
+- **A stored SSH passphrase or password is deleted only when the same ssh
+  process asks for it again,** which means it rejected it; the user is
+  asked then. A failure for any other reason (a repository not found, a
+  wrong URL, a dropped connection) keeps it, and so does another ssh in the
+  same git command (a submodule, Git LFS). Desktop deleted it on any SSH
+  authentication error, which dugite's patterns also report for a missing
+  repository. A stored signing key passphrase goes only when ssh-keygen
+  rejects it.
 
 ## Editors and shells
 
@@ -796,6 +879,11 @@ immediately; importing desktop's repository list and settings (my call).
   theme's color, reads as the default.
 - **The appearance** is Settings ▸ Appearance's System, Light, or Dark (`theme`,
   desktop's values; System by default).
+- **The default number format follows the Mac's region** (desktop's came
+  from a table of countries): the nearest of the six formats by its
+  grouping and decimal separators, shown selected in Settings ▸ Appearance
+  until the user picks one, with no "Same as Mac" item (my call). Spaces and
+  apostrophes that group digits read as a space.
 - **No command works through an open sheet.**
 - **Desktop bugs fixed:** Git LFS 3's "warning: the … attribute" (dugite's
   pattern missed it, so mismatched global filters were never offered an
@@ -825,6 +913,10 @@ immediately; importing desktop's repository list and settings (my call).
   Retries follow the OpenAI and Anthropic SDKs: at most twice, for 408, 409,
   429, 5xx, and connection failures, honoring `x-should-retry` and
   `Retry-After`; only before a stream starts.
+- **Every request's summary shows:** when conflicts go to the model in
+  several requests, the results show each request's summary under the names
+  of the files it covers (my call). Context lists every request's
+  references, a retry's included.
 - **Conflict markers:** a file with a marker outside its blocks is skipped,
   and a reassembled file that still has one fails, so no file with markers
   is reported resolved.
@@ -836,7 +928,11 @@ immediately; importing desktop's repository list and settings (my call).
   like `src/[id].ts` also staged `src/i.ts`) and never overwrite files
   changed since the round; successful chunks are kept and failed files can
   be retried alone; later batches stop after an auth, quota, rate-limit, or
-  network error; a rebase's conflicts get commit context.
+  network error; a rebase's conflicts get commit context; a resolved file
+  keeps each line's own ending, a final newline or its absence included,
+  and the lines spliced in take the ending of the line before their block
+  (one CRLF line made desktop end every line with CRLF); a line ending at
+  the end of a resolution ends its last line (desktop added a blank line).
 - **Dropped with Copilot:** built-in models, the "auto" default, quota and
   billing codes, per-account selections.
 
@@ -880,10 +976,12 @@ immediately; importing desktop's repository list and settings (my call).
   `rebase-apply`; submodules that aren't checked out are listed, so
   discarding a deleted submodule folder restores it; a submodule with only
   uncommitted changes inside is never committed; patch headers quote paths
-  with control characters, so partial commits of such files work; `git log`
-  reads `--encoding=UTF-8`; New Branch on an unborn branch refuses clearly,
-  and leaving an unborn branch never tries a stash. No unshallow, as
-  desktop.
+  with control characters, so partial commits of such files work; a
+  partial commit or discard that leaves a line after one without a final
+  newline gives that line its newline (desktop's patch had git join the
+  two); `git log` reads `--encoding=UTF-8`; New Branch on an unborn branch
+  refuses clearly, and leaving an unborn branch never tries a stash. No
+  unshallow, as desktop.
 
 ## History's simple mode
 

@@ -89,7 +89,6 @@ struct PreferencesTests {
         preferences.lastCloneLocation = "/Users/someone/Developer"
         preferences.tabSize = 4
         preferences.imageDiffType = .twoUp
-        preferences.numberFormat = defaultNumberFormat
         preferences.dateFormat = nil
         preferences.timeFormat = nil
         preferences.integrations = IntegrationSettings()
@@ -136,30 +135,49 @@ struct PreferencesTests {
 
     @Test("reads and writes the number, date, and time formats in the store it was given")
     func formats() throws {
-        let other = try #require(numberFormats.first { $0 != defaultNumberFormat })
+        let german = Locale(identifier: "de_DE")
+        let other = try #require(numberFormats.first { $0 != nearestNumberFormat(to: german) })
         let temporary = try TemporaryDefaults()
         defer { temporary.remove() }
         temporary.defaults.set(numberFormatToKey(other), forKey: "numberFormat")
         temporary.defaults.set("yyyy-MM-dd", forKey: "dateFormat")
         temporary.defaults.set("HH:mm", forKey: "timeFormat")
 
-        let preferences = Preferences(store: PreferenceStore(temporary.defaults))
+        let preferences = Preferences(store: PreferenceStore(temporary.defaults), locale: german)
         #expect(preferences.numberFormat == other)
         #expect(preferences.dateFormat == "yyyy-MM-dd")
         #expect(preferences.timeFormat == "HH:mm")
 
-        preferences.numberFormat = defaultNumberFormat
+        preferences.numberFormat = nearestNumberFormat(to: german)
         preferences.dateFormat = "d MMM yyyy"
         preferences.timeFormat = nil
-        #expect(temporary.defaults.object(forKey: "numberFormat") as? String == numberFormatToKey(defaultNumberFormat))
+        #expect(temporary.defaults.object(forKey: "numberFormat") as? String == numberFormatToKey(nearestNumberFormat(to: german)))
         #expect(temporary.defaults.object(forKey: "dateFormat") as? String == "d MMM yyyy")
         #expect(temporary.defaults.object(forKey: "timeFormat") == nil)
 
-        // An empty or unknown number format is the locale's.
+        // An empty or unknown number format is the region's.
         for stored in ["", "x|y"] {
             temporary.defaults.set(stored, forKey: "numberFormat")
-            #expect(Preferences(store: PreferenceStore(temporary.defaults)).numberFormat == defaultNumberFormat)
+            #expect(Preferences(store: PreferenceStore(temporary.defaults), locale: german).numberFormat == nearestNumberFormat(to: german))
         }
+    }
+
+    @Test("the number format follows the region until one is picked, and a pick stays, even the region's own")
+    func numberFormatFollowsRegion() throws {
+        let temporary = try TemporaryDefaults()
+        defer { temporary.remove() }
+        let periodComma = NumberFormat(thousandsSeparator: .period, decimalSeparator: .comma)
+        let spacePeriod = NumberFormat(thousandsSeparator: .space, decimalSeparator: .period)
+
+        let german = Preferences(store: PreferenceStore(temporary.defaults), locale: Locale(identifier: "de_DE"))
+        #expect(german.numberFormat == periodComma)
+        #expect(Preferences(store: PreferenceStore(temporary.defaults), locale: Locale(identifier: "de_CH")).numberFormat == spacePeriod)
+        #expect(temporary.defaults.object(forKey: "numberFormat") == nil)
+
+        // Picking the format already shown keeps it when the region changes.
+        german.numberFormat = periodComma
+        #expect(temporary.defaults.object(forKey: "numberFormat") as? String == numberFormatToKey(periodComma))
+        #expect(Preferences(store: PreferenceStore(temporary.defaults), locale: Locale(identifier: "de_CH")).numberFormat == periodComma)
     }
 
     @Test("keeps the design theme, each theme's color and background tint, the app font, and the code font, and reads unknown ones as the defaults")

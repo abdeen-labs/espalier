@@ -197,15 +197,18 @@ public struct Branch: Hashable, Sendable {
     }
 
     /// Gets a value indicating whether the branch is a remote branch belonging to
-    /// one of the app's automatically created (and pruned) fork remotes. I.e. a
-    /// remote branch from a branch which starts with `espalierForkedRemotePrefix`
-    /// or `forkedRemotePrefix`.
+    /// one of the app's automatically created (and pruned) fork remotes: the
+    /// remotes named in `forkRemoteNames`, the ones Espalier marked
+    /// (`getForkRemoteNames`).
     ///
     /// We hide branches from our known fork remotes as these are considered
     /// plumbing and can add noise to everywhere in the user interface where we
     /// display branches as forks will likely contain duplicates of the same ref
     /// names
-    public var isDesktopForkRemoteBranch: Bool {
-        type == .remote && isForkedRemoteName(name)
+    public func isForkRemoteBranch(_ forkRemoteNames: Set<ExactString>) -> Bool {
+        guard type == .remote, !forkRemoteNames.isEmpty else {
+            return false
+        }
+        return forkRemoteNames.contains { JSCompat.startsWith(ref, "refs/remotes/\($0.value)/") }
     }
 }

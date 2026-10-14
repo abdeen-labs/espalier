@@ -135,6 +135,7 @@ public struct CherryPickTargetSheet: View {
             branches: state.branches.all,
             defaultBranch: state.branches.defaultBranch,
             recentBranches: state.branches.recent,
+            forkRemoteNames: state.remotes.forkRemoteNames,
             includesRemoteBranches: true,
             filter: filter
         ).isEmpty

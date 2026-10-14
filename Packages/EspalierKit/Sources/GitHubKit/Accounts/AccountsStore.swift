@@ -101,6 +101,11 @@ private func isKeyChainError(_ error: any Error) -> Bool {
 /// so accounts with expired tokens are signed out when they load, on
 /// `refresh()`, and on `signOutExpiredAccounts()`, with a `tokenExpired`
 /// event telling the user to sign in again.
+///
+/// An account whose token the keychain refuses to read (it's locked, or the
+/// user denied access) stays in the saved list without its token and isn't
+/// used (`getAll()` leaves it out) until `retryUnreadableAccounts()` reads
+/// it.
 public actor AccountsStore {
     public enum Event: Sendable {
         /// The list of accounts changed.
@@ -127,7 +132,12 @@ public actor AccountsStore {
     private let runtime: GitHubRuntime
     private let now: @Sendable () -> Date
 
+    /// Every saved account, in the saved order. Those in `unreadable` have no
+    /// token.
     private var accounts: [Account] = []
+
+    /// The accounts whose tokens the keychain refused to read.
+    private var unreadable: Set<AccountKey> = []
 
     /// Loads the accounts on first use.
     private var loadingTask: Task<Void, Never>?
@@ -154,11 +164,25 @@ public actor AccountsStore {
         continuation.finish()
     }
 
-    /// Get the list of accounts in the cache.
+    /// Get the list of accounts in the cache, leaving out those whose tokens
+    /// couldn't be read.
     public func getAll() async -> [Account] {
         await ensureLoaded()
 
-        return accounts
+        return usableAccounts
+    }
+
+    /// The accounts in use (`getAll()`), and those whose tokens the keychain
+    /// refused to read, without tokens.
+    public func getAllWithUnreadable() async -> (accounts: [Account], unreadable: [Account]) {
+        await ensureLoaded()
+
+        return (usableAccounts, accounts.filter { unreadable.contains(AccountKey($0)) })
+    }
+
+    /// The accounts whose tokens were read.
+    private var usableAccounts: [Account] {
+        accounts.filter { !unreadable.contains(AccountKey($0)) }
     }
 
     /// Handle a rejected API token without leaving unhandled errors: failures
@@ -178,7 +202,7 @@ public actor AccountsStore {
     /// Sign out the account whose current token was rejected.
     public func invalidateToken(endpoint: String, token: String) async throws {
         await ensureLoaded()
-        guard let account = accounts.first(where: { $0.endpoint == endpoint }) else {
+        guard let account = usableAccounts.first(where: { $0.endpoint == endpoint }) else {
             return
         }
 
@@ -244,6 +268,7 @@ public actor AccountsStore {
         }
 
         accounts = sortAccounts(endpoints.compactMap { accountsByEndpoint[$0] })
+        unreadable = unreadable.filter { $0.endpoint != account.endpoint }
 
         save()
         return account
@@ -256,7 +281,7 @@ public actor AccountsStore {
         await ensureLoaded()
         await signOutExpiredAccounts()
 
-        let current = accounts
+        let current = usableAccounts
         let updated = await withTaskGroup(of: (Int, Account).self) { group in
             for (index, account) in current.enumerated() {
                 group.addTask { (index, await self.tryUpdateAccount(account)) }
@@ -316,7 +341,8 @@ public actor AccountsStore {
             throw error
         }
 
-        accounts = accounts.filter { !($0.endpoint == account.endpoint && $0.id == account.id) }
+        accounts = accounts.filter { !accountEquals($0, account) }
+        unreadable.remove(AccountKey(account))
 
         save()
     }
@@ -328,7 +354,7 @@ public actor AccountsStore {
         await ensureLoaded()
 
         var signedOut: [Account] = []
-        for account in accounts where account.isTokenExpired(at: now()) {
+        for account in usableAccounts where account.isTokenExpired(at: now()) {
             do {
                 try await removeAccount(account)
                 signedOut.append(account)
@@ -416,46 +442,128 @@ public actor AccountsStore {
         let migratedAccounts = getMigratedGHEAccounts(parsedAccounts)
         let rawAccounts = migratedAccounts ?? parsedAccounts
 
-        var accountsWithTokens: [Account] = []
+        var loadedAccounts: [Account] = []
+        var unreadableAccounts: Set<AccountKey> = []
         var removedInvalidAccounts = false
         for account in rawAccounts {
             let accountWithoutToken = account.account
 
-            let key = getKeyForAccount(accountWithoutToken)
-            do {
-                let stored = try secureStore.secret(service: key, account: account.login)
-                let credential = try deserializeAccountCredential(stored)
-                let expired = credential?.isExpired(at: now()) ?? false
-                if (credential == nil && stored != nil) || expired {
-                    removedInvalidAccounts = true
-                    do {
-                        try secureStore.deleteSecret(service: key, account: account.login)
-                    } catch {
-                        log.error("Unable to remove unusable GitHub credentials.")
-                        continuation.yield(.didError(GitHubError("Unable to remove unusable GitHub credentials.")))
-                    }
-                    if expired {
-                        continuation.yield(.tokenExpired(accountWithoutToken))
-                    }
-                    continue
-                }
-                accountsWithTokens.append(
-                    accountWithoutToken.withToken(credential?.accessToken ?? "", expiresAt: credential?.expirationDate)
-                )
-            } catch {
-                log.error("Error getting token for '\(key, privacy: .public)'. Skipping. \(String(describing: error), privacy: .public)")
-
+            switch readToken(of: accountWithoutToken) {
+            case .read(let accountWithToken):
+                loadedAccounts.append(accountWithToken)
+            case .removed:
+                removedInvalidAccounts = true
+            case .unreadable:
+                loadedAccounts.append(accountWithoutToken)
+                unreadableAccounts.insert(AccountKey(accountWithoutToken))
+                continuation.yield(.didError(GitHubError(
+                    "Espalier couldn't read the token for your \(accountWithoutToken.friendlyEndpoint) account from your keychain. "
+                        + "Make sure your login keychain is unlocked, then try again in Settings ▸ Accounts."
+                )))
+            case .malformed(let error):
                 continuation.yield(.didError(error))
             }
         }
 
-        accounts = sortAccounts(accountsWithTokens)
+        accounts = sortAccounts(loadedAccounts)
+        unreadable = unreadableAccounts
         // If any account was migrated, make sure to persist the new value
         if migratedAccounts != nil || removedInvalidAccounts {
             save() // Save already emits an update
         } else {
-            continuation.yield(.didUpdate(accounts))
+            continuation.yield(.didUpdate(usableAccounts))
         }
+    }
+
+    /// Reads the tokens of the accounts whose tokens the keychain refused to
+    /// read before. An account whose token reads is used again; one whose
+    /// token the keychain still refuses stays as it is.
+    public func retryUnreadableAccounts() async {
+        await ensureLoaded()
+        guard !unreadable.isEmpty else {
+            return
+        }
+
+        var changed = false
+        accounts = accounts.compactMap { account in
+            let key = AccountKey(account)
+            guard unreadable.contains(key) else {
+                return account
+            }
+            switch readToken(of: account) {
+            case .read(let accountWithToken):
+                unreadable.remove(key)
+                changed = true
+                return accountWithToken
+            case .removed:
+                unreadable.remove(key)
+                changed = true
+                return nil
+            case .unreadable:
+                return account
+            case .malformed(let error):
+                unreadable.remove(key)
+                changed = true
+                continuation.yield(.didError(error))
+                return nil
+            }
+        }
+
+        if changed {
+            save()
+        }
+    }
+
+    /// What reading an account's token from the secure store found.
+    private enum StoredToken {
+        /// The account with its token, or with an empty one when none is
+        /// stored.
+        case read(Account)
+        /// The stored credential was unusable or expired, and was removed
+        /// (an expired one with a `tokenExpired` event).
+        case removed
+        /// The keychain refused to read it (locked, or access denied).
+        case unreadable
+        /// The stored credential is malformed.
+        case malformed(any Error)
+    }
+
+    /// Reads the token of `account`, an account without one, from the secure
+    /// store.
+    private func readToken(of account: Account) -> StoredToken {
+        let key = getKeyForAccount(account)
+
+        let stored: String?
+        do {
+            stored = try secureStore.secret(service: key, account: account.login)
+        } catch {
+            log.error("Error getting token for '\(key, privacy: .public)': \(String(describing: error), privacy: .public)")
+            return .unreadable
+        }
+
+        let credential: AccountCredential
+        do {
+            credential = try deserializeAccountCredential(stored)
+        } catch {
+            log.error("Unable to read the credential for '\(key, privacy: .public)'. Skipping. \(String(describing: error), privacy: .public)")
+            return .malformed(error)
+        }
+
+        let expired = credential?.isExpired(at: now()) ?? false
+        if (credential == nil && stored != nil) || expired {
+            do {
+                try secureStore.deleteSecret(service: key, account: account.login)
+            } catch {
+                log.error("Unable to remove unusable GitHub credentials.")
+                continuation.yield(.didError(GitHubError("Unable to remove unusable GitHub credentials.")))
+            }
+            if expired {
+                continuation.yield(.tokenExpired(account))
+            }
+            return .removed
+        }
+
+        return .read(account.withToken(credential?.accessToken ?? "", expiresAt: credential?.expirationDate))
     }
 
     private func save() {
@@ -467,7 +575,19 @@ public actor AccountsStore {
             log.error("Unable to save the accounts: \(String(describing: error), privacy: .public)")
         }
 
-        continuation.yield(.didUpdate(accounts))
+        continuation.yield(.didUpdate(usableAccounts))
+    }
+}
+
+/// An account's identity in the store, as `accountEquals` compares
+/// accounts.
+private struct AccountKey: Hashable {
+    let endpoint: String
+    let id: Int
+
+    init(_ account: Account) {
+        endpoint = account.endpoint
+        id = account.id
     }
 }
 

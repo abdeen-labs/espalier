@@ -126,6 +126,85 @@ struct FinderLaunchHooksTests {
         }
     }
 
+    @Test(
+        "hooks get where git says the repository is, never where the login shell's variables say",
+        arguments: LoginShellKind.installed
+    )
+    func repositoryLocation(_ kind: LoginShellKind) async throws {
+        // The startup files point git at another repository.
+        let elsewhere = try setupEmptyRepository("main").path
+        let exported = [
+            ("GIT_DIR", POSIXPath.join(elsewhere, ".git")),
+            ("GIT_WORK_TREE", elsewhere),
+            ("GIT_INDEX_FILE", POSIXPath.join(elsewhere, ".git/index")),
+            ("GIT_OBJECT_DIRECTORY", POSIXPath.join(elsewhere, ".git/objects")),
+        ]
+        let startupLines = exported.map { name, value in
+            kind == .fish ? "set --global --export \(name) '\(value)'" : "export \(name)='\(value)'"
+        }.joined(separator: "\n")
+        let session = try LoginSession.make(kind, startupLines: startupLines)
+
+        let repository = try setupEmptyRepository("main")
+        let gitDir = POSIXPath.join(repository.path, ".git")
+        for hook in ["pre-commit", "commit-msg"] {
+            try writeScript(POSIXPath.join(gitDir, "hooks/\(hook)"), """
+                #!/bin/sh
+                \(session.recordEnvironment(hook))
+                git rev-parse --absolute-git-dir --show-toplevel > '\(session.output)/\(hook)-repository'
+                exit 0
+                """)
+        }
+        let file = POSIXPath.join(repository.path, "file.txt")
+        try Data("one\n".utf8).write(to: URL(filePath: file))
+
+        // A commit git sets the index for, and one Espalier also sets GIT_DIR
+        // for, committing one file through a temporary index of git's.
+        var first: [String: [String: String]] = [:]
+        var second: [String: [String: String]] = [:]
+        try await withLoginSession(session) { runtime in
+            await runtime.shellEnvironment?.waitUntilLoaded()
+            let files = try #require(try await getStatus(repository)).workingDirectory.files
+            _ = try await createCommit(repository, "First\n", files)
+            for hook in ["pre-commit", "commit-msg"] {
+                first[hook] = try session.hookEnvironment(hook)
+                let seen = try String(contentsOfFile: POSIXPath.join(session.output, "\(hook)-repository"), encoding: .utf8)
+                #expect(seen == "\(gitDir)\n\(repository.path)\n", "\(hook)")
+            }
+
+            try Data("two\n".utf8).write(to: URL(filePath: file))
+            _ = try await git(
+                ["commit", "-m", "Second", "--", "file.txt"],
+                repository.path,
+                "commit",
+                options: GitExecutionOptions(env: ["GIT_DIR": gitDir], interceptHooks: ["pre-commit", "commit-msg"])
+            )
+            for hook in ["pre-commit", "commit-msg"] {
+                second[hook] = try session.hookEnvironment(hook)
+            }
+        }
+
+        for hook in ["pre-commit", "commit-msg"] {
+            let seen = try #require(first[hook])
+            // Git sets the index (relative to the work tree) and nothing
+            // else that locates the repository.
+            let index = try #require(seen["GIT_INDEX_FILE"], "\(hook)")
+            #expect(POSIXPath.join(repository.path, index) == POSIXPath.join(gitDir, "index"), "\(hook)")
+            for name in ["GIT_DIR", "GIT_WORK_TREE", "GIT_OBJECT_DIRECTORY"] {
+                #expect(seen[name] == nil, "\(hook): \(name)")
+            }
+
+            // What git was given and what it set reach the hook unchanged.
+            let partial = try #require(second[hook])
+            #expect(partial["GIT_DIR"] == gitDir, "\(hook)")
+            #expect(partial["GIT_INDEX_FILE"]?.hasPrefix(POSIXPath.join(gitDir, "next-index-")) == true, "\(hook)")
+            #expect(partial["GIT_WORK_TREE"] == nil, "\(hook)")
+        }
+        let log = try await git(["log", "--format=%s"], repository.path, "log")
+        #expect(log.stdout == "Second\nFirst\n")
+        let elsewhereLog = try await git(["log"], elsewhere, "log", options: GitExecutionOptions(successExitCodes: [0, 128]))
+        #expect(elsewhereLog.exitCode == 128)
+    }
+
     @Test("a locale the session has, and a locale or terminal type the startup files set, stay as they are")
     func sessionLocaleAndTerminalType() async throws {
         let base = try LoginSession.make(.zsh, startupLines: "export TERM=vt100")

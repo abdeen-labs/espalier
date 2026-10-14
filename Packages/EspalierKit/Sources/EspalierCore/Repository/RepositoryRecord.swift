@@ -56,6 +56,12 @@ public struct RepositoryRecord: Sendable, Hashable, Identifiable {
     /// doesn't point at the fork's parent.
     public var ignoresExistingUpstreamRemote: Bool
 
+    /// Branches whose history Espalier rewrote (amend, rebase, squash,
+    /// reorder), by name, to their upstream's tip when Espalier rewrote
+    /// them: while the upstream is still there, the push recommended is a
+    /// force push (`forcePushState`).
+    public var rewrittenBranches: [String: String]
+
     /// When the repository was added to the list.
     public var addedAt: Date
 
@@ -75,6 +81,7 @@ public struct RepositoryRecord: Sendable, Hashable, Identifiable {
         isTutorialRepository: Bool = false,
         tagsToPush: [String] = [],
         ignoresExistingUpstreamRemote: Bool = false,
+        rewrittenBranches: [String: String] = [:],
         addedAt: Date = Date(),
         historyScope: HistoryScope? = nil
     ) {
@@ -89,6 +96,7 @@ public struct RepositoryRecord: Sendable, Hashable, Identifiable {
         self.isTutorialRepository = isTutorialRepository
         self.tagsToPush = tagsToPush
         self.ignoresExistingUpstreamRemote = ignoresExistingUpstreamRemote
+        self.rewrittenBranches = rewrittenBranches
         self.addedAt = addedAt
         self.historyScope = historyScope
     }

@@ -255,9 +255,17 @@ struct MultiCommitCaptures {
         )
     }
 
+    private static let loaderSummary = """
+        ### Conflicting changes
+        Both branches changed **RepositoryLoader**: a1b2c3d added a retry after a failed load, and #142 an empty-state path.
+
+        ### Resolution
+        Kept both: the retry now wraps the branch's empty-state path.
+        """
+
     private static let summary = AIConflictSummaryContent(
         operationPhrase: "Rebasing feature/login onto main",
-        markdown: "Both branches changed **RepositoryLoader**. The resolution keeps main's retry after a failed load and the branch's empty-state path, which the retry now wraps.",
+        sections: [.init(id: 0, markdown: loaderSummary)],
         references: [
             AIConflictReference(
                 id: "pr-0", kind: .pullRequest(number: 142), title: "Show an empty history for new repositories",
@@ -281,16 +289,38 @@ struct MultiCommitCaptures {
         return options
     }
 
+    /// Two requests' summaries, each under the files it covers.
+    private static var batchSummary: AIConflictSummaryContent {
+        var batches = summary
+        batches.sections = [
+            .init(id: 0, paths: ["Sources/App/RepositoryLoader.swift", "Sources/App/EmptyState.swift", "README.md"], markdown: loaderSummary),
+            .init(
+                id: 1,
+                paths: ["Sources/Cache/Store.swift", "Sources/Cache/Eviction.swift"],
+                markdown: """
+                    ### Conflicting changes
+                    main moved eviction into **Store**, and feature/login capped the old eviction path's size.
+
+                    ### Resolution
+                    Moved the cap into Store's eviction; **the old path's cap was dropped**.
+                    """
+            ),
+        ]
+        return batches
+    }
+
     private static func results(
         skipped: Bool = true,
         failed: Bool = true,
+        batches: Bool = false,
+        retryProgress: String? = nil,
         canContinue: Bool = false,
         error: String? = nil
     ) -> AIConflictResultsContent {
         AIConflictResultsContent(
             title: "Resolve conflicts before Rebase",
             modelLabel: "GPT-5 · High",
-            summary: summary,
+            summary: batches ? batchSummary : summary,
             conflicted: [
                 AIResolutionRow(
                     path: "Sources/App/RepositoryLoader.swift",
@@ -307,7 +337,22 @@ struct MultiCommitCaptures {
                     isResolved: false
                 ),
                 AIResolutionRow(path: "README.md", explanation: "No conflicts remaining", choiceLabel: "", options: [], isResolved: true),
-            ],
+            ] + (batches ? [
+                AIResolutionRow(
+                    path: "Sources/Cache/Store.swift",
+                    explanation: "Moved the branch's size cap into Store's eviction.",
+                    choiceLabel: "The Model",
+                    options: options(model: true, checked: .model),
+                    isResolved: false
+                ),
+                AIResolutionRow(
+                    path: "Sources/Cache/Eviction.swift",
+                    explanation: "Kept main's removal of the old eviction path.",
+                    choiceLabel: "The Model",
+                    options: options(model: true, checked: .model),
+                    isResolved: false
+                ),
+            ] : []),
             skipped: skipped ? [
                 AIResolutionRow(
                     path: "Assets/logo.png",
@@ -326,7 +371,7 @@ struct MultiCommitCaptures {
                     isResolved: false
                 ),
             ] : [],
-            retryProgress: nil,
+            retryProgress: retryProgress,
             abortTitle: "Abort Rebase",
             continueTitle: "Continue Rebase",
             canContinue: canContinue,
@@ -336,7 +381,7 @@ struct MultiCommitCaptures {
         )
     }
 
-    @Test("the AI sheet's results: skipped and failed files; all resolved, with an error")
+    @Test("the AI sheet's results: skipped and failed files; retrying them; all resolved, with an error; several requests' summaries")
     func aiResults() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await OperationsCaptureRepository.make()
@@ -346,9 +391,14 @@ struct MultiCommitCaptures {
                     .windowEnvironment(fixture.context)
             }
             capture(view(Self.results()), named: "ai-results", area: area)
+            capture(view(Self.results(retryProgress: "Retrying 1 file…")), named: "ai-results-retrying", area: area)
             capture(
                 view(Self.results(skipped: false, failed: false, canContinue: true, error: "Couldn't write Sources/App/RepositoryLoader.swift: the file is locked.")),
                 named: "ai-results-resolved", area: area
+            )
+            capture(
+                view(Self.results(skipped: false, failed: false, batches: true, canContinue: true)),
+                named: "ai-results-batches", area: area
             )
             await fixture.settle()
         }

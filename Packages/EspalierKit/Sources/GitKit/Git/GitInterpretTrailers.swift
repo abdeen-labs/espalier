@@ -47,52 +47,6 @@ public func parseSingleUnfoldedTrailer(_ line: String, _ separators: String) -> 
     return nil
 }
 
-/// Get a string containing the characters that may be used in this repository
-/// separate tokens from values in commit message trailers. If no specific
-/// trailer separator is configured the default separator (:) will be returned.
-public func getTrailerSeparatorCharacters(_ repository: Repository) async throws -> String {
-    let separators = try await getConfigValue(repository, "trailer.separators")
-    if let separators, !separators.isEmpty {
-        return separators
-    }
-    return ":"
-}
-
-/// Extract commit message trailers from a commit message.
-///
-/// The trailers returned here are unfolded, i.e. they've had their
-/// whitespace continuation removed and are all on one line. See the
-/// documentation for --unfold in the help for `git interpret-trailers`
-///
-/// - Parameters:
-///   - repository: The repository in which to run the interpret-
-///     trailers command. Although not intuitive this
-///     does matter as there are configuration options
-///     available for the format, position, etc of commit
-///     message trailers. See the manpage for
-///     git-interpret-trailers for more information.
-///   - commitMessage: A commit message from where to attempt to extract
-///     commit message trailers.
-///
-/// - Returns: An array of zero or more parsed trailers
-public func parseTrailers(_ repository: Repository, _ commitMessage: String) async throws -> [Trailer] {
-    let result = try await git(
-        ["interpret-trailers", "--parse"],
-        repository.path,
-        "parseTrailers",
-        options: GitExecutionOptions(stdin: commitMessage)
-    )
-
-    let trailers = result.stdout
-
-    if trailers.isEmpty {
-        return []
-    }
-
-    let separators = try await getTrailerSeparatorCharacters(repository)
-    return parseRawUnfoldedTrailers(trailers, separators)
-}
-
 /// Merge one or more commit message trailers into a commit message.
 ///
 /// If no trailers are given this method will simply try to ensure that

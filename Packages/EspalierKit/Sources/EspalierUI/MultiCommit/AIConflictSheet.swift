@@ -709,8 +709,13 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
         "\(skipped.count) Skipped by the model"
     }
 
-    /// "2 files couldn't be resolved."
+    /// "2 Couldn't be resolved".
     public var failedHeader: String {
+        "\(failed.count) Couldn't be resolved"
+    }
+
+    /// "2 files couldn't be resolved.", beside Try Again.
+    public var failedStatus: String {
         failed.count == 1 ? "1 file couldn't be resolved." : "\(failed.count) files couldn't be resolved."
     }
 
@@ -795,6 +800,7 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
             modelLabel: aiModelLabel(results.model),
             summary: AIConflictSummaryContent.make(
                 results.summary,
+                resolvedPaths: results.resolutions.map(\.path),
                 operation: results.operation,
                 htmlURL: repository.record.gitHubRepository?.htmlURL
             ),
@@ -951,6 +957,9 @@ struct AIConflictResultsView: View {
                     .transition(.opacity)
             }
             .motion(Motion.leave, value: tab)
+            if !content.failed.isEmpty {
+                failedBar
+            }
             if let error = content.error {
                 Text(error)
                     .font(Typography.subheadline)
@@ -991,36 +1000,49 @@ struct AIConflictResultsView: View {
                 fileSection(header: content.skippedHeader, systemImage: "exclamationmark.triangle", rows: content.skipped)
             }
             if !content.failed.isEmpty {
-                VStack(alignment: .leading, spacing: Metrics.grid) {
-                    HStack {
-                        Text(content.failedHeader)
-                            .font(Typography.heading)
-                            .foregroundStyle(.text)
-                        Spacer()
-                        if let progress = content.retryProgress {
-                            ArcProgress(.small)
-                            Text(progress)
-                                .font(Typography.secondary)
-                                .foregroundStyle(.text2)
-                            Button("Stop") {
-                                repository.ai.stopResolvingConflicts()
-                            }
-                            .buttonStyle(.quiet)
-                            .controlSize(.small)
-                        } else {
-                            Button("Try Again") {
-                                AIConflictFlow.retry(in: context, repository: repository)
-                            }
-                            .buttonStyle(.quiet)
-                            .controlSize(.small)
-                        }
-                    }
-                    ForEach(content.failed) { row in
-                        AIResolutionRowView(row: row, actions: rowActions(row))
-                    }
-                }
+                fileSection(header: content.failedHeader, systemImage: "xmark.octagon", rows: content.failed)
             }
         }
+    }
+
+    /// The failed files' count and Try Again, or the retry's progress, below
+    /// both tabs, on the attention tint.
+    private var failedBar: some View {
+        HStack(spacing: Metrics.insetSmall) {
+            Label {
+                Text(content.failedStatus)
+                    .foregroundStyle(.text)
+            } icon: {
+                Image(systemName: "xmark.octagon.fill")
+                    .foregroundStyle(Color(espalier: Palette.error))
+            }
+            .font(Typography.secondary)
+            Spacer()
+            if let progress = content.retryProgress {
+                ArcProgress(.small)
+                Text(progress)
+                    .font(Typography.secondary)
+                    .foregroundStyle(.text2)
+                Button("Stop") {
+                    repository.ai.stopResolvingConflicts()
+                }
+                .buttonStyle(.quiet)
+                .controlSize(.small)
+            } else {
+                Button("Try Again") {
+                    AIConflictFlow.retry(in: context, repository: repository)
+                }
+                .buttonStyle(.quiet)
+                .controlSize(.small)
+            }
+        }
+        .padding(.leading, Metrics.insetMedium)
+        .padding(.trailing, Metrics.insetSmall)
+        .padding(.vertical, Metrics.insetSmall)
+        .background(
+            Color(nsColor: StatusBarTone.attention.fill),
+            in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
+        )
     }
 
     private func fileSection(header: String, systemImage: String, rows: [AIResolutionRow]) -> some View {

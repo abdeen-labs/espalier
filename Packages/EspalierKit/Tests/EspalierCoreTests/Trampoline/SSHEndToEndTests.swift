@@ -233,25 +233,50 @@ struct SSHEndToEndTests {
         }
     }
 
-    @Test("deletes a stored passphrase that no longer works", .hangGuard(minutes: 5))
+    @Test("replaces a stored passphrase ssh rejects with the one the user enters", .hangGuard(minutes: 5))
     func staleStoredPassphrase() async throws {
         try await withSSHServer { server, repository in
-            let prompter = TestPrompter(addSSHHost: { _, _ in true })
+            let passphrase = server.passphrase
+            let prompter = TestPrompter(
+                addSSHHost: { _, _ in true },
+                sshKeyPassphrase: { _ in PromptSSHSecretResponse(secret: passphrase, storeSecret: true) }
+            )
             let knownHosts = POSIXPath.join(server.directory, "known_hosts")
 
             try await withTrampoline(prompter: prompter) { context in
                 let keyHash = try getHashForSSHKey(server.keyPath)
                 try context.secrets.setSecret("stale", service: "Espalier - SSH key passphrases", account: keyHash)
 
+                let result = try await lsRemote(server, repository, knownHosts: knownHosts)
+
+                // ssh got the stored passphrase, rejected it, and asked
+                // again: the user was asked then.
+                #expect(result.stdout.contains("refs/heads/main"))
+                #expect(prompter.calls.last == .sshKeyPassphrase(keyPath: server.keyPath))
+                #expect(prompter.calls.count == 2)
+                #expect(try context.secrets.secret(service: "Espalier - SSH key passphrases", account: keyHash) == passphrase)
+            }
+        }
+    }
+
+    @Test("keeps a stored passphrase when the repository isn't there", .hangGuard(minutes: 5))
+    func missingRepository() async throws {
+        try await withSSHServer { server, _ in
+            let prompter = TestPrompter(addSSHHost: { _, _ in true })
+            let knownHosts = POSIXPath.join(server.directory, "known_hosts")
+
+            try await withTrampoline(prompter: prompter) { context in
+                let keyHash = try getHashForSSHKey(server.keyPath)
+                try context.secrets.setSecret(server.passphrase, service: "Espalier - SSH key passphrases", account: keyHash)
+
                 let error = await #expect(throws: GitError.self) {
-                    try await lsRemote(server, repository, knownHosts: knownHosts)
+                    try await lsRemote(server, POSIXPath.join(server.directory, "missing.git"), knownHosts: knownHosts)
                 }
 
+                // Dugite's patterns read it as permission denied.
                 #expect(error?.result.gitError == .sshPermissionDenied)
-                // Only the host key was asked about; ssh got the stored
-                // passphrase every time it asked.
                 #expect(prompter.calls.count == 1)
-                #expect(try context.secrets.secret(service: "Espalier - SSH key passphrases", account: keyHash) == nil)
+                #expect(try context.secrets.secret(service: "Espalier - SSH key passphrases", account: keyHash) == server.passphrase)
             }
         }
     }

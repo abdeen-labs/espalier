@@ -58,10 +58,11 @@ struct RepositoryCapabilitiesRulesTests {
         let capabilities = RepositoryCapabilities(onBranch(feature) { $0.hasChangedFiles = true })
         #expect(capabilities.isRepositoryActive)
         let off = repositoryCommands(capabilities).filter { !$0.value }.map(\.key).sorted()
-        // Off: GitHub's commands (not on GitHub), the stash toggle (no
-        // stash), and removing an alias (none).
+        // Off: GitHub's commands (not on GitHub), Force Push (not
+        // diverged), the stash toggle (no stash), and removing an alias
+        // (none).
         #expect(off == [
-            "canCompareOnGitHub", "canCreateIssueOnGitHub", "canCreatePullRequest", "canPreviewPullRequest",
+            "canCompareOnGitHub", "canCreateIssueOnGitHub", "canCreatePullRequest", "canForcePush", "canPreviewPullRequest",
             "canRemoveAlias", "canToggleStashedChanges", "canViewBranchOnGitHub", "canViewOnGitHub",
         ])
     }
@@ -230,13 +231,21 @@ struct RepositoryCapabilitiesRulesTests {
         #expect(!unpublished.canCreateIssueOnGitHub)
     }
 
-    @Test("a branch that can be force pushed makes Push a force push")
+    @Test("a branch that can be force pushed offers Force Push beside Push, disabled while Push is")
     func forcePush() {
         for state in [ForcePushBranchState.available, .recommended] {
-            #expect(RepositoryCapabilities(onBranch { $0.forcePushState = state }).isForcePush)
+            let capabilities = RepositoryCapabilities(onBranch { $0.forcePushState = state })
+            #expect(capabilities.isForcePushAvailable && capabilities.canForcePush && capabilities.canPush)
         }
         let notAvailable = RepositoryCapabilities(onBranch { $0.forcePushState = .notAvailable })
-        #expect(!notAvailable.isForcePush)
+        #expect(!notAvailable.isForcePushAvailable && !notAvailable.canForcePush)
+        #expect(notAvailable.canPush)
+
+        let busy = RepositoryCapabilities(onBranch { state in
+            state.forcePushState = .available
+            state.isNetworkOperationRunning = true
+        })
+        #expect(busy.isForcePushAvailable && !busy.canForcePush && !busy.canPush)
     }
 
     @Test("a stash on the current branch shows the toggle")
@@ -300,7 +309,8 @@ struct RepositoryCapabilitiesRulesTests {
 /// The capabilities' repository commands by name.
 private func repositoryCommands(_ capabilities: RepositoryCapabilities) -> [(key: String, value: Bool)] {
     [
-        ("canPush", capabilities.canPush), ("canPull", capabilities.canPull), ("canFetch", capabilities.canFetch),
+        ("canPush", capabilities.canPush), ("canForcePush", capabilities.canForcePush),
+        ("canPull", capabilities.canPull), ("canFetch", capabilities.canFetch),
         ("canRemoveRepository", capabilities.canRemoveRepository), ("canViewOnGitHub", capabilities.canViewOnGitHub),
         ("canChangeAlias", capabilities.canChangeAlias), ("canRemoveAlias", capabilities.canRemoveAlias),
         ("canOpenInShell", capabilities.canOpenInShell), ("canShowInFinder", capabilities.canShowInFinder),
@@ -398,7 +408,7 @@ struct RepositoryCapabilitiesModelTests {
         await fixture.model.refresh(.full, reason: .user)
         #expect(fixture.model.gitState.aheadBehind == AheadBehind(ahead: 1, behind: 1))
 
-        #expect(fixture.app.capabilities.isForcePush)
+        #expect(fixture.app.capabilities.canForcePush)
     }
 
     @Test("on a detached HEAD")
