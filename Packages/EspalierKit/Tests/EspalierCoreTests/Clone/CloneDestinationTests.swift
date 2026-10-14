@@ -101,7 +101,7 @@ struct CloneDestinationTests {
         #expect(cloneFolderName("") == nil)
     }
 
-    @Test("the local path follows the URL as desktop's dialog does")
+    @Test("the local path follows the URL")
     func pathFollowsURL() {
         let base = "/Users/me/Developer"
         // A first URL adds its name to the folder.
@@ -114,9 +114,9 @@ struct CloneDestinationTests {
         #expect(clonePath(second, afterURLChangeFrom: "https://github.com/octocat/world.git", to: "https://") == base)
         // Without a repository before or after, the path stays.
         #expect(clonePath(base, afterURLChangeFrom: "nothing", to: "still nothing") == base)
-        // A path the user chose (the previous URL named a repository) gets
-        // its last component replaced.
-        #expect(clonePath("/Volumes/Work/mine", afterURLChangeFrom: "octocat/hello", to: "octocat/other") == "/Volumes/Work/other")
+        // A folder the user named stays.
+        #expect(clonePath("/Volumes/Work/mine", afterURLChangeFrom: "octocat/hello", to: "octocat/other") == "/Volumes/Work/mine")
+        #expect(clonePath("/Volumes/Work/mine", afterURLChangeFrom: "octocat/hello", to: "") == "/Volumes/Work/mine")
     }
 
     @Test("clones go to ~/Developer at first, then the last folder cloned into") @MainActor

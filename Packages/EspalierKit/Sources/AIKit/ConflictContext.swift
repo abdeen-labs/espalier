@@ -2,10 +2,9 @@
 //
 // AIKit doesn't depend on GitKit, so EspalierCore runs git and resolves
 // paths: it supplies the commits (`ConflictContextCommit`) and each file's
-// read result (`ConflictedFileContents`, see `readConflictedFile(atPath:)`),
-// and `buildConflictContext` turns them into the context.
+// read result (`ConflictedFileContents`), and `buildConflictContext` turns
+// them into the context.
 
-import Darwin
 import EspalierSupport
 import Foundation
 
@@ -493,28 +492,6 @@ public struct ConflictedFile: Sendable, Hashable {
         self.deletedSide = deletedSide
         self.contents = nil
     }
-}
-
-/// Reads a conflicted file for `buildConflictContext`, once
-/// `resolveWithin` has confirmed the path is inside the repository:
-/// files over `MaxConflictFileReadSize` aren't read, and the text is decoded
-/// as UTF-8 with invalid bytes replaced.
-///
-/// - Parameter absolutePath: The path `resolveWithin(repositoryPath, path)`
-///   returned.
-public func readConflictedFile(atPath absolutePath: String) -> ConflictedFileContents {
-    // stat(2) follows symbolic links, like Node's `stat`.
-    var info = stat()
-    guard stat(absolutePath, &info) == 0 else {
-        return .unreadable
-    }
-    if info.st_size > MaxConflictFileReadSize {
-        return .tooLarge
-    }
-    guard let data = FileManager.default.contents(atPath: absolutePath) else {
-        return .unreadable
-    }
-    return .text(String(decoding: data, as: UTF8.self))
 }
 
 /// The skip reason for a file with a `<<<<<<<` or `>>>>>>>` marker outside

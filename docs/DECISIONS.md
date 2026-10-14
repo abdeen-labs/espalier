@@ -299,8 +299,8 @@ GitHub branding. It also recognizes desktop's `github-desktop-<owner>` and
 - **Pull request lists:** an empty answer replaces the list, a list with a
   failed page is never stored, and fork remotes are pruned only after
   GitHub answers. **Repository rules:** RE2 patterns are translated to ICU
-  (one that can't compile passes); a required pull request blocks the
-  commit with a message.
+  (one that can't compile, or with an operator Espalier doesn't know,
+  passes); a required pull request blocks the commit with a message.
 - **Clones can be cancelled** (desktop's can't): Cancel Clone, removing the
   clone, or quitting stops git's process group and removes what it cloned.
   Two clones into one folder are refused, and so is a relative path.
@@ -433,7 +433,8 @@ immediately; importing desktop's repository list and settings (my call).
   (desktop cleared them).
 - **"N included" counts every file the next commit includes,** in full or in
   part, including files the filter hides; the include-all checkbox reflects
-  only the files shown.
+  only the files shown. Included in Commit shows partly included files
+  (desktop's showed them under neither option).
 - **Diffs paint before the file's contents load;** expansion and syntax
   color follow (desktop waited). Find works from anywhere in the window.
   Copying a diff skips hunk headers. A submodule URL without a host means
@@ -488,6 +489,14 @@ immediately; importing desktop's repository list and settings (my call).
   and the current match stays on its line through Unified ↔ Split and
   expanding. Past 10,000 matches the count says "10,000+" and the rest
   aren't found.
+- **Desktop bugs fixed:** the gutter's width comes from the largest line
+  number, not the last line's; sizes and counts at a unit's edge move up a
+  unit ("1 MiB", not "1,024 KiB"); mention suggestions sort ignoring case;
+  a binary file offers Open with Default App only in Changes, for a file on
+  disk; a conflicted image says how to resolve it (desktop showed nothing);
+  an image that can't be decoded has no "W: 0px"; 2-Up gives the change in
+  size (+20%), not the ratio (120%); the line endings warning says CRLF
+  becomes LF when the file is committed.
 
 **History**
 
@@ -535,6 +544,10 @@ immediately; importing desktop's repository list and settings (my call).
   Branch menu keeps desktop's rules for the current branch.
 - **Delete Branch makes Delete the default button,** as every confirmation
   does (my call; desktop's makes Cancel the default).
+- **Delete Branch for a branch with a pull request names the branch**
+  (desktop's didn't).
+- **An empty branch list reads "No Branches"** with nothing typed in the
+  filter (desktop's said it couldn't find that branch).
 - **The branch popover is desktop's branch switcher:** a click or Return
   checks a branch out, and "Choose a branch to merge into <current>" sits
   beside New Branch…. The sidebar's branches use its groups (Default,
@@ -571,6 +584,9 @@ immediately; importing desktop's repository list and settings (my call).
   prompt.
 - **Move to Applications** isn't offered in Debug builds; as the user it
   puts an older copy in the Trash, as an administrator it replaces it.
+- **Desktop bugs fixed:** owners sort ignoring case in the repository list
+  and Clone; editing Clone's URL renames the folder only when it's named
+  for the previous repository.
 
 **Settings**
 
@@ -621,7 +637,9 @@ immediately; importing desktop's repository list and settings (my call).
 - **Desktop bugs fixed:** `fetchAllOpenPullRequests` throws when a page
   fails; `fetchIssues` filters on `pull_request`; `getEndpointForRepository`
   matches Enterprise Server accounts; migrating a ghe.com account moves its
-  token; a failed user fetch at the end of sign-in is an error.
+  token; a failed user fetch at the end of sign-in is an error; an API
+  error leaves out empty messages ("Validation Failed (, )"); a queued
+  check reads Queued, not In progress.
 - **A pull request's checks add up one way everywhere:** failed if any
   failed, timed out, or needs an action; else running if any runs; else not
   successful if any was cancelled or went stale; else passed (skipped and
@@ -717,7 +735,8 @@ immediately; importing desktop's repository list and settings (my call).
   branch names; `determineMergeability` reporting a clean merge when git
   can't merge; cherry-pick's `-m 1` as one argument; squash dropping `#`
   lines and losing its message after conflicts; `--continue`/`--skip` with
-  `--no-verify`; "up to date" missed with `rebase.autoStash`.
+  `--no-verify`; "up to date" missed with `rebase.autoStash`; extra blank
+  lines after summary-only commits in squash's description.
 
 ## Network
 
@@ -763,8 +782,8 @@ immediately; importing desktop's repository list and settings (my call).
 
 - **Desktop bugs fixed:** `%TARGET_PATH%` expands literally (desktop's
   `replaceAll` read `$&` in paths as a pattern); symbolic links are
-  validated by their target; `findShellOrDefault` returns nil rather than
-  crashing.
+  validated by their target; a selected shell that isn't installed fails
+  with a pointer to Settings (desktop opened Terminal under its name).
 
 ## Preferences and integrations
 
@@ -1078,6 +1097,9 @@ immediately; importing desktop's repository list and settings (my call).
   parser does: `:shortcode:` emoji (GitHub's custom ones stay text), URLs,
   and in GitHub repositories `#123` and `@mentions`. An issue reference
   with no known web address stays text (desktop linked "null/issues/n").
+  Issue references and mentions leave out the punctuation after them, as
+  URLs do, and end at a tab or carriage return; ghe.com mentions get no
+  double slash.
 - **Compare to Branch** shows each branch's behind and ahead counts and date,
   counted only for rows on screen, without fork remotes' branches.
 - **The toolbar search filters a pull request's files** in its place, as it

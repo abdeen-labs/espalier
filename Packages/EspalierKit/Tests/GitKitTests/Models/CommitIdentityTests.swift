@@ -19,19 +19,6 @@ struct CommitIdentityTests {
             #expect(identity.date == expected)
         }
 
-        @Test("parses timezone information")
-        func parsesTimezoneInformation() throws {
-            let identity1 = try CommitIdentity.parseIdentity(
-                "Markus Olsson <markus@github.com> 1475670580 +0130"
-            )
-            #expect(identity1.tzOffset == 90)
-
-            let identity2 = try CommitIdentity.parseIdentity(
-                "Markus Olsson <markus@github.com> 1475670580 -0245"
-            )
-            #expect(identity2.tzOffset == -165)
-        }
-
         @Test("parses even if the email address isn't a normal email")
         func parsesEvenIfTheEmailAddressIsNotANormalEmail() throws {
             let identity = try CommitIdentity.parseIdentity(

@@ -15,7 +15,7 @@ import TestSupport
 
 /// A commit with `summary` and `body`.
 private func makeCommit(_ summary: String, _ body: String = "") -> Commit {
-    let author = CommitIdentity(name: "A", email: "a@example.com", date: Date(timeIntervalSince1970: 0), tzOffset: 0)
+    let author = CommitIdentity(name: "A", email: "a@example.com", date: Date(timeIntervalSince1970: 0))
     let sha = String(repeating: "0", count: 40 - String(summary.count, radix: 16).count) + String(summary.count, radix: 16)
     return Commit(
         sha: sha,

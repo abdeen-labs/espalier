@@ -1,13 +1,16 @@
-// The diff container's layouts: the header, a text diff with its warnings
-// and with find open, the find bar's states, a large diff, a submodule's
-// change, a failed diff, empty states, the image modes with their picker,
-// and a working directory file of a real repository with its staging
-// gutter, contents, and syntax color. A text diff, find, and the two-up
-// image in light and dark, the rest in light.
+// The diff container's layouts: the header, the previous file's diff while
+// the next loads, a text diff with its warnings and with find open, the find
+// bar's states, a large diff, a binary file, a submodule's change, a failed
+// diff, empty states, the image modes with their picker, an image that
+// can't be decoded, a conflicted image, and a working directory file of a
+// real repository with its staging gutter, contents, and syntax color. A
+// text diff, find, the loading header, the binary file, the two-up image,
+// and the image states in light and dark, the rest in light.
 
 import AppKit
 @testable import EspalierCore
 import EspalierCoreTestSupport
+import EspalierSupport
 import GitKit
 import SwiftUI
 import Testing
@@ -35,6 +38,23 @@ struct DiffContainerCaptures {
         await captureDiffView(
             { DiffContainer(.loaded(.text(DiffCaptureFixtures.swiftChange)), file: modified, context: .history) },
             named: "container-text",
+            area: area,
+            size: Self.size,
+            appearances: CaptureAppearance.allCases
+        )
+    }
+
+    @Test("the next file's header over the previous file's diff while the next loads: no counts")
+    func loadingNext() async {
+        await captureDiffView(
+            {
+                DiffContainer(
+                    .loading(previous: .text(DiffCaptureFixtures.swiftChange)),
+                    file: DiffFileInfo(path: "Sources/App/EmptyState.swift", status: .modified),
+                    context: .history
+                )
+            },
+            named: "container-loading-next",
             area: area,
             size: Self.size,
             appearances: CaptureAppearance.allCases
@@ -109,6 +129,14 @@ struct DiffContainerCaptures {
         capture(DiffContainer(.loaded(.largeText(large)), file: modified, context: .history), named: "container-large")
     }
 
+    @Test("a binary file: Open with Default App in Changes, nothing to open elsewhere", arguments: [
+        NamedCase("binary-changes", true),
+        NamedCase("binary-history", false),
+    ])
+    func binary(_ opens: NamedCase<Bool>) {
+        capture(BinaryDiffView(open: opens.value ? {} : nil), named: opens.name, size: CGSize(width: 480, height: 200), appearances: CaptureAppearance.allCases)
+    }
+
     @Test("a submodule's change")
     func submodule() {
         let changed = SubmoduleDiff(
@@ -155,6 +183,46 @@ struct DiffContainerCaptures {
         )
     }
 
+    @Test("an image that can't be decoded: added alone, and beside the old one in 2-Up")
+    func undecodableImage() {
+        let broken = DiffCaptureImages.image(Data("not an image".utf8))
+        capture(
+            ImageDiffView(diff: ImageDiff(current: broken), status: .new, mode: .twoUp),
+            named: "image-undecodable",
+            size: CGSize(width: 560, height: 300),
+            appearances: CaptureAppearance.allCases
+        )
+        capture(
+            ImageDiffView(diff: ImageDiff(previous: DiffCaptureImages.previous, current: broken), status: .modified, mode: .twoUp),
+            named: "image-undecodable-twoUp",
+            size: CGSize(width: 560, height: 300),
+            appearances: CaptureAppearance.allCases
+        )
+    }
+
+    @Test("a conflicted image: a side to choose, a side chosen, and none to choose (a stash restore)", arguments: [
+        NamedCase(
+            "image-conflicted",
+            ConflictFileRowContent(
+                path: "Assets/icon.png", state: .manual, status: "Manual conflict",
+                oursLabel: "Use the modified file from main", theirsLabel: "Use the modified file from feature"
+            )
+        ),
+        NamedCase(
+            "image-conflicted-chosen",
+            ConflictFileRowContent(path: "Assets/icon.png", state: .resolved(isUndoable: true), status: "Using the modified file from main")
+        ),
+        NamedCase("image-conflicted-restore", ConflictFileRowContent(path: "Assets/icon.png", state: .manual, status: "Manual conflict")),
+    ])
+    func conflictedImage(_ row: NamedCase<ConflictFileRowContent>) {
+        capture(
+            ImageDiffView(diff: ImageDiff(), status: .conflicted, conflict: row.value, mode: .twoUp),
+            named: row.name,
+            size: CGSize(width: 560, height: 240),
+            appearances: CaptureAppearance.allCases
+        )
+    }
+
     @Test("an image diff shows its mode picker above the images")
     func imageHeader() {
         let file = DiffFileInfo(path: "Assets/icon.png", status: .modified)
@@ -166,6 +234,43 @@ struct DiffContainerCaptures {
     }
 
     // MARK: A repository's file
+
+    /// Writes a PNG of `color` to icon.png and commits it.
+    private static func commitIcon(_ color: NSColor, _ message: String, in local: Repository) async throws {
+        let png = DiffCaptureImages.png(width: 120, height: 90, color: color, inset: 10)
+        try png.write(to: URL(exactFilePath: POSIXPath.join(local.path, "icon.png")))
+        try await runGit(["add", "icon.png"], local)
+        try await runGit(["commit", "-m", message], local)
+    }
+
+    @Test("an image conflicted by a merge, changed in the working directory, in a window: how to resolve it")
+    func conflictedImageInMerge() async throws {
+        try await withIsolatedGitConfig { _ in
+            let local = try setupEmptyRepository()
+            try await Self.commitIcon(.systemBlue, "Add the icon", in: local)
+            try await runGit(["branch", "feature"], local)
+            try await Self.commitIcon(.systemOrange, "Make the icon orange", in: local)
+            try await runGit(["checkout", "feature"], local)
+            try await Self.commitIcon(.systemGreen, "Make the icon green", in: local)
+            _ = try await Dugite.exec(["merge", "master"], local.path)
+            // Git leaves the branch's version, which has no diff; another
+            // one makes the diff an image diff.
+            try DiffCaptureImages.png(width: 120, height: 90, color: .systemPurple, inset: 10)
+                .write(to: URL(exactFilePath: POSIXPath.join(local.path, "icon.png")))
+            let fixture = try await ChangesCaptureRepository.make(local)
+            let changes = fixture.repository.changes
+            let file = try #require(changes.workingDirectory.files.first { $0.path == "icon.png" })
+            changes.select(fileIDs: [file.id])
+            await changes.diffIdle()
+            capture(
+                DiffContainer(changes.diff, file: DiffFileInfo(file), context: .conflict).windowEnvironment(fixture.context),
+                named: "container-image-conflicted",
+                size: CGSize(width: 640, height: 300),
+                appearances: CaptureAppearance.allCases
+            )
+            await fixture.app.idle()
+        }
+    }
 
     /// Numbers.swift's lines: `let lineN = N`, with `replacing`'s in their
     /// places.

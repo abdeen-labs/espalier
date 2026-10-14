@@ -23,17 +23,6 @@ public struct MergePreview: Sendable, Equatable {
         self.status = status
         self.commitCount = commitCount
     }
-
-    /// Whether the merge can start: it brings in commits and isn't between
-    /// unrelated histories; a merge that will conflict can start, its conflicts
-    /// are dealt with after.
-    public var canStart: Bool {
-        switch status {
-        case .conflicts: true
-        case .invalid, .loading: false
-        case .clean: commitCount > 0
-        }
-    }
 }
 
 extension MultiCommitOperationsModel {

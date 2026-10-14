@@ -159,9 +159,9 @@ public final class IntegrationsModel {
     }
 
     /// The shell named in "Open in <Shell>": the selected shell (Terminal
-    /// by default, even when the selected one isn't installed and Terminal
-    /// opens instead); nil while the custom shell is in use, which reads
-    /// "Open in Shell".
+    /// by default), even when it isn't installed and opening reports it
+    /// missing; nil while the custom shell is in use, which reads "Open in
+    /// Shell".
     public var shellLabel: String? {
         let settings = preferences.integrations
         return settings.activeCustomShell == nil ? settings.selectedShell.rawValue : nil
@@ -291,12 +291,12 @@ public final class IntegrationsModel {
     }
 
     /// Opens a folder in the shell: the custom shell when it is in use,
-    /// otherwise the selected shell, or Terminal when that one isn't
-    /// installed.
+    /// otherwise the selected shell.
     ///
-    /// - Throws: `.integration(.shell)` when the shell's application or
-    ///   executable is missing (recovery "Open Settings"); when it can't
-    ///   start, a generic error (`spawn <path> <code>`).
+    /// - Throws: `.integration(.shell)` when the shell isn't installed or
+    ///   its application or executable is missing (recovery "Open
+    ///   Settings"); when it can't start, a generic error (`spawn <path>
+    ///   <code>`).
     public func openInShell(_ path: String) async throws(OperationError) {
         let settings = preferences.integrations
         let spawnFailures = SpawnFailures()
@@ -304,9 +304,7 @@ public final class IntegrationsModel {
             if let customShell = settings.activeCustomShell {
                 try await launchCustomShell(customShell, path, onError: spawnFailures.record, launcher: environment.launcher)
             } else {
-                // Terminal is part of macOS, but a missing one is still
-                // reported.
-                guard let shell = await environment.shells.findShellOrDefault(settings.selectedShell) else {
+                guard let shell = await environment.shells.findShell(settings.selectedShell) else {
                     throw ShellError(
                         "Espalier couldn't find \(settings.selectedShell.rawValue). Choose an available shell in Settings ▸ Integrations."
                     )

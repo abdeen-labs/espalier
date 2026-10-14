@@ -705,24 +705,6 @@ struct BuildConflictContextTests {
         #expect(built.files.prefix(unmatched.count).allSatisfy { $0.hunks.isEmpty && $0.rawContent == nil })
     }
 
-    @Test("reads files like desktop: size limit, invalid UTF-8 replaced, unreadable paths")
-    func readsFiles() throws {
-        let directory = try createTempDirectory()
-        let text = directory + "/conflicted.txt"
-        try Data([0x61, 0xFF, 0x62]).write(to: URL(filePath: text))
-        #expect(readConflictedFile(atPath: text) == .text("a\u{FFFD}b"))
-
-        let large = directory + "/large.bin"
-        #expect(FileManager.default.createFile(atPath: large, contents: nil))
-        let handle = try FileHandle(forWritingTo: URL(filePath: large))
-        try handle.truncate(atOffset: UInt64(MaxConflictFileReadSize + 1))
-        try handle.close()
-        #expect(readConflictedFile(atPath: large) == .tooLarge)
-
-        #expect(readConflictedFile(atPath: directory + "/missing") == .unreadable)
-        #expect(readConflictedFile(atPath: directory) == .unreadable)
-    }
-
     @Test("restricts a context to some files")
     func restricted() {
         let full = ConflictResolutionContext(

@@ -1,8 +1,8 @@
 // The Changes place at the window's size, on real repositories: the files
-// with README.md's diff (light and dark), README.md partly included,
-// filtered to nothing, no changes with Suggestions and a stash on the
-// branch, and a merge's conflicts with the operation panel and the merge's
-// commit form (light and dark).
+// with README.md's diff (light and dark), README.md partly included (also
+// under Included in Commit), filtered to nothing, no changes with
+// Suggestions and a stash on the branch, and a merge's conflicts with the
+// operation panel and the merge's commit form (light and dark).
 
 import AppKit
 @testable import EspalierCore
@@ -20,7 +20,7 @@ struct ChangesPlaceCaptures {
     /// The place at the window's size.
     private let size = CGSize(width: 960, height: 620)
 
-    @Test("files with the diff, a file partly included, filtered, no changes")
+    @Test("files with the diff, a file partly included and under Included in Commit, filtered, no changes")
     func place() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await ChangesCaptureRepository.make(try await ChangesCaptureRepository.withChanges())
@@ -38,6 +38,13 @@ struct ChangesPlaceCaptures {
             changes.setLineSelection(selection.withLineSelection(4, selected: false), forFile: readme.id)
             await fixture.settle()
             await capturePlace(fixture, named: "place-partial")
+            // Included in Commit keeps the partly included file and hides
+            // LICENSE, excluded.
+            changes.setIncluded([try fixture.file("LICENSE").id], false)
+            changes.filter.includedInCommit = true
+            await fixture.settle()
+            await capturePlace(fixture, named: "place-partial-included")
+            changes.filter = FileListFilter()
             changes.setIncluded([readme.id], true)
             await fixture.settle()
 

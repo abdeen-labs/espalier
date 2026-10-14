@@ -158,12 +158,11 @@ struct BranchesCaptures {
         return Dictionary(uniqueKeysWithValues: (1...7).map { (Values.sha($0), now.addingTimeInterval(-Double($0 * $0) * 90 * 60)) })
     }
 
-    private func picker(filter: String, selection: Branch?) -> some View {
-        let branches = Self.pickerBranches
+    private func picker(filter: String, selection: Branch?, branches: [Branch] = Self.pickerBranches) -> some View {
         let content = BranchPickerContent.make(
             branches: branches,
-            defaultBranch: branches[0],
-            recentBranches: [branches[1], branches[2]],
+            defaultBranch: branches.first,
+            recentBranches: Array(branches.dropFirst().prefix(2)),
             includesRemoteBranches: true,
             filter: filter
         )
@@ -179,11 +178,12 @@ struct BranchesCaptures {
         .padding(Metrics.insetMedium)
     }
 
-    @Test("the picker: grouped with dates and a selection, and a miss with Create New Branch")
+    @Test("the picker: grouped with dates and a selection, a miss with Create New Branch, and no branches")
     func picker() {
         let branches = Self.pickerBranches
         capture(picker(filter: "", selection: branches[3]), named: "picker", area: area)
         capture(picker(filter: "nothing-like-this", selection: nil), named: "picker-miss", area: area)
+        capture(picker(filter: "", selection: nil, branches: []), named: "picker-none", area: area)
     }
 
     @Test("Compare's picker: how far the current branch is behind and ahead of each branch, once counted")

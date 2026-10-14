@@ -21,9 +21,8 @@ public enum RepositoryListGroup: Hashable, Sendable {
 }
 
 /// Returns a unique grouping key (string) for a repository group. Doubles as
-/// a case sensitive sorting key (i.e the case sensitive sort order of the
-/// keys is the order in which the groups will be displayed in the repository
-/// list).
+/// a sorting key: the keys' order, ignoring case (`compareIgnoringCase`), is
+/// the order in which the groups will be displayed in the repository list.
 public func getGroupKey(_ group: RepositoryListGroup) -> String {
     switch group {
     case .recent: "0:recent"
@@ -31,6 +30,13 @@ public func getGroupKey(_ group: RepositoryListGroup) -> String {
     case .enterprise(let host): "2:enterprise:\(host)"
     case .other: "3:other"
     }
+}
+
+/// Orders two strings ignoring case, then, between strings that differ only
+/// in case, by code units.
+private func compareIgnoringCase(_ x: String, _ y: String) -> Int {
+    let ignoringCase = JSCompat.caseInsensitiveCompare(x, y)
+    return ignoringCase != 0 ? ignoringCase : JSCompat.compare(x, y)
 }
 
 /// A repository in the list, or a clone in progress.
@@ -147,7 +153,7 @@ public func groupRepositories(
     }
 
     return keys
-        .sorted { JSCompat.compare($0, $1) < 0 }
+        .sorted { compareIgnoringCase($0, $1) < 0 }
         .compactMap { key in
             groups[key].map { group in
                 RepositoryListGroupItems(
@@ -375,7 +381,7 @@ private func toListItems(_ repositories: [APIRepository]) -> [CloneableRepositor
 
 /// Groups an account's repositories to clone by owner: the account's own
 /// first ("Your Repositories", matching `login` ignoring case), then each
-/// other owner in case-sensitive order; repositories sort by name.
+/// other owner in order ignoring case; repositories sort by name.
 public func groupRepositories(_ repositories: [APIRepository], login: String) -> [CloneableRepositoryGroup] {
     var identifiers: [String] = []
     var groups: [ExactString: [APIRepository]] = [:]
@@ -397,7 +403,7 @@ public func groupRepositories(_ repositories: [APIRepository], login: String) ->
             } else if JSCompat.strictEquals(y.identifier, yourRepositoriesIdentifier) {
                 return false
             } else {
-                return JSCompat.compare(x.identifier, y.identifier) < 0
+                return compareIgnoringCase(x.identifier, y.identifier) < 0
             }
         }
 }

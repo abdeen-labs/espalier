@@ -104,6 +104,22 @@ struct PullRequestCaptures {
         )
     }
 
+    @Test("the checks popover, in its card: one check running, one queued")
+    func popoverRunning() {
+        capture(
+            RepositoryCaptureFixtures.popoverCard {
+                ChecksPopoverView(
+                    number: 142,
+                    content: GitHubCaptureFixtures.checksContent(GitHubCaptureFixtures.runningChecks),
+                    actions: GitHubCaptureFixtures.checksActions,
+                    showPullRequest: {}
+                )
+            },
+            named: "popover-running",
+            area: area
+        )
+    }
+
     @Test("the checks popover, in its card: a pull request with no checks")
     func popoverNoChecks() {
         capture(

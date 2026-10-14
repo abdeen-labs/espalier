@@ -64,14 +64,14 @@ struct AIResolutionChanges: View {
     @ViewBuilder
     private var diffView: some View {
         if let selectedPath {
-            switch diff {
+            switch diff.shown(for: selectedPath) {
             case .loading:
                 DelayedProgressView()
-            case .loaded(let resolution?):
+            case .loaded(let resolution?, _):
                 DiffContainer(.loaded(resolution.diff), file: DiffFileInfo(path: selectedPath, status: .conflicted), context: .aiResolution)
-            case .loaded(nil):
+            case .loaded(nil, _):
                 PlaceholderNote("No suggested changes for this file")
-            case .failed(let message):
+            case .failed(let message, _):
                 PlaceholderNote(message)
             }
         } else {
@@ -91,30 +91,46 @@ struct AIResolutionChanges: View {
         guard let selectedPath else {
             return
         }
-        if case .loaded = diff {
-            // Keep showing the last diff until the next one arrives.
-        } else {
-            diff = .loading
-        }
+        // The file's last diff shows until the next one arrives.
+        diff = diff.reloading(selectedPath)
         do {
             let loaded = try await repository.ai.resolutionDiff(forPath: selectedPath)
             if !Task.isCancelled {
-                diff = .loaded(loaded)
+                diff = .loaded(loaded, path: selectedPath)
             }
         } catch {
             if !Task.isCancelled {
-                diff = .failed(error.message)
+                diff = .failed(error.message, path: selectedPath)
             }
         }
     }
 }
 
-/// The Changes tab's diff.
+/// The Changes tab's diff, for the file it was loaded for.
 enum ResolutionDiffState: Equatable {
     case loading
     /// Nil when the file has no suggestion and no side is chosen.
-    case loaded(ResolutionDiff?)
-    case failed(String)
+    case loaded(ResolutionDiff?, path: String)
+    case failed(String, path: String)
+
+    /// What shows for `path`: the state when it's `path`'s, else loading.
+    func shown(for path: String) -> ResolutionDiffState {
+        switch self {
+        case .loaded(_, let loadedPath) where loadedPath == path, .failed(_, let loadedPath) where loadedPath == path:
+            self
+        default:
+            .loading
+        }
+    }
+
+    /// The state while `path`'s diff loads: its last diff, else loading.
+    func reloading(_ path: String) -> ResolutionDiffState {
+        if case .loaded(_, let loadedPath) = self, loadedPath == path {
+            self
+        } else {
+            .loading
+        }
+    }
 }
 
 /// What the diff depends on: the file, and how it's resolved.

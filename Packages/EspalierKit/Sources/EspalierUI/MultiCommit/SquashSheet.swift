@@ -26,14 +26,12 @@ nonisolated public struct SquashSheetContent: Sendable, Equatable {
         self.coAuthors = coAuthors
     }
 
-    /// The sheet for squashing `toSquash` into `target`. The description
-    /// loses the blank lines `getSquashedCommitDescription` leaves at its end
-    /// (a squashed commit without a body).
+    /// The sheet for squashing `toSquash` into `target`.
     public init(toSquash: [Commit], target: Commit) {
         self.init(
             commitCount: toSquash.count + 1,
             summary: target.summary,
-            description: JSCompat.trim(getSquashedCommitDescription(toSquash, target)),
+            description: getSquashedCommitDescription(toSquash, target),
             coAuthors: getUniqueCoauthorsAsAuthors(toSquash + [target])
         )
     }

@@ -21,11 +21,10 @@ struct MergePreviewTests {
         }
         let preview = try #require(await selected.model.operations.mergePreview(of: try selected.branch("feature")))
         #expect(preview == MergePreview(status: .clean, commitCount: 2))
-        #expect(preview.canStart)
         await selected.app.idle()
     }
 
-    @Test("an up-to-date branch brings in nothing and can't start")
+    @Test("an up-to-date branch brings in nothing")
     func upToDate() async throws {
         let selected = try await makeSelectedRepository { local in
             try await runGit(["branch", "feature"], local)
@@ -33,11 +32,10 @@ struct MergePreviewTests {
         }
         let preview = try #require(await selected.model.operations.mergePreview(of: try selected.branch("feature")))
         #expect(preview == MergePreview(status: .clean, commitCount: 0))
-        #expect(!preview.canStart)
         await selected.app.idle()
     }
 
-    @Test("conflicts are counted by file, and the merge can still start")
+    @Test("conflicts are counted by file")
     func conflicts() async throws {
         let selected = try await makeSelectedRepository { local in
             try await commitFile(local, "shared.txt", numberedLines)
@@ -48,7 +46,6 @@ struct MergePreviewTests {
         }
         let preview = try #require(await selected.model.operations.mergePreview(of: try selected.branch("feature")))
         #expect(preview == MergePreview(status: .conflicts(conflictedFiles: 1), commitCount: 1))
-        #expect(preview.canStart)
         await selected.app.idle()
     }
 
@@ -62,7 +59,6 @@ struct MergePreviewTests {
         }
         let preview = try #require(await selected.model.operations.mergePreview(of: try selected.branch("other")))
         #expect(preview == MergePreview(status: .invalid, commitCount: 0))
-        #expect(!preview.canStart)
         await selected.app.idle()
     }
 

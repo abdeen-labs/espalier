@@ -50,16 +50,10 @@ public final class ShellLookup: Sendable {
         return shells
     }
 
-    /// Find the given shell or the default if the given shell can't be found.
-    ///
-    /// Returns `nil` only when neither is installed.
+    /// Find the given shell; `nil` when it isn't installed.
     @concurrent
-    public func findShellOrDefault(_ shell: Shell) async -> FoundShell? {
-        let available = await getAvailableShells()
-        if let found = available.first(where: { $0.shell == shell }) {
-            return found
-        }
-        return available.first { $0.shell == Shell.default }
+    public func findShell(_ shell: Shell) async -> FoundShell? {
+        await getAvailableShells().first { $0.shell == shell }
     }
 }
 

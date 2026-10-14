@@ -107,50 +107,6 @@ public struct DiffSelection: Hashable, Sendable {
         }
     }
 
-    /// Returns a value indicating whether the range is all selected, partially
-    /// selected, or not selected.
-    ///
-    /// - Parameters:
-    ///   - from: The line index (inclusive) from where to checking the range.
-    ///   - length: The number of lines to check from the start point of
-    ///     'from', Assumes positive number, returns None if length is <= 0.
-    public func isRangeSelected(from: Int, length: Int) -> DiffSelectionType {
-        if length <= 0 {
-            // This shouldn't happen? But if it does we'll log it and return None.
-            return .none
-        }
-
-        let computedSelectionType = getSelectionType()
-        if computedSelectionType != .partial {
-            // Nothing for us to do here. If all lines are selected or none, then any
-            // range of lines will be the same.
-            return computedSelectionType
-        }
-
-        if length == 1 {
-            return isSelected(from) ? .all : .none
-        }
-
-        let to = from + length
-        var foundSelected = false
-        var foundDeselected = false
-        for index in stride(from: from, to: to, by: 1) {
-            if isSelected(index) {
-                foundSelected = true
-            }
-
-            if !isSelected(index) {
-                foundDeselected = true
-            }
-
-            if foundSelected && foundDeselected {
-                return .partial
-            }
-        }
-
-        return foundSelected ? .all : .none
-    }
-
     /// Returns a value indicating wether the given line number is selectable.
     /// A line not being selectable usually means it's a hunk header or a context
     /// line.

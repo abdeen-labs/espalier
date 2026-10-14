@@ -26,7 +26,7 @@ nonisolated public struct DeleteBranchSheetContent: Sendable, Equatable {
     }
 
     public var message: String {
-        "This branch may have an open pull request associated with it."
+        "Delete the branch \(branchName)? It may have an open pull request associated with it."
     }
 
     /// The second paragraph, around the pull request's number (a link).

@@ -231,6 +231,13 @@ struct TextTokenParserTests {
         #expect(results == [.text("thanks "), .link(text: "@octo", url: "https://ghe.example.com/octo")])
     }
 
+    @Test("ghe.com mentions link to the enterprise's profiles")
+    func gheMention() {
+        let enterprise = gitHubRepoFixture(owner: "team", name: "tool", endpoint: "https://api.acme.ghe.com/")
+        let results = Tokenizer(emoji: emoji, gitHubRepository: enterprise).tokenize("thanks @octo")
+        #expect(results == [.text("thanks "), .link(text: "@octo", url: "https://acme.ghe.com/octo")])
+    }
+
     @Test("an issue reference stays text when the repository's web address isn't known")
     func issueWithoutHTMLURL() {
         let repository = GitHubRepository(name: "repo", owner: Owner(login: "owner", endpoint: getDotComAPIEndpoint(), id: 1), dbID: 1)
@@ -279,6 +286,37 @@ struct TextTokenParserTests {
         // The repository's issue URLs still shorten.
         #expect(gitHubTokenizer.tokenize("Fixes \(Self.htmlURL)/issues/3.") == [
             .text("Fixes "), .link(text: "#3", url: "\(Self.htmlURL)/issues/3"), .text("."),
+        ])
+    }
+
+    @Test("issue references and mentions leave out the punctuation after them")
+    func issueAndMentionTrailingPunctuation() {
+        let issue = { (number: Int) in TokenResult.link(text: "#\(number)", url: "\(Self.htmlURL)/issues/\(number)") }
+        let mention = { (login: String) in TokenResult.link(text: "@\(login)", url: "https://github.com/\(login)") }
+        #expect(gitHubTokenizer.tokenize("Closes #12: done") == [.text("Closes "), issue(12), .text(": done")])
+        #expect(gitHubTokenizer.tokenize("Update README.md (#5203).") == [.text("Update README.md ("), issue(5203), .text(").")])
+        #expect(gitHubTokenizer.tokenize("Is it #3?") == [.text("Is it "), issue(3), .text("?")])
+        #expect(gitHubTokenizer.tokenize("(cc @alice). Thanks @bob: done") == [
+            .text("(cc "), mention("alice"), .text("). Thanks "), mention("bob"), .text(": done"),
+        ])
+        #expect(gitHubTokenizer.tokenize("ready, @carol?") == [.text("ready, "), mention("carol"), .text("?")])
+    }
+
+    @Test("a tab or carriage return ends a word")
+    func tabAndCarriageReturnEndWords() {
+        #expect(gitHubTokenizer.tokenize("Fixes #12\r\nby @alice\tthanks") == [
+            .text("Fixes "),
+            .link(text: "#12", url: "\(Self.htmlURL)/issues/12"),
+            .text("\r\nby "),
+            .link(text: "@alice", url: "https://github.com/alice"),
+            .text("\tthanks"),
+        ])
+        #expect(Tokenizer(emoji: emoji).tokenize("see\thttps://example.com\r\n:shipit:\t") == [
+            .text("see\t"),
+            .link(text: "https://example.com", url: "https://example.com"),
+            .text("\r\n"),
+            .emoji(text: ":shipit:", emoji: nil),
+            .text("\t"),
         ])
     }
 

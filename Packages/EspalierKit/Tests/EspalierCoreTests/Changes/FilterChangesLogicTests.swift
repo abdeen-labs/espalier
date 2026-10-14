@@ -216,6 +216,28 @@ struct FilterChangesLogicTests {
         #expect(changes.noResultsMessage == nil)
     }
 
+    @Test("Included in Commit shows partly included files, which it doesn't count as hidden")
+    @MainActor
+    func partlyIncluded() async throws {
+        let harness = try AppHarness()
+        let app = await harness.loadedApp()
+        let repository = RepositoryModel(record: ModelFixtures.record(), app: app, environment: harness.environment)
+        repository.changes.reconcile(status([
+            createTestFile("all.txt", .modified(), .all),
+            createTestFile("part.txt", .modified(), .partial),
+            createTestFile("none.txt", .modified(), .none),
+        ]), options: [])
+        let changes = repository.changes
+
+        changes.filter = FileListFilter(includedInCommit: true)
+        #expect(changes.visibleFiles.map(\.path) == ["all.txt", "part.txt"])
+        #expect(changes.includedFilesHiddenByFilter.isEmpty)
+
+        changes.filter = FileListFilter(excludedFromCommit: true)
+        #expect(changes.visibleFiles.map(\.path) == ["none.txt"])
+        #expect(changes.includedFilesHiddenByFilter.map(\.path) == ["all.txt", "part.txt"])
+    }
+
     @Test("checkboxes show submodules and rebase conflicts as desktop does")
     @MainActor
     func inclusionStates() async throws {

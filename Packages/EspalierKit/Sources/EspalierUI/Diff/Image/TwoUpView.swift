@@ -61,8 +61,7 @@ struct TwoUpView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// "Diff: +2.5 KiB (120%)" or "No size difference" (the percentage is
-    /// the new size relative to the old).
+    /// "Diff: +2.5 KiB (+20%)" or "No size difference".
     private var summary: some View {
         let diffBytes = current.bytes - previous.bytes
         return HStack(spacing: Metrics.grid) {
@@ -77,19 +76,24 @@ struct TwoUpView: View {
         .font(Typography.secondary.monospacedDigit())
     }
 
-    /// "+2.5 KiB (120%)".
+    /// "+2.5 KiB (+20%)", "−1 KiB (−50%)"; without the percentage
+    /// when the old image was empty.
     var sizeDifference: String {
         let diffBytes = current.bytes - previous.bytes
-        let sign = diffBytes >= 0 ? "+" : ""
-        return "\(sign)\(formatBytes(Double(diffBytes), 2)) (\(percentDiff(previous.bytes, current.bytes)))"
+        let sign = diffBytes >= 0 ? "+" : "\u{2212}"
+        let size = "\(sign)\(formatBytes(Double(abs(diffBytes)), 2))"
+        guard let percent = percentChange(previous.bytes, current.bytes) else {
+            return size
+        }
+        return "\(size) (\(sign)\(abs(percent))%)"
     }
 }
 
-/// The new size as a percentage of the old one.
-nonisolated func percentDiff(_ previous: Int, _ current: Int) -> String {
+/// The change in size as a percentage of the old size, rounded: 20 from
+/// 100 to 120 bytes, -50 from 100 to 50. Nil when the old size is 0.
+nonisolated func percentChange(_ previous: Int, _ current: Int) -> Int? {
     guard previous != 0 else {
-        return "∞%"
+        return nil
     }
-    let ratio = (Double(current) / Double(previous) * 100).rounded(.toNearestOrAwayFromZero)
-    return "\(Int(abs(ratio)))%"
+    return Int((Double(current - previous) / Double(previous) * 100).rounded(.toNearestOrAwayFromZero))
 }

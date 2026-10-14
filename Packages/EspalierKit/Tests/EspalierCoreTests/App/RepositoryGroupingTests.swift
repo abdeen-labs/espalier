@@ -145,7 +145,7 @@ struct RepositoryListGroupingTests {
         #expect(grouped.dropFirst().flatMap(\.items).allSatisfy { !$0.needsDisambiguation })
     }
 
-    @Test("orders groups by their keys, case-sensitively, and items by title ignoring case")
+    @Test("orders groups by their keys and items by title, ignoring case")
     func ordering() {
         let entries = [
             repository("/r/x", gitHubRepoFixture(owner: "abe", name: "x")),
@@ -159,7 +159,7 @@ struct RepositoryListGroupingTests {
             repository("/r/cloud", gitHubRepoFixture(owner: "o", name: "cloud", endpoint: "https://api.octo.ghe.com:8443/")),
         ]
         let grouped = groupRepositories(entries, [:], [])
-        #expect(grouped.map(\.id) == ["1:dotcom:Zed", "1:dotcom:abe", "2:enterprise:ghe.io", "2:enterprise:octo.ghe.com:8443", "3:other"])
+        #expect(grouped.map(\.id) == ["1:dotcom:abe", "1:dotcom:Zed", "2:enterprise:ghe.io", "2:enterprise:octo.ghe.com:8443", "3:other"])
         #expect(grouped[4].items.map(\.text) == [["A", "A"], ["b", "b"], ["beta", "B2"]])
     }
 
@@ -260,6 +260,15 @@ struct CloneListGroupingTests {
         #expect(grouped[2].identifier == "octokit")
         #expect(grouped[2].items.count == 1)
         #expect(grouped[2].items[0].name == "octokit.net")
+    }
+
+    @Test("orders other owners ignoring case")
+    func ownerOrder() {
+        let owners = ["Zed", "abe", "Mona"].enumerated().map { offset, login in
+            APIIdentity(id: 10 + offset, login: login, avatarURL: "", htmlURL: "", type: .user)
+        }
+        let grouped = groupRepositories(owners.map { repository("r", owner: $0) }, login: "shiftkey")
+        #expect(grouped.map(\.identifier) == ["abe", "Mona", "Zed"])
     }
 
     @Test("matches the account's login ignoring case, sorts names case-sensitively, and describes each repository")

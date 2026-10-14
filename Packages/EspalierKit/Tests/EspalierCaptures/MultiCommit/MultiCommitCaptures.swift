@@ -1,7 +1,8 @@
 // The operations' sheets, the conflicted files' rows, the operation panel,
 // and the AI conflict sheet, one capture per layout. Leaf views take
 // values; the Integrate and Cherry-pick sheets and the AI gate popover use
-// a repository with a remote.
+// a repository with a remote, the AI sheet's Changes tab a merge's
+// conflict.
 
 import AIKit
 import AppKit
@@ -186,7 +187,7 @@ struct MultiCommitCaptures {
 
     // MARK: The operation panel
 
-    @Test("the operation panel: running, conflicts stopped at a commit and resolved, AI's error, and interrupted")
+    @Test("the operation panel: running, conflicts stopped at a commit and resolved, no conflicted files, AI's error, and interrupted")
     func panel() {
         let panels: [(name: String, content: OperationPanelContent, aiError: String?)] = [
             ("running", OperationPanelContent(
@@ -202,6 +203,10 @@ struct MultiCommitCaptures {
                 operation: "Rebase", isMerge: false, resolved: 3, total: 3, unresolved: 0, isContinuing: false,
                 hasUntrackedFiles: false, isRebaseFamily: true, showsResolveWithAI: true, canResolveWithAI: true,
                 step: OperationStep(position: 2, total: 4)
+            ), nil),
+            ("conflicts-none", .conflicts(
+                operation: "Merge", isMerge: true, resolved: 0, total: 0, unresolved: 0, isContinuing: false,
+                hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: true, canResolveWithAI: true
             ), nil),
             ("conflicts-aiError", .conflicts(
                 operation: "Merge", isMerge: true, resolved: 0, total: 2, unresolved: 2, isContinuing: false,
@@ -325,7 +330,7 @@ struct MultiCommitCaptures {
             abortTitle: "Abort Rebase",
             continueTitle: "Continue Rebase",
             canContinue: canContinue,
-            continueHelp: canContinue ? nil : AIConflictResultsContent.skippedHelp,
+            continueHelp: canContinue ? nil : AIConflictResultsContent.continueHelp(skipped: skipped, failed: failed),
             isContinuing: false,
             error: error
         )
@@ -346,6 +351,22 @@ struct MultiCommitCaptures {
                 named: "ai-results-resolved", area: area
             )
             await fixture.settle()
+        }
+    }
+
+    @Test("the AI sheet's Changes tab: a file's chosen side against the file with its markers")
+    func aiChanges() async throws {
+        try await withIsolatedGitConfig { _ in
+            let fixture = try await ChangesCaptureRepository.make(try await setupConflictedRepo())
+            fixture.repository.ai.setResolutionChoice(.ours, forPath: "foo")
+            await captureDiffView(
+                { AIResolutionChanges(repository: fixture.repository, paths: ["foo"]).windowEnvironment(fixture.context) },
+                named: "ai-changes",
+                area: area,
+                size: CGSize(width: aiSheetSize.width, height: 360),
+                appearances: CaptureAppearance.allCases
+            )
+            await fixture.app.idle()
         }
     }
 

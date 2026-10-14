@@ -66,11 +66,17 @@ enum GitHubCaptureFixtures {
         id: 900, workflowID: 1, cancelURL: "", createdAt: "2026-10-06T09:00:00Z", logsURL: "", name: "CI", rerunURL: "", checkSuiteID: 100, event: "pull_request"
     )
 
-    static func step(_ number: Int, _ name: String, _ conclusion: APICheckConclusion?, seconds: Int = 12) -> APIWorkflowJobStep {
+    static func step(
+        _ number: Int,
+        _ name: String,
+        _ conclusion: APICheckConclusion?,
+        status: APICheckStatus? = nil,
+        seconds: Int = 12
+    ) -> APIWorkflowJobStep {
         APIWorkflowJobStep(
             name: name,
             number: number,
-            status: conclusion == nil ? .inProgress : .completed,
+            status: status ?? (conclusion == nil ? .inProgress : .completed),
             conclusion: conclusion,
             completedAt: conclusion == nil ? nil : "2026-10-06T09:00:\(String(format: "%02d", seconds))Z",
             startedAt: "2026-10-06T09:00:00Z"
@@ -81,16 +87,20 @@ enum GitHubCaptureFixtures {
         _ id: Int,
         _ name: String,
         _ conclusion: APICheckConclusion?,
+        status: APICheckStatus? = nil,
         description: String? = nil,
         suite: Int? = 100,
         workflow: APIWorkflowRun? = nil,
         steps: [APIWorkflowJobStep]? = nil
     ) -> RefCheck {
-        RefCheck(
+        let status = status ?? (conclusion == nil ? .inProgress : .completed)
+        return RefCheck(
             id: id,
             name: name,
-            description: description ?? (conclusion == nil ? "In progress" : "\(getCheckRunConclusionAdjective(conclusion)) in 3m 2s"),
-            status: conclusion == nil ? .inProgress : .completed,
+            description: description ?? (conclusion == nil
+                ? getCheckRunAdjective(status, nil)
+                : "\(getCheckRunConclusionAdjective(conclusion)) in 3m 2s"),
+            status: status,
             conclusion: conclusion,
             appName: workflow == nil ? "Travis CI" : "GitHub Actions",
             htmlURL: "https://github.com/octocat/hello/actions/runs/900/job/\(id)",
@@ -111,6 +121,20 @@ enum GitHubCaptureFixtures {
                 step(3, "Upload results", .skipped, seconds: 0),
             ]),
             check(13, "ci/legacy", .success, suite: nil),
+        ])!
+    }
+
+    /// A build that passed, a test job running its tests with a step
+    /// queued after them, and a deploy job queued.
+    static var runningChecks: CombinedRefCheck {
+        createCombinedCheckFromChecks([
+            check(21, "build", .success, workflow: workflow, steps: [step(1, "Set up job", .success, seconds: 2), step(2, "Compile", .success, seconds: 40)]),
+            check(22, "test", nil, workflow: workflow, steps: [
+                step(1, "Set up job", .success, seconds: 3),
+                step(2, "Run tests", nil),
+                step(3, "Upload results", nil, status: .queued),
+            ]),
+            check(23, "deploy", nil, status: .queued, workflow: workflow, steps: []),
         ])!
     }
 

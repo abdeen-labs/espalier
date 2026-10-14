@@ -3,11 +3,13 @@
 // The diff's container: the header, then the text table, an image diff, or
 // the binary, submodule, large, unrenderable, empty, or conflicted state.
 // The previous diff stays while the next loads, with a spinner after
-// 150 ms. A text diff has the find bar over its top trailing corner while
+// 150 ms; the header's counts and the file's actions wait for the file's
+// own diff. A text diff has the find bar over its top trailing corner while
 // find is open (DiffFindBar.swift).
 
 import AppKit
 import EspalierCore
+import EspalierSupport
 import GitKit
 import SwiftUI
 
@@ -163,7 +165,7 @@ public struct DiffContainer: View {
 
     private func headerContent(_ file: DiffFileInfo) -> DiffHeaderContent {
         var content = DiffHeaderContent(path: file.path, oldPath: file.oldPath, status: file.status)
-        switch diff.value {
+        switch showsFilesDiff ? diff.value : nil {
         case .text(let text)?:
             let (added, deleted) = lineCounts(text.hunks)
             content.addedLines = added
@@ -191,14 +193,30 @@ public struct DiffContainer: View {
             expansion: nil
         )
         if let (text, isLarge) = textDiff {
-            if session.hasExpandedLines {
-                content.expansion = .collapse
-            } else if session.canExpand(text, isLarge: isLarge) {
-                let shown = session.displayDiff(for: text, isLarge: isLarge)
-                content.expansion = .expand(isEnabled: shown.hunks.count != 1 || shown.hunks[0].expansionType != .none)
-            }
+            content.expansion = Self.expansion(
+                session.displayDiff(for: text, isLarge: isLarge),
+                canExpand: session.canExpand(text, isLarge: isLarge),
+                hasExpandedLines: session.hasExpandedLines
+            )
         }
         return content
+    }
+
+    /// The options menu's expansion item for the text diff shown: none
+    /// without hunks; Collapse Expanded Lines once lines are expanded;
+    /// Expand Whole File once the file's contents allow it, disabled when
+    /// the diff already shows the whole file.
+    static func expansion(_ shown: TextDiff, canExpand: Bool, hasExpandedLines: Bool) -> DiffOptionsContent.Expansion? {
+        if shown.hunks.isEmpty {
+            return nil
+        }
+        if hasExpandedLines {
+            return .collapse
+        }
+        guard canExpand else {
+            return nil
+        }
+        return .expand(isEnabled: shown.hunks.count != 1 || shown.hunks[0].expansionType != .none)
     }
 
     private var optionsActions: DiffOptionsActions {
@@ -231,6 +249,20 @@ public struct DiffContainer: View {
         case diff(Diff, isInteractive: Bool)
         /// The error's title and message.
         case failed(OperationError)
+    }
+
+    /// Whether the diff shown is the file's: a loaded diff is; the previous
+    /// one, shown while the next loads, is when it was loaded for the same
+    /// file.
+    static func isFilesDiff(_ diff: Loadable<Diff, OperationError>, fileID: String?, loadedFileID: String?) -> Bool {
+        switch diff {
+        case .loaded:
+            true
+        case .loading(_?):
+            fileID != nil && fileID == loadedFileID
+        case .idle, .loading(nil), .failed:
+            false
+        }
     }
 
     /// What shows below the header for `diff`, with or without a file.
@@ -274,13 +306,12 @@ public struct DiffContainer: View {
                 LargeDiffView { session.forceShowLargeDiff = true }
             }
         case .binary:
-            BinaryDiffView(open: file.flatMap(fullPath).map { path in
-                { window?.actions.perform(.openWithDefaultProgram(path: path)) }
-            })
+            BinaryDiffView(open: openWithDefaultApp)
         case .image(let image):
             ImageDiffView(
                 content: session.images.flatMap { $0.diff == image ? $0.content : nil } ?? ImageDiffContent(image),
-                status: file?.status ?? .modified,
+                status: shownFile?.status ?? .modified,
+                conflict: shownFile.flatMap(conflictRow),
                 mode: settings.imageDiffType,
                 setMode: { mode in
                     window?.app.preferences.imageDiffType = mode
@@ -301,10 +332,10 @@ public struct DiffContainer: View {
     @ViewBuilder
     private func textContent(_ text: TextDiff, isLarge: Bool, settings: DiffSettings, isInteractive: Bool) -> some View {
         if text.hunks.isEmpty {
-            NoHunksView(status: file?.appStatus, hidesWhitespace: settings.hidesWhitespace == true)
+            NoHunksView(status: shownFile?.appStatus, hidesWhitespace: settings.hidesWhitespace == true)
         } else {
             let shown = session.displayDiff(for: text, isLarge: isLarge)
-            let stagingState = stagingEnabled ? staging?.state(hunks: shown.hunks) : nil
+            let stagingState = stagingEnabled ? staging?.state : nil
             VStack(spacing: 0) {
                 DiffMessages(warnings: DiffContentsWarning.warnings(for: shown))
                 DiffTextView(
@@ -323,7 +354,7 @@ public struct DiffContainer: View {
                         tokensGeneration: session.tokensGeneration,
                         isInteractive: isInteractive
                     ),
-                    actions: tableActions(hunks: shown.hunks),
+                    actions: tableActions,
                     find: find
                 )
                 .overlay(alignment: .topTrailing) {
@@ -339,7 +370,7 @@ public struct DiffContainer: View {
         }
     }
 
-    private func tableActions(hunks: [DiffHunk]) -> DiffTableActions {
+    private var tableActions: DiffTableActions {
         let session = session
         let window = window
         return DiffTableActions(
@@ -347,7 +378,7 @@ public struct DiffContainer: View {
             expandWholeFile: { session.expandWholeFile() },
             collapseExpandedLines: { session.collapseExpandedLines() },
             didPaint: { fileID in session.didPaint(fileID) },
-            staging: stagingEnabled ? staging?.actions(hunks: hunks, discard: { changes, lines, generation in
+            staging: stagingEnabled ? staging?.actions(discard: { changes, lines, generation in
                 guard let window else {
                     return
                 }
@@ -361,6 +392,37 @@ public struct DiffContainer: View {
     }
 
     // MARK: Helpers
+
+    /// The diff shown is the file's, not the previous file's shown while
+    /// the file's loads.
+    private var showsFilesDiff: Bool {
+        Self.isFilesDiff(diff, fileID: file?.id, loadedFileID: session.loadedFileID)
+    }
+
+    /// The file of the diff shown: the file, or the previous one while the
+    /// file's diff loads.
+    private var shownFile: DiffFileInfo? {
+        showsFilesDiff ? file : session.loadedFile
+    }
+
+    /// Opens a binary file in its default app: in Changes, for a file on
+    /// disk, once its own diff shows.
+    private var openWithDefaultApp: (() -> Void)? {
+        guard context == .changes || context == .conflict, showsFilesDiff, let file, fileExistsOnDisk(file),
+              let path = fullPath(file)
+        else {
+            return nil
+        }
+        return { window?.actions.perform(.openWithDefaultProgram(path: path)) }
+    }
+
+    /// A conflicted file's row in Changes, for what its image says.
+    private func conflictRow(_ file: DiffFileInfo) -> ConflictFileRowContent? {
+        guard file.status == .conflicted, let repository = window?.repository else {
+            return nil
+        }
+        return FileList.conflictRows(repository)[ExactString(file.path)]
+    }
 
     /// The text diff shown, if any.
     private var textDiff: (TextDiff, Bool)? {
@@ -378,7 +440,7 @@ public struct DiffContainer: View {
 
     /// A conflicted file's diff tints its markers.
     private var isConflict: Bool {
-        context == .conflict || file?.status == .conflicted
+        context == .conflict || shownFile?.status == .conflicted
     }
 
     private func fullPath(_ file: DiffFileInfo) -> String? {

@@ -77,13 +77,14 @@ nonisolated struct WorktreeRowContent: Sendable, Equatable, Identifiable {
     }
 
     /// The rows for `worktrees` (the main one first, as git lists them),
-    /// those whose name or branch contains `filter`.
+    /// those whose name or branch `filter` matches as it matches the
+    /// repositories (`FuzzyQuery`); all of them for an empty filter.
     static func rows(_ worktrees: [WorktreeEntry], currentPath: String?, filter: String) -> [WorktreeRowContent] {
-        worktrees
-            .map { WorktreeRowContent($0, isCurrent: $0.path == currentPath) }
-            .filter { row in
-                filter.isEmpty || row.name.localizedCaseInsensitiveContains(filter) || row.detail.localizedCaseInsensitiveContains(filter)
-            }
+        let rows = worktrees.map { WorktreeRowContent($0, isCurrent: $0.path == currentPath) }
+        guard let query = FuzzyQuery(filter) else {
+            return rows
+        }
+        return rows.filter { query.matches($0.name) || query.matches($0.detail) }
     }
 }
 

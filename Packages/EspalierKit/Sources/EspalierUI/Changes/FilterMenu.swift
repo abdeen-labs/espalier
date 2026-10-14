@@ -37,11 +37,10 @@ nonisolated public struct FilterMenuContent: Sendable, Equatable {
     public init(filter: FileListFilter, visibleFiles: [WorkingDirectoryFileChange]) {
         self.init(filter: filter)
         for file in visibleFiles {
-            if file.isIncludedInCommit() {
-                includedCount += 1
-            }
             if file.isExcludedFromCommit() {
                 excludedCount += 1
+            } else {
+                includedCount += 1
             }
             switch file.status.kind {
             case .new, .untracked: newCount += 1

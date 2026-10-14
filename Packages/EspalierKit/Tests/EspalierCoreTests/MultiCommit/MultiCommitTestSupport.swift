@@ -11,7 +11,7 @@ import TestSupport
 
 /// A `Commit` value, for reducer tests that don't run git.
 func makeTestCommit(sha: String, summary: String, parents: [String] = []) -> Commit {
-    let identity = CommitIdentity(name: "Joe Bloggs", email: "joe.bloggs@example.com", date: .distantPast, tzOffset: 0)
+    let identity = CommitIdentity(name: "Joe Bloggs", email: "joe.bloggs@example.com", date: .distantPast)
     return Commit(
         sha: sha,
         shortSha: String(sha.prefix(7)),

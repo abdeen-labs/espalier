@@ -112,8 +112,21 @@ public func getCheckRunConclusionAdjective(_ conclusion: APICheckConclusion?) ->
     }
 }
 
+/// The user-facing adjective for a check or step: its conclusion's, or
+/// without one yet, its status's ("Queued", "Waiting", "In progress").
+public func getCheckRunAdjective(_ status: APICheckStatus, _ conclusion: APICheckConclusion?) -> String {
+    if let conclusion {
+        return getCheckRunConclusionAdjective(conclusion)
+    }
+    switch status {
+    case .queued, .requested, .pending: return "Queued"
+    case .waiting: return "Waiting"
+    default: return "In progress"
+    }
+}
+
 /// Method to generate a user friendly short check run description such as
-/// "Successful in xs", "In Progress", "Failed after 1m"
+/// "Successful in xs", "Queued", "In progress", "Failed after 1m"
 ///
 /// If the duration is not provided, it will omit the preposition and duration
 /// context. Also, conclusions such as `Skipped`, 'Action required`, `Marked as
@@ -127,7 +140,7 @@ public func getCheckRunConclusionAdjective(_ conclusion: APICheckConclusion?) ->
 ///   - durationMs: The time in milliseconds it took to complete.
 func getCheckRunShortDescription(_ status: APICheckStatus, _ conclusion: APICheckConclusion?, _ durationMs: Double? = nil) -> String {
     guard status == .completed, let conclusion else {
-        return "In progress"
+        return getCheckRunAdjective(status, nil)
     }
 
     let adjective = getCheckRunConclusionAdjective(conclusion)
@@ -621,21 +634,26 @@ public func getCheckStatusCountMap(_ checks: [RefCheck]) -> [(key: String, count
 
 // MARK: The checks popover's copy
 
-/// "2 successful, 1 failed, and 1 in progress checks": the conclusions and
-/// how many checks (or steps) have each, in the order they first appear.
-public func getCombinedStatusSummary(_ conclusions: [APICheckConclusion?], description: String = "check") -> String {
-    var order: [APICheckConclusion?] = []
-    var counts: [APICheckConclusion?: Int] = [:]
-    for conclusion in conclusions {
-        if counts[conclusion] == nil {
-            order.append(conclusion)
+/// "2 successful, 1 failed, and 1 queued checks": how many checks (or
+/// steps) have each conclusion, or without one each status
+/// (`getCheckRunAdjective`), in the order they first appear.
+public func getCombinedStatusSummary(
+    _ states: [(status: APICheckStatus, conclusion: APICheckConclusion?)],
+    description: String = "check"
+) -> String {
+    var order: [String] = []
+    var counts: [String: Int] = [:]
+    for state in states {
+        let adjective = JSCompat.toLowerCase(getCheckRunAdjective(state.status, state.conclusion))
+        if counts[adjective] == nil {
+            order.append(adjective)
         }
-        counts[conclusion, default: 0] += 1
+        counts[adjective, default: 0] += 1
     }
-    let parts = order.map { conclusion in
-        "\(counts[conclusion] ?? 0) \(JSCompat.toLowerCase(getCheckRunConclusionAdjective(conclusion)))"
+    let parts = order.map { adjective in
+        "\(counts[adjective] ?? 0) \(adjective)"
     }
-    let pluralize = conclusions.count > 1 ? "\(description)s" : description
+    let pluralize = states.count > 1 ? "\(description)s" : description
     return "\(toSentence(parts)) \(pluralize)"
 }
 

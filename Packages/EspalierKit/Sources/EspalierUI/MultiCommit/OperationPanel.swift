@@ -21,8 +21,8 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         /// An operation runs: "Commit 2 of 5 · summary", and its progress.
         case running(detail: String?, progress: Double?)
         /// Waiting on conflicts: "1 of 2 conflicted files has been
-        /// resolved."
-        case conflicts(summary: String)
+        /// resolved."; nil without conflicted files.
+        case conflicts(summary: String?)
         /// A rebase git was interrupted between commits.
         case interrupted(message: String)
         /// A stash restore conflicted (no operation to continue or abort).
@@ -96,8 +96,12 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
     public static let summaryRequiredHelp = "Enter a summary to commit"
 
     /// "2 conflicted files", "1 of 2 conflicted files has been resolved.",
-    /// or "All conflicted files have been resolved."
-    public static func summary(resolved: Int, total: Int) -> String {
+    /// or "All conflicted files have been resolved."; nil without conflicted
+    /// files.
+    public static func summary(resolved: Int, total: Int) -> String? {
+        if total == 0 {
+            return nil
+        }
         if resolved == 0 {
             return total == 1 ? "1 conflicted file" : "\(total) conflicted files"
         }
@@ -126,7 +130,9 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         }
     }
 
-    /// The panel for an operation waiting on conflicts.
+    /// The panel for an operation waiting on conflicts. With no conflicted
+    /// files (resolutions already staged, or an operation that stopped
+    /// without conflicts), it says there are none to resolve.
     ///
     /// - Parameters:
     ///   - mergeMessage: A merge's message, once loaded: Commit Merge waits
@@ -150,8 +156,15 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
     ) -> OperationPanelContent {
         let lacksSummary = isMerge && (mergeMessage.map { $0.summary.unicodeScalars.allSatisfy(JSCompat.isWhitespace) } ?? false)
         let stoppedAt = step.flatMap { $0.total > 1 ? "Stopped at commit \($0.position) of \($0.total)" : nil }
+        let title = if total == 0 {
+            "No conflicts to resolve"
+        } else if unresolved > 0 {
+            "Resolve conflicts before \(operation)"
+        } else {
+            "All conflicts resolved"
+        }
         return OperationPanelContent(
-            title: unresolved > 0 ? "Resolve conflicts before \(operation)" : "All conflicts resolved",
+            title: title,
             state: .conflicts(summary: summary(resolved: resolved, total: total)),
             abortTitle: "Abort \(operation)",
             continueTitle: isMerge ? "Commit Merge" : "Continue \(operation)",
@@ -398,7 +411,9 @@ struct OperationPanelView: View {
             if let stoppedAt = content.stoppedAt {
                 parts.append(stoppedAt)
             }
-            parts.append(summary)
+            if let summary {
+                parts.append(summary)
+            }
         case .interrupted(let message), .stashConflicts(let message), .unsupported(let message):
             parts.append(message)
         }

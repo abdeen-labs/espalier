@@ -35,7 +35,12 @@ struct SquashedCommitDescriptionTests {
                 ("summary2", "Co-Authored-By: Jane <jane@example.com>", [Trailer(token: "Co-Authored-By", value: "Jane <jane@example.com>")]),
             ],
             squashOnto: ("ontoSummary", "", []),
-            expected: "summary1\n\ndesc1\n\nsummary2\n\n"
+            expected: "summary1\n\ndesc1\n\nsummary2"
+        )),
+        NamedCase("separates commits without a description by one blank line", (
+            commits: [("summary1", "", []), ("summary2", "  \n", []), ("summary3", "desc3", [])],
+            squashOnto: ("ontoSummary", "", []),
+            expected: "summary1\n\nsummary2\n\nsummary3\n\ndesc3"
         )),
     ] as [NamedCase<SquashedCommitDescriptionCase>])
     func builds(_ testCase: NamedCase<SquashedCommitDescriptionCase>) {

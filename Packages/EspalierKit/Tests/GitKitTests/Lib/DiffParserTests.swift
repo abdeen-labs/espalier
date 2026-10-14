@@ -407,6 +407,14 @@ struct DiffParserTests {
         #expect(!diff.hasHiddenBidiChars)
     }
 
+    @Test("the largest line number is the largest old or new one, wherever it is")
+    func largestLineNumber() throws {
+        let deletions = (1...12).map { "-old\($0)" }
+        let diffText = (["--- a/a", "+++ b/a", "@@ -1,12 +1,2 @@"] + deletions + ["+new1", "+new2"]).joined(separator: "\n")
+        let diff = try DiffParser().parse(diffText)
+        #expect(diff.maxLineNumber == 12)
+    }
+
     @Test("decodes invalid UTF-8 per line as Node decodes the whole buffer")
     func invalidUTF8() throws {
         var bytes = Data("--- a/a\n+++ b/a\n@@ -1 +1 @@\n-caf".utf8)

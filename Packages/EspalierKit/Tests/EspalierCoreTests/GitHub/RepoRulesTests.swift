@@ -325,13 +325,16 @@ struct RepositoryRulesTests {
         #expect(translateRE2Pattern("[[:alpha:]]+") == "[[:alpha:]]+")
     }
 
-    @Test("a pattern ICU can't compile passes rather than blocking the commit")
-    func uncompilablePattern() async {
-        let info = await parse([APIRepoRule(
-            rulesetID: 1,
-            type: .commitMessagePattern,
-            parameters: APIRepoRuleMetadataParameters(name: "", negate: true, pattern: "(unclosed", operator: .regexMatch)
-        )])
+    @Test("a rule Espalier can't use passes rather than blocking the commit", arguments: [
+        NamedCase("a pattern ICU can't compile", APIRepoRuleMetadataParameters(
+            name: "", negate: true, pattern: "(unclosed", operator: .regexMatch
+        )),
+        NamedCase("an operator Espalier doesn't know", APIRepoRuleMetadataParameters(
+            name: "", negate: false, pattern: "feat", operator: APIRepoRuleMetadataOperator(rawValue: "glob")
+        )),
+    ])
+    func unusableRule(_ testCase: NamedCase<APIRepoRuleMetadataParameters>) async {
+        let info = await parse([APIRepoRule(rulesetID: 1, type: .commitMessagePattern, parameters: testCase.value)])
         #expect(info.commitMessagePatterns.getFailedRules("anything").status == .pass)
     }
 

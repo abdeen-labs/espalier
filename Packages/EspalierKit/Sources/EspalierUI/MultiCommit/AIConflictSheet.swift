@@ -520,7 +520,7 @@ nonisolated public struct AIConflictLoadingContent: Sendable, Equatable {
             title: "Resolving conflicts for \(operationName.lowercased())",
             modelLabel: aiModelLabel(round.model),
             phase: gathering ? "Gathering context…" : "Analyzing conflicts…",
-            progress: round.filesTotal > 0 ? "\(round.filesResolved) of \(round.filesTotal) files" : nil,
+            progress: round.filesTotal > 0 ? "\(round.filesResolved) of \(round.filesTotal) \(round.filesTotal == 1 ? "file" : "files")" : nil,
             reasoning: Array(round.reasoning.compactMap(Self.clean).suffix(Self.maxLines)),
             fallbackLines: fallback,
             abortTitle: "Abort \(operationName)"
@@ -719,8 +719,17 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
         (conflicted + skipped + failed).map(\.path)
     }
 
-    /// Continue's tooltip while skipped files need the user.
-    public static let skippedHelp = "The model skipped some files. You'll need to resolve those yourself."
+    /// Continue's tooltip while files need the user: those the model
+    /// skipped, those whose request failed or wasn't attempted, or both.
+    /// Nil when none do.
+    public static func continueHelp(skipped: Bool, failed: Bool) -> String? {
+        switch (skipped, failed) {
+        case (true, false): "The model skipped some files. You'll need to resolve those yourself."
+        case (false, true): "Some files couldn't be resolved. Try again, or resolve them yourself."
+        case (true, true): "The model skipped some files and couldn't resolve others. Resolve them yourself, or try again."
+        case (false, false): nil
+        }
+    }
 
     /// The results for a repository.
     @MainActor
@@ -777,11 +786,10 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
         }
 
         let retryProgress = results.retry.map { round in
-            round.filesTotal > 0
-                ? "Retrying \(round.files.count) files… \(round.filesResolved) of \(round.filesTotal)"
-                : "Retrying \(round.files.count) \(round.files.count == 1 ? "file" : "files")…"
+            let retrying = "Retrying \(round.files.count) \(round.files.count == 1 ? "file" : "files")…"
+            return round.filesTotal > 0 ? "\(retrying) \(round.filesResolved) of \(round.filesTotal)" : retrying
         }
-        let needsResolution = !ai.filesNeedingResolution.isEmpty
+        let needingResolution = ai.filesNeedingResolution
         return AIConflictResultsContent(
             title: "Resolve conflicts before \(operationName)",
             modelLabel: aiModelLabel(results.model),
@@ -796,8 +804,11 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
             retryProgress: retryProgress,
             abortTitle: "Abort \(operationName)",
             continueTitle: operationName == "Merge" ? "Commit Merge" : "Continue \(operationName)",
-            canContinue: !needsResolution && results.retry == nil && !isContinuing,
-            continueHelp: needsResolution ? skippedHelp : nil,
+            canContinue: needingResolution.isEmpty && results.retry == nil && !isContinuing,
+            continueHelp: continueHelp(
+                skipped: needingResolution.contains { skippedPaths.contains($0) },
+                failed: needingResolution.contains { !skippedPaths.contains($0) }
+            ),
             isContinuing: isContinuing,
             error: error
         )

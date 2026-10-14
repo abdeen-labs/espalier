@@ -9,9 +9,10 @@
 //   text.
 // - An issue's number is its digits without leading zeros, exact however
 //   long.
-// - A URL leaves out the punctuation that ends a sentence or a parenthesis
-//   around it ("(see https://example.com)." links "https://example.com"),
-//   as GitHub's own autolinks do.
+// - A URL, issue reference, or mention leaves out the punctuation that
+//   ends a sentence or a parenthesis around it ("(see https://example.com)."
+//   links "https://example.com"), as GitHub's own autolinks do.
+// - A word ends at a space, tab, carriage return, or newline.
 
 import EspalierSupport
 import GitHubKit
@@ -72,7 +73,9 @@ public struct Tokenizer: Sendable {
 
 /// The ASCII code units the scan looks for.
 private enum Code {
+    static let tab: UInt16 = 0x09
     static let newline: UInt16 = 0x0A
+    static let carriageReturn: UInt16 = 0x0D
     static let space: UInt16 = 0x20
     static let hash: UInt16 = 0x23
     static let hyphen: UInt16 = 0x2D
@@ -157,14 +160,18 @@ private struct Scan {
         return !JSCompat.isWhitespace(scalar)
     }
 
-    /// Where the word at `index` ends: the next newline or space after it,
-    /// whichever is closest, or the end of the string.
+    /// Where the word at `index` ends: the next space, tab, carriage
+    /// return, or newline after it, or the end of the string.
     private func scanForEndOfWord() -> Int {
         var end = index + 1
-        while end < units.count, units[end] != Code.newline, units[end] != Code.space {
+        while end < units.count, !Self.endsWord(units[end]) {
             end += 1
         }
         return min(end, units.count)
+    }
+
+    private static func endsWord(_ unit: UInt16) -> Bool {
+        unit == Code.space || unit == Code.tab || unit == Code.carriageReturn || unit == Code.newline
     }
 
     private func hasSuffix(_ range: Range<Int>, _ character: Unicode.Scalar) -> Bool {
@@ -202,20 +209,8 @@ private struct Scan {
         guard let htmlURL = repository?.htmlURL else {
             return nil
         }
-        var nextIndex = scanForEndOfWord()
-        // Handle situation where issue reference is wrapped in parentheses
-        // like the generated "squash and merge" commits on GitHub.
-        if hasSuffix(index..<nextIndex, ")") {
-            nextIndex -= 1
-        }
-        // Release notes may add a full stop as part of formatting the entry.
-        if hasSuffix(index..<nextIndex, ".") {
-            nextIndex -= 1
-        }
-        // Handle list of issues.
-        if hasSuffix(index..<nextIndex, ",") {
-            nextIndex -= 1
-        }
+        // Without the punctuation after it, as in "(#123)." and "#1, #2".
+        let nextIndex = trimmingTrailingPunctuation(index..<scanForEndOfWord(), keeping: 1)
         // /^#\d+$/
         let digits = (index + 1)..<nextIndex
         guard !digits.isEmpty, units[digits].allSatisfy(Self.isDigit) else {
@@ -239,12 +234,9 @@ private struct Scan {
         if followsNonWhitespace {
             return nil
         }
-        var nextIndex = scanForEndOfWord()
-        // Release notes add a ! to the very last user, or use , to separate
-        // users.
-        if hasSuffix(index..<nextIndex, "!") || hasSuffix(index..<nextIndex, ",") {
-            nextIndex -= 1
-        }
+        // Without the punctuation after it, as in "Thanks @alice!" and
+        // "@alice, @bob".
+        let nextIndex = trimmingTrailingPunctuation(index..<scanForEndOfWord(), keeping: 1)
         // /^@[a-zA-Z0-9\-]+$/
         let name = (index + 1)..<nextIndex
         guard !name.isEmpty, units[name].allSatisfy({ unit in
@@ -255,7 +247,8 @@ private struct Scan {
             return nil
         }
         flush()
-        let url = "\(getHTMLURL(repository.endpoint))/\(string(name))"
+        let profiles = getHTMLURL(repository.endpoint)
+        let url = profiles.hasSuffix("/") ? "\(profiles)\(string(name))" : "\(profiles)/\(string(name))"
         results.append(.link(text: string(index..<nextIndex), url: url))
         return nextIndex
     }
@@ -296,10 +289,10 @@ private struct Scan {
 
     private static let trailingPunctuation: Set<UInt16> = Set("?!.,:*_~".utf16)
 
-    /// Where a URL in `range` ends without the punctuation after it: `?`,
-    /// `!`, `.`, `,`, `:`, `*`, `_`, `~`, and a closing parenthesis it
-    /// doesn't open (GitHub's autolink rules). At least `keeping` units
-    /// stay.
+    /// Where a URL, issue reference, or mention in `range` ends without the
+    /// punctuation after it: `?`, `!`, `.`, `,`, `:`, `*`, `_`, `~`, and a
+    /// closing parenthesis it doesn't open (GitHub's autolink rules). At
+    /// least `keeping` units stay.
     private func trimmingTrailingPunctuation(_ range: Range<Int>, keeping: Int) -> Int {
         let open = UInt16(0x28), close = UInt16(0x29)
         var end = range.upperBound

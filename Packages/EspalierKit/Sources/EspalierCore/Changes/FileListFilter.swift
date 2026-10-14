@@ -10,7 +10,7 @@ import GitKit
 public struct FileListFilter: Sendable, Equatable {
     /// Matched against each file's path, fuzzily, ignoring case.
     public var text = ""
-    /// Files the next commit includes in full.
+    /// Files the next commit includes, in full or in part.
     public var includedInCommit = false
     /// Files the next commit excludes.
     public var excludedFromCommit = false
@@ -57,7 +57,7 @@ public struct FileListFilter: Sendable, Equatable {
             return true
         }
 
-        if includedInCommit, !change.isIncludedInCommit() {
+        if includedInCommit, change.isExcludedFromCommit() {
             return false
         }
 
@@ -347,7 +347,7 @@ private let optionalQueryCharacters: Set<UInt16> = [0x20, 0x5F, 0x2D, 0x3A, 0x2F
 /// some lowercased text character: its scores only grow along the matrix,
 /// so the traceback from a positive score always reaches a diagonal step.
 /// No score is computed; the list keeps the files' order.
-struct FuzzyQuery: Sendable {
+public struct FuzzyQuery: Sendable {
     private let units: [UInt16]
     /// The non-optional characters, lowercased and (truncated) uppercased.
     private let coreLower: [UInt16]
@@ -357,7 +357,7 @@ struct FuzzyQuery: Sendable {
 
     /// Nil for an empty query, which matches nothing in fuzzaldrin-plus
     /// (`return [] unless query`); filters skip an empty text instead.
-    init?(_ query: String) {
+    public init?(_ query: String) {
         guard !query.isEmpty else {
             return nil
         }
@@ -368,7 +368,7 @@ struct FuzzyQuery: Sendable {
         lowerUnits = Set(JSCompat.toLowerCase(query).utf16)
     }
 
-    func matches(_ text: String) -> Bool {
+    public func matches(_ text: String) -> Bool {
         let subject = text.utf16
         // `return [] unless string`
         if subject.isEmpty {

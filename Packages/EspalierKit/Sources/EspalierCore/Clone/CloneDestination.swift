@@ -80,15 +80,20 @@ public func cloneFolderName(_ urlOrAlias: String) -> String? {
 }
 
 /// The clone's local path after its URL changed from `previousURL` to
-/// `url`: a path that ended in the previous repository's name ends in the
-/// new one's instead (or in its folder, when the new URL names none);
-/// otherwise the new name is appended.
+/// `url`. When the previous URL named a repository, the path is the clone's
+/// own folder: one named for that repository is renamed for the new one
+/// (or dropped, when the new URL names none), and one the user named stays.
+/// Otherwise the path is the folder the clone goes in, and the new name is
+/// appended.
 ///
 /// The Clone sheet starts from `lastCloneLocation` with an empty previous
 /// URL, so the path is that folder plus the repository's name.
 public func clonePath(_ path: String, afterURLChangeFrom previousURL: String, to url: String) -> String {
     let safeName = cloneFolderName(url)
     if parseRepositoryIdentifier(previousURL) != nil {
+        guard let previousName = cloneFolderName(previousURL), JSCompat.strictEquals(POSIXPath.basename(path), previousName) else {
+            return path
+        }
         if let safeName {
             return POSIXPath.join(POSIXPath.dirname(path), safeName)
         }

@@ -213,9 +213,9 @@ private func toHumanDescription(_ apiParams: APIRepoRuleMetadataParameters) -> S
 /// to test the rule.
 ///
 /// GitHub evaluates the patterns with RE2; they're translated to ICU
-/// (`translateRE2Pattern`). A pattern ICU can't compile counts as passing
-/// (and is logged): GitHub accepted it, so failing the user's commit on the
-/// translation would be wrong.
+/// (`translateRE2Pattern`). A pattern ICU can't compile, or an operator
+/// Espalier doesn't know, counts as passing (and is logged): GitHub accepted
+/// the rule, so failing the user's commit on it would be wrong.
 private func toMatcher(_ rule: APIRepoRuleMetadataParameters) -> RepoRulesMetadataMatcher {
     let pattern: String
     switch rule.operator {
@@ -229,7 +229,8 @@ private func toMatcher(_ rule: APIRepoRuleMetadataParameters) -> RepoRulesMetada
     case .regexMatch:
         pattern = translateRE2Pattern(rule.pattern)
     default:
-        return { _ in false }
+        logger.error("Could not use the rule operator \(rule.operator.rawValue, privacy: .public)")
+        return { _ in true }
     }
 
     guard let regex = try? NSRegularExpression(pattern: pattern) else {

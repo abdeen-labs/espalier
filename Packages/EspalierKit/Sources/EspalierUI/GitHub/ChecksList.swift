@@ -201,7 +201,7 @@ nonisolated struct ChecksContent: Sendable, Equatable {
         // Only show the loading header status if there are no cached check
         // runs to display.
         title = getChecksSummaryTitle(checks, loading: !loaded)
-        summary = checks.isEmpty ? "" : getCombinedStatusSummary(checks.map(\.conclusion), description: "check")
+        summary = checks.isEmpty ? "" : getCombinedStatusSummary(checks.map { (status: $0.status, conclusion: $0.conclusion) }, description: "check")
         overall = ChecksState(check)
         isLoading = !loaded
         isEmpty = loaded && checks.isEmpty
@@ -230,7 +230,7 @@ nonisolated struct ChecksContent: Sendable, Equatable {
                         }
                     },
                     stepsSummary: check.actionJobSteps.map { steps in
-                        getCombinedStatusSummary(steps.map(\.conclusion), description: "step")
+                        getCombinedStatusSummary(steps.map { (status: $0.status, conclusion: $0.conclusion) }, description: "step")
                     },
                     canRerun: rerunSupport.individualOrFailed && check.actionJobSteps != nil
                 )

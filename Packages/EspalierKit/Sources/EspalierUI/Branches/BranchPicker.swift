@@ -511,13 +511,14 @@ struct BranchPickerList: View {
         }
     }
 
-    /// "No Matching Branches", and Create New Branch… when the picker
-    /// offers it.
+    /// "No Matching Branches" for a filter, with Create New Branch… when the
+    /// picker offers it; "No Branches" without one.
     private var noBranches: some View {
-        let offersCreate = onCreateBranch != nil && !content.filter.isEmpty
+        let isFiltered = !content.filter.isEmpty
+        let offersCreate = onCreateBranch != nil && isFiltered
         return CenteredMessage(
-            "No Matching Branches",
-            systemImage: "magnifyingglass",
+            isFiltered ? "No Matching Branches" : "No Branches",
+            systemImage: isFiltered ? "magnifyingglass" : "arrow.trianglehead.branch",
             description: offersCreate ? "Do you want to create a new branch instead?" : nil
         ) {
             if offersCreate {

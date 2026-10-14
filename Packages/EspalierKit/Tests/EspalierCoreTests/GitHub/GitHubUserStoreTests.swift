@@ -83,6 +83,11 @@ struct MatchMentionableUsersTests {
             query: "team",
             logins: ["team-ant", "team-zoo"]
         )),
+        NamedCase("breaks ties by login ignoring case", (
+            users: [user("team-Zoo"), user("team-ant")],
+            query: "team",
+            logins: ["team-ant", "team-Zoo"]
+        )),
     ])
     func ranks(_ testCase: NamedCase<(users: [MentionableUser], query: String, logins: [String])>) {
         let logins = matchMentionableUsers(testCase.value.users, testCase.value.query).map(\.login)

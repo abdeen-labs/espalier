@@ -150,12 +150,11 @@ enum ConflictContextGatherer {
     }
 
     /// Reads a conflicted file: too large (by `stat`, following symbolic
-    /// links), unreadable, or its text. Unlike with AIKit's
-    /// `readConflictedFile`, a file with conflict markers whose bytes aren't
-    /// valid UTF-8 is unreadable: its resolution would be written back as
-    /// UTF-8, replacing them throughout the file. Without markers (a binary
-    /// file) it's read with those bytes replaced, and skipped for having no
-    /// conflict markers.
+    /// links), unreadable, or its text. A file with conflict markers whose
+    /// bytes aren't valid UTF-8 is unreadable: its resolution would be
+    /// written back as UTF-8, replacing them throughout the file. Without
+    /// markers (a binary file) it's read with those bytes replaced, and
+    /// skipped for having no conflict markers.
     static func readConflictedFileContents(atPath absolutePath: String) -> ConflictedFileContents {
         var info = stat()
         guard stat(absolutePath, &info) == 0 else {

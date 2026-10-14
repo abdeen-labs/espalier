@@ -46,7 +46,6 @@ struct CommitBehaviorTests {
     @Test("parses identities like desktop at the edges")
     func identityEdges() throws {
         let unsigned = try CommitIdentity.parseIdentity("A <b> 0 0130")
-        #expect(unsigned.tzOffset == 90)
         #expect(unsigned.date == Date(timeIntervalSince1970: 0))
 
         // The latest date a JavaScript Date can hold, and one second past it.
@@ -63,12 +62,11 @@ struct CommitBehaviorTests {
 
         // Trailing text after the time zone is ignored.
         let trailing = try CommitIdentity.parseIdentity("A <b> 1475670580 +0200 trailing")
-        #expect(trailing.tzOffset == 120)
         #expect(trailing.description == "A <b>")
     }
 
     private func identity(_ name: String, _ email: String) -> CommitIdentity {
-        CommitIdentity(name: name, email: email, date: Date(timeIntervalSince1970: 0), tzOffset: 0)
+        CommitIdentity(name: name, email: email, date: Date(timeIntervalSince1970: 0))
     }
 
     private func makeCommit(

@@ -7,8 +7,8 @@ import SwiftUI
 
 /// "This binary file has changed" and a button to open it.
 struct BinaryDiffView: View {
-    /// Opens the file in its default app; nil when it can't be (a deleted
-    /// file, or no repository).
+    /// Opens the file in its default app; nil outside Changes, for a file
+    /// not on disk, and without a repository.
     let open: (() -> Void)?
 
     var body: some View {

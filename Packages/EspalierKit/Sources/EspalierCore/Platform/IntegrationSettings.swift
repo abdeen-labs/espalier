@@ -12,7 +12,7 @@ public struct IntegrationSettings: Sendable, Hashable {
     /// `ExternalEditorLookup.resolveExternalEditor(_:)`.
     public var selectedExternalEditor: String?
     /// The selected shell (`shell`, Terminal by default). A shell that isn't
-    /// installed opens Terminal instead (`ShellLookup.findShellOrDefault`).
+    /// installed is kept, and opening reports it missing.
     public var selectedShell: Shell
     /// Whether to launch the custom editor instead of the selected editor
     /// (`use-custom-editor`, off by default).

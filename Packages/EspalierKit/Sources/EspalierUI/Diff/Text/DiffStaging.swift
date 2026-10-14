@@ -10,36 +10,21 @@ import GitKit
 
 /// Staging lines from the diff's gutter (Changes only).
 ///
-/// Build it from the changes model (`DiffStaging(changes:)`), which brings
-/// its rules: lines can't be staged while committing, in conflicted files,
-/// or with whitespace hidden (a gutter click then offers to show
-/// whitespace), and lines can be discarded. The selection-only form toggles
-/// lines in the given selection.
+/// Built from the changes model, which brings its rules: lines can't be
+/// staged while committing, in conflicted files, or with whitespace hidden
+/// (a gutter click then offers to show whitespace), and lines can be
+/// discarded.
 public struct DiffStaging {
-    /// The file's current line selection.
-    public var selection: DiffSelection
-    /// Sets the file's line selection (`changes.setLineSelection(_:forFile:)`).
-    public var setSelection: @MainActor (DiffSelection) -> Void
-    /// The model the gutter's gestures go through, when built from it.
-    let changes: ChangesModel?
-
-    public init(selection: DiffSelection, setSelection: @escaping @MainActor (DiffSelection) -> Void) {
-        self.selection = selection
-        self.setSelection = setSelection
-        changes = nil
-    }
+    /// The file's line selection when this was built.
+    let selection: DiffSelection
+    /// The model the gutter's gestures go through.
+    let changes: ChangesModel
 
     /// Staging through the changes model: its selection of the shown diff's
     /// lines, `setLines`/`toggleLines`, and discarding lines.
     public init(changes: ChangesModel) {
         self.changes = changes
         selection = changes.diffSelection ?? DiffSelection.fromInitialSelection(.none)
-        setSelection = { [weak changes] selection in
-            guard let changes, let fileID = changes.diffFileID else {
-                return
-            }
-            changes.setLineSelection(selection, forFile: fileID)
-        }
     }
 }
 
@@ -76,12 +61,9 @@ struct StagingActions {
 }
 
 extension DiffStaging {
-    /// The state to draw, for the shown diff.
-    func state(hunks: [DiffHunk]) -> StagingState {
-        guard let changes else {
-            return StagingState(selection: selection, canSelectLines: !hunks.isEmpty, hidesWhitespace: false, canDiscard: false)
-        }
-        return StagingState(
+    /// The state to draw.
+    var state: StagingState {
+        StagingState(
             selection: changes.diffSelection ?? selection,
             canSelectLines: changes.canSelectLines,
             hidesWhitespace: changes.hidesWhitespace || changes.diffHidesWhitespace,
@@ -92,120 +74,26 @@ extension DiffStaging {
 
     /// The gestures' effects. `discard` runs a discard through the window's
     /// presenter (so it asks first and shows errors).
-    func actions(hunks: [DiffHunk], discard: @escaping @MainActor (ChangesModel, DiffLines, Int) -> Void) -> StagingActions {
-        if let changes {
-            return StagingActions(
-                setLines: { [weak changes] lines, included, generation in
-                    changes?.setLines(lines, included: included, inDiff: generation)
-                },
-                toggleLines: { [weak changes] lines, generation in
-                    changes?.toggleLines(lines, inDiff: generation)
-                },
-                discardTitle: { [weak changes] lines, generation in
-                    changes?.discardTitle(for: lines, inDiff: generation)
-                },
-                discardLines: { [weak changes] lines, generation in
-                    guard let changes else {
-                        return
-                    }
-                    discard(changes, lines, generation)
-                },
-                showWhitespaceChanges: { [weak changes] in
-                    changes?.setHidesWhitespace(false)
-                }
-            )
-        }
-        // Without the model: the same gestures, applied to the given
-        // selection.
-        let selection = selection
-        let setSelection = setSelection
-        return StagingActions(
-            setLines: { lines, included, _ in
-                guard let range = selectionRange(of: lines, in: hunks) else {
+    func actions(discard: @escaping @MainActor (ChangesModel, DiffLines, Int) -> Void) -> StagingActions {
+        StagingActions(
+            setLines: { [weak changes] lines, included, generation in
+                changes?.setLines(lines, included: included, inDiff: generation)
+            },
+            toggleLines: { [weak changes] lines, generation in
+                changes?.toggleLines(lines, inDiff: generation)
+            },
+            discardTitle: { [weak changes] lines, generation in
+                changes?.discardTitle(for: lines, inDiff: generation)
+            },
+            discardLines: { [weak changes] lines, generation in
+                guard let changes else {
                     return
                 }
-                setSelection(selection
-                    .withSelectableLines(selectableDiffLines(in: hunks))
-                    .withRangeSelection(from: range.lowerBound, length: range.count, selected: included))
+                discard(changes, lines, generation)
             },
-            toggleLines: { lines, _ in
-                guard let range = selectionRange(of: lines, in: hunks) else {
-                    return
-                }
-                let included: Bool
-                if case .line(let index) = lines {
-                    included = !selection.isSelected(index)
-                } else {
-                    included = selection.isRangeSelected(from: range.lowerBound, length: range.count) != .all
-                }
-                setSelection(selection
-                    .withSelectableLines(selectableDiffLines(in: hunks))
-                    .withRangeSelection(from: range.lowerBound, length: range.count, selected: included))
-            },
-            discardTitle: { _, _ in nil },
-            discardLines: { _, _ in },
-            showWhitespaceChanges: {}
+            showWhitespaceChanges: { [weak changes] in
+                changes?.setHidesWhitespace(false)
+            }
         )
-    }
-}
-
-/// The original diff's indexes of the added and deleted lines.
-nonisolated func selectableDiffLines(in hunks: [DiffHunk]) -> Set<Int> {
-    var lines = Set<Int>()
-    for hunk in hunks {
-        for line in hunk.lines where line.isIncludeableLine() {
-            if let number = line.originalLineNumber {
-                lines.insert(number)
-            }
-        }
-    }
-    return lines
-}
-
-/// The range of original diff indexes `lines` covers in `hunks` (which may
-/// be expanded): a line, a range, the block around a line, or a hunk.
-nonisolated func selectionRange(of lines: DiffLines, in hunks: [DiffHunk]) -> ClosedRange<Int>? {
-    let changed = hunks.flatMap { hunk in
-        hunk.lines.compactMap { line -> (number: Int, line: DiffLine)? in
-            guard line.isIncludeableLine(), let number = line.originalLineNumber else {
-                return nil
-            }
-            return (number, line)
-        }
-    }
-    switch lines {
-    case .line(let index):
-        return changed.contains { $0.number == index } ? index...index : nil
-    case .range(let range):
-        let numbers = changed.map(\.number).filter { range.contains($0) }
-        guard let first = numbers.min(), let last = numbers.max() else {
-            return nil
-        }
-        return first...last
-    case .block(let index), .hunk(let index):
-        for hunk in hunks {
-            guard let position = hunk.lines.firstIndex(where: { $0.originalLineNumber == index && $0.isIncludeableLine() }) else {
-                continue
-            }
-            var start = position
-            var end = position
-            if case .block = lines {
-                while start > 0, hunk.lines[start - 1].isIncludeableLine() {
-                    start -= 1
-                }
-                while end + 1 < hunk.lines.count, hunk.lines[end + 1].isIncludeableLine() {
-                    end += 1
-                }
-            } else {
-                start = 0
-                end = hunk.lines.count - 1
-            }
-            let numbers = hunk.lines[start...end].compactMap { $0.isIncludeableLine() ? $0.originalLineNumber : nil }
-            guard let first = numbers.min(), let last = numbers.max() else {
-                return nil
-            }
-            return first...last
-        }
-        return nil
     }
 }

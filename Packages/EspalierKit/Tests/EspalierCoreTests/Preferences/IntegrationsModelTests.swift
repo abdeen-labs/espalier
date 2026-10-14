@@ -314,14 +314,11 @@ struct IntegrationsModelTests {
         #expect(fixture.launcher.traced == [true])
     }
 
-    @Test("opens a folder in the selected shell, its executable for Kitty, and Terminal when it isn't installed")
+    @Test("opens a folder in the selected shell, its executable for Kitty")
     func opensInSelectedShell() async throws {
         let fixture = try await makeIntegrationsFixture(shells: [terminal, kitty]) { preferences in
             preferences.integrations.selectedShell = .kitty
         }
-        try await fixture.integrations.openInShell("/repo")
-
-        fixture.app.preferences.integrations.selectedShell = .warp
         try await fixture.integrations.openInShell("/repo")
 
         #expect(fixture.launcher.commands == [
@@ -330,9 +327,25 @@ struct IntegrationsModelTests {
                 arguments: ["--single-instance", "--directory", "/repo"],
                 isDetached: false
             ),
-            LaunchCommand(executable: "/usr/bin/open", arguments: ["-b", "com.apple.Terminal", "/repo"], isDetached: false),
         ])
-        // The label still names the selected shell.
+    }
+
+    @Test("reports a selected shell that isn't installed, offering Settings, and opens nothing else")
+    func selectedShellNotInstalled() async throws {
+        let fixture = try await makeIntegrationsFixture(shells: [terminal]) { preferences in
+            preferences.integrations.selectedShell = .warp
+        }
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.integrations.openInShell("/repo")
+        }
+        if case .integration(.shell)? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
+        }
+        #expect(error?.recoveries.map(\.kind) == [.openSettings(.integrations)])
+        #expect(fixture.launcher.commands.isEmpty)
+        // The choice is kept, and the label names it.
+        #expect(fixture.app.preferences.integrations.selectedShell == .warp)
         #expect(fixture.integrations.shellLabel == "Warp")
     }
 
