@@ -55,8 +55,9 @@ nonisolated enum CheckGlyphKind: String, Sendable, Equatable, CaseIterable {
 }
 
 extension ChecksState {
-    /// The overall state of a pull request's checks, or nil when it has
-    /// none (no glyph shows then).
+    /// The overall state of a pull request's checks (`checksResult(_:)`,
+    /// through the combined check), or nil when it has none (no glyph shows
+    /// then).
     nonisolated init?(_ check: CombinedRefCheck?) {
         guard let check, !check.checks.isEmpty else {
             return nil
@@ -167,7 +168,7 @@ nonisolated struct ChecksContent: Sendable, Equatable {
     var title: String
     /// "2 successful and 1 failed checks".
     var summary: String
-    /// The overall state, or nil while loading with nothing to show.
+    /// The overall state, or nil with no checks (loading, or none).
     var overall: ChecksState?
     var groups: [CheckGroupContent]
     /// Whether the list is waiting for the checks (with their workflows'
@@ -263,8 +264,8 @@ struct ChecksListActions {
 
 // MARK: Views
 
-/// The checks' summary: the state's glyph, the title, the summary line,
-/// and Re-run.
+/// The checks' summary: the state's glyph (progress while loading), the
+/// title, the summary line, and Re-run (not with no checks).
 struct ChecksHeader: View {
     let content: ChecksContent
     let actions: ChecksListActions
@@ -274,7 +275,7 @@ struct ChecksHeader: View {
             Group {
                 if let overall = content.overall {
                     ChecksGlyph(overall)
-                } else {
+                } else if content.isLoading {
                     ArcProgress(.small)
                 }
             }
@@ -291,8 +292,10 @@ struct ChecksHeader: View {
             .fixedSize(horizontal: false, vertical: true)
             .layoutPriority(1)
             Spacer(minLength: Metrics.insetSmall)
-            ChecksRerunButton(options: content.rerun, isEnabled: content.canRerun) { failedOnly in
-                actions.rerun(failedOnly, nil)
+            if !content.isEmpty {
+                ChecksRerunButton(options: content.rerun, isEnabled: content.canRerun) { failedOnly in
+                    actions.rerun(failedOnly, nil)
+                }
             }
         }
         .accessibilityElement(children: .contain)

@@ -622,6 +622,12 @@ immediately; importing desktop's repository list and settings (my call).
   fails; `fetchIssues` filters on `pull_request`; `getEndpointForRepository`
   matches Enterprise Server accounts; migrating a ghe.com account moves its
   token; a failed user fetch at the end of sign-in is an error.
+- **A pull request's checks add up one way everywhere:** failed if any
+  failed, timed out, or needs an action; else running if any runs; else not
+  successful if any was cancelled or went stale; else passed (skipped and
+  neutral pass). Every glyph, tooltip, and the summary's title follow it,
+  so they can't disagree. With no checks the summary says "No checks",
+  without progress or Re-run.
 
 ## Reading the repository
 

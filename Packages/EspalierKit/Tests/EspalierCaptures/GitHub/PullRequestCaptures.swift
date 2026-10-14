@@ -104,6 +104,22 @@ struct PullRequestCaptures {
         )
     }
 
+    @Test("the checks popover, in its card: a pull request with no checks")
+    func popoverNoChecks() {
+        capture(
+            RepositoryCaptureFixtures.popoverCard {
+                ChecksPopoverView(
+                    number: 142,
+                    content: GitHubCaptureFixtures.checksContent(nil),
+                    actions: GitHubCaptureFixtures.checksActions,
+                    showPullRequest: {}
+                )
+            },
+            named: "popover-noChecks",
+            area: area
+        )
+    }
+
     // MARK: The overview
 
     private var overviewActions: PullRequestOverviewActions {

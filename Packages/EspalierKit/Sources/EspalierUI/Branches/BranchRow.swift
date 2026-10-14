@@ -88,18 +88,10 @@ nonisolated public struct BranchPullRequestBadge: Sendable, Equatable {
         return text
     }
 
-    /// The glyph's state for a pull request's combined checks: pending
-    /// until they conclude; failed when they failed, timed out, or need an
-    /// action; neutral when cancelled, skipped, stale, or neutral.
+    /// The glyph's state for a pull request's combined checks, as every
+    /// checks glyph shows it.
     public static func checksState(of check: CombinedRefCheck) -> ChecksState {
-        guard let conclusion = check.conclusion, check.status == .completed else {
-            return .pending
-        }
-        switch conclusion {
-        case .success: return .success
-        case .failure, .timedOut, .actionRequired: return .failure
-        default: return .neutral
-        }
+        CheckGlyphKind(status: check.status, conclusion: check.conclusion).tone
     }
 }
 

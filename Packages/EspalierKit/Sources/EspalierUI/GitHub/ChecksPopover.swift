@@ -54,7 +54,8 @@ struct ChecksPopover: View {
     }
 }
 
-/// The popover's content: the summary, the list, and Show Pull Request.
+/// The popover's content: the summary, the list (none with no checks: the
+/// title says so), and Show Pull Request.
 struct ChecksPopoverView: View {
     let number: Int
     let content: ChecksContent
@@ -65,13 +66,15 @@ struct ChecksPopoverView: View {
         VStack(alignment: .leading, spacing: 0) {
             ChecksHeader(content: content, actions: actions)
                 .padding(Metrics.Popover.padding)
-            Hairline()
-            ScrollView {
-                ChecksList(content: content, actions: actions)
-                    .padding(Metrics.insetMedium)
+            if !content.isEmpty {
+                Hairline()
+                ScrollView {
+                    ChecksList(content: content, actions: actions)
+                        .padding(Metrics.insetMedium)
+                }
+                .frame(maxHeight: 420)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxHeight: 420)
-            .fixedSize(horizontal: false, vertical: true)
             Hairline()
             HStack {
                 Spacer()

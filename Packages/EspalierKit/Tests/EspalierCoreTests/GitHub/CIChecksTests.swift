@@ -166,44 +166,29 @@ func refCheck(
 
 @Suite("CI checks")
 struct CIChecksTests {
-    @Test("no checks combine into none; one check is mirrored")
-    func combineFew() throws {
-        #expect(createCombinedCheckFromChecks([]) == nil)
-        let pending = refCheck(id: 1, status: .inProgress, conclusion: nil)
-        let combined = try #require(createCombinedCheckFromChecks([pending]))
-        #expect(combined.status == .inProgress)
-        #expect(combined.conclusion == nil)
-        #expect(combined.checks == [pending])
-    }
-
-    @Test("any failure, or incomplete check, fails the combination, even with others pending")
-    func combineFailure() throws {
-        for conclusion in [APICheckConclusion.failure, .actionRequired, .timedOut, .stale, .canceled] {
-            let combined = try #require(createCombinedCheckFromChecks([
-                refCheck(id: 1, status: .inProgress, conclusion: nil),
-                refCheck(id: 2, conclusion: conclusion),
-            ]))
-            #expect(combined.status == .completed)
-            #expect(combined.conclusion == .failure)
+    @Test("checks add up to failed, else running, else unfinished, else passed; the combined check follows", arguments: [
+        NamedCase("no checks: none", (checks: [APICheckConclusion?](), result: CheckResult?.none, combined: APICheckConclusion?.none)),
+        NamedCase("one running check runs", ([nil], .running, nil)),
+        NamedCase("a failure fails, beside a running check", ([nil, .failure], .failed, .failure)),
+        NamedCase("timing out fails", ([.success, .timedOut], .failed, .failure)),
+        NamedCase("needing an action fails", ([.success, .actionRequired], .failed, .failure)),
+        NamedCase("one cancelled check is unfinished, not failed", ([.canceled], .unfinished, .canceled)),
+        NamedCase("a cancelled check beside a pass is unfinished", ([.success, .canceled], .unfinished, .canceled)),
+        NamedCase("a stale check beside a running one still runs", ([.stale, nil], .running, nil)),
+        NamedCase("only stale checks unfinished: stale", ([.success, .stale], .unfinished, .stale)),
+        NamedCase("a conclusion GitHub added since is unfinished", ([.success, APICheckConclusion(rawValue: "something_new")], .unfinished, .canceled)),
+        NamedCase("success, neutral, and skipped pass", ([.success, .neutral, .skipped], .passed, .success)),
+        NamedCase("one skipped check passes", ([.skipped], .passed, .success)),
+    ])
+    func results(_ testCase: NamedCase<(checks: [APICheckConclusion?], result: CheckResult?, combined: APICheckConclusion?)>) {
+        let checks = testCase.value.checks.enumerated().map { index, conclusion in
+            refCheck(id: index + 1, status: conclusion == nil ? .inProgress : .completed, conclusion: conclusion)
         }
-    }
-
-    @Test("success, neutral, and skipped combine into success; otherwise in progress")
-    func combineSuccess() throws {
-        let success = try #require(createCombinedCheckFromChecks([
-            refCheck(id: 1, conclusion: .success),
-            refCheck(id: 2, conclusion: .neutral),
-            refCheck(id: 3, conclusion: .skipped),
-        ]))
-        #expect(success.status == .completed)
-        #expect(success.conclusion == .success)
-
-        let pending = try #require(createCombinedCheckFromChecks([
-            refCheck(id: 1, conclusion: .success),
-            refCheck(id: 2, status: .queued, conclusion: nil),
-        ]))
-        #expect(pending.status == .inProgress)
-        #expect(pending.conclusion == nil)
+        #expect(checksResult(checks) == testCase.value.result)
+        let combined = createCombinedCheckFromChecks(checks)
+        #expect(combined?.checks == (checks.isEmpty ? nil : checks))
+        #expect(combined?.conclusion == testCase.value.combined)
+        #expect(combined.map { $0.status == .completed } == testCase.value.result.map { $0 != .running })
     }
 
     @Test("a check run keeps its app, check suite, and URL")
