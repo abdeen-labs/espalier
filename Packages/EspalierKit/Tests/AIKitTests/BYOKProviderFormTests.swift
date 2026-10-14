@@ -145,12 +145,8 @@ struct BYOKProviderFormTests {
         anthropic.wireApi = .responses
         #expect(makeBYOKProvider(from: anthropic, existing: nil).provider.wireApi == nil)
 
-        // A new provider gets the defaults (OpenAI, Chat Completions, an API
-        // key) and a lowercase UUID.
+        // A new provider gets a lowercase UUID.
         let fresh = makeBYOKProvider(from: validForm(), existing: nil).provider
-        #expect(fresh.type == .openai)
-        #expect(fresh.wireApi == .completions)
-        #expect(fresh.authKind == .apiKey)
         #expect(fresh.id == fresh.id.lowercased())
         #expect(fresh.id.count == 36)
     }

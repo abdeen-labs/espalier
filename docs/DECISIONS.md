@@ -71,9 +71,9 @@ reason.
   white for the hue is as light as the hue allows. Its chroma grows with a
   surface's depth, as the themes' own tints do. Washes, text, the accent,
   status colors, and Pop's accent-tinted sidebar (my call) stay the
-  theme's. A swatch is the theme's field fill in that tint, as the
-  current appearance draws it, its chroma tripled, since the tints are
-  too faint to tell apart at swatch size.
+  theme's. A swatch is the theme's light field fill in that tint, its
+  chroma tripled, since the tints are too faint to tell apart at swatch
+  size.
 - **The app font and the code font are two settings** (my call), picked
   apart from each other and from the theme, any app font with any code
   font. The app font is all the interface's text: SF Pro (the default),

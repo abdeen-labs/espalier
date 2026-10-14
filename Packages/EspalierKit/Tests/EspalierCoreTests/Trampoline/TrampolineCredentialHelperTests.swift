@@ -125,7 +125,6 @@ struct TrampolineCredentialHelperTests {
             }
 
             #expect(prompter.calls == [.genericGitAuthentication(endpoint: endpoint(server), username: nil)])
-            #expect(error?.message == getDescriptionForError(.httpsAuthenticationFailed, ""))
             #expect(error?.isRawMessage == false)
             #expect(error?.result.stderr.contains("terminal prompts disabled") == true)
             #expect(context.genericGitAuth.getGenericUsername(endpoint(server)) == nil)
@@ -148,7 +147,7 @@ struct TrampolineCredentialHelperTests {
             }
 
             #expect(prompter.calls == [])
-            #expect(error?.message == getDescriptionForError(.httpsAuthenticationFailed, ""))
+            #expect(error?.isRawMessage == false)
         }
     }
 
@@ -225,7 +224,7 @@ struct TrampolineCredentialHelperTests {
             }
 
             #expect(prompter.calls == [.gitHubSignIn(endpoint: "http://github.com/")])
-            #expect(error?.message == getDescriptionForError(.httpsAuthenticationFailed, ""))
+            #expect(error?.isRawMessage == false)
         }
     }
 

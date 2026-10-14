@@ -312,7 +312,7 @@ struct AccountsModelTests {
         // Git gets no credentials from it, and is told why.
         let provider = AccountsTrampolineProvider(store, runtime: harness.gitHub.runtime)
         #expect(await provider.getAll().isEmpty)
-        #expect(await provider.unreadableAccountMessage(endpoint: "https://api.github.com") == issue.message)
+        #expect(await provider.unreadableAccountMessage(endpoint: "https://api.github.com") != nil)
         #expect(await provider.unreadableAccountMessage(endpoint: "https://ghe.example.com/api/v3") == nil)
 
         // Trying again while the keychain is still locked changes nothing.

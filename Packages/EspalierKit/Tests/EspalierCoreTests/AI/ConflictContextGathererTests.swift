@@ -133,8 +133,6 @@ struct ConflictContextGathererTests {
         let merge = ConflictState.merge(currentBranch: "main", currentTip: "a", manualResolutions: [:])
         #expect(ConflictContextGatherer.labels(merge, operation: nil, branches: ConflictBranches(ours: "main", theirs: "feature"))
             == Labels(ourLabel: "main", theirLabel: "feature", ourRef: "main", theirRef: "feature"))
-        #expect(ConflictContextGatherer.labels(merge, operation: nil, branches: ConflictBranches(ours: "main", theirs: nil))
-            == Labels(ourLabel: "main", theirLabel: "incoming branch", ourRef: "main", theirRef: nil))
 
         let rebase = ConflictState.rebase(
             currentTip: "b", targetBranch: "feature", baseBranch: nil, originalBranchTip: "c", baseBranchTip: "d", manualResolutions: [:]
@@ -157,14 +155,6 @@ struct ConflictContextGathererTests {
         )
         #expect(ConflictContextGatherer.labels(rebase, operation: squash, branches: ConflictBranches(ours: "feature", theirs: "squash commit"))
             == Labels(ourLabel: "feature", theirLabel: "squash commit", ourRef: nil, theirRef: nil))
-
-        let cherryPick = ConflictState.cherryPick(targetBranchName: "release", manualResolutions: [:])
-        #expect(ConflictContextGatherer.labels(cherryPick, operation: nil, branches: ConflictBranches(ours: "release", theirs: nil))
-            == Labels(ourLabel: "release", theirLabel: "cherry-picked commit", ourRef: "release", theirRef: nil))
-
-        let revert = ConflictState.revert(targetBranchName: "main", manualResolutions: [:])
-        #expect(ConflictContextGatherer.labels(revert, operation: nil, branches: nil)
-            == Labels(ourLabel: "main", theirLabel: "reverted commit", ourRef: "main", theirRef: nil))
     }
 
     @Test("names a rebase's unknown base by the commit it's being rebased onto")

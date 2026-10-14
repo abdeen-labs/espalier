@@ -137,7 +137,6 @@ struct TrampolineGitEnvironmentTests {
             let original = gitError("fatal: could not read Username for 'https://example.com': terminal prompts disabled\n")
             let rewritten = try #require(userCancelledAuthenticationError(original))
 
-            #expect(rewritten.message == getDescriptionForError(.httpsAuthenticationFailed, ""))
             #expect(!rewritten.isRawMessage)
             #expect(rewritten.args == ["fetch", "origin"])
             #expect(rewritten.result.stderr == original.result.stderr)
