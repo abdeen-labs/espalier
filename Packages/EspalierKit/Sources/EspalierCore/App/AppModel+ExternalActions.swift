@@ -339,7 +339,7 @@ extension AppModel {
             }
             return [gitHubRepository.htmlURL, gitHubRepository.parent?.htmlURL]
                 .compactMap { $0 }
-                .contains { urlsMatchIgnoringCase($0, url) }
+                .contains { urlsMatch($0, url) }
         }?.id
     }
 
@@ -419,22 +419,6 @@ extension AppModel {
             }
         }
     }
-}
-
-/// `url1` and `url2` name the same repository on the same host, ignoring
-/// case.
-private func urlsMatchIgnoringCase(_ url1: String, _ url2: String) -> Bool {
-    guard let first = parseRepositoryIdentifier(url1), let second = parseRepositoryIdentifier(url2) else {
-        return false
-    }
-    let hostsMatch = switch (first.hostname, second.hostname) {
-    case (nil, nil): true
-    case (let x?, let y?): JSCompat.caseInsensitiveEquals(x, y)
-    default: false
-    }
-    return hostsMatch
-        && JSCompat.caseInsensitiveEquals(first.owner, second.owner)
-        && JSCompat.caseInsensitiveEquals(first.name, second.name)
 }
 
 /// `/^[^\/]+\/[^\/]+$/`: an owner and name, such as `torvalds/linux`.

@@ -39,7 +39,7 @@ public struct EndpointConfiguration: Codable, Sendable, Hashable {
     /// A github.com address means GitHub.com, which signs in with Espalier's
     /// own OAuth app.
     public static func enterprise(address: String, clientID: String) throws -> EndpointConfiguration {
-        if address.contains(/^(?:https:\/\/)?(?:api\.)?github\.com($|\/)/) {
+        if isDotComAddress(address) {
             return .dotCom
         }
 
@@ -50,6 +50,14 @@ public struct EndpointConfiguration: Codable, Sendable, Hashable {
         }
         return EndpointConfiguration(endpoint: getEnterpriseAPIURL(validURL), clientID: clientID)
     }
+}
+
+/// Whether an address typed for an Enterprise server is GitHub.com's:
+/// `github.com` or `api.github.com`, in any case, optionally after
+/// `https://` and before a path.
+public func isDotComAddress(_ address: String) -> Bool {
+    address.trimmingCharacters(in: .whitespacesAndNewlines)
+        .contains(/^(?:https:\/\/)?(?:api\.)?github\.com($|\/)/.ignoresCase())
 }
 
 extension Account {

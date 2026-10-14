@@ -32,7 +32,7 @@ struct ChangesFileRowCaptures {
             file("Sources/App/Loader.swift", .renamed(oldPath: "Sources/App/OldLoader.swift", renameIncludesModifications: true)),
             file("Sources/App/Copy.swift", .copied(oldPath: "Sources/Other/Original.swift", renameIncludesModifications: false)),
             file("notes.txt", .untracked()),
-            file("Package.resolved", .conflicted(.conflictsWithMarkers(entry: UnmergedEntry(action: .bothModified), conflictMarkerCount: 3))),
+            file("Package.resolved", .conflicted(.conflictsWithMarkers(entry: UnmergedEntry(action: .bothModified), conflictMarkerCount: 3, conflictCount: 1))),
             file("Vendor/Kit", .modified(submoduleStatus: SubmoduleStatus(commitChanged: false, modifiedChanges: true, untrackedChanges: false)), .none),
             file("Sources/Feature/AVeryLongFileNameThatGoesOnAndOn.swift", .modified()),
         ]

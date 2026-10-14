@@ -65,7 +65,7 @@ private func currentRemote(_ repository: Repository, tip: Tip) async -> Remote? 
         return nil
     }
     let defaultRemote = findDefaultRemote(remotes)
-    return tip.branch?.upstreamRemoteName.flatMap { name in
+    return tip.branch?.resolvingRemotes(remotes.map(\.name)).upstreamRemoteName.flatMap { name in
         remotes.first { JSCompat.strictEquals($0.name, name) }
     } ?? defaultRemote
 }

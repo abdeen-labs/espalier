@@ -80,7 +80,8 @@ public func getEndpointForRepository(_ url: String) -> String {
 /// Get the URL for the HTML site. For example:
 ///
 /// https://api.github.com -> https://github.com
-/// http://github.mycompany.com/api -> http://github.mycompany.com/
+/// http://github.mycompany.com/api -> http://github.mycompany.com
+/// https://github.mycompany.com:8443/api/v3 -> https://github.mycompany.com:8443
 public func getHTMLURL(_ endpoint: String) -> String {
     // In the case of GitHub.com, the HTML site lives on the parent domain.
     //  E.g., https://api.github.com -> https://github.com
@@ -106,7 +107,7 @@ public func getHTMLURL(_ endpoint: String) -> String {
         }
 
         let parsed = ParsedURL(endpoint)
-        return "\(parsed.protocol ?? "")//\(parsed.hostname ?? "")"
+        return "\(parsed.protocol ?? "")//\(parsed.host ?? "")"
     }
 }
 

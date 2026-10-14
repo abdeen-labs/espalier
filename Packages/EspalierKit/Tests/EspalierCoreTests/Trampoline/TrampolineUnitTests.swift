@@ -22,6 +22,18 @@ struct TrampolineUnitTests {
             #expect(try await findGitHubTrampolineAccount(accounts, "https://gitlab.com/") == nil)
         }
 
+        @Test("gives an Enterprise account only to its own port")
+        func gitHubAccountOnPort() async throws {
+            let onPort = TrampolineAccount(endpoint: "https://ghe.example.com:8443/api/v3", login: "hubot", token: "b")
+            let onDefaultPort = TrampolineAccount(endpoint: "https://ghe.example.org/api/v3", login: "monalisa", token: "c")
+            let accounts = TestAccounts([onPort, onDefaultPort])
+
+            #expect(try await findGitHubTrampolineAccount(accounts, "https://ghe.example.com:8443/owner/repo.git") == onPort)
+            #expect(try await findGitHubTrampolineAccount(accounts, "https://ghe.example.com/owner/repo.git") == nil)
+            #expect(try await findGitHubTrampolineAccount(accounts, "https://ghe.example.org:8443/owner/repo.git") == nil)
+            #expect(try await findGitHubTrampolineAccount(accounts, "https://ghe.example.org:443/owner/repo.git") == onDefaultPort)
+        }
+
         @Test("finds a generic credential by the URL's username or the stored one")
         func genericAccount() throws {
             let suiteName = POSIXPath.join(try createTempDirectory(), "defaults")

@@ -381,6 +381,9 @@ public struct GitProgressParser: GitProgressParsing {
                 if let total = progress.total, total != 0 {
                     percent += step.weight * (Double(progress.value) / Double(total))
                 }
+                // A submodule's clone reports the steps again from the
+                // start; the overall progress stays where it was.
+                percent = max(percent, lastPercent)
 
                 stepIndex = i
                 lastPercent = percent

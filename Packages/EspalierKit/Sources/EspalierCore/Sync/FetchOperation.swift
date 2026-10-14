@@ -227,7 +227,7 @@ extension SyncModel {
 func remotesToFetch(_ repository: Repository, tip: Tip, record: RepositoryRecord) async throws -> [Remote] {
     let remotes = try await getRemotes(repository)
     let defaultRemote = findDefaultRemote(remotes)
-    let currentRemote = tip.branch?.upstreamRemoteName.flatMap { name in
+    let currentRemote = tip.branch?.resolvingRemotes(remotes.map(\.name)).upstreamRemoteName.flatMap { name in
         remotes.first { JSCompat.strictEquals($0.name, name) }
     } ?? defaultRemote
     let upstreamRemote = record.gitHubRepository?.parent.flatMap { findUpstreamRemote($0, remotes) }

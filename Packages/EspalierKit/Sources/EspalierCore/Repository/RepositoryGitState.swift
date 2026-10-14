@@ -43,6 +43,16 @@ public final class RepositoryGitState {
     /// refreshed hasn't loaded its remotes yet.
     public internal(set) var loaded: RefreshScope = []
 
+    /// Whether the current branch is published: its upstream's
+    /// remote-tracking branch exists, the only case status reports how far
+    /// the branch is ahead and behind. A branch whose upstream is gone (a
+    /// merged pull request's, deleted and pruned) isn't: the sync button
+    /// offers to publish it, and the menu's Pull and GitHub branch items are
+    /// off.
+    public var isCurrentBranchPublished: Bool {
+        tip.branch != nil && aheadBehind != nil
+    }
+
     /// Whether the status, remotes, and refs have all loaded since the
     /// last reset. Before then, the remotes and the branch's upstream
     /// aren't known: a repository without them reads as one to publish.

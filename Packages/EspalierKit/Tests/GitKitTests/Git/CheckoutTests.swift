@@ -110,6 +110,23 @@ struct CheckoutTests {
         #expect(validBranch.upstreamRemoteName == "first-remote")
     }
 
+    @Test("checks out a remote branch as the branch of its name when the remote's name has a slash")
+    func remoteNameWithSlash() async throws {
+        let repository = try await setupTwoCommitRepo()
+        let remote = try setupEmptyDirectory()
+        _ = try await git(["init", "-q", "--bare"], remote.path, "remoteNameWithSlash")
+        _ = try await git(["remote", "add", "team/alice", remote.path], repository.path, "remoteNameWithSlash")
+        _ = try await git(["push", "-q", "team/alice", "master:feature"], repository.path, "remoteNameWithSlash")
+        _ = try await git(["fetch", "-q", "team/alice"], repository.path, "remoteNameWithSlash")
+
+        let remoteBranch = try #require(try await getBranches(repository).first { $0.ref == "refs/remotes/team/alice/feature" })
+        try await checkoutBranch(repository, remoteBranch, nil)
+
+        let branch = try #require(try await validBranch(repository))
+        #expect(branch.name == "feature")
+        #expect(branch.upstream == "team/alice/feature")
+    }
+
     @Test("will fail when an existing branch matches the remote branch")
     func existingBranchMatchesRemoteBranch() async throws {
         let path = try setupFixtureRepository("checkout-test-cases")

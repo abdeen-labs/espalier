@@ -856,7 +856,7 @@ public final class RepositoryAIModel: RepositoryFeature {
 
             // A file the user resolved meanwhile (no markers left) keeps
             // their resolution.
-            guard case .conflictsWithMarkers(_, let markerCount, _) = conflicted, markerCount > 0 else {
+            guard case .conflictsWithMarkers(_, let markerCount, _, _) = conflicted, markerCount > 0 else {
                 applied.notWritten.append(.init(path: resolution.path, reason: .alreadyResolved))
                 continue
             }

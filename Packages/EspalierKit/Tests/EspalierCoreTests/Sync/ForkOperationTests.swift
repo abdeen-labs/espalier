@@ -225,4 +225,33 @@ struct ForkOperationTests {
         #expect(try await getForkRemoteNames(fixture.local) == ["espalier-hubot", "espalier-tracked"].exactSet)
         await fixture.app.idle()
     }
+
+    @Test("pruning reads the branches from the repository: one whose branches never loaded keeps the fork remote a branch tracks")
+    func prunesWithBranchesNotLoaded() async throws {
+        let (local, _) = try await setupRepositoryWithRemote()
+        try await runGit(["remote", "add", "espalier-unused", "https://github.com/unused/app.git"], local)
+        try await runGit(["remote", "add", "espalier-tracked", "https://github.com/tracked/app.git"], local)
+        for name in ["espalier-unused", "espalier-tracked"] {
+            try await markForkRemote(local, name)
+        }
+        try await runGit(["config", "branch.topic.remote", "espalier-tracked"], local)
+        try await runGit(["config", "branch.topic.merge", "refs/heads/topic"], local)
+        try await runGit(["branch", "topic"], local)
+        // A repository that isn't selected, whose status alone the indicator
+        // updater refreshed, hears of the pull requests of another clone of
+        // its GitHub repository.
+        let harness = try AppHarness()
+        let app = await harness.loadedApp()
+        let id = try #require(try await app.addRepositories([local.path]).added.first)
+        let model = try #require(app.repository(id))
+        await model.refresh(.status, reason: .background)
+        #expect(model.gitState.branches.all.isEmpty)
+
+        await model.sync.pruneForkedRemotes(openPullRequests: [])
+        await model.idle()
+
+        #expect(try await remoteURLs(local).keys.sorted() == ["espalier-tracked", "origin"])
+        #expect(try await runGit(["config", "branch.topic.remote"], local) == "espalier-tracked\n")
+        await app.idle()
+    }
 }

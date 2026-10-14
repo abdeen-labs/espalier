@@ -1,8 +1,8 @@
 // These run the fetcher on a `ManualScheduler` against a local bare remote
 // and a mock GitHub: the initial skew, the interval (X-Poll-Interval read
-// in seconds, the 5-minute minimum, the hour without one), the 30-minute
-// FETCH_HEAD gate, stopping, failures, and a user fetch waiting behind a
-// background one.
+// in seconds, the 5-minute minimum, the hour without one or off GitHub),
+// the 30-minute FETCH_HEAD gate, a repository without a remote, stopping,
+// failures, and a user fetch waiting behind a background one.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -35,15 +35,17 @@ struct BackgroundFetcherTests {
         }
     }
 
-    /// A GitHub repository with a bare `origin`, refreshed but not selected,
-    /// so the app's own fetcher doesn't run; a fetcher of the test's own on
-    /// a clock set to now (`FETCH_HEAD`'s dates are real).
-    private func makeFixture(skew: Duration = .seconds(7)) async throws -> Fixture {
+    /// A GitHub repository (with `gitHub`) with a bare `origin`, refreshed
+    /// but not selected, so the app's own fetcher doesn't run; a fetcher of
+    /// the test's own on a clock set to now (`FETCH_HEAD`'s dates are real).
+    private func makeFixture(skew: Duration = .seconds(7), gitHub: Bool = true) async throws -> Fixture {
         let (local, remote) = try await setupRepositoryWithRemote()
         let harness = try AppHarness(scheduler: ManualScheduler(now: Date()), skew: skew)
         let app = await harness.loadedApp()
         let id = try #require(try await app.addRepositories([local.path]).added.first)
-        app.updateRecord(id) { $0.gitHubRepository = ModelFixtures.gitHubRepository() }
+        if gitHub {
+            app.updateRecord(id) { $0.gitHubRepository = ModelFixtures.gitHubRepository() }
+        }
         let model = try #require(app.repository(id))
         await model.refresh(.full, reason: .user)
         let fetcher = BackgroundFetcher(environment: harness.environment, accounts: app.accounts)
@@ -83,6 +85,39 @@ struct BackgroundFetcherTests {
         await fixture.scheduler.waitForSleepers(1)
 
         #expect(try await fixture.fetchedTip() == pushed)
+        #expect(fixture.scheduler.sleeps == [.zero, .seconds(60 * 60 + 7)])
+        fixture.fetcher.stop()
+        await fixture.app.idle()
+    }
+
+    @Test("a repository not on GitHub fetches too, every hour plus the skew", .hangGuard(minutes: 5))
+    func notOnGitHub() async throws {
+        let fixture = try await makeFixture(gitHub: false)
+        let pushed = try await pushCommitFromAnotherClone(fixture.remote, path: "other.txt", contents: "other\n")
+
+        fixture.fetcher.start(for: fixture.model, isFirstSelectionSinceLaunch: false)
+        await fixture.scheduler.waitForSleepers(1)
+
+        #expect(try await fixture.fetchedTip() == pushed)
+        #expect(fixture.scheduler.sleeps == [.zero, .seconds(60 * 60 + 7)])
+        #expect(fixture.harness.gitHub.requests.isEmpty)
+        fixture.fetcher.stop()
+        await fixture.app.idle()
+    }
+
+    @Test("a repository without a remote isn't fetched, and is checked again an hour later", .hangGuard(minutes: 5))
+    func noRemote() async throws {
+        let fixture = try await makeFixture(gitHub: false)
+        try await runGit(["remote", "remove", "origin"], fixture.local)
+        await fixture.model.refresh(.full, reason: .user)
+        #expect(fixture.model.gitState.remotes.all.isEmpty)
+
+        fixture.fetcher.start(for: fixture.model, isFirstSelectionSinceLaunch: false)
+        await fixture.scheduler.waitForSleepers(1)
+        await fixture.model.idle()
+
+        // A fetch would have refreshed after it.
+        #expect(fixture.model.refreshScheduler.lastPassReasons == [.user])
         #expect(fixture.scheduler.sleeps == [.zero, .seconds(60 * 60 + 7)])
         fixture.fetcher.stop()
         await fixture.app.idle()

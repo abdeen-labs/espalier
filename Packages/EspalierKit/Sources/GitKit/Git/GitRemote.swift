@@ -104,6 +104,24 @@ public func getRemotes(_ repository: Repository) async throws -> [Remote] {
     return remotes
 }
 
+/// The names of the repository's remotes (`git remote`), in git's order;
+/// none outside a repository.
+public func getRemoteNames(_ repository: Repository) async throws -> [String] {
+    let result = try await git(
+        ["remote"],
+        repository.path,
+        "getRemoteNames",
+        options: GitExecutionOptions(expectedErrors: [.notAGitRepository])
+    )
+
+    if result.gitError == .notAGitRepository {
+        return []
+    }
+
+    // A remote's name can't contain a line feed.
+    return JSCompat.split(result.stdout, "\n").filter { !$0.isEmpty }
+}
+
 /// Add a new remote with the given URL.
 @discardableResult
 public func addRemote(_ repository: Repository, _ name: String, _ url: String) async throws -> Remote {

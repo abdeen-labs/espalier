@@ -833,7 +833,7 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
         // Resolved in an editor: no markers left, or no longer conflicted.
         let isResolved: Bool = switch status {
         case nil: true
-        case .conflictsWithMarkers(_, let markers, _)?: markers == 0
+        case .conflictsWithMarkers(_, let markers, _, _)?: markers == 0
         case .manualConflict?: false
         }
         if isResolved {

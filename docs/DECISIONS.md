@@ -244,11 +244,26 @@ remotes from before the mark aren't migrated (my call).
   services, and quitting never interrupt a git write; only a user's cancel
   does (clone, hook abort).
 - **Background services stop by cancelling their loop,** never an operation
-  (fixes desktop's orphaned pruner interval and pull request timer). They
-  start once the selected repository is associated with GitHub (desktop
-  waited for it to be selected again).
+  (fixes desktop's orphaned pruner interval and pull request timer). The
+  GitHub ones start once the selected repository is associated with GitHub
+  (desktop waited for it to be selected again).
+- **The selected repository is fetched in the background wherever it's
+  hosted,** while it has a remote: on GitHub at its poll interval, elsewhere
+  every hour, plus the skew. Desktop fetched only GitHub repositories, so a
+  GitLab repository's indicator updated while it wasn't selected and never
+  while it was.
 - **`X-Poll-Interval` is read in seconds** (desktop compared it with
   milliseconds).
+- **The default branch is the local branch named like it,** then a local
+  branch tracking the remote's default branch, then the remote branch.
+  Desktop put the tracking branch first, so with `main` unpublished, a
+  branch made from `origin/main` with git (which tracks it) became the
+  default: it couldn't be deleted or updated from `main`.
+- **A branch whose upstream is gone isn't published:** the menu's Pull,
+  Compare on GitHub, and View Branch on GitHub are off for it, as the sync
+  button offers Publish Branch. Desktop's menu went by the configured
+  upstream alone, so after a merged pull request's branch was deleted and
+  pruned, Pull failed and the GitHub pages were missing.
 - **Branch pruning keeps desktop's safeguards,** runs as background work,
   records each deletion with its SHA (restorable), reads the branches itself
   and keeps one that moved since it was found merged, and writes the last
@@ -338,9 +353,12 @@ remotes from before the mark aren't migrated (my call).
   recovered after `git worktree remove`.
 - **Pull request lists:** an empty answer replaces the list, a list with a
   failed page is never stored, and fork remotes are pruned only after
-  GitHub answers. **Repository rules:** RE2 patterns are translated to ICU
-  (one that can't compile, or with an operator Espalier doesn't know,
-  passes); a required pull request blocks the commit with a message.
+  GitHub answers, keeping those the branches on disk track (desktop
+  checked the loaded branch list, and a repository that shares another
+  clone's pull requests may never have loaded it). **Repository rules:**
+  RE2 patterns are translated to ICU (one that can't compile, or with an
+  operator Espalier doesn't know, passes); a required pull request blocks
+  the commit with a message.
 - **Fork This Repository asks before replacing an `upstream` remote that
   points elsewhere,** as the check at selection does: Update points it at
   the fork's parent, Ignore keeps it. Desktop overwrote it with the old
@@ -611,6 +629,12 @@ immediately; importing desktop's repository list and settings (my call).
   does (my call; desktop's makes Cancel the default).
 - **Delete Branch for a branch with a pull request names the branch**
   (desktop's didn't).
+- **Branch and tag names follow git's rules for each part of the name:**
+  slashes in a row collapse, a leading slash goes, and a part's leading dot
+  or ending `.lock` becomes a hyphen ("Will be created as …"); `HEAD` is not
+  a valid name. Desktop checked only the whole name, so git refused after
+  the sheet closed. Create Tag says a name is not valid, as the branch
+  sheets do (it said what an empty name would be created as).
 - **An empty branch list reads "No Branches"** with nothing typed in the
   filter (desktop's said it couldn't find that branch).
 - **The branch popover is desktop's branch switcher:** a click or Return
@@ -724,6 +748,15 @@ immediately; importing desktop's repository list and settings (my call).
   token and points to the OAuth app's settings.
 - **Enterprise (Server and ghe.com) needs an OAuth app with device flow
   registered on that server;** its client ID is stored per account.
+- **Remotes match accounts and each other by server:** an HTTPS remote by
+  host and port, an SSH remote by host alone (its port is the SSH
+  server's), with `ssh.github.com` (GitHub's SSH over port 443) as
+  `github.com`. Hosts, owners, and names compare ignoring case everywhere.
+  An Enterprise server's web address keeps its port, so sign-in, links,
+  and credentials reach a server on a port other than 443, and its token
+  goes to that port only. Desktop dropped the port from the web address
+  (and so gave the token to the same host's port 443), compared a remote's
+  host with its port, and compared case in some places but not others.
 - **No untrusted-certificate prompt:** the error names the server and says
   to trust its certificate in Keychain Access. Redirects keep
   `Authorization` only on the same origin.
@@ -739,7 +772,12 @@ immediately; importing desktop's repository list and settings (my call).
   tooltip says In progress only while one runs (else Waiting if one waits,
   else Queued); an account whose token the keychain won't give (locked,
   access denied) stays saved but unused, and Settings ▸ Accounts offers
-  Try Again (desktop dropped it from the saved list).
+  Try Again (desktop dropped it from the saved list); an HTTPS remote's
+  user info ends before its path (desktop read
+  `https://evil.example/x@github.com/o/r` as github.com's); SSH remotes
+  ending in `.git/`, and `owner/name.git` typed in Clone, leave `.git` out
+  of the name; GitHub.com typed in any case as an Enterprise address signs
+  in to GitHub.com.
 - **An account without a usable token is signed out at launch,** with the
   Signed Out alert: a token missing from the keychain, or stored in a form
   Espalier can't read, which is removed. Desktop loaded a missing token as
@@ -784,11 +822,31 @@ immediately; importing desktop's repository list and settings (my call).
   normalization stay apart.
 - **Kept as desktop:** `getGitDescription` reads `<path>/.git/description`,
   so it's empty for linked worktrees and submodules.
+- **A conflicted file's conflicts are counted from the file,** by its lines
+  that open one (`<<<<<<<`). `git diff --check` still says whether markers
+  are left, but counts every marker, and a conflict has four in the diff3
+  styles (desktop's markers ÷ 3 made one conflict two).
+- **A remote's name can have a `/`:** a remote branch's remote, and an
+  upstream's, is the longest of the remotes' names it starts with (then a
+  `/`), as the graph splits them; with none, it ends at the first `/`.
+  Desktop always ended it at the first `/`, so `team/alice/main` read as
+  remote `team`, branch `alice/main`, and pushing, fetching, deleting the
+  remote branch, checking it out, and matching pull requests used a remote
+  that isn't there. `getBranches` reads the remotes' names (`git remote`)
+  beside its `for-each-ref`, and the current branch from status is matched
+  against the remotes as last loaded, and again when they load. Not
+  `branch.<name>.remote`: status doesn't report it, and the current branch
+  has to agree with the branch list. Git refuses a remote whose name nests
+  in another's, so only a hand-edited configuration has two that match.
 - **Desktop bugs fixed:** `.gitignore` writes with `core.autocrlf` and
   `safecrlf`; `splitBuffer` skipping a delimiter's UTF-16 length; a binary
   rename breaking `getBinaryPaths`; missing `--no-ext-diff` on range diffs;
   pull request preview image diffs against the wrong base; uppercase image
-  extensions; a detached rebase's `head-name` newline.
+  extensions; a detached rebase's `head-name` newline; diffs with
+  `diff.suppressBlankEmpty`, whose empty context lines failed the parse
+  (they're read as `git apply` reads them, within the hunk's counts); a
+  change or type change staged and then deleted showing as Modified (it's
+  Deleted).
 
 ## Writing to the repository
 
@@ -863,7 +921,9 @@ immediately; importing desktop's repository list and settings (my call).
   can't merge; cherry-pick's `-m 1` as one argument; squash dropping `#`
   lines and losing its message after conflicts; `--continue`/`--skip` with
   `--no-verify`; "up to date" missed with `rebase.autoStash`; extra blank
-  lines after summary-only commits in squash's description.
+  lines after summary-only commits in squash's description; "would be
+  overwritten" naming only git's first list (changed files, not the
+  untracked ones after them) and dropping a path's leading spaces.
 
 ## Network
 
@@ -880,10 +940,12 @@ immediately; importing desktop's repository list and settings (my call).
 - **The clone destination check covers the account's real home directory,**
   not only `HOME`.
 - **Desktop bugs fixed:** git 2.53's "Updating files" progress title
-  (checkout progress never moved); the revert parser's 0/0 percentages; a
-  failed LFS progress file made git-lfs write a file named `null` into the
-  repository; `tailByLine` splitting lines across reads; `pull` dropping its
-  hook and output callbacks; `isTrackedByLFS` lacking `--`.
+  (checkout progress never moved); clone progress moving back when a
+  submodule's clone reports the same steps; the revert parser's 0/0
+  percentages; a failed LFS progress file made git-lfs write a file named
+  `null` into the repository; `tailByLine` splitting lines across reads;
+  `pull` dropping its hook and output callbacks; `isTrackedByLFS` lacking
+  `--`.
 
 ## Trampoline: credentials, SSH, and the hooks proxy
 

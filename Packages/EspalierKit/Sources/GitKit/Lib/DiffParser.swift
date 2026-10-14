@@ -40,6 +40,8 @@ private let DiffPrefixAdd = UInt8(ascii: "+")
 private let DiffPrefixDelete = UInt8(ascii: "-")
 private let DiffPrefixContext = UInt8(ascii: " ")
 private let DiffPrefixNoNewline = UInt8(ascii: "\\")
+/// The newline that starts an empty line.
+private let DiffPrefixEmptyContext = UInt8(ascii: "\n")
 
 /// A parser for the GNU unified diff format
 ///
@@ -280,6 +282,21 @@ private struct DiffParserState {
         }
     }
 
+    /// `DiffPrefixEmptyContext` when the next line is an empty context line,
+    /// else nil. With `diff.suppressBlankEmpty`, git writes a context line
+    /// that's empty in both files as an empty line, without its space. An
+    /// empty line is one only while the hunk's header still expects a line
+    /// in both files, as `git apply` reads it; otherwise it ends the hunk.
+    func emptyContextLinePrefix(_ header: DiffHunkHeader, _ oldLine: Int, _ newLine: Int) -> UInt8? {
+        guard peek() == DiffPrefixEmptyContext,
+              oldLine - header.oldStartLine < header.oldLineCount,
+              newLine - header.newStartLine < header.newLineCount
+        else {
+            return nil
+        }
+        return DiffPrefixEmptyContext
+    }
+
     /// Parses a hunk, including its header or throws an error if the diff doesn't
     /// contain a well-formed diff hunk at the current position.
     ///
@@ -305,9 +322,18 @@ private struct DiffParserState {
         var rollingDiffAfterCounter = header.newStartLine
 
         var diffLineNumber = linesConsumed
-        while let c = parseLinePrefix(peek()) {
-            guard let line = readLine() else {
-                throw GitLibError("Expected unified diff line but reached end of diff")
+        while let c = parseLinePrefix(peek())
+            ?? emptyContextLinePrefix(header, rollingDiffBeforeCounter, rollingDiffAfterCounter) {
+            let line: Range<Int>
+            if c == DiffPrefixEmptyContext {
+                // `nextLine` moves past an empty line but reports false.
+                _ = nextLine()
+                line = ls..<le
+            } else {
+                guard let nonEmptyLine = readLine() else {
+                    throw GitLibError("Expected unified diff line but reached end of diff")
+                }
+                line = nonEmptyLine
             }
 
             // A marker indicating that the last line in the original or the new file
@@ -357,7 +383,8 @@ private struct DiffParserState {
                 rollingDiffBeforeCounter += 1
             } else {
                 diffLine = DiffLine(
-                    text: string(line),
+                    // An empty context line reads as git writes it by default.
+                    text: c == DiffPrefixEmptyContext ? " " : string(line),
                     type: .context,
                     originalLineNumber: diffLineNumber,
                     oldLineNumber: rollingDiffBeforeCounter,

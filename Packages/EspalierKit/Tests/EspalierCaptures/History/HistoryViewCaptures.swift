@@ -248,6 +248,18 @@ struct HistoryViewCaptures {
         capture(CreateTagForm(content: taken, name: .constant(taken.name)), named: "createTag-taken", area: area)
     }
 
+    @Test("the tag sheet with a name git refuses")
+    func createTagInvalid() {
+        let name = "HEAD"
+        let invalid = CreateTagContent(
+            name: name,
+            sanitizedName: sanitizedRefName(name),
+            error: CreateTagContent.invalidNameError(name),
+            previousTags: []
+        )
+        capture(CreateTagForm(content: invalid, name: .constant(name)), named: "createTag-invalid", area: area)
+    }
+
     @Test("Go to Commit when no commit matches")
     func goToCommit() {
         capture(

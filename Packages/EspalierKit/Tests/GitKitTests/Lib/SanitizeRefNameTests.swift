@@ -33,6 +33,34 @@ struct SanitizeRefNameTests {
         #expect(sanitizedRefName("a.lock\n") == "a.lock-")
     }
 
+    // Git applies its rules to each `/`-separated component, and refuses
+    // empty components: the sanitized name is one git creates a branch and
+    // a tag with.
+    @Test("applies git's rules to each component of the name", arguments: [
+        NamedCase("collapses slashes in a row", (name: "feature//x", expected: "feature/x")),
+        NamedCase("removes a leading slash", (name: "/foo", expected: "foo")),
+        NamedCase("replaces a dot starting a component", (name: "feature/.x", expected: "feature/-x")),
+        NamedCase("replaces .lock ending a component", (name: "a.lock/b", expected: "a-/b")),
+        NamedCase("replaces a component's leading dot before .lock", (name: "a/.lock", expected: "a/-lock")),
+        NamedCase("replaces a dot left at the start", (name: "~.a", expected: "a")),
+    ])
+    func componentRules(_ testCase: NamedCase<(name: String, expected: String)>) async throws {
+        let sanitized = sanitizedRefName(testCase.value.name)
+        #expect(sanitized == testCase.value.expected)
+
+        let repository = try setupEmptyRepository()
+        try await makeCommit(repository, Tree(entries: [TreeEntry(path: "file.txt", contents: "one\n")]))
+        try await GitKit.createBranch(repository, sanitized, nil)
+        try await createTag(repository, sanitized, "HEAD")
+    }
+
+    @Test("leaves nothing of HEAD, which git refuses as a branch or tag name")
+    func head() {
+        #expect(sanitizedRefName("HEAD") == "")
+        #expect(sanitizedRefName("-HEAD") == "")
+        #expect(sanitizedRefName("feature/HEAD") == "feature/HEAD")
+    }
+
     // A global regex keeps `lastIndex` after a match, so its next test
     // would start searching where the previous match ended.
     @Test("testForInvalidChars rejects every invalid name, one after another")

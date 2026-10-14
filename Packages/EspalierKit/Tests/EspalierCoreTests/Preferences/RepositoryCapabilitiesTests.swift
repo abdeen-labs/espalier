@@ -26,10 +26,11 @@ private let main = branch("main", upstream: "origin/main")
 private let feature = branch("feature", upstream: "origin/feature")
 
 /// A repository on `tip`, with `main` as its default branch and the
-/// contribution target.
+/// contribution target; `tip` is published when it has an upstream.
 private func onBranch(_ tip: Branch = feature, _ change: (inout RepositoryCapabilities.RepositoryState) -> Void = { _ in }) -> RepositoryCapabilities.State {
     var repository = RepositoryCapabilities.RepositoryState(
         tip: .valid(branch: tip),
+        isBranchPublished: tip.upstream != nil,
         defaultBranch: main,
         contributionTargetDefaultBranch: main,
         hasRemote: true
@@ -395,6 +396,33 @@ struct RepositoryCapabilitiesModelTests {
 
         let capabilities = fixture.app.capabilities
         #expect(capabilities.canToggleStashedChanges)
+        await fixture.app.idle()
+    }
+
+    @Test("a branch whose upstream is gone: the sync button publishes it, and the menu has no Pull or GitHub branch items")
+    func goneUpstream() async throws {
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["checkout", "-q", "-b", "feature"], local)
+            try await commitFile(local, "feature.txt", "feature\n")
+            try await runGit(["push", "-q", "-u", "origin", "feature"], local)
+        }
+        fixture.app.preferences.hasShownWelcomeFlow = true
+        fixture.app.updateRecord(fixture.model.id) { $0.gitHubRepository = ModelFixtures.gitHubRepository() }
+        let published = fixture.app.capabilities
+        #expect(published.canPull && published.canCompareOnGitHub && published.canViewBranchOnGitHub)
+
+        // The merged pull request's branch is deleted, and pruned here.
+        try await runGit(["branch", "-D", "feature"], fixture.remote)
+        try await runGit(["fetch", "-q", "--prune"], fixture.local)
+        await fixture.model.refresh(.full, reason: .user)
+
+        #expect(fixture.model.gitState.tip.branch?.upstream == "origin/feature")
+        #expect(!fixture.model.gitState.isCurrentBranchPublished)
+        #expect(fixture.model.sync.action == .publishBranch(remote: "origin", isGitHubRepository: true))
+        let capabilities = fixture.app.capabilities
+        #expect(!capabilities.canPull)
+        #expect(!capabilities.canCompareOnGitHub && !capabilities.canViewBranchOnGitHub)
+        #expect(capabilities.canPush && capabilities.canFetch)
         await fixture.app.idle()
     }
 

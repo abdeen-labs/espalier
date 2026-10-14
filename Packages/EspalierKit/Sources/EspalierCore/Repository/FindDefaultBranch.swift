@@ -71,10 +71,10 @@ public func findDefaultBranch(
         }
     }
 
-    // When determining what the default branch is we give priority to local
+    // When determining what the default branch is we give priority to the
+    // local branch named the same as the default branch, then to local
     // branches tracking the default branch of the contribution target (think
-    // origin) remote, then we consider local branches that are named the same
-    // as the default branch, and finally we look for the remote branch
-    // representing the default branch of the contribution target
-    return localTrackingHit ?? localHit ?? remoteHit
+    // origin) remote, and finally we look for the remote branch representing
+    // the default branch of the contribution target
+    return localHit ?? localTrackingHit ?? remoteHit
 }

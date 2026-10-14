@@ -35,6 +35,25 @@ struct ForEachRefTests {
             #expect(master.tip.sha == "b9ccfc3307240b86447bca2bd6c51a4bb4ade493")
         }
 
+        @Test("finds the remote of an upstream and of a remote branch when the remote's name has a slash")
+        func remoteNameWithSlash() async throws {
+            let repository = try await setupTwoCommitRepo()
+            let remote = try setupEmptyDirectory()
+            _ = try await git(["init", "-q", "--bare"], remote.path, "remoteNameWithSlash")
+            _ = try await git(["remote", "add", "team/alice", remote.path], repository.path, "remoteNameWithSlash")
+            _ = try await git(["push", "-q", "-u", "team/alice", "master"], repository.path, "remoteNameWithSlash")
+
+            let branches = try await getBranches(repository)
+            let master = try #require(branches.first { $0.ref == "refs/heads/master" })
+            #expect(master.upstream == "team/alice/master")
+            #expect(master.upstreamRemoteName == "team/alice")
+            #expect(master.upstreamWithoutRemote == "master")
+
+            let remoteMaster = try #require(branches.first { $0.ref == "refs/remotes/team/alice/master" })
+            #expect(try remoteMaster.remoteName == "team/alice")
+            #expect(remoteMaster.nameWithoutRemote == "master")
+        }
+
         @Test("should return empty list for empty repo")
         func emptyListForEmptyRepo() async throws {
             let repo = try setupEmptyRepository()

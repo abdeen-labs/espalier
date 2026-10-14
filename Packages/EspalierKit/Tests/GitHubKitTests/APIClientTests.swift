@@ -16,8 +16,8 @@ struct APIClientTests {
             #expect(getHTMLURL("https://api.github.com") == "https://github.com")
             #expect(getHTMLURL("https://github.mycompany.com/api/v3") == "https://github.mycompany.com")
             #expect(getHTMLURL("http://github.mycompany.com/api/v3") == "http://github.mycompany.com")
-            // Node's legacy URL parsing drops the port.
-            #expect(getHTMLURL("https://github.mycompany.com:8443/api/v3") == "https://github.mycompany.com")
+            #expect(getHTMLURL("https://github.mycompany.com:8443/api/v3") == "https://github.mycompany.com:8443")
+            #expect(getHTMLURL("https://github.mycompany.com:443/api/v3") == "https://github.mycompany.com")
             #expect(getHTMLURL("https://api.octocorp.ghe.com/") == "https://octocorp.ghe.com/")
         }
 

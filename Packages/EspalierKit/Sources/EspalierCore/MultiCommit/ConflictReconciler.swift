@@ -326,7 +326,7 @@ func hasResolvedConflicts(_ status: StatusResult, previouslyConflicted: Set<Exac
         guard case .conflicted(let conflicted) = file.status else {
             continue
         }
-        if case .conflictsWithMarkers(_, 0, _) = conflicted {
+        if case .conflictsWithMarkers(_, 0, _, _) = conflicted {
             return true
         }
         conflictedNow.insert(ExactString(file.path))
@@ -350,7 +350,7 @@ func effectiveManualResolutions(
 ) -> [String: ManualConflictResolution] {
     var effective = resolutions
     for file in files {
-        if case .conflicted(.conflictsWithMarkers(_, 0, _)) = file.status {
+        if case .conflicted(.conflictsWithMarkers(_, 0, _, _)) = file.status {
             effective[file.path] = nil
         }
     }

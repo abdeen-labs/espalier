@@ -67,6 +67,25 @@ struct PushOperationTests {
         await fixture.app.idle()
     }
 
+    @Test("pushes to the remote a branch tracks when the remote's name has a slash")
+    func remoteNameWithSlash() async throws {
+        let team = try await makeEmptyBareRemote()
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["remote", "add", "team/alice", team.path], local)
+            try await runGit(["checkout", "-q", "-b", "feature"], local)
+            try await runGit(["push", "-q", "-u", "team/alice", "feature"], local)
+            try await commitFile(local, "feature.txt", "feature\n")
+        }
+        #expect(fixture.model.gitState.tip.branch?.upstreamRemoteName == "team/alice")
+        #expect(fixture.model.gitState.remotes.currentRemote?.name == "team/alice")
+        #expect(fixture.model.sync.action == .push(remote: "team/alice", aheadBehind: AheadBehind(ahead: 1, behind: 0), tagsToPush: 0))
+
+        #expect(try await fixture.model.sync.push() == .pushed(branch: "feature", remote: "team/alice", tags: [], fetchFailure: nil))
+        #expect(try await resolveRef("refs/heads/feature", in: team) == (try await fixture.head()))
+        #expect(try await fixture.remoteTip("feature") == nil)
+        await fixture.app.idle()
+    }
+
     @Test("pushes a branch tracking a branch of another name to that branch")
     func upstreamOfAnotherName() async throws {
         let fixture = try await makeSelectedRepository { local in

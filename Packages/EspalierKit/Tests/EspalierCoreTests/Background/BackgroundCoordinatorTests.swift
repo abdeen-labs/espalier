@@ -71,7 +71,7 @@ struct BackgroundCoordinatorTests {
         #expect(!app.background.indicators.isRunning)
     }
 
-    @Test("runs the fetcher and pruner for the selected GitHub repository; the fetcher after its first status pass")
+    @Test("runs the fetcher for the selected repository after its first status pass, and the pruner for a GitHub one")
     func selectionServices() async throws {
         let harness = try AppHarness(backgroundServices: .all)
         let app = await harness.loadedApp()
@@ -80,9 +80,12 @@ struct BackgroundCoordinatorTests {
         let background = app.background!
 
         app.select(.repository(local))
+        #expect(!background.fetcher.isRunning)
         await app.idle()
         await settle()
-        #expect(!background.fetcher.isRunning)
+        #expect(background.fetcher.repositoryID == local)
+        // The first selection since launch: the initial skew.
+        #expect(background.fetcher.startedWithInitialSkew)
         #expect(!background.pruner.isRunning)
 
         app.select(.repository(gitHub))
@@ -94,13 +97,13 @@ struct BackgroundCoordinatorTests {
         // Not the first selection since launch: no initial skew.
         #expect(background.fetcher.startedWithInitialSkew == false)
 
-        app.select(.repository(local))
+        app.select(nil)
         #expect(!background.fetcher.isRunning)
         #expect(!background.pruner.isRunning)
         await app.idle()
     }
 
-    @Test("starts the fetcher and pruner once the selected repository is associated with GitHub")
+    @Test("starts the pruner once the selected repository is associated with GitHub; the fetcher runs on")
     func associatedAfterSelection() async throws {
         let harness = try AppHarness(backgroundServices: .all)
         let app = await harness.loadedApp()
@@ -110,7 +113,7 @@ struct BackgroundCoordinatorTests {
         app.select(.repository(id))
         await app.idle()
         await settle()
-        #expect(!background.fetcher.isRunning)
+        #expect(background.fetcher.repositoryID == id)
         #expect(!background.pruner.isRunning)
 
         // Signing in associates the selected repository; the association
@@ -121,12 +124,12 @@ struct BackgroundCoordinatorTests {
         await app.idle()
         await settle()
         #expect(background.fetcher.repositoryID == id)
-        // Selected once since launch: the late start keeps that.
+        // Selected once since launch: the fetcher keeps its initial skew.
         #expect(background.fetcher.startedWithInitialSkew)
 
         // A second update starts nothing twice.
         background.update()
-        #expect(background.fetcher.repositoryID == id)
+        #expect(background.pruner.repositoryID == id)
         await app.idle()
     }
 

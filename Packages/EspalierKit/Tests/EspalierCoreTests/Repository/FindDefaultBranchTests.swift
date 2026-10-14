@@ -21,11 +21,23 @@ struct FindDefaultBranchTests {
         try await findDefaultBranch(record, try await getBranches(record.gitRepository), defaultRemote)
     }
 
-    @Test("prefers the local branch tracking the remote's default branch")
-    func trackingBranchFirst() async throws {
+    @Test("prefers the local branch named like the default branch, without an upstream, to another branch tracking the remote's")
+    func namedBranchFirst() async throws {
         let clone = try await makeClone()
         try await run(clone, ["branch", "--unset-upstream", "master"])
-        try await run(clone, ["branch", "--track", "tracker", "origin/master"])
+        // A branch made from the remote's default branch tracks it.
+        try await run(clone, ["branch", "--track", "feature", "origin/master"])
+
+        let branch = try #require(try await findDefault(RepositoryRecord(path: clone.path)))
+        #expect(branch.name == "master")
+        #expect(branch.upstream == nil)
+    }
+
+    @Test("without a local branch named like the default branch, prefers one tracking the remote's default branch")
+    func trackingBranch() async throws {
+        let clone = try await makeClone()
+        try await run(clone, ["checkout", "-b", "tracker", "--track", "origin/master"])
+        try await run(clone, ["branch", "-D", "master"])
 
         let branch = try #require(try await findDefault(RepositoryRecord(path: clone.path)))
         #expect(branch.name == "tracker")

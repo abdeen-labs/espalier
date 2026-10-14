@@ -144,16 +144,21 @@ extension SyncModel {
     /// Removes the fork remotes Espalier added that nothing uses any more; it
     /// runs whenever the open pull requests are loaded. Background work: skipped behind another
     /// network operation, failures only logged.
+    ///
+    /// The remotes and branches are read from the repository as it prunes:
+    /// a repository that shares the selected one's pull requests may never
+    /// have loaded its branches, and branches made since the last refresh
+    /// count.
     func pruneForkedRemotes(openPullRequests: [PullRequest]) async {
         guard let repository else {
             return
         }
-        let branches = repository.gitState.branches.all
         let descriptor = OperationDescriptor(kind: .setRemoteURL, lanes: [.network], policy: .background, refreshAfter: [])
         do {
             let removed = try await repository.performIfIdle(descriptor) { ctx -> Int in
                 let remotes = try await getRemotes(ctx.repository)
                 let forkRemoteNames = try await getForkRemoteNames(ctx.repository)
+                let branches = try await getBranches(ctx.repository)
                 let remotesToPrune = findForkedRemotesToPrune(remotes, forkRemoteNames: forkRemoteNames, openPullRequests, branches)
                 for remote in remotesToPrune {
                     try await removeRemote(ctx.repository, remote.name)

@@ -22,7 +22,8 @@ public enum SyncAction: Sendable, Equatable {
     case fetch(remote: String)
     /// 4. HEAD is detached: "Publish branch", disabled.
     case detachedHead(rebaseInProgress: Bool)
-    /// 5. The branch has no upstream: "Publish branch".
+    /// 5. The branch isn't published (it has no upstream, or its upstream is
+    /// gone): "Publish branch".
     case publishBranch(remote: String, isGitHubRepository: Bool)
     /// 7. Espalier rewrote the branch (rebase, squash, reorder, amend), its
     /// remote branch hasn't moved since, and it has diverged from its
@@ -191,6 +192,9 @@ extension SyncModel {
             break
         }
 
+        // Status reports ahead/behind only for a published branch
+        // (`RepositoryGitState.isCurrentBranchPublished`), so one whose
+        // upstream is gone is published again, as the menu has it.
         guard let aheadBehind = state.aheadBehind else {
             return .publishBranch(remote: remoteName, isGitHubRepository: repository.record.gitHubRepository != nil)
         }

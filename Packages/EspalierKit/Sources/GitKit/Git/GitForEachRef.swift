@@ -28,6 +28,9 @@ public func getBranches(_ repository: Repository, prefixes: [String]) async thro
 
     let prefixes = prefixes.isEmpty ? ["refs/heads", "refs/remotes"] : prefixes
 
+    // The remotes' names tell where a remote's name ends in an upstream or
+    // a remote branch's ref, since a remote's name can have a `/`.
+    async let remoteNames = getRemoteNames(repository)
     let result = try await git(
         ["for-each-ref"] + parser.formatArgs + prefixes,
         repository.path,
@@ -38,6 +41,7 @@ public func getBranches(_ repository: Repository, prefixes: [String]) async thro
     if result.gitError == .notAGitRepository {
         return []
     }
+    let names = try await remoteNames
 
     var branches: [Branch] = []
 
@@ -53,7 +57,7 @@ public func getBranches(_ repository: Repository, prefixes: [String]) async thro
 
         let upstream = ref[.upstreamShortName].isEmpty ? nil : ref[.upstreamShortName]
 
-        branches.append(Branch(name: ref[.shortName], upstream: upstream, tip: tip, type: type, ref: ref[.fullName]))
+        branches.append(Branch(name: ref[.shortName], upstream: upstream, tip: tip, type: type, ref: ref[.fullName], remoteNames: names))
     }
 
     return branches

@@ -167,6 +167,12 @@ struct FetchOperationTests {
         // A branch tracking a remote that's gone fetches the default.
         let gone = Tip.valid(branch: ModelFixtures.branch("main", upstream: "gone/main"))
         #expect(try await remotesToFetch(local, tip: gone, record: plain).map(\.name) == ["origin"])
+
+        // A remote whose name has a slash, read from the remotes it loads
+        // (a status-only refresh made the tip without them).
+        try await runGit(["remote", "add", "team/alice", "https://example.com/alice/app.git"], local)
+        let slash = Tip.valid(branch: ModelFixtures.branch("main", upstream: "team/alice/main"))
+        #expect(try await remotesToFetch(local, tip: slash, record: plain).map(\.name) == ["team/alice", "origin"])
     }
 
     @Test("a remote that fails doesn't stop the others; the first failure is thrown afterwards, with a Retry")

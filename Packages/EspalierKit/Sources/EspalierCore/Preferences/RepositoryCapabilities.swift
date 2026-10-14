@@ -51,7 +51,7 @@ public struct RepositoryCapabilities: Sendable, Equatable {
     /// Force Push: as Push, and the current branch can be force pushed
     /// (`isForcePushAvailable`).
     public let canForcePush: Bool
-    /// Pull: the current branch is published.
+    /// Pull: the current branch is published (its upstream exists).
     public let canPull: Bool
     /// Fetch: the repository has a remote.
     public let canFetch: Bool
@@ -114,9 +114,11 @@ public struct RepositoryCapabilities: Sendable, Equatable {
     public let canSquashAndMergeBranch: Bool
     /// Rebase Current Branch…: on a branch.
     public let canRebaseBranch: Bool
-    /// Compare on GitHub: on GitHub, and the branch is published.
+    /// Compare on GitHub: on GitHub, and the branch is published (its
+    /// upstream exists).
     public let canCompareOnGitHub: Bool
-    /// View Branch on GitHub: on GitHub, and the branch is published.
+    /// View Branch on GitHub: on GitHub, and the branch is published (its
+    /// upstream exists).
     public let canViewBranchOnGitHub: Bool
     /// Create Pull Request, or View Pull Request on GitHub: on GitHub, on a
     /// branch with commits.
@@ -223,6 +225,10 @@ extension RepositoryCapabilities {
     /// The selected repository's state the rules read.
     public struct RepositoryState: Sendable, Equatable {
         public var tip: Tip
+        /// Whether the current branch is published
+        /// (`RepositoryGitState.isCurrentBranchPublished`): its upstream
+        /// exists.
+        public var isBranchPublished: Bool
         /// The default branch.
         public var defaultBranch: Branch?
         /// `findContributionTargetDefaultBranch`.
@@ -257,6 +263,7 @@ extension RepositoryCapabilities {
 
         public init(
             tip: Tip = .unknown,
+            isBranchPublished: Bool = false,
             defaultBranch: Branch? = nil,
             contributionTargetDefaultBranch: Branch? = nil,
             hasStash: Bool = false,
@@ -273,6 +280,7 @@ extension RepositoryCapabilities {
             hasCurrentPullRequest: Bool = false
         ) {
             self.tip = tip
+            self.isBranchPublished = isBranchPublished
             self.defaultBranch = defaultBranch
             self.contributionTargetDefaultBranch = contributionTargetDefaultBranch
             self.hasStash = hasStash
@@ -322,7 +330,8 @@ extension RepositoryCapabilities {
         } else {
             true
         }
-        let hasPublishedBranch = !(branch?.upstream ?? "").isEmpty
+        // The sync button offers Publish for the same branches.
+        let hasPublishedBranch = onBranch && repo?.isBranchPublished == true
         let branchHasStashEntry = onBranch && repo?.hasStash == true
         let target = repo?.contributionTargetDefaultBranch
         let onContributionTargetDefaultBranch = branch.map { branch in
@@ -473,6 +482,7 @@ extension RepositoryModel {
         let isShowingStash: Bool = if case .stash = changes.selection { true } else { false }
         return RepositoryCapabilities.RepositoryState(
             tip: state.tip,
+            isBranchPublished: state.isCurrentBranchPublished,
             defaultBranch: state.branches.defaultBranch,
             contributionTargetDefaultBranch: findContributionTargetDefaultBranch(record, state.branches),
             hasStash: stash.current != nil,

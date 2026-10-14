@@ -1,7 +1,7 @@
 // Creating a tag: a name, cleaned up as a ref name ("Will be created as
-// …"), its checks (`tagNameError`: too long, already exists), and the
-// previous tags that match what's typed. It sits in the shared
-// `SheetScaffold`.
+// …"), its checks (nothing of it valid; `tagNameError`: too long, already
+// exists), and the previous tags that match what's typed. It sits in the
+// shared `SheetScaffold`.
 
 import EspalierCore
 import GitKit
@@ -22,6 +22,12 @@ nonisolated struct CreateTagContent: Sendable, Equatable {
     /// Whether the tag can be created.
     var canCreate: Bool {
         !sanitizedName.isEmpty && error == nil && !isCreating
+    }
+
+    /// The error for a name of which nothing makes a valid name (nil while
+    /// nothing is typed).
+    static func invalidNameError(_ name: String) -> String? {
+        name.isEmpty ? nil : "\(name) is not a valid name."
     }
 
     /// The latest three of `tags` that contain `name` (all of them for an
@@ -107,7 +113,7 @@ struct CreateTagSheet: View {
         return CreateTagContent(
             name: name,
             sanitizedName: sanitized,
-            error: sanitized.isEmpty ? nil : repository.branches.tagNameError(sanitized),
+            error: sanitized.isEmpty ? CreateTagContent.invalidNameError(name) : repository.branches.tagNameError(sanitized),
             previousTags: CreateTagContent.previousTags(tags, matching: name),
             isCreating: isCreating
         )

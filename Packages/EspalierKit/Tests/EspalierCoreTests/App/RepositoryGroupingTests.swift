@@ -153,13 +153,12 @@ struct RepositoryListGroupingTests {
             repository("/r/b"),
             repository("/r/B2", alias: "beta"),
             repository("/r/A"),
-            // An Enterprise server's web address drops the API's port
-            // (`getHTMLURL`); a ghe.com one keeps it.
+            // An Enterprise server's group keeps its port.
             repository("/r/server", gitHubRepoFixture(owner: "o", name: "server", endpoint: "https://ghe.io:8443/api/v3")),
             repository("/r/cloud", gitHubRepoFixture(owner: "o", name: "cloud", endpoint: "https://api.octo.ghe.com:8443/")),
         ]
         let grouped = groupRepositories(entries, [:], [])
-        #expect(grouped.map(\.id) == ["1:dotcom:abe", "1:dotcom:Zed", "2:enterprise:ghe.io", "2:enterprise:octo.ghe.com:8443", "3:other"])
+        #expect(grouped.map(\.id) == ["1:dotcom:abe", "1:dotcom:Zed", "2:enterprise:ghe.io:8443", "2:enterprise:octo.ghe.com:8443", "3:other"])
         #expect(grouped[4].items.map(\.text) == [["A", "A"], ["b", "b"], ["beta", "B2"]])
     }
 

@@ -373,7 +373,7 @@ public final class SignInModel {
 
         // If the user enters a github.com url in the GitHub Enterprise
         // sign-in flow we'll redirect them to the GitHub.com sign-in flow.
-        if address.contains(/^(?:https:\/\/)?(?:api\.)?github\.com($|\/)/) {
+        if isDotComAddress(address) {
             showDotComSignIn()
             return
         }

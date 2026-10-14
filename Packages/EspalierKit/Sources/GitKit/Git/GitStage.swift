@@ -21,7 +21,7 @@ public func stageManualConflictResolution(
         return
     }
 
-    if case .conflictsWithMarkers(_, let conflictMarkerCount, _) = status, conflictMarkerCount == 0 {
+    if case .conflictsWithMarkers(_, let conflictMarkerCount, _, _) = status, conflictMarkerCount == 0 {
         // If somehow the user used the UI to solve the conflict via ours/theirs
         // but afterwards resolved manually the conflicts via an editor, used the manually
         // resolved file.

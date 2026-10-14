@@ -11,7 +11,8 @@ public enum GitProtocol: String, Codable, Sendable, Hashable {
 public struct GitRemoteURL: Sendable, Hashable {
     public let `protocol`: GitProtocol
 
-    /// The hostname of the remote.
+    /// The hostname of the remote, with the port if the URL names one
+    /// (`ghe.example.com:8443`).
     public let hostname: String
 
     /// The owner of the GitHub repository.
@@ -33,12 +34,15 @@ public struct GitRemoteURL: Sendable, Hashable {
 // https://github.com/octocat/Hello-World.git/
 // git@github.com:octocat/Hello-World.git
 // git:github.com/octocat/Hello-World.git
+//
+// An HTTPS URL's user info ends at its last `@` before the first `/`. Every
+// form drops a trailing `/`, `.git`, or `.git/` from the name.
 nonisolated(unsafe) private let remoteRegexes: [(protocol: GitProtocol, regex: Regex<(Substring, Substring, Substring, Substring)>)] = [
-    (.https, /^https?:\/\/(?:.+@)?(.+)\/([^\/]+)\/([^\/]+?)(?:\/|\.git\/?)?$/),
-    (.ssh, /^git@(.+):([^\/]+)\/([^\/]+?)(?:\/|\.git)?$/),
-    (.ssh, /^(?:.+)@(.+\.ghe\.com):([^\/]+)\/([^\/]+?)(?:\/|\.git)?$/),
-    (.ssh, /^git:(.+)\/([^\/]+)\/([^\/]+?)(?:\/|\.git)?$/),
-    (.ssh, /^ssh:\/\/git@(.+)\/(.+)\/(.+?)(?:\/|\.git)?$/),
+    (.https, /^https?:\/\/(?:[^\/]+@)?(.+)\/([^\/]+)\/([^\/]+?)(?:\/|\.git\/?)?$/),
+    (.ssh, /^git@(.+):([^\/]+)\/([^\/]+?)(?:\/|\.git\/?)?$/),
+    (.ssh, /^(?:.+)@(.+\.ghe\.com):([^\/]+)\/([^\/]+?)(?:\/|\.git\/?)?$/),
+    (.ssh, /^git:(.+)\/([^\/]+)\/([^\/]+?)(?:\/|\.git\/?)?$/),
+    (.ssh, /^ssh:\/\/git@(.+)\/(.+)\/(.+?)(?:\/|\.git\/?)?$/),
 ]
 
 /// Parse the remote information from URL.
@@ -111,9 +115,17 @@ public func parseRepositoryIdentifier(_ url: String) -> RepositoryIdentifier? {
         return RepositoryIdentifier(hostname: parsed.hostname, owner: parsed.owner, name: parsed.name)
     }
 
+    // A `.git` suffix isn't part of the name, as in a URL.
     let pieces = url.split(separator: "/", omittingEmptySubsequences: false)
-    if pieces.count == 2 && !pieces[0].isEmpty && !pieces[1].isEmpty {
-        return RepositoryIdentifier(hostname: nil, owner: String(pieces[0]), name: String(pieces[1]))
+    if pieces.count == 2 {
+        let owner = String(pieces[0])
+        var name = String(pieces[1])
+        if name.hasSuffix(".git") {
+            name.removeLast(4)
+        }
+        if !owner.isEmpty && !name.isEmpty {
+            return RepositoryIdentifier(hostname: nil, owner: owner, name: name)
+        }
     }
 
     return nil

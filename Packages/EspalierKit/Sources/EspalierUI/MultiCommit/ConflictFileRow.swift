@@ -98,9 +98,10 @@ nonisolated public struct ConflictFileRowContent: Sendable, Equatable, Identifia
         let theirsLabel = offersSides ? getLabelForManualResolutionOption(entry.them, theirs) : nil
 
         if hasUnresolvedConflicts(status, manualResolution) {
-            if case .conflictsWithMarkers(_, let markers, _) = status {
-                // Each conflict has three markers (<<<<<<<, =======, >>>>>>>).
-                let conflicts = (markers + 2) / 3
+            if case .conflictsWithMarkers(_, _, let conflictCount, _) = status {
+                // Markers left without a line that opens a conflict still
+                // need resolving.
+                let conflicts = max(conflictCount, 1)
                 return ConflictFileRowContent(
                     path: file.path,
                     state: .markers(conflicts: conflicts),
@@ -129,7 +130,7 @@ nonisolated public struct ConflictFileRowContent: Sendable, Equatable, Identifia
             )
         }
 
-        let noConflictMarkers: Bool = if case .conflictsWithMarkers(_, 0, _) = status { true } else { false }
+        let noConflictMarkers: Bool = if case .conflictsWithMarkers(_, 0, _, _) = status { true } else { false }
         let resolvedMessage = "No conflicts remaining"
         let summary: String
         if noConflictMarkers {

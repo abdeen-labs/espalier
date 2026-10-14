@@ -277,6 +277,35 @@ struct BranchOperationsTests {
         await fixture.app.idle()
     }
 
+    @Test("deletes a remote branch, and a branch's upstream, on a remote whose name has a slash")
+    func deletesOnRemoteWithSlash() async throws {
+        let team = try await makeEmptyBareRemote()
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["remote", "add", "team/alice", team.path], local)
+            try await runGit(["checkout", "-q", "-b", "feature"], local)
+            try await commitFile(local, "feature.txt", "feature\n", message: "Feature")
+            try await runGit(["push", "-q", "-u", "team/alice", "feature"], local)
+            try await runGit(["push", "-q", "team/alice", "feature:topic"], local)
+            try await runGit(["checkout", "-q", "main"], local)
+        }
+        func teamHasBranch(_ name: String) async throws -> Bool {
+            try await runGitAllowingFailure(["rev-parse", "--verify", "--quiet", "refs/heads/\(name)"], team) == 0
+        }
+        let topic = try fixture.branch("team/alice/topic")
+        #expect(try topic.remoteName == "team/alice")
+        #expect(topic.nameWithoutRemote == "topic")
+
+        try await fixture.model.branches.delete(topic, includingRemote: false, confirmed: [.deleteRemoteBranch])
+        #expect(!(try await teamHasBranch("topic")))
+        #expect(try await teamHasBranch("feature"))
+
+        try await fixture.model.branches.delete(try fixture.branch("feature"), includingRemote: true, confirmed: [.deleteBranch])
+        #expect(!(try await teamHasBranch("feature")))
+        #expect(!(try await localBranchNames(fixture).contains("feature")))
+        #expect(try await remoteHasBranch(fixture, "main"))
+        await fixture.app.idle()
+    }
+
     @Test("deleting a remote branch already gone there removes the remote-tracking branch")
     func deletesRemoteBranchAlreadyGone() async throws {
         let fixture = try await makeRepository()

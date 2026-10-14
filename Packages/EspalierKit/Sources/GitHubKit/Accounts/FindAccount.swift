@@ -47,10 +47,10 @@ public func findAccountForRemoteURL(
     //    1. If that works, find the first account that can access it.
     //  3. And if all that fails then throw our hands in the air because we
     //     truly don't care.
-    if let parsedURL = parseRemote(urlOrRepositoryAlias) {
+    let parsedURL = parseRemote(urlOrRepositoryAlias)
+    if let parsedURL {
         let account = allAccounts.first { account in
-            let htmlURL = getHTMLURL(account.endpoint)
-            return parsedURL.hostname == hostname(of: htmlURL)
+            isRemote(parsedURL, onServerOf: account)
         }
 
         // If we find an account whose hostname matches the URL to be cloned, it's
@@ -63,7 +63,6 @@ public func findAccountForRemoteURL(
     if let repositoryIdentifier = parseRepositoryIdentifier(urlOrRepositoryAlias) {
         let owner = repositoryIdentifier.owner
         let name = repositoryIdentifier.name
-        let hostname = repositoryIdentifier.hostname
 
         // This chunk of code is designed to sort the user's accounts in this order:
         //  - authenticated GitHub account
@@ -86,9 +85,9 @@ public func findAccountForRemoteURL(
             .map(\.element)
 
         for account in sortedAccounts {
-            if let hostname {
-                let accountHost = GitHubKit.hostname(of: getHTMLURL(account.endpoint))
-                if accountHost != hostname {
+            // The identifier has a host when the input was a URL.
+            if let parsedURL {
+                if !isRemote(parsedURL, onServerOf: account) {
                     continue
                 }
             }

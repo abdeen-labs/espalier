@@ -167,7 +167,7 @@ struct MultiCommitCaptures {
 
     /// A file conflicted with markers in it.
     private static func conflictedFile(_ path: String) -> WorkingDirectoryFileChange {
-        let status = ConflictedFileStatus.conflictsWithMarkers(entry: UnmergedEntry(action: .bothModified), conflictMarkerCount: 3)
+        let status = ConflictedFileStatus.conflictsWithMarkers(entry: UnmergedEntry(action: .bothModified), conflictMarkerCount: 3, conflictCount: 1)
         return WorkingDirectoryFileChange(path: path, status: .conflicted(status), selection: DiffSelection.fromInitialSelection(.all))
     }
 

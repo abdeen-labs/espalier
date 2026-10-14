@@ -147,6 +147,10 @@ final class RepositoryRefresher {
                     (try await getRemotes(repository), await loadForkRemoteNames(repository))
                 }
                 guard token.isCurrent else { return }
+                // The current branch's upstream remote, with these remotes.
+                if case .valid(let branch) = state.tip {
+                    assign(\.tip, .valid(branch: branch.resolvingRemotes(remotes.map(\.name))), in: state)
+                }
                 let snapshot = remotesSnapshot(remotes, forkRemoteNames: forkRemoteNames, tip: state.tip, record: model.record)
                 assign(\.remotes, snapshot, in: state)
                 applied.insert(.remotes)
@@ -266,12 +270,15 @@ final class RepositoryRefresher {
         let currentBranch = status.currentBranch.flatMap { $0.isEmpty ? nil : $0 }
         let currentTip = status.currentTip.flatMap { $0.isEmpty ? nil : $0 }
         if let currentBranch, let currentTip {
+            // The remotes as last loaded tell where the upstream's remote
+            // name ends; loading the remotes resolves it again.
             tip = .valid(branch: Branch(
                 name: currentBranch,
                 upstream: status.currentUpstreamBranch.flatMap { $0.isEmpty ? nil : $0 },
                 tip: BranchTip(sha: currentTip),
                 type: .local,
-                ref: "refs/heads/\(currentBranch)"
+                ref: "refs/heads/\(currentBranch)",
+                remoteNames: state.remotes.all.map(\.name)
             ))
         } else if let currentTip {
             tip = .detached(currentSha: currentTip)
