@@ -16,28 +16,15 @@ private let invalidCharacterRegex = JSCompat.regex(#"[\x00-\x20\x7F~^:?*\[\\|"<>
 /// Slashes in a row, which leave an empty component.
 private let repeatedSlashesRegex = JSCompat.regex("//+")
 
-/// `/^[-\+]*/`, and a leading slash, which leaves an empty first component.
-private let leadingDashesAndPlusesRegex = JSCompat.regex(#"^[-+/]*"#)
+/// `/^[-\+]*/`, with a leading slash, which leaves an empty first
+/// component, and a leading dot.
+private let invalidStartRegex = JSCompat.regex(#"^[-+/.]*"#)
 
 /// Sanitize a proposed reference name by replacing illegal characters.
 ///
 /// Empty when nothing of the name can be used, as for `HEAD`, which git
 /// refuses as a branch or tag name.
 public func sanitizedRefName(_ name: String) -> String {
-    // Removing the start can leave a dot there (`~.a` becomes `-.a`, then
-    // `.a`), so this runs until the name stops changing.
-    var sanitized = name
-    while true {
-        let next = sanitizedRefNameOnce(sanitized)
-        if JSCompat.strictEquals(next, sanitized) {
-            break
-        }
-        sanitized = next
-    }
-    return JSCompat.strictEquals(sanitized, "HEAD") ? "" : sanitized
-}
-
-private func sanitizedRefNameOnce(_ name: String) -> String {
     let replaced = invalidCharacterRegex.stringByReplacingMatches(
         in: name,
         range: NSRange(name.startIndex..., in: name),
@@ -48,11 +35,15 @@ private func sanitizedRefNameOnce(_ name: String) -> String {
         range: NSRange(replaced.startIndex..., in: replaced),
         withTemplate: "/"
     )
-    return leadingDashesAndPlusesRegex.stringByReplacingMatches(
+    // A dot the replacements leave after the start (`~.a` becomes `-.a`)
+    // goes with it. The rest already follows the rules, so one pass is
+    // enough.
+    let sanitized = invalidStartRegex.stringByReplacingMatches(
         in: collapsed,
         range: NSRange(collapsed.startIndex..., in: collapsed),
         withTemplate: ""
     )
+    return JSCompat.strictEquals(sanitized, "HEAD") ? "" : sanitized
 }
 
 /// Validate that a reference does not contain any invalid characters

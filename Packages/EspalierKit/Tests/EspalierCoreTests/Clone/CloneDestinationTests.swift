@@ -236,6 +236,46 @@ struct CloneResolutionTests {
         await settle(app, harness)
     }
 
+    @Test("a signed-in account's \"not found\" stands when the anonymous lookup after it fails; an Enterprise server's failure counts", arguments: [
+        NamedCase("GitHub.com alone: not found", false),
+        NamedCase("an Enterprise server that can't be reached: its failure", true),
+    ])
+    func notFoundBeforeAnonymousFailure(_ testCase: NamedCase<Bool>) async throws {
+        let enterprise = testCase.value
+        let harness = try AppHarness()
+        harness.mockUser("octocat", id: 1)
+        // The account finds nothing, and the anonymous lookup is rate limited.
+        harness.gitHub.on("GET", "/repos/octocat/typo") { request in
+            request.header("Authorization") == nil
+                ? .json(["message": "API rate limit exceeded for 127.0.0.1."], status: 403)
+                : .status(404)
+        }
+        if enterprise {
+            try await harness.store(dotComAccount(), enterpriseAccount())
+            harness.mockUser("enterprise-user", id: 2, prefix: "/api/v3")
+            harness.gitHub.on("GET", "/api/v3/repos/octocat/typo", respond: .networkError(.notConnectedToInternet))
+        } else {
+            try await harness.store(dotComAccount())
+        }
+        let app = await harness.loadedAppWithAccounts()
+
+        let error = await #expect(throws: OperationError.self) {
+            try await app.clones.resolveCloneInfo("octocat/typo")
+        }
+        #expect(harness.gitHub.requests("GET", "/repos/octocat/typo").map { $0.header("Authorization") == nil } == [false, true])
+        if enterprise {
+            guard case .api(let failure)? = error?.reason else {
+                Issue.record("Unexpected error \(String(describing: error))")
+                return
+            }
+            // The Enterprise server's, which had no response.
+            #expect(failure.status == nil)
+        } else {
+            #expect(preconditionText(error) != nil)
+        }
+        await settle(app, harness)
+    }
+
     @Test("other hosts, wikis, and API failures clone what was typed")
     func asTyped() async throws {
         let harness = try AppHarness()

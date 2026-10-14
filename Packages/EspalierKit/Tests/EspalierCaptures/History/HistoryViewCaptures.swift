@@ -248,6 +248,17 @@ struct HistoryViewCaptures {
         capture(CreateTagForm(content: taken, name: .constant(taken.name)), named: "createTag-taken", area: area)
     }
 
+    @Test("the tag sheet with a name inside a tag's")
+    func createTagClash() {
+        let clash = CreateTagContent(
+            name: "v1.2/rc",
+            sanitizedName: "v1.2/rc",
+            error: "A tag named v1.2 already exists, so v1.2/rc can't be used",
+            previousTags: ["v1.2"]
+        )
+        capture(CreateTagForm(content: clash, name: .constant(clash.name)), named: "createTag-clash", area: area)
+    }
+
     @Test("the tag sheet with a name git refuses")
     func createTagInvalid() {
         let name = "HEAD"

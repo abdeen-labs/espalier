@@ -171,6 +171,52 @@ struct CompareModelTests {
         #expect(comparison.canStart)
     }
 
+    /// How a comparison loads again.
+    enum Reload: Sendable {
+        /// The other direction is compared.
+        case compare
+        /// The repository is deselected, and its history shown again.
+        case show
+    }
+
+    @Test("a merge check git couldn't make runs again when the comparison loads again", arguments: [
+        NamedCase("compared in the other direction", Reload.compare),
+        NamedCase("its history shown again", Reload.show),
+    ])
+    func retriesFailedMergeCheck(_ reload: NamedCase<Reload>) async throws {
+        let fixture = try await makeRepository()
+        // Merging `feature` into `main` needs both versions of a file, and
+        // the feature's is moved out of the object database.
+        try await fixture.git(["checkout", "-q", "feature"])
+        try await fixture.commit("main.txt", "feature's\n", message: "F4")
+        try await fixture.git(["checkout", "-q", "main"])
+        let blob = JSCompat.trim(try await fixture.git(["rev-parse", "feature:main.txt"]))
+        let object = POSIXPath.join(fixture.local.path, ".git", "objects", String(blob.prefix(2)), String(blob.dropFirst(2)))
+        let aside = POSIXPath.join(try createTempDirectory(), "object")
+        try FileManager.default.moveItem(atPath: object, toPath: aside)
+        await fixture.refresh()
+        await fixture.activate()
+
+        let history = fixture.history
+        let feature = try fixture.branch("feature")
+        try await history.compare(with: feature, direction: .behind)
+        await fixture.settle()
+        #expect(history.comparison.isMergeCheckFailed)
+
+        // The object is back, and the same pair of commits loads again.
+        try FileManager.default.moveItem(atPath: aside, toPath: object)
+        switch reload.value {
+        case .compare:
+            try await history.compare(with: feature, direction: .ahead)
+        case .show:
+            history.repositoryDidBecomeInactive()
+            await fixture.activate()
+        }
+        await fixture.settle()
+        #expect(history.comparison.mergePreview == MergePreview(status: .conflicts(conflictedFiles: 1), commitCount: 4))
+        #expect(!history.comparison.isMergeCheckFailed)
+    }
+
     @Test("a merge check stopped when the repository is deselected runs again when its history is shown")
     func resumesMergeCheck() async throws {
         let fixture = try await makeRepository()

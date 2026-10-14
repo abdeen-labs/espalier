@@ -73,7 +73,8 @@ public final class CompareModel {
     /// its commits are the ones behind. Nil when there's nothing to merge
     /// (the current branch isn't behind), or while the check isn't running:
     /// one stopped with the comparison's loads runs again when they resume
-    /// (`resumeLoads()`).
+    /// (`resumeLoads()`). A check git couldn't make runs again when the
+    /// comparison loads again or its loads resume.
     public private(set) var mergePreview: MergePreview?
     /// What rebasing the current branch onto the compared one would apply;
     /// loaded while `method` is `.rebase`.
@@ -223,9 +224,10 @@ public final class CompareModel {
         isLoading = false
         self.aheadBehind = aheadBehind
         // `begin` forgot the results of another pair of commits; the same
-        // pair (another direction) keeps them.
+        // pair (another direction) keeps them, but for a check git couldn't
+        // make.
         if aheadBehind.behind > 0 {
-            if mergePreview == nil {
+            if needsMergeCheck {
                 loadMergeability()
             }
         } else if mergePreview != nil || mergeabilitySlot.isRunning {
@@ -272,18 +274,28 @@ public final class CompareModel {
         }
     }
 
-    /// Runs again the checks `cancelLoads()` stopped: the merge's, while the
-    /// current branch is behind, and a rebase's preview.
+    /// Runs again the checks `cancelLoads()` stopped, and a merge check git
+    /// couldn't make: the merge's, while the current branch is behind, and a
+    /// rebase's preview.
     func resumeLoads() {
         guard !isLoading, let aheadBehind else {
             return
         }
-        if aheadBehind.behind > 0, mergePreview == nil, !mergeabilitySlot.isRunning {
+        if aheadBehind.behind > 0, needsMergeCheck, !mergeabilitySlot.isRunning {
             loadMergeability()
         }
         if method == .rebase, rebasePreview == nil, !rebasePreviewSlot.isRunning {
             loadRebasePreview()
         }
+    }
+
+    /// Whether the merge check is to run: it hasn't, it was stopped, or git
+    /// couldn't make it.
+    private var needsMergeCheck: Bool {
+        guard let mergePreview else {
+            return true
+        }
+        return mergePreview.status == nil
     }
 
     /// Whether a load is in flight.

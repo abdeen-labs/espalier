@@ -101,7 +101,7 @@ public enum ConflictedFileStatus: Hashable, Sendable {
     /// `conflictMarkerCount` counts the markers `git diff --check` finds,
     /// which can't tell conflicts apart: one has three markers in git's
     /// default style and four in the diff3 style. `conflictCount` counts
-    /// the lines in the file that open a conflict, read when there are
+    /// the markers that open a conflict, read from the file when there are
     /// markers.
     case conflictsWithMarkers(
         entry: TextConflictEntry,

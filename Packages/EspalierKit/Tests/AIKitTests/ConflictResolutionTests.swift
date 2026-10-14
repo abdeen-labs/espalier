@@ -117,17 +117,15 @@ struct ParseConflictResolutionTests {
         }
     }
 
-    @Test("leaves out a resolution without a path, which no file can claim")
-    func missingPath() throws {
-        for entry: JSONValue in [
-            ["hunks": [["resolvedContent": "c"]], "reasoning": "r"],
-            ["path": "  ", "hunks": [["resolvedContent": "c"]], "reasoning": "r"],
-            "a.ts",
-        ] {
-            let result = try parseAIConflictResolution(payload([entry, makeResolution("b.ts", "c", "r")]))
-            #expect(result.resolutions.map(\.path) == ["b.ts"])
-            #expect(result.invalidResolutions.isEmpty)
-        }
+    @Test("leaves out a resolution without a path, which no file can claim", arguments: [
+        NamedCase<JSONValue>("no path", ["hunks": [["resolvedContent": "c"]], "reasoning": "r"]),
+        NamedCase<JSONValue>("a blank path", ["path": "  ", "hunks": [["resolvedContent": "c"]], "reasoning": "r"]),
+        NamedCase<JSONValue>("a string in place of the resolution", "a.ts"),
+    ])
+    func missingPath(_ testCase: NamedCase<JSONValue>) throws {
+        let result = try parseAIConflictResolution(payload([testCase.value, makeResolution("b.ts", "c", "r")]))
+        #expect(result.resolutions.map(\.path) == ["b.ts"])
+        #expect(result.invalidResolutions.isEmpty)
     }
 
     @Test("sets aside, under its path, a text resolution without hunks, beside the valid ones")
@@ -139,14 +137,17 @@ struct ParseConflictResolutionTests {
         #expect(result.invalidResolutions.map(\.path) == ["a.ts", "b.ts"])
     }
 
-    @Test("accepts a missing, blank, or mistyped reasoning as none")
-    func missingReasoning() throws {
-        for reasoning: JSONValue? in [nil, "", "  ", 3] {
-            var entry: JSONObject = ["path": "a.ts", "hunks": [["resolvedContent": "c"]]]
-            entry["reasoning"] = reasoning
-            let result = try parseAIConflictResolution(payload([.object(entry)]))
-            #expect(result.resolutions.map(\.reasoning) == [reasoning?.stringValue ?? ""])
-        }
+    @Test("accepts a missing, blank, or mistyped reasoning as none", arguments: [
+        NamedCase<JSONValue?>("missing", nil),
+        NamedCase<JSONValue?>("empty", ""),
+        NamedCase<JSONValue?>("blank", "  "),
+        NamedCase<JSONValue?>("a number", 3),
+    ])
+    func missingReasoning(_ testCase: NamedCase<JSONValue?>) throws {
+        var entry: JSONObject = ["path": "a.ts", "hunks": [["resolvedContent": "c"]]]
+        entry["reasoning"] = testCase.value
+        let result = try parseAIConflictResolution(payload([.object(entry)]))
+        #expect(result.resolutions.map(\.reasoning) == [testCase.value?.stringValue ?? ""])
     }
 
     @Test("allows empty resolvedContent in a hunk (intentional deletion)")
@@ -578,14 +579,12 @@ struct CheckResolutionsTests {
         #expect(checked.unresolved[2].error == AIValidationError("No hunks"))
     }
 
-    @Test("accepts an action only for a delete-vs-modify conflict")
-    func actionsOnlyForDeleteConflicts() {
-        for action in [DeleteConflictAction.keep, .delete] {
-            let resolution = RawFileResolution(path: "text.ts", hunks: [], reasoning: "r", action: action)
-            #expect(checkResolutions(response([resolution]), [conflicted("text.ts")]).resolutions.isEmpty)
-            let deleted = FileConflictContext(path: "text.ts", hunks: [], deletedSide: .theirs)
-            #expect(checkResolutions(response([resolution]), [deleted]).resolutions.map(\.deleteConflictAction) == [action])
-        }
+    @Test("accepts an action only for a delete-vs-modify conflict", arguments: [DeleteConflictAction.keep, .delete])
+    func actionsOnlyForDeleteConflicts(_ action: DeleteConflictAction) {
+        let resolution = RawFileResolution(path: "text.ts", hunks: [], reasoning: "r", action: action)
+        #expect(checkResolutions(response([resolution]), [conflicted("text.ts")]).resolutions.isEmpty)
+        let deleted = FileConflictContext(path: "text.ts", hunks: [], deletedSide: .theirs)
+        #expect(checkResolutions(response([resolution]), [deleted]).resolutions.map(\.deleteConflictAction) == [action])
     }
 
     @Test("fails a file without its original content, at the reassembly stage")
@@ -598,26 +597,31 @@ struct CheckResolutionsTests {
         #expect(checked.unresolved.map(\.stage) == [.reassembleResponse])
     }
 
-    @Test("never reports a file as resolved while it still has conflict markers")
-    func leftoverMarkers() {
-        let file = conflicted("a.ts")
+    // A single marker is enough to reject the file.
+    @Test("never reports a file as resolved while its resolution has a conflict marker", arguments: [
+        NamedCase("an opening marker with a label", "<<<<<<< HEAD"),
+        NamedCase("a closing marker with a label", ">>>>>>> feature"),
+        NamedCase("a bare opening marker", "<<<<<<<"),
+        NamedCase("a closing marker before a JavaScript space", ">>>>>>>\u{2003}x"),
+    ])
+    func leftoverMarkers(_ marker: NamedCase<String>) {
+        let resolution = RawFileResolution(path: "a.ts", hunks: hunks("merged\n\(marker.value)"), reasoning: "r")
+        let checked = checkResolutions(response([resolution]), [conflicted("a.ts")])
+        #expect(checked.resolutions.isEmpty)
+        #expect(checked.unresolved.map(\.stage) == [.reassembleResponse])
+    }
 
-        // A single marker is enough to reject the file.
-        for marker in ["<<<<<<< HEAD", ">>>>>>> feature", "<<<<<<<", ">>>>>>>\u{2003}x"] {
-            let resolution = RawFileResolution(path: "a.ts", hunks: hunks("merged\n\(marker)"), reasoning: "r")
-            let checked = checkResolutions(response([resolution]), [file])
-            #expect(checked.resolutions.isEmpty)
-            #expect(checked.unresolved.map(\.stage) == [.reassembleResponse])
-        }
-
-        // A marker outside the file's blocks stays in the file too.
-        var stray = file
-        stray.rawContent = (file.rawContent ?? "") + "\n<<<<<<< leftover"
+    @Test("never reports a file as resolved while a marker outside its blocks stays in it")
+    func strayMarker() {
+        var stray = conflicted("a.ts")
+        stray.rawContent = (stray.rawContent ?? "") + "\n<<<<<<< leftover"
         #expect(checkResolutions(response([RawFileResolution(path: "a.ts", hunks: hunks("merged"), reasoning: "r")]), [stray]).resolutions.isEmpty)
+    }
 
-        // Separator lines alone are ordinary text (a Markdown heading).
+    @Test("reads separator lines alone as ordinary text (a Markdown heading)")
+    func separatorLines() {
         let heading = RawFileResolution(path: "a.ts", hunks: hunks("Title\n======="), reasoning: "r")
-        #expect(checkResolutions(response([heading]), [file]).resolutions.count == 1)
+        #expect(checkResolutions(response([heading]), [conflicted("a.ts")]).resolutions.count == 1)
     }
 
     @Test("matches a path the model changed to the one file it reads as", arguments: [
@@ -625,6 +629,7 @@ struct CheckResolutionsTests {
         NamedCase("Windows separators", (model: "src\\lib\\file.ts", file: "src/lib/file.ts")),
         NamedCase("a leading ./", (model: "./src/file.ts", file: "src/file.ts")),
         NamedCase("doubled separators", (model: "src//lib///file.ts", file: "src/lib/file.ts")),
+        NamedCase("a leading ./ with a doubled separator", (model: ".//src/file.ts", file: "src/file.ts")),
         NamedCase("a backslash in the name", (model: "src/a/b.ts", file: "src/a\\b.ts")),
         NamedCase("a backtick the prompt dropped", (model: "src/file.ts", file: "src/fi`le.ts")),
         NamedCase("a leading space the model trimmed", (model: "notes.md", file: " notes.md")),

@@ -139,7 +139,8 @@ extension SyncModel {
     /// The fetch the repository indicator updater makes for a repository
     /// that isn't selected, when `shouldBackgroundFetch(lastPush:)` says so:
     /// the bare minimum to know the current branch's ahead/behind. No
-    /// fast-forwarding, no refresh.
+    /// fast-forwarding, no refresh, and the repository's
+    /// `lastBackgroundFailure` stays as it is.
     ///
     /// Call it after a status pass, which loads the tip it uses.
     func fetchForIndicator(lastPush: Date?) async -> IndicatorFetchResult {
@@ -152,7 +153,13 @@ extension SyncModel {
         await refreshGitHubRepositoryIfNeeded()
         let tip = repository.gitState.tip
         let record = repository.record
-        let descriptor = OperationDescriptor(kind: .fetch, lanes: [.network], policy: .background, refreshAfter: [])
+        let descriptor = OperationDescriptor(
+            kind: .fetch,
+            lanes: [.network],
+            policy: .background,
+            refreshAfter: [],
+            updatesBackgroundFailure: false
+        )
         do {
             let result = try await repository.performIfIdle(descriptor) { ctx -> AheadBehind? in
                 let remotes = try await remotesToFetch(ctx.repository, tip: tip, record: record)

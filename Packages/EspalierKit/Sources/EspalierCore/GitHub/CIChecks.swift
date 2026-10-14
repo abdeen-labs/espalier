@@ -289,40 +289,16 @@ public func isFailure(_ check: RefCheck) -> Bool {
     CheckResult(check) == .failed
 }
 
-/// The latest run of each check in each check suite.
-///
-/// A rerun (a GitHub Actions job's or a rerequested suite's) adds a run of
-/// the same name to the same check suite, and GitHub's default `latest`
-/// filter already sends only the newest of those. Runs of the same name in
-/// different check suites are different checks (two workflows' `build`
-/// jobs, a workflow's runs for a push and for a pull request) and all stay.
+/// Every check run, each once, keyed by its id: GitHub's default `latest`
+/// filter already sends only the newest run of each check in a check suite.
+/// A run listed twice (on two pages, when runs were added between their
+/// requests) keeps its first place.
 public func getLatestCheckRunsById(_ checkRuns: [APIRefCheckRun]) -> [APIRefCheckRun] {
-    enum Key: Hashable {
-        case job(checkSuite: Int, name: String)
-        /// A run without a check suite stands alone.
-        case run(Int)
-    }
-    var order: [Key] = []
-    var latest: [Key: APIRefCheckRun] = [:]
-
-    for checkRun in checkRuns {
-        let key = checkRun.checkSuite.map { Key.job(checkSuite: $0.id, name: checkRun.name) } ?? .run(checkRun.id)
-        guard let current = latest[key] else {
-            order.append(key)
-            latest[key] = checkRun
-            continue
-        }
-        // Check run IDs increase, so the higher one ran later.
-        if current.id < checkRun.id {
-            latest[key] = checkRun
-        }
-    }
-
-    return order.compactMap { latest[$0] }
+    var seen: Set<Int> = []
+    return checkRuns.filter { seen.insert($0.id).inserted }
 }
 
-/// The checks of a ref: its legacy statuses, then the latest of its check
-/// runs.
+/// The checks of a ref: its legacy statuses, then its check runs.
 func refChecks(statuses: APIRefStatus, checkRuns: APIRefCheckRuns) -> [RefCheck] {
     statuses.statuses.map(apiStatusToRefCheck) + getLatestCheckRunsById(checkRuns.checkRuns).map(apiCheckRunToRefCheck)
 }

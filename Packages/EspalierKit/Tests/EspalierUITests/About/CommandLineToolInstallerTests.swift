@@ -70,8 +70,8 @@ struct CommandLineToolInstallerTests {
                 _ = try await CommandLineToolInstaller.install(system: system, at: link)
                 Issue.record("Installing replaced \(existing) without asking")
             } catch {
-                let destination = existing == .otherLink ? otherLink : nil
-                #expect(error.reason == .confirmationRequired(.replaceCommandLineTool(path: link, linkDestination: destination)))
+                let replaced: ExistingCommandLineTool = existing == .otherLink ? .link(otherLink) : .file
+                #expect(error.reason == .confirmationRequired(.replaceCommandLineTool(path: link, existing: replaced)))
             }
             #expect(CommandLineToolSystem.live.item(link) == before)
             let outcome = try await CommandLineToolInstaller.install(system: system, at: link, confirmed: [.replaceCommandLineTool])
@@ -85,5 +85,33 @@ struct CommandLineToolInstallerTests {
             return
         }
         #expect(CommandLineToolSystem.live.item(link) == .link(script))
+    }
+
+    @Test("something at the tool's path that can't be looked at asks as such before it's replaced")
+    func unexamined() async throws {
+        let folder = POSIXPath.join(try createTempDirectory(), "bin")
+        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: false)
+        let link = POSIXPath.join(folder, "espalier")
+        #expect(FileManager.default.createFile(atPath: link, contents: Data("someone else's\n".utf8)))
+        // Nothing in a folder that can't be searched can be looked at.
+        #expect(chmod(folder, 0o600) == 0)
+        defer { chmod(folder, 0o755) }
+        #expect(CommandLineToolSystem.live.item(link) == .unexamined)
+
+        let system = CommandLineToolSystem(
+            scriptPath: { "/Applications/Espalier.app/Contents/Resources/espalier.sh" },
+            item: CommandLineToolSystem.live.item,
+            linkAsUser: { _, _ in Issue.record("Installing linked the tool") },
+            runAsAdministrator: { _ throws(AdministratorCommandError) in
+                Issue.record("Installing asked for an administrator")
+                throw .failed("No administrator in tests.")
+            }
+        )
+        do {
+            _ = try await CommandLineToolInstaller.install(system: system, at: link)
+            Issue.record("Installing replaced it without asking")
+        } catch {
+            #expect(error.reason == .confirmationRequired(.replaceCommandLineTool(path: link, existing: .unexamined)))
+        }
     }
 }

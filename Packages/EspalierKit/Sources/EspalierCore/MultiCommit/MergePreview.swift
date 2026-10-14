@@ -29,9 +29,8 @@ public struct MergePreview: Sendable, Equatable {
 
     /// Whether a merge or squash merge can start, in Compare and the merge
     /// sheet: git has checked, the branch brings in commits, and the
-    /// histories are related. Conflicts are dealt with after the merge
-    /// starts. A check git couldn't make doesn't stop it: the merge itself
-    /// goes through, stops on conflicts, or says why it can't.
+    /// histories are related. Conflicts don't stop it, and neither does a
+    /// check git couldn't make (no status) or commits it couldn't count.
     public var canStart: Bool {
         switch status {
         case .loading?, .invalid?:

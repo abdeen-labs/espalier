@@ -714,6 +714,7 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
     ) -> AIConflictResultsContent {
         let ai = repository.ai
         let branches = repository.operations.conflictBranches
+        let roundLabels = (ours: results.summary.ourLabel, theirs: results.summary.theirLabel)
         let files = repository.changes.workingDirectory.files
         let skippedPaths = Set(results.skippedFiles.map(\.path))
         let failures = Dictionary(results.failedFiles.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
@@ -736,6 +737,7 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
                 choice: ai.resolutionChoice(forPath: path),
                 resolution: results.resolution(forPath: path),
                 branches: branches,
+                roundLabels: roundLabels,
                 offersModel: failures[path] == nil && !notAttempted.contains(path),
                 failure: failures[path]?.message ?? (notAttempted.contains(path) ? "Not attempted after an earlier request failed." : nil)
             )
@@ -752,6 +754,7 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
                 choice: ai.resolutionChoice(forPath: skippedFile.path),
                 resolution: nil,
                 branches: branches,
+                roundLabels: roundLabels,
                 offersModel: false,
                 failure: skippedFile.reason
             )
@@ -787,13 +790,18 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
         )
     }
 
-    /// A file's row: its explanation, its choice, and the menu.
+    /// A file's row: its explanation, its choice, and the menu. The
+    /// explanation names a side by its branch, else by the label the round
+    /// gave it (`results.summary`): a rebase's unknown base is the short SHA
+    /// of the commit it's being rebased onto, a revert's theirs "reverted
+    /// commit".
     static func resolutionRow(
         path: String,
         status: ConflictedFileStatus?,
         choice: ConflictResolutionChoice,
         resolution: FileResolution?,
         branches: ConflictBranches?,
+        roundLabels: (ours: String, theirs: String),
         offersModel: Bool,
         failure: String?
     ) -> AIResolutionRow {
@@ -838,13 +846,13 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
             explanation = offersModel ? (resolution?.reasoning ?? failure) : failure
         case .ours, .theirs:
             if let deletedSide {
-                let branch = deletedSide == .ours ? (ours ?? "current branch") : (theirs ?? "incoming branch")
+                let branch = deletedSide == .ours ? (ours ?? roundLabels.ours) : (theirs ?? roundLabels.theirs)
                 let deletes = (deletedSide == .ours) == (choice == .ours)
                 explanation = deletes ? "Deleting file (deleted on \(branch))" : "Keeping modified file"
             } else if choice == .ours {
-                explanation = "Using changes from \(ours ?? "current branch")"
+                explanation = "Using changes from \(ours ?? roundLabels.ours)"
             } else {
-                explanation = "Using changes from \(theirs ?? "incoming branch")"
+                explanation = "Using changes from \(theirs ?? roundLabels.theirs)"
             }
         }
         return AIResolutionRow(path: path, explanation: explanation, choiceLabel: choiceLabel, options: options, isResolved: false)

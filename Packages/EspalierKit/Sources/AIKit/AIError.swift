@@ -93,18 +93,21 @@ func outputLimitReachedError() -> AIProviderError {
 /// message.
 ///
 /// The message comes from `error.message` (OpenAI, Azure, Anthropic), a
-/// string `error` (Ollama), or a top-level `message`. A plain-text body is
-/// the message as it is; JSON with none of these, or an HTML page (a proxy's
-/// or gateway's), gives the description of the failure instead.
+/// string `error` (Ollama), or a top-level `message`; a body that's an array
+/// (Gemini's OpenAI-compatible endpoint) is read from its first element the
+/// same way, and a body that's a JSON string is the message. A plain-text
+/// body is the message as it is; other JSON, or an HTML page (a proxy's or
+/// gateway's), gives the description of the failure instead.
 public func parseProviderErrorResponse(statusCode: Int, responseText: String, retryAfter: String?) -> AIProviderError {
     let trimmedResponse = JSCompat.trim(responseText)
     var message = trimmedResponse
     var code: String?
 
     if !trimmedResponse.isEmpty, let parsed = try? JSONValue.parse(trimmedResponse) {
-        message = ""
-        let error = parsed.isObject ? parsed["error"] : nil
-        let topLevelMessage = parsed.isObject ? nonBlank(parsed["message"]?.stringValue) : nil
+        message = nonBlank(parsed.stringValue) ?? ""
+        let body = parsed.arrayValue?.first ?? parsed
+        let error = body.isObject ? body["error"] : nil
+        let topLevelMessage = body.isObject ? nonBlank(body["message"]?.stringValue) : nil
 
         if let error, error.isObject {
             if let errorMessage = nonBlank(error["message"]?.stringValue) {
@@ -150,9 +153,9 @@ func getProviderErrorKind(statusCode: Int, code: String?, message: String) -> AI
         if code == "insufficient_quota" {
             return .quotaExceeded
         }
-        // OpenAI refuses a request larger than the organization's tokens per
-        // minute with a 429 "Request too large for <model> ... on tokens per
-        // min (TPM)": no wait lets that request through.
+        // OpenAI's 429 for a request larger than the organization's tokens
+        // per minute reads "Request too large for <model> ... on tokens per
+        // min (TPM)": it counts as too large.
         return message.lowercased().contains("request too large") ? .requestTooLarge : .rateLimited
     case 400..<500:
         return isContextLengthError(code: code, message: message) ? .requestTooLarge : .badRequest

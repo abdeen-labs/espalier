@@ -41,6 +41,7 @@ struct MultiCommitCaptures {
             .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .clean, commitCount: 3)),
             .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .clean, commitCount: 0)),
             .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .conflicts(conflictedFiles: 2), commitCount: 3)),
+            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .conflicts(conflictedFiles: 2), commitCount: nil)),
             .merge(current: "main", branch: "unrelated", preview: MergePreview(status: .invalid, commitCount: 0)),
             .merge(current: "main", branch: "feature/login", preview: MergePreview(status: nil, commitCount: 3)),
             .rebase(current: "feature/login", base: "main", preview: .loading),
@@ -400,6 +401,66 @@ struct MultiCommitCaptures {
             capture(
                 view(Self.results(skipped: false, failed: false, batches: true, canContinue: true)),
                 named: "ai-results-batches", area: area
+            )
+            await fixture.settle()
+        }
+    }
+
+    @Test("the AI sheet's results for a rebase whose base branch isn't known, made from the round as the sheet makes them")
+    func aiResultsRebaseUnknownBase() async throws {
+        try await withIsolatedGitConfig { _ in
+            let fixture = try await OperationsCaptureRepository.make()
+            let branches = ConflictBranches(ours: nil, theirs: "feature/login")
+            let roundLabels = (ours: "0123456", theirs: "feature/login")
+            let markers = ConflictedFileStatus.conflictsWithMarkers(entry: UnmergedEntry(action: .bothModified), conflictMarkerCount: 3, conflictCount: 1)
+            func row(_ path: String, _ status: ConflictedFileStatus, _ choice: ConflictResolutionChoice) -> AIResolutionRow {
+                AIConflictResultsContent.resolutionRow(
+                    path: path,
+                    status: status,
+                    choice: choice,
+                    resolution: nil,
+                    branches: branches,
+                    roundLabels: roundLabels,
+                    offersModel: true,
+                    failure: nil
+                )
+            }
+            let summary = AIConflictSummaryContent.make(
+                AIResolutionSummary(
+                    summaries: [AIChunkSummary(markdown: Self.loaderSummary, paths: ["Sources/App/RepositoryLoader.swift"])],
+                    ourLabel: roundLabels.ours,
+                    theirLabel: roundLabels.theirs,
+                    references: []
+                ),
+                resolvedPaths: ["Sources/App/RepositoryLoader.swift"],
+                operation: .rebase,
+                htmlURL: nil
+            )
+            let content = AIConflictResultsContent(
+                title: "Resolve conflicts before Rebase",
+                modelLabel: "GPT-5 · High",
+                summary: summary,
+                conflicted: [
+                    row("Sources/App/EmptyState.swift", markers, .ours),
+                    row("Sources/App/RepositoryLoader.swift", markers, .theirs),
+                    row("Sources/Legacy/Loader.swift", .manualConflict(entry: ManualConflictEntry(action: .deletedByUs)), .ours),
+                ],
+                skipped: [],
+                failed: [],
+                retryProgress: nil,
+                abortTitle: "Abort Rebase",
+                continueTitle: "Continue Rebase",
+                canContinue: true,
+                continueHelp: nil,
+                isContinuing: false,
+                error: nil
+            )
+            capture(
+                AIConflictResultsView(content: content, repository: fixture.repository, alwaysUseAI: .constant(false))
+                    .frame(width: aiSheetSize.width, height: aiSheetSize.height)
+                    .windowEnvironment(fixture.context),
+                named: "ai-results-rebase-unknown-base",
+                area: area
             )
             await fixture.settle()
         }

@@ -266,6 +266,21 @@ struct FetchOperationTests {
         await fixture.app.idle()
     }
 
+    @Test("the indicator fetch leaves the background failure in place when its own fetch fails")
+    func indicatorFetchKeepsBackgroundFailure() async throws {
+        let fixture = try await makeSelectedRepository()
+        try await runGit(["remote", "set-url", "origin", POSIXPath.join(try createTempDirectory(), "gone.git")], fixture.local)
+        _ = try? await fixture.model.sync.backgroundFetch()
+        let failure = try #require(fixture.model.lastBackgroundFailure)
+
+        // The indicator fetch's fetch fails too; it goes on to the
+        // ahead/behind.
+        #expect(await fixture.model.sync.fetchForIndicator(lastPush: nil) != .skipped)
+        #expect(fixture.model.lastBackgroundFailure?.date == failure.date)
+        #expect(fixture.model.lastBackgroundFailure?.error.operation == .fetch)
+        await fixture.app.idle()
+    }
+
     @Test("the indicator fetch skips while another network operation runs")
     func indicatorSkipsWhenBusy() async throws {
         let fixture = try await makeSelectedRepository()

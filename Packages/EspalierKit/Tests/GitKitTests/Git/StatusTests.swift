@@ -306,17 +306,38 @@ struct StatusTests {
         // More of getStatus's behavior.
         @Suite("Espalier")
         struct Espalier {
+            /// A merge's conflict style, the `.gitattributes` and a line
+            /// both sides keep in the base, and the markers git finds.
+            typealias ConflictCountCase = (style: String, attributes: String?, keptLine: String?, markers: Int)
+
             // `git diff --check` counts every marker; the diff3 styles write
-            // four for a conflict, the default three.
-            @Test("counts a file's conflicts in every conflict style", arguments: [
-                NamedCase("merge", (style: "merge", markers: 6)),
-                NamedCase("diff3", (style: "diff3", markers: 8)),
-                NamedCase("zdiff3", (style: "zdiff3", markers: 8)),
-            ])
-            func conflictCounts(_ testCase: NamedCase<(style: String, markers: Int)>) async throws {
+            // four for a conflict, the default three. Markers are the size
+            // `conflict-marker-size` sets, and a line both sides keep is no
+            // marker, whatever it looks like.
+            @Test("counts a file's conflicts", arguments: [
+                NamedCase("in the merge style", (style: "merge", attributes: nil, keptLine: nil, markers: 6)),
+                NamedCase("in the diff3 style", (style: "diff3", attributes: nil, keptLine: nil, markers: 8)),
+                NamedCase("in the zdiff3 style", (style: "zdiff3", attributes: nil, keptLine: nil, markers: 8)),
+                NamedCase(
+                    "with markers of ten characters",
+                    (style: "diff3", attributes: "* conflict-marker-size=10\n", keptLine: nil, markers: 8)
+                ),
+                NamedCase(
+                    "with a line like a marker that both sides keep",
+                    (style: "merge", attributes: nil, keptLine: "<<<<<<< kept\n", markers: 6)
+                ),
+            ] as [NamedCase<ConflictCountCase>])
+            func conflictCounts(_ testCase: NamedCase<ConflictCountCase>) async throws {
                 let repository = try setupEmptyRepository()
-                let lines = (1...9).map { "line \($0)\n" }
-                try await makeCommit(repository, Tree(entries: [TreeEntry(path: "file.txt", contents: lines.joined())]))
+                var lines = (1...9).map { "line \($0)\n" }
+                if let keptLine = testCase.value.keptLine {
+                    lines[4] = keptLine
+                }
+                var base = [TreeEntry(path: "file.txt", contents: lines.joined())]
+                if let attributes = testCase.value.attributes {
+                    base.append(TreeEntry(path: ".gitattributes", contents: attributes))
+                }
+                try await makeCommit(repository, Tree(entries: base))
                 try await switchTo(repository, "other")
                 var theirs = lines
                 theirs[0] = "theirs 1\n"
@@ -360,6 +381,26 @@ struct StatusTests {
                 _ = try await createCommit(repository, "delete", files)
                 let tree = try await git(["ls-tree", "--name-only", "HEAD"], repository.path, "test").stdout
                 #expect(tree == "")
+                #expect(try await getStatusOrThrow(repository).workingDirectory.files.isEmpty)
+            }
+
+            @Test("shows a new file staged and then replaced by a symlink as new, and commits the symlink")
+            func stagedThenTypeChanged() async throws {
+                let repository = try setupEmptyRepository()
+                try await makeCommit(repository, Tree(entries: [TreeEntry(path: "base", contents: "one\n")]))
+                let new = POSIXPath.join(repository.path, "new")
+                try writeFile(new, "two\n")
+                _ = try await Dugite.exec(["add", "new"], repository.path)
+                try FileManager.default.removeItem(atPath: new)
+                try FileManager.default.createSymbolicLink(atPath: new, withDestinationPath: "base")
+
+                let files = try await getStatusOrThrow(repository).workingDirectory.files
+                #expect(files.map(\.path) == ["new"])
+                #expect(files.map(\.status) == [.new()])
+
+                _ = try await createCommit(repository, "add", files)
+                let tree = try await git(["ls-tree", "HEAD", "new"], repository.path, "test").stdout
+                #expect(tree.hasPrefix("120000 blob "))
                 #expect(try await getStatusOrThrow(repository).workingDirectory.files.isEmpty)
             }
 

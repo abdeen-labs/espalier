@@ -317,6 +317,10 @@ public func mapStatus(
         return .ordinary(OrdinaryEntry(type: .deleted, workingTree: .deleted, submoduleStatus: submoduleStatus))
     case "AM":
         return .ordinary(OrdinaryEntry(type: .added, index: .added, workingTree: .modified, submoduleStatus: submoduleStatus))
+    // A new file staged, then its type changed in the working tree (a file
+    // replaced by a symlink).
+    case "AT":
+        return .ordinary(OrdinaryEntry(type: .added, index: .added, submoduleStatus: submoduleStatus))
     case "RM":
         return .renamed(RenamedOrCopiedEntry(
             index: .renamed,

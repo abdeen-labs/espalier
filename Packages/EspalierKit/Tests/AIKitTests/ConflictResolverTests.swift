@@ -355,20 +355,21 @@ struct ConflictResolverTests {
         #expect(failure.error.underlyingError is AIValidationError)
     }
 
-    @Test("reports a response cut off at the output limit as that, without asking again for a single file", arguments: ["max_tokens", "length"])
-    func cutOff(stopReason: String) async throws {
-        for content in [#"{"resolutions":[{"path":"a.ts","hunks":[{"resolvedContent":"lo"#, ""] {
-            let provider = ScriptedProvider { _ in ScriptedTurn(response: AIResponse(content: content, stopReason: stopReason)) }
+    @Test("reports a response cut off at the output limit as that, without asking again for a single file", arguments: ["max_tokens", "length"], [
+        NamedCase("a partial response", #"{"resolutions":[{"path":"a.ts","hunks":[{"resolvedContent":"lo"#),
+        NamedCase("no content", ""),
+    ])
+    func cutOff(stopReason: String, content: NamedCase<String>) async throws {
+        let provider = ScriptedProvider { _ in ScriptedTurn(response: AIResponse(content: content.value, stopReason: stopReason)) }
 
-            let error = await resolutionError {
-                _ = try await resolveConflicts(context: context([conflictedFile("a.ts")]), model: scriptedModel(), using: provider)
-            }
-
-            #expect((error?.underlyingError as? AIProviderError)?.kind == .outputLimitReached)
-            #expect(error?.stage == .streamResponse)
-            #expect(error?.retryState == .notRetried)
-            #expect(provider.requests.count == 1)
+        let error = await resolutionError {
+            _ = try await resolveConflicts(context: context([conflictedFile("a.ts")]), model: scriptedModel(), using: provider)
         }
+
+        #expect((error?.underlyingError as? AIProviderError)?.kind == .outputLimitReached)
+        #expect(error?.stage == .streamResponse)
+        #expect(error?.retryState == .notRetried)
+        #expect(provider.requests.count == 1)
     }
 
     @Test("splits files the model can't take in one request, until each fits or fails alone", arguments: [

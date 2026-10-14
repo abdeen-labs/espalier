@@ -14,10 +14,7 @@ public let DefaultAIRequestTimeoutMs = 60_000
 let CommitMessageMaxOutputTokens = 16_000
 
 /// The most of a diff, in bytes of UTF-8, sent to generate a commit message:
-/// 128 KB, about 35,000 tokens of code. With the prompt and the output limit
-/// that fits the context window of current hosted models (128,000 tokens and
-/// up) with room to spare, keeps a click's cost small, and is more than a
-/// message needs; a larger diff is mostly generated or vendored files.
+/// 128 KB, about 35,000 tokens of code.
 let MaxCommitMessageDiffSize = 131_072
 
 /// The least of a file's patch worth sending: about ten lines. When the

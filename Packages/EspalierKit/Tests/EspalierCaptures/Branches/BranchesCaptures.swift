@@ -316,6 +316,21 @@ struct BranchesCaptures {
         capture(view, named: "nameMessages", area: area)
     }
 
+    @Test("the name's messages: names git can't keep beside a branch")
+    func clashMessages() {
+        let branches = Self.sheetBranches
+        let inside = BranchNameValidation.validate("feature/login/fix", branches: branches)
+        let otherCase = BranchNameValidation.validate("Main", branches: branches)
+        let view = VStack(alignment: .leading, spacing: Metrics.insetMedium) {
+            NameValidationMessages(inside)
+            Divider()
+            NameValidationMessages(otherCase)
+        }
+        .padding(Metrics.insetLarge)
+        .frame(width: Metrics.Sheet.standardWidth, alignment: .leading)
+        capture(view, named: "nameMessages-clash", area: area)
+    }
+
     @Test("Rename: a tracking branch's warning")
     func rename() {
         capture(

@@ -65,15 +65,12 @@ nonisolated struct AddWorktreeContent: Sendable, Equatable {
         itemExists: (String) -> ItemAtPath = AddWorktreeContent.item(at:)
     ) -> AddWorktreeContent {
         let path = WorktreesModel.worktreePath(in: directory, name: name)
-        var branchMessage: Message?
-        let sanitized = sanitizedRefName(branchName)
-        if !branchName.isEmpty, sanitized.isEmpty {
-            branchMessage = Message(text: "\(branchName) is not a valid name.", isError: true)
-        } else if let hint = repository.worktrees.branchResolution(for: branchName, path: path ?? name)?.hint {
-            branchMessage = Message(text: hint, isError: false)
-        } else if !branchName.isEmpty, sanitized != branchName {
-            branchMessage = Message(text: "Will be created as \(sanitized).", isError: false)
-        }
+        let branchMessage = Self.branchMessage(
+            name: name,
+            branchName: branchName,
+            resolution: repository.worktrees.branchResolution(for: branchName, path: path ?? name),
+            branches: repository.gitState.branches.all
+        )
         var pathProblem: String?
         if let path {
             switch itemExists(path) {
@@ -94,6 +91,48 @@ nonisolated struct AddWorktreeContent: Sendable, Equatable {
             pathProblem: pathProblem,
             isCreating: isCreating
         )
+    }
+
+    /// The message under Branch Name: an error when nothing of the branch's
+    /// name is valid (the name typed, or the worktree's name when none is
+    /// typed), or when the local branch the worktree makes can't be kept
+    /// beside `branches`' local branches (`refNameConflict`); else what the
+    /// name checks out (`resolution`'s hint), or how it will be saved.
+    static func branchMessage(
+        name: String,
+        branchName: String,
+        resolution: WorktreeBranchResolution?,
+        branches: [Branch]
+    ) -> Message? {
+        let sanitized = sanitizedRefName(branchName)
+        if !branchName.isEmpty, sanitized.isEmpty {
+            return Message(text: "\(branchName) is not a valid name.", isError: true)
+        }
+        if branchName.isEmpty, !JSCompat.trim(name).isEmpty, sanitizedRefName(name).isEmpty {
+            return Message(text: "\(name) is not a valid name.", isError: true)
+        }
+        // The local branch the worktree makes: a new branch, or a remote
+        // branch's.
+        let newBranchName: String? = switch resolution {
+        case .new, .remote: resolution?.branchName
+        case .existing, nil: nil
+        }
+        if let newBranchName,
+           let conflict = refNameConflict(newBranchName, among: branches.lazy.filter { $0.type == .local }.map(\.name)) {
+            return Message(
+                text: conflict.isSameName
+                    ? "A branch named \(conflict.existingName) already exists."
+                    : "A branch named \(conflict.existingName) already exists, so \(newBranchName) can't be used.",
+                isError: true
+            )
+        }
+        if let hint = resolution?.hint {
+            return Message(text: hint, isError: false)
+        }
+        if !branchName.isEmpty, sanitized != branchName {
+            return Message(text: "Will be created as \(sanitized).", isError: false)
+        }
+        return nil
     }
 
     /// The branch names that contain `text` (all of them for none), local

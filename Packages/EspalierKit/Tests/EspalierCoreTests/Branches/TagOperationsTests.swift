@@ -46,6 +46,35 @@ struct TagOperationsTests {
         await fixture.app.idle()
     }
 
+    // Git keeps a tag in a file named by its name: a name can't be another
+    // tag's folder, and on a case-insensitive volume names that differ only
+    // in case are one file.
+    @Test("a name git can't keep beside a tag is refused before git runs", arguments: [
+        NamedCase("inside a tag", (existing: "v1", name: "v1/rc", isRefused: true)),
+        NamedCase("around a tag", (existing: "v1/rc", name: "v1", isRefused: true)),
+        NamedCase("a tag in another case", (existing: "v1", name: "V1", isRefused: true)),
+        NamedCase("only starting like a tag", (existing: "v1", name: "v1.1/rc", isRefused: false)),
+    ])
+    func clashingNames(_ testCase: NamedCase<(existing: String, name: String, isRefused: Bool)>) async throws {
+        let value = testCase.value
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["tag", value.existing], local)
+        }
+        let head = try await fixture.head()
+        #expect((fixture.model.branches.tagNameError(value.name) != nil) == value.isRefused)
+
+        if value.isRefused {
+            let error = await #expect(throws: OperationError.self) {
+                try await fixture.model.branches.createTag(value.name, at: head)
+            }
+            #expect(preconditionText(error) != nil)
+        } else {
+            try await fixture.model.branches.createTag(value.name, at: head)
+            #expect(fixture.model.gitState.tags?[value.name] == head)
+        }
+        await fixture.app.idle()
+    }
+
     @Test("a tag git refuses isn't queued")
     func refusedTag() async throws {
         let fixture = try await makeSelectedRepository()

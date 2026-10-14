@@ -114,9 +114,24 @@ private struct StatusHeadersData {
 private struct ConflictFilesDetails {
     var conflictCountsByPath: [ExactString: Int]
     var binaryFilePaths: Set<ExactString>
-    /// The conflicts in each conflicted file with markers, counted from the
-    /// file (`conflictCountsByPath` counts markers).
+    /// The line numbers of each file's markers (`getConflictMarkerLines`).
+    var conflictMarkerLinesByPath: [ExactString: [Int]] = [:]
+    /// The conflicts in each conflicted file with markers: the markers that
+    /// open one (`conflictCountsByPath` counts every marker).
     var conflictsByPath: [ExactString: Int] = [:]
+
+    init(conflictCountsByPath: [ExactString: Int], binaryFilePaths: Set<ExactString>) {
+        self.conflictCountsByPath = conflictCountsByPath
+        self.binaryFilePaths = binaryFilePaths
+    }
+
+    /// The details for the markers at `conflictMarkerLinesByPath`, counted
+    /// as `getFilesWithConflictMarkers` counts them.
+    init(conflictMarkerLinesByPath: [ExactString: [Int]], binaryFilePaths: [String]) {
+        self.conflictCountsByPath = conflictMarkerLinesByPath.mapValues(\.count)
+        self.binaryFilePaths = Set(binaryFilePaths.map(ExactString.init))
+        self.conflictMarkerLinesByPath = conflictMarkerLinesByPath
+    }
 }
 
 private func parseConflictedState(
@@ -372,11 +387,11 @@ private func getMergeConflictDetails(
     _ conflictedFilesInIndex: [StatusEntry]
 ) async throws -> ConflictFilesDetails {
     // Neither depends on the other, so they run concurrently.
-    async let conflictCountsByPath = getConflictMarkerCounts(repository.path)
+    async let conflictMarkerLinesByPath = getConflictMarkerLines(repository.path)
     async let binaryFilePaths = getBinaryPaths(repository, "MERGE_HEAD", conflictedFilesInIndex)
     return try await ConflictFilesDetails(
-        conflictCountsByPath: conflictCountsByPath,
-        binaryFilePaths: Set(binaryFilePaths.map(ExactString.init))
+        conflictMarkerLinesByPath: conflictMarkerLinesByPath,
+        binaryFilePaths: binaryFilePaths
     )
 }
 
@@ -384,11 +399,11 @@ private func getRebaseConflictDetails(
     _ repository: Repository,
     _ conflictedFilesInIndex: [StatusEntry]
 ) async throws -> ConflictFilesDetails {
-    async let conflictCountsByPath = getConflictMarkerCounts(repository.path)
+    async let conflictMarkerLinesByPath = getConflictMarkerLines(repository.path)
     async let binaryFilePaths = getBinaryPaths(repository, "REBASE_HEAD", conflictedFilesInIndex)
     return try await ConflictFilesDetails(
-        conflictCountsByPath: conflictCountsByPath,
-        binaryFilePaths: Set(binaryFilePaths.map(ExactString.init))
+        conflictMarkerLinesByPath: conflictMarkerLinesByPath,
+        binaryFilePaths: binaryFilePaths
     )
 }
 
@@ -398,7 +413,7 @@ private func getWorkingDirectoryConflictDetails(
     _ repository: Repository,
     _ conflictedFilesInIndex: [StatusEntry]
 ) async throws -> ConflictFilesDetails {
-    let conflictCountsByPath = try await getConflictMarkerCounts(repository.path)
+    let conflictMarkerLinesByPath = try await getConflictMarkerLines(repository.path)
     var binaryFilePaths: [String] = []
     do {
         // its totally fine if HEAD doesn't exist, which throws an error
@@ -408,8 +423,8 @@ private func getWorkingDirectoryConflictDetails(
     } catch {}
 
     return ConflictFilesDetails(
-        conflictCountsByPath: conflictCountsByPath,
-        binaryFilePaths: Set(binaryFilePaths.map(ExactString.init))
+        conflictMarkerLinesByPath: conflictMarkerLinesByPath,
+        binaryFilePaths: binaryFilePaths
     )
 }
 
@@ -458,9 +473,9 @@ private func getConflictDetails(
     return ConflictFilesDetails(conflictCountsByPath: [:], binaryFilePaths: [])
 }
 
-/// `details` with the conflicts of each conflicted file that has markers,
-/// counted from the file: its lines that open a conflict. A file that can't
-/// be read counts none.
+/// `details` with the conflicts of each conflicted file that has markers:
+/// the markers `git diff --check` reported whose line in the file opens a
+/// conflict. A file that can't be read counts none.
 private func withConflictCounts(
     _ details: ConflictFilesDetails,
     _ repository: Repository,
@@ -469,44 +484,42 @@ private func withConflictCounts(
     var details = details
     for file in conflictedFilesInIndex {
         let path = ExactString(file.path)
-        guard (details.conflictCountsByPath[path] ?? 0) > 0,
+        guard let markerLines = details.conflictMarkerLinesByPath[path], !markerLines.isEmpty,
               let contents = try? Data(contentsOf: URL(exactFilePath: POSIXPath.join(repository.path, file.path)), options: .mappedIfSafe)
         else {
             continue
         }
-        details.conflictsByPath[path] = countConflictStarts(contents)
+        details.conflictsByPath[path] = countConflictStarts(contents, markerLines: markerLines)
     }
     return details
 }
 
-/// The lines of `contents` that open a conflict: `<<<<<<<` and whitespace,
-/// as git's `is_conflict_marker` reads a marker of the default size.
-private func countConflictStarts(_ contents: Data) -> Int {
-    contents.withUnsafeBytes { raw in
+/// How many of the markers at `markerLines` (line numbers from 1, lines
+/// ending at line feeds, as git counts them) open a conflict in `contents`:
+/// start with `<`. A marker's first character says which it is (`<`, `|`,
+/// `=`, or `>`), whatever its size.
+private func countConflictStarts(_ contents: Data, markerLines: [Int]) -> Int {
+    let lines = Set(markerLines)
+    guard let lastLine = lines.max() else {
+        return 0
+    }
+    return contents.withUnsafeBytes { raw in
         let bytes = raw.bindMemory(to: UInt8.self)
         guard let base = bytes.baseAddress else {
             return 0
         }
-        let markerSize = 7
         var count = 0
+        var lineNumber = 1
         var lineStart = 0
-        while lineStart < bytes.count {
-            let lineEnd = memchr(base + lineStart, Int32(UInt8(ascii: "\n")), bytes.count - lineStart)
-                .map { base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) } ?? bytes.count
-            // The newline counts as the whitespace after the marker.
-            if lineStart + markerSize < bytes.count,
-               bytes[lineStart..<(lineStart + markerSize)].allSatisfy({ $0 == UInt8(ascii: "<") }),
-               isGitSpace(bytes[lineStart + markerSize]) {
+        while lineStart < bytes.count, lineNumber <= lastLine {
+            if bytes[lineStart] == UInt8(ascii: "<"), lines.contains(lineNumber) {
                 count += 1
             }
+            let lineEnd = memchr(base + lineStart, Int32(UInt8(ascii: "\n")), bytes.count - lineStart)
+                .map { base.distance(to: $0.assumingMemoryBound(to: UInt8.self)) } ?? bytes.count
             lineStart = lineEnd + 1
+            lineNumber += 1
         }
         return count
     }
-}
-
-/// `isspace` in git's own character table: space, tab, line feed, and
-/// carriage return.
-private func isGitSpace(_ byte: UInt8) -> Bool {
-    byte == UInt8(ascii: " ") || byte == UInt8(ascii: "\t") || byte == UInt8(ascii: "\n") || byte == UInt8(ascii: "\r")
 }

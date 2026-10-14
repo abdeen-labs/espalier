@@ -66,7 +66,7 @@ private final class LockableSecretStore: SecretStore {
 /// or a record Espalier can't read.
 private let unusableTokens = [
     NamedCase("missing", String?.none),
-    NamedCase("stored in a form Espalier can't read", "espalier-oauth:{\"version\":2}"),
+    NamedCase("stored in a form Espalier can't read", "espalier-oauth:{\"version\":1}"),
 ]
 
 @Suite("Accounts", .offline, .hangGuard(minutes: 5)) @MainActor

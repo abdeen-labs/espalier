@@ -1,7 +1,7 @@
 // Creating a tag: a name, cleaned up as a ref name ("Will be created as
 // …"), its checks (nothing of it valid; `tagNameError`: too long, already
-// exists), and the previous tags that match what's typed. It sits in the
-// shared `SheetScaffold`.
+// exists, or clashing with a tag), and the previous tags that match what's
+// typed. It sits in the shared `SheetScaffold`.
 
 import EspalierCore
 import GitKit

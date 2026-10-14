@@ -241,6 +241,25 @@ struct SSHAskpassTests {
         }
     }
 
+    @Test("offers to remember a signing key's passphrase only when its key file can be read", arguments: [
+        NamedCase("a key file that can be read", true),
+        NamedCase("a key file that can't be read", false),
+    ])
+    func signingKeyPassphraseRemember(_ testCase: NamedCase<Bool>) async throws {
+        let keyPath = testCase.value ? try makeKey() : POSIXPath.join(try createTempDirectory(), "id_ed25519")
+        let prompter = TestPrompter(sshKeyPassphrase: { _ in
+            PromptSSHSecretResponse(secret: "correct horse", storeSecret: false)
+        })
+
+        try await withTrampoline(prompter: prompter) { (context) async throws in
+            try await withSSHEnvironment(context) { (env) async throws in
+                let output = try await runHelper(["Enter passphrase for \"\(keyPath)\": "], environment: env)
+                #expect(output.stdout == "correct horse")
+            }
+            #expect(prompter.calls == [.sshKeyPassphrase(keyPath: keyPath, canRemember: testCase.value)])
+        }
+    }
+
     @Test("doesn't store the passphrase when git fails")
     func passphraseNotStoredOnFailure() async throws {
         let keyPath = try makeKey()

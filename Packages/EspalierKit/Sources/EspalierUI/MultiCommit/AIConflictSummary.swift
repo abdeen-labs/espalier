@@ -116,7 +116,7 @@ nonisolated public struct AIConflictSummaryContent: Sendable, Equatable {
         }
     }
 
-    /// "Rebasing main onto develop".
+    /// "Rebasing feature onto main".
     public var operationPhrase: String?
     /// The model's summaries, one per request that wrote one.
     public var sections: [Section]
@@ -141,7 +141,7 @@ nonisolated public struct AIConflictSummaryContent: Sendable, Equatable {
         let theirs = summary.theirLabel
         let phrase: String? = switch operation {
         case .merge?: "Merging \(theirs) into \(ours)"
-        case .rebase?: "Rebasing \(ours) onto \(theirs)"
+        case .rebase?: "Rebasing \(theirs) onto \(ours)"
         case .cherryPick?: "Cherry-picking from \(theirs) into \(ours)"
         case .squash?: "Squashing into \(ours)"
         case .reorder?: "Reordering \(ours)"

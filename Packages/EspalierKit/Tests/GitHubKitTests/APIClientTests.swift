@@ -162,6 +162,37 @@ struct APIClientTests {
             #expect(mock.requests.map { $0.query["per_page"] } == ["100", "100"])
         }
 
+        @Test("a list stops at a next link to a page already fetched", arguments: [
+            NamedCase("a page linking to itself", "?per_page=100&page=2"),
+            NamedCase("a page linking back to the first", "?per_page=100"),
+        ])
+        func pagesLoop(_ testCase: NamedCase<String>) async throws {
+            let served = Mutex(0)
+            mock.on("GET", "/user/orgs") { request in
+                // A loop that would go on forever fails instead.
+                let count = served.withLock { served in
+                    served += 1
+                    return served
+                }
+                if count > 5 {
+                    return .json(["message": "Server Error"], status: 500)
+                }
+                if request.query["page"] == "2" {
+                    return .json(
+                        encoding: [APIOrganization(id: 2, url: "", login: "two", avatarURL: "")],
+                        headers: ["Link": "<https://api.github.com/user/orgs\(testCase.value)>; rel=\"next\""]
+                    )
+                }
+                return .json(
+                    encoding: [APIOrganization(id: 1, url: "", login: "one", avatarURL: "")],
+                    headers: ["Link": #"<https://api.github.com/user/orgs?per_page=100&page=2>; rel="next""#]
+                )
+            }
+
+            #expect(await api.fetchOrgs().map(\.login) == ["one", "two"])
+            #expect(mock.requests.count == 2)
+        }
+
         @Test("organizations and issues fail when a page fails (desktop kept the pages before it)")
         func failedPages() async throws {
             mock.on("GET", "/user/orgs") { request in
@@ -247,6 +278,45 @@ struct APIClientTests {
             #expect(try await api.fetchCombinedRefStatus(owner: "desktop", name: "desktop", ref: "abc") == nil)
             #expect(try await api.fetchRefCheckRuns(owner: "desktop", name: "desktop", ref: "abc") == nil)
             #expect(try await api.fetchWorkflowRunJobs(owner: "desktop", name: "desktop", workflowRunId: 7) == nil)
+        }
+
+        @Test("a ref's check runs stop at a next link to a page already fetched", arguments: [
+            NamedCase("a page linking to itself", "?per_page=100&page=2"),
+            NamedCase("a page linking back to the first", "?per_page=100"),
+        ])
+        func checksPagesLoop(_ testCase: NamedCase<String>) async throws {
+            let path = "/repos/desktop/desktop/commits/abc/check-runs"
+            let pages = [1, 2].map { id in
+                APIRefCheckRuns(totalCount: 2, checkRuns: [APIRefCheckRun(
+                    id: id, url: "", status: .completed, conclusion: .success, name: "check \(id)",
+                    checkSuite: APIRefCheckRunCheckSuite(id: 1), app: nil, completedAt: nil, startedAt: nil, htmlURL: nil, pullRequests: []
+                )])
+            }
+            let served = Mutex(0)
+            mock.on("GET", path) { request in
+                // A loop that would go on forever fails instead.
+                let count = served.withLock { served in
+                    served += 1
+                    return served
+                }
+                if count > 5 {
+                    return .json(["message": "Server Error"], status: 500)
+                }
+                if request.query["page"] == "2" {
+                    return .json(
+                        encoding: pages[1],
+                        headers: ["Link": "<https://api.github.com\(path)\(testCase.value)>; rel=\"next\""]
+                    )
+                }
+                return .json(
+                    encoding: pages[0],
+                    headers: ["Link": "<https://api.github.com\(path)?per_page=100&page=2>; rel=\"next\""]
+                )
+            }
+
+            let checkRuns = try await api.fetchRefCheckRuns(owner: "desktop", name: "desktop", ref: "abc")
+            #expect(checkRuns?.checkRuns.map(\.id) == [1, 2])
+            #expect(mock.requests.count == 2)
         }
 
         @Test("re-running checks throws when GitHub refuses or can't be reached")

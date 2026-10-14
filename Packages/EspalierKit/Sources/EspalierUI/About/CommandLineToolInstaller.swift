@@ -5,10 +5,10 @@
 // the app target's espalier.sh), as the user, or after an administrator
 // prompt when that fails. Nothing happens when the link is already there.
 // A link to another copy of Espalier is replaced; anything else there
-// (another link, a file) is replaced once the user confirms, and a folder
-// isn't. Success says where the tool is; a failure shows the command to run
-// instead, with Copy Command. Cancelling the confirmation or the
-// administrator prompt shows nothing.
+// (another link, a file, something that can't be looked at) is replaced
+// once the user confirms, and a folder isn't. Success says where the tool
+// is; a failure shows the command to run instead, with Copy Command.
+// Cancelling the confirmation or the administrator prompt shows nothing.
 //
 // The system calls go through `CommandLineToolSystem`, so tests never
 // install anything.
@@ -33,6 +33,8 @@ enum CommandLineToolItem: Equatable {
     case folder
     /// A file, or anything else that isn't a link or a folder.
     case file
+    /// Something that couldn't be looked at.
+    case unexamined
 }
 
 /// What installing the command line tool does to the system.
@@ -55,13 +57,12 @@ struct CommandLineToolSystem: Sendable {
         item: { path in
             var info = stat()
             guard lstat(path, &info) == 0 else {
-                // Something that can't be looked at counts as a file, so
-                // replacing it asks first.
-                return errno == ENOENT || errno == ENOTDIR ? .none : .file
+                // Nothing there, or something that can't be looked at.
+                return errno == ENOENT || errno == ENOTDIR ? .none : .unexamined
             }
             switch info.st_mode & S_IFMT {
             case S_IFLNK:
-                return (try? FileManager.default.destinationOfSymbolicLink(atPath: path)).map { .link($0) } ?? .file
+                return (try? FileManager.default.destinationOfSymbolicLink(atPath: path)).map { .link($0) } ?? .unexamined
             case S_IFDIR:
                 return .folder
             default:
@@ -185,7 +186,8 @@ enum CommandLineToolInstaller {
     /// is replaced; a folder is left alone.
     ///
     /// - Throws: `.confirmationRequired(.replaceCommandLineTool)` when a link
-    ///   elsewhere or a file is at `link` and replacing it isn't confirmed.
+    ///   elsewhere, a file, or something that couldn't be looked at is at
+    ///   `link` and replacing it isn't confirmed.
     static func install(
         system: CommandLineToolSystem,
         at link: String = installedPath,
@@ -204,11 +206,15 @@ enum CommandLineToolInstaller {
             break
         case .folder:
             return .failed(message: "\(link) is a folder. Move or rename it, then try again.", command: nil)
-        case .link, .file:
+        case .link, .file, .unexamined:
             guard confirmed.contains(.replaceCommandLineTool) else {
-                let destination: String? = if case .link(let destination) = existing { destination } else { nil }
+                let replaced: ExistingCommandLineTool = switch existing {
+                case .link(let destination): .link(destination)
+                case .unexamined: .unexamined
+                default: .file
+                }
                 throw OperationError(
-                    .confirmationRequired(.replaceCommandLineTool(path: link, linkDestination: destination)),
+                    .confirmationRequired(.replaceCommandLineTool(path: link, existing: replaced)),
                     operation: .installCommandLineTool
                 )
             }

@@ -142,16 +142,31 @@ extension CloneCoordinator {
         let environment = app.environment
         let gitHub = environment.gitHub
         let accounts = app.accounts.accounts
-        // The last lookup that failed for a reason other than not finding
-        // the repository.
-        let lookupFailure = Mutex<(any Error)?>(nil)
+        struct Lookups {
+            /// The last lookup that failed for a reason other than not
+            /// finding the repository. An anonymous lookup's failure doesn't
+            /// count on a server where a signed-in account didn't find it.
+            var failure: (any Error)?
+            /// The servers (API endpoints) where a signed-in account didn't
+            /// find the repository.
+            var notFoundSignedIn: Set<String> = []
+        }
+        let lookups = Mutex(Lookups())
         let account = await environment.withRuntimes {
             await findAccountForRemoteURL(url, accounts, canAccessRepository: { account, owner, name in
                 do {
-                    return try await API.fromAccount(account, runtime: gitHub)
+                    let found = try await API.fromAccount(account, runtime: gitHub)
                         .fetchRepositoryCloneInfo(owner: owner, name: name, protocol: nil) != nil
+                    if !found, !account.token.isEmpty {
+                        lookups.withLock { _ = $0.notFoundSignedIn.insert(account.endpoint) }
+                    }
+                    return found
                 } catch {
-                    lookupFailure.withLock { $0 = error }
+                    lookups.withLock { lookups in
+                        if !account.token.isEmpty || !lookups.notFoundSignedIn.contains(account.endpoint) {
+                            lookups.failure = error
+                        }
+                    }
                     return false
                 }
             }, runtime: gitHub)
@@ -161,7 +176,7 @@ extension CloneCoordinator {
 
         guard let identifier, let account else {
             if let identifier, remote == nil {
-                if let error = lookupFailure.withLock({ $0 }) {
+                if let error = lookups.withLock({ $0.failure }) {
                     throw lookupFailed(identifier, error)
                 }
                 throw repositoryNotFound

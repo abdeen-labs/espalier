@@ -160,8 +160,9 @@ public struct FieldLabel: View {
 
 extension View {
     /// A list inside a sheet: the sheet's background in a card's shape with
-    /// a 1-point ring, the rows `Metrics.SheetList.inset` in from its top and
-    /// bottom, so a row scrolled under an edge is cut at the card's edge.
+    /// a 1-point ring, the list `Metrics.SheetList.inset` in from its top and
+    /// bottom, so a row scrolled under an edge is cut at that inset, inside
+    /// the ring.
     public func sheetListCard() -> some View {
         let shape = RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
         return padding(.vertical, Metrics.SheetList.inset)

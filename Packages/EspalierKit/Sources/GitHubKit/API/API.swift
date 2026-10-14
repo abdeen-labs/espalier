@@ -886,7 +886,8 @@ public struct API: Sendable {
     ///
     /// Follows the GitHub API hypermedia links to get the subsequent
     /// pages when available, buffers all items and returns them in
-    /// one array when done.
+    /// one array when done. A next link to a page already fetched ends
+    /// the list.
     func fetchAll<T: Decodable & Sendable>(
         _ path: String,
         as type: T.Type = T.self,
@@ -895,9 +896,10 @@ public struct API: Sendable {
         var buf: [T] = []
         let params: KeyValuePairs = ["per_page": "\(options.perPage ?? 100)"]
 
+        var requested: Set<String> = []
         var nextPath: String? = urlWithQueryString(path, params)
         repeat {
-            guard let currentPath = nextPath else { break }
+            guard let currentPath = nextPath, requested.insert(getAbsoluteUrl(endpoint, currentPath)).inserted else { break }
             let response = try await ghRequest(.get, currentPath)
             if options.suppressErrors != false && !response.ok {
                 log.warning("fetchAll: '\(path, privacy: .public)' returned a \(response.status, privacy: .public)")
@@ -921,7 +923,8 @@ public struct API: Sendable {
 
     /// Every page of a paginated resource whose response wraps its items in
     /// an object (statuses, check runs, jobs), following the Link headers,
-    /// each parsed as `T`.
+    /// each parsed as `T`. A next link to a page already fetched ends the
+    /// list.
     ///
     /// - Throws: Network errors and API errors, on any page.
     private func fetchPages<T: Decodable>(
@@ -931,8 +934,9 @@ public struct API: Sendable {
         reloadCache: Bool = false
     ) async throws -> [T] {
         var pages: [T] = []
+        var requested: Set<String> = []
         var nextPath: String? = path
-        while let currentPath = nextPath {
+        while let currentPath = nextPath, requested.insert(getAbsoluteUrl(endpoint, currentPath)).inserted {
             let response = try await ghRequest(.get, currentPath, customHeaders: customHeaders, reloadCache: reloadCache)
             pages.append(try parsedResponse(response, as: T.self))
             nextPath = getNextPagePathFromLink(response)

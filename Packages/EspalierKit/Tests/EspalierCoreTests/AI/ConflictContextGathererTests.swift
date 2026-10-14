@@ -142,8 +142,6 @@ struct ConflictContextGathererTests {
         // The base branch, when known, gives the rebase's side commit context.
         #expect(ConflictContextGatherer.labels(rebase, operation: nil, branches: ConflictBranches(ours: "main", theirs: "feature"))
             == Labels(ourLabel: "main", theirLabel: "feature", ourRef: "main", theirRef: "feature"))
-        #expect(ConflictContextGatherer.labels(rebase, operation: nil, branches: ConflictBranches(ours: nil, theirs: "feature"))
-            == Labels(ourLabel: "current branch", theirLabel: "feature", ourRef: nil, theirRef: "feature"))
 
         let squash = MultiCommitOperation(
             kind: .squash,
@@ -167,6 +165,20 @@ struct ConflictContextGathererTests {
         let revert = ConflictState.revert(targetBranchName: "main", manualResolutions: [:])
         #expect(ConflictContextGatherer.labels(revert, operation: nil, branches: nil)
             == Labels(ourLabel: "main", theirLabel: "reverted commit", ourRef: "main", theirRef: nil))
+    }
+
+    @Test("names a rebase's unknown base by the commit it's being rebased onto")
+    func rebaseOntoUnknownBase() {
+        let rebase = ConflictState.rebase(
+            currentTip: "b",
+            targetBranch: "feature",
+            baseBranch: nil,
+            originalBranchTip: "c",
+            baseBranchTip: "0123456789abcdef0123456789abcdef01234567",
+            manualResolutions: [:]
+        )
+        #expect(ConflictContextGatherer.labels(rebase, operation: nil, branches: ConflictBranches(ours: nil, theirs: "feature"))
+            == ConflictContextGatherer.Labels(ourLabel: "0123456", theirLabel: "feature", ourRef: nil, theirRef: "feature"))
     }
 
     @Test("reads text files, and leaves out those too large, unreadable, outside, or not UTF-8")

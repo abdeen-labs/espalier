@@ -63,6 +63,52 @@ struct WorktreeCaptures {
         )
     }
 
+    @Test("Add Worktree: a worktree name that's no valid branch name")
+    func addInvalidName() {
+        let name = "HEAD"
+        let directory = "/Users/joe/Developer"
+        let content = AddWorktreeContent(
+            name: name,
+            directory: directory,
+            branchName: "",
+            branchPlaceholder: sanitizedRefName(name),
+            branchMessage: AddWorktreeContent.branchMessage(name: name, branchName: "", resolution: nil, branches: []),
+            suggestions: [],
+            path: "\(directory)/\(name)",
+            pathProblem: nil,
+            isCreating: false
+        )
+        capture(addForm(content), named: "add-invalidName", area: area)
+    }
+
+    @Test("Add Worktree: a branch name inside a local branch's")
+    func addClash() {
+        let name = "espalier-login"
+        let directory = "/Users/joe/Developer"
+        let branchName = "feature/login/fix"
+        let feature = Branch(
+            name: "feature/login", upstream: nil, tip: BranchTip(sha: String(repeating: "1", count: 40)),
+            type: .local, ref: "refs/heads/feature/login"
+        )
+        let content = AddWorktreeContent(
+            name: name,
+            directory: directory,
+            branchName: branchName,
+            branchPlaceholder: sanitizedRefName(name),
+            branchMessage: AddWorktreeContent.branchMessage(
+                name: name,
+                branchName: branchName,
+                resolution: .new(name: branchName),
+                branches: [feature]
+            ),
+            suggestions: [],
+            path: "\(directory)/\(name)",
+            pathProblem: nil,
+            isCreating: false
+        )
+        capture(addForm(content), named: "add-clash", area: area)
+    }
+
     @Test("Rename Worktree, as it opens")
     func rename() {
         capture(

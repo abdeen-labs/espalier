@@ -54,6 +54,14 @@ struct SanitizeRefNameTests {
         try await createTag(repository, sanitized, "HEAD")
     }
 
+    // Sheets sanitize the name as it's typed. Each `-.` here leaves a dot at
+    // the start once the dash before it goes, so a name sanitized again
+    // until it stops changing takes minutes.
+    @Test("sanitizes a long name in time proportional to its length", .timeLimit(.minutes(1)))
+    func longName() {
+        #expect(sanitizedRefName(String(repeating: "-.", count: 50_000) + "a") == "a")
+    }
+
     @Test("leaves nothing of HEAD, which git refuses as a branch or tag name")
     func head() {
         #expect(sanitizedRefName("HEAD") == "")

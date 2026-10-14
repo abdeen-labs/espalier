@@ -199,22 +199,22 @@ struct CIChecksTests {
         #expect(check.htmlURL == "https://github.com/octocat/hello/runs/9")
     }
 
-    @Test("a rerun's run replaces the one it reran in its check suite; same-named runs in other suites stay")
+    @Test("every check run GitHub sends shows once, so a failing run isn't hidden behind a same-named one")
     func latestCheckRuns() {
         let runs = [
-            // ci.yml's build fails; docs.yml's build passes.
+            // Two same-named runs in one check suite: the failing one stays.
             apiCheckRun(id: 1, name: "build", conclusion: .failure, checkSuite: 100),
-            apiCheckRun(id: 2, name: "build", checkSuite: 101),
-            // test failed, then its rerun passed, in the same suite.
-            apiCheckRun(id: 3, name: "test", conclusion: .failure, checkSuite: 100),
-            apiCheckRun(id: 4, name: "test", checkSuite: 100),
+            apiCheckRun(id: 2, name: "build", checkSuite: 100),
+            apiCheckRun(id: 3, name: "build", checkSuite: 101),
             // A push's run beside the pull request's.
-            apiCheckRun(id: 5, name: "build", checkSuite: 102, pullRequests: []),
+            apiCheckRun(id: 4, name: "build", checkSuite: 102, pullRequests: []),
+            apiCheckRun(id: 5, name: "lint", checkSuite: nil),
             apiCheckRun(id: 6, name: "lint", checkSuite: nil),
-            apiCheckRun(id: 7, name: "lint", checkSuite: nil),
+            // Listed again on a later page.
+            apiCheckRun(id: 1, name: "build", conclusion: .failure, checkSuite: 100),
         ]
         let latest = getLatestCheckRunsById(runs)
-        #expect(latest.map(\.id) == [1, 2, 4, 5, 6, 7])
+        #expect(latest.map(\.id) == [1, 2, 3, 4, 5, 6])
         #expect(checksResult(latest.map(apiCheckRunToRefCheck)) == .failed)
     }
 

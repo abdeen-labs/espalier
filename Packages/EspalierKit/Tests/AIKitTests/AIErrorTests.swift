@@ -11,9 +11,14 @@ private func parse(_ text: String, status: Int = 402, retryAfter: String? = nil)
 @Suite("parseProviderErrorResponse")
 struct ParseProviderErrorTests {
     @Test("describes the failure when the body has no message to show", arguments: [
-        NamedCase("an array", (body: #"[{"message":"Not a top-level error"}]"#, status: 402)),
+        NamedCase("an array whose first element has no message", (body: #"[{"code":"quota_exceeded"},{"message":"Second"}]"#, status: 402)),
+        NamedCase("an empty array", (body: "[]", status: 400)),
         NamedCase("an array error without a top-level message", (body: #"{"error":[{"code":"quota_exceeded"}]}"#, status: 402)),
+        NamedCase("an object without a message", (body: #"{"detail":"Not Found"}"#, status: 404)),
         NamedCase("a blank message", (body: #"{"error":{"message":" "}}"#, status: 500)),
+        NamedCase("a blank JSON string", (body: #"" ""#, status: 500)),
+        NamedCase("null", (body: "null", status: 502)),
+        NamedCase("a number", (body: "42", status: 400)),
         NamedCase("a gateway's HTML page", (body: "<html>\n<head><title>502 Bad Gateway</title></head>\n<body>nginx</body>\n</html>", status: 502)),
         NamedCase("an HTML page with a doctype", (body: "  <!DOCTYPE html><html><body>Not Found</body></html>", status: 404)),
     ])
@@ -21,6 +26,28 @@ struct ParseProviderErrorTests {
         let error = parse(testCase.value.body, status: testCase.value.status)
         #expect(error.message == getFallbackErrorMessage(error.kind))
         #expect(error.code == nil)
+    }
+
+    @Test("reads the message from an array's first element, or from a JSON string", arguments: [
+        NamedCase(
+            "Gemini's array",
+            (
+                body: #"[{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}]"#,
+                message: "API key not valid. Please pass a valid API key.",
+                code: nil
+            )
+        ),
+        NamedCase(
+            "an array with an error code",
+            (body: #"[{"error":{"message":"Quota used up.","code":"insufficient_quota"}}]"#, message: "Quota used up.", code: "insufficient_quota")
+        ),
+        NamedCase("an array with a top-level message", (body: #"[{"message":"Not a top-level error"}]"#, message: "Not a top-level error", code: nil)),
+        NamedCase("a JSON string", (body: #""Rate limit exceeded""#, message: "Rate limit exceeded", code: nil)),
+    ] as [NamedCase<(body: String, message: String, code: String?)>])
+    func arrayAndStringBodies(_ testCase: NamedCase<(body: String, message: String, code: String?)>) {
+        let error = parse(testCase.value.body, status: 429)
+        #expect(error.message == testCase.value.message)
+        #expect(error.code == testCase.value.code)
     }
 
     @Test("uses the top-level message when the nested error is an array")

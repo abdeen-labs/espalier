@@ -100,18 +100,21 @@ struct CommitMessageGenerationTests {
         }
     }
 
-    @Test("reports a reply cut off at the output limit as that, not as invalid JSON", arguments: ["length", "max_tokens", "max_output_tokens"])
-    func cutOff(stopReason: String) async throws {
-        for content in [#"{"title":"Update a.txt","descr"#, ""] {
-            let provider = ScriptedProvider { _ in ScriptedTurn(response: AIResponse(content: content, stopReason: stopReason)) }
-            let error = await providerError {
-                _ = try await generateCommitMessage(diff: diff, model: scriptedModel(), using: provider)
-            }
-            #expect(error?.kind == .outputLimitReached)
-            #expect(provider.requests.count == 1)
+    @Test("reports a reply cut off at the output limit as that, not as invalid JSON", arguments: ["length", "max_tokens", "max_output_tokens"], [
+        NamedCase("a partial message", #"{"title":"Update a.txt","descr"#),
+        NamedCase("no content", ""),
+    ])
+    func cutOff(stopReason: String, content: NamedCase<String>) async throws {
+        let provider = ScriptedProvider { _ in ScriptedTurn(response: AIResponse(content: content.value, stopReason: stopReason)) }
+        let error = await providerError {
+            _ = try await generateCommitMessage(diff: diff, model: scriptedModel(), using: provider)
         }
+        #expect(error?.kind == .outputLimitReached)
+        #expect(provider.requests.count == 1)
+    }
 
-        // A complete message is used, however the response ended.
+    @Test("uses a complete message, however the response ended", arguments: ["length", "max_tokens", "max_output_tokens"])
+    func completeAtOutputLimit(stopReason: String) async throws {
         let complete = ScriptedProvider { _ in ScriptedTurn(response: AIResponse(content: #"{"title":"T"}"#, stopReason: stopReason)) }
         #expect(try await generateCommitMessage(diff: diff, model: scriptedModel(), using: complete).title == "T")
     }

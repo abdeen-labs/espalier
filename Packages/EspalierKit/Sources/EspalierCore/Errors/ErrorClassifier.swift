@@ -10,7 +10,8 @@ import GitKit
 
 /// What the classifier needs to know beyond the error and the operation.
 struct ClassificationContext: Sendable {
-    /// The operation is a background task: its error is never presented.
+    /// The operation is a background task: its error is never presented as
+    /// an error.
     var isBackgroundTask = false
 
     /// An account matches the repository's GitHub endpoint: only then is a

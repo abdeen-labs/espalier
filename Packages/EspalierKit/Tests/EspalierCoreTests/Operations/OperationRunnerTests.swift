@@ -219,6 +219,33 @@ struct OperationRunnerTests {
         await app.idle()
     }
 
+    @Test("the last background failure stays until an operation of its kind succeeds, in the background or not")
+    func backgroundFailureClears() async throws {
+        let (_, app, repository) = try await makeRepository()
+        let backgroundFetch = OperationDescriptor(kind: .fetch, lanes: [.network], policy: .background)
+        let failAFetch = {
+            _ = try? await repository.performIfIdle(backgroundFetch) { _ in
+                throw gitError("fatal: unable to access 'https://example.com/x.git/': Could not resolve host: example.com\n")
+            }
+        }
+
+        await failAFetch()
+        #expect(repository.lastBackgroundFailure?.error.operation == .fetch)
+        // Another kind of operation leaves it.
+        try await repository.perform(OperationDescriptor(kind: .push, lanes: [.network])) { _ in }
+        #expect(repository.lastBackgroundFailure?.error.operation == .fetch)
+        // A user's fetch clears it.
+        try await repository.perform(OperationDescriptor(kind: .fetch, lanes: [.network])) { _ in }
+        #expect(repository.lastBackgroundFailure == nil)
+
+        // So does a background fetch.
+        await failAFetch()
+        #expect(repository.lastBackgroundFailure?.error.operation == .fetch)
+        _ = try await repository.performIfIdle(backgroundFetch) { _ in }
+        #expect(repository.lastBackgroundFailure == nil)
+        await app.idle()
+    }
+
     @Test("the body runs in its own task: cancelling the caller doesn't reach it")
     func cancellationShielding() async throws {
         let (_, app, repository) = try await makeRepository()

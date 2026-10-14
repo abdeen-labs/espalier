@@ -273,11 +273,7 @@ public actor AccountsStore {
         }
 
         for replaced in accounts where replaced.endpoint == account.endpoint && replaced.login != account.login {
-            do {
-                try secureStore.deleteSecret(service: getKeyForAccount(replaced), account: replaced.login)
-            } catch {
-                log.error("Unable to remove the token of replaced account '\(replaced.login, privacy: .public)': \(String(describing: error), privacy: .public)")
-            }
+            removeToken(storedUnder: replaced.login, keepingTokenOf: account, as: account.login)
         }
 
         var endpoints: [String] = []
@@ -353,12 +349,32 @@ public actor AccountsStore {
             return false
         }
 
-        do {
-            try secureStore.deleteSecret(service: getKeyForAccount(account), account: account.login)
-        } catch {
-            log.error("Unable to remove the token stored under the old login '\(account.login, privacy: .public)': \(String(describing: error), privacy: .public)")
-        }
+        removeToken(storedUnder: account.login, keepingTokenOf: account, as: login)
         return true
+    }
+
+    /// Removes the token stored under `oldLogin` on the server of `account`,
+    /// whose token is already stored under `login`, and stores that token
+    /// again if removing the old one removed it too.
+    ///
+    /// When the logins differ only in case, a keychain that matches account
+    /// names ignoring case holds one item for both, so removing the old
+    /// login's removes the new one's.
+    private func removeToken(storedUnder oldLogin: String, keepingTokenOf account: Account, as login: String) {
+        let key = getKeyForAccount(account)
+        do {
+            try secureStore.deleteSecret(service: key, account: oldLogin)
+        } catch {
+            log.error("Unable to remove the token stored under the old login '\(oldLogin, privacy: .public)': \(String(describing: error), privacy: .public)")
+        }
+
+        do {
+            if try secureStore.secret(service: key, account: login) == nil {
+                try storeToken(of: account, as: login)
+            }
+        } catch {
+            log.error("Unable to check the token stored under the new login '\(login, privacy: .public)': \(String(describing: error), privacy: .public)")
+        }
     }
 
     /// Attempts to update the Account with new information from
@@ -568,6 +584,7 @@ public actor AccountsStore {
         case read(Account)
         /// There's no usable token: none is stored, the stored one expired,
         /// or it can't be read as a token. Whatever was stored is removed,
+        /// except a credential record of a version this build doesn't know,
         /// and a `tokenExpired` or `tokenMissing` event signs the account
         /// out.
         case signedOut
@@ -589,11 +606,13 @@ public actor AccountsStore {
         }
 
         let credential: AccountCredential
+        var isUnknownVersion = false
         do {
             credential = try deserializeAccountCredential(stored)
         } catch {
             log.error("Unable to read the credential for '\(key, privacy: .public)'. Signing out. \(String(describing: error), privacy: .public)")
             credential = nil
+            isUnknownVersion = (error as? AccountCredentialError)?.isUnknownVersion == true
         }
 
         let expired = credential?.isExpired(at: now()) ?? false
@@ -601,7 +620,7 @@ public actor AccountsStore {
             return .read(account.withToken(credential.accessToken, expiresAt: credential.expirationDate))
         }
 
-        if stored != nil {
+        if stored != nil, !isUnknownVersion {
             do {
                 try secureStore.deleteSecret(service: key, account: account.login)
             } catch {

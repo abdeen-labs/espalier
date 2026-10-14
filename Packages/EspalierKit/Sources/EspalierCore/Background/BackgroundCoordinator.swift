@@ -13,7 +13,7 @@ protocol SelectionScopedService: AnyObject {
 ///
 /// | Service | Runs for | Starts | Stops | Pauses |
 /// |---|---|---|---|---|
-/// | BackgroundFetcher | the selected repository | after the selection's first status pass | selection change, quit | never |
+/// | BackgroundFetcher | the selected repository | once the selection's pass has loaded its status and remotes | selection change, quit | never |
 /// | BranchPruner | the selected GitHub repository | on selection, or once the selection is associated | selection change, quit | — |
 /// | PullRequestUpdater | the selected GitHub repository with an account | selection while active; activation | inactive, selection change | — |
 /// | RepositoryIndicatorUpdater | every other repository | 2 min after launch if enabled; when the setting turns on | setting off, quit | while inactive |
@@ -87,14 +87,16 @@ final class BackgroundCoordinator {
             }
         }
 
-        // The fetcher runs for any repository. It starts after the
-        // selection's first status pass, or at once when that has happened.
+        // The fetcher runs for any repository. It starts once the
+        // selection's pass has loaded the status and the remotes (which
+        // tell a repository without a remote), or at once when that has
+        // happened.
         if let selected, !fetcherStarted {
             fetcherStarted = true
             let isFirst = selectionIsFirstSinceLaunch
             if services.contains(.fetcher) {
                 fetcherStart = Task { [weak self] in
-                    await selected.refreshScheduler.waitForRequestedPass(covering: .status)
+                    await selected.refreshScheduler.waitForRequestedPass(covering: [.status, .remotes])
                     guard let self, !Task.isCancelled, self.selectionRepositoryID == selected.id else {
                         return
                     }

@@ -19,7 +19,9 @@ extension RepositoryModel {
     /// 4. On failure: a hook the user aborted becomes
     ///    `cancelled(.hookAborted)`; anything else is classified, with its
     ///    side effects (marking the repository missing), and a background
-    ///    failure is kept in `lastBackgroundFailure`.
+    ///    failure is kept in `lastBackgroundFailure`. On success, a kept
+    ///    failure of the same kind is cleared. Neither happens without
+    ///    `updatesBackgroundFailure`.
     /// 5. Always clears the activity, resumes the watcher, requests the
     ///    descriptor's refresh, and releases the hold and the lanes. With
     ///    `showsProgressUntilRefreshed`, the network activity stays until
@@ -136,11 +138,14 @@ extension RepositoryModel {
         let outcome: Result<T, OperationError>
         switch result {
         case .success(let value):
+            if descriptor.updatesBackgroundFailure, lastBackgroundFailure?.error.operation == descriptor.kind {
+                lastBackgroundFailure = nil
+            }
             outcome = .success(value)
         case .failure(let error):
             let operationError = await classify(error, descriptor: descriptor, hookState: hookState)
             applySideEffects(of: operationError)
-            if operationError.isBackgroundTask, !operationError.isCancellation {
+            if descriptor.updatesBackgroundFailure, operationError.isBackgroundTask, !operationError.isCancellation {
                 lastBackgroundFailure = BackgroundFailure(error: operationError, date: environment.scheduler.now)
             }
             if !operationError.isCancellation {

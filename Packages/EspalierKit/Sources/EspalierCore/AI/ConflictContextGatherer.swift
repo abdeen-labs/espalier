@@ -52,7 +52,8 @@ enum ConflictContextGatherer {
     /// a cherry-pick's target and source; a squash's or reorder's branch and
     /// the commit being moved; a revert's branch and the reverted commit.
     /// A side that isn't known gets a generic name ("incoming branch",
-    /// "current branch", "cherry-picked commit").
+    /// "cherry-picked commit"), except a rebase's base, which is named by
+    /// the short SHA of the commit it's being rebased onto.
     static func labels(
         _ conflictState: ConflictState,
         operation: MultiCommitOperation?,
@@ -67,7 +68,7 @@ enum ConflictContextGatherer {
                 ourRef: currentBranch,
                 theirRef: theirBranch
             )
-        case .rebase(_, let targetBranch, _, _, _, _):
+        case .rebase(_, let targetBranch, _, _, let baseBranchTip, _):
             switch operation?.detail {
             case .squash?, .reorder?:
                 // The commits being moved aren't a branch: no commit context.
@@ -80,7 +81,7 @@ enum ConflictContextGatherer {
             default:
                 let baseBranch = branches?.ours
                 return Labels(
-                    ourLabel: baseBranch ?? "current branch",
+                    ourLabel: baseBranch ?? shortenSHA(baseBranchTip),
                     theirLabel: targetBranch,
                     ourRef: baseBranch,
                     theirRef: targetBranch

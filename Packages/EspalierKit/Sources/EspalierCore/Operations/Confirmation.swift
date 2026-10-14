@@ -13,6 +13,17 @@ public enum ConfirmationKind: String, Sendable, Hashable, CaseIterable {
     case replaceCommandLineTool
 }
 
+/// What's at the command line tool's path that installing would replace
+/// (`Confirmation.replaceCommandLineTool`).
+public enum ExistingCommandLineTool: Sendable, Equatable {
+    /// A link elsewhere, to where it points.
+    case link(String)
+    /// A file.
+    case file
+    /// Something that couldn't be looked at.
+    case unexamined
+}
+
 /// A confirmation an intent requires, with its copy.
 public struct Confirmation: Sendable, Equatable {
     public let kind: ConfirmationKind
@@ -348,16 +359,19 @@ extension Confirmation {
     }
 
     /// Installing the command line tool over something else at its path: a
-    /// link elsewhere, or a file.
+    /// link elsewhere, a file, or something that couldn't be looked at.
     ///
     /// - Parameters:
     ///   - path: Where the tool goes (`/usr/local/bin/espalier`).
-    ///   - linkDestination: Where the link there points; nil for a file.
-    public static func replaceCommandLineTool(path: String, linkDestination: String?) -> Confirmation {
-        let message = if let linkDestination {
-            "\(path) is a link to \(linkDestination), not to Espalier's command line tool. Installing replaces the link."
-        } else {
+    ///   - existing: What's there.
+    public static func replaceCommandLineTool(path: String, existing: ExistingCommandLineTool) -> Confirmation {
+        let message = switch existing {
+        case .link(let destination):
+            "\(path) is a link to \(destination), not to Espalier's command line tool. Installing replaces the link."
+        case .file:
             "\(path) is a file other than Espalier's command line tool. Installing deletes it and puts the tool in its place."
+        case .unexamined:
+            "Espalier couldn't check what's at \(path). If there's a file or link there, installing replaces it with the command line tool."
         }
         return Confirmation(
             kind: .replaceCommandLineTool,

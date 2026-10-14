@@ -55,6 +55,7 @@ struct ModalCaptures {
         capture(card(push), named: "alert-threeButtons", area: area)
         capture(card(try confirmation("replaceCommandLineTool")), named: "alert-replaceCommandLineTool", area: area)
         capture(card(try confirmation("replaceCommandLineTool-file")), named: "alert-replaceCommandLineTool-file", area: area)
+        capture(card(try confirmation("replaceCommandLineTool-unexamined")), named: "alert-replaceCommandLineTool-unexamined", area: area)
     }
 
     @Test("alerts: the checkbox on, a list of ten and the rest counted, a long URL")

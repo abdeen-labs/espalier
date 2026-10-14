@@ -14,8 +14,8 @@ public struct OperationError: Error, Sendable {
     public let reason: Reason
     /// How to run the operation again with the same arguments, if it can be.
     public let retry: (any RetryableOperation)?
-    /// Whether a background task failed: never presented, kept as the
-    /// repository's `lastBackgroundFailure`.
+    /// Whether a background task failed: never presented as an error, kept
+    /// as the repository's `lastBackgroundFailure`.
     public let isBackgroundTask: Bool
     /// The error the operation threw.
     public let underlying: (any Error)?

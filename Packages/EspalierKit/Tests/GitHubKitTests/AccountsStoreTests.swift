@@ -52,6 +52,56 @@ private final class FailingSecretStore: SecretStore {
     }
 }
 
+/// An in-memory secure store that matches account names exactly, or
+/// ignoring case as a keychain can.
+private final class CaseMatchingSecretStore: SecretStore {
+    private let ignoresCase: Bool
+    private let secrets = Mutex<[String: String]>([:])
+
+    init(ignoresCase: Bool) {
+        self.ignoresCase = ignoresCase
+    }
+
+    /// How many secrets are stored.
+    var count: Int {
+        secrets.withLock { $0.count }
+    }
+
+    private func key(_ service: String, _ account: String) -> String {
+        "\(service)\n\(ignoresCase ? account.lowercased() : account)"
+    }
+
+    func secret(service: String, account: String) throws -> String? {
+        secrets.withLock { $0[key(service, account)] }
+    }
+
+    func setSecret(_ secret: String, service: String, account: String) throws {
+        secrets.withLock { $0[key(service, account)] = secret }
+    }
+
+    func deleteSecret(service: String, account: String) throws -> Bool {
+        secrets.withLock { $0.removeValue(forKey: key(service, account)) != nil }
+    }
+}
+
+/// Holds a mock's response on its thread until the test opens it (for at
+/// most 30 seconds, so a broken test can't hang), so the test can act while
+/// the request is in flight.
+private final class ResponseGate: Sendable {
+    private let opened = DispatchSemaphore(value: 0)
+    /// Resolved once a response is held.
+    let arrived = AsyncEvent<Void>()
+
+    func hold() {
+        arrived.resolve()
+        _ = opened.wait(timeout: .now() + 30)
+    }
+
+    func open() {
+        opened.signal()
+    }
+}
+
 private func storedUser(endpoint: String) -> String {
     """
     [{"login":"joan","endpoint":"\(endpoint)","token":"deadbeef","emails":[],"avatarURL":"","id":1,"name":"","plan":"free"}]
@@ -221,6 +271,24 @@ struct AccountsStoreTests {
             #expect(try secure.secret(service: getKeyForAccount(octocat), account: "octocat") == nil)
         }
 
+        @Test("keeps the new token, stored once, when signing in again changes only the login's case", arguments: [
+            NamedCase("a keychain that matches account names ignoring case", true),
+            NamedCase("a keychain that matches them exactly", false),
+        ])
+        func replacesRecasedAccount(_ testCase: NamedCase<Bool>) async throws {
+            let data = InMemoryDataStore()
+            let secure = CaseMatchingSecretStore(ignoresCase: testCase.value)
+            let store = AccountsStore(dataStore: data, secureStore: secure)
+            try await store.addAccount(account("Octocat", token: "old-token"))
+            let signedIn = account("octocat", token: "new-token")
+
+            try await store.addAccount(signedIn)
+
+            #expect(await store.getAll() == [signedIn])
+            #expect(secure.count == 1)
+            #expect(await AccountsStore(dataStore: data, secureStore: secure).getAll() == [signedIn])
+        }
+
         @Test("keeps the existing account when storing the new token fails")
         func keepsAccountWhenAddingFails() async throws {
             let secure = FailingSecretStore()
@@ -375,6 +443,58 @@ struct AccountsStoreTests {
             #expect(restarted.tokenExpiresAt == octocat.tokenExpiresAt)
         }
 
+        @Test("keeps the token, stored once, when GitHub changed only the login's case", arguments: [
+            NamedCase("a keychain that matches account names ignoring case", true),
+            NamedCase("a keychain that matches them exactly", false),
+        ])
+        func movesTokenToRecasedLogin(_ testCase: NamedCase<Bool>) async throws {
+            let mock = MockGitHub()
+            mock.on("GET", "/user", respond: .json(encoding: createMockAPIFullIdentity(id: 1, login: "octocat")))
+            mock.on("GET", "/user/emails", respond: .json(encoding: [createMockAPIEmail("octocat@example.com")]))
+            let data = InMemoryDataStore()
+            let secure = CaseMatchingSecretStore(ignoresCase: testCase.value)
+            let store = AccountsStore(dataStore: data, secureStore: secure, runtime: mock.runtime)
+            try await store.addAccount(account("Octocat", token: "secret-token"))
+
+            await store.refresh()
+
+            #expect(await store.getAll().map(\.login) == ["octocat"])
+            #expect(secure.count == 1)
+            let restarted = await AccountsStore(dataStore: data, secureStore: secure).getAll()
+            #expect(restarted.map(\.login) == ["octocat"])
+            #expect(restarted.first?.token == "secret-token")
+        }
+
+        @Test("a sign-in that finishes while a refresh runs keeps its token", arguments: [
+            NamedCase("the refresh finds the same login", (refreshed: "octocat", signedIn: "octocat")),
+            NamedCase("the refresh finds the login renamed", (refreshed: "monalisa", signedIn: "octocat")),
+            NamedCase("both find the login renamed", (refreshed: "monalisa", signedIn: "monalisa")),
+        ])
+        func signInDuringRefresh(_ testCase: NamedCase<(refreshed: String, signedIn: String)>) async throws {
+            let mock = MockGitHub()
+            let gate = ResponseGate()
+            let refreshedLogin = testCase.value.refreshed
+            mock.on("GET", "/user") { _ in
+                gate.hold()
+                return .json(encoding: createMockAPIFullIdentity(id: 1, login: refreshedLogin))
+            }
+            mock.on("GET", "/user/emails", respond: .json(encoding: [createMockAPIEmail("\(refreshedLogin)@example.com")]))
+            let data = InMemoryDataStore()
+            let secure = InMemorySecretStore()
+            let store = AccountsStore(dataStore: data, secureStore: secure, runtime: mock.runtime)
+            try await store.addAccount(account("octocat", token: "old-token"))
+
+            let refreshing = Task { await store.refresh() }
+            try await gate.arrived.wait()
+            let signedIn = account(testCase.value.signedIn, token: "new-token")
+            try await store.addAccount(signedIn)
+            gate.open()
+            await refreshing.value
+
+            #expect(await store.getAll() == [signedIn])
+            #expect(await AccountsStore(dataStore: data, secureStore: secure).getAll() == [signedIn])
+        }
+
         @Test("keeps the account's old login while its token can't be moved to the new one")
         func keepsLoginWhenTokenCantMove() async throws {
             let mock = MockGitHub()
@@ -413,17 +533,23 @@ struct AccountsStoreTests {
             #expect(signedOut.token == "")
         }
 
-        @Test("signs out an account whose stored credential can't be read, and removes it")
-        func signsOutMalformedCredential() async throws {
+        @Test("signs out an account whose stored credential can't be read, removing a broken one and keeping a later version's", arguments: [
+            NamedCase("empty", (stored: "", kept: false)),
+            NamedCase("not JSON", (stored: #"espalier-oauth:{"version":1,"#, kept: false)),
+            NamedCase("without a version", (stored: #"espalier-oauth:{"credential":{"accessToken":"gho_token","expiresAt":1}}"#, kept: false)),
+            NamedCase("a broken version 1 record", (stored: #"espalier-oauth:{"version":1,"credential":"gho_token"}"#, kept: false)),
+            NamedCase("a later version's record", (stored: #"espalier-oauth:{"version":2,"credential":{"token":"gho_token","binding":"key"}}"#, kept: true)),
+        ])
+        func signsOutMalformedCredential(_ testCase: NamedCase<(stored: String, kept: Bool)>) async throws {
             let data = InMemoryDataStore()
             data.setItem("users", storedUser(endpoint: "https://api.github.com"))
             let secure = InMemorySecretStore()
-            try secure.setSecret(#"espalier-oauth:{"version":7}"#, service: "Espalier - https://api.github.com", account: "joan")
+            try secure.setSecret(testCase.value.stored, service: "Espalier - https://api.github.com", account: "joan")
             let store = AccountsStore(dataStore: data, secureStore: secure)
 
             #expect(await store.getAllWithUnreadable() == ([], []))
             #expect(data.getItem("users") == "[]")
-            #expect(try secure.secret(service: "Espalier - https://api.github.com", account: "joan") == nil)
+            #expect(try secure.secret(service: "Espalier - https://api.github.com", account: "joan") == (testCase.value.kept ? testCase.value.stored : nil))
             let missing = await store.events.first { event in
                 if case .tokenMissing = event { return true }
                 return false

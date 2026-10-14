@@ -71,7 +71,7 @@ struct BackgroundCoordinatorTests {
         #expect(!app.background.indicators.isRunning)
     }
 
-    @Test("runs the fetcher for the selected repository after its first status pass, and the pruner for a GitHub one")
+    @Test("runs the fetcher for the selected repository once its first pass has loaded, and the pruner for a GitHub one")
     func selectionServices() async throws {
         let harness = try AppHarness(backgroundServices: .all)
         let app = await harness.loadedApp()
@@ -149,6 +149,36 @@ struct BackgroundCoordinatorTests {
         #expect(app.background.fetcher.repositoryID == id)
         #expect(app.background.fetcher.startedWithInitialSkew)
         await app.idle()
+    }
+
+    @Test("a later selection starts the fetcher once its remotes have loaded, so a repository without one isn't fetched", .hangGuard(minutes: 5))
+    func laterSelectionWithoutRemote() async throws {
+        let harness = try AppHarness(skew: .seconds(7), backgroundServices: [.fetcher])
+        let first = await harness.loadedApp()
+        let other = try await add(gitHub: false, to: first)
+        let local = try await add(gitHub: false, to: first)
+        first.select(.repository(other))
+        await first.idle()
+        await first.prepareForTermination()
+
+        // Relaunched: the other repository is selected again, and this one's
+        // remotes haven't loaded.
+        let app = await harness.loadedApp()
+        #expect(app.selection == .repository(other))
+        await app.idle()
+        let model = try #require(app.repository(local))
+        #expect(!model.gitState.loaded.contains(.remotes))
+
+        // Not the first selection: the fetcher's first run comes at once,
+        // then its wait.
+        app.select(.repository(local))
+        await harness.scheduler.waitForSleepers(1)
+        await app.idle()
+        #expect(app.background.fetcher.repositoryID == local)
+        #expect(app.background.fetcher.startedWithInitialSkew == false)
+        #expect(model.gitState.remotes.all.isEmpty)
+        // A fetch would have refreshed after it.
+        #expect(!model.refreshScheduler.lastPassReasons.contains(.operation(.fetch)))
     }
 
     @Test("updates pull requests while active, for a GitHub repository with an account")

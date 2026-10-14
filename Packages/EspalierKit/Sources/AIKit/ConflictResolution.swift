@@ -359,13 +359,12 @@ let ConflictResolutionSystemPrompt = #"""
 /// Normalizes a file path returned by the model. The model may return
 /// Windows-style backslashes (`src\file.ts`), a leading `./`, or redundant
 /// separators, all of which would cause validation to reject an otherwise
-/// correct resolution.
+/// correct resolution. Separators are collapsed before a leading `./` is
+/// dropped, so `.//src/file.ts` reads as `src/file.ts`.
 private func normalizeLLMPath(_ raw: String) -> String {
-    var path = JSCompat.trim(raw).replacingOccurrences(of: "\\", with: "/", options: .literal)
-    if JSCompat.startsWith(path, "./") {
-        path = JSCompat.dropFirst(path, 2)
-    }
-    return JS.replaceAll(path, repeatedSlashes, with: "/")
+    let separators = JSCompat.trim(raw).replacingOccurrences(of: "\\", with: "/", options: .literal)
+    let path = JS.replaceAll(separators, repeatedSlashes, with: "/")
+    return JSCompat.startsWith(path, "./") ? JSCompat.dropFirst(path, 2) : path
 }
 
 private let repeatedSlashes = JSCompat.regex("//+")

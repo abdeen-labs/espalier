@@ -272,7 +272,11 @@ remotes from before the mark aren't migrated (my call).
   branch is never pruned for its upstream (desktop counted every local
   upstream as gone).
 - **Background errors keep their side effects** (marking a repository
-  missing) but are never presented.
+  missing) but never show as an error alert. The last one shows as a
+  badge on the sync button, with its details in the button's menu, until
+  an operation of its kind succeeds, in the background or not. The
+  repository indicators' fetch, which goes on when its fetch fails,
+  neither sets nor clears it.
 - **Retrying a push keeps its options** (desktop retried a force push as a
   normal push). **A force push forgets the rewrite only once it succeeds,**
   and only pushed tags leave the queue.
@@ -634,7 +638,16 @@ immediately; importing desktop's repository list and settings (my call).
   or ending `.lock` becomes a hyphen ("Will be created as …"); `HEAD` is not
   a valid name. Desktop checked only the whole name, so git refused after
   the sheet closed. Create Tag says a name is not valid, as the branch
-  sheets do (it said what an empty name would be created as).
+  sheets do (it said what an empty name would be created as). A link's
+  `branch` follows the same rules: an `openRepo` link with one git refuses
+  (`feature/.x`, `a.lock/b`) is unknown, as desktop's was for `..`.
+- **New Branch, Rename Branch, Create Tag, and Add Worktree refuse a name
+  git can't keep beside an existing local branch or tag:** the same name in
+  another case (one file on macOS's case-insensitive volumes), or one that
+  is the other's folder (`feature` and `feature/x`). A rename's own branch
+  doesn't count; Add Worktree checks the local branch it makes, new or for
+  a remote branch. Desktop compared exact names, so git refused after the
+  sheet closed.
 - **An empty branch list reads "No Branches"** with nothing typed in the
   filter (desktop's said it couldn't find that branch).
 - **The branch popover is desktop's branch switcher:** a click or Return
@@ -651,7 +664,9 @@ immediately; importing desktop's repository list and settings (my call).
   them enabled; the merge itself says what's wrong. Desktop's Compare
   enabled Merge while checking, and both read a failed check as clean, or
   commits it couldn't count as up to date. A check stopped when the
-  repository is deselected runs again when its history shows.
+  repository is deselected runs again when its history shows; one git
+  couldn't make runs again then too, and whenever the comparison loads
+  again.
 
 **Repositories**
 
@@ -663,7 +678,9 @@ immediately; importing desktop's repository list and settings (my call).
   it writes,** and makes no commit when it writes none; the folder's other
   files stay uncommitted, in Changes, and the sheet says how many (as git
   will list them, with the Git Ignore template chosen in place of the
-  folder's own top-level .gitignore). No .gitattributes (my call).
+  folder's own top-level .gitignore, and the .gitignore files below it
+  read as git will read them under the template). No .gitattributes (my
+  call).
 - **The .gitignore templates and licenses** come from desktop's static
   folder (github/gitignore, CC0; choosealicense.com, MIT), credited in
   Acknowledgements.
@@ -685,7 +702,8 @@ immediately; importing desktop's repository list and settings (my call).
   linked at `/usr/local/bin/espalier` as the user or after an administrator
   prompt. A link to another copy of Espalier's tool is replaced; anything
   else there asks first (Replace Existing Command?), and a folder isn't
-  touched (desktop replaced whatever was there).
+  touched (desktop replaced whatever was there). Something there that
+  can't be looked at asks first too, saying it couldn't be checked.
 - **Move to Applications** isn't offered in Debug builds; as the user it
   puts an older copy in the Trash, as an administrator it replaces it.
 - **Desktop bugs fixed:** owners sort ignoring case in the repository list
@@ -693,7 +711,9 @@ immediately; importing desktop's repository list and settings (my call).
   for the previous repository; a clone list that fails to load says so,
   with Try Again (desktop said the account had no repositories); an
   `owner/name` GitHub couldn't be asked about (offline, rate limited) gives
-  GitHub's or the connection's reason, apart from one no account can see;
+  GitHub's or the connection's reason, apart from one no account can see
+  (a signed-in account's "not found" stands over a failed anonymous lookup
+  on its server, which could only see less);
   publishing to an organization gives GitHub's reason (desktop blamed a
   name already taken or permissions for every error, single sign-on and
   rate limits included).
@@ -735,9 +755,11 @@ immediately; importing desktop's repository list and settings (my call).
 - **Pull requests have their own symbol** (desktop's reads as a figure at
   small sizes) and drafts a Draft tag. A check's step row opens the step.
 - **Checks glyphs:** pending is a clock and neutral a minus (desktop: a dot
-  and a square), in the checks list and in a pull request's glyph, where
-  the minus also stands for cancelled or stale checks. Only a check that
-  needs an action has the warning's shape.
+  and a square), in the checks list and in a pull request's glyph. In the
+  checks list only a check that needs an action has the warning's shape.
+  A pull request's glyph has four shapes: the minus also stands for
+  cancelled, skipped, or stale checks, and checks that need an action draw
+  the failure's ✕.
 - **Preview Pull Request fills the window** less its 40-point margins, as
   desktop's dialog does.
 
@@ -767,7 +789,9 @@ immediately; importing desktop's repository list and settings (my call).
 - **Desktop bugs fixed:** `fetchAllOpenPullRequests`, `fetchIssues`, and
   `fetchOrgs` fail when a page fails (desktop kept the pages before it, so
   the issue cache moved past issues it never read and Publish listed some
-  organizations); `fetchIssues` filters on `pull_request`; `getEndpointForRepository`
+  organizations); a paged list stops at a next link to a page it already
+  fetched (desktop's `fetchAll` requested it again forever); `fetchIssues`
+  filters on `pull_request`; `getEndpointForRepository`
   matches Enterprise Server accounts; migrating a ghe.com account moves its
   token; a failed user fetch at the end of sign-in is an error; an API
   error leaves out empty messages ("Validation Failed (, )"); a queued
@@ -784,14 +808,24 @@ immediately; importing desktop's repository list and settings (my call).
   in to GitHub.com.
 - **An account without a usable token is signed out at launch,** with the
   Signed Out alert: a token missing from the keychain, or stored in a form
-  Espalier can't read, which is removed. Desktop loaded a missing token as
-  an empty one, so requests went out unauthenticated and git got an empty
-  password, and it dropped an account whose credential it couldn't decode
-  at the next save, leaving the keychain item behind.
+  Espalier can't read. A broken item (empty, or not a record this build can
+  parse) is removed; a well-formed record of a version this build doesn't
+  know is kept, since debug and release builds share keychain items and an
+  older build mustn't erase a newer one's token. Desktop loaded a missing
+  token as an empty one, so requests went out unauthenticated and git got
+  an empty password, and it dropped an account whose credential it couldn't
+  decode at the next save, leaving the keychain item behind.
 - **A refresh that finds the login renamed moves the token to the new
   login** (tokens are stored by login); if the keychain won't take it, the
-  account keeps its old details until the next refresh. Desktop left the
-  token under the old login, so the next launch found none.
+  account keeps its old details until the next refresh. When only the
+  login's case changed, here or when signing in again replaces the
+  account, the token is stored again if removing the old login's item
+  removed it too, as a keychain that matches account names ignoring case
+  does. Desktop left the token under the old login, so the
+  next launch found none. A refresh replaces an account only if its token
+  hasn't changed since the request started, so a sign-in that finishes
+  during a refresh keeps its new token (desktop replaced it with the
+  refreshed account and its old token).
 - **Emails that can't be fetched keep the account's saved ones;** desktop
   saved an empty list.
 - **The preferred email is never a private primary or an unverified
@@ -826,10 +860,12 @@ immediately; importing desktop's repository list and settings (my call).
   normalization stay apart.
 - **Kept as desktop:** `getGitDescription` reads `<path>/.git/description`,
   so it's empty for linked worktrees and submodules.
-- **A conflicted file's conflicts are counted from the file,** by its lines
-  that open one (`<<<<<<<`). `git diff --check` still says whether markers
-  are left, but counts every marker, and a conflict has four in the diff3
-  styles (desktop's markers ÷ 3 made one conflict two).
+- **A conflicted file's conflicts are counted by the markers that open
+  one.** `git diff --check` reports each marker left in a file by line
+  number (at the size `conflict-marker-size` sets, and only on lines the
+  merge changed); status reads each conflicted file with markers and counts
+  those whose line starts with `<`. Desktop divided the markers by three,
+  and a conflict has four in the diff3 styles, so one conflict read as two.
 - **A remote's name can have a `/`:** a remote branch's remote, and an
   upstream's, is the longest of the remotes' names it starts with (then a
   `/`), as the graph splits them; with none, it ends at the first `/`.
@@ -850,7 +886,8 @@ immediately; importing desktop's repository list and settings (my call).
   `diff.suppressBlankEmpty`, whose empty context lines failed the parse
   (they're read as `git apply` reads them, within the hunk's counts); a
   change or type change staged and then deleted showing as Modified (it's
-  Deleted).
+  Deleted); a new file staged and then replaced by a symlink (`AT`)
+  showing as Modified (it's New).
 
 ## Writing to the repository
 
@@ -1023,7 +1060,10 @@ immediately; importing desktop's repository list and settings (my call).
 - **Prompts are desktop's, byte for byte,** except that the commit prompt's
   attribution says "AI", a long diff is cut down (below), and the conflict
   prompt names each side by its label ("Ours (main):"), where desktop's
-  "Ours (current branch)" is the other way round in a rebase.
+  "Ours (current branch)" is the other way round in a rebase. A rebase
+  whose base branch isn't known names ours by the short SHA of the commit
+  it's being rebased onto (desktop: "current branch", the branch being
+  rebased).
 - **Providers:** OpenAI-compatible Chat Completions (default) and Responses
   (`store: false`), Azure (deployment URLs or the v1 routes), and Anthropic
   Messages (adaptive thinking and effort for current Claude models, budgets
@@ -1032,7 +1072,9 @@ immediately; importing desktop's repository list and settings (my call).
 - **A stored provider that doesn't load is kept** (a newer version's, say):
   every save writes it back after the others, so it isn't lost and its key
   isn't left in the keychain without it. Desktop dropped it at the next
-  save.
+  save. This holds per entry: a stored value that isn't a JSON array
+  (another shape, or cut off) loads no providers, and the next save
+  replaces it, leaving its providers' keys in the keychain.
 - **Safety:** base URLs are validated with Foundation's parser (what
   `URLSession` uses), so `http://localhost\@evil.com` can't pass as local;
   `http://` only for local hosts; redirects are refused so credentials never
@@ -1050,20 +1092,26 @@ immediately; importing desktop's repository list and settings (my call).
   429, 5xx, and connection failures, honoring `x-should-retry` and
   `Retry-After`; only before a stream starts. A request too large isn't
   retried: OpenAI's 429 "Request too large" (over the account's tokens per
-  minute) counts as too large, not as a rate limit, so it doesn't stop later
-  chunks either.
-- **Provider errors:** an HTML page or JSON without a message (a proxy's or
-  gateway's) is described by its status rather than shown raw.
+  minute) counts as too large, not as a rate limit, since no wait lets that
+  request through, so it doesn't stop later chunks either.
+- **Provider errors:** the message is read from the error object, from the
+  first element of a body that's an array (Gemini's OpenAI-compatible
+  endpoint), or from a body that's a JSON string (desktop showed both
+  raw). An HTML page or other JSON (a proxy's or gateway's) is described by
+  its status rather than shown raw.
 - **A response cut off at the output limit** reads "Response cut off" in
   both features, not as invalid JSON, and isn't sent again unchanged.
 - **Commit messages:** a `"description": null` is no description and the
   title is trimmed (desktop rejected the message); the JSON is found as
   conflict resolution finds it. The diff sent is at most 128 KB, about
-  35,000 tokens: within every current hosted model's context with the
-  prompt and the output limit, and cheap per click. A longer one keeps the
-  file list and every file's patch, the largest cut short with a note of
-  the lines left out, or with too many files, the first that fit and a
-  count of the rest. Changes with no diff say so (desktop did nothing).
+  35,000 tokens: with the prompt and the output limit, within every current
+  hosted model's context (128,000 tokens and up) with room to spare, cheap
+  per click, and more than a message needs (a larger diff is mostly
+  generated or vendored files). A longer one gives the file list up to a
+  quarter of that, cut short past it with a note of the lines left out, and
+  shares the rest among the files' patches: smaller ones whole, the largest
+  cut short with that note, or with too many files, the first that fit and
+  a count of the rest. Changes with no diff say so (desktop did nothing).
 - **Conflict requests sized for the model:** a chunk holds at most 20 files
   (15 above 100) and no more conflict content than one file may have
   (256K characters), so files that each fit don't go out together as
@@ -1079,7 +1127,8 @@ immediately; importing desktop's repository list and settings (my call).
 - **Paths from the model** match a file's exact path first, else the one
   file whose path reads the same with line breaks and backticks dropped
   (the prompt's headings drop them), spaces trimmed, backslashes as
-  slashes, `./` and doubled slashes removed, and Unicode composed; a
+  slashes, doubled slashes collapsed and then a leading `./` removed
+  (desktop's order left `.//x` as `/x`), and Unicode composed; a
   resolution is always written under the file's own path. Desktop compared
   the normalized path exactly, so a path with a backslash, backtick, or
   surrounding space never matched.
@@ -1087,6 +1136,12 @@ immediately; importing desktop's repository list and settings (my call).
   several requests, the results show each request's summary under the names
   of the files it covers (my call). Context lists every request's
   references, a retry's included.
+- **A rebase's results name its sides the right way round:** the summary
+  reads "Rebasing <branch> onto <base>" (desktop's read "Rebasing <base>
+  onto <branch>"). A file's row names a side whose branch isn't known by the
+  label the prompt gave it (a rebase's base by its commit's short SHA, a
+  cherry-pick's or revert's theirs as "cherry-picked commit" or "reverted
+  commit"), where desktop said "current branch" or "incoming branch".
 - **Conflict markers:** a file with a marker outside its blocks is skipped,
   and a reassembled file that still has one fails, so no file with markers
   is reported resolved.
@@ -1204,11 +1259,11 @@ immediately; importing desktop's repository list and settings (my call).
 - **The diff, the file lists, and History's lists don't bounce** past
   their edges (my call).
 - **A file row keeps its name whole, then its folder:** the folder, cut
-  from its start, takes the room the name leaves and goes once it can't
-  show its first and last characters around "…"; only then is the name
-  cut. A conflicted file's state takes what the name leaves, but at least
-  35% of the row. Desktop shows the folder before the name and cuts it
-  first.
+  from its start ("…" and its end), takes the room the name leaves and goes
+  once that room is narrower than its first and last characters around "…"
+  would be; only then is the name cut. A conflicted file's state takes
+  what the name leaves, but at least 35% of the row. Desktop shows the
+  folder before the name and cuts it first.
 - **No focus ring over a selection** (my call): History's commit and file
   rows, and the diff's line cursor, show only their accent tint, focused or
   not.

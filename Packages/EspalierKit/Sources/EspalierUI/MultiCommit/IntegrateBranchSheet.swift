@@ -69,6 +69,13 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
             return IntegrateStatus(icon: .invalid, message: "These branches have unrelated histories and can't be merged")
         case (_, 0?):
             return IntegrateStatus(icon: .clean, message: "\(current) is already up to date with \(branch)")
+        case (.conflicts(let count)?, _):
+            let files = count == 1 ? "file" : "files"
+            return IntegrateStatus(
+                icon: .conflicts,
+                message: "There will be \(count) conflicted \(files) when merging \(branch) into \(current)",
+                canStart: canStart
+            )
         case (nil, _), (_, nil):
             return IntegrateStatus(icon: .unknown, message: "Couldn't check whether this merges cleanly", canStart: canStart)
         case (.clean?, let count?):
@@ -76,13 +83,6 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
             return IntegrateStatus(
                 icon: .clean,
                 message: "This will merge \(count) \(commits) from \(branch) into \(current)",
-                canStart: canStart
-            )
-        case (.conflicts(let count)?, _):
-            let files = count == 1 ? "file" : "files"
-            return IntegrateStatus(
-                icon: .conflicts,
-                message: "There will be \(count) conflicted \(files) when merging \(branch) into \(current)",
                 canStart: canStart
             )
         }

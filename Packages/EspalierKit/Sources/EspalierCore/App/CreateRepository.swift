@@ -259,9 +259,10 @@ public struct CreateRepositoryDestination: Sendable, Equatable {
 /// The files already in a folder that would wait in Changes once it's a
 /// repository: what `git status --untracked-files=all` would list there.
 public struct CreateRepositoryExistingFiles: Sendable, Equatable {
-    /// How many files git lists: each file the folder's .gitignore files,
-    /// the user's global excludes, and the Git Ignore template leave, and a
-    /// nested repository as one.
+    /// How many files git lists: each file the user's global excludes and
+    /// the folder's .gitignore files leave, with the Git Ignore template, if
+    /// one is chosen, in place of the top-level .gitignore; a nested
+    /// repository counts as one.
     public var count: Int
     /// The files creating writes (README.md, .gitignore, LICENSE) among
     /// them, by the names they're written as.
@@ -339,9 +340,17 @@ public func checkCreateRepositoryDestination(_ fullPath: String) async -> Create
 /// patterns added. The template replaces the folder's own top-level
 /// .gitignore, so git then reads no .gitignore file, and the template is
 /// followed by the patterns of the .gitignore files below the top level,
-/// made relative to the folder (`gitIgnorePatterns(_:in:)`). Cancelling the
-/// task stops git. Nothing for a folder that doesn't exist or can't be
-/// listed.
+/// made relative to the folder (`gitIgnorePatterns(_:in:)`).
+///
+/// Those .gitignore files are the ones git would read: each in a folder
+/// that isn't ignored, whether the file itself is or not. A .gitignore can
+/// include a folder again, so they're listed in rounds, each with the
+/// patterns found so far (`listNestedGitIgnores`). A .gitignore in a folder
+/// whose path has a newline is left out (a pattern can't hold one), so the
+/// files it ignores count.
+///
+/// Cancelling the task stops git. Nothing for a folder that doesn't exist
+/// or can't be listed.
 public func checkCreateRepositoryExistingFiles(_ folder: String, gitIgnore: String?) async -> CreateRepositoryExistingFiles {
     guard await directoryExists(folder) else {
         return CreateRepositoryExistingFiles()
@@ -369,27 +378,8 @@ public func checkCreateRepositoryExistingFiles(_ folder: String, gitIgnore: Stri
             try writeData(excludesPath, excludes)
             if isRegularFile(POSIXPath.join(folder, gitIgnoreName)) {
                 args.append("--no-exclude-per-directory")
-                // The .gitignore files below the top level, which git would
-                // read: those in folders the template and the user's
-                // excludes leave. The shallower come first, so the deeper
-                // ones' patterns win, as they would in their own folders.
-                let listed = try await git(
-                    args + ["--exclude-from=\(excludesPath)", "--", ":(glob)**/\(gitIgnoreName)"],
-                    folder,
-                    "listNestedGitIgnores"
-                )
-                let nested = listed.stdoutData.split(separator: 0)
-                    .map { String(decoding: $0, as: UTF8.self) }
-                    .filter { $0.contains("/") }
-                    .sorted { depth($0) < depth($1) }
-                for path in nested {
-                    let fullPath = POSIXPath.join(folder, path)
-                    // Git doesn't follow a .gitignore that's a link.
-                    guard isRegularFile(fullPath), let contents = FileManager.default.contents(atPath: fullPath) else {
-                        continue
-                    }
-                    excludes.append(gitIgnorePatterns(contents, in: POSIXPath.dirname(path)))
-                }
+                let nested = try await listNestedGitIgnores(folder, args: args, template: excludes, excludesPath: excludesPath)
+                excludes.append(patternsByDepth(nested))
                 try writeData(excludesPath, excludes)
             }
             args.append("--exclude-from=\(excludesPath)")
@@ -405,6 +395,69 @@ public func checkCreateRepositoryExistingFiles(_ folder: String, gitIgnore: Stri
         logger.error("Unable to list the existing files: \(error.localizedDescription, privacy: .public)")
         return CreateRepositoryExistingFiles()
     }
+}
+
+/// The .gitignore files below the top level of `folder` that git would
+/// read, by path, with their patterns (`gitIgnorePatterns(_:in:)`). `args`
+/// lists the folder's untracked files without reading its .gitignore
+/// files; `template` has the patterns that stand in for the top-level one.
+///
+/// A round writes the template and the patterns found so far to
+/// `excludesPath`, and lists the .gitignore files in the folders they
+/// leave; a last `!.gitignore` keeps the files themselves, as git reads a
+/// .gitignore it ignores. Another round runs while one finds files with a
+/// negation, which can include a folder again. A file that isn't a regular
+/// file (git doesn't follow a link), or in a folder whose path has a
+/// newline, adds no patterns.
+private func listNestedGitIgnores(
+    _ folder: String,
+    args: [String],
+    template: Data,
+    excludesPath: String
+) async throws -> [String: Data] {
+    var nested: [String: Data] = [:]
+    while true {
+        var excludes = template
+        excludes.append(patternsByDepth(nested))
+        excludes.append(contentsOf: "!\(gitIgnoreName)\n".utf8)
+        try writeData(excludesPath, excludes)
+        let listed = try await git(
+            args + ["--exclude-from=\(excludesPath)", "--", ":(glob)**/\(gitIgnoreName)"],
+            folder,
+            "listNestedGitIgnores"
+        )
+        var includesAgain = false
+        for path in listed.stdoutData.split(separator: 0).map({ String(decoding: $0, as: UTF8.self) }) {
+            guard path.contains("/"), nested[path] == nil else {
+                continue
+            }
+            let fullPath = POSIXPath.join(folder, path)
+            guard !path.utf8.contains(UInt8(ascii: "\n")), isRegularFile(fullPath),
+                  let contents = FileManager.default.contents(atPath: fullPath) else {
+                nested[path] = Data()
+                continue
+            }
+            let patterns = gitIgnorePatterns(contents, in: POSIXPath.dirname(path))
+            nested[path] = patterns
+            if patterns.split(separator: UInt8(ascii: "\n")).contains(where: { $0.first == UInt8(ascii: "!") }) {
+                includesAgain = true
+            }
+        }
+        if !includesAgain {
+            return nested
+        }
+    }
+}
+
+/// The patterns of the .gitignore files in `nested`, the shallower first,
+/// so the deeper ones' win, as they would in their own folders.
+private func patternsByDepth(_ nested: [String: Data]) -> Data {
+    let paths = nested.keys.sorted { depth($0) != depth($1) ? depth($0) < depth($1) : $0.utf8.lexicographicallyPrecedes($1.utf8) }
+    var patterns = Data()
+    for path in paths {
+        patterns.append(nested[path] ?? Data())
+    }
+    return patterns
 }
 
 /// The patterns of a .gitignore file in `directory` (relative to the work
