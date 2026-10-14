@@ -30,7 +30,8 @@ struct SecretPrompt: View {
     let message: String
     /// The field's label ("Passphrase").
     let fieldLabel: String
-    let rememberTitle: String
+    /// The checkbox's title, or nil for no checkbox.
+    let rememberTitle: String?
     let onAnswer: (SecretPromptAnswer?) -> Void
     @State private var secret = ""
     @State private var remember = false
@@ -43,8 +44,10 @@ struct SecretPrompt: View {
                     SecureField(fieldLabel, text: $secret)
                         .labelsHidden()
                 }
-                Toggle(rememberTitle, isOn: $remember)
-                    .toggleStyle(.checkboxMark)
+                if let rememberTitle {
+                    Toggle(rememberTitle, isOn: $remember)
+                        .toggleStyle(.checkboxMark)
+                }
             }
             .formStyle(.columns)
             .textFieldStyle(.capsule)
@@ -56,13 +59,16 @@ struct SecretPrompt: View {
     }
 }
 
-/// "SSH Key Passphrase".
+/// "SSH Key Passphrase", offering to remember it only for a key Espalier
+/// can identify.
 public struct PassphrasePrompt: View {
     private let keyPath: String
+    private let canRemember: Bool
     private let onAnswer: (SecretPromptAnswer?) -> Void
 
-    public init(keyPath: String, onAnswer: @escaping (SecretPromptAnswer?) -> Void) {
+    public init(keyPath: String, canRemember: Bool, onAnswer: @escaping (SecretPromptAnswer?) -> Void) {
         self.keyPath = keyPath
+        self.canRemember = canRemember
         self.onAnswer = onAnswer
     }
 
@@ -71,7 +77,7 @@ public struct PassphrasePrompt: View {
             title: "SSH Key Passphrase",
             message: "Enter passphrase for key '\(keyPath)':",
             fieldLabel: "Passphrase",
-            rememberTitle: "Remember passphrase",
+            rememberTitle: canRemember ? "Remember passphrase" : nil,
             onAnswer: onAnswer
         )
     }

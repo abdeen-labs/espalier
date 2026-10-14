@@ -652,7 +652,13 @@ immediately; importing desktop's repository list and settings (my call).
   puts an older copy in the Trash, as an administrator it replaces it.
 - **Desktop bugs fixed:** owners sort ignoring case in the repository list
   and Clone; editing Clone's URL renames the folder only when it's named
-  for the previous repository.
+  for the previous repository; a clone list that fails to load says so,
+  with Try Again (desktop said the account had no repositories); an
+  `owner/name` GitHub couldn't be asked about (offline, rate limited) gives
+  GitHub's or the connection's reason, apart from one no account can see;
+  publishing to an organization gives GitHub's reason (desktop blamed a
+  name already taken or permissions for every error, single sign-on and
+  rate limits included).
 
 **Settings**
 
@@ -704,8 +710,10 @@ immediately; importing desktop's repository list and settings (my call).
 - **No untrusted-certificate prompt:** the error names the server and says
   to trust its certificate in Keychain Access. Redirects keep
   `Authorization` only on the same origin.
-- **Desktop bugs fixed:** `fetchAllOpenPullRequests` throws when a page
-  fails; `fetchIssues` filters on `pull_request`; `getEndpointForRepository`
+- **Desktop bugs fixed:** `fetchAllOpenPullRequests`, `fetchIssues`, and
+  `fetchOrgs` fail when a page fails (desktop kept the pages before it, so
+  the issue cache moved past issues it never read and Publish listed some
+  organizations); `fetchIssues` filters on `pull_request`; `getEndpointForRepository`
   matches Enterprise Server accounts; migrating a ghe.com account moves its
   token; a failed user fetch at the end of sign-in is an error; an API
   error leaves out empty messages ("Validation Failed (, )"); a queued
@@ -715,12 +723,39 @@ immediately; importing desktop's repository list and settings (my call).
   else Queued); an account whose token the keychain won't give (locked,
   access denied) stays saved but unused, and Settings ▸ Accounts offers
   Try Again (desktop dropped it from the saved list).
+- **An account without a usable token is signed out at launch,** with the
+  Signed Out alert: a token missing from the keychain, or stored in a form
+  Espalier can't read, which is removed. Desktop loaded a missing token as
+  an empty one, so requests went out unauthenticated and git got an empty
+  password, and it dropped an account whose credential it couldn't decode
+  at the next save, leaving the keychain item behind.
+- **A refresh that finds the login renamed moves the token to the new
+  login** (tokens are stored by login); if the keychain won't take it, the
+  account keeps its old details until the next refresh. Desktop left the
+  token under the old login, so the next launch found none.
+- **Emails that can't be fetched keep the account's saved ones;** desktop
+  saved an empty list.
+- **The preferred email is never a private primary or an unverified
+  address:** with a private primary and no noreply address listed, it's the
+  noreply form (`<id>+<login>@users.noreply.github.com`); without a primary,
+  the first verified address, else the noreply form. Desktop took the first
+  address listed. GitHub's API docs don't say whether `GET /user/emails`
+  lists the noreply address.
 - **A pull request's checks add up one way everywhere:** failed if any
   failed, timed out, or needs an action; else running if any runs; else not
   successful if any was cancelled or went stale; else passed (skipped and
   neutral pass). Every glyph, tooltip, and the summary's title follow it,
-  so they can't disagree. With no checks the summary says "No checks",
-  without progress or Re-run.
+  so they can't disagree, and Re-run Failed and failure notifications count
+  the same failures (desktop's counted only failed). With no checks the
+  summary says "No checks", without progress or Re-run.
+- **A pull request's checks load whole:** every page of statuses, check
+  runs, and Actions jobs (desktop read the first 100 and 30). A refresh
+  where the statuses or the check runs fail keeps the last checks (desktop
+  took the half that loaded for all of them).
+- **Re-run says when GitHub refuses:** the sheet stays open with GitHub's
+  reason, listing the checks it didn't rerun to try again, and only the
+  checks GitHub reruns show in progress (desktop closed the dialog and
+  showed them all in progress).
 
 ## Reading the repository
 
@@ -860,6 +895,17 @@ immediately; importing desktop's repository list and settings (my call).
   authentication error, which dugite's patterns also report for a missing
   repository. A stored signing key passphrase goes only when ssh-keygen
   rejects it.
+- **Remember is offered for an SSH key's passphrase only when the key file
+  can be read,** since its hash identifies the stored passphrase. ssh cuts
+  paths over 100 bytes in its prompt; desktop offered Remember for those
+  keys and never stored the passphrase.
+- **A username in the remote URL is decoded** before looking up its stored
+  password and filling in the prompt: `joe%40example.com` is `joe@example.com`,
+  as git gives it and Espalier stores it. Desktop looked it up encoded, so it
+  asked every time.
+- **Git that needs an account whose token the keychain won't give fails
+  with that message,** which points to Settings ▸ Accounts, instead of
+  asking to sign in again.
 
 ## Editors and shells
 

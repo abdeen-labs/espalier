@@ -62,6 +62,13 @@ private final class LockableSecretStore: SecretStore {
     }
 }
 
+/// What the keychain holds for an account's token that isn't one: nothing,
+/// or a record Espalier can't read.
+private let unusableTokens = [
+    NamedCase("missing", String?.none),
+    NamedCase("stored in a form Espalier can't read", "espalier-oauth:{\"version\":2}"),
+]
+
 @Suite("Accounts", .offline, .hangGuard(minutes: 5)) @MainActor
 struct AccountsModelTests {
     /// An app whose accounts store reads the time from the harness's
@@ -258,21 +265,23 @@ struct AccountsModelTests {
         await app.accounts.idle()
     }
 
-    @Test("reports stored credentials it can't read and skips their accounts")
-    func unreadableCredentials() async throws {
+    @Test("signs out an account whose token is missing or can't be read as one, to sign in again", arguments: unusableTokens)
+    func unusableToken(_ stored: NamedCase<String?>) async throws {
         let harness = try AppHarness()
         UserDefaultsDataStore(harness.defaults.defaults).setItem("users", """
             [{"login":"octocat","endpoint":"https://api.github.com","token":"","emails":[],"avatarURL":"","id":1,"name":"","plan":"free"}]
             """)
-        try harness.secrets.setSecret("espalier-oauth:{\"version\":2}", service: "Espalier - https://api.github.com", account: "octocat")
+        if let secret = stored.value {
+            try harness.secrets.setSecret(secret, service: "Espalier - https://api.github.com", account: "octocat")
+        }
 
         let app = await harness.loadedAppWithAccounts()
-        await waitForState { !app.accounts.issues.isEmpty }
+        await waitForState { !app.accounts.invalidatedAccounts.isEmpty }
 
         #expect(app.accounts.accounts.isEmpty)
-        let issue = try #require(app.accounts.issues.first)
-        app.accounts.dismissIssue(issue.id)
+        #expect(app.accounts.invalidatedAccounts.map(\.login) == ["octocat"])
         #expect(app.accounts.issues.isEmpty)
+        #expect(try harness.secrets.secret(service: "Espalier - https://api.github.com", account: "octocat") == nil)
         await settle(app, harness)
     }
 
@@ -297,8 +306,14 @@ struct AccountsModelTests {
         #expect(app.accounts.unreadableAccounts.map(\.login) == ["octocat"])
         #expect(app.accounts.unreadableAccounts.first?.token == "")
         #expect(app.accounts.invalidatedAccounts.isEmpty)
-        // Git gets no credentials from it.
-        #expect(await AccountsTrampolineProvider(store, runtime: harness.gitHub.runtime).getAll().isEmpty)
+        let issue = try #require(app.accounts.issues.first)
+        app.accounts.dismissIssue(issue.id)
+        #expect(app.accounts.issues.isEmpty)
+        // Git gets no credentials from it, and is told why.
+        let provider = AccountsTrampolineProvider(store, runtime: harness.gitHub.runtime)
+        #expect(await provider.getAll().isEmpty)
+        #expect(await provider.unreadableAccountMessage(endpoint: "https://api.github.com") == issue.message)
+        #expect(await provider.unreadableAccountMessage(endpoint: "https://ghe.example.com/api/v3") == nil)
 
         // Trying again while the keychain is still locked changes nothing.
         await app.accounts.retryUnreadableAccounts()
@@ -309,7 +324,8 @@ struct AccountsModelTests {
 
         #expect(app.accounts.unreadableAccounts.isEmpty)
         #expect(app.accounts.accounts.map(\.token) == ["gho_secret"])
-        #expect(await AccountsTrampolineProvider(store, runtime: harness.gitHub.runtime).getAll().map(\.token) == ["gho_secret"])
+        #expect(await provider.getAll().map(\.token) == ["gho_secret"])
+        #expect(await provider.unreadableAccountMessage(endpoint: "https://api.github.com") == nil)
         await settle(app, harness)
     }
 

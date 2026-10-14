@@ -28,8 +28,9 @@ public protocol TrampolinePrompter: Sendable {
     /// ssh doesn't know the host's key: add it to `known_hosts` and connect?
     func promptAddingSSHHost(host: String, ip: String, keyType: String, fingerprint: String) async -> Bool
 
-    /// The passphrase for the SSH key at `keyPath`.
-    func promptSSHKeyPassphrase(keyPath: String) async -> PromptSSHSecretResponse
+    /// The passphrase for the SSH key at `keyPath`, offering to remember it
+    /// when `canRemember` (the key file can be read to identify it).
+    func promptSSHKeyPassphrase(keyPath: String, canRemember: Bool) async -> PromptSSHSecretResponse
 
     /// The password for `username` (`user@host`).
     func promptSSHUserPassword(username: String) async -> PromptSSHSecretResponse

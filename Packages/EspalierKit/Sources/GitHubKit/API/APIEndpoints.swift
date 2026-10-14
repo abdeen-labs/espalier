@@ -27,12 +27,21 @@ public func getOAuthApplicationSettingsURL(endpoint: String, clientID: String) -
 }
 
 /// Fetch the user authenticated by the token.
-public func fetchUser(endpoint: String, token: String, runtime: GitHubRuntime = .current) async throws -> Account {
+///
+/// - Parameter previousEmails: The emails the account has when its emails
+///   can't be fetched.
+public func fetchUser(
+    endpoint: String,
+    token: String,
+    previousEmails: [APIEmail] = [],
+    runtime: GitHubRuntime = .current
+) async throws -> Account {
     let api = API(endpoint: endpoint, token: token, runtime: runtime)
     do {
         async let user = api.fetchAccount()
         async let emails = api.fetchEmails()
-        let (fetchedUser, fetchedEmails) = try await (user, emails)
+        let fetchedUser = try await user
+        let fetchedEmails = (try? await emails) ?? previousEmails
 
         return Account(
             login: fetchedUser.login,

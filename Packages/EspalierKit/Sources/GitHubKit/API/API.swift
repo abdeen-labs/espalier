@@ -194,21 +194,22 @@ public struct API: Sendable {
         }
     }
 
-    /// Fetch the current user's emails.
-    public func fetchEmails() async -> [APIEmail] {
+    /// Fetch the current user's emails. Throws when they can't be fetched.
+    public func fetchEmails() async throws -> [APIEmail] {
         do {
             let response = try await ghRequest(.get, "user/emails")
             return try parsedResponse(response, as: [APIEmail].self)
         } catch {
             log.warning("fetchEmails: failed with endpoint \(endpoint, privacy: .public): \(String(describing: error), privacy: .public)")
-            return []
+            throw error
         }
     }
 
-    /// Fetch all the orgs to which the user belongs.
+    /// Fetch all the orgs to which the user belongs; none when any page
+    /// fails to load.
     public func fetchOrgs() async -> [APIOrganization] {
         do {
-            return try await fetchAll("user/orgs", as: APIOrganization.self)
+            return try await fetchAll("user/orgs", options: FetchAllOptions<APIOrganization>(suppressErrors: false))
         } catch {
             log.warning("fetchOrgs: failed with endpoint \(endpoint, privacy: .public): \(String(describing: error), privacy: .public)")
             return []
@@ -233,9 +234,7 @@ public struct API: Sendable {
             return try parsedResponse(response, as: APIFullRepository.self)
         } catch let error as APIError {
             if let org {
-                throw GitHubError(
-                    "Couldn't create the repository in \(org.login). Check that \(org.login) doesn't already have a repository with this name, and that you can create repositories there."
-                )
+                throw GitHubError("Couldn't create the repository in \(org.login). \(error.message)")
             }
             throw error
         } catch {
@@ -264,6 +263,9 @@ public struct API: Sendable {
     ///
     /// Pull requests, which the API returns as issues with a `pull_request`
     /// field, are left out.
+    ///
+    /// - Throws: Network errors and API errors, on any page, so a caller
+    ///   never takes the pages loaded so far for every issue.
     public func fetchIssues(
         owner: String,
         name: String,
@@ -281,7 +283,7 @@ public struct API: Sendable {
         }
 
         do {
-            let issues = try await fetchAll(url, as: APIIssue.self)
+            let issues = try await fetchAll(url, options: FetchAllOptions<APIIssue>(suppressErrors: false))
 
             // PRs are issues! But we only want Really Seriously Issues.
             return issues.filter { $0.pullRequest == nil }
@@ -490,7 +492,11 @@ public struct API: Sendable {
         return try await fetchAll(path, options: FetchAllOptions<APIComment>(suppressErrors: false))
     }
 
-    /// Get the combined status for the given ref.
+    /// Get the combined status for the given ref: every page of its
+    /// statuses.
+    ///
+    /// - Returns: nil when a page's response isn't the status (an API error).
+    /// - Throws: Network errors.
     public func fetchCombinedRefStatus(
         owner: String,
         name: String,
@@ -499,17 +505,23 @@ public struct API: Sendable {
     ) async throws -> APIRefStatus? {
         let safeRef = encodeURIComponent(ref)
         let path = "repos/\(owner)/\(name)/commits/\(safeRef)/status?per_page=100"
-        let response = try await ghRequest(.get, path, reloadCache: reloadCache)
 
         do {
-            return try parsedResponse(response, as: APIRefStatus.self)
-        } catch {
+            let pages = try await fetchPages(path, as: APIRefStatus.self, reloadCache: reloadCache)
+            return pages.first.map { first in
+                APIRefStatus(state: first.state, totalCount: first.totalCount, statuses: pages.flatMap(\.statuses))
+            }
+        } catch let error where isResponseError(error) {
             log.debug("Failed fetching check runs for ref \(ref, privacy: .public) (\(owner, privacy: .public)/\(name, privacy: .public)): \(String(describing: error), privacy: .public)")
             return nil
         }
     }
 
-    /// Get any check run results for the given ref.
+    /// Get any check run results for the given ref: every page of them.
+    ///
+    /// - Returns: nil when a page's response isn't the check runs (an API
+    ///   error).
+    /// - Throws: Network errors.
     public func fetchRefCheckRuns(
         owner: String,
         name: String,
@@ -522,11 +534,12 @@ public struct API: Sendable {
             "Accept": "application/vnd.github.antiope-preview+json",
         ]
 
-        let response = try await ghRequest(.get, path, customHeaders: headers, reloadCache: reloadCache)
-
         do {
-            return try parsedResponse(response, as: APIRefCheckRuns.self)
-        } catch {
+            let pages = try await fetchPages(path, as: APIRefCheckRuns.self, customHeaders: headers, reloadCache: reloadCache)
+            return pages.first.map { first in
+                APIRefCheckRuns(totalCount: first.totalCount, checkRuns: pages.flatMap(\.checkRuns))
+            }
+        } catch let error where isResponseError(error) {
             log.debug("Failed fetching check runs for ref \(ref, privacy: .public) (\(owner, privacy: .public)/\(name, privacy: .public)): \(String(describing: error), privacy: .public)")
             return nil
         }
@@ -585,16 +598,21 @@ public struct API: Sendable {
         return nil
     }
 
-    /// List workflow run jobs for a given workflow run
+    /// List workflow run jobs for a given workflow run: every page of them.
+    ///
+    /// - Returns: nil when a page's response isn't the jobs (an API error).
+    /// - Throws: Network errors.
     public func fetchWorkflowRunJobs(owner: String, name: String, workflowRunId: Int) async throws -> APIWorkflowJobs? {
-        let path = "repos/\(owner)/\(name)/actions/runs/\(workflowRunId)/jobs"
+        let path = "repos/\(owner)/\(name)/actions/runs/\(workflowRunId)/jobs?per_page=100"
         let customHeaders = [
             "Accept": "application/vnd.github.antiope-preview+json",
         ]
-        let response = try await ghRequest(.get, path, customHeaders: customHeaders)
         do {
-            return try parsedResponse(response, as: APIWorkflowJobs.self)
-        } catch {
+            let pages = try await fetchPages(path, as: APIWorkflowJobs.self, customHeaders: customHeaders)
+            return pages.first.map { first in
+                APIWorkflowJobs(totalCount: first.totalCount, jobs: pages.flatMap(\.jobs))
+            }
+        } catch let error where isResponseError(error) {
             log.debug("Failed fetching workflow jobs (\(owner, privacy: .public)/\(name, privacy: .public)) workflow run: \(workflowRunId, privacy: .public)")
         }
         return nil
@@ -602,39 +620,45 @@ public struct API: Sendable {
 
     /// Triggers GitHub to rerequest an existing check suite, without pushing new
     /// code to a repository.
-    public func rerequestCheckSuite(owner: String, name: String, checkSuiteId: Int) async -> Bool {
+    ///
+    /// - Throws: Network errors, and an `APIError` when GitHub refuses.
+    public func rerequestCheckSuite(owner: String, name: String, checkSuiteId: Int) async throws {
         let path = "/repos/\(owner)/\(name)/check-suites/\(checkSuiteId)/rerequest"
 
         do {
-            return try await ghRequest(.post, path).ok
+            try acceptedResponse(await ghRequest(.post, path))
         } catch {
             log.debug("Failed retry check suite id \(checkSuiteId, privacy: .public) (\(owner, privacy: .public)/\(name, privacy: .public)): \(String(describing: error), privacy: .public)")
-            return false
+            throw error
         }
     }
 
     /// Re-run all of the failed jobs and their dependent jobs in a workflow run
     /// using the id of the workflow run.
-    public func rerunFailedJobs(owner: String, name: String, workflowRunId: Int) async -> Bool {
+    ///
+    /// - Throws: Network errors, and an `APIError` when GitHub refuses.
+    public func rerunFailedJobs(owner: String, name: String, workflowRunId: Int) async throws {
         let path = "/repos/\(owner)/\(name)/actions/runs/\(workflowRunId)/rerun-failed-jobs"
 
         do {
-            return try await ghRequest(.post, path).ok
+            try acceptedResponse(await ghRequest(.post, path))
         } catch {
             log.debug("Failed to rerun failed workflow jobs for (\(owner, privacy: .public)/\(name, privacy: .public)): \(workflowRunId, privacy: .public): \(String(describing: error), privacy: .public)")
-            return false
+            throw error
         }
     }
 
     /// Re-run a job and its dependent jobs in a workflow run.
-    public func rerunJob(owner: String, name: String, jobId: Int) async -> Bool {
+    ///
+    /// - Throws: Network errors, and an `APIError` when GitHub refuses.
+    public func rerunJob(owner: String, name: String, jobId: Int) async throws {
         let path = "/repos/\(owner)/\(name)/actions/jobs/\(jobId)/rerun"
 
         do {
-            return try await ghRequest(.post, path).ok
+            try acceptedResponse(await ghRequest(.post, path))
         } catch {
             log.debug("Failed to rerun workflow job (\(owner, privacy: .public)/\(name, privacy: .public)): \(jobId, privacy: .public): \(String(describing: error), privacy: .public)")
-            return false
+            throw error
         }
     }
 
@@ -895,6 +919,27 @@ public struct API: Sendable {
         return buf
     }
 
+    /// Every page of a paginated resource whose response wraps its items in
+    /// an object (statuses, check runs, jobs), following the Link headers,
+    /// each parsed as `T`.
+    ///
+    /// - Throws: Network errors and API errors, on any page.
+    private func fetchPages<T: Decodable>(
+        _ path: String,
+        as type: T.Type,
+        customHeaders: [String: String] = [:],
+        reloadCache: Bool = false
+    ) async throws -> [T] {
+        var pages: [T] = []
+        var nextPath: String? = path
+        while let currentPath = nextPath {
+            let response = try await ghRequest(.get, currentPath, customHeaders: customHeaders, reloadCache: reloadCache)
+            pages.append(try parsedResponse(response, as: T.self))
+            nextPath = getNextPagePathFromLink(response)
+        }
+        return pages
+    }
+
     /// Make an authenticated request to the client's endpoint with its token.
     private func request(
         _ endpoint: String,
@@ -949,6 +994,20 @@ public struct API: Sendable {
         tryUpdateEndpointVersionFromResponse(endpoint, response, runtime: runtime)
 
         return response
+    }
+}
+
+/// Whether `error` came from a response (an API error, or a body that isn't
+/// what was asked for) rather than from the connection.
+private func isResponseError(_ error: any Error) -> Bool {
+    error is APIError || error is DecodingError
+}
+
+/// Throws the API error a refused response carries, as `parsedResponse`
+/// does.
+private func acceptedResponse(_ response: HTTPResponse) throws {
+    guard response.ok else {
+        throw APIError(response: response, apiError: try? deserialize(response, as: APIErrorPayload.self))
     }
 }
 

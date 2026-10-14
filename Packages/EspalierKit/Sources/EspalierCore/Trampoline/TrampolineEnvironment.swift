@@ -25,6 +25,7 @@ final class TrampolineInvocation: Sendable {
 
     private struct State {
         var rejectedCredentialEndpoints: Set<String> = []
+        var unreadableAccountMessage: String?
         var mostRecentSSHCredential: SSHCredentialEntry?
         var genericPassword: (endpoint: String, login: String, password: String?)?
         var signingKeyPassphrases: [String: String] = [:]
@@ -69,6 +70,16 @@ final class TrampolineInvocation: Sendable {
     /// Whether credentials were rejected for any endpoint.
     var hasRejectedCredentials: Bool {
         state.withLock { !$0.rejectedCredentialEndpoints.isEmpty }
+    }
+
+    /// What to tell the user about an account git needed whose token the
+    /// keychain wouldn't give, if there was one.
+    var unreadableAccountMessage: String? {
+        state.withLock { $0.unreadableAccountMessage }
+    }
+
+    func setUnreadableAccountMessage(_ message: String) {
+        state.withLock { $0.unreadableAccountMessage = message }
     }
 
     var mostRecentSSHCredential: SSHCredentialEntry? {
@@ -236,8 +247,12 @@ public final class TrampolineEnvironment: GitTrampoline {
 
                 // We catch the error git gives when the credential helper
                 // provided nothing and throw the user-friendly authentication
-                // failed error instead.
+                // failed error instead, or the message about an account whose
+                // token the keychain wouldn't give.
                 if invocation.hasRejectedCredentials, let fakeAuthError = userCancelledAuthenticationError(error) {
+                    if let message = invocation.unreadableAccountMessage {
+                        throw replacingDescription(of: fakeAuthError, with: message)
+                    }
                     throw fakeAuthError
                 }
 
@@ -250,6 +265,19 @@ public final class TrampolineEnvironment: GitTrampoline {
     var usesExternalCredentialHelper: Bool {
         useExternalCredentialHelper(defaults: defaults)
     }
+}
+
+/// `error` with `message` as its description.
+private func replacingDescription(of error: GitError, with message: String) -> GitError {
+    let result = GitResult(
+        stdoutData: error.result.stdoutData,
+        stderrData: error.result.stderrData,
+        exitCode: error.result.exitCode,
+        gitError: error.result.gitError,
+        gitErrorDescription: message,
+        path: error.result.path
+    )
+    return GitError(result: result, args: error.args, terminalOutput: message)
 }
 
 /// Serves the askpass and credential helper commands of one git invocation.

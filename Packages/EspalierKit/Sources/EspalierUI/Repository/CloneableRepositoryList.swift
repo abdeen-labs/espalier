@@ -1,7 +1,7 @@
 // The repositories an account can clone, in the Clone sheet and Get Started:
 // "Your Repositories" first, then each owner; a lock for private
 // repositories, a fork glyph for forks, "Archived"; the filter and Refresh;
-// and three empty states.
+// and four empty states.
 
 import EspalierCore
 import GitHubKit
@@ -14,6 +14,8 @@ nonisolated struct CloneableListContent: Sendable, Equatable {
     enum EmptyState: Sendable, Equatable {
         /// "Loading repositories from <endpoint>…"
         case loading(endpoint: String)
+        /// "Couldn't load repositories from <endpoint>.", with Try Again.
+        case failed(endpoint: String)
         /// "No repositories match <filter>"
         case noMatch(filter: String)
         /// "<login> has no repositories on <endpoint>.
@@ -39,6 +41,8 @@ nonisolated struct CloneableListContent: Sendable, Equatable {
             emptyState = nil
         } else if isLoading, loaded.isEmpty {
             emptyState = .loading(endpoint: account.friendlyEndpoint)
+        } else if repositories?.failed == true, loaded.isEmpty {
+            emptyState = .failed(endpoint: account.friendlyEndpoint)
         } else if !filter.isEmpty {
             emptyState = .noMatch(filter: filter)
         } else {
@@ -209,6 +213,11 @@ struct CloneableListEmptyState: View {
                 ArcProgress(.small)
                 Text("Loading repositories from \(endpoint)…")
                     .foregroundStyle(.text2)
+            case .failed(let endpoint):
+                Text("Couldn't load repositories from \(endpoint).")
+                    .foregroundStyle(.text2)
+                Button("Try Again", action: refresh)
+                    .buttonStyle(.textLink)
             case .noMatch(let filter):
                 Text("No repositories match \(Text(filter).font(Typography.sha))")
                     .foregroundStyle(.text2)

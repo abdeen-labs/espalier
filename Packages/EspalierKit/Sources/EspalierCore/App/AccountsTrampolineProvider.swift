@@ -22,4 +22,10 @@ public final class AccountsTrampolineProvider: TrampolineAccountsProvider {
     public func isGitHubHost(_ url: String) async -> Bool? {
         await GitHubKit.isGitHubHost(url, runtime: runtime)
     }
+
+    public func unreadableAccountMessage(endpoint: String) async -> String? {
+        await store.getAllWithUnreadable().unreadable
+            .first { $0.endpoint == endpoint }
+            .flatMap { UnreadableTokenError($0).errorDescription }
+    }
 }

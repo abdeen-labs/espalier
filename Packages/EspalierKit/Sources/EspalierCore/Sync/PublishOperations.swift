@@ -18,10 +18,10 @@ extension SyncModel {
     ///
     /// - Throws: `.precondition` when the repository already has an `origin`
     ///   remote (checked before anything is created on GitHub); `.api` when
-    ///   GitHub refuses ("Unable to create repository for organization
-    ///   '<org>'. ...") or can't be reached ("Unable to publish repository.
-    ///   Please check if you have an internet connection and try again."); the
-    ///   push's errors.
+    ///   GitHub refuses (its message, after "Couldn't create the repository
+    ///   in <org>." for an organization) or can't be reached ("Couldn't
+    ///   publish the repository. Check your internet connection and try
+    ///   again."); the push's errors.
     @discardableResult
     public func publishRepository(_ request: PublishRepositoryRequest) async throws(OperationError) -> APIFullRepository {
         guard let repository, let app = repository.app else {

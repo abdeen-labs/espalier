@@ -246,6 +246,21 @@ struct PullRequestCaptures {
         capture(RerunChecksView(content: content, cancel: {}, rerun: {}), named: "rerun-failed", area: area)
     }
 
+    @Test("the Re-run sheet: GitHub didn't re-run some failed checks")
+    func rerunRefused() {
+        let checks = GitHubCaptureFixtures.failingChecks.checks
+        let failed = checks.filter(isFailure)
+        let result = CheckRerunResult(accepted: [], refused: failed, reasons: ["Must have admin rights to Repository."])
+        let content = RerunChecksContent(
+            checks: checks,
+            failedOnly: true,
+            plan: CheckRerunPlan(rerunnable: failed, nonRerunnable: [], failedOnly: true),
+            isRerunning: false,
+            failure: result.failureMessage
+        )
+        capture(RerunChecksView(content: content, cancel: {}, rerun: {}), named: "rerun-refused", area: area)
+    }
+
     @Test("the Re-run sheet: checks running, queued, and waiting, and their glyphs' tooltips")
     func rerunPending() {
         let checks = [

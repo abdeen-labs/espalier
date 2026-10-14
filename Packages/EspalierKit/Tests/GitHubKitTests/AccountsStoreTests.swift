@@ -58,6 +58,13 @@ private func storedUser(endpoint: String) -> String {
     """
 }
 
+/// A secure store holding the token of `storedUser(endpoint:)`.
+private func storedToken(endpoint: String) throws -> InMemorySecretStore {
+    let secure = InMemorySecretStore()
+    try secure.setSecret("token", service: getKeyForEndpoint(endpoint), account: "joan")
+    return secure
+}
+
 @Suite("AccountsStore", .offline, .hangGuard(minutes: 5))
 struct AccountsStoreTests {
     @Suite("loading persisted users")
@@ -66,7 +73,7 @@ struct AccountsStoreTests {
         func migratesGHEUsers() async throws {
             let dataStore = InMemoryDataStore()
             dataStore.setItem("users", storedUser(endpoint: "https://whatever.ghe.com/api/v3"))
-            let accountsStore = AccountsStore(dataStore: dataStore, secureStore: InMemorySecretStore())
+            let accountsStore = AccountsStore(dataStore: dataStore, secureStore: try storedToken(endpoint: "https://whatever.ghe.com/api/v3"))
 
             let users = await accountsStore.getAll()
             #expect(users.first?.login == "joan")
@@ -81,7 +88,7 @@ struct AccountsStoreTests {
         func doesNotMigrateMigratedGHEUsers() async throws {
             let dataStore = InMemoryDataStore()
             dataStore.setItem("users", storedUser(endpoint: "https://api.whatever.ghe.com/"))
-            let accountsStore = AccountsStore(dataStore: dataStore, secureStore: InMemorySecretStore())
+            let accountsStore = AccountsStore(dataStore: dataStore, secureStore: try storedToken(endpoint: "https://api.whatever.ghe.com/"))
 
             let users = await accountsStore.getAll()
             #expect(users.first?.login == "joan")
@@ -130,7 +137,7 @@ struct AccountsStoreTests {
         func doesNotMigrateGHESUsers() async throws {
             let dataStore = InMemoryDataStore()
             dataStore.setItem("users", storedUser(endpoint: "https://my-company-repos.com/api/v3"))
-            let accountsStore = AccountsStore(dataStore: dataStore, secureStore: InMemorySecretStore())
+            let accountsStore = AccountsStore(dataStore: dataStore, secureStore: try storedToken(endpoint: "https://my-company-repos.com/api/v3"))
 
             let users = await accountsStore.getAll()
             #expect(users.first?.login == "joan")
@@ -153,13 +160,14 @@ struct AccountsStoreTests {
             endpoint: String = getDotComAPIEndpoint(),
             id: Int = 1,
             token: String = "token",
+            emails: [APIEmail] = [],
             expiresAt: Date? = nil
         ) -> Account {
             Account(
                 login: login,
                 endpoint: endpoint,
                 token: token,
-                emails: [],
+                emails: emails,
                 avatarURL: "",
                 id: id,
                 name: login,
@@ -326,24 +334,105 @@ struct AccountsStoreTests {
             #expect(await store.getAll() == [octocat])
         }
 
-        @Test("reports unreadable stored credentials and skips their accounts")
-        func reportsUnreadableCredentials() async throws {
+        @Test("keeps the account's emails when they can't be fetched")
+        func keepsEmailsWhenFetchFails() async throws {
+            let mock = MockGitHub()
+            mock.on("GET", "/user", respond: .json(encoding: createMockAPIFullIdentity(id: 1, login: "octocat", name: "Mona Lisa Octocat")))
+            mock.on("GET", "/user/emails", respond: .status(502))
+            let data = InMemoryDataStore()
+            let secure = InMemorySecretStore()
+            let store = AccountsStore(dataStore: data, secureStore: secure, runtime: mock.runtime)
+            let emails = [createMockAPIEmail("octocat@example.com")]
+            try await store.addAccount(account("octocat", emails: emails))
+
+            await store.refresh()
+
+            let refreshed = try #require(await store.getAll().first)
+            #expect(refreshed.name == "Mona Lisa Octocat")
+            #expect(refreshed.emails == emails)
+            #expect(await AccountsStore(dataStore: data, secureStore: secure).getAll().first?.emails == emails)
+        }
+
+        @Test("moves the token to the account's new login when GitHub renamed it")
+        func movesTokenToRenamedLogin() async throws {
+            let mock = MockGitHub()
+            mock.on("GET", "/user", respond: .json(encoding: createMockAPIFullIdentity(id: 1, login: "monalisa")))
+            mock.on("GET", "/user/emails", respond: .json(encoding: [createMockAPIEmail("monalisa@example.com")]))
+            let data = InMemoryDataStore()
+            let secure = InMemorySecretStore()
+            let store = AccountsStore(dataStore: data, secureStore: secure, runtime: mock.runtime, now: { now })
+            let octocat = account("octocat", token: "secret-token", expiresAt: now.addingTimeInterval(3600))
+            try await store.addAccount(octocat)
+
+            await store.refresh()
+
+            #expect(await store.getAll().map(\.login) == ["monalisa"])
+            #expect(try secure.secret(service: getKeyForAccount(octocat), account: "octocat") == nil)
+
+            let restarted = try #require(await AccountsStore(dataStore: data, secureStore: secure, now: { now }).getAll().first)
+            #expect(restarted.login == "monalisa")
+            #expect(restarted.token == "secret-token")
+            #expect(restarted.tokenExpiresAt == octocat.tokenExpiresAt)
+        }
+
+        @Test("keeps the account's old login while its token can't be moved to the new one")
+        func keepsLoginWhenTokenCantMove() async throws {
+            let mock = MockGitHub()
+            mock.on("GET", "/user", respond: .json(encoding: createMockAPIFullIdentity(id: 1, login: "monalisa")))
+            mock.on("GET", "/user/emails", respond: .json(encoding: [createMockAPIEmail("monalisa@example.com")]))
+            let data = InMemoryDataStore()
+            let secure = FailingSecretStore()
+            let store = AccountsStore(dataStore: data, secureStore: secure, runtime: mock.runtime)
+            let octocat = account("octocat", token: "secret-token")
+            try await store.addAccount(octocat)
+            secure.failWrites = true
+
+            await store.refresh()
+
+            #expect(await store.getAll() == [octocat])
+            #expect(await AccountsStore(dataStore: data, secureStore: secure).getAll() == [octocat])
+        }
+
+        @Test("signs out an account whose token is missing, asking to sign in again")
+        func signsOutMissingToken() async throws {
+            let data = InMemoryDataStore()
+            data.setItem("users", storedUser(endpoint: "https://api.github.com"))
+            let store = AccountsStore(dataStore: data, secureStore: InMemorySecretStore())
+
+            #expect(await store.getAllWithUnreadable() == ([], []))
+            #expect(data.getItem("users") == "[]")
+            let missing = await store.events.first { event in
+                if case .tokenMissing = event { return true }
+                return false
+            }
+            guard case .tokenMissing(let signedOut) = missing else {
+                Issue.record("Expected a tokenMissing event")
+                return
+            }
+            #expect(signedOut.login == "joan")
+            #expect(signedOut.token == "")
+        }
+
+        @Test("signs out an account whose stored credential can't be read, and removes it")
+        func signsOutMalformedCredential() async throws {
             let data = InMemoryDataStore()
             data.setItem("users", storedUser(endpoint: "https://api.github.com"))
             let secure = InMemorySecretStore()
             try secure.setSecret(#"espalier-oauth:{"version":7}"#, service: "Espalier - https://api.github.com", account: "joan")
             let store = AccountsStore(dataStore: data, secureStore: secure)
 
-            #expect(await store.getAll() == [])
-            let reported = await store.events.first { event in
-                if case .didError = event { return true }
+            #expect(await store.getAllWithUnreadable() == ([], []))
+            #expect(data.getItem("users") == "[]")
+            #expect(try secure.secret(service: "Espalier - https://api.github.com", account: "joan") == nil)
+            let missing = await store.events.first { event in
+                if case .tokenMissing = event { return true }
                 return false
             }
-            guard case .didError(let error) = reported else {
-                Issue.record("Expected an error event")
+            guard case .tokenMissing(let signedOut) = missing else {
+                Issue.record("Expected a tokenMissing event")
                 return
             }
-            #expect(error as? AccountCredentialError == AccountCredentialError())
+            #expect(signedOut.login == "joan")
         }
     }
 
@@ -413,6 +502,25 @@ struct AccountsStoreTests {
                 return false
             }
             #expect(reported != nil)
+        }
+
+        @Test("signs out an account whose token went missing while it couldn't be read")
+        func retryMissing() async throws {
+            let octocat = account("octocat")
+            let (store, data, secure) = try await restarted(with: [octocat], unreadable: [octocat])
+            #expect(await store.getAllWithUnreadable().unreadable.map(\.login) == ["octocat"])
+
+            secure.unreadableServices = []
+            _ = try secure.deleteSecret(service: getKeyForAccount(octocat), account: "octocat")
+            await store.retryUnreadableAccounts()
+
+            #expect(await store.getAllWithUnreadable() == ([], []))
+            #expect(data.getItem("users") == "[]")
+            let missing = await store.events.first { event in
+                if case .tokenMissing = event { return true }
+                return false
+            }
+            #expect(missing != nil)
         }
 
         @Test("uses an account again once its token reads, in its place in the list")

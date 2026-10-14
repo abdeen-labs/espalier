@@ -228,12 +228,13 @@ public final class RepositoryGitHubModel: RepositoryFeature {
         await commitStatuses.rerunPlan(checks, failedOnly: failedOnly, key: CheckRunsKey(pullRequest))
     }
 
-    /// Reruns the plan's rerunnable checks, then shows them in progress
-    /// until GitHub's state arrives (the rerun sheet's submit).
+    /// Reruns the plan's rerunnable checks, then shows the ones GitHub
+    /// reruns in progress until GitHub's state arrives (the rerun sheet's
+    /// submit).
     ///
-    /// - Returns: Whether each request succeeded.
+    /// - Returns: Which checks GitHub reruns, and which it didn't and why.
     @discardableResult
-    public func rerunChecks(_ plan: CheckRerunPlan, for pullRequest: PullRequest) async -> [Bool] {
+    public func rerunChecks(_ plan: CheckRerunPlan, for pullRequest: PullRequest) async -> CheckRerunResult {
         await commitStatuses.rerun(plan.rerunnable, failedOnly: plan.failedOnly, key: CheckRunsKey(pullRequest))
     }
 

@@ -252,7 +252,7 @@ nonisolated struct ChecksContent: Sendable, Equatable {
 
         if !rerunSupport.checks {
             rerun = .none
-        } else if rerunSupport.individualOrFailed, checks.contains(where: { $0.conclusion == .failure }) {
+        } else if rerunSupport.individualOrFailed, checks.contains(where: isFailure) {
             rerun = .failedOrAll
         } else {
             rerun = .all

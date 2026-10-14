@@ -199,16 +199,23 @@ struct CIChecksTests {
         #expect(check.htmlURL == "https://github.com/octocat/hello/runs/9")
     }
 
-    @Test("a rerun replaces the run it reran; push and pull request runs, and other apps' runs, stay apart")
+    @Test("a rerun's run replaces the one it reran in its check suite; same-named runs in other suites stay")
     func latestCheckRuns() {
         let runs = [
+            // ci.yml's build fails; docs.yml's build passes.
             apiCheckRun(id: 1, name: "build", conclusion: .failure, checkSuite: 100),
             apiCheckRun(id: 2, name: "build", checkSuite: 101),
-            apiCheckRun(id: 3, name: "build", checkSuite: 102, pullRequests: []),
-            apiCheckRun(id: 4, name: "build", app: "Travis CI", checkSuite: 50),
-            apiCheckRun(id: 5, name: "test", checkSuite: 100),
+            // test failed, then its rerun passed, in the same suite.
+            apiCheckRun(id: 3, name: "test", conclusion: .failure, checkSuite: 100),
+            apiCheckRun(id: 4, name: "test", checkSuite: 100),
+            // A push's run beside the pull request's.
+            apiCheckRun(id: 5, name: "build", checkSuite: 102, pullRequests: []),
+            apiCheckRun(id: 6, name: "lint", checkSuite: nil),
+            apiCheckRun(id: 7, name: "lint", checkSuite: nil),
         ]
-        #expect(getLatestCheckRunsById(runs).map(\.id) == [2, 3, 4, 5])
+        let latest = getLatestCheckRunsById(runs)
+        #expect(latest.map(\.id) == [1, 2, 4, 5, 6, 7])
+        #expect(checksResult(latest.map(apiCheckRunToRefCheck)) == .failed)
     }
 
     @Test("rerun checks show in progress, with their steps")
@@ -239,6 +246,8 @@ struct CIChecksTests {
             refCheck(id: 3, conclusion: .failure, checkSuiteID: 3),
             refCheck(id: 4, conclusion: .failure, checkSuiteID: 4),
             refCheck(id: 5, conclusion: .failure, checkSuiteID: nil),
+            refCheck(id: 6, conclusion: .timedOut, checkSuiteID: 1),
+            refCheck(id: 7, conclusion: .actionRequired, checkSuiteID: 1),
         ]
         let suites = [
             APICheckSuite(id: 1, rerequestable: true, runsRerequestable: true, status: .completed, createdAt: createdAt(daysAgo: 1)),
@@ -248,13 +257,14 @@ struct CIChecksTests {
         ]
 
         let all = rerunPlan(checks, failedOnly: false, checkSuites: suites, now: now)
-        #expect(all.rerunnable.map(\.id) == [1, 2])
+        #expect(all.rerunnable.map(\.id) == [1, 2, 6, 7])
         #expect(all.nonRerunnable.map(\.id) == [3, 4, 5])
         #expect(all.warning != nil)
         #expect(all.dependentsMessage(allChecks: checks) != nil)
 
+        // Timed out and needing an action count as failed.
         let failed = rerunPlan(checks, failedOnly: true, checkSuites: suites, now: now)
-        #expect(failed.rerunnable.map(\.id) == [1])
+        #expect(failed.rerunnable.map(\.id) == [1, 6, 7])
         #expect(failed.nonRerunnable.map(\.id) == [3, 4, 5])
         #expect(failed.warning != nil)
 

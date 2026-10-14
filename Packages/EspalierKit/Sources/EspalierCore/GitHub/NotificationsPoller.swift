@@ -499,7 +499,7 @@ final class NotificationsPoller {
         // A suite that finished with failures, not yet notified.
         let failedSuite = finishedSuites
             .filter { _, runs in
-                runs.contains { $0.conclusion == .failure } && !runs.allSatisfy { skipCheckRuns.contains($0.id) }
+                runs.contains(where: isFailure) && !runs.allSatisfy { skipCheckRuns.contains($0.id) }
             }
             .keys
             .sorted()
@@ -522,7 +522,7 @@ final class NotificationsPoller {
             return
         }
 
-        let numberOfFailedChecks = checks.filter { $0.conclusion == .failure }.count
+        let numberOfFailedChecks = checks.filter(isFailure).count
 
         // Sometimes we could get a checks-failed event for a PR whose checks just
         // got restarted, so we won't get failed checks at that point. In that

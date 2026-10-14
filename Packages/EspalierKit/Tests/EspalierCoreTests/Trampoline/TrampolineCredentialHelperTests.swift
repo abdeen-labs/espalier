@@ -88,6 +88,31 @@ struct TrampolineCredentialHelperTests {
         }
     }
 
+    @Test("finds a stored credential for a username the remote URL percent-encodes")
+    func encodedUsernameFromURL() async throws {
+        let server = try AuthHTTPServer(username: "joe@example.com", password: "s3cret")
+        defer { server.stop() }
+        let prompter = TestPrompter(genericGitAuthentication: { endpoint, username in
+            TrampolineAccount(endpoint: endpoint, login: username ?? "", token: "s3cret")
+        })
+
+        try await withTrampoline(prompter: prompter) { context in
+            let url = "http://joe%40example.com@127.0.0.1:\(server.port)/repo.git"
+            _ = try await lsRemote(url)
+
+            // The prompt is filled in with the username decoded, and it's
+            // stored decoded, as git gives it.
+            #expect(prompter.calls == [
+                .genericGitAuthentication(endpoint: "http://joe%40example.com@127.0.0.1:\(server.port)/", username: "joe@example.com"),
+            ])
+            #expect(try context.genericGitAuth.getGenericPassword(endpoint(server), "joe@example.com") == "s3cret")
+
+            // The next run finds the password for the URL's username.
+            _ = try await lsRemote(url)
+            #expect(prompter.calls.count == 1)
+        }
+    }
+
     @Test("rewrites the error when the user cancels the prompt")
     func promptCancelled() async throws {
         let server = try AuthHTTPServer(username: "joe", password: "s3cret")
@@ -201,6 +226,28 @@ struct TrampolineCredentialHelperTests {
 
             #expect(prompter.calls == [.gitHubSignIn(endpoint: "http://github.com/")])
             #expect(error?.message == getDescriptionForError(.httpsAuthenticationFailed, ""))
+        }
+    }
+
+    @Test("says to try again in Settings instead of signing in when the account's token couldn't be read", arguments: [false, true])
+    func unreadableAccount(background: Bool) async throws {
+        let server = try AuthHTTPServer(username: "octocat", password: "gho_token")
+        defer { server.stop() }
+        let prompter = TestPrompter(gitHubSignIn: { _ in
+            TrampolineAccount(endpoint: "https://api.github.com", login: "octocat", token: "gho_token")
+        })
+        let message = "The keychain is locked."
+        let accounts = TestAccounts(unreadable: ["https://api.github.com": message])
+
+        try await withTrampoline(prompter: prompter, accounts: accounts) { _ in
+            let error = await #expect(throws: GitError.self) {
+                try await lsRemote("http://github.com/owner/repo.git", background: background, env: ["http_proxy": server.proxyURL])
+            }
+
+            #expect(prompter.calls == [])
+            #expect(error?.message == message)
+            #expect(error?.isRawMessage == false)
+            #expect(server.authorizations.allSatisfy { $0 == nil })
         }
     }
 

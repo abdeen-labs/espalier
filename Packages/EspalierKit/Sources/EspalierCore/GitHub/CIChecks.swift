@@ -289,59 +289,42 @@ public func isFailure(_ check: RefCheck) -> Bool {
     CheckResult(check) == .failed
 }
 
-/// In some cases there may be multiple check runs reported for a
-/// reference. In that case GitHub.com will pick only the latest
-/// run for each check name to present in the PR merge footer and
-/// only the latest run counts towards the mergeability of a PR.
+/// The latest run of each check in each check suite.
 ///
-/// We use the check suite id as a proxy for determining what's
-/// the "latest" of two check runs with the same name.
-///
-/// Runs are keyed by the app's and the check's names, so a rerun replaces
-/// the run it reran while two apps' checks of the same name both stay.
+/// A rerun (a GitHub Actions job's or a rerequested suite's) adds a run of
+/// the same name to the same check suite, and GitHub's default `latest`
+/// filter already sends only the newest of those. Runs of the same name in
+/// different check suites are different checks (two workflows' `build`
+/// jobs, a workflow's runs for a push and for a pull request) and all stay.
 public func getLatestCheckRunsById(_ checkRuns: [APIRefCheckRun]) -> [APIRefCheckRun] {
-    struct Key: Hashable {
-        let app: String
-        let name: String
-        let hasPullRequests: Bool
+    enum Key: Hashable {
+        case job(checkSuite: Int, name: String)
+        /// A run without a check suite stands alone.
+        case run(Int)
     }
     var order: [Key] = []
-    var latestCheckRunsByName: [Key: APIRefCheckRun] = [:]
+    var latest: [Key: APIRefCheckRun] = [:]
 
     for checkRun in checkRuns {
-        // For release branches (maybe other scenarios?), there can be check runs
-        // with the same name, but are "push" events not "pull_request" events. For
-        // the push events, the pull_request array will be empty. For pull_request,
-        // the pull_request array should have the pull_request object in it. We want
-        // these runs treated separately even tho they have same name, they are not
-        // simply a repeat of the same run as they have a different origination. This
-        // feels hacky... but we don't have any other meta data on a check run that
-        // differieates these.
-        let key = Key(app: checkRun.app?.name ?? "", name: checkRun.name, hasPullRequests: !checkRun.pullRequests.isEmpty)
-        guard let current = latestCheckRunsByName[key] else {
+        let key = checkRun.checkSuite.map { Key.job(checkSuite: $0.id, name: checkRun.name) } ?? .run(checkRun.id)
+        guard let current = latest[key] else {
             order.append(key)
-            latestCheckRunsByName[key] = checkRun
+            latest[key] = checkRun
             continue
         }
-        if (current.checkSuite?.id ?? Int.min) < (checkRun.checkSuite?.id ?? Int.min) {
-            latestCheckRunsByName[key] = checkRun
+        // Check run IDs increase, so the higher one ran later.
+        if current.id < checkRun.id {
+            latest[key] = checkRun
         }
     }
 
-    return order.compactMap { latestCheckRunsByName[$0] }
+    return order.compactMap { latest[$0] }
 }
 
 /// The checks of a ref: its legacy statuses, then the latest of its check
 /// runs.
-func refChecks(statuses: APIRefStatus?, checkRuns: APIRefCheckRuns?) -> [RefCheck] {
-    var checks: [RefCheck] = []
-    if let statuses {
-        checks.append(contentsOf: statuses.statuses.map(apiStatusToRefCheck))
-    }
-    if let checkRuns {
-        checks.append(contentsOf: getLatestCheckRunsById(checkRuns.checkRuns).map(apiCheckRunToRefCheck))
-    }
-    return checks
+func refChecks(statuses: APIRefStatus, checkRuns: APIRefCheckRuns) -> [RefCheck] {
+    statuses.statuses.map(apiStatusToRefCheck) + getLatestCheckRunsById(checkRuns.checkRuns).map(apiCheckRunToRefCheck)
 }
 
 /// Retrieve GitHub Actions job and logs for the check runs.
@@ -751,11 +734,38 @@ public struct CheckRerunPlan: Sendable, Equatable {
     }
 }
 
+/// What GitHub did with a rerun's requests.
+public struct CheckRerunResult: Sendable, Equatable {
+    /// The checks GitHub reruns.
+    public let accepted: [RefCheck]
+    /// The checks GitHub didn't rerun: it refused, or couldn't be reached.
+    public let refused: [RefCheck]
+    /// Why, each different reason once: GitHub's message, or the
+    /// connection's.
+    public let reasons: [String]
+
+    public init(accepted: [RefCheck], refused: [RefCheck], reasons: [String]) {
+        self.accepted = accepted
+        self.refused = refused
+        self.reasons = reasons
+    }
+
+    /// "Couldn't re-run build. <reason>", "Couldn't re-run 2 checks.
+    /// <reason>"; nil when every check reruns.
+    public var failureMessage: String? {
+        guard !refused.isEmpty else {
+            return nil
+        }
+        let checks = refused.count == 1 ? refused[0].name : "\(refused.count) checks"
+        return (["Couldn't re-run \(checks)."] + reasons).joined(separator: " ")
+    }
+}
+
 /// Splits the checks to consider (failed ones only, with `failedOnly`) by
 /// whether their check suites can be rerun: rerequestable, completed, and
 /// under a month old.
 func rerunPlan(_ checkRuns: [RefCheck], failedOnly: Bool, checkSuites: [APICheckSuite], now: Date) -> CheckRerunPlan {
-    let checkRunsToConsider = failedOnly ? checkRuns.filter { $0.conclusion == .failure } : checkRuns
+    let checkRunsToConsider = failedOnly ? checkRuns.filter(isFailure) : checkRuns
     let monthAgo = now.addingTimeInterval(-30 * 24 * 60 * 60)
 
     var rerequestableCheckSuiteIDs: Set<Int> = []

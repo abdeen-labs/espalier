@@ -107,9 +107,11 @@ struct TrampolineAskpassHandler: Sendable {
         }
 
         // ssh truncates key paths longer than 100 bytes in this prompt, so the
-        // passphrase of such a key can't be found or stored.
+        // passphrase of such a key can't be found or stored, and the prompt
+        // doesn't offer to remember it.
+        let keyHash = try? getHashForSSHKey(keyPath)
 
-        if let keyHash = try? getHashForSSHKey(keyPath),
+        if let keyHash,
            let storedPassphrase = storedSecret(SSHKeyPassphraseTokenStoreKey, keyHash, for: process, read: { getSSHKeyPassphrase(keyPath, secrets) })
         {
             return storedPassphrase
@@ -120,7 +122,7 @@ struct TrampolineAskpassHandler: Sendable {
             return nil
         }
 
-        let response = await prompter.promptSSHKeyPassphrase(keyPath: keyPath)
+        let response = await prompter.promptSSHKeyPassphrase(keyPath: keyPath, canRemember: keyHash != nil)
 
         // If the user wanted us to remember the passphrase, we'll keep it
         // around to store it later if the git operation succeeds. However,
@@ -163,7 +165,7 @@ struct TrampolineAskpassHandler: Sendable {
             return nil
         }
 
-        let response = await prompter.promptSSHKeyPassphrase(keyPath: keyPath)
+        let response = await prompter.promptSSHKeyPassphrase(keyPath: keyPath, canRemember: (try? getHashForSSHKey(keyPath)) != nil)
 
         if let passphrase = response.secret, response.storeSecret {
             setSSHKeyPassphrase(invocation, keyPath, passphrase)

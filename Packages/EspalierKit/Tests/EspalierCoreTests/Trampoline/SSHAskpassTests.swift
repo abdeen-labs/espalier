@@ -222,6 +222,25 @@ struct SSHAskpassTests {
         }
     }
 
+    @Test("doesn't offer to remember the passphrase of a key whose path ssh cut short")
+    func passphraseOfTruncatedKeyPath() async throws {
+        let keyPath = POSIXPath.join(try createTempDirectory(), String(repeating: "k", count: 120))
+        try Data("not really a key".utf8).write(to: URL(filePath: keyPath))
+        // ssh's prompt shows at most 100 bytes of the path.
+        let shownPath = String(decoding: keyPath.utf8.prefix(100), as: UTF8.self)
+        let prompter = TestPrompter(sshKeyPassphrase: { _ in
+            PromptSSHSecretResponse(secret: "correct horse", storeSecret: false)
+        })
+
+        try await withTrampoline(prompter: prompter) { (context) async throws in
+            try await withSSHEnvironment(context) { (env) async throws in
+                let output = try await runHelper([passphrasePrompt(shownPath)], environment: env)
+                #expect(output.stdout == "correct horse")
+            }
+            #expect(prompter.calls == [.sshKeyPassphrase(keyPath: shownPath, canRemember: false)])
+        }
+    }
+
     @Test("doesn't store the passphrase when git fails")
     func passphraseNotStoredOnFailure() async throws {
         let keyPath = try makeKey()

@@ -214,6 +214,28 @@ struct CloneResolutionTests {
         await settle(app, harness)
     }
 
+    @Test("an owner/name GitHub couldn't be asked about (offline, rate limited) is an API error, not \"not found\"", arguments: [
+        NamedCase("offline", MockGitHub.Response.networkError(.notConnectedToInternet)),
+        NamedCase("rate limited", .json(["message": "API rate limit exceeded for 127.0.0.1."], status: 403)),
+    ])
+    func lookupFailed(_ testCase: NamedCase<MockGitHub.Response>) async throws {
+        let harness = try AppHarness()
+        try await harness.store(dotComAccount())
+        harness.mockUser("octocat", id: 1)
+        harness.gitHub.on("GET", "/repos/octocat/hello", respond: testCase.value)
+        let app = await harness.loadedAppWithAccounts()
+
+        let error = await #expect(throws: OperationError.self) {
+            try await app.clones.resolveCloneInfo("octocat/hello")
+        }
+        #expect(error?.operation == .clone)
+        guard case .api? = error?.reason else {
+            Issue.record("Unexpected error \(String(describing: error))")
+            return
+        }
+        await settle(app, harness)
+    }
+
     @Test("other hosts, wikis, and API failures clone what was typed")
     func asTyped() async throws {
         let harness = try AppHarness()

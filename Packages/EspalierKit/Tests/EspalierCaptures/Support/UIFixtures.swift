@@ -86,7 +86,9 @@ enum UIFixtures {
 
     static let prompts: [(name: String, prompt: Prompt)] = [
         ("addSSHHost", .addSSHHost(host: "github.com", ip: "140.82.112.3", keyType: "ED25519", fingerprint: "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU")),
-        ("sshKeyPassphrase", .sshKeyPassphrase(keyPath: "/Users/joe/.ssh/id_ed25519")),
+        ("sshKeyPassphrase", .sshKeyPassphrase(keyPath: "/Users/joe/.ssh/id_ed25519", canRemember: true)),
+        // ssh cut the path at 100 bytes, so the key can't be read to remember its passphrase.
+        ("sshKeyPassphrase-unidentified", .sshKeyPassphrase(keyPath: "/Users/joe/Library/Mobile Documents/com~apple~CloudDocs/Keys/deploy-keys/espalier-production-deploy-", canRemember: false)),
         ("sshUserPassword", .sshUserPassword(username: "joe@git.example.com")),
         ("genericGitAuthentication", .genericGitAuthentication(endpoint: "https://git.example.com/joe/espalier.git", username: nil)),
         ("genericGitAuthentication-user", .genericGitAuthentication(endpoint: "https://git.example.com/joe/espalier.git", username: "joe")),

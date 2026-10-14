@@ -77,10 +77,10 @@ struct GitAuthorFormTests {
     func fillsAuthor() {
         let unset = GlobalGitSettings(name: nil, email: "", defaultBranch: "main")
         // The private primary address isn't preferred; with no noreply
-        // address, the first is.
+        // address listed, GitHub's noreply form is.
         #expect(unset.fillingAuthor(from: [enterprise, dotCom]) == GlobalGitSettings(
             name: "joe",
-            email: "joe@example.com",
+            email: "1234+joe@users.noreply.github.com",
             defaultBranch: "main"
         ))
         // Without a GitHub.com account, the first; its public primary
@@ -99,7 +99,7 @@ struct GitAuthorFormTests {
         #expect(GitHubAuthorInfo(accounts: []) == nil)
         let info = GitHubAuthorInfo(accounts: [dotCom, enterprise])
         #expect(info?.name == "Joe Bloggs")
-        #expect(info?.email == "joe@example.com")
+        #expect(info?.email == "1234+joe@users.noreply.github.com")
         #expect(GitHubAuthorInfo(accounts: [enterprise])?.name == "jbloggs")
     }
 

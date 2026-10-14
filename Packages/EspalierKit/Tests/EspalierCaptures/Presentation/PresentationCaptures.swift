@@ -42,7 +42,10 @@ struct PresentationCaptures {
         capture(EditorDecisionSheet(decision, editors: editors, selection: "Zed") { _ in }, named: "externalEditor-chosen", area: "Decisions")
     }
 
-    @Test("the prompt sheets: a secret, a username and password, a failed hook's output", arguments: ["sshKeyPassphrase", "genericGitAuthentication", "hookFailed"])
+    @Test(
+        "the prompt sheets: a secret, one it can't remember, a username and password, a failed hook's output",
+        arguments: ["sshKeyPassphrase", "sshKeyPassphrase-unidentified", "genericGitAuthentication", "hookFailed"]
+    )
     func prompt(name: String) throws {
         let prompt = try #require(UIFixtures.prompts.first { $0.name == name }?.prompt)
         guard case .sheet(let sheet) = PromptPresentation.make(prompt, finish: { _ in }) else {

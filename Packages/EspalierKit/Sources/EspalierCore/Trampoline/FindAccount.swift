@@ -39,6 +39,17 @@ public protocol TrampolineAccountsProvider: Sendable {
     /// can't be determined: from the host name when it can, otherwise from the
     /// host's `/meta` API.
     func isGitHubHost(_ url: String) async -> Bool?
+
+    /// What to tell the user when git needs the account signed in to
+    /// `endpoint` (an API endpoint) and the keychain wouldn't give its
+    /// token, or `nil` when there's no such account.
+    func unreadableAccountMessage(endpoint: String) async -> String?
+}
+
+/// The username in `url`, percent-decoded, as git gives it and Espalier
+/// stores it; a URL holds it percent-encoded (`getCredentialUrl`).
+func decodedUsername(_ url: JSURL) -> String {
+    url.username.removingPercentEncoding ?? url.username
 }
 
 func findGitHubTrampolineAccount(_ accountsStore: any TrampolineAccountsProvider, _ remoteUrl: String) async throws(JSURLError) -> TrampolineAccount? {
@@ -59,7 +70,7 @@ func findGenericTrampolineAccount(
 
     let login = parsedUrl.username.isEmpty
         ? genericGitAuth.getGenericUsername(endpoint)
-        : parsedUrl.username
+        : decodedUsername(parsedUrl)
 
     guard let login, !login.isEmpty else {
         return nil

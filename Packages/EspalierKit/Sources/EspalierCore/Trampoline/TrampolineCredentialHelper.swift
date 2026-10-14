@@ -103,7 +103,7 @@ struct TrampolineCredentialHelper: Sendable {
 
     private func promptForCredential(_ cred: GitCredential, _ endpoint: String) async throws -> GitCredential? {
         let parsedUrl = try JSURL(endpoint)
-        let username = parsedUrl.username.isEmpty ? nil : parsedUrl.username
+        let username = parsedUrl.username.isEmpty ? nil : decodedUsername(parsedUrl)
         let account = await prompter.promptForGenericGitAuthentication(endpoint: endpoint, username: username)
         info("prompt for \(endpoint): \(account != nil ? "completed" : "cancelled")")
         return credWithAccount(cred, account)
@@ -148,6 +148,14 @@ struct TrampolineCredentialHelper: Sendable {
         // an account for that endpoint then we should prompt the user to sign
         // in.
         if endpointKind != .generic, !accounts.contains(where: { $0.endpoint == apiEndpoint }) {
+            // An account whose token the keychain wouldn't give: git fails
+            // with a message that says so, instead of asking to sign in.
+            if let message = await store.unreadableAccountMessage(endpoint: apiEndpoint) {
+                info("the token of the account for \(endpoint) couldn't be read from the keychain")
+                invocation.setUnreadableAccountMessage(message)
+                return nil
+            }
+
             if invocation.isBackgroundTask {
                 debug("background task environment, skipping prompt")
                 return nil

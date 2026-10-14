@@ -110,7 +110,7 @@ struct RepositoryCaptures {
         await app.idle()
     }
 
-    @Test("the clone list: repositories by owner, one selected; and none")
+    @Test("the clone list: repositories by owner, one selected; none; and a load that failed")
     func cloneList() {
         func list(_ content: CloneableListContent, selection: String? = nil) -> some View {
             CloneableRepositoryListView(content: content, filter: .constant(""), selection: .constant(selection))
@@ -122,6 +122,11 @@ struct RepositoryCaptures {
         capture(
             list(CloneableListContent(groups: [], emptyState: .noRepositories(login: "joe", endpoint: "GitHub.com"))),
             named: "clone-list-none",
+            area: area
+        )
+        capture(
+            list(CloneableListContent(groups: [], emptyState: .failed(endpoint: "GitHub.com"))),
+            named: "clone-list-failed",
             area: area
         )
     }

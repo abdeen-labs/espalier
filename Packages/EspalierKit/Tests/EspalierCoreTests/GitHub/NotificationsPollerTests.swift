@@ -1,6 +1,7 @@
 // Notification polling against a mock GitHub: what the first look notes,
-// reviews, comments, failed checks and their dedupe, the commit authorship
-// check, when it polls, and what a click shows.
+// reviews, comments, failed checks (timed out and needing an action too)
+// and their dedupe, the commit authorship check, when it polls, and what a
+// click shows.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -214,6 +215,23 @@ struct NotificationsPollerTests {
         ] }
         await fixture.model.gitHub.notifications.poll()
         #expect(posted(fixture).count == 2)
+        await fixture.settle()
+    }
+
+    @Test("checks that timed out or need an action post as failed")
+    func checksTimedOut() async throws {
+        let activity = PullRequestActivity()
+        activity.update { $0.checkRuns = [apiCheckRun(id: 21, name: "build", status: .inProgress, checkSuite: 100)] }
+        let fixture = try await fixture(activity: activity)
+
+        activity.update { $0.checkRuns = [
+            apiCheckRun(id: 21, name: "build", conclusion: .timedOut, checkSuite: 100),
+            apiCheckRun(id: 22, name: "deploy", conclusion: .actionRequired, checkSuite: 100),
+        ] }
+        await fixture.model.gitHub.notifications.poll()
+        let notification = try #require(posted(fixture).first)
+        #expect(notification.userInfo["kind"] == "checksFailed")
+        #expect(notification.userInfo["checkSuiteID"] == "100")
         await fixture.settle()
     }
 

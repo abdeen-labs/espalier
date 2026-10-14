@@ -7,17 +7,16 @@ import Foundation
 ///
 ///  - the primary email if it's publicly visible
 ///  - an anonymous (i.e. '@users.noreply.github.com') email address
-///  - the first email address returned from the API
-///  - an automatically generated stealth email based on the user's
-///    login, id, and endpoint.
+///  - with a private primary email, an automatically generated stealth
+///    email based on the user's login, id, and endpoint
+///  - the first verified email address returned from the API
+///  - an automatically generated stealth email.
 public func lookupPreferredEmail(_ account: Account) -> String {
     let emails = account.emails
+    let stealthEmail = getStealthEmailForUser(account.id, account.login, account.endpoint)
 
-    guard let first = emails.first else {
-        return getStealthEmailForUser(account.id, account.login, account.endpoint)
-    }
-
-    if let primary = emails.first(where: \.primary), isEmailPublic(primary) {
+    let primary = emails.first(where: \.primary)
+    if let primary, isEmailPublic(primary) {
         return primary.email
     }
 
@@ -26,7 +25,11 @@ public func lookupPreferredEmail(_ account: Account) -> String {
         return noReply.email
     }
 
-    return first.email
+    if primary != nil {
+        return stealthEmail
+    }
+
+    return emails.first(where: \.verified)?.email ?? stealthEmail
 }
 
 /// Is the email public?

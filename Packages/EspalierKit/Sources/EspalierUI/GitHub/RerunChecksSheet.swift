@@ -1,7 +1,8 @@
 // The Re-run sheet: which checks will run again, the ones that can't and why
 // (`CheckRerunPlan` words them), and the button. While it works out which
 // checks can run again (for more than one), it says "Please wait" /
-// "Determining which checks can be re-run.".
+// "Determining which checks can be re-run.". When GitHub doesn't rerun some,
+// the sheet stays open with why, listing those to try again.
 
 import EspalierCore
 import GitHubKit
@@ -22,6 +23,8 @@ nonisolated struct RerunChecksContent: Sendable, Equatable {
     var rerunnable: [CheckRunContent]
     /// Why some checks can't run again.
     var warning: String?
+    /// Why GitHub didn't rerun the checks listed, after the button.
+    var failure: String?
     /// Whether the button works.
     var canRerun: Bool
 
@@ -38,7 +41,7 @@ nonisolated struct RerunChecksContent: Sendable, Equatable {
         return "Re-run \(descriptor)Check\(checkCount == 1 ? "" : "s")"
     }
 
-    init(checks: [RefCheck], failedOnly: Bool, plan: CheckRerunPlan?, isRerunning: Bool) {
+    init(checks: [RefCheck], failedOnly: Bool, plan: CheckRerunPlan?, isRerunning: Bool, failure: String? = nil) {
         title = Self.title(checkCount: checks.count, failedOnly: failedOnly)
         confirmTitle = Self.title(checkCount: checks.count, failedOnly: failedOnly, showsDescriptor: false)
         isDetermining = plan == nil && checks.count > 1
@@ -56,6 +59,7 @@ nonisolated struct RerunChecksContent: Sendable, Equatable {
             )
         }
         warning = plan?.warning
+        self.failure = failure
         canRerun = !(plan?.rerunnable.isEmpty ?? true) && !isRerunning
     }
 }
@@ -70,6 +74,8 @@ final class RerunChecksFlow {
     /// Which checks can run again; nil until it's worked out.
     private(set) var plan: CheckRerunPlan?
     private(set) var isRerunning = false
+    /// Why GitHub didn't rerun some checks, after the last try.
+    private(set) var failure: String?
 
     init(repository: RepositoryModel, pullRequest: PullRequest, checks: [RefCheck], failedOnly: Bool) {
         self.repository = repository
@@ -79,7 +85,7 @@ final class RerunChecksFlow {
     }
 
     var content: RerunChecksContent {
-        RerunChecksContent(checks: checks, failedOnly: failedOnly, plan: plan, isRerunning: isRerunning)
+        RerunChecksContent(checks: checks, failedOnly: failedOnly, plan: plan, isRerunning: isRerunning, failure: failure)
     }
 
     /// Works out which checks can run again, from their check suites.
@@ -88,14 +94,22 @@ final class RerunChecksFlow {
     }
 
     /// Runs the plan's checks again; false when there's no plan yet,
-    /// nothing in it can run again, or it's already running.
+    /// nothing in it can run again, it's already running, or GitHub didn't
+    /// rerun some of them. Those become the plan, to try again, with why.
     func rerun() async -> Bool {
         guard let plan, !plan.rerunnable.isEmpty, !isRerunning else {
             return false
         }
         isRerunning = true
-        await repository.gitHub.rerunChecks(plan, for: pullRequest)
-        return true
+        failure = nil
+        let result = await repository.gitHub.rerunChecks(plan, for: pullRequest)
+        guard let message = result.failureMessage else {
+            return true
+        }
+        self.plan = CheckRerunPlan(rerunnable: result.refused, nonRerunnable: plan.nonRerunnable, failedOnly: plan.failedOnly)
+        failure = message
+        isRerunning = false
+        return false
     }
 }
 
@@ -204,6 +218,9 @@ struct RerunChecksView: View {
                         WarningGlyph()
                     }
                     .font(Typography.secondary)
+                }
+                if let failure = content.failure {
+                    SignInInlineError(message: failure)
                 }
             }
         } buttons: {

@@ -2,6 +2,7 @@
 
 @testable import GitHubKit
 import Testing
+import TestSupport
 
 private func makeAccount(
     _ login: String,
@@ -93,6 +94,46 @@ struct EmailTests {
             let account = makeAccount("shiftkey", getDotComAPIEndpoint(), emails, -1, "Caps Lock")
 
             #expect(lookupPreferredEmail(account) == "shiftkey@example.com")
+        }
+
+        /// An account's emails and endpoint, and the address preferred.
+        struct Fallback: Sendable {
+            let emails: [APIEmail]
+            var endpoint = getDotComAPIEndpoint()
+            let preferred: String
+        }
+
+        static let fallbacks = [
+            NamedCase("the noreply form for a private primary without a noreply address", Fallback(
+                emails: [
+                    APIEmail(email: "my-primary-email@example.com", verified: true, primary: true, visibility: .private),
+                    APIEmail(email: "shiftkey@example.com", verified: true, primary: false, visibility: nil),
+                ],
+                preferred: "1234+shiftkey@users.noreply.github.com"
+            )),
+            NamedCase("the noreply form for a private primary on GitHub Enterprise Server", Fallback(
+                emails: [APIEmail(email: "my-primary-email@example.com", verified: true, primary: true, visibility: .private)],
+                endpoint: "https://github.example.com/api/v3",
+                preferred: "1234+shiftkey@users.noreply.github.example.com"
+            )),
+            NamedCase("the first verified address without a primary", Fallback(
+                emails: [
+                    APIEmail(email: "unverified@example.com", verified: false, primary: false, visibility: nil),
+                    APIEmail(email: "shiftkey@example.com", verified: true, primary: false, visibility: nil),
+                ],
+                preferred: "shiftkey@example.com"
+            )),
+            NamedCase("the noreply form without a primary or a verified address", Fallback(
+                emails: [APIEmail(email: "unverified@example.com", verified: false, primary: false, visibility: nil)],
+                preferred: "1234+shiftkey@users.noreply.github.com"
+            )),
+        ]
+
+        @Test("never prefers a private primary or an unverified address", arguments: fallbacks)
+        func fallsBack(_ fallback: NamedCase<Fallback>) {
+            let account = makeAccount("shiftkey", fallback.value.endpoint, fallback.value.emails, 1234, "Caps Lock")
+
+            #expect(lookupPreferredEmail(account) == fallback.value.preferred)
         }
     }
 
