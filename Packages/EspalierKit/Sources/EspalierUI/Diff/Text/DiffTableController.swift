@@ -117,6 +117,10 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     private(set) var document = DiffDocument.empty
     private var buildTask: Task<Void, Never>?
     private var buildGeneration = 0
+    /// A new document is building: the rows on screen are the previous
+    /// one's, so gestures that stage, discard, or expand by its indexes
+    /// wait for it.
+    private(set) var isBuilding = false
 
     // MARK: Layout
 
@@ -276,7 +280,14 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             buildDocument(for: content)
             return
         }
-        guard let shown = shownContent else {
+        guard !isBuilding, let shown = shownContent else {
+            // The document on screen keeps its content until the new one
+            // installs with the latest; only a new font size applies to it
+            // at once.
+            if fontChanged, shownContent != nil {
+                textCache.reset()
+                relayout(force: true)
+            }
             return
         }
         // The document is current: settings that don't shape rows.
@@ -307,6 +318,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
 
     private func buildDocument(for content: DiffTableContent) {
         buildGeneration &+= 1
+        isBuilding = true
         let generation = buildGeneration
         let input = content.documentInput
         buildTask?.cancel()
@@ -326,6 +338,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     /// than reload); Unified ↔ Split crossfades over 0.15 s. A hover
     /// showing moves to what's under the pointer in the new rows.
     private func install(_ document: DiffDocument, for content: DiffTableContent) {
+        isBuilding = false
         let isNewFile = shownContent?.fileID != content.fileID
         let keepsScroll = !isNewFile
         let scrollOrigin = scrollView.contentView.bounds.origin
@@ -372,6 +385,11 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         if hovers {
             refreshHover()
         }
+    }
+
+    /// Waits for the document building, if any, to install (for tests).
+    func documentIdle() async {
+        await buildTask?.value
     }
 
     // MARK: Expansion's motion
@@ -1044,29 +1062,35 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             expand(hunk: hunk, button: button)
             return .none
         case .hunkCheckbox(let hunk):
-            guard let range = document.hunks[hunk].changedDiffLines else {
+            guard !isBuilding, let range = document.hunks[hunk].changedDiffLines else {
                 return .none
             }
             if showWhitespaceHintIfNeeded(at: point) {
                 return .none
             }
-            guard shownContent?.staging?.canSelectLines == true else {
+            guard let staging = shownContent?.staging, staging.canSelectLines else {
                 return .none
             }
-            actions.staging?.toggleLines(.range(range))
+            actions.staging?.toggleLines(.range(range), staging.diffGeneration)
             return .none
         case .handle(_, let block):
+            guard !isBuilding else {
+                return .none
+            }
             if showWhitespaceHintIfNeeded(at: point) {
                 return .none
             }
-            guard shownContent?.staging?.canSelectLines == true else {
+            guard let staging = shownContent?.staging, staging.canSelectLines else {
                 return .none
             }
-            actions.staging?.toggleLines(.block(containing: document.blocks[block].diffLines.lowerBound))
+            actions.staging?.toggleLines(.block(containing: document.blocks[block].diffLines.lowerBound), staging.diffGeneration)
             return .none
         case .gutter(let row, let column):
             guard shownContent?.staging != nil else {
                 return beginCursorClick(row: row)
+            }
+            guard !isBuilding else {
+                return .none
             }
             if showWhitespaceHintIfNeeded(at: point) {
                 return .none
@@ -1161,7 +1185,9 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         let lower = min(gutterDrag.from, gutterDrag.to)
         let upper = max(gutterDrag.from, gutterDrag.to)
         let lines: DiffLines = lower == upper ? .line(lower) : .range(lower...upper)
-        actions.staging?.setLines(lines, gutterDrag.include)
+        if let staging = shownContent?.staging {
+            actions.staging?.setLines(lines, gutterDrag.include, staging.diffGeneration)
+        }
         redrawVisibleRows()
     }
 
@@ -1228,6 +1254,9 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     // MARK: Expansion
 
     private func expand(hunk: Int, button: DiffHunkButton) {
+        guard !isBuilding else {
+            return
+        }
         let documentHunk = document.hunks[hunk]
         let (index, kind) = button.expansion(ofHunk: documentHunk.index)
         guard index >= 0 else {
@@ -1355,7 +1384,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             }
             return true
         case 0x20:
-            guard shownContent?.isInteractive == true else {
+            guard shownContent?.isInteractive == true, !isBuilding else {
                 return true
             }
             if option {
@@ -1422,7 +1451,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         guard let first = numbers.min(), let last = numbers.max() else {
             return
         }
-        actions.staging?.toggleLines(first == last ? .line(first) : .range(first...last))
+        actions.staging?.toggleLines(first == last ? .line(first) : .range(first...last), staging.diffGeneration)
     }
 
     /// Option-Space: toggles the block under the cursor.
@@ -1438,7 +1467,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         guard staging.canSelectLines else {
             return
         }
-        actions.staging?.toggleLines(.block(containing: block.diffLines.lowerBound))
+        actions.staging?.toggleLines(.block(containing: block.diffLines.lowerBound), staging.diffGeneration)
     }
 
     // MARK: Copy and select all
@@ -1488,7 +1517,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
                 // A read-only diff's gutter has the text's menu.
                 return textMenu()
             }
-            guard staging.canDiscard || staging.hidesWhitespace else {
+            guard !isBuilding, staging.canDiscard || staging.hidesWhitespace else {
                 return nil
             }
             if staging.hidesWhitespace {
@@ -1498,16 +1527,16 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             guard let line = document.changedLine(ofRow: row, column: column) else {
                 return nil
             }
-            return discardMenu(.line(document.lines[line].diffLineNumber))
+            return discardMenu(.line(document.lines[line].diffLineNumber), generation: staging.diffGeneration)
         case .handle(_, let block):
-            guard let staging = shownContent?.staging, staging.canDiscard || staging.hidesWhitespace else {
+            guard !isBuilding, let staging = shownContent?.staging, staging.canDiscard || staging.hidesWhitespace else {
                 return nil
             }
             if staging.hidesWhitespace {
                 showWhitespaceHint(at: point)
                 return nil
             }
-            return discardMenu(.block(containing: document.blocks[block].diffLines.lowerBound))
+            return discardMenu(.block(containing: document.blocks[block].diffLines.lowerBound), generation: staging.diffGeneration)
         case .expansion, .hunkHeader, .hunkCheckbox:
             return expansionMenuAction().map { $0.menuContent }
         case .text, .inertGutter, .none:
@@ -1525,13 +1554,14 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         return CGPoint(x: textScrollX + geometry.before.text.lowerBound, y: rect.midY)
     }
 
-    private func discardMenu(_ lines: DiffLines) -> MenuContent? {
-        guard let title = actions.staging?.discardTitle(lines) else {
+    /// The menu discarding `lines` of the diff of `generation`.
+    private func discardMenu(_ lines: DiffLines, generation: Int) -> MenuContent? {
+        guard let title = actions.staging?.discardTitle(lines, generation) else {
             return nil
         }
         return MenuContent {
             MenuAction(title) { [weak self] in
-                self?.actions.staging?.discardLines(lines)
+                self?.actions.staging?.discardLines(lines, generation)
             }
         }
     }

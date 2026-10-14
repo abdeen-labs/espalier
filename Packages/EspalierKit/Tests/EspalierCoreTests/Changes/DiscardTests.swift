@@ -393,6 +393,36 @@ struct DiscardTests {
         await fixture.settle()
     }
 
+    @Test("refuses lines whose diff changed while the user was asked, and discards them when it didn't")
+    func discardLinesAfterRefresh() async throws {
+        let fixture = try await makeLinesFixture()
+        let generation = fixture.changes.diffGeneration
+        let addFifteen = try fixture.lineIndex(.add, "line fifteen")
+        let asked = await #expect(throws: OperationError.self) {
+            try await fixture.changes.discardLines(.line(addFifteen), inDiff: generation)
+        }
+        #expect(confirmationKind(of: asked) == .discardLines)
+
+        // Saved in an editor while the alert shows, and refreshed: a line
+        // changed above moves the indexes.
+        let changed = numberedLines(20, replacing: [1: "line one", 2: "line two", 15: "line fifteen"])
+        try fixture.write("numbered.txt", changed)
+        await fixture.refresh()
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.changes.discardLines(.line(addFifteen), inDiff: generation, confirmed: [.discardLines])
+        }
+        #expect(preconditionText(error) != nil)
+        #expect(fixture.read("numbered.txt") == changed)
+
+        // A refresh that finds the file unchanged doesn't count.
+        let current = fixture.changes.diffGeneration
+        let currentFifteen = try fixture.lineIndex(.add, "line fifteen")
+        await fixture.refresh()
+        try await fixture.changes.discardLines(.block(containing: currentFifteen), inDiff: current, confirmed: [.discardLines])
+        await fixture.settle()
+        #expect(fixture.read("numbered.txt") == numberedLines(20, replacing: [1: "line one", 2: "line two"]))
+    }
+
     @Test("discards lines of a new file")
     func discardLinesOfNewFile() async throws {
         let (fixture, _) = try await ChangesFixture.withRemote()

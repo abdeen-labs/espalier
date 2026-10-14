@@ -17,14 +17,10 @@ extension NSView {
 
 extension DiffTableController {
     /// Whether the table shows the document of the content it was last
-    /// given. While a document builds, content that changes only its tokens
-    /// or staging shows at once over the previous document, so the rows
-    /// must be the content's too.
+    /// given: one is shown and none is building (an install shows the
+    /// latest content).
     var showsItsDocument: Bool {
-        guard let content, let shownContent, !content.needsNewDocument(comparedTo: shownContent) else {
-            return false
-        }
-        return document.rowCount == DiffDocument(input: content.documentInput).rowCount
+        shownContent != nil && !isBuilding
     }
 }
 

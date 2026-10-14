@@ -65,6 +65,10 @@ public final class ChangesModel: RepositoryFeature {
     /// `fullDiff` (comparing two sets of 10,000,000 lines took over a
     /// second).
     @ObservationIgnored private(set) var fullDiffSelectableLines: Set<Int> = []
+    /// Bumped whenever `fullDiff`'s lines change: line indexes taken from one
+    /// generation's diff name the same lines only while it's current
+    /// (`setLines`, `toggleLines`, and `discardLines` take it).
+    public private(set) var diffGeneration = 0
 
     @ObservationIgnored weak var repository: RepositoryModel?
 
@@ -229,7 +233,7 @@ public final class ChangesModel: RepositoryFeature {
         diff = .idle
         diffFileID = nil
         diffHidesWhitespace = false
-        fullDiff = nil
+        setFullDiff(nil)
         diffIsTextConverted = false
         fullDiffSelectableLines = []
     }
@@ -245,9 +249,7 @@ public final class ChangesModel: RepositoryFeature {
         if diffFileID != nil {
             diffFileID = nil
         }
-        if fullDiff != nil {
-            fullDiff = nil
-        }
+        setFullDiff(nil)
         fullDiffSelectableLines = []
         if diffIsTextConverted {
             diffIsTextConverted = false
@@ -262,7 +264,7 @@ public final class ChangesModel: RepositoryFeature {
             diff = diff.reloading
         } else {
             diff = .loading(previous: nil)
-            fullDiff = nil
+            setFullDiff(nil)
             if diffHidesWhitespace != hidesWhitespace {
                 diffHidesWhitespace = hidesWhitespace
             }
@@ -292,7 +294,7 @@ public final class ChangesModel: RepositoryFeature {
             setLineSelection(selection, forFile: file.id)
         }
         diff = .loaded(loaded.shown)
-        fullDiff = loaded.full
+        setFullDiff(loaded.full)
         fullDiffSelectableLines = loaded.selectableLines
         if diffIsTextConverted != loaded.isTextConverted {
             diffIsTextConverted = loaded.isTextConverted
@@ -305,8 +307,17 @@ public final class ChangesModel: RepositoryFeature {
     /// Records a failed diff load.
     func diffDidFail(_ error: OperationError) {
         diff = .failed(error)
-        fullDiff = nil
+        setFullDiff(nil)
         fullDiffSelectableLines = []
+    }
+
+    /// Sets `fullDiff`, bumping `diffGeneration` unless its lines stay the
+    /// same (a refresh reloading an unchanged file keeps the generation).
+    private func setFullDiff(_ full: Diff?) {
+        if !hasSameLines(fullDiff, full) {
+            diffGeneration &+= 1
+        }
+        fullDiff = full
     }
 
     // MARK: Files

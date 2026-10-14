@@ -54,19 +54,23 @@ nonisolated struct StagingState: Sendable, Equatable {
     var hidesWhitespace: Bool
     /// Whether lines can be discarded (from the gutter's context menu).
     var canDiscard: Bool
+    /// The changes model's `diffGeneration` the selection's indexes are of,
+    /// which the gestures pass back so they don't apply to a newer diff.
+    var diffGeneration = 0
 }
 
-/// What the gutter's gestures do.
+/// What the gutter's gestures do, to lines of the diff of a generation
+/// (`StagingState.diffGeneration`).
 struct StagingActions {
     /// Includes or excludes lines.
-    var setLines: @MainActor (DiffLines, Bool) -> Void
+    var setLines: @MainActor (DiffLines, Bool, _ generation: Int) -> Void
     /// Toggles lines (a line flips; a range, block, or hunk is excluded
     /// when all of it is included, and included otherwise).
-    var toggleLines: @MainActor (DiffLines) -> Void
+    var toggleLines: @MainActor (DiffLines, _ generation: Int) -> Void
     /// The title of the action that discards lines, if they can be.
-    var discardTitle: @MainActor (DiffLines) -> String?
+    var discardTitle: @MainActor (DiffLines, _ generation: Int) -> String?
     /// Discards lines (asking first, through the presenter).
-    var discardLines: @MainActor (DiffLines) -> Void
+    var discardLines: @MainActor (DiffLines, _ generation: Int) -> Void
     /// Shows whitespace changes again (the hint's Yes).
     var showWhitespaceChanges: @MainActor () -> Void
 }
@@ -81,29 +85,30 @@ extension DiffStaging {
             selection: changes.diffSelection ?? selection,
             canSelectLines: changes.canSelectLines,
             hidesWhitespace: changes.hidesWhitespace || changes.diffHidesWhitespace,
-            canDiscard: changes.canSelectLines
+            canDiscard: changes.canSelectLines,
+            diffGeneration: changes.diffGeneration
         )
     }
 
     /// The gestures' effects. `discard` runs a discard through the window's
     /// presenter (so it asks first and shows errors).
-    func actions(hunks: [DiffHunk], discard: @escaping @MainActor (ChangesModel, DiffLines) -> Void) -> StagingActions {
+    func actions(hunks: [DiffHunk], discard: @escaping @MainActor (ChangesModel, DiffLines, Int) -> Void) -> StagingActions {
         if let changes {
             return StagingActions(
-                setLines: { [weak changes] lines, included in
-                    changes?.setLines(lines, included: included)
+                setLines: { [weak changes] lines, included, generation in
+                    changes?.setLines(lines, included: included, inDiff: generation)
                 },
-                toggleLines: { [weak changes] lines in
-                    changes?.toggleLines(lines)
+                toggleLines: { [weak changes] lines, generation in
+                    changes?.toggleLines(lines, inDiff: generation)
                 },
-                discardTitle: { [weak changes] lines in
-                    changes?.discardTitle(for: lines)
+                discardTitle: { [weak changes] lines, generation in
+                    changes?.discardTitle(for: lines, inDiff: generation)
                 },
-                discardLines: { [weak changes] lines in
+                discardLines: { [weak changes] lines, generation in
                     guard let changes else {
                         return
                     }
-                    discard(changes, lines)
+                    discard(changes, lines, generation)
                 },
                 showWhitespaceChanges: { [weak changes] in
                     changes?.setHidesWhitespace(false)
@@ -115,7 +120,7 @@ extension DiffStaging {
         let selection = selection
         let setSelection = setSelection
         return StagingActions(
-            setLines: { lines, included in
+            setLines: { lines, included, _ in
                 guard let range = selectionRange(of: lines, in: hunks) else {
                     return
                 }
@@ -123,7 +128,7 @@ extension DiffStaging {
                     .withSelectableLines(selectableDiffLines(in: hunks))
                     .withRangeSelection(from: range.lowerBound, length: range.count, selected: included))
             },
-            toggleLines: { lines in
+            toggleLines: { lines, _ in
                 guard let range = selectionRange(of: lines, in: hunks) else {
                     return
                 }
@@ -137,8 +142,8 @@ extension DiffStaging {
                     .withSelectableLines(selectableDiffLines(in: hunks))
                     .withRangeSelection(from: range.lowerBound, length: range.count, selected: included))
             },
-            discardTitle: { _ in nil },
-            discardLines: { _ in },
+            discardTitle: { _, _ in nil },
+            discardLines: { _, _ in },
             showWhitespaceChanges: {}
         )
     }

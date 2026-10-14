@@ -347,13 +347,13 @@ public struct DiffContainer: View {
             expandWholeFile: { session.expandWholeFile() },
             collapseExpandedLines: { session.collapseExpandedLines() },
             didPaint: { fileID in session.didPaint(fileID) },
-            staging: stagingEnabled ? staging?.actions(hunks: hunks, discard: { changes, lines in
+            staging: stagingEnabled ? staging?.actions(hunks: hunks, discard: { changes, lines, generation in
                 guard let window else {
                     return
                 }
                 Task {
                     await window.presenter.perform { answers throws(OperationError) in
-                        try await changes.discardLines(lines, confirmed: answers.confirmed)
+                        try await changes.discardLines(lines, inDiff: generation, confirmed: answers.confirmed)
                     }
                 }
             }) : nil

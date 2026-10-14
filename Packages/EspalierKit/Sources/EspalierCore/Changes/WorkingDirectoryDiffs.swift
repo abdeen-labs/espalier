@@ -78,6 +78,20 @@ func textDiffData(_ diff: Diff?) -> (any TextDiffData)? {
     }
 }
 
+/// Whether two diffs have the same lines at the same indexes: text diffs of
+/// the same text with the same last hunk (the text leaves out "No newline at
+/// end of file", which only the last hunk has), or neither a text diff.
+func hasSameLines(_ x: Diff?, _ y: Diff?) -> Bool {
+    switch (textDiffData(x), textDiffData(y)) {
+    case (nil, nil):
+        true
+    case (let x?, let y?):
+        ExactString(x.text) == ExactString(y.text) && x.hunks.count == y.hunks.count && x.hunks.last == y.hunks.last
+    default:
+        false
+    }
+}
+
 /// The lines of a diff that can be included in a commit, by index in the
 /// diff (`hunk.unifiedDiffStart` plus the line's index in its hunk): added
 /// and deleted lines of a text diff; other diffs have none.
@@ -276,13 +290,22 @@ extension ChangesModel {
         return inclusionType(of: range, in: text.hunks, file.selection)
     }
 
+    /// Whether line indexes taken from the diff of `generation` name the
+    /// same lines in the current one (nil: they were taken from it).
+    func isCurrentDiff(_ generation: Int?) -> Bool {
+        generation.map { $0 == diffGeneration } ?? true
+    }
+
     /// Includes or excludes `lines` of the selected file in the next commit.
     ///
+    /// - Parameter generation: The `diffGeneration` of the diff the indexes
+    ///   were taken from; nil for the current one.
     /// - Returns: Whether the selection changed; false while lines can't be
-    ///   selected (`canSelectLines`).
+    ///   selected (`canSelectLines`), or when the diff changed since
+    ///   `generation`.
     @discardableResult
-    public func setLines(_ lines: DiffLines, included: Bool) -> Bool {
-        guard canSelectLines, let file = shownFile, let text = textDiffData(fullDiff),
+    public func setLines(_ lines: DiffLines, included: Bool, inDiff generation: Int? = nil) -> Bool {
+        guard canSelectLines, isCurrentDiff(generation), let file = shownFile, let text = textDiffData(fullDiff),
               let range = lineRange(of: lines, in: text.hunks)
         else {
             return false
@@ -300,10 +323,11 @@ extension ChangesModel {
     /// Toggles `lines`: a line flips; a range, block, or hunk is excluded
     /// when the commit includes all of it, and included otherwise.
     ///
+    /// - Parameter generation: As `setLines(_:included:inDiff:)`'s.
     /// - Returns: Whether the selection changed.
     @discardableResult
-    public func toggleLines(_ lines: DiffLines) -> Bool {
-        guard let file = shownFile, let current = inclusion(of: lines) else {
+    public func toggleLines(_ lines: DiffLines, inDiff generation: Int? = nil) -> Bool {
+        guard isCurrentDiff(generation), let file = shownFile, let current = inclusion(of: lines) else {
             return false
         }
         let included: Bool
@@ -312,7 +336,7 @@ extension ChangesModel {
         } else {
             included = current != .all
         }
-        return setLines(lines, included: included)
+        return setLines(lines, included: included, inDiff: generation)
     }
 
     /// The selection to draw on the shown diff's lines: the file's own, or,
@@ -335,9 +359,10 @@ extension ChangesModel {
     /// The title of the action that discards `lines`: "Discard Added Line",
     /// "Discard Removed Lines", "Discard Modified Lines", with an ellipsis
     /// while discarding asks first (`confirmDiscardChanges`). Nil when there's
-    /// nothing to discard.
-    public func discardTitle(for lines: DiffLines) -> String? {
-        guard let text = textDiffData(fullDiff), let range = lineRange(of: lines, in: text.hunks),
+    /// nothing to discard, or the diff changed since `generation` (as
+    /// `setLines(_:included:inDiff:)`'s).
+    public func discardTitle(for lines: DiffLines, inDiff generation: Int? = nil) -> String? {
+        guard isCurrentDiff(generation), let text = textDiffData(fullDiff), let range = lineRange(of: lines, in: text.hunks),
               let type = rangeType(of: range, in: text.hunks)
         else {
             return nil

@@ -100,6 +100,35 @@ struct WorkingDirectoryDiffTests {
         await fixture.settle()
     }
 
+    @Test("lines taken from a diff that changed since leave the selection alone")
+    func staleGeneration() async throws {
+        let fixture = try await makeFixture()
+        try await fixture.select("numbered.txt")
+        let changes = fixture.changes
+        let generation = changes.diffGeneration
+        let addFifteen = try fixture.lineIndex(.add, "line fifteen")
+
+        // A refresh that finds the file unchanged keeps the generation.
+        await fixture.refresh()
+        #expect(changes.diffGeneration == generation)
+
+        // Changed above line 15: the old indexes name other lines.
+        try fixture.write("numbered.txt", numberedLines(20, replacing: [1: "line one", 2: "line two", 15: "line fifteen"]))
+        await fixture.refresh()
+        #expect(changes.diffGeneration != generation)
+        let selection = try fixture.file("numbered.txt").selection
+
+        #expect(!changes.setLines(.line(addFifteen), included: false, inDiff: generation))
+        #expect(!changes.toggleLines(.hunk(containing: addFifteen), inDiff: generation))
+        #expect(changes.discardTitle(for: .line(addFifteen), inDiff: generation) == nil)
+        #expect(try fixture.file("numbered.txt").selection == selection)
+
+        let current = try fixture.lineIndex(.add, "line fifteen")
+        #expect(changes.toggleLines(.line(current), inDiff: changes.diffGeneration))
+        #expect(try !fixture.file("numbered.txt").selection.isSelected(current))
+        await fixture.settle()
+    }
+
     @Test("commits only the included lines and keeps the rest")
     func commitsIncludedLines() async throws {
         let fixture = try await makeFixture()
