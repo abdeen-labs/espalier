@@ -151,6 +151,27 @@ public struct FileListFilter: Sendable, Equatable {
     }
 }
 
+// MARK: - The selection a filter keeps
+
+/// The selection a list keeps while a filter is active, as the filter or
+/// the items change: the selected items it lists, in the selection's
+/// order; when it lists none of them (or nothing is selected), the first
+/// item it lists, or none when it lists nothing. Nil when that's the
+/// selection already. The Changes list, a stash's files, and a pull
+/// request's files follow it.
+public func filteredSelection(_ selected: [String], listed: [String]) -> [String]? {
+    let wanted = selected.exactSet
+    let listedSelected: Set<ExactString> = wanted.isEmpty ? [] : Set(listed.lazy.map(ExactString.init).filter(wanted.contains))
+    let kept = selected.filter { listedSelected.contains(ExactString($0)) }
+    if !kept.isEmpty {
+        return kept.count == selected.count ? nil : kept
+    }
+    if let first = listed.first {
+        return [first]
+    }
+    return selected.isEmpty ? nil : []
+}
+
 // MARK: - The list as the model shows it
 
 /// How a file's checkbox shows its inclusion in the next commit.

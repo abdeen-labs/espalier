@@ -141,18 +141,25 @@ private final class MainWindowStage {
 
     /// What the window draws now. The sidebar's and the inspector's
     /// columns are on Liquid Glass, which an offscreen window draws as a
-    /// blank sheet, with what's in it: each column's content is drawn on its
-    /// own and laid over the image (below a band as high as the toolbar, as
-    /// the window shows it), then the titlebar and toolbar over that.
+    /// blank sheet, with what's in it, and with a 0.5-point line just
+    /// outside the column's inner edge that the window on screen doesn't
+    /// show. So the columns are left out of the window's image, each
+    /// column's content is drawn on its own and laid over it (below a band
+    /// as high as the toolbar, as the window shows it), then the titlebar
+    /// and toolbar over that.
     var image: NSBitmapImageRep {
         let frame = frame
         frame.layoutSubtreeIfNeeded()
-        let image = Capture.image(of: frame)
+        let glasses = frame.captureDescendants(NSGlassEffectView.self)
+        // A column is its split item's view, the glass's superview.
+        let image = Self.withLayersHidden(glasses.compactMap { $0.superview?.layer }) {
+            Capture.image(of: frame)
+        }
         let toolbarHeight = frame.bounds.height - window.contentLayoutRect.maxY
         let appearance: CaptureAppearance = window.appearance?.name == .darkAqua ? .dark : .light
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: image)
-        for glass in frame.captureDescendants(NSGlassEffectView.self) {
+        for glass in glasses {
             let column = glass.convert(glass.bounds, to: frame)
             let view = column.minX == 0 ? AnyView(SidebarContainer()) : AnyView(InspectorColumn())
             let content = Capture.render(
@@ -171,6 +178,24 @@ private final class MainWindowStage {
         }
         NSGraphicsContext.restoreGraphicsState()
         return image
+    }
+
+    /// Runs `body` with `layers` hidden, then shows them again, with no
+    /// animation. A layer rather than its view: hiding a split item's view
+    /// collapses the item.
+    private static func withLayersHidden<T>(_ layers: [CALayer], _ body: () -> T) -> T {
+        let shown = layers.filter { !$0.isHidden }
+        func setHidden(_ isHidden: Bool) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            for layer in shown {
+                layer.isHidden = isHidden
+            }
+            CATransaction.commit()
+        }
+        setHidden(true)
+        defer { setHidden(false) }
+        return body()
     }
 
     /// Takes the window down, and its toolbar with it.

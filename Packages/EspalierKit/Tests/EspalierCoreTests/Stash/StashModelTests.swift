@@ -84,6 +84,25 @@ struct StashModelTests {
         await fixture.settle()
     }
 
+    @Test("selecting no stashed file drops its diff and keeps the stash shown; showing it again selects the first file")
+    func deselectFile() async throws {
+        let fixture = try await makeStashed()
+        fixture.stash.show(file: nil)
+        await fixture.settle()
+        #expect(fixture.stash.diff.value != nil)
+
+        fixture.stash.deselectFile()
+        #expect(fixture.stash.selectedFile == nil)
+        #expect(fixture.stash.diff == .idle)
+        #expect(fixture.stash.isShowing)
+        #expect(fixture.changes.selection == .stash(fileID: nil))
+
+        fixture.stash.show(file: nil)
+        await fixture.settle()
+        #expect(fixture.stash.selectedFile?.path == "README.md")
+        #expect(fixture.stash.diff.value != nil)
+    }
+
     @Test("follows the branch's newest stash, keeping the selected file, and leaves when it's gone")
     func followsEntry() async throws {
         let fixture = try await makeStashed()

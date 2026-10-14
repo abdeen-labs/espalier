@@ -1,8 +1,9 @@
 // The Changes place at the window's size, on real repositories: the files
 // with README.md's diff (light and dark), README.md partly included (also
-// under Included in Commit), filtered to nothing, no changes with
-// Suggestions and a stash on the branch, and a merge's conflicts with the
-// operation panel and the merge's commit form (light and dark).
+// under Included in Commit), the search typed hiding the selected file,
+// filtered to nothing, no changes with Suggestions and a stash on the
+// branch, and a merge's conflicts with the operation panel and the merge's
+// commit form (light and dark).
 
 import AppKit
 @testable import EspalierCore
@@ -20,7 +21,7 @@ struct ChangesPlaceCaptures {
     /// The place at the window's size.
     private let size = CGSize(width: 960, height: 620)
 
-    @Test("files with the diff, a file partly included and under Included in Commit, filtered, no changes")
+    @Test("files with the diff, a file partly included and under Included in Commit, searched, filtered, no changes")
     func place() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await ChangesCaptureRepository.make(try await ChangesCaptureRepository.withChanges())
@@ -48,9 +49,18 @@ struct ChangesPlaceCaptures {
             changes.setIncluded([readme.id], true)
             await fixture.settle()
 
-            // The filter hides every file, LICENSE excluded.
+            // The search, typed while the last file is selected, hides it:
+            // the file it shows is selected, with its diff.
+            changes.select(fileIDs: [try fixture.file("Sources/App/Loader.swift").id])
+            await fixture.settle()
+            await capturePlace(fixture, named: "place-searched", typing: "readme")
+            fixture.context.state.searchText = ""
+            changes.filter = FileListFilter()
+            await fixture.settle()
+
+            // The filter hides every file, the selected one too, LICENSE
+            // excluded.
             changes.setIncluded([try fixture.file("LICENSE").id], false)
-            changes.select(fileIDs: [])
             changes.filter.newFiles = true
             changes.filter.deletedFiles = true
             await fixture.settle()
@@ -75,8 +85,15 @@ struct ChangesPlaceCaptures {
     }
 
     /// Captures the place in the window's environment, once what it loads
-    /// as it shows has arrived and the diff's rows are built.
-    private func capturePlace(_ fixture: ChangesCaptureRepository, named name: String, sourceLocation: SourceLocation = #_sourceLocation) async {
+    /// as it shows has arrived and the diff's rows are built; with `typing`,
+    /// once that's typed in the toolbar's search after the place shows, and
+    /// what follows has loaded.
+    private func capturePlace(
+        _ fixture: ChangesCaptureRepository,
+        named name: String,
+        typing: String? = nil,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async {
         await LoadedCapture.capture(
             ChangesScreen(repository: fixture.repository).windowEnvironment(fixture.context),
             named: name,
@@ -86,6 +103,15 @@ struct ChangesPlaceCaptures {
                 await fixture.settle()
                 host.layoutSubtreeIfNeeded()
                 await LoadedCapture.diffDocumentShown(in: host)
+                if let typing {
+                    fixture.context.state.searchText = typing
+                    await waitUntilRunLoopIdle {
+                        fixture.repository.changes.filter.text == typing
+                    }
+                    await fixture.settle()
+                    host.layoutSubtreeIfNeeded()
+                    await LoadedCapture.diffDocumentShown(in: host)
+                }
             },
             sourceLocation: sourceLocation
         )

@@ -4,7 +4,8 @@
 // the selected file's read-only diff. Any branch's stash shows; another
 // branch's can be discarded but not restored ("Switch to <branch> to
 // restore these changes.", `StashModel`'s precondition). The toolbar search
-// filters the files.
+// filters the files; when it hides the selected file, the first file it
+// lists is selected, or none when it lists none (`filteredSelection`).
 //
 // The stash shows through `StashModel` (`stash.show`, which also takes the
 // Changes list's selection to the stash), and leaving the place goes back
@@ -230,6 +231,9 @@ public struct StashScreen: View {
         .onChange(of: entry?.stashSha) {
             showStash()
         }
+        .onChange(of: searchedFileIDs, initial: true) {
+            selectSearchedFile()
+        }
         .onChange(of: repository.stash.isShowing) {
             // A checkout goes back to the working directory; this place
             // still shows the stash.
@@ -282,6 +286,32 @@ public struct StashScreen: View {
             filter: filter,
             selectedFileID: isShowingThisStash ? stash.selectedFile?.id : nil
         )
+    }
+
+    /// The IDs of the shown stash's files the search lists, once they've
+    /// loaded; nil without a search.
+    private var searchedFileIDs: [String]? {
+        let filter = context.state.searchText
+        guard !filter.isEmpty, isShowingThisStash, case .loaded(let files) = repository.stash.files else {
+            return nil
+        }
+        return StashColumnContent.files(files, filter: filter).map(\.id)
+    }
+
+    /// Keeps the selected file to those the search lists, as a click
+    /// selects (`filteredSelection`).
+    private func selectSearchedFile() {
+        let stash = repository.stash
+        guard let listed = searchedFileIDs, let entry, case .loaded(let files) = stash.files,
+              let kept = filteredSelection(stash.selectedFile.map { [$0.id] } ?? [], listed: listed)
+        else {
+            return
+        }
+        if let id = kept.first, let file = files.first(where: { $0.id == id }) {
+            stash.show(entry, file: file)
+        } else {
+            stash.deselectFile()
+        }
     }
 
     /// Shows the branch's stash, unless it shows already.

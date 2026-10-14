@@ -6,8 +6,8 @@
 // description (its image as a link, and loaded), the Re-run sheet (failed
 // checks, and pending ones with their glyphs' tooltips), and the pull
 // request's place built from the models: its overview beside "Changes Not
-// Available", beside its files and the first file's diff, and beside a
-// filter that matches no file.
+// Available", beside its files and the first file's diff, beside a search
+// that hides the first file, and beside one that matches no file.
 
 import AppKit
 @testable import EspalierCore
@@ -356,5 +356,25 @@ struct PullRequestCaptures {
         let pullRequest = try #require(window.model.gitHub.openPullRequests.first)
         window.context.state.searchText = "readme"
         await capturePlace(window, pullRequest, named: "place-noMatchingFiles", showsDiff: false)
+    }
+
+    @Test("the place: the toolbar's search hiding the pull request's first file, the file it shows selected with its diff")
+    func searchedFiles() async throws {
+        let window = try await GitHubCaptureFixtures.Window.make { local in
+            _ = try await runGit(["checkout", "-b", "feature"], local)
+            try Data("Show the code step's expiry\nand copy the code\n".utf8).write(to: URL(exactFilePath: POSIXPath.join(local.path, "feature.txt")))
+            try Data("Codes expire after 15 minutes.\n".utf8).write(to: URL(exactFilePath: POSIXPath.join(local.path, "notes.txt")))
+            _ = try await runGit(["add", "feature.txt", "notes.txt"], local)
+            _ = try await runGit(["commit", "-m", "Add a feature"], local)
+            _ = try await runGit(["push", "origin", "feature"], local)
+            _ = try await runGit(["checkout", "main"], local)
+            _ = try await runGit(["branch", "-D", "feature"], local)
+        }
+        let head = JSCompat.trim(try await runGit(["rev-parse", "origin/feature"], window.local))
+        GitHubCaptureFixtures.mockChecks(window.harness.gitHub)
+        await window.open([GitHubCaptureFixtures.apiPullRequest(5, title: "Add a feature", head: "feature", headSHA: head, body: Self.body)])
+        let pullRequest = try #require(window.model.gitHub.openPullRequests.first)
+        window.context.state.searchText = "notes"
+        await capturePlace(window, pullRequest, named: "place-searchedFiles", showsDiff: true)
     }
 }

@@ -247,9 +247,8 @@ struct ProviderSheet: View {
                 }
                 LabeledContent("Request Timeout") {
                     HStack(spacing: Metrics.insetSmall) {
-                        TextField("Request Timeout", text: $editor.form.requestTimeoutSeconds, prompt: Text("Default"))
+                        TextField("Request Timeout", text: $editor.form.requestTimeoutSeconds, prompt: Text("Default").fieldPrompt())
                             .labelsHidden()
-                            .multilineTextAlignment(.trailing)
                             .frame(width: Metrics.SettingsWindow.narrowControlWidth)
                         Text("seconds")
                             .foregroundStyle(.text2)

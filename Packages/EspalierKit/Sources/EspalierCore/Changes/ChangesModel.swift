@@ -35,11 +35,13 @@ public final class ChangesModel: RepositoryFeature {
     /// can't be included or excluded then: their indexes are the full
     /// diff's.
     public private(set) var diffHidesWhitespace = false
-    /// The file list filter.
+    /// The file list filter. The selection follows it
+    /// (`selectListedFiles`).
     public var filter = FileListFilter() {
         didSet {
             if filter != oldValue {
                 updateVisibleFiles()
+                selectListedFiles()
             }
         }
     }
@@ -109,32 +111,37 @@ public final class ChangesModel: RepositoryFeature {
 
     // MARK: Inclusion
 
-    /// Includes or excludes whole files in the next commit.
+    /// Includes or excludes whole files in the next commit. The selection
+    /// follows the filter, which may now hide them (`selectListedFiles`).
     public func setIncluded(_ fileIDs: [String], _ included: Bool) {
         let ids = Set(fileIDs.map(ExactString.init))
         let files = workingDirectory.files.map { file in
             ids.contains(ExactString(file.id)) ? file.withIncludeAll(included) : file
         }
         setFiles(files)
+        selectListedFiles()
     }
 
-    /// Includes or excludes every file.
+    /// Includes or excludes every file. The selection follows the filter.
     public func setIncludeAll(_ included: Bool) {
         let updated = workingDirectory.withIncludeAllFiles(included)
         if updated != workingDirectory {
             workingDirectory = updated
         }
+        selectListedFiles()
     }
 
     /// Sets which lines of a file the next commit includes, as given: it
     /// doesn't check `canSelectLines`. The UI uses `setLines(_:included:)` and
     /// `toggleLines(_:)`, which build the selection from the shown diff and
-    /// refuse while lines can't be selected.
+    /// refuse while lines can't be selected. The selection follows the
+    /// filter, which may now hide the file.
     public func setLineSelection(_ lineSelection: DiffSelection, forFile fileID: String) {
         let files = workingDirectory.files.map { file in
             JSCompat.strictEquals(file.id, fileID) ? file.withSelection(lineSelection) : file
         }
         setFiles(files)
+        selectListedFiles()
     }
 
     // MARK: Selection
@@ -155,7 +162,8 @@ public final class ChangesModel: RepositoryFeature {
     }
 
     /// Shows the working directory rather than a stash, as after a checkout:
-    /// the files selected before the stash was shown, or else the first file.
+    /// the files selected before the stash was shown, or else the first
+    /// file, as far as the filter lists them (`listedSelection`).
     public func selectWorkingDirectory() {
         if isShowingStash {
             let previous = (selectionBeforeStash ?? []).filter { workingDirectory.findFileWithID($0) != nil }
@@ -166,9 +174,31 @@ public final class ChangesModel: RepositoryFeature {
             if selection != self.selection {
                 self.selection = selection
             }
+            if let listed = listedSelection() {
+                self.selection = .workingDirectory(fileIDs: listed)
+            }
             repository?.stash.stashWasHidden()
         }
         loadSelectedDiff()
+    }
+
+    /// While a filter is active, keeps the selection to the files the list
+    /// shows (`filteredSelection`): the selected files it shows; when it
+    /// shows none of them, the first file it shows, or none, which clears
+    /// the diff. Selects as a click does. Not while the stash shows.
+    func selectListedFiles() {
+        if let listed = listedSelection() {
+            select(fileIDs: listed)
+        }
+    }
+
+    /// The working directory selection `filteredSelection` keeps; nil
+    /// without a filter, while the stash shows, or when the selection stays.
+    private func listedSelection() -> [String]? {
+        guard filter.hasActiveFilters, case .workingDirectory(let fileIDs) = selection else {
+            return nil
+        }
+        return filteredSelection(fileIDs, listed: visibleFiles.map(\.id))
     }
 
     /// Whether the stash is shown instead of the working directory.
@@ -192,7 +222,8 @@ public final class ChangesModel: RepositoryFeature {
     // MARK: Refreshing
 
     /// Merges a new status into the files and the selection
-    /// (`updateChangedFiles`), then reloads the selected file's diff.
+    /// (`updateChangedFiles`), keeps the selection to the files the filter
+    /// lists (`listedSelection`), then reloads the selected file's diff.
     func reconcile(_ status: StatusResult, options: RefreshOptions) {
         let result = updateChangedFiles(
             workingDirectory: workingDirectory,
@@ -205,6 +236,9 @@ public final class ChangesModel: RepositoryFeature {
         }
         if result.selection != selection {
             selection = result.selection
+        }
+        if let listed = listedSelection() {
+            selection = .workingDirectory(fileIDs: listed)
         }
         if !result.keepsDiff {
             clearDiff()
@@ -290,9 +324,6 @@ public final class ChangesModel: RepositoryFeature {
             selection = carrySelection(file.selection, to: loaded.full, selectableLines: loaded.selectableLines)
             changed = selection != file.selection
         }
-        if changed {
-            setLineSelection(selection, forFile: file.id)
-        }
         diff = .loaded(loaded.shown)
         setFullDiff(loaded.full)
         fullDiffSelectableLines = loaded.selectableLines
@@ -301,6 +332,11 @@ public final class ChangesModel: RepositoryFeature {
         }
         if diffHidesWhitespace != hidesWhitespace {
             diffHidesWhitespace = hidesWhitespace
+        }
+        // Last: under Included in Commit or Excluded from Commit, the
+        // carried selection can hide the file, and another is selected.
+        if changed {
+            setLineSelection(selection, forFile: file.id)
         }
     }
 

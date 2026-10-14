@@ -323,7 +323,12 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
            Motion.animates(tableView), let change = Self.rowChange(from: shownIDs, to: ids) {
             applyAnimated(change, to: tableView)
         } else if tableView.numberOfRows != files.count {
+            // Fewer rows drop selected rows past the end, which the table
+            // reports as a selection change; the model's selection is
+            // applied below instead.
+            isApplyingSelection = true
             tableView.noteNumberOfRowsChanged()
+            isApplyingSelection = false
         }
         shownIDs = ids
         tableView.enumerateAvailableRowViews { rowView, row in

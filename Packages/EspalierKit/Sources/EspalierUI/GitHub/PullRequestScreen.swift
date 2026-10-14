@@ -503,7 +503,9 @@ struct PullRequestChangesView: View {
     }
 }
 
-/// The changed files beside the selected file's diff.
+/// The changed files beside the selected file's diff. When the toolbar
+/// search hides the selected file, the first file it lists is selected, or
+/// none when it lists none (`filteredSelection`).
 private struct PullRequestFilesAndDiff: View {
     let changes: PullRequestPreviewModel
     let repository: RepositoryModel
@@ -525,6 +527,30 @@ private struct PullRequestFilesAndDiff: View {
         } trailing: {
             DiffContainer(changes.selection.diff, file: changes.selection.file.map(DiffFileInfo.init), context: .pullRequest)
         }
+        .onChange(of: searchedFileIDs, initial: true) {
+            selectSearchedFile()
+        }
+    }
+
+    /// The IDs of the files the search lists, once they've loaded; nil
+    /// without a search.
+    private var searchedFileIDs: [String]? {
+        let filter = context.state.searchText
+        guard !filter.isEmpty, let files = changes.selection.changeset.value?.files else {
+            return nil
+        }
+        return ChangedFilesList.files(files, filter: filter).map(\.id)
+    }
+
+    /// Keeps the selected file to those the search lists, as a click
+    /// selects (`filteredSelection`).
+    private func selectSearchedFile() {
+        guard let listed = searchedFileIDs, let files = changes.selection.changeset.value?.files,
+              let kept = filteredSelection(changes.selection.file.map { [$0.id] } ?? [], listed: listed)
+        else {
+            return
+        }
+        changes.selectFile(kept.first.flatMap { id in files.first { $0.id == id } })
     }
 }
 

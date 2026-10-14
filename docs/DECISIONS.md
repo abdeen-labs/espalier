@@ -1442,6 +1442,12 @@ immediately; importing desktop's repository list and settings (my call).
   counted only for rows on screen, without fork remotes' branches.
 - **The toolbar search filters a pull request's files** in its place, as it
   does Changes' and a stash's, with No Matching Files when none match.
+- **A filter hiding the selected file selects the first file listed,** or
+  none, as desktop's filter list does. In Changes, the filter options do
+  too (desktop's cleared the selection when only options hid it). The
+  selection follows the list as the filter, inclusion, or a refresh
+  changes it, not a deselection (desktop selected the first file listed
+  again).
 
 ## Accessibility
 

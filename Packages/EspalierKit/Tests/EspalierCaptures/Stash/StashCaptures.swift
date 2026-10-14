@@ -1,7 +1,8 @@
 // The Stashes section's rows and the stash's place, one capture per layout:
 // the place's column (the current branch's stash, failed, no matches), the
 // section's rows, and the place on a real stash with the selected file's
-// diff.
+// diff, with the search typed hiding the selected file, and with a search
+// matching no file.
 
 import AppKit
 @testable import EspalierCore
@@ -76,24 +77,47 @@ struct StashCaptures {
         capture(list, named: "rows", area: area)
     }
 
-    @Test("the place on a real stash: its files and the selected file's diff")
+    @Test("the place on a real stash: its files and the selected file's diff, searched, and matching nothing")
     func place() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await StashCaptureRepository.make()
-            let repository = fixture.repository
-            repository.stash.show(try fixture.entry("master"))
+            fixture.repository.stash.show(try fixture.entry("master"))
             await fixture.settle()
-            await LoadedCapture.capture(
-                StashScreen(repository: repository, branch: "master").windowEnvironment(fixture.context),
-                named: "place",
-                area: area,
-                size: CGSize(width: 900, height: 360)
-            ) { host in
+            await capturePlace(fixture, named: "place")
+            // The search, typed while good-file is selected, hides it:
+            // notes.txt is selected, with its diff.
+            await capturePlace(fixture, named: "place-searched", typing: "notes")
+            // No file matches: none is selected, and no diff shows.
+            fixture.context.state.searchText = "zzz"
+            await capturePlace(fixture, named: "place-noMatches")
+            await fixture.settle()
+        }
+    }
+
+    /// Captures master's stash in the window's environment, once its files
+    /// and the selected file's diff have loaded; with `typing`, once that's
+    /// typed in the toolbar's search after the place shows, and what follows
+    /// has loaded.
+    private func capturePlace(_ fixture: StashCaptureRepository, named name: String, typing: String? = nil) async {
+        await LoadedCapture.capture(
+            StashScreen(repository: fixture.repository, branch: "master").windowEnvironment(fixture.context),
+            named: name,
+            area: area,
+            size: CGSize(width: 900, height: 360)
+        ) { host in
+            await fixture.settle()
+            host.layoutSubtreeIfNeeded()
+            await LoadedCapture.diffDocumentShown(in: host)
+            if let typing {
+                fixture.context.state.searchText = typing
+                // The list shows the one file matching.
+                await waitUntilRunLoopIdle {
+                    host.captureDescendants(ChangesTableView.self).first?.numberOfRows == 1
+                }
                 await fixture.settle()
                 host.layoutSubtreeIfNeeded()
                 await LoadedCapture.diffDocumentShown(in: host)
             }
-            await fixture.settle()
         }
     }
 }

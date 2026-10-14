@@ -1,6 +1,6 @@
-// The composer under the Changes list, top to bottom: the last commit with
-// Undo, the amend note, the commit message card, an AI failure, one
-// warning, the hook line, and the commit button. The card holds the
+// The composer under the Changes list, top to bottom: the amend note, the
+// commit message card, an AI failure, one warning, the hook line, the
+// commit button, and the last commit with Undo. The card holds the
 // summary (with its hints) and the description, the co-authors under them
 // while they show, dividers between, a faint accent tint behind the one
 // that has focus, and a footer: the AI button, Co-Authors, and Options,
@@ -355,15 +355,6 @@ public struct ComposerView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-            if let lastCommit = content.lastCommit {
-                // Grows in after a commit over 0.22 s and leaves over 0.15
-                // s (Changes' column sets the motion).
-                VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-                    LastCommitRow(lastCommit, onUndo: actions.undo)
-                    Hairline()
-                }
-                .barTransition()
-            }
             if content.isAmending {
                 // Grows in over 0.22 s and leaves over 0.15 s (Changes'
                 // column sets the motion).
@@ -381,6 +372,15 @@ public struct ComposerView: View {
                 HookActivityView(hook, output: hookOutput, onStop: actions.stopHook)
             }
             CommitButton(content.button, action: actions.commit)
+            if let lastCommit = content.lastCommit {
+                // Grows in after a commit over 0.22 s and leaves over 0.15
+                // s (Changes' column sets the motion).
+                VStack(alignment: .leading, spacing: Metrics.insetSmall) {
+                    Hairline()
+                    LastCommitRow(lastCommit, onUndo: actions.undo)
+                }
+                .barTransition()
+            }
         }
         .padding(.horizontal, Metrics.Composer.horizontalPadding)
         .padding(.top, Metrics.insetMedium)

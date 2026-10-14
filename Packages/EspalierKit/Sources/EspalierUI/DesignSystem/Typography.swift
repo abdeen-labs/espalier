@@ -76,6 +76,9 @@ public enum Typography {
     public static var aheadCount: Font { mono(size: 11, weight: .semibold) }
     /// SHAs in text (the mono at 11).
     public static var sha: Font { mono(size: 11) }
+    /// A SHA in a control's title, in the title's weight (the location
+    /// control's "On a1b2c3d").
+    public static func sha(weight: Font.Weight) -> Font { mono(size: 11, weight: weight) }
     /// Terminal output (hooks, raw git errors).
     public static var terminal: Font { mono(size: 11) }
     /// Key caps' text (10, medium): SF Pro whatever the app font, which has

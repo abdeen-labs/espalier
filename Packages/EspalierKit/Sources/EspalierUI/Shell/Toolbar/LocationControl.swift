@@ -79,10 +79,23 @@ nonisolated public struct LocationControlState: Sendable, Equatable {
         case .hidden: nil
         case .branch(let name): name
         case .unborn(let ref): ref
-        case .detached(let sha): "On \(JSCompat.prefix(sha, 7))"
+        case .detached(let sha): "On \(Self.shortSHA(sha))"
         case .checkingOut(let target, _, _): target
         case .rebasing(let target): "Rebasing \(target)"
         }
+    }
+
+    /// A detached HEAD's short SHA in the branch segment's title
+    /// ("a1b2c3d"); nil on a branch.
+    var detachedShortSHA: String? {
+        guard case .detached(let sha) = branch else {
+            return nil
+        }
+        return Self.shortSHA(sha)
+    }
+
+    private static func shortSHA(_ sha: String) -> String {
+        JSCompat.prefix(sha, 7)
     }
 
     /// The branch segment's tooltip, or why it's disabled.
@@ -226,7 +239,7 @@ public struct LocationControlView: View {
                                 .font(Typography.row)
                                 .foregroundStyle(branchSymbolColor)
                         }
-                        Text(branchTitle)
+                        branchText(branchTitle)
                             .lineLimit(1)
                             .opacity(branchOpacity)
                             .onAppear {
@@ -253,6 +266,15 @@ public struct LocationControlView: View {
         .padding(.horizontal, Metrics.grid)
         .frame(height: Metrics.ControlHeight.toolbar)
         .quietControlSurface()
+    }
+
+    /// The branch segment's title as one text: a detached HEAD's SHA in the
+    /// code font, in the control's weight ("On a1b2c3d").
+    private func branchText(_ title: String) -> Text {
+        guard let sha = state.detachedShortSHA else {
+            return Text(title)
+        }
+        return Text("On \(Text(sha).font(Typography.sha(weight: Theme.current.buttonWeights.quiet)))")
     }
 
     /// The current branch's accent; a detached HEAD is neutral.
