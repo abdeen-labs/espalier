@@ -114,6 +114,7 @@ public struct ChangesHeader: View {
                 scope: content.repository,
                 onChange: onIncludeAll
             )
+            .disabled(!content.isIncludeAllEnabled)
             .accessibilityLabel("Include all changed files")
             .accessibilityValue(content.title)
             .layoutPriority(1)

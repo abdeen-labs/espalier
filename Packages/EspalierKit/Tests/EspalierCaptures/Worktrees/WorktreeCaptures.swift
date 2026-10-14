@@ -19,7 +19,7 @@ struct WorktreeCaptures {
             WorktreeRowContent(path: "/Users/joe/Developer/espalier", detail: "main", isMain: true, isCurrent: false, isLocked: false),
             WorktreeRowContent(path: "/Users/joe/Developer/espalier-login", detail: "feature/login", isMain: false, isCurrent: true, isLocked: false),
             WorktreeRowContent(path: "/Users/joe/Developer/espalier-release", detail: "release/2.0", isMain: false, isCurrent: false, isLocked: true),
-            WorktreeRowContent(path: "/Users/joe/Developer/espalier-bisect", detail: "a1b2c3d", isMain: false, isCurrent: false, isLocked: false),
+            WorktreeRowContent(path: "/Users/joe/Developer/espalier-bisect", detail: "a1b2c3d", isDetached: true, isMain: false, isCurrent: false, isLocked: false),
         ]
         let list = VStack(alignment: .leading, spacing: 2) {
             ListGroupLabel("Worktrees")

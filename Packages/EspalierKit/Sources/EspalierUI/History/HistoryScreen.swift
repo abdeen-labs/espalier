@@ -441,6 +441,8 @@ struct HistoryBanner<Action: View>: View {
             action()
                 .buttonStyle(.quiet)
                 .controlSize(.small)
+                // Whole: the message wraps instead.
+                .fixedSize()
         }
         .padding(.leading, Metrics.insetSmall)
         .padding(.trailing, Metrics.insetMedium)

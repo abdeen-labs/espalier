@@ -111,7 +111,7 @@ struct CloneableRepositoryListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
             HStack(spacing: Metrics.grid) {
-                TextField("Filter", text: $filter, prompt: Text("Filter your repositories"))
+                TextField("Filter", text: $filter, prompt: Text("Filter your repositories").fieldPrompt())
                     .textFieldStyle(.capsule(systemImage: "magnifyingglass"))
                 Button(action: refresh) {
                     if content.isLoading {
@@ -161,13 +161,7 @@ struct CloneableRepositoryListView: View {
                     }
                 }
             }
-            .padding(.vertical, Metrics.SheetList.inset)
-            .background(Color(espalier: Palette.background))
-            .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
-                    .strokeBorder(.line, lineWidth: 1)
-            )
+            .sheetListCard()
         }
     }
 }

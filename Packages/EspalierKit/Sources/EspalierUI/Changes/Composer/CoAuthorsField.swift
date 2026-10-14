@@ -242,8 +242,8 @@ struct CoAuthorEntry: NSViewRepresentable {
     func makeNSView(context: Context) -> CoAuthorsTextField {
         let field = CoAuthorsTextField(frame: .zero)
         field.delegate = context.coordinator
-        field.placeholderString = "Add co-author…"
         field.font = AppKitTypography.row
+        field.applyPlaceholder()
         field.isBezeled = false
         field.isBordered = false
         field.drawsBackground = false
@@ -268,9 +268,10 @@ struct CoAuthorEntry: NSViewRepresentable {
         apply(to: field)
     }
 
-    private func apply(to field: NSTextField) {
+    private func apply(to field: CoAuthorsTextField) {
         if field.font != AppKitTypography.row {
             field.font = AppKitTypography.row
+            field.applyPlaceholder()
         }
         if field.isEditable != isEditable {
             field.isEditable = isEditable
@@ -508,6 +509,16 @@ final class CoAuthorsTextField: NSTextField {
         set {}
     }
 
+    /// Sets "Add co-author…" in the field's font, in placeholder text. Set
+    /// rather than computed by the cell: the cell draws the placeholder it
+    /// was given while the field isn't editing.
+    func applyPlaceholder() {
+        placeholderAttributedString = NSAttributedString(string: "Add co-author…", attributes: [
+            .font: font ?? AppKitTypography.row,
+            .foregroundColor: Palette.placeholderText,
+        ])
+    }
+
     override func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()
         if became {
@@ -526,5 +537,12 @@ final class CoAuthorsTextField: NSTextField {
         if window == nil {
             focusBridge?.field(.coAuthors, hasFocus: false)
         }
+    }
+}
+
+extension CoAuthorsTextField: LookChangeObserving {
+    func lookDidChange() {
+        font = AppKitTypography.row
+        applyPlaceholder()
     }
 }

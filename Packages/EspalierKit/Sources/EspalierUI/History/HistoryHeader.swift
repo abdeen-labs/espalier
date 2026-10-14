@@ -68,7 +68,6 @@ struct HistoryHeader: View {
                 switch content.style {
                 case .graph:
                     scopePicker
-                    Spacer(minLength: 0)
                     if content.search == nil {
                         // Shown whole or not at all: a narrow list leaves
                         // the room to the scope.
@@ -81,6 +80,9 @@ struct HistoryHeader: View {
                             Color.clear
                                 .frame(width: 0, height: 0)
                         }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    } else {
+                        Spacer(minLength: 0)
                     }
                 case .simple:
                     if let branch = content.branchName {

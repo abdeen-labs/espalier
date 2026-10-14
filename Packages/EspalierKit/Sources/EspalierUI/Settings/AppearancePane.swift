@@ -153,20 +153,30 @@ struct AppearanceForm: View {
             SettingsSection("Dates and numbers") {
                 SettingsToggleRow("Prefer absolute dates over relative", isOn: $preferences.preferAbsoluteDates)
                 SettingsRow("Date format", labelsControl: true) {
-                    CapsulePopUp("Date format", selection: dateFormat, title: Self.title(dateFormat.wrappedValue)) {
+                    CapsulePopUp(
+                        "Date format",
+                        selection: dateFormat,
+                        title: Self.title(dateFormat.wrappedValue),
+                        fitting: DateFormatPattern.allCases.map(Self.title)
+                    ) {
                         for format in DateFormatPattern.allCases {
                             MenuChoice(Self.title(format), value: format)
                         }
                     }
-                    .settingsControlWidth()
+                    .settingsControlWidthFittingChoices()
                 }
                 SettingsRow("Time format", labelsControl: true) {
-                    CapsulePopUp("Time format", selection: timeFormat, title: Self.title(timeFormat.wrappedValue)) {
+                    CapsulePopUp(
+                        "Time format",
+                        selection: timeFormat,
+                        title: Self.title(timeFormat.wrappedValue),
+                        fitting: TimeFormatPattern.allCases.map(Self.title)
+                    ) {
                         for format in TimeFormatPattern.allCases {
                             MenuChoice(Self.title(format), value: format)
                         }
                     }
-                    .settingsControlWidth()
+                    .settingsControlWidthFittingChoices()
                 }
                 SettingsRow("Number format", labelsControl: true) {
                     CapsulePopUp("Number format", selection: $preferences.numberFormat, title: AppearanceSettings.numberFormatExample(preferences.numberFormat)) {

@@ -139,13 +139,13 @@ struct AddWorktreeForm: View {
             Form {
                 // The labels in the form's column; the fields are capsules.
                 LabeledContent("Worktree Name") {
-                    TextField("Worktree Name", text: $name, prompt: Text("Worktree name"))
+                    TextField("Worktree Name", text: $name, prompt: Text("Worktree name").fieldPrompt())
                         .labelsHidden()
                         .focused($isNameFocused)
                 }
                 LabeledContent("Local Path") {
                     HStack(spacing: Metrics.insetSmall) {
-                        TextField("Local Path", text: $directory, prompt: Text("Folder"))
+                        TextField("Local Path", text: $directory, prompt: Text("Folder").fieldPrompt())
                             .labelsHidden()
                         Button("Choose…", action: choose)
                             .buttonStyle(.quiet)
@@ -155,7 +155,7 @@ struct AddWorktreeForm: View {
                     FieldMessage(problem, kind: .error)
                 }
                 LabeledContent("Branch Name") {
-                    TextField("Branch Name", text: $branchName, prompt: Text(content.branchPlaceholder.isEmpty ? "Branch name" : content.branchPlaceholder))
+                    TextField("Branch Name", text: $branchName, prompt: Text(content.branchPlaceholder.isEmpty ? "Branch name" : content.branchPlaceholder).fieldPrompt())
                         .labelsHidden()
                         .textFieldSuggestions(content.suggestions, text: branchName)
                 }

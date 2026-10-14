@@ -72,11 +72,11 @@ struct ModelSheet: View {
         SheetScaffold(editor.title) {
             Form {
                 LabeledContent("Display Name") {
-                    TextField("Display Name", text: $editor.form.name, prompt: Text(verbatim: "GPT-4o"))
+                    TextField("Display Name", text: $editor.form.name, prompt: Text(verbatim: "GPT-4o").fieldPrompt())
                         .labelsHidden()
                 }
                 LabeledContent("Model Identifier") {
-                    TextField("Model Identifier", text: $editor.form.id, prompt: Text(verbatim: "gpt-4o"))
+                    TextField("Model Identifier", text: $editor.form.id, prompt: Text(verbatim: "gpt-4o").fieldPrompt())
                         .labelsHidden()
                 }
                 LabeledContent {

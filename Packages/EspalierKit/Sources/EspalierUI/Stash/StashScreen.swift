@@ -84,7 +84,7 @@ struct StashHeader: View {
                 .lineLimit(1)
                 .layoutPriority(1)
                 .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: Metrics.insetSmall)
+            Spacer(minLength: 0)
             if content.isBusy {
                 ArcProgress(.small)
                     .accessibilityLabel("Working")
@@ -100,8 +100,7 @@ struct StashHeader: View {
                 .fixedSize()
         }
         .controlSize(.small)
-        .padding(.leading, FileRowMetrics.contentInset)
-        .padding(.trailing, Metrics.insetSmall)
+        .padding(.horizontal, FileRowMetrics.contentInset)
         .frame(height: Metrics.PaneHeader.height)
     }
 }

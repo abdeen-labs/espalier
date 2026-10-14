@@ -49,8 +49,8 @@ public struct KeyboardShortcutsSheet: View {
                 ForEach(menus, id: \.self) { menu in
                     // The menu's label is a row of its own: a list's
                     // floating header draws a line.
-                    SectionLabel(menu)
-                        .padding(.top, Metrics.PaletteList.sectionTopPadding)
+                    ListGroupLabel(menu)
+                        .listRowInsets(EdgeInsets(top: 0, leading: Metrics.ListRow.inset, bottom: 0, trailing: Metrics.ListRow.inset))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                     ForEach(ShortcutListing.all.filter { $0.menu == menu }) { listing in
@@ -58,11 +58,13 @@ public struct KeyboardShortcutsSheet: View {
                             KeyCap(listing.symbols)
                         }
                         .foregroundStyle(.text)
+                        .padding(.horizontal, Metrics.ListRow.horizontalPadding)
                         // The key cap is hidden from VoiceOver; the row
                         // reads the shortcut as its value.
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(listing.title)
                         .accessibilityValue(listing.symbols)
+                        .listRowInsets(EdgeInsets(top: 1, leading: Metrics.ListRow.inset, bottom: 1, trailing: Metrics.ListRow.inset))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                     }
@@ -71,6 +73,7 @@ public struct KeyboardShortcutsSheet: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .rowsDrawSelection()
+            .sheetListCard()
             .frame(height: 420)
         } buttons: {
             Button("Done") {

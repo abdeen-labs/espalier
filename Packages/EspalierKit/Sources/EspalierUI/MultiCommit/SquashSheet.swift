@@ -148,7 +148,7 @@ struct SquashMessageCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TextField("Summary", text: $summary, prompt: Text("Summary (required)").foregroundStyle(.text3))
+            TextField("Summary", text: $summary, prompt: Text("Summary (required)").fieldPrompt())
                 .textFieldStyle(.plain)
                 // AppKit's one-line mode: a pasted line break becomes a
                 // space.

@@ -214,7 +214,7 @@ struct ProviderSheet: View {
         SheetScaffold(editor.title) {
             Form {
                 LabeledContent("Name") {
-                    TextField("Name", text: $editor.form.name, prompt: Text("My provider"))
+                    TextField("Name", text: $editor.form.name, prompt: Text("My provider").fieldPrompt())
                         .labelsHidden()
                 }
                 LabeledContent("Type") {
@@ -226,7 +226,7 @@ struct ProviderSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 LabeledContent("Base URL") {
-                    TextField("Base URL", text: $editor.form.baseUrl, prompt: Text(ProviderCopy.baseURLPlaceholder(editor.form.type)))
+                    TextField("Base URL", text: $editor.form.baseUrl, prompt: Text(ProviderCopy.baseURLPlaceholder(editor.form.type)).fieldPrompt())
                         .labelsHidden()
                 }
                 if editor.form.type != .anthropic {
@@ -241,7 +241,7 @@ struct ProviderSheet: View {
                 }
                 if editor.form.type == .azure {
                     LabeledContent("Azure API Version") {
-                        TextField("Azure API Version", text: $editor.form.azureApiVersion, prompt: Text("2024-10-21"))
+                        TextField("Azure API Version", text: $editor.form.azureApiVersion, prompt: Text("2024-10-21").fieldPrompt())
                             .labelsHidden()
                     }
                 }
@@ -273,7 +273,7 @@ struct ProviderSheet: View {
                 } else {
                     let secretLabel = editor.form.authKind == .bearer ? "Bearer Token" : "API Key"
                     LabeledContent(secretLabel) {
-                        SecureField(secretLabel, text: $editor.form.secret, prompt: Text(editor.keepsStoredSecret ? "Unchanged" : "Required"))
+                        SecureField(secretLabel, text: $editor.form.secret, prompt: Text(editor.keepsStoredSecret ? "Unchanged" : "Required").fieldPrompt())
                             .labelsHidden()
                     }
                 }

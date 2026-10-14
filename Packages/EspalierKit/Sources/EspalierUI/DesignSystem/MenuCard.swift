@@ -235,14 +235,12 @@ private struct MenuRowView: View {
                     .frame(width: Metrics.Menu.checkColumnWidth)
             }
             if level.hasSymbols {
-                Group {
-                    if let systemImage = item.systemImage {
-                        Image(systemName: systemImage)
-                            .font(Typography.row)
-                            .foregroundStyle(.text2)
-                    }
-                }
-                .frame(width: Metrics.Menu.symbolColumnWidth)
+                // An item without a symbol keeps the column, empty.
+                Image(systemName: item.systemImage ?? "circle")
+                    .font(Typography.row)
+                    .foregroundStyle(.text2)
+                    .opacity(item.systemImage == nil ? 0 : 1)
+                    .frame(width: Metrics.Menu.symbolColumnWidth)
             }
             VStack(alignment: .leading, spacing: Metrics.Menu.subtitleSpacing) {
                 Text(item.title)
@@ -279,8 +277,8 @@ private struct MenuRowView: View {
     }
 }
 
-/// Which ends of a scrolling menu have rows past them.
-private struct MenuScrollEdges: Equatable {
+/// Which ends of a scrolling menu (or suggestion list) have rows past them.
+struct MenuScrollEdges: Equatable {
     var top = false
     var bottom = false
 
@@ -292,9 +290,9 @@ private struct MenuScrollEdges: Equatable {
     }
 }
 
-/// A scrolling menu's mask: its rows fade out toward an end with more rows
-/// past it.
-private struct MenuScrollFade: View {
+/// A scrolling menu's (or suggestion list's) mask: its rows fade out toward
+/// an end with more rows past it.
+struct MenuScrollFade: View {
     let edges: MenuScrollEdges
 
     var body: some View {

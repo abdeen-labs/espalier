@@ -81,7 +81,7 @@ struct DiffFindBar: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.text3)
                 .accessibilityHidden(true)
-            TextField("Find in Diff", text: $find.query, prompt: Text("Find in Diff").foregroundStyle(.text3))
+            TextField("Find in Diff", text: $find.query, prompt: Text("Find in Diff").fieldPrompt())
                 .textFieldStyle(.plain)
                 // AppKit's one-line mode: a pasted line break becomes a
                 // space.

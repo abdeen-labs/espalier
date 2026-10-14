@@ -89,7 +89,7 @@ struct GitAuthorForm: View {
                     .textSelection(.enabled)
                     .authorControlWidth(layout)
             } else {
-                TextField("Name", text: $name, prompt: Text(verbatim: namePrompt))
+                TextField("Name", text: $name, prompt: Text(verbatim: namePrompt).fieldPrompt())
                     .labelsHidden()
                     .textFieldStyle(.capsule)
                     .authorControlWidth(layout)
@@ -182,7 +182,7 @@ struct GitAuthorForm: View {
                 .textSelection(.enabled)
                 .authorControlWidth(layout)
         } else {
-            TextField(showsPopUp ? "Other Email" : "Email", text: $otherEmail, prompt: Text(verbatim: "name@example.com"))
+            TextField(showsPopUp ? "Other Email" : "Email", text: $otherEmail, prompt: Text(verbatim: "name@example.com").fieldPrompt())
                 .labelsHidden()
                 .textFieldStyle(.capsule)
                 .authorControlWidth(layout)

@@ -1,6 +1,7 @@
 // Espalier's text fields. A one-line field is a `field` capsule 28 high,
-// like the search field, with the accent ring while it has focus; a text
-// area (a description, a list of patterns) is the same fill in a rounded
+// like the search field, with the accent ring while it has focus and its
+// prompt in placeholder text (`fieldPrompt()`); a text area (a
+// description, a list of patterns) is the same fill in a rounded
 // rectangle.
 
 import AppKit
@@ -108,6 +109,19 @@ private struct CapsuleTextFieldBody<Field: View>: View {
             isFocused = true
         }
         .opacity(isEnabled ? 1 : Palette.disabledOpacity)
+    }
+}
+
+extension Text {
+    /// The text as a field's prompt, in placeholder text
+    /// (`Palette.placeholderText`): `TextField("Name", text: $name,
+    /// prompt: Text("Branch name").fieldPrompt())`. A text field style
+    /// never sees its field's prompt, so a prompt without a color of its
+    /// own draws in AppKit's placeholder color, nearly as dark as the text.
+    /// A prompt with a color draws at the field's leading edge, whatever
+    /// the field's alignment.
+    public func fieldPrompt() -> Text {
+        foregroundStyle(Color(nsColor: Palette.placeholderText))
     }
 }
 

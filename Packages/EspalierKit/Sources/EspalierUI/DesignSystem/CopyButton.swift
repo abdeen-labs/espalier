@@ -50,7 +50,8 @@ public struct CopyButton<Label: View>: View {
             copies += 1
         } label: {
             label(showsCheck ? "checkmark" : "doc.on.doc")
-                .contentTransition(.symbolEffect(.replace))
+                // A symbol replace plays whatever the transaction says.
+                .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
         }
         .task(id: copies) {
             guard copies > 0 else {

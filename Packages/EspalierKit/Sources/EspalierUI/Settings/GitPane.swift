@@ -474,7 +474,7 @@ struct GitPaneContent: View {
                 .disabled(settings.loadState != .loaded)
                 if settings.branchChoice == .other {
                     SettingsRow("Branch name", labelsControl: true) {
-                        TextField("Branch name", text: $settings.otherBranch, prompt: Text("Branch name"))
+                        TextField("Branch name", text: $settings.otherBranch, prompt: Text("Branch name").fieldPrompt())
                             .labelsHidden()
                             .textFieldStyle(.capsule)
                             .settingsControlWidth()

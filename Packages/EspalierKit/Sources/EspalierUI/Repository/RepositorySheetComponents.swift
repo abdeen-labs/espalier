@@ -18,7 +18,7 @@ struct FolderField: View {
     var body: some View {
         LabeledContent(label) {
             HStack(spacing: Metrics.insetSmall) {
-                TextField(label, text: $path, prompt: Text(prompt))
+                TextField(label, text: $path, prompt: Text(prompt).fieldPrompt())
                     .labelsHidden()
                     .textFieldStyle(.capsule)
                 Button("Choose…", action: choose)

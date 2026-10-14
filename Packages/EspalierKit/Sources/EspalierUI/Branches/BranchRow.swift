@@ -192,16 +192,15 @@ public struct BranchRow: View {
                 .truncationMode(.middle)
                 // The name first; what follows takes the room left.
                 .layoutPriority(1)
-            Spacer(minLength: Metrics.grid)
-            if let pullRequest = content.pullRequest {
-                PullRequestBadgeGlyph(pullRequest)
+            HStack(spacing: Metrics.insetSmall) {
+                if let pullRequest = content.pullRequest {
+                    PullRequestBadgeGlyph(pullRequest)
+                }
+                BranchTrackingView(content.tracking)
             }
-            BranchTrackingView(content.tracking)
-                // After the name, before the spacer: "Not published" gets the
-                // room the name leaves. At the spacer's priority it would be
-                // offered half of it and fall back to the glyph even in wide
-                // rows.
-                .layoutPriority(0.5)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            // "Not published" gets all the room the name leaves.
+            .layoutPriority(0.5)
         }
         .tooltip(content.name)
         .accessibilityElement(children: .ignore)

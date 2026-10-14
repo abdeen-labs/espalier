@@ -348,6 +348,7 @@ struct OperationPanelView: View {
     var onAbort: () -> Void = {}
     var onOpenTerminal: () -> Void = {}
     var onResolveWithAI: () -> Void = {}
+    @Environment(\.motion) private var motion
 
     var body: some View {
         StatusBar(tone: tone, title: content.title, subtitle: subtitle, help: subtitleHelp) {
@@ -379,7 +380,8 @@ struct OperationPanelView: View {
             let isResolved: Bool = if case .conflicts = content.state { content.isResolved } else { false }
             Image(systemName: isResolved ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                 .foregroundStyle(Color(espalier: isResolved ? Palette.success : Palette.warningMark))
-                .contentTransition(.symbolEffect(.replace))
+                // A symbol replace plays whatever the transaction says.
+                .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
                 .motion(Motion.arrive, value: isResolved)
                 .accessibilityLabel("Warning")
                 .accessibilityHidden(isResolved)

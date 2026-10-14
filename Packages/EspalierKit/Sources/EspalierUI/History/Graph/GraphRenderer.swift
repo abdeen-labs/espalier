@@ -419,13 +419,13 @@ enum GraphRenderer {
             let ends = layout.outgoingSidesDrawn.map { side in
                 (geometry.outgoingStubEnd(nodeX: nodeX, side: side), side)
             }
-            drawCount(layout.extraOutgoing, candidates: ends.reversed(), geometry: geometry, colors: colors, track: row.track, in: context)
+            drawCount(layout.extraOutgoing, candidates: ends.reversed(), geometry: geometry, colors: colors, track: row.track, opacity: nodeOpacity(row, emphasis: emphasis), in: context)
         }
         if layout.extraIncoming > 0 {
             let starts = layout.incomingSlotsDrawn.map { slot in
                 (geometry.incomingStubStart(nodeX: nodeX, side: slot.side), slot.side ?? 1)
             }
-            drawCount(layout.extraIncoming, candidates: starts.reversed(), geometry: geometry, colors: colors, track: row.track, in: context)
+            drawCount(layout.extraIncoming, candidates: starts.reversed(), geometry: geometry, colors: colors, track: row.track, opacity: nodeOpacity(row, emphasis: emphasis), in: context)
         }
 
         drawNode(drawing.node, row: row, at: CGPoint(x: nodeX, y: nodeY), emphasis: emphasis, geometry: geometry, colors: colors, in: context)
@@ -532,13 +532,15 @@ enum GraphRenderer {
     }
 
     /// "+N" for the stubs a node has beyond the two drawn: beside the first
-    /// of `candidates` (a stub's end and its side) with room outward.
+    /// of `candidates` (a stub's end and its side) with room outward, at
+    /// the node's opacity.
     private static func drawCount(
         _ count: Int,
         candidates: [(point: CGPoint, side: CGFloat)],
         geometry: GraphGeometry,
         colors: GraphColors,
         track: Int,
+        opacity: CGFloat,
         in context: CGContext
     ) {
         guard let first = candidates.first else {
@@ -566,6 +568,7 @@ enum GraphRenderer {
         let x = min(max(origin(chosen), 0), max(geometry.columnWidth - width, 0))
         let capsule = CGRect(x: x, y: chosen.point.y - height / 2, width: width, height: height)
         context.saveGState()
+        context.setAlpha(opacity)
         context.setFillColor(color.copy(alpha: 0.16) ?? color)
         context.addPath(CGPath(roundedRect: capsule, cornerWidth: height / 2, cornerHeight: height / 2, transform: nil))
         context.fillPath()
@@ -590,10 +593,8 @@ enum GraphRenderer {
     ) {
         let size = node.size
         let ring = geometry.ring(size)
-        let isEmphasized = emphasis.emphasizedTrack == nil || emphasis.emphasizedTrack == row.track
         let color = colors.color(forTrack: row.track)
-        var opacity: CGFloat = isEmphasized ? 1 : emphasis.dimming
-        opacity *= emphasis.nodeOpacity
+        let opacity = nodeOpacity(row, emphasis: emphasis)
         context.saveGState()
         defer { context.restoreGState() }
 
@@ -616,8 +617,10 @@ enum GraphRenderer {
             return
         }
 
-        // The fill is opaque whatever the node's opacity, so dimmed rings
-        // still hide the lines' ends.
+        // The fill is opaque whatever the node's opacity (and whatever the
+        // pens left on the context), so dimmed rings still hide the lines'
+        // ends.
+        context.setAlpha(1)
         context.setFillColor(emphasis.isSelected ? colors.selectedBackground : colors.background)
         context.fillEllipse(in: circle(center, ring.radius + ring.stroke / 2))
 
@@ -647,6 +650,13 @@ enum GraphRenderer {
             context.setLineWidth(Metrics.Graph.targetOutline)
             context.strokeEllipse(in: circle(center, outlineRadius(for: size, geometry: geometry)))
         }
+    }
+
+    /// A node's opacity: dimmed while another track is emphasized, and
+    /// as search dims its row.
+    private static func nodeOpacity(_ row: CommitGraphRow, emphasis: GraphEmphasis) -> CGFloat {
+        let isEmphasized = emphasis.emphasizedTrack == nil || emphasis.emphasizedTrack == row.track
+        return (isEmphasized ? 1 : emphasis.dimming) * emphasis.nodeOpacity
     }
 
     /// The radius of the outline that marks a node (a stub's other end, a

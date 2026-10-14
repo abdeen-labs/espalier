@@ -45,10 +45,13 @@ extension BackgroundTint {
 }
 
 extension Theme {
-    /// The background swatch: the field fill as light draws it, its tint
-    /// three times as strong, so tints this faint tell apart.
+    /// The background swatch: the field fill in the current appearance,
+    /// its tint three times as strong, so tints this faint tell apart.
     var backgroundSwatch: NSColor {
-        OKLCH.saturated(field.resolved(in: .light), by: 3)
+        let field = field
+        return NSColor.espalierDynamic { variant in
+            OKLCH.saturated(field.resolved(in: variant), by: 3)
+        }
     }
 }
 

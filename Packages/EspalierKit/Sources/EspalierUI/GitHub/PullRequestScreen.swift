@@ -576,7 +576,15 @@ struct ChangedFilesList: View {
         VStack(spacing: 0) {
             if let changeset = selection.changeset.value {
                 let files = Self.files(changeset.files, filter: filter)
-                ChangedFilesHeader(fileCount: changeset.files.count, linesAdded: changeset.linesAdded, linesDeleted: changeset.linesDeleted)
+                ChangedFilesHeader(
+                    title: ChangesHeaderContent.title(
+                        fileCount: changeset.files.count,
+                        visibleCount: files.count,
+                        numberFormat: context.app.preferences.numberFormat
+                    ),
+                    linesAdded: changeset.linesAdded,
+                    linesDeleted: changeset.linesDeleted
+                )
                 Hairline()
                 if files.isEmpty && !filter.isEmpty {
                     CenteredMessage("No Matching Files", systemImage: "magnifyingglass", description: "No changed files match \u{201C}\(filter)\u{201D}.")
@@ -655,34 +663,22 @@ enum PullRequestFileMenus {
     }
 }
 
-/// A count with grouping separators ("1,204").
-nonisolated private func countText(_ count: Int) -> String {
-    count.formatted(.number.locale(Locale(identifier: "en_US")))
-}
-
-/// "3 changed files", "+12 −4".
+/// "3 changed files", or "0 of 3 changed files" while the search hides
+/// some, and the lines added and removed ("+12 −4", zero counts left out).
 struct ChangedFilesHeader: View {
-    let fileCount: Int
+    let title: String
     let linesAdded: Int
     let linesDeleted: Int
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
-            Text(fileCount == 1 ? "1 changed file" : "\(countText(fileCount)) changed files")
+            Text(title)
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)
                 .lineLimit(1)
             Spacer(minLength: Metrics.grid)
             if linesAdded > 0 || linesDeleted > 0 {
-                HStack(spacing: Metrics.grid) {
-                    Text("+\(countText(linesAdded))")
-                        .foregroundStyle(Color(espalier: DiffColors.addedMarker))
-                    Text("−\(countText(linesDeleted))")
-                        .foregroundStyle(Color(espalier: DiffColors.deletedMarker))
-                }
-                .font(Typography.secondaryCount)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(linesAdded) added lines, \(linesDeleted) removed lines")
+                HistoryLineCounts(added: linesAdded, deleted: linesDeleted)
             }
         }
         .padding(.horizontal, Metrics.insetMedium)

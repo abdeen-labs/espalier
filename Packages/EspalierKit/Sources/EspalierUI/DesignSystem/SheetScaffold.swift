@@ -157,3 +157,16 @@ public struct FieldLabel: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 }
+
+extension View {
+    /// A list inside a sheet: the sheet's background in a card's shape with
+    /// a 1-point ring, the rows `Metrics.SheetList.inset` in from its top and
+    /// bottom, so a row scrolled under an edge is cut at the card's edge.
+    public func sheetListCard() -> some View {
+        let shape = RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
+        return padding(.vertical, Metrics.SheetList.inset)
+            .background(Color(espalier: Palette.background))
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(.line, lineWidth: 1))
+    }
+}

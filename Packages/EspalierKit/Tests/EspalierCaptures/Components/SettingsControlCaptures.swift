@@ -38,22 +38,32 @@ struct SettingsControlCaptures {
         capture(view, named: "switch", area: area)
     }
 
-    @Test("the capsule pop-up: a choice, a long one cut short, and disabled")
+    @Test("the capsule pop-up: a choice, a long one cut short, disabled, and Settings' date format as wide as its widest choice, that one chosen")
     func popUps() {
+        let dateTitles = DateFormatPattern.allCases.map { AppearanceSettings.formatTitle(example: $0.example, pattern: $0.rawValue) }
+        let widest = AppearanceSettings.formatTitle(example: DateFormatPattern.longMonthOrdinalDayYear.example, pattern: DateFormatPattern.longMonthOrdinalDayYear.rawValue)
         let view = VStack(alignment: .leading, spacing: Metrics.insetMedium) {
-            CapsulePopUp("Email", selection: .constant("joe@example.com"), title: "joe@example.com") {
-                MenuChoice("joe@example.com", value: "joe@example.com")
-                MenuChoice("Other", value: "other")
+            VStack(alignment: .leading, spacing: Metrics.insetMedium) {
+                CapsulePopUp("Email", selection: .constant("joe@example.com"), title: "joe@example.com") {
+                    MenuChoice("joe@example.com", value: "joe@example.com")
+                    MenuChoice("Other", value: "other")
+                }
+                CapsulePopUp("Date format", selection: .constant(1), title: "Thursday, October 19, 2017 (EEEE, MMMM d, yyyy)") {
+                    MenuChoice("Thursday, October 19, 2017 (EEEE, MMMM d, yyyy)", value: 1)
+                }
+                CapsulePopUp("Editor", selection: .constant(0), title: "None") {
+                    MenuChoice("None", value: 0)
+                }
+                .disabled(true)
             }
-            CapsulePopUp("Date format", selection: .constant(1), title: "Thursday, October 19, 2017 (EEEE, MMMM d, yyyy)") {
-                MenuChoice("Thursday, October 19, 2017 (EEEE, MMMM d, yyyy)", value: 1)
+            .frame(width: Metrics.SettingsWindow.controlWidth)
+            CapsulePopUp("Date format", selection: .constant(widest), title: widest, fitting: dateTitles) {
+                for title in dateTitles {
+                    MenuChoice(title, value: title)
+                }
             }
-            CapsulePopUp("Editor", selection: .constant(0), title: "None") {
-                MenuChoice("None", value: 0)
-            }
-            .disabled(true)
+            .settingsControlWidthFittingChoices()
         }
-        .frame(width: Metrics.SettingsWindow.controlWidth)
         .padding(Metrics.insetLarge)
         capture(view, named: "capsulePopUp", area: area)
     }

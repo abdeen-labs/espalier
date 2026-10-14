@@ -394,7 +394,7 @@ struct CloneForm: View {
             // The labels in the form's column; the fields are capsules.
             if model.source == .url {
                 LabeledContent("Repository URL") {
-                    TextField("Repository URL", text: Binding(get: { model.current.url }, set: { model.setURL($0) }), prompt: Text("URL or username/repository"))
+                    TextField("Repository URL", text: Binding(get: { model.current.url }, set: { model.setURL($0) }), prompt: Text("URL or username/repository").fieldPrompt())
                         .labelsHidden()
                 }
             }

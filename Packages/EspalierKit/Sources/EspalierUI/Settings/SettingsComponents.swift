@@ -288,6 +288,34 @@ extension View {
     func settingsControlWidth(_ width: CGFloat = Metrics.SettingsWindow.controlWidth) -> some View {
         frame(width: width)
     }
+
+    /// A pop-up in a Settings row whose choices can be wider than the rows'
+    /// control width (`CapsulePopUp(fitting:)`): at that width, or at its
+    /// ideal width when that's wider, so the chosen title shows whole.
+    func settingsControlWidthFittingChoices() -> some View {
+        AtLeastIdealWidth(minimum: Metrics.SettingsWindow.controlWidth) {
+            self
+        }
+    }
+}
+
+/// Its view at its ideal width rounded up to a whole point, but at least
+/// `minimum`, offered that width so a view that fills its width fills it.
+private struct AtLeastIdealWidth: Layout {
+    let minimum: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let content = subviews.first else {
+            return .zero
+        }
+        let width = max(minimum, content.sizeThatFits(ProposedViewSize(width: nil, height: proposal.height)).width.rounded(.up))
+        let size = content.sizeThatFits(ProposedViewSize(width: width, height: proposal.height))
+        return CGSize(width: width, height: size.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
 }
 
 extension AppModel {

@@ -31,7 +31,7 @@ nonisolated struct DiffHeaderContent: Sendable, Equatable {
 }
 
 /// The diff's header row: the name, the folder in tertiary text, the counts
-/// in SF Mono, Open in <Editor>, and the options.
+/// in SF Mono (zero counts left out), Open in <Editor>, and the options.
 struct DiffHeader<Options: View>: View {
     let content: DiffHeaderContent
     var openInEditor: @MainActor () -> Void = {}
@@ -98,16 +98,8 @@ struct DiffHeader<Options: View>: View {
     @ViewBuilder
     private var stats: some View {
         if let added = content.addedLines, let deleted = content.deletedLines, added + deleted > 0 {
-            HStack(spacing: Metrics.grid) {
-                Text("+\(added)")
-                    .foregroundStyle(Color(nsColor: DiffColors.addedMarker))
-                Text("\u{2212}\(deleted)")
-                    .foregroundStyle(Color(nsColor: DiffColors.deletedMarker))
-            }
-            .font(Typography.count)
-            .padding(.trailing, Metrics.grid)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(added) added, \(deleted) removed")
+            HistoryLineCounts(added: added, deleted: deleted)
+                .padding(.trailing, Metrics.grid)
         }
     }
 }

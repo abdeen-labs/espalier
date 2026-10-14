@@ -62,7 +62,7 @@ struct RenameWorktreeForm: View {
     var body: some View {
         SheetScaffold("Rename Worktree", width: Metrics.Sheet.compactWidth) {
             VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                TextField("Name", text: $name, prompt: Text("Worktree name"))
+                TextField("Name", text: $name, prompt: Text("Worktree name").fieldPrompt())
                     .textFieldStyle(.capsule)
                     .focused($isFocused)
                     .onSubmit {

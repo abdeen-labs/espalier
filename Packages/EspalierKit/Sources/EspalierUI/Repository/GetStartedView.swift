@@ -30,8 +30,6 @@ public struct GetStartedView: View {
 
             if let account {
                 VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-                    SectionLabel("Your Repositories")
-                        .padding(.leading, Metrics.grid)
                     if accounts.count > 1 {
                         CapsulePopUp("Account", selection: Binding(
                             get: { AccountKey(account) },

@@ -276,6 +276,7 @@ struct IntegrateStatusLine: View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
             if let icon = status.icon {
                 IntegrateStatusIcon(icon: icon)
+                    .frame(width: Metrics.symbolWidth)
             }
             Text(status.message ?? " ")
                 .font(Typography.secondary)
@@ -295,7 +296,13 @@ struct IntegrateStatusIcon: View {
     var body: some View {
         switch icon {
         case .loading:
+            // The arc's center on the middle of the line's cap height,
+            // where the symbols' centers sit.
+            let offset = AppKitTypography.secondary.capHeight / 2
             ArcProgress(.mini)
+                .alignmentGuide(.firstTextBaseline) { dimensions in
+                    dimensions[VerticalAlignment.center] + offset
+                }
                 .accessibilityLabel("Checking")
         case .clean:
             Image(systemName: "checkmark.circle.fill")

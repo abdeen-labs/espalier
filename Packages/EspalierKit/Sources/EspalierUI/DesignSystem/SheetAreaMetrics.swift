@@ -67,8 +67,9 @@ extension Metrics {
     }
 
     /// A list inside a sheet (repositories to clone, a branch picker's
-    /// list): the `field` fill in a card's shape.
+    /// list, the keyboard shortcuts): `sheetListCard()`.
     public enum SheetList {
+        /// Between the card's top and bottom edges and its rows.
         public static let inset: CGFloat = 6
     }
 }

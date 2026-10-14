@@ -348,7 +348,7 @@ public struct NewBranchSheet: View {
         let validation = BranchNameRuleCheck.applying(ruleCheck, to: basic)
         SheetScaffold(content.title) {
             VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                TextField("Name", text: $name, prompt: Text("Branch name"))
+                TextField("Name", text: $name, prompt: Text("Branch name").fieldPrompt())
                     .textFieldStyle(.capsule)
                     .focused($isNameFocused)
                     .onSubmit { create(validation) }

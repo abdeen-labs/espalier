@@ -17,6 +17,8 @@ nonisolated struct WorktreeRowContent: Sendable, Equatable, Identifiable {
     var path: String
     /// Its branch, or its short SHA when HEAD is detached.
     var detail: String
+    /// Whether `detail` is a SHA.
+    var isDetached: Bool
     var isMain: Bool
     /// The window is at this worktree.
     var isCurrent: Bool
@@ -58,9 +60,10 @@ nonisolated struct WorktreeRowContent: Sendable, Equatable, Identifiable {
         return parts.joined(separator: ", ")
     }
 
-    init(path: String, detail: String, isMain: Bool, isCurrent: Bool, isLocked: Bool) {
+    init(path: String, detail: String, isDetached: Bool = false, isMain: Bool, isCurrent: Bool, isLocked: Bool) {
         self.path = path
         self.detail = detail
+        self.isDetached = isDetached
         self.isMain = isMain
         self.isCurrent = isCurrent
         self.isLocked = isLocked
@@ -70,6 +73,8 @@ nonisolated struct WorktreeRowContent: Sendable, Equatable, Identifiable {
         self.init(
             path: worktree.path,
             detail: getWorktreeDescription(worktree),
+            // As `getWorktreeDescription` decides on the SHA.
+            isDetached: worktree.branch?.isEmpty ?? true,
             isMain: worktree.type == .main,
             isCurrent: isCurrent,
             isLocked: worktree.isLocked
@@ -88,7 +93,8 @@ nonisolated struct WorktreeRowContent: Sendable, Equatable, Identifiable {
     }
 }
 
-/// One worktree: its symbol, its name, a lock, and its branch or SHA.
+/// One worktree: its symbol, its name, a lock, and its branch or SHA (in
+/// the code font).
 struct WorktreeRow: View {
     let content: WorktreeRowContent
 
@@ -114,7 +120,7 @@ struct WorktreeRow: View {
                     .accessibilityHidden(true)
             }
             Text(content.detail)
-                .font(Typography.secondary)
+                .font(content.isDetached ? Typography.sha : Typography.secondary)
                 .foregroundStyle(.text3)
                 .lineLimit(1)
                 .truncationMode(.middle)

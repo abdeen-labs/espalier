@@ -362,10 +362,10 @@ public struct NoChangesSuggestions: View {
                 systemImage: "checkmark",
                 description: content.subtitle,
                 tint: Color(espalier: Palette.success),
-                isLarge: true
+                isLarge: true,
+                maximumWidth: SuggestionMetrics.listWidth
             ) {
                 rows
-                    .frame(maxWidth: SuggestionMetrics.listWidth)
                     .padding(.top, Metrics.insetSmall)
             }
             .frame(maxWidth: .infinity)
@@ -449,7 +449,7 @@ extension PullRequestSuggestedNextAction {
 
 /// The Suggestions' sizes.
 enum SuggestionMetrics {
-    /// The action list's width.
+    /// The widest the action list and the message above it get.
     static let listWidth: CGFloat = 440
     /// A row's height on one line.
     static let rowHeight: CGFloat = 48

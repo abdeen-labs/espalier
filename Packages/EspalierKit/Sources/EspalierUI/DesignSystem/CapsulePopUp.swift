@@ -16,16 +16,27 @@ import SwiftUI
 public struct CapsulePopUp<Value: Hashable>: View {
     private let label: String
     private let title: String
+    private let fittingTitles: [String]
     private let items: () -> MenuContent
     @Binding private var selection: Value
 
     /// - Parameters:
     ///   - label: What VoiceOver calls the pop-up ("Email").
     ///   - title: The chosen item's title, shown in the capsule.
+    ///   - fittingTitles: Titles the capsule's ideal width fits, as well as
+    ///     `title`: every choice's, so the pop-up keeps its width whichever
+    ///     is chosen.
     ///   - items: The menu's choices, built as it opens.
-    public init(_ label: String, selection: Binding<Value>, title: String, @MenuBuilder items: @escaping () -> MenuContent) {
+    public init(
+        _ label: String,
+        selection: Binding<Value>,
+        title: String,
+        fitting fittingTitles: [String] = [],
+        @MenuBuilder items: @escaping () -> MenuContent
+    ) {
         self.label = label
         self.title = title
+        self.fittingTitles = fittingTitles
         self.items = items
         _selection = selection
     }
@@ -35,10 +46,18 @@ public struct CapsulePopUp<Value: Hashable>: View {
             items().resolvingOptions(selection: $selection)
         }) {
             HStack(spacing: Metrics.CapsuleMenu.chevronSpacing) {
-                Text(title)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                ZStack(alignment: .leading) {
+                    // The titles to fit, unseen, set the ideal width.
+                    ForEach(Array(fittingTitles.enumerated()), id: \.offset) { _, fitting in
+                        Text(fitting)
+                            .hidden()
+                            .accessibilityHidden(true)
+                    }
+                    Text(title)
+                        .truncationMode(.tail)
+                }
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: Metrics.CapsuleMenu.chevronSize, weight: .semibold))
                     .foregroundStyle(.text3)

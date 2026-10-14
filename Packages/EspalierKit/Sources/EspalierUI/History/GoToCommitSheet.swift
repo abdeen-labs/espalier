@@ -39,7 +39,7 @@ struct GoToCommitForm: View {
     var body: some View {
         SheetScaffold("Go to Commit", width: Metrics.Sheet.compactWidth) {
             VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                TextField("SHA", text: $text, prompt: Text("Commit SHA"))
+                TextField("SHA", text: $text, prompt: Text("Commit SHA").fieldPrompt())
                     .textFieldStyle(.capsule(font: AppKitTypography.shaField))
                     .focused($isFocused)
                     .onSubmit {

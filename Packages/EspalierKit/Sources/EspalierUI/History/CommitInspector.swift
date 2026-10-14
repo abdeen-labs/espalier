@@ -96,9 +96,8 @@ struct CommitInfoView: View {
                     Text(fullDate(content.authoredDate))
                         .textSelection(.enabled)
                     if !content.authorEmail.isEmpty {
-                        Text(content.authorEmail)
+                        address(content.authorEmail)
                             .foregroundStyle(.text2)
-                            .textSelection(.enabled)
                     }
                 }
                 Hairline()
@@ -106,9 +105,8 @@ struct CommitInfoView: View {
                     Text(fullDate(content.committedDate))
                         .textSelection(.enabled)
                     if let committer = content.committer {
-                        Text(verbatim: committer.email.isEmpty ? "by \(committer.name)" : "by \(committer.name) <\(committer.email)>")
+                        address(committer.email.isEmpty ? "by \(committer.name)" : "by \(committer.name) <\(committer.email)>")
                             .foregroundStyle(.text2)
-                            .textSelection(.enabled)
                     }
                 }
                 if !content.parents.isEmpty {
@@ -131,8 +129,7 @@ struct CommitInfoView: View {
                     Hairline()
                     row("Co-Authors") {
                         ForEach(content.coAuthors, id: \.self) { coAuthor in
-                            Text(coAuthor)
-                                .textSelection(.enabled)
+                            address(coAuthor)
                         }
                     }
                 }
@@ -166,6 +163,16 @@ struct CommitInfoView: View {
         }
         .font(Typography.secondary)
         .padding(.vertical, Metrics.insetSmall)
+    }
+
+    /// An email address, or a name with one, on one line: its middle cut
+    /// when it's too wide, and whole in its tooltip.
+    private func address(_ text: String) -> some View {
+        Text(verbatim: text)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .textSelection(.enabled)
+            .tooltip(text)
     }
 
     private func parentLink(_ parent: CommitInfoContent.Parent) -> some View {

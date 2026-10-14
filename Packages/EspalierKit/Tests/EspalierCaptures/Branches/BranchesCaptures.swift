@@ -1,7 +1,9 @@
 // The Branches section and its rows, the branch picker and popover, and the
 // New, Rename, and Delete Branch sheets, one capture per layout. Rows, the
 // section's rows, the picker's list, and the sheets take values; the
-// section's header and the popover use a repository with a remote.
+// section's header and the popover use a repository with a remote. Dots
+// take the colors the app gives the branches listed (`BranchColors`): the
+// section's repository has its local branches, on feature/login.
 
 import AppKit
 @testable import EspalierCore
@@ -52,9 +54,15 @@ struct BranchesCaptures {
 
     @Test("rows: the current branch, each comparison with the upstream, and pull requests with their checks")
     func rows() {
+        let colors = BranchColors(
+            branches: Self.rows.filter { !$0.isRemote }.map(\.name),
+            current: "feature/login",
+            defaultBranch: "main",
+            remoteNames: ["origin"]
+        )
         let view = List {
             ForEach(Self.rows) { row in
-                BranchRow(row)
+                BranchRow(row, dotColor: colors.color(of: (name: row.name, isRemote: row.isRemote)))
             }
         }
         .sidebarListStyle()
@@ -122,8 +130,15 @@ struct BranchesCaptures {
     @Test("the section: as it first shows (Remote Branches and the folders collapsed), then open, with a branch selected")
     func section() async throws {
         try await withIsolatedGitConfig { _ in
-            let fixture = try await OperationsCaptureRepository.make()
-            let content = BranchesSectionContent.make(Self.sectionInputs())
+            let inputs = Self.sectionInputs()
+            let localBranches = inputs.branches.filter { $0.type == .local && $0.name != "main" }.map(\.name)
+            let fixture = try await OperationsCaptureRepository.make { local in
+                for name in localBranches {
+                    try await runGit(["branch", name], local)
+                }
+                try await runGit(["checkout", "-q", "feature/login"], local)
+            }
+            let content = BranchesSectionContent.make(inputs)
             let pruned = [PrunedBranch(name: "old-cleanup", sha: Values.sha(1), date: Date().addingTimeInterval(-30 * 60))]
 
             let firstShown = try TemporaryDefaults()
@@ -153,6 +168,20 @@ struct BranchesCaptures {
         Values.remoteBranch("origin/release/1.0", sha: Values.sha(7)),
     ]
 
+    /// The dots' colors for `branches`, on feature/login, as the app gives
+    /// them.
+    private static func dotColor(in branches: [Branch]) -> (Branch) -> NSColor {
+        let colors = BranchColors(
+            branches: branches.filter { $0.type == .local }.map(\.name),
+            current: "feature/login",
+            defaultBranch: "main",
+            remoteNames: ["origin"]
+        )
+        return { branch in
+            colors.color(of: (name: branch.name, isRemote: branch.type == .remote))
+        }
+    }
+
     private static var pickerDates: [String: Date] {
         let now = Date()
         return Dictionary(uniqueKeysWithValues: (1...7).map { (Values.sha($0), now.addingTimeInterval(-Double($0 * $0) * 90 * 60)) })
@@ -173,7 +202,8 @@ struct BranchesCaptures {
             dates: Self.pickerDates,
             filter: .constant(filter),
             selection: .constant(selection),
-            onCreateBranch: { _ in }
+            onCreateBranch: { _ in },
+            dotColor: Self.dotColor(in: branches)
         )
         .frame(width: 340, height: 320)
         .padding(Metrics.insetMedium)
@@ -218,7 +248,8 @@ struct BranchesCaptures {
             dates: Self.pickerDates,
             filter: .constant(""),
             selection: .constant(branches[2]),
-            comparison: comparison
+            comparison: comparison,
+            dotColor: Self.dotColor(in: branches)
         )
         .frame(width: 400, height: 320)
         .padding(Metrics.insetMedium)

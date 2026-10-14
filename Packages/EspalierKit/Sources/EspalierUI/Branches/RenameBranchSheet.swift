@@ -76,7 +76,7 @@ public struct RenameBranchSheet: View {
                 .font(Typography.secondary)
             }
             VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                TextField("Name", text: $name, prompt: Text("Branch name"))
+                TextField("Name", text: $name, prompt: Text("Branch name").fieldPrompt())
                     .textFieldStyle(.capsule)
                     .focused($isNameFocused)
                     .onSubmit { rename(validation, isUnchanged: isUnchanged) }

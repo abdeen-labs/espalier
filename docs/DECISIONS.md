@@ -71,9 +71,9 @@ reason.
   white for the hue is as light as the hue allows. Its chroma grows with a
   surface's depth, as the themes' own tints do. Washes, text, the accent,
   status colors, and Pop's accent-tinted sidebar (my call) stay the
-  theme's. A swatch is the theme's light field fill in that tint, its
-  chroma tripled, since the tints are too faint to tell apart at swatch
-  size.
+  theme's. A swatch is the theme's field fill in that tint, as the
+  current appearance draws it, its chroma tripled, since the tints are
+  too faint to tell apart at swatch size.
 - **The app font and the code font are two settings** (my call), picked
   apart from each other and from the theme, any app font with any code
   font. The app font is all the interface's text: SF Pro (the default),
@@ -734,6 +734,10 @@ immediately; importing desktop's repository list and settings (my call).
 - **Pull request links check the pull request out.**
 - **Pull requests have their own symbol** (desktop's reads as a figure at
   small sizes) and drafts a Draft tag. A check's step row opens the step.
+- **Checks glyphs:** pending is a clock and neutral a minus (desktop: a dot
+  and a square), in the checks list and in a pull request's glyph, where
+  the minus also stands for cancelled or stale checks. Only a check that
+  needs an action has the warning's shape.
 - **Preview Pull Request fills the window** less its 40-point margins, as
   desktop's dialog does.
 
@@ -1199,6 +1203,12 @@ immediately; importing desktop's repository list and settings (my call).
   and removed beside it show only when the column has room for them.
 - **The diff, the file lists, and History's lists don't bounce** past
   their edges (my call).
+- **A file row keeps its name whole, then its folder:** the folder, cut
+  from its start, takes the room the name leaves and goes once it can't
+  show its first and last characters around "…"; only then is the name
+  cut. A conflicted file's state takes what the name leaves, but at least
+  35% of the row. Desktop shows the folder before the name and cuts it
+  first.
 - **No focus ring over a selection** (my call): History's commit and file
   rows, and the diff's line cursor, show only their accent tint, focused or
   not.

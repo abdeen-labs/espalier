@@ -254,14 +254,16 @@ struct AIConflictSummary: View {
     @ViewBuilder
     private func referenceRow(_ reference: AIConflictReference) -> some View {
         HStack(spacing: Metrics.insetSmall) {
-            switch reference.kind {
-            case .pullRequest:
-                Image(systemName: "arrow.trianglehead.pull")
-                    .foregroundStyle(.text2)
-            case .commit:
-                Image(systemName: "smallcircle.filled.circle")
-                    .foregroundStyle(.text2)
+            Group {
+                switch reference.kind {
+                case .pullRequest:
+                    Image(systemName: "arrow.trianglehead.pull")
+                case .commit:
+                    Image(systemName: "smallcircle.filled.circle")
+                }
             }
+            .foregroundStyle(.text2)
+            .frame(width: Metrics.symbolWidth)
             if let url = reference.url {
                 Button(reference.title) {
                     openURL(url)

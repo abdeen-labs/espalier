@@ -278,50 +278,17 @@ struct AIConsentSheet: View {
     }
 
     var body: some View {
-        SheetScaffold("Send Conflicts to \(disclosure.providerName)?", message: disclosure.summary) {
-            VStack(alignment: .leading, spacing: Metrics.grid) {
-                ForEach(disclosure.sentData, id: \.self) { item in
-                    BulletItem(text: item)
-                        .font(Typography.secondary)
-                        .foregroundStyle(.text)
-                }
-            }
-            .padding(Metrics.insetMedium)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
-                    .fill(.field)
-            )
-            Text(disclosure.reviewAdvice)
-                .font(Typography.meta)
-                .foregroundStyle(.text3)
-                .fixedSize(horizontal: false, vertical: true)
-        } buttons: {
-            SheetButtons("Continue", cancel: { dismissModal() }) {
-                dismissModal()
-                onContinue()
-            }
+        AIConsentScaffold("Send Conflicts to \(disclosure.providerName)?", content: AIConsentContent(disclosure)) {
+            dismissModal()
+        } confirm: {
+            dismissModal()
+            onContinue()
         }
     }
 
     static func present(_ disclosure: AIDataDisclosure, in context: WindowContext, onContinue: @escaping () -> Void) {
         context.modals.presentSheet(id: sheetID) {
             AIConsentSheet(disclosure: disclosure, onContinue: onContinue)
-        }
-    }
-}
-
-/// A bulleted line; wrapped lines align with the text, not the bullet.
-private struct BulletItem: View {
-    let text: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
-            Text(verbatim: "•")
-                .foregroundStyle(.text2)
-                .accessibilityHidden(true)
-            Text(text)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -1129,8 +1096,11 @@ struct AIResolutionRowView: View {
             }
             Spacer(minLength: Metrics.insetSmall)
             if row.isResolved {
+                // In the file options button's place, centered as its
+                // symbol is.
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(Color(espalier: Palette.success))
+                    .frame(width: Metrics.ControlHeight.regular)
                     .accessibilityLabel("Resolved")
             } else {
                 PullDownButton("Resolution for \(row.path)", value: row.choiceLabel) { [row, actions] in

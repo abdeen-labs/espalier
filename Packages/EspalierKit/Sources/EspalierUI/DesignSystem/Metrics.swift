@@ -17,6 +17,9 @@ public enum Metrics {
     public static let insetMedium: CGFloat = 12
     /// Large inset: around a pane's content.
     public static let insetLarge: CGFloat = 16
+    /// The column a symbol takes before text in a line, so text after
+    /// different symbols (a check, a warning, the arc) starts at the same x.
+    public static let symbolWidth: CGFloat = 16
 
     /// Corner radii, four of them, the theme's but for sheets'; controls
     /// are capsules.

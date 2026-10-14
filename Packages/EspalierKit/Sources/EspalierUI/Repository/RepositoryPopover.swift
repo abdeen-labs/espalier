@@ -184,7 +184,7 @@ struct RepositoryPopoverView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: Metrics.insetSmall) {
-                TextField("Filter", text: $filter, prompt: Text("Filter"))
+                TextField("Filter", text: $filter, prompt: Text("Filter").fieldPrompt())
                     .textFieldStyle(.capsule(systemImage: "magnifyingglass"))
                     .focused($isFilterFocused)
                     .onKeyPress(.downArrow) {

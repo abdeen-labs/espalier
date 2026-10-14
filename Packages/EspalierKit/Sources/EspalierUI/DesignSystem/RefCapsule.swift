@@ -239,7 +239,8 @@ public struct RefCapsule: View {
 }
 
 /// A commit's refs: at most three capsules, then "+N", whose popover lists
-/// the rest.
+/// the rest. Beside text, the text gives way first: the capsules truncate
+/// only when nothing else can.
 public struct RefCapsuleList: View {
     private let refs: [RefCapsuleContent]
     private let maximumVisible: Int
@@ -280,6 +281,7 @@ public struct RefCapsuleList: View {
                 }
             }
         }
+        .layoutPriority(1)
     }
 }
 
@@ -375,10 +377,15 @@ public enum RefCapsuleRenderer {
         }
         let title = NSAttributedString(string: content.title, attributes: attributes(style.text))
         drawText(title, x: x, in: frame)
-        x += ceil(title.size().width)
+        x += title.size().width
         if let remote = content.remoteSuffix {
-            let suffix = NSAttributedString(string: "│\(remote)", attributes: attributes(style.secondaryText))
-            drawText(suffix, x: x + Metrics.RefCapsule.glyphSpacing, in: frame)
+            // The divider and the remote, spaced as the SwiftUI capsule
+            // spaces its parts.
+            let divider = NSAttributedString(string: dividerText, attributes: attributes(style.secondaryText))
+            x += Metrics.RefCapsule.glyphSpacing
+            drawText(divider, x: x, in: frame)
+            x += divider.size().width + Metrics.RefCapsule.glyphSpacing
+            drawText(NSAttributedString(string: remote, attributes: attributes(style.secondaryText)), x: x, in: frame)
         }
     }
 
@@ -402,16 +409,22 @@ public enum RefCapsuleRenderer {
 
     private static func capsuleWidth(_ content: RefCapsuleContent) -> CGFloat {
         var width = Metrics.RefCapsule.horizontalPadding * 2
-        width += ceil(NSAttributedString(string: content.title, attributes: attributes(.labelColor)).size().width)
         if let symbol = symbol(for: content.kind), let glyph = symbolImage(symbol, color: .labelColor) {
             width += glyph.size.width + Metrics.RefCapsule.glyphSpacing
         }
+        // The text's parts, rounded up once, as they're drawn one after
+        // another.
+        var text = NSAttributedString(string: content.title, attributes: attributes(.labelColor)).size().width
         if let remote = content.remoteSuffix {
-            width += Metrics.RefCapsule.glyphSpacing
-            width += ceil(NSAttributedString(string: "│\(remote)", attributes: attributes(.labelColor)).size().width)
+            text += Metrics.RefCapsule.glyphSpacing * 2
+            text += NSAttributedString(string: dividerText, attributes: attributes(.labelColor)).size().width
+            text += NSAttributedString(string: remote, attributes: attributes(.labelColor)).size().width
         }
-        return width
+        return width + ceil(text)
     }
+
+    /// Between a branch and its upstream's remote: "main│origin".
+    private static let dividerText = "│"
 
     private static func overflowWidth(_ count: Int) -> CGFloat {
         let text = NSAttributedString(string: "+\(count)", attributes: [.font: AppKitTypography.tinyCount])

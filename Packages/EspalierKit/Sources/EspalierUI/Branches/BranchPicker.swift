@@ -383,7 +383,7 @@ struct BranchPickerList: View {
     /// The filter: the arrow keys move the highlight, and Return activates
     /// it or, matching nothing, creates the branch.
     private var filterField: some View {
-        TextField("Filter", text: $filter, prompt: Text("Filter"))
+        TextField("Filter", text: $filter, prompt: Text("Filter").fieldPrompt())
             .textFieldStyle(.capsule(systemImage: "magnifyingglass"))
             .focused($isFilterFocused)
             .onKeyPress(.downArrow) {
@@ -564,12 +564,7 @@ private struct EmbeddedListChrome: ViewModifier {
     func body(content: Content) -> some View {
         if isEmbedded {
             content
-                .padding(.vertical, Metrics.SheetList.inset)
-                .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
-                        .strokeBorder(.line, lineWidth: 1)
-                )
+                .sheetListCard()
         } else {
             content
         }

@@ -357,28 +357,35 @@ final class HistoryFileCellView: NSTableCellView {
 }
 
 /// A file's row: the status badge, the name, its folder (so two files of
-/// one name tell apart), and its counts.
+/// one name tell apart), and its counts. The name stays whole while the
+/// folder, cut from its start, takes the room left (`FileLabelLayout`).
 struct HistoryFileRow: View {
     let content: HistoryFileContent
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
             StatusGlyph(content.file.status)
-            Text(content.file.fileName)
-                .font(Typography.row.weight(.medium))
-                .foregroundStyle(.text)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .layoutPriority(1)
-            if !content.file.directory.isEmpty {
-                Text(content.file.directory)
-                    .font(Typography.secondary)
-                    .foregroundStyle(.text3)
+            FileLabelLayout(spacing: Metrics.insetSmall) {
+                Text(content.file.fileName)
+                    .font(Typography.row.weight(.medium))
+                    .foregroundStyle(.text)
                     .lineLimit(1)
-                    .truncationMode(.head)
+                    .truncationMode(.middle)
+                    .layoutValue(key: FileLabelFloor.self, value: FileLabelWidths.floor(of: content.file.fileName, font: AppKitTypography.row(weight: .medium)))
+                if !content.file.directory.isEmpty {
+                    Text(content.file.directory)
+                        .font(Typography.secondary)
+                        .foregroundStyle(.text3)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .layoutValue(key: FileLabelFloor.self, value: FileLabelWidths.floor(of: content.file.directory, font: AppKitTypography.secondary))
+                }
             }
-            Spacer(minLength: Metrics.grid)
-            HistoryLineCounts(added: content.added, deleted: content.deleted)
+            .clipped()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if (content.added ?? 0) > 0 || (content.deleted ?? 0) > 0 {
+                HistoryLineCounts(added: content.added, deleted: content.deleted)
+            }
         }
         .padding(.horizontal, Metrics.CommitRow.selectionInset + Metrics.insetSmall)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

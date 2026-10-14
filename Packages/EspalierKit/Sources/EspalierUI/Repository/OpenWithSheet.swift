@@ -122,7 +122,7 @@ struct OpenWithForm: View {
                         FieldMessage(error, kind: .error)
                     }
                     LabeledContent("Arguments") {
-                        TextField("Arguments", text: $model.customArguments, prompt: Text("Command line arguments"))
+                        TextField("Arguments", text: $model.customArguments, prompt: Text("Command line arguments").fieldPrompt())
                             .labelsHidden()
                     }
                     if let error = model.currentValidation?.argumentsError {

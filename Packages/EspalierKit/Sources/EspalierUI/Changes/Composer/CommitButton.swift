@@ -137,18 +137,27 @@ public struct CommitButton: View {
                 .accessibilityAddTraits(.isButton)
             } else {
                 Button(action: action) {
-                    HStack(spacing: Metrics.insetSmall) {
+                    if let symbols = shortcutSymbols {
                         // The shortcut's hidden twin on the left keeps the
-                        // title centered; the title takes the room between.
-                        if let symbols = shortcutSymbols {
-                            shortcut(symbols)
-                                .hidden()
+                        // title centered while the whole title fits; when
+                        // it doesn't, the title takes the twin's room too.
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: Metrics.insetSmall) {
+                                shortcut(symbols)
+                                    .hidden()
+                                label
+                                    .frame(maxWidth: .infinity)
+                                shortcut(symbols)
+                            }
+                            HStack(spacing: Metrics.insetSmall) {
+                                label
+                                    .frame(maxWidth: .infinity)
+                                shortcut(symbols)
+                            }
                         }
+                    } else {
                         label
                             .frame(maxWidth: .infinity)
-                        if let symbols = shortcutSymbols {
-                            shortcut(symbols)
-                        }
                     }
                 }
                 .buttonStyle(.prominent)

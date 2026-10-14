@@ -89,13 +89,15 @@ public struct StatusGlyph: View {
 nonisolated public enum ChecksState: String, CaseIterable, Sendable {
     case success, failure, pending, neutral
 
-    /// A distinct shape per state, so color never stands alone.
+    /// A distinct shape per state, so color never stands alone: the checks
+    /// list's shapes, a minus for checks that ended neither passed nor
+    /// failed.
     public var systemImage: String {
         switch self {
         case .success: "checkmark.circle.fill"
         case .failure: "xmark.circle.fill"
-        case .pending: "circle.dashed"
-        case .neutral: "exclamationmark.triangle.fill"
+        case .pending: "clock.fill"
+        case .neutral: "minus.circle.fill"
         }
     }
 

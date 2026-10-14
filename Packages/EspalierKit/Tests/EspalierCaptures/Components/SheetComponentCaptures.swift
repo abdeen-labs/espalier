@@ -26,7 +26,7 @@ struct SheetComponentCaptures {
                 FieldLabel("Name")
                 TextField("Name", text: .constant("feature/hourly-forecast"))
                     .textFieldStyle(.capsule)
-                TextField("Filter", text: .constant(""), prompt: Text("Filter"))
+                TextField("Filter", text: .constant(""), prompt: Text("Filter").fieldPrompt())
                     .textFieldStyle(.capsule(systemImage: "magnifyingglass"))
                 TextField("Disabled", text: .constant("Can't change"))
                     .textFieldStyle(.capsule)

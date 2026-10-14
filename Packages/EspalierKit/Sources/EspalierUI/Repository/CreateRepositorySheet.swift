@@ -251,7 +251,7 @@ struct CreateRepositoryForm: View {
             Form {
                 // The labels in the form's column; the fields are capsules.
                 LabeledContent("Name") {
-                    TextField("Name", text: $model.name, prompt: Text("repository name"))
+                    TextField("Name", text: $model.name, prompt: Text("repository name").fieldPrompt())
                         .labelsHidden()
                         .focused($isNameFocused)
                 }

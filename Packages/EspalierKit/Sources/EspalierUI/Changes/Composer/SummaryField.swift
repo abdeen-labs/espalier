@@ -127,11 +127,12 @@ struct SummaryTextField: NSViewRepresentable {
         if field.stringValue != text, editor?.hasMarkedText() != true {
             field.stringValue = text
         }
-        if field.placeholderString != placeholder {
-            field.placeholderString = placeholder
-        }
         if field.font != font {
             field.font = font
+            field.applyPlaceholder()
+        }
+        if field.placeholder != placeholder {
+            field.placeholder = placeholder
         }
         if field.isEnabled != isEditable {
             field.isEnabled = isEditable
@@ -207,6 +208,24 @@ final class SummaryNSTextField: NSTextField {
         cell as? SummaryTextFieldCell
     }
 
+    /// What the field shows while it's empty.
+    var placeholder = "" {
+        didSet {
+            applyPlaceholder()
+        }
+    }
+
+    /// Sets the placeholder in the field's font, in placeholder text (as
+    /// the description draws its own). Set rather than computed by the
+    /// cell: the cell draws the placeholder it was given while the field
+    /// isn't editing.
+    func applyPlaceholder() {
+        placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
+            .font: font ?? AppKitTypography.row,
+            .foregroundColor: Palette.placeholderText,
+        ])
+    }
+
     /// Leaving the window (the shimmer replacing the field) takes the
     /// focus with it.
     override func viewDidMoveToWindow() {
@@ -214,6 +233,12 @@ final class SummaryNSTextField: NSTextField {
         if window == nil {
             focusBridge?.field(.summary, hasFocus: false)
         }
+    }
+}
+
+extension SummaryNSTextField: LookChangeObserving {
+    func lookDidChange() {
+        applyPlaceholder()
     }
 }
 
@@ -231,23 +256,6 @@ final class SummaryTextFieldCell: NSTextFieldCell {
 
     override func fieldEditor(for controlView: NSView) -> NSTextView? {
         editor
-    }
-
-    /// The placeholder in the field's font, in tertiary text (as the
-    /// description draws its own).
-    override var placeholderAttributedString: NSAttributedString? {
-        get {
-            guard let placeholder = placeholderString, !placeholder.isEmpty else {
-                return super.placeholderAttributedString
-            }
-            return NSAttributedString(string: placeholder, attributes: [
-                .font: font ?? AppKitTypography.row,
-                .foregroundColor: Palette.placeholderText,
-            ])
-        }
-        set {
-            super.placeholderAttributedString = newValue
-        }
     }
 
     override func setUpFieldEditorAttributes(_ textObj: NSText) -> NSText {

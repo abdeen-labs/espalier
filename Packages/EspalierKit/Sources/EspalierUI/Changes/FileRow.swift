@@ -182,9 +182,9 @@ enum FileRowMetrics {
     static let labelSpacing: CGFloat = 6
     /// Space before the line counts, and before a conflict's buttons.
     static let countsSpacing: CGFloat = 8
-    /// The share of the room after the badge a conflict's state may take
-    /// before it gives way; the name keeps the rest.
-    static let conflictStatusShare: CGFloat = 0.5
+    /// The share of the room after the badge a conflict's state keeps when
+    /// the name would leave it less.
+    static let conflictStatusShare: CGFloat = 0.35
     /// The row's leading content edge: the checkbox's x.
     static var contentInset: CGFloat {
         inset + padding
@@ -254,6 +254,7 @@ final class FileRowView: NSTableCellView {
         checkbox.action = #selector(toggle(_:))
         countsLabel.lineBreakMode = .byClipping
         countsLabel.isHidden = true
+        directoryLabel.lineBreakMode = .byTruncatingHead
         conflictLabel.lineBreakMode = .byTruncatingTail
         conflictLabel.isHidden = true
         conflictGlyph.isHidden = true
@@ -462,14 +463,14 @@ final class FileRowView: NSTableCellView {
         glyph.frame = CGRect(x: glyphX, y: ((bounds.height - glyphSize) / 2).rounded(), width: glyphSize, height: glyphSize)
         conflictGlyph.frame = glyph.frame
 
-        // The name, then the rename's source, then the folder, each as wide
-        // as it needs while there's room: the folder gives way first. A
+        // The name, then the rename's source, then the folder, as
+        // `FileLabelWidths` shares the room: the folder gives way first. A
         // label's frame includes its cell's padding (its intrinsic width
         // doesn't, and a frame that narrow truncates the text), so frames
         // start and sit closer by that padding for the text to keep the
         // spacing. The counts keep their width at the trailing edge; a
-        // conflict's buttons keep theirs, and its state takes up to half
-        // the room left.
+        // conflict's buttons keep theirs, and its state takes what the name
+        // leaves, at least `conflictStatusShare` of the room.
         let padding = Self.labelPadding
         let gap = FileRowMetrics.labelSpacing - 2 * padding
         var x = glyph.frame.maxX + FileRowMetrics.spacing - padding
@@ -486,9 +487,12 @@ final class FileRowView: NSTableCellView {
             )
             end = conflictButtons.frame.minX - FileRowMetrics.countsSpacing + padding
         }
+        let labels = [nameLabel, sourceLabel, directoryLabel].filter { !$0.isHidden }
+        let natural = labels.map(Self.fittingWidth)
         if !conflictLabel.isHidden {
             let room = max(end - x, 0)
-            let width = min(Self.fittingWidth(conflictLabel), (room * FileRowMetrics.conflictStatusShare).rounded())
+            let left = room - (natural.first ?? 0) - FileRowMetrics.countsSpacing + 2 * padding
+            let width = min(Self.fittingWidth(conflictLabel), max(left, (room * FileRowMetrics.conflictStatusShare).rounded()))
             let height = ceil(conflictLabel.intrinsicContentSize.height)
             conflictLabel.frame = CGRect(x: end - width, y: ((bounds.height - height) / 2).rounded(), width: width, height: height)
             end = conflictLabel.frame.minX - FileRowMetrics.countsSpacing + 2 * padding
@@ -499,15 +503,12 @@ final class FileRowView: NSTableCellView {
             countsLabel.frame = CGRect(x: end - width, y: ((bounds.height - height) / 2).rounded(), width: width, height: height)
             end = countsLabel.frame.minX - FileRowMetrics.countsSpacing + 2 * padding
         }
-        let labels = [nameLabel, sourceLabel, directoryLabel].filter { !$0.isHidden }
-        let natural = labels.map(Self.fittingWidth)
-        var widths = natural
-        var overflow = natural.reduce(0, +) + gap * CGFloat(max(labels.count - 1, 0)) - max(end - x, 0)
-        for index in labels.indices.reversed() where overflow > 0 {
-            let cut = min(overflow, widths[index])
-            widths[index] -= cut
-            overflow -= cut
-        }
+        let widths = FileLabelWidths.widths(
+            natural: natural,
+            floors: labels.map { FileLabelWidths.floor(of: $0.stringValue, font: $0.font ?? AppKitTypography.secondary) + 2 * padding },
+            room: end - x,
+            gap: gap
+        )
         // The labels share the name's baseline.
         let nameHeight = ceil(nameLabel.intrinsicContentSize.height)
         let nameY = ((bounds.height - nameHeight) / 2).rounded()
@@ -515,8 +516,10 @@ final class FileRowView: NSTableCellView {
         for (label, width) in zip(labels, widths) {
             let height = ceil(label.intrinsicContentSize.height)
             let y = label === nameLabel ? nameY : (baseline - label.firstBaselineOffsetFromTop).rounded()
-            label.frame = CGRect(x: x, y: y, width: max(width, 0), height: height)
-            x += width + gap
+            label.frame = CGRect(x: x, y: y, width: width, height: height)
+            if width > 0 {
+                x += width + gap
+            }
         }
         if !countsLabel.isHidden {
             countsLabel.frame.origin.y = (baseline - countsLabel.firstBaselineOffsetFromTop).rounded()
@@ -702,7 +705,7 @@ struct InclusionCheckbox: NSViewRepresentable {
         button.refusesFirstResponder = true
         button.setContentHuggingPriority(.required, for: .horizontal)
         button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        apply(to: button)
+        apply(to: button, isEnabled: isEnabled && context.environment.isEnabled)
         context.coordinator.shownScope = scope
         return button
     }
@@ -712,7 +715,7 @@ struct InclusionCheckbox: NSViewRepresentable {
         coordinator.parent = self
         let isSameScope = coordinator.shownScope == scope
         coordinator.shownScope = scope
-        apply(to: button, animated: isSameScope)
+        apply(to: button, isEnabled: isEnabled && context.environment.isEnabled, animated: isSameScope)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: CheckboxButton, context: Context) -> CGSize? {
@@ -723,7 +726,10 @@ struct InclusionCheckbox: NSViewRepresentable {
         return CGSize(width: min(size.width, width), height: size.height)
     }
 
-    private func apply(to button: CheckboxButton, animated: Bool = false) {
+    /// - Parameter isEnabled: Whether the checkbox takes clicks: `isEnabled`
+    ///   where the environment's is too, since SwiftUI sets the
+    ///   environment's on the control as it updates it.
+    private func apply(to button: CheckboxButton, isEnabled: Bool, animated: Bool = false) {
         let state = Self.state(value)
         if button.state != state {
             button.setState(state, animated: animated)

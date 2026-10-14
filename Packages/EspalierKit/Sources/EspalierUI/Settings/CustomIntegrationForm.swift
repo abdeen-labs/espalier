@@ -122,7 +122,7 @@ struct CustomIntegrationSheet: View {
                 LabeledContent("Path") {
                     VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
                         HStack(spacing: Metrics.insetSmall) {
-                            TextField("Path", text: $editor.path, prompt: Text("Path to executable"))
+                            TextField("Path", text: $editor.path, prompt: Text("Path to executable").fieldPrompt())
                                 .labelsHidden()
                             Button("Choose…", action: choosePath)
                                 .buttonStyle(.quiet)
@@ -134,7 +134,7 @@ struct CustomIntegrationSheet: View {
                 }
                 LabeledContent("Arguments") {
                     VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                        TextField("Arguments", text: $editor.arguments, prompt: Text("Command line arguments"))
+                        TextField("Arguments", text: $editor.arguments, prompt: Text("Command line arguments").fieldPrompt())
                             .labelsHidden()
                         if let error = editor.argumentsError {
                             FieldMessage(error, kind: .error)

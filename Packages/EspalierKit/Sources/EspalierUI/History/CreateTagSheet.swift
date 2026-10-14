@@ -49,7 +49,7 @@ struct CreateTagForm: View {
     var body: some View {
         SheetScaffold("Create Tag", width: Metrics.Sheet.compactWidth) {
             VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                TextField("Name", text: $name, prompt: Text("v1.0.0"))
+                TextField("Name", text: $name, prompt: Text("v1.0.0").fieldPrompt())
                     .textFieldStyle(.capsule)
                     .focused($isFocused)
                     .onSubmit {
