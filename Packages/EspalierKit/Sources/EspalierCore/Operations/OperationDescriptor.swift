@@ -39,6 +39,11 @@ public struct OperationDescriptor: Sendable {
     /// from the progress straight to the state the operation left, never
     /// back to the one from before it. The lanes are released first.
     public var showsProgressUntilRefreshed: Bool
+    /// Whether its outcome updates the repository's `lastBackgroundFailure`:
+    /// a background failure sets it, and a success clears one of the same
+    /// kind. Off for work that succeeds when its git work failed (the
+    /// indicator fetch).
+    public var updatesBackgroundFailure: Bool
 
     public init(
         kind: OperationKind,
@@ -48,7 +53,8 @@ public struct OperationDescriptor: Sendable {
         retry: (any RetryableOperation)? = nil,
         refreshAfter: RefreshScope = .full,
         refreshOptions: RefreshOptions = [],
-        showsProgressUntilRefreshed: Bool = false
+        showsProgressUntilRefreshed: Bool = false,
+        updatesBackgroundFailure: Bool = true
     ) {
         self.kind = kind
         self.lanes = lanes
@@ -58,10 +64,12 @@ public struct OperationDescriptor: Sendable {
         self.refreshAfter = refreshAfter
         self.refreshOptions = refreshOptions
         self.showsProgressUntilRefreshed = showsProgressUntilRefreshed
+        self.updatesBackgroundFailure = updatesBackgroundFailure
     }
 
-    /// Whether background work runs it: its errors are never presented and
-    /// it never prompts.
+    /// Whether background work runs it: its errors are never presented as
+    /// errors (the last is kept as `lastBackgroundFailure`) and it never
+    /// prompts.
     public var isBackgroundTask: Bool {
         policy == .background
     }

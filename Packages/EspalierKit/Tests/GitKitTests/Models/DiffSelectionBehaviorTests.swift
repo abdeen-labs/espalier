@@ -38,18 +38,6 @@ struct DiffSelectionBehaviorTests {
         #expect(!selection.isSelectable(7))
     }
 
-    @Test("computes the selection of a range")
-    func isRangeSelected() {
-        let selection = none.withLineSelection(2, selected: true).withLineSelection(3, selected: true)
-        #expect(all.isRangeSelected(from: 0, length: 0) == .none)
-        #expect(selection.isRangeSelected(from: 2, length: 1) == .all)
-        #expect(selection.isRangeSelected(from: 4, length: 1) == .none)
-        #expect(selection.isRangeSelected(from: 1, length: 3) == .partial)
-        #expect(selection.isRangeSelected(from: 2, length: 2) == .all)
-        #expect(selection.isRangeSelected(from: 4, length: 3) == .none)
-        #expect(selection.isRangeSelected(from: 2, length: -1) == .none)
-    }
-
     @Test("skips lines that aren't selectable")
     func rangeSelectionSkipsUnselectableLines() {
         let selection = all.withSelectableLines([2, 4]).withRangeSelection(from: 1, length: 5, selected: false)

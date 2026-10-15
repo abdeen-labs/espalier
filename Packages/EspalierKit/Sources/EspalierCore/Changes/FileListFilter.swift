@@ -10,7 +10,7 @@ import GitKit
 public struct FileListFilter: Sendable, Equatable {
     /// Matched against each file's path, fuzzily, ignoring case.
     public var text = ""
-    /// Files the next commit includes in full.
+    /// Files the next commit includes, in full or in part.
     public var includedInCommit = false
     /// Files the next commit excludes.
     public var excludedFromCommit = false
@@ -57,7 +57,7 @@ public struct FileListFilter: Sendable, Equatable {
             return true
         }
 
-        if includedInCommit, !change.isIncludedInCommit() {
+        if includedInCommit, change.isExcludedFromCommit() {
             return false
         }
 
@@ -149,6 +149,27 @@ public struct FileListFilter: Sendable, Equatable {
         }
         return "No changed files match these filters: \(filterList)"
     }
+}
+
+// MARK: - The selection a filter keeps
+
+/// The selection a list keeps while a filter is active, as the filter or
+/// the items change: the selected items it lists, in the selection's
+/// order; when it lists none of them (or nothing is selected), the first
+/// item it lists, or none when it lists nothing. Nil when that's the
+/// selection already. The Changes list, a stash's files, and a pull
+/// request's files follow it.
+public func filteredSelection(_ selected: [String], listed: [String]) -> [String]? {
+    let wanted = selected.exactSet
+    let listedSelected: Set<ExactString> = wanted.isEmpty ? [] : Set(listed.lazy.map(ExactString.init).filter(wanted.contains))
+    let kept = selected.filter { listedSelected.contains(ExactString($0)) }
+    if !kept.isEmpty {
+        return kept.count == selected.count ? nil : kept
+    }
+    if let first = listed.first {
+        return [first]
+    }
+    return selected.isEmpty ? nil : []
 }
 
 // MARK: - The list as the model shows it
@@ -347,7 +368,7 @@ private let optionalQueryCharacters: Set<UInt16> = [0x20, 0x5F, 0x2D, 0x3A, 0x2F
 /// some lowercased text character: its scores only grow along the matrix,
 /// so the traceback from a positive score always reaches a diagonal step.
 /// No score is computed; the list keeps the files' order.
-struct FuzzyQuery: Sendable {
+public struct FuzzyQuery: Sendable {
     private let units: [UInt16]
     /// The non-optional characters, lowercased and (truncated) uppercased.
     private let coreLower: [UInt16]
@@ -357,7 +378,7 @@ struct FuzzyQuery: Sendable {
 
     /// Nil for an empty query, which matches nothing in fuzzaldrin-plus
     /// (`return [] unless query`); filters skip an empty text instead.
-    init?(_ query: String) {
+    public init?(_ query: String) {
         guard !query.isEmpty else {
             return nil
         }
@@ -368,7 +389,7 @@ struct FuzzyQuery: Sendable {
         lowerUnits = Set(JSCompat.toLowerCase(query).utf16)
     }
 
-    func matches(_ text: String) -> Bool {
+    public func matches(_ text: String) -> Bool {
         let subject = text.utf16
         // `return [] unless string`
         if subject.isEmpty {

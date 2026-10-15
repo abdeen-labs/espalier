@@ -11,14 +11,23 @@ extension BranchesModel {
         repository?.record.tagsToPush ?? []
     }
 
-    /// Why `name` can't be a new tag's name, or nil.
+    /// Why `name` can't be a new tag's name, or nil: it's too long, taken,
+    /// or git can't keep it beside a tag (`refNameConflict`).
     public func tagNameError(_ name: String) -> String? {
         // JavaScript's string length: UTF-16 code units.
         if name.utf16.count > maxTagNameLength {
             return "The tag name cannot be longer than \(maxTagNameLength) characters"
         }
-        if repository?.gitState.tags?[name] != nil {
+        guard let tags = repository?.gitState.tags else {
+            return nil
+        }
+        if tags[name] != nil {
             return "A tag named \(name) already exists"
+        }
+        if let conflict = refNameConflict(name, among: tags.keys) {
+            return conflict.isSameName
+                ? "A tag named \(conflict.existingName) already exists"
+                : "A tag named \(conflict.existingName) already exists, so \(name) can't be used"
         }
         return nil
     }
@@ -27,7 +36,7 @@ extension BranchesModel {
     /// for the next push. Returns after the repository's refresh.
     ///
     /// - Throws: `.precondition` with `tagNameError(_:)`'s message when the
-    ///   name is too long or taken; git's errors (the tag isn't queued).
+    ///   name can't be used; git's errors (the tag isn't queued).
     public func createTag(_ name: String, at sha: String) async throws(OperationError) {
         guard let repository, let app = repository.app else {
             throw OperationError(.precondition("The repository is no longer in the list."), operation: .createTag)

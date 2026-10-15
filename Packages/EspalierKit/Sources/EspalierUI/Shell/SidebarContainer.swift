@@ -1,9 +1,9 @@
-// The sidebar. It shows the current repository: the places you select
-// (Changes, History, branches, pull requests, tags, stashes), then the rows
-// that switch the working copy (worktrees, repositories), and a filter field
-// at the bottom, as in Xcode's navigators. Each section after the first is a
-// feature's view. After a switch, the repository's sections keep showing the
-// previous repository until the selected one has loaded
+// The sidebar. It shows the current repository's places you select
+// (Changes, History, branches, pull requests, tags, stashes), and a filter
+// field at the bottom, as in Xcode's navigators; the repository popover
+// switches repositories and worktrees. Each section after the first is a
+// feature's view. After a switch, the repository's sections keep showing
+// the previous repository until the selected one has loaded
 // (`SidebarSectionsHold`).
 //
 // The sidebar is flat: the `sidebar` color with a hairline on its trailing
@@ -45,15 +45,13 @@ struct SidebarContainer: View {
                     PullRequestsSection(repository: shown)
                     TagsSection(repository: shown)
                     StashesSection(repository: shown)
-                    WorktreesSection(repository: shown)
                 }
-                RepositoriesSection()
             }
         }
         .sidebarListStyle()
         .environment(\.sidebarSelection, selection.wrappedValue)
-        .contextMenu(forSelectionType: SidebarPlace.self) { places in
-            SidebarContextMenu(places: Self.actionable(places, isHolding: isHolding))
+        .contextMenuCard(forSelectionType: SidebarPlace.self, selection: selection.wrappedValue.map { [$0] } ?? []) { [context] places in
+            SidebarContextMenu.content(places: Self.actionable(places, isHolding: isHolding), context: context)
         } primaryAction: { places in
             primaryAction(Self.actionable(places, isHolding: isHolding))
         }
@@ -73,8 +71,11 @@ struct SidebarContainer: View {
         }
         .background(Color(espalier: Palette.sidebar).ignoresSafeArea())
         .overlay(alignment: .trailing) {
+            // The floating layout's sidebar sits on the backdrop, beside
+            // the cards.
             Hairline(.vertical)
                 .ignoresSafeArea()
+                .opacity(PaneCards.floats ? 0 : 1)
         }
     }
 
@@ -112,8 +113,8 @@ struct SidebarContainer: View {
     /// The selected place; choosing one remembers it for the repository.
     /// Without places (a missing or unsafe repository) nothing is selected:
     /// a selection whose row goes away with its section would stay drawn
-    /// over the Repositories header. While the sections still show the
-    /// previous repository, their rows can't be chosen.
+    /// where the row was. While the sections still show the previous
+    /// repository, their rows can't be chosen.
     private func placeSelection(isHolding: Bool) -> Binding<SidebarPlace?> {
         Binding(
             get: { context.repository?.isUsable == true ? context.state.place : nil },
@@ -127,9 +128,9 @@ struct SidebarContainer: View {
 }
 
 /// Which repository the sidebar's repository sections show (Branches, Pull
-/// Requests, Tags, Stashes, Worktrees): the selected one's, except just
-/// after a switch. Then they keep showing the repository they showed until
-/// the selected one has loaded what they show
+/// Requests, Tags, Stashes): the selected one's, except just after a
+/// switch. Then they keep showing the repository they showed until the
+/// selected one has loaded what they show
 /// (`hasLoadedSidebarSections(accounts:)`), for at most
 /// `Timing.sidebarHold`, and change in one step. A repository that hasn't
 /// loaded has none of it: its sections would vanish and come back, moving
@@ -174,8 +175,8 @@ final class SidebarSectionsHold {
 
 extension RepositoryModel {
     /// Whether the repository has loaded what its sidebar sections show: a
-    /// refresh pass's status, remotes, and refs (branches, tags, stashes,
-    /// worktrees), and its open pull requests where Pull Requests shows.
+    /// refresh pass's status, remotes, and refs (branches, tags, stashes),
+    /// and its open pull requests where Pull Requests shows.
     func hasLoadedSidebarSections(accounts: AccountsModel) -> Bool {
         gitState.loaded.isSuperset(of: [.status, .remotes, .refs])
             && (gitHub.hasLoadedPullRequests || !PullRequestsSection.isShown(self, accounts: accounts))
@@ -211,29 +212,28 @@ struct PlacesSectionRows: View {
 
 /// The context menu of the place right-clicked: each feature's menu for its
 /// rows.
-struct SidebarContextMenu: View {
-    let places: Set<SidebarPlace>
-
-    var body: some View {
+enum SidebarContextMenu {
+    @MenuBuilder
+    static func content(places: Set<SidebarPlace>, context: WindowContext) -> MenuContent {
         if places.count == 1, let place = places.first {
             switch place {
             case .changes:
-                ActionButton(.stashAllChanges)
-                ActionButton(.discardAllChanges)
+                context.actions.menuAction(.stashAllChanges)
+                context.actions.menuAction(.discardAllChanges)
             case .history:
-                Menu("History Scope") {
-                    ForEach(HistoryScope.allCases, id: \.self) { scope in
-                        ActionToggle(.setHistoryScope(scope))
+                Submenu("History Scope") {
+                    for scope in HistoryScope.allCases {
+                        context.actions.menuToggle(.setHistoryScope(scope))
                     }
                 }
             case .branch(let ref):
-                BranchContextMenu(ref: ref)
+                BranchContextMenu.content(ref: ref, context: context)
             case .pullRequest(let number):
-                PullRequestContextMenu(number: number)
+                PullRequestContextMenu.content(number: number, context: context)
             case .tag(let name):
-                TagContextMenu(name: name)
+                TagContextMenu.content(name: name, context: context)
             case .stash(let stashBranch):
-                StashContextMenu(branch: stashBranch)
+                StashContextMenu.content(branch: stashBranch, context: context)
             }
         }
     }
@@ -280,11 +280,11 @@ struct ChangesPlaceRow: View {
         SidebarRowLabel("Changes", systemImage: "plus.forwardslash.minus", isSelected: isSelected) {
             if content.hasConflicts {
                 WarningGlyph()
-                    .help("Conflicts")
+                    .tooltip("Conflicts")
             } else if let badge = content.badge {
                 Text(badge)
                     .font(Typography.count)
-                    .foregroundStyle(.text3)
+                    .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
             }
         }
     }
@@ -306,8 +306,7 @@ struct SidebarRowLabel<Trailing: View>: View {
     /// - Parameters:
     ///   - isSelected: Draws the row as selected; a row that selects a
     ///     place (`sidebarRow(_:)`) is also selected while its place is.
-    ///   - isEmphasized: Semibold, as the current branch and repository
-    ///     are.
+    ///   - isEmphasized: Semibold, as the current branch is.
     init(_ title: String, systemImage: String, isSelected: Bool = false, isEmphasized: Bool = false, @ViewBuilder trailing: () -> Trailing = { EmptyView() }) {
         self.title = title
         self.systemImage = systemImage
@@ -320,13 +319,13 @@ struct SidebarRowLabel<Trailing: View>: View {
         let isSelected = isSelected || isRowSelected
         HStack(spacing: Metrics.insetSmall) {
             Image(systemName: systemImage)
-                .font(.system(size: 13))
-                .foregroundStyle(isSelected ? Color.accentColor : .text2)
-                .frame(width: 16)
+                .font(Typography.row)
+                .foregroundStyle(.sidebarRowIcon(isSelected: isSelected))
+                .frame(width: Metrics.Sidebar.symbolWidth)
                 .accessibilityHidden(true)
             Text(title)
                 .font(SidebarRowFont.title(isSelected: isSelected, isEmphasized: isEmphasized))
-                .foregroundStyle(.text)
+                .foregroundStyle(.sidebarRowText(isSelected: isSelected))
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: Metrics.grid)
@@ -336,11 +335,15 @@ struct SidebarRowLabel<Trailing: View>: View {
     }
 }
 
-/// A sidebar row title's weight: semibold for the current branch, pull
-/// request, and repository; medium while the row is selected; regular
-/// otherwise.
+/// A sidebar row title's weight: bold while the row is selected in a theme
+/// whose selection is bold (`Theme.sidebarSelectionIsBold`); semibold for
+/// the current branch and its pull request (the one way the sidebar marks
+/// what's current); medium while the row is selected; regular otherwise.
 enum SidebarRowFont {
     static func title(isSelected: Bool, isEmphasized: Bool = false) -> Font {
+        if isSelected, Theme.current.sidebarSelectionIsBold {
+            return Typography.row.weight(.bold)
+        }
         if isEmphasized {
             return Typography.row.weight(.semibold)
         }
@@ -363,20 +366,22 @@ final class SidebarHover {
     var row: AnyHashable?
 }
 
+extension Metrics.Sidebar {
+    /// The column a row's symbol or dot sits in, so titles line up.
+    public static let symbolWidth: CGFloat = 16
+}
+
 extension View {
-    /// A sidebar row: 28 high, its background the selection's neutral wash,
-    /// the hover wash, or a highlight, inset 10 from the sidebar's edges
-    /// with radius 9.
+    /// A sidebar row: 28 high, its background the selection's neutral wash
+    /// or the hover wash, inset 10 from the sidebar's edges with radius 9.
     ///
     /// - Parameters:
     ///   - place: The place the row selects, if any.
     ///   - id: What identifies a row that isn't a place, for the hover.
-    ///   - isHighlighted: Shows the hover wash for good (the current
-    ///     repository).
     ///   - isDropTarget: Dragged commits are over the row and it takes
     ///     them: the row fills with the soft accent, in its own shape.
-    func sidebarRow(_ place: SidebarPlace?, id: AnyHashable? = nil, isHighlighted: Bool = false, isDropTarget: Bool = false) -> some View {
-        modifier(SidebarRowModifier(place: place, id: id ?? place.map(AnyHashable.init), isHighlighted: isHighlighted, isDropTarget: isDropTarget))
+    func sidebarRow(_ place: SidebarPlace?, id: AnyHashable? = nil, isDropTarget: Bool = false) -> some View {
+        modifier(SidebarRowModifier(place: place, id: id ?? place.map(AnyHashable.init), isDropTarget: isDropTarget))
     }
 
     /// The sidebar's list: the sidebar style, opaque on the `sidebar`
@@ -411,26 +416,22 @@ private struct SidebarHoverProvider: ViewModifier {
 private struct SidebarRowModifier: ViewModifier {
     let place: SidebarPlace?
     let id: AnyHashable?
-    let isHighlighted: Bool
     let isDropTarget: Bool
     @Environment(SidebarHover.self) private var hover: SidebarHover?
     @Environment(\.sidebarSelection) private var selection
-    /// The row's styler, where VoiceOver's Show Menu on a place's row makes
-    /// its right-click.
-    @State private var menuAnchor = KeyboardMenuAnchor()
 
     func body(content: Content) -> some View {
-        content
+        placeMenu(content)
             .environment(\.isSidebarRowSelected, place != nil && place == selection)
             .background {
                 // Inside the row, so the list's table exists when it joins
                 // the window: its highlight is off before any row draws.
-                SidebarListStyler(searchesBeside: false, menuAnchor: menuAnchor)
+                SidebarListStyler(searchesBeside: false)
                     .frame(width: 0, height: 0)
                     .accessibilityHidden(true)
             }
             .frame(minHeight: Metrics.RowHeight.sidebar - 8)
-            .listRowBackground(SidebarRowBackground(place: place, id: id, isHighlighted: isHighlighted, isDropTarget: isDropTarget))
+            .listRowBackground(SidebarRowBackground(place: place, id: id, isDropTarget: isDropTarget))
             .onHover { isInside in
                 guard let id, let hover else {
                     return
@@ -441,21 +442,15 @@ private struct SidebarRowModifier: ViewModifier {
                     hover.row = nil
                 }
             }
-            .modifier(SidebarPlaceShowMenu(anchor: place == nil ? nil : menuAnchor))
     }
-}
 
-/// VoiceOver's Show Menu on a place's row: the menu the list shows for a
-/// right-click on the row (`SidebarContextMenu`). Rows that aren't places
-/// carry their own menus.
-private struct SidebarPlaceShowMenu: ViewModifier {
-    let anchor: KeyboardMenuAnchor?
-
-    func body(content: Content) -> some View {
-        if let anchor {
-            content.accessibilityAction(.showMenu) {
-                anchor.showMenu()
-            }
+    /// A place's row is a row of the list's context menu
+    /// (`SidebarContextMenu`); rows that aren't places carry their own
+    /// menus.
+    @ViewBuilder
+    private func placeMenu(_ content: Content) -> some View {
+        if let place {
+            content.contextMenuRow(place)
         } else {
             content
         }
@@ -464,14 +459,15 @@ private struct SidebarPlaceShowMenu: ViewModifier {
 
 /// A row's background: the soft accent under dragged commits it takes, the
 /// selection's neutral wash (`Palette.sidebarSelection`), the hover wash,
-/// or nothing.
+/// or nothing; and the ring while the row is the open context menu's
+/// target.
 struct SidebarRowBackground: View {
     let place: SidebarPlace?
     let id: AnyHashable?
-    let isHighlighted: Bool
     var isDropTarget = false
     @Environment(\.sidebarSelection) private var selection
     @Environment(SidebarHover.self) private var hover: SidebarHover?
+    @Environment(ContextMenuTarget.self) private var contextMenuTarget: ContextMenuTarget?
 
     var body: some View {
         // Hover and a drop target fade in over 0.08 s and out over 0.15 s;
@@ -479,7 +475,20 @@ struct SidebarRowBackground: View {
         RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
             .fill(fill)
             .hoverMotion(isHovered || isDropTarget)
+            .background {
+                if isSelected, !isDropTarget {
+                    SidebarSelectionFill()
+                }
+            }
+            .contextTargetRing(isContextMenuTarget)
             .padding(.horizontal, Metrics.Sidebar.rowInset)
+    }
+
+    private var isContextMenuTarget: Bool {
+        guard let place, let target = contextMenuTarget?.id else {
+            return false
+        }
+        return target == AnyHashable(place)
     }
 
     private var isSelected: Bool {
@@ -495,9 +504,10 @@ struct SidebarRowBackground: View {
             return Color(espalier: Palette.accentSoft)
         }
         if isSelected {
-            return Color(espalier: Palette.sidebarSelection)
+            // `SidebarSelectionFill`, under it.
+            return .clear
         }
-        if isHighlighted || (id != nil && hover?.row == id) {
+        if isHovered {
             return Color(espalier: Palette.hover)
         }
         return .clear
@@ -519,17 +529,12 @@ struct SidebarListStyler: NSViewRepresentable {
     /// only around itself (in a row: a row's search would cover every other
     /// row).
     var searchesBeside = true
-    /// Takes the view, for a right-click on the row it's in.
-    var menuAnchor: KeyboardMenuAnchor?
 
     func makeNSView(context: Context) -> StylerView {
-        let view = StylerView(searchesBeside: searchesBeside)
-        menuAnchor?.view = view
-        return view
+        StylerView(searchesBeside: searchesBeside)
     }
 
     func updateNSView(_ view: StylerView, context: Context) {
-        menuAnchor?.view = view
         view.apply()
     }
 
@@ -640,9 +645,8 @@ struct SidebarListStyler: NSViewRepresentable {
 /// The rows follow the expansion the chevron sets, a state change it makes
 /// inside its animation, so the list animates them in and out; the
 /// remembered expansion, in user defaults, follows it once that change has
-/// drawn. A change made elsewhere (Show Worktrees, the section in another
-/// window) reaches the remembered expansion first, and the shown one
-/// follows it.
+/// drawn. A change made elsewhere (the section in another window) reaches
+/// the remembered expansion first, and the shown one follows it.
 public struct SidebarSection<Content: View, Header: View>: View {
     private let content: Content
     private let header: Header
@@ -694,6 +698,9 @@ extension EnvironmentValues {
     /// The expansion of the `SidebarSection` whose header this is, which
     /// the header's chevron toggles.
     @Entry var sidebarSectionExpansion: Binding<Bool>?
+    /// Whether this is in a sidebar section header's accessory, whose
+    /// buttons are the sidebar's tertiary text.
+    @Entry var isInSidebarSectionHeader = false
 }
 
 /// A section's header: the uppercase label, with no count, and what
@@ -712,18 +719,19 @@ struct SidebarSectionHeader<Accessory: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Metrics.grid) {
             SectionLabel(title)
             Spacer(minLength: Metrics.grid)
             if let expansion {
                 SidebarSectionChevron(title: title, isExpanded: expansion, isHeaderHovered: isHovered)
             }
             accessory
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.text3)
+                .font(Typography.subheadline.weight(.semibold))
+                .foregroundStyle(.sidebarText3)
+                .environment(\.isInSidebarSectionHeader, true)
         }
         // Aligned with the rows' symbols and their trailing counts.
-        .padding(.leading, 4)
+        .padding(.leading, Metrics.grid)
         .padding(.trailing, Metrics.Sidebar.rowInset)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
@@ -749,16 +757,16 @@ private struct SidebarSectionChevron: View {
             // The list's own chevron's size and weight. Hidden by color,
             // not opacity, so VoiceOver still finds it.
             Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
+                .font(Typography.row.weight(.semibold))
                 .imageScale(.small)
-                .foregroundStyle(isShown ? Color.text3 : Color.clear)
+                .foregroundStyle(isShown ? Color.sidebarText3 : Color.clear)
                 .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 .motion(Motion.leave, value: isExpanded)
                 .hoverMotion(isShown)
         }
         .buttonStyle(SidebarHeaderButtonStyle())
         .focused($isFocused)
-        .help(isExpanded ? "Collapse" : "Expand")
+        .tooltip(isExpanded ? "Collapse" : "Expand")
         .accessibilityLabel(isExpanded ? "Collapse \(title)" : "Expand \(title)")
     }
 
@@ -767,15 +775,38 @@ private struct SidebarSectionChevron: View {
     }
 }
 
-/// A header's symbol button (New Branch's plus, the add menu).
-struct SidebarHeaderButtonStyle: ButtonStyle {
+/// A header's symbol button (New Branch's plus, the More menu, the
+/// repository popover's New Worktree…), with the focus ring around it.
+struct SidebarHeaderButtonStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.text3)
-            .frame(width: 18, height: 18)
+        FocusRingButton(configuration: configuration, style: SidebarHeaderButtonDrawing())
+    }
+}
+
+/// Draws a header's symbol button.
+private struct SidebarHeaderButtonDrawing: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        SidebarHeaderButtonBody(label: configuration.label, isPressed: configuration.isPressed)
+    }
+}
+
+private struct SidebarHeaderButtonBody<Label: View>: View {
+    let label: Label
+    let isPressed: Bool
+    /// Whether the button has keyboard focus.
+    @Environment(\.isFocused) private var isFocused
+    @Environment(\.isInSidebarSectionHeader) private var isInSidebarSectionHeader
+    @Environment(\.isMenuOpen) private var isMenuOpen
+
+    var body: some View {
+        let isPressed = self.isPressed || isMenuOpen
+        label
+            .font(Typography.subheadline.weight(.semibold))
+            .foregroundStyle(isInSidebarSectionHeader ? Color.sidebarText3 : Color.text3)
+            .frame(width: Metrics.Sidebar.badgeSize, height: Metrics.Sidebar.badgeSize)
             .contentShape(Rectangle())
-            .opacity(configuration.isPressed ? 0.6 : 1)
+            .opacity(isPressed ? 0.6 : 1)
+            .focusRing(isFocused, in: RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .continuous), outset: 0)
     }
 }
 
@@ -793,6 +824,7 @@ struct SidebarFilterField: View {
             focusRequest: $state.isSidebarFilterFocused
         )
         .controlSize(.regular)
+        .environment(\.searchFieldIsRaised, PaneCards.floats)
         .padding(.horizontal, Metrics.Sidebar.rowInset)
         .padding(.vertical, Metrics.insetSmall)
         .background(Color(espalier: Palette.sidebar))
@@ -805,17 +837,13 @@ struct SidebarFilterField: View {
     /// section lists them (collapsed sections included).
     static func resultCount(in context: WindowContext) -> Int {
         let app = context.app
-        guard app.loadState == .ready else {
+        guard app.loadState == .ready, let repository = context.repository, repository.isUsable else {
             return 0
         }
         let filter = context.state.sidebarFilter
-        var count = RepositoriesSection.rows(in: app, filter: filter).count
-        guard let repository = context.repository, repository.isUsable else {
-            return count
-        }
         let state = repository.gitState
         let branches = BranchesSectionContent.make(repository, upstreamStates: repository.branches.upstreamStates, filter: filter)
-        count += branches.allRows.count + (branches.detachedSHA == nil ? 0 : 1) + (branches.unbornBranch == nil ? 0 : 1)
+        var count = branches.allRows.count + (branches.detachedSHA == nil ? 0 : 1) + (branches.unbornBranch == nil ? 0 : 1)
         if PullRequestsSection.isShown(repository, accounts: app.accounts) {
             count += PullRequestsSection.filtered(repository.gitHub.openPullRequests, by: filter).count
         }
@@ -823,18 +851,11 @@ struct SidebarFilterField: View {
             count += TagRowContent.rows(tags: Array(tags.keys), tagsToPush: [], filter: filter).count
         }
         count += StashRowContent.rows(repository, filter: filter).count
-        let worktrees = repository.worktrees
-        let isWorktreesRevealed = context.state.featureState(WorktreesWindowState.self) { WorktreesWindowState() }
-            .revealedRepository == repository.id
-        if worktrees.isListVisible || isWorktreesRevealed {
-            count += WorktreeRowContent.rows(worktrees.entries, currentPath: worktrees.current?.path, filter: filter).count
-        }
         return count
     }
 }
 
-/// A menu button that runs an action, titled and enabled as its menu item
-/// is. Context menus use it.
+/// A button that runs an action, titled and enabled as its menu item is.
 public struct ActionButton: View {
     private let action: ActionID
     private let title: String?
@@ -849,24 +870,6 @@ public struct ActionButton: View {
         Button(title ?? context.actions.title(for: action)) {
             context.actions.perform(action)
         }
-        .disabled(!context.actions.canPerform(action))
-    }
-}
-
-/// A check-marked menu item that runs an action.
-public struct ActionToggle: View {
-    private let action: ActionID
-    @Environment(WindowContext.self) private var context
-
-    public init(_ action: ActionID) {
-        self.action = action
-    }
-
-    public var body: some View {
-        Toggle(context.actions.title(for: action), isOn: Binding(
-            get: { context.actions.isChecked(action) },
-            set: { _ in context.actions.perform(action) }
-        ))
         .disabled(!context.actions.canPerform(action))
     }
 }

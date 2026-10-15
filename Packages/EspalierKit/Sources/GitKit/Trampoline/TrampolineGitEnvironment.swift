@@ -133,12 +133,6 @@ public func userCancelledAuthenticationError(_ error: any Error) -> GitError? {
     return GitError(result: result, args: error.args, terminalOutput: msg)
 }
 
-/// Whether `error` is git failing to authenticate over SSH.
-public func isSSHAuthFailure(_ error: any Error) -> Bool {
-    guard let error = error as? GitError else { return false }
-    return error.result.gitError == .sshAuthenticationFailed || error.result.gitError == .sshPermissionDenied
-}
-
 /// Whether ssh-keygen, signing a commit or tag for git, rejected the
 /// passphrase it was given for the key file.
 public func isSigningKeyPassphraseRejected(_ error: any Error) -> Bool {

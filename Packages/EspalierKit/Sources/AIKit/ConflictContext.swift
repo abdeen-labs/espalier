@@ -2,10 +2,9 @@
 //
 // AIKit doesn't depend on GitKit, so EspalierCore runs git and resolves
 // paths: it supplies the commits (`ConflictContextCommit`) and each file's
-// read result (`ConflictedFileContents`, see `readConflictedFile(atPath:)`),
-// and `buildConflictContext` turns them into the context.
+// read result (`ConflictedFileContents`), and `buildConflictContext` turns
+// them into the context.
 
-import Darwin
 import EspalierSupport
 import Foundation
 
@@ -495,28 +494,6 @@ public struct ConflictedFile: Sendable, Hashable {
     }
 }
 
-/// Reads a conflicted file for `buildConflictContext`, once
-/// `resolveWithin` has confirmed the path is inside the repository:
-/// files over `MaxConflictFileReadSize` aren't read, and the text is decoded
-/// as UTF-8 with invalid bytes replaced.
-///
-/// - Parameter absolutePath: The path `resolveWithin(repositoryPath, path)`
-///   returned.
-public func readConflictedFile(atPath absolutePath: String) -> ConflictedFileContents {
-    // stat(2) follows symbolic links, like Node's `stat`.
-    var info = stat()
-    guard stat(absolutePath, &info) == 0 else {
-        return .unreadable
-    }
-    if info.st_size > MaxConflictFileReadSize {
-        return .tooLarge
-    }
-    guard let data = FileManager.default.contents(atPath: absolutePath) else {
-        return .unreadable
-    }
-    return .text(String(decoding: data, as: UTF8.self))
-}
-
 /// The skip reason for a file with a `<<<<<<<` or `>>>>>>>` marker outside
 /// its conflict blocks (see `hasUnmatchedConflictMarkers`). The model could
 /// resolve the blocks, but the file would still have a conflict marker.
@@ -662,7 +639,7 @@ public func formatConflictContextForPrompt(_ context: ConflictResolutionContext)
                 parts.append("")
             }
 
-            parts.append("Ours (current branch):")
+            parts.append("Ours (\(context.ourLabel)):")
             parts.append(makeFencedBlock(hunk.oursContent, lang))
             parts.append("")
 
@@ -672,7 +649,7 @@ public func formatConflictContextForPrompt(_ context: ConflictResolutionContext)
                 parts.append("")
             }
 
-            parts.append("Theirs (incoming branch):")
+            parts.append("Theirs (\(context.theirLabel)):")
             parts.append(makeFencedBlock(hunk.theirsContent, lang))
             parts.append("")
 
@@ -739,6 +716,6 @@ private func makeFencedBlock(_ content: String, _ lang: String = "") -> String {
 
 /// Strips characters that could break markdown structure when used in
 /// headings and labels.
-private func sanitizeForMarkdown(_ text: String) -> String {
+func sanitizeForMarkdown(_ text: String) -> String {
     String(String.UnicodeScalarView(text.unicodeScalars.filter { $0 != "\r" && $0 != "\n" && $0 != "`" }))
 }

@@ -1,7 +1,7 @@
-// A repository's row in the sidebar's Repositories section and the
-// repository popover: the alias or name, the owner where the name is
-// ambiguous, the status indicators with their tooltips, the hover tooltip
-// (full name, alias, path), and the cloning and missing states.
+// A repository's row in the repository popover: the alias or name (the
+// selected repository's semibold), the owner where the name is ambiguous,
+// the status indicators with their tooltips, the hover tooltip (full name,
+// alias, path), and the cloning and missing states.
 
 import EspalierCore
 import EspalierSupport
@@ -13,7 +13,7 @@ import SwiftUI
 nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
     /// The row's glyph.
     enum Icon: Sendable, Equatable {
-        /// The selected repository: `folder.fill` in the accent color.
+        /// The selected repository: its badge, and its title semibold.
         case current
         case other
         /// The folder is gone, or git won't work in it.
@@ -53,13 +53,13 @@ nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
 
     /// The tooltip for the ahead and behind arrows: "The currently checked
     /// out branch is 2 commits behind and 1 commit ahead of its tracked
-    /// branch."
-    var aheadBehindTooltip: String? {
+    /// branch.", the counts in `numberFormat`.
+    func aheadBehindTooltip(_ numberFormat: NumberFormat) -> String? {
         guard showsStatus, ahead > 0 || behind > 0 else {
             return nil
         }
         func commits(_ count: Int) -> String {
-            count == 1 ? "1 commit" : "\(count) commits"
+            count == 1 ? "1 commit" : "\(formatCount(count, numberFormat)) commits"
         }
         var text = "The currently checked out branch is"
         if behind > 0 {
@@ -77,8 +77,8 @@ nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
     /// The tooltip for the changes indicator.
     static let changesTooltip = "There are uncommitted changes in this repository"
 
-    /// What VoiceOver reads.
-    var accessibilityLabel: String {
+    /// What VoiceOver reads, the counts in `numberFormat`.
+    func accessibilityLabel(_ numberFormat: NumberFormat) -> String {
         var parts = [title]
         if let subtitle {
             parts.append(subtitle)
@@ -90,13 +90,13 @@ nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
         }
         if showsStatus {
             if changedFileCount > 0 {
-                parts.append(changedFileCount == 1 ? "1 changed file" : "\(changedFileCount) changed files")
+                parts.append(changedFileCount == 1 ? "1 changed file" : "\(formatCount(changedFileCount, numberFormat)) changed files")
             }
             if ahead > 0 {
-                parts.append("\(ahead) ahead")
+                parts.append("\(formatCount(ahead, numberFormat)) ahead")
             }
             if behind > 0 {
-                parts.append("\(behind) behind")
+                parts.append("\(formatCount(behind, numberFormat)) behind")
             }
         }
         return parts.joined(separator: ", ")
@@ -168,23 +168,21 @@ extension RepositoryRowContent {
 /// and the status indicators.
 struct RepositoryRow: View {
     let content: RepositoryRowContent
-    /// Increased on the repository popover's highlighted row (the accent).
-    @Environment(\.backgroundProminence) private var prominence
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
-        let colors = PaletteRowColors(prominence)
         HStack(spacing: Metrics.insetSmall) {
             RepositoryRowIcon(icon: content.icon, title: content.title)
             VStack(alignment: .leading, spacing: 0) {
                 Text(content.title)
                     .font(content.icon == .current ? Typography.row.weight(.semibold) : Typography.row)
-                    .foregroundStyle(colors.primary)
+                    .foregroundStyle(.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if let subtitle = content.subtitle {
                     Text(subtitle)
                         .font(Typography.subheadline)
-                        .foregroundStyle(colors.tertiary)
+                        .foregroundStyle(.text3)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -192,9 +190,9 @@ struct RepositoryRow: View {
             Spacer(minLength: Metrics.grid)
             RepositoryStatusIndicators(content: content)
         }
-        .help(content.tooltip)
+        .tooltip(content.tooltip)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(content.accessibilityLabel)
+        .accessibilityLabel(content.accessibilityLabel(numberFormat))
     }
 }
 
@@ -226,35 +224,34 @@ struct RepositoryRowIcon: View {
 /// tooltips.
 struct RepositoryStatusIndicators: View {
     let content: RepositoryRowContent
-    @Environment(\.backgroundProminence) private var prominence
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
-        let colors = PaletteRowColors(prominence)
         if content.showsStatus {
             HStack(spacing: Metrics.grid) {
                 if content.changedFileCount > 0 {
-                    Text(content.changedFileCount > 999 ? "999+" : "\(content.changedFileCount)")
+                    Text(verbatim: content.changedFileCount > 999 ? "999+" : formatCount(content.changedFileCount, numberFormat))
                         .font(Typography.tinyCount)
-                        .foregroundStyle(colors.secondary)
+                        .foregroundStyle(.text2)
                         .padding(.horizontal, Metrics.grid + 1)
                         .padding(.vertical, 1)
-                        .background(Capsule(style: .circular).fill(colors.tagFill))
-                        .help(RepositoryRowContent.changesTooltip)
+                        .background(Capsule(style: .circular).fill(.field))
+                        .tooltip(RepositoryRowContent.changesTooltip)
                 }
-                if let tooltip = content.aheadBehindTooltip {
-                    HStack(spacing: 4) {
+                if let tooltip = content.aheadBehindTooltip(numberFormat) {
+                    HStack(spacing: Metrics.grid) {
                         if content.ahead > 0 {
-                            Text("↑\(content.ahead)")
+                            Text(verbatim: "↑\(formatCount(content.ahead, numberFormat))")
                                 .font(Typography.aheadCount)
-                                .foregroundStyle(colors.mark(.accentColor))
+                                .foregroundStyle(.aheadText)
                         }
                         if content.behind > 0 {
-                            Text("↓\(content.behind)")
+                            Text(verbatim: "↓\(formatCount(content.behind, numberFormat))")
                                 .font(Typography.secondaryCount)
-                                .foregroundStyle(colors.tertiary)
+                                .foregroundStyle(.text3)
                         }
                     }
-                    .help(tooltip)
+                    .tooltip(tooltip)
                 }
             }
         }

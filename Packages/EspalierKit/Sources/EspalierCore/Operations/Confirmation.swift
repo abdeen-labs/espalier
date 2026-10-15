@@ -10,6 +10,18 @@ public enum ConfirmationKind: String, Sendable, Hashable, CaseIterable {
     case forcePush, rewritePublishedCommits, undoCommitWithChanges, resetWithChanges, overwriteStash
     case commitFilteredChanges, commitWithUnknownCoAuthors, commitOversizedFiles, commitConflictMarkers
     case overwriteCommitMessage, removeWorktree, abortWithResolvedConflicts, deleteBranch, deleteRemoteBranch, deleteTag
+    case replaceCommandLineTool
+}
+
+/// What's at the command line tool's path that installing would replace
+/// (`Confirmation.replaceCommandLineTool`).
+public enum ExistingCommandLineTool: Sendable, Equatable {
+    /// A link elsewhere, to where it points.
+    case link(String)
+    /// A file.
+    case file
+    /// Something that couldn't be looked at.
+    case unexamined
 }
 
 /// A confirmation an intent requires, with its copy.
@@ -70,7 +82,7 @@ extension Confirmation {
         Confirmation(
             kind: .removeRepository,
             details: .repository(name: name, path: path),
-            title: "Remove Repository",
+            title: "Remove Repository?",
             message: "Remove \u{201C}\(name)\u{201D} from Espalier?",
             confirmButton: "Remove"
         )
@@ -169,10 +181,12 @@ extension Confirmation {
     ///   "Reorder", or "Amend".
     public static func rewritePublishedCommits(operation: String) -> Confirmation {
         let lowercased = operation.lowercased()
+        // Amending rewrites one commit; the others, several.
+        let commits = operation == "Amend" ? "Commit" : "Commits"
         return Confirmation(
             kind: .rewritePublishedCommits,
             details: .operation(operation),
-            title: "\(operation) Requires a Force Push",
+            title: "\(operation) Pushed \(commits)?",
             message: "This branch has already been pushed. After the \(lowercased), you'll need to force push it, which rewrites its history on the remote and may cause problems for others working on it.",
             confirmButton: "\(operation) Anyway"
         )
@@ -242,7 +256,7 @@ extension Confirmation {
         return Confirmation(
             kind: .commitWithUnknownCoAuthors,
             details: .authors(usernames),
-            title: "Unknown Co-Authors",
+            title: "Commit Without Unknown Co-Authors?",
             message: message,
             confirmButton: "Commit Anyway"
         )
@@ -253,7 +267,7 @@ extension Confirmation {
         Confirmation(
             kind: .commitOversizedFiles,
             details: .files(paths),
-            title: "Files Too Large",
+            title: "Commit Large Files?",
             message: "These files are larger than 100 MB:\n\nIf you commit them, you won't be able to push this repository to GitHub.com. Leave them out of the commit, or store large files with Git LFS.",
             confirmButton: "Commit Anyway"
         )
@@ -285,7 +299,7 @@ extension Confirmation {
         Confirmation(
             kind: .removeWorktree,
             details: .worktree(name: name, path: path),
-            title: "Delete Worktree",
+            title: "Delete Worktree?",
             message: "Are you sure you want to delete the worktree \(name)?",
             confirmButton: "Delete"
         )
@@ -316,7 +330,7 @@ extension Confirmation {
         return Confirmation(
             kind: .deleteBranch,
             details: .deleteBranch(name: name, existsOnRemote: existsOnRemote),
-            title: "Delete Branch",
+            title: "Delete Branch?",
             message: "Delete the branch \(name)?\n\nThis can't be undone.\(remote)",
             confirmButton: "Delete"
         )
@@ -327,7 +341,7 @@ extension Confirmation {
         Confirmation(
             kind: .deleteRemoteBranch,
             details: .branch(name),
-            title: "Delete Remote Branch",
+            title: "Delete Remote Branch?",
             message: "Delete the remote branch \(name)?\n\nThis can't be undone. The branch doesn't exist on this Mac, and deleting it may affect others working on it.",
             confirmButton: "Delete"
         )
@@ -338,17 +352,42 @@ extension Confirmation {
         Confirmation(
             kind: .deleteTag,
             details: .tag(name),
-            title: "Delete Tag",
+            title: "Delete Tag?",
             message: "Are you sure you want to delete the tag \(name)?",
             confirmButton: "Delete"
+        )
+    }
+
+    /// Installing the command line tool over something else at its path: a
+    /// link elsewhere, a file, or something that couldn't be looked at.
+    ///
+    /// - Parameters:
+    ///   - path: Where the tool goes (`/usr/local/bin/espalier`).
+    ///   - existing: What's there.
+    public static func replaceCommandLineTool(path: String, existing: ExistingCommandLineTool) -> Confirmation {
+        let message = switch existing {
+        case .link(let destination):
+            "\(path) is a link to \(destination), not to Espalier's command line tool. Installing replaces the link."
+        case .file:
+            "\(path) is a file other than Espalier's command line tool. Installing deletes it and puts the tool in its place."
+        case .unexamined:
+            "Espalier couldn't check what's at \(path). If there's a file or link there, installing replaces it with the command line tool."
+        }
+        return Confirmation(
+            kind: .replaceCommandLineTool,
+            title: "Replace Existing Command?",
+            message: message,
+            confirmButton: "Replace"
         )
     }
 }
 
 // MARK: - Decisions
 
-/// A choice an intent needs before it can run, made by calling it again with
-/// an explicit argument (checkout's `strategy:`).
+/// A choice an intent needs before it can run, answered with a
+/// `DecisionAnswer`: checkout is called again with an explicit argument
+/// (`strategy:`); an editor answer is saved as the editor, and the intent
+/// called again.
 public enum Decision: Sendable, Equatable {
     /// Switching branches with uncommitted changes and the "ask" strategy:
     /// leave the changes on the current branch (stash them there) or bring
@@ -358,10 +397,17 @@ public enum Decision: Sendable, Equatable {
     ///   replace the current branch's stash (the choice's warning).
     case uncommittedChanges(currentBranch: String, targetBranch: String, currentBranchHasStash: Bool)
 
+    /// Opening in the external editor with no editor chosen and several
+    /// installed: which one to use, from now on.
+    ///
+    /// - Parameter editors: The installed editors' names, in order.
+    case externalEditor(editors: [String])
+
     /// The dialog's title.
     public var title: String {
         switch self {
         case .uncommittedChanges: "Switch Branch"
+        case .externalEditor: "Choose an Editor"
         }
     }
 
@@ -370,12 +416,17 @@ public enum Decision: Sendable, Equatable {
         switch self {
         case .uncommittedChanges:
             "You have changes on this branch. What would you like to do with them?"
+        case .externalEditor:
+            "Espalier found more than one editor on your Mac. Which one should it open repositories and files in?"
         }
     }
 
-    /// The answers. Each one's `strategy` is the argument to pass back.
+    /// The answers to `uncommittedChanges`. Each one's `strategy` is the
+    /// argument to pass back. An editor's answers are its `editors`.
     public var choices: [DecisionChoice] {
         switch self {
+        case .externalEditor:
+            []
         case .uncommittedChanges(let currentBranch, let targetBranch, let hasStash):
             [
                 DecisionChoice(
@@ -398,6 +449,7 @@ public enum Decision: Sendable, Equatable {
     public var confirmButton: String {
         switch self {
         case .uncommittedChanges: "Switch Branch"
+        case .externalEditor: "Open"
         }
     }
 
@@ -409,8 +461,18 @@ public enum Decision: Sendable, Equatable {
         switch self {
         case .uncommittedChanges(_, _, let hasStash):
             hasStash && strategy == .stashOnCurrentBranch ? [.overwriteStash] : []
+        case .externalEditor:
+            []
         }
     }
+}
+
+/// The user's answer to a `Decision`.
+public enum DecisionAnswer: Sendable, Equatable {
+    /// What to do with uncommitted changes (`uncommittedChanges`).
+    case strategy(UncommittedChangesStrategy)
+    /// The editor to use, by name (`externalEditor`).
+    case editor(String)
 }
 
 /// One answer to a `Decision`.

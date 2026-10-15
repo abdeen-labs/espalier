@@ -70,7 +70,12 @@ func promptFiles(_ prompt: String) -> [(path: String, hunks: Int?)] {
 
 /// A valid model response resolving every file in a prompt: each hunk
 /// becomes `resolved <path> <n>`, each delete-vs-modify conflict is kept.
-func resolvingEverything(_ prompt: String, summary: String? = "### Conflicting changes\nA.\n\n### Resolution\nB.") -> String {
+/// It cites `references`.
+func resolvingEverything(
+    _ prompt: String,
+    summary: String? = "### Conflicting changes\nA.\n\n### Resolution\nB.",
+    references: [AIConflictReference] = []
+) -> String {
     let resolutions: [JSONValue] = promptFiles(prompt).map { file in
         guard let hunks = file.hunks else {
             return ["path": .string(file.path), "action": "keep", "hunks": [], "reasoning": "Kept it."]
@@ -81,7 +86,8 @@ func resolvingEverything(_ prompt: String, summary: String? = "### Conflicting c
             "reasoning": "Merged both sides.",
         ]
     }
-    var object: JSONObject = ["resolutions": .array(resolutions), "references": []]
+    let cited: [JSONValue] = references.map { ["type": .string($0.type.rawValue), "id": .string($0.id)] }
+    var object: JSONObject = ["resolutions": .array(resolutions), "references": .array(cited)]
     if let summary {
         object["summary"] = .string(summary)
     }

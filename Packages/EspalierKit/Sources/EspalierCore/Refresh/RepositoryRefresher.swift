@@ -143,9 +143,16 @@ final class RepositoryRefresher {
         // 4. Remotes.
         if scope.contains(.remotes) {
             do {
-                let remotes = try await environment.withRuntimes { try await getRemotes(repository) }
+                let (remotes, forkRemoteNames) = try await environment.withRuntimes {
+                    (try await getRemotes(repository), await loadForkRemoteNames(repository))
+                }
                 guard token.isCurrent else { return }
-                assign(\.remotes, remotesSnapshot(remotes, tip: state.tip, record: model.record), in: state)
+                // The current branch's upstream remote, with these remotes.
+                if case .valid(let branch) = state.tip {
+                    assign(\.tip, .valid(branch: branch.resolvingRemotes(remotes.map(\.name))), in: state)
+                }
+                let snapshot = remotesSnapshot(remotes, forkRemoteNames: forkRemoteNames, tip: state.tip, record: model.record)
+                assign(\.remotes, snapshot, in: state)
                 applied.insert(.remotes)
             } catch {
                 guard token.isCurrent else { return }
@@ -263,12 +270,15 @@ final class RepositoryRefresher {
         let currentBranch = status.currentBranch.flatMap { $0.isEmpty ? nil : $0 }
         let currentTip = status.currentTip.flatMap { $0.isEmpty ? nil : $0 }
         if let currentBranch, let currentTip {
+            // The remotes as last loaded tell where the upstream's remote
+            // name ends; loading the remotes resolves it again.
             tip = .valid(branch: Branch(
                 name: currentBranch,
                 upstream: status.currentUpstreamBranch.flatMap { $0.isEmpty ? nil : $0 },
                 tip: BranchTip(sha: currentTip),
                 type: .local,
-                ref: "refs/heads/\(currentBranch)"
+                ref: "refs/heads/\(currentBranch)",
+                remoteNames: state.remotes.all.map(\.name)
             ))
         } else if let currentTip {
             tip = .detached(currentSha: currentTip)
@@ -311,8 +321,14 @@ final class RepositoryRefresher {
 
     // MARK: Remotes
 
-    /// The remotes: all, default, current, upstream.
-    private func remotesSnapshot(_ remotes: [Remote], tip: Tip, record: RepositoryRecord) -> RemotesSnapshot {
+    /// The remotes: all, default, current, upstream, and Espalier's fork
+    /// remotes.
+    private func remotesSnapshot(
+        _ remotes: [Remote],
+        forkRemoteNames: Set<ExactString>,
+        tip: Tip,
+        record: RepositoryRecord
+    ) -> RemotesSnapshot {
         let defaultRemote = findDefaultRemote(remotes)
 
         // Load the remote that the current branch is tracking. If the branch
@@ -324,7 +340,13 @@ final class RepositoryRefresher {
         } ?? defaultRemote
 
         let upstreamRemote = record.gitHubRepository?.parent.flatMap { findUpstreamRemote($0, remotes) }
-        return RemotesSnapshot(all: remotes, defaultRemote: defaultRemote, currentRemote: currentRemote, upstreamRemote: upstreamRemote)
+        return RemotesSnapshot(
+            all: remotes,
+            defaultRemote: defaultRemote,
+            currentRemote: currentRemote,
+            upstreamRemote: upstreamRemote,
+            forkRemoteNames: forkRemoteNames
+        )
     }
 
     // MARK: Failures
@@ -423,7 +445,10 @@ func loadBranches(_ repository: Repository, record: RepositoryRecord, defaultRem
         return nil
     }
     let allBranches = mergeRemoteAndLocalBranches(branches)
-    let defaultBranch = try? await findDefaultBranch(record, allBranches, defaultRemoteName)
+    // From every branch: the remote's default branch is the default even
+    // when a local branch of another name tracks it, which leaves it out of
+    // `allBranches`.
+    let defaultBranch = try? await findDefaultBranch(record, branches, defaultRemoteName)
     let upstreamDefaultBranch = await findUpstreamDefaultBranch(repository, record: record, branches: allBranches)
     let recent = recentBranches(await recentNames, allBranches: allBranches, defaultBranch: defaultBranch)
     let pullWithRebase = parsePullRebase(try? await getConfigValue(repository, "pull.rebase"))
@@ -456,6 +481,18 @@ func trackedUpstreams(_ branches: [Branch]) -> [ExactString: Branch] {
         }
     }
     return upstreams
+}
+
+/// The fork remotes Espalier marked; none when the marks can't be read, so
+/// nothing is hidden.
+@concurrent
+private func loadForkRemoteNames(_ repository: Repository) async -> Set<ExactString> {
+    do {
+        return try await getForkRemoteNames(repository)
+    } catch {
+        logger.error("Could not read the fork remotes' marks: \(error.localizedDescription, privacy: .public)")
+        return []
+    }
 }
 
 @concurrent

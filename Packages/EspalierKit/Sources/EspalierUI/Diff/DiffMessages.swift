@@ -11,7 +11,8 @@ import SwiftUI
 nonisolated enum DiffContentsWarning: Sendable, Equatable, Hashable {
     /// The diff has invisible bidirectional Unicode characters.
     case unicodeBidiCharacters
-    /// Git will change the file's line endings when it's checked out.
+    /// Git will change the file's line endings: to LF as it commits the
+    /// file, to CRLF as it checks the file out.
     case lineEndingsChange(LineEndingsChange)
 
     /// The warnings for a text diff: hidden bidirectional characters, then
@@ -31,6 +32,8 @@ nonisolated enum DiffContentsWarning: Sendable, Equatable, Hashable {
         switch self {
         case .unicodeBidiCharacters:
             "This diff contains bidirectional Unicode text that may be interpreted or compiled differently than what appears below. To review, open the file in an editor that reveals hidden Unicode characters."
+        case .lineEndingsChange(let change) where change.to == .lf:
+            "This file uses '\(change.from.rawValue)' line endings, but Git is configured to commit them as '\(change.to.rawValue)'."
         case .lineEndingsChange(let change):
             "This file uses '\(change.from.rawValue)' line endings, but Git is configured to convert them to '\(change.to.rawValue)' the next time the file is checked out."
         }
@@ -43,7 +46,7 @@ struct DiffMessages: View {
     let warnings: [DiffContentsWarning]
 
     /// The band: the modified color at 7%.
-    static let background = Palette.tint(Palette.modified, light: 0.07, dark: 0.07)
+    static var background: NSColor { Palette.tint(Palette.modified, light: 0.07, dark: 0.07) }
 
     var body: some View {
         if !warnings.isEmpty {
@@ -59,8 +62,8 @@ struct DiffMessages: View {
                     .font(Typography.secondary)
                 }
             }
-            .padding(.horizontal, Metrics.insetMedium + 2)
-            .padding(.vertical, Metrics.insetSmall + 2)
+            .padding(.horizontal, Metrics.insetMedium)
+            .padding(.vertical, Metrics.insetSmall)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(nsColor: DiffMessages.background))
             .overlay(alignment: .bottom) {
@@ -73,8 +76,8 @@ struct DiffMessages: View {
 /// "Show whitespace changes?": offered when the gutter of a diff hiding
 /// whitespace changes is clicked, since lines can't be selected then.
 struct WhitespaceHintView: View {
-    let onNo: () -> Void
-    let onYes: () -> Void
+    let onCancel: () -> Void
+    let onShow: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
@@ -86,10 +89,10 @@ struct WhitespaceHintView: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
-                Button("No", action: onNo)
+                Button("Cancel", action: onCancel)
                     .buttonStyle(.secondary)
                     .keyboardShortcut(.cancelAction)
-                Button("Yes", action: onYes)
+                Button("Show Whitespace", action: onShow)
                     .buttonStyle(.prominent)
                     .keyboardShortcut(.defaultAction)
             }

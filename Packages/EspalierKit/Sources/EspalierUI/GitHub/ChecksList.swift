@@ -1,7 +1,8 @@
 // A pull request's checks, as the pull request's place and the checks
-// popover list them: the summary's title and line, workflow groups, a check
-// expanding to its steps (the first failed one already open), "View <step>
-// on GitHub", and "There are no steps to display for this check.". Shapes
+// popover list them: the summary's title and line with Re-run, workflow
+// groups, a check expanding to its steps (the first failed one already
+// open) with its own Re-run and View on GitHub, steps a click opens on
+// GitHub, and "There are no steps to display for this check.". Shapes
 // differ per state, so color never stands alone.
 
 import EspalierCore
@@ -9,12 +10,15 @@ import GitHubKit
 import SwiftUI
 
 /// A check's or a step's state, as its glyph shows it.
-nonisolated enum CheckGlyphKind: String, Sendable, Equatable, CaseIterable {
-    case success, failure, actionRequired, cancelled, neutral, skipped, stale, pending
+nonisolated enum CheckGlyphKind: Sendable, Equatable {
+    case success, failure, actionRequired, cancelled, neutral, skipped, stale
+    /// Not concluded yet: queued, waiting, or in progress, as the status
+    /// says.
+    case pending(APICheckStatus)
 
     init(status: APICheckStatus, conclusion: APICheckConclusion?) {
         guard status == .completed || conclusion != nil, let conclusion else {
-            self = .pending
+            self = .pending(status)
             return
         }
         switch conclusion {
@@ -54,8 +58,9 @@ nonisolated enum CheckGlyphKind: String, Sendable, Equatable, CaseIterable {
 }
 
 extension ChecksState {
-    /// The overall state of a pull request's checks, or nil when it has
-    /// none (no glyph shows then).
+    /// The overall state of a pull request's checks (`checksResult(_:)`,
+    /// through the combined check), or nil when it has none (no glyph shows
+    /// then).
     nonisolated init?(_ check: CombinedRefCheck?) {
         guard let check, !check.checks.isEmpty else {
             return nil
@@ -64,9 +69,10 @@ extension ChecksState {
     }
 }
 
-/// The tooltip of a pull request's checks glyph: "Checks: Successful".
+/// The tooltip of a pull request's checks glyph: "Checks: Successful",
+/// "Checks: Queued".
 nonisolated func checksTooltipText(_ check: CombinedRefCheck) -> String {
-    "Checks: \(getCheckRunConclusionAdjective(check.conclusion))"
+    "Checks: \(getCombinedCheckAdjective(check))"
 }
 
 /// A check's or a step's glyph.
@@ -76,12 +82,21 @@ struct CheckGlyph: View {
     var body: some View {
         Image(systemName: kind.systemImage)
             .foregroundStyle(Color(espalier: Palette.checks(kind.tone)))
-            .accessibilityLabel(getCheckRunConclusionAdjective(kind.conclusion))
+            .accessibilityLabel(kind.adjective)
     }
 }
 
 extension CheckGlyphKind {
-    /// The conclusion the kind stands for, for its words.
+    /// What the kind stands for, in the words of the check's or step's row:
+    /// "Successful", "Queued", "In progress".
+    nonisolated var adjective: String {
+        if case .pending(let status) = self {
+            return getCheckRunAdjective(status, nil)
+        }
+        return getCheckRunConclusionAdjective(conclusion)
+    }
+
+    /// The conclusion the kind stands for.
     nonisolated var conclusion: APICheckConclusion? {
         switch self {
         case .success: .success
@@ -166,7 +181,7 @@ nonisolated struct ChecksContent: Sendable, Equatable {
     var title: String
     /// "2 successful and 1 failed checks".
     var summary: String
-    /// The overall state, or nil while loading with nothing to show.
+    /// The overall state, or nil with no checks (loading, or none).
     var overall: ChecksState?
     var groups: [CheckGroupContent]
     /// Whether the list is waiting for the checks (with their workflows'
@@ -199,7 +214,7 @@ nonisolated struct ChecksContent: Sendable, Equatable {
         // Only show the loading header status if there are no cached check
         // runs to display.
         title = getChecksSummaryTitle(checks, loading: !loaded)
-        summary = checks.isEmpty ? "" : getCombinedStatusSummary(checks.map(\.conclusion), description: "check")
+        summary = checks.isEmpty ? "" : getCombinedStatusSummary(checks.map { (status: $0.status, conclusion: $0.conclusion) }, description: "check")
         overall = ChecksState(check)
         isLoading = !loaded
         isEmpty = loaded && checks.isEmpty
@@ -228,7 +243,7 @@ nonisolated struct ChecksContent: Sendable, Equatable {
                         }
                     },
                     stepsSummary: check.actionJobSteps.map { steps in
-                        getCombinedStatusSummary(steps.map(\.conclusion), description: "step")
+                        getCombinedStatusSummary(steps.map { (status: $0.status, conclusion: $0.conclusion) }, description: "step")
                     },
                     canRerun: rerunSupport.individualOrFailed && check.actionJobSteps != nil
                 )
@@ -237,7 +252,7 @@ nonisolated struct ChecksContent: Sendable, Equatable {
 
         if !rerunSupport.checks {
             rerun = .none
-        } else if rerunSupport.individualOrFailed, checks.contains(where: { $0.conclusion == .failure }) {
+        } else if rerunSupport.individualOrFailed, checks.contains(where: isFailure) {
             rerun = .failedOrAll
         } else {
             rerun = .all
@@ -258,27 +273,22 @@ struct ChecksListActions {
     var open: (URL) -> Void
     /// Reruns: failed ones only, or all; or one check (`checkID`).
     var rerun: (_ failedOnly: Bool, _ checkID: Int?) -> Void
-
-    static let none = ChecksListActions(open: { _ in }, rerun: { _, _ in })
 }
 
 // MARK: Views
 
-/// The checks' summary: the state's glyph, the title, the summary line,
-/// and Re-run.
+/// The checks' summary: the state's glyph (progress while loading), the
+/// title, the summary line, and Re-run (not with no checks).
 struct ChecksHeader: View {
     let content: ChecksContent
     let actions: ChecksListActions
-    /// Whether Re-run shows here (the pull request's place shows it on the
-    /// section's heading instead).
-    var showsRerun = true
 
     var body: some View {
         HStack(alignment: .top, spacing: Metrics.insetSmall) {
             Group {
                 if let overall = content.overall {
                     ChecksGlyph(overall)
-                } else {
+                } else if content.isLoading {
                     ArcProgress(.small)
                 }
             }
@@ -295,7 +305,7 @@ struct ChecksHeader: View {
             .fixedSize(horizontal: false, vertical: true)
             .layoutPriority(1)
             Spacer(minLength: Metrics.insetSmall)
-            if showsRerun {
+            if !content.isEmpty {
                 ChecksRerunButton(options: content.rerun, isEnabled: content.canRerun) { failedOnly in
                     actions.rerun(failedOnly, nil)
                 }
@@ -326,19 +336,17 @@ struct ChecksRerunButton: View {
             .fixedSize()
             .disabled(!isEnabled)
         case .failedOrAll:
-            Menu {
-                Button("Re-run Failed Checks") {
+            PullDownButton("Re-run") { [rerun] in
+                MenuAction("Re-run Failed Checks") {
                     rerun(true)
                 }
-                Button("Re-run All Checks") {
+                MenuAction("Re-run All Checks") {
                     rerun(false)
                 }
             } label: {
                 MenuCapsuleLabel("Re-run", systemImage: "arrow.clockwise")
             }
-            .menuStyle(.button)
             .buttonStyle(.quiet)
-            .menuIndicator(.hidden)
             .controlSize(.small)
             .fixedSize()
             .disabled(!isEnabled)
@@ -441,8 +449,8 @@ private struct CheckRunRow: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .help(check.name)
+            .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
+            .tooltip(check.name)
             .accessibilityLabel("\(check.name), \(check.description)")
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
 
@@ -455,8 +463,9 @@ private struct CheckRunRow: View {
     }
 }
 
-/// An expanded check: its steps' summary, rerun and View on GitHub, then
-/// its steps or the note that it has none.
+/// An expanded check: its steps' summary, Re-run and View on GitHub as
+/// symbol buttons, then its steps or the note that it has none with View
+/// Check Details.
 private struct CheckStepsView: View {
     let check: CheckRunContent
     let actions: ChecksListActions
@@ -475,51 +484,26 @@ private struct CheckStepsView: View {
                         Button {
                             actions.rerun(false, check.id)
                         } label: {
-                            Image(systemName: "arrow.clockwise")
+                            Label("Re-run \(check.name)", systemImage: "arrow.clockwise")
                         }
-                        .buttonStyle(.borderless)
-                        .help("Re-run \(check.name)")
-                        .accessibilityLabel("Re-run \(check.name)")
+                        .buttonStyle(.icon)
+                        .tooltip("Re-run \(check.name)")
                     }
                     if let url = check.url {
                         Button {
                             actions.open(url)
                         } label: {
-                            Image(systemName: "arrow.up.forward.square")
+                            Label("View \(check.name) on GitHub", systemImage: "arrow.up.forward.square")
                         }
-                        .buttonStyle(.borderless)
-                        .help("View \(check.name) on GitHub")
-                        .accessibilityLabel("View \(check.name) on GitHub")
+                        .buttonStyle(.icon)
+                        .tooltip("View \(check.name) on GitHub")
                     }
                 }
                 ForEach(steps) { step in
-                    HStack(spacing: Metrics.insetSmall) {
-                        CheckGlyph(kind: step.glyph)
-                            .font(Typography.subheadline)
-                        Text(step.name)
-                            .font(Typography.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .help(step.name)
-                        Spacer(minLength: Metrics.grid)
-                        Text(step.duration)
-                            .font(Typography.subheadline.monospacedDigit())
-                            .foregroundStyle(.text2)
-                        if let url = step.url {
-                            Button {
-                                actions.open(url)
-                            } label: {
-                                Image(systemName: "arrow.up.forward.square")
-                            }
-                            .buttonStyle(.borderless)
-                            .help("View \(step.name) on GitHub")
-                            .accessibilityLabel("View \(step.name) on GitHub")
-                        }
-                    }
-                    .accessibilityElement(children: .combine)
+                    CheckStepRow(step: step, open: actions.open)
                 }
             } else {
-                HStack(spacing: Metrics.grid) {
+                VStack(alignment: .leading, spacing: Metrics.insetSmall) {
                     Text("There are no steps to display for this check.")
                         .font(Typography.secondary)
                         .foregroundStyle(.text2)
@@ -528,10 +512,65 @@ private struct CheckStepsView: View {
                         Button("View Check Details") {
                             actions.open(url)
                         }
-                        .buttonStyle(.link)
+                        .buttonStyle(.quiet)
+                        .controlSize(.small)
                     }
                 }
             }
         }
+    }
+}
+
+/// A step: its glyph, name, and duration. A step with a page opens it on a
+/// click, the row taking the hover wash and showing ↗ while the pointer is
+/// on it.
+private struct CheckStepRow: View {
+    let step: CheckStepContent
+    let open: (URL) -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        if let url = step.url {
+            Button {
+                open(url)
+            } label: {
+                row(showsLink: isHovered)
+            }
+            .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
+            .background(
+                RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .continuous)
+                    .fill(isHovered ? Color(espalier: Palette.hover) : .clear)
+                    .hoverMotion(isHovered)
+                    .padding(.horizontal, -Metrics.grid)
+            )
+            .onHover { isHovered = $0 }
+            .tooltip("View \(step.name) on GitHub")
+            .accessibilityHint("Opens the step on GitHub")
+        } else {
+            row(showsLink: false)
+                .tooltip(step.name)
+        }
+    }
+
+    private func row(showsLink: Bool) -> some View {
+        HStack(spacing: Metrics.insetSmall) {
+            CheckGlyph(kind: step.glyph)
+                .font(Typography.subheadline)
+            Text(step.name)
+                .font(Typography.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: Metrics.grid)
+            Text(step.duration)
+                .font(Typography.subheadline.monospacedDigit())
+                .foregroundStyle(.text2)
+            Image(systemName: "arrow.up.forward")
+                .font(Typography.subheadline)
+                .foregroundStyle(.text3)
+                .opacity(showsLink ? 1 : 0)
+                .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }

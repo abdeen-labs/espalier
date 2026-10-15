@@ -9,8 +9,22 @@ import SwiftUI
 
 /// What the search's status says.
 nonisolated struct HistorySearchStatusContent: Sendable, Equatable {
-    /// "3 of 17 matches in 2,400 loaded commits".
-    var text: String
+    /// A run of the status's text: its words, or a count.
+    struct Part: Sendable, Equatable {
+        var text: String
+        var isCount: Bool
+
+        static func words(_ text: String) -> Part {
+            Part(text: text, isCount: false)
+        }
+
+        static func count(_ count: Int, _ numberFormat: NumberFormat) -> Part {
+            Part(text: formatCount(count, numberFormat), isCount: true)
+        }
+    }
+
+    /// "3 of 17 matches in 2,400 loaded commits", its counts apart.
+    var parts: [Part]
     /// Whether there are matches to move between.
     var canMove: Bool
     /// Whether older commits can be loaded and searched.
@@ -21,28 +35,29 @@ nonisolated struct HistorySearchStatusContent: Sendable, Equatable {
     /// short form for the button.
     var commitID: String?
 
-    init(text: String, canMove: Bool, canSearchOlder: Bool, isSearchingOlder: Bool, commitID: String?) {
-        self.text = text
+    init(parts: [Part], canMove: Bool, canSearchOlder: Bool, isSearchingOlder: Bool, commitID: String?) {
+        self.parts = parts
         self.canMove = canMove
         self.canSearchOlder = canSearchOlder
         self.isSearchingOlder = isSearchingOlder
         self.commitID = commitID
     }
 
-    init(search: HistorySearch, loaded: Int, isComplete: Bool, isLoadingMore: Bool) {
-        let commits = loaded == 1 ? "1 loaded commit" : "\(formatCount(loaded)) loaded commits"
+    /// The status of `search`, its counts in `numberFormat`.
+    init(search: HistorySearch, loaded: Int, isComplete: Bool, isLoadingMore: Bool, numberFormat: NumberFormat) {
+        let commits: [Part] = [.count(loaded, numberFormat), .words(loaded == 1 ? " loaded commit" : " loaded commits")]
         let count = search.matchCount
-        let matches = count == 1 ? "match" : "matches"
-        let text: String
+        let matches = count == 1 ? " match in " : " matches in "
+        let parts: [Part]
         if count == 0 {
-            text = search.isSearching ? "Searching…" : "No matches in \(commits)"
+            parts = search.isSearching ? [.words("Searching…")] : [.words("No matches in ")] + commits
         } else if let current = search.currentMatch {
-            text = "\(formatCount(current + 1)) of \(formatCount(count)) \(matches) in \(commits)"
+            parts = [.count(current + 1, numberFormat), .words(" of "), .count(count, numberFormat), .words(matches)] + commits
         } else {
-            text = "\(formatCount(count)) \(matches) in \(commits)"
+            parts = [.count(count, numberFormat), .words(matches)] + commits
         }
         self.init(
-            text: text,
+            parts: parts,
             canMove: count > 0,
             canSearchOlder: !isComplete,
             isSearchingOlder: isLoadingMore && !isComplete,
@@ -51,8 +66,19 @@ nonisolated struct HistorySearchStatusContent: Sendable, Equatable {
     }
 
     @MainActor
-    init(_ search: HistorySearch, history: HistoryModel) {
-        self.init(search: search, loaded: history.commitSHAs.count, isComplete: history.isComplete, isLoadingMore: history.isLoadingMore)
+    init(_ search: HistorySearch, history: HistoryModel, numberFormat: NumberFormat) {
+        self.init(
+            search: search,
+            loaded: history.commitSHAs.count,
+            isComplete: history.isComplete,
+            isLoadingMore: history.isLoadingMore,
+            numberFormat: numberFormat
+        )
+    }
+
+    /// The status as one string, as VoiceOver reads it.
+    var text: String {
+        parts.map(\.text).joined()
     }
 
     /// The commit's short SHA for "Go to Commit a1b2c3d".
@@ -82,11 +108,11 @@ struct HistorySearchStatus: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.text3)
                     .accessibilityHidden(true)
-                Text(content.text)
-                    .font(Typography.secondaryCount)
+                statusText
                     .foregroundStyle(.text2)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .accessibilityLabel(content.text)
                     .accessibilityAddTraits(.updatesFrequently)
                 Spacer(minLength: Metrics.grid)
                 HStack(spacing: Metrics.grid) {
@@ -95,14 +121,14 @@ struct HistorySearchStatus: View {
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.text2)
                     }
-                    .help("Previous Match (⇧⌘G)")
+                    .tooltip("Previous Match (⇧⌘G)")
                     .accessibilityLabel("Previous Match")
                     Button(action: actions.next) {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.text2)
                     }
-                    .help("Next Match (⌘G)")
+                    .tooltip("Next Match (⌘G)")
                     .accessibilityLabel("Next Match")
                 }
                 .buttonStyle(.quiet)
@@ -131,6 +157,14 @@ struct HistorySearchStatus: View {
                 .buttonStyle(.quiet)
                 .controlSize(.small)
             }
+        }
+    }
+
+    /// The status's words in the meta font, its counts in the code font.
+    private var statusText: Text {
+        content.parts.reduce(Text(verbatim: "")) { text, part in
+            let run = Text(verbatim: part.text).font(part.isCount ? Typography.secondaryCount : Typography.meta)
+            return Text("\(text)\(run)")
         }
     }
 }

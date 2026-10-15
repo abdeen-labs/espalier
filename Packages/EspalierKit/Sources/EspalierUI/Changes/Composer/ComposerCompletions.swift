@@ -221,11 +221,6 @@ nonisolated public struct CompletionToken: Sendable, Equatable {
         )
     }
 
-    /// The word ending at the end of `text`.
-    public static func atEnd(of text: String) -> CompletionToken? {
-        at(text.utf16.count, in: text)
-    }
-
     /// `text` with the word replaced by `insertion` and a space.
     public func replacing(in text: String, with insertion: String) -> String {
         let string = text as NSString

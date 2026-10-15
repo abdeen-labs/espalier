@@ -1,6 +1,7 @@
-// The author's avatar in the summary field and its popover: who the commit is
-// by, and a warning when the email won't link the commit to the GitHub
-// account, or when the branch's rules don't allow it.
+// The author's avatar at the end of the commit message card's footer, and
+// its popover: who the commit is by, and a warning when the email won't
+// link the commit to the GitHub account, or when the branch's rules don't
+// allow it.
 
 import EspalierCore
 import GitHubKit
@@ -67,13 +68,13 @@ nonisolated public struct AuthorIdentityContent: Sendable, Equatable {
         return "No Author Set"
     }
 
-    /// What the warning says.
-    public var warningText: String? {
+    /// What the warning says, the count in `numberFormat`.
+    public func warningText(_ numberFormat: NumberFormat) -> String? {
         switch warning {
         case .misattributed(let isEnterprise)?:
             "This email address doesn't match your GitHub\(isEnterprise ? " Enterprise" : "") account. Your commits won't be attributed to you."
         case .disallowedEmail(let count, let canBypass)?:
-            "This email address fails \(count == 1 ? "1 rule" : "\(count) rules") for commits on this branch"
+            "This email address fails \(count == 1 ? "1 rule" : "\(formatCount(count, numberFormat)) rules") for commits on this branch"
                 + (canBypass ? ", but you can bypass \(count == 1 ? "it" : "them")." : ".")
         case nil:
             nil
@@ -159,10 +160,10 @@ public struct AuthorAvatarButton: View {
         } label: {
             AuthorAvatar(content, size: Metrics.Composer.avatarSize)
         }
-        .buttonStyle(.plain)
-        .help(content.title)
+        .buttonStyle(.bare(.circle))
+        .tooltip(content.title)
         .accessibilityLabel(content.accessibilityLabel)
-        .popover(isPresented: $isShowingPopover, arrowEdge: .bottom) {
+        .popoverCard(isPresented: $isShowingPopover, title: content.title) {
             AuthorIdentityPopover(
                 content,
                 canOpenRepositorySettings: canOpenRepositorySettings,
@@ -225,6 +226,7 @@ public struct AuthorIdentityPopover: View {
     private let onOpenRepositorySettings: () -> Void
     private let onUpdateEmail: (String) -> Void
     @State private var accountEmail: String
+    @Environment(\.numberFormat) private var numberFormat
 
     public init(
         _ content: AuthorIdentityContent,
@@ -265,7 +267,7 @@ public struct AuthorIdentityPopover: View {
                     }
                 }
             }
-            if let warning = content.warningText {
+            if let warning = content.warningText(numberFormat) {
                 HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(Color(espalier: Palette.warning))
@@ -298,12 +300,11 @@ public struct AuthorIdentityPopover: View {
                 .font(Typography.secondary)
                 .foregroundStyle(.secondary)
             // The whole width: a private address is long.
-            Picker(Self.accountEmailsLabel, selection: $accountEmail) {
-                ForEach(content.accountEmails, id: \.self) { email in
-                    Text(email).tag(email)
+            CapsulePopUp(Self.accountEmailsLabel, selection: $accountEmail, title: accountEmail) {
+                for email in content.accountEmails {
+                    MenuChoice(email, value: email)
                 }
             }
-            .labelsHidden()
             .frame(maxWidth: .infinity)
             HStack {
                 Spacer(minLength: 0)
@@ -313,7 +314,7 @@ public struct AuthorIdentityPopover: View {
                 .buttonStyle(.prominent)
                 .controlSize(.small)
                 .disabled(accountEmail.isEmpty)
-                .help(Self.updateEmailHelp)
+                .tooltip(Self.updateEmailHelp)
             }
         }
     }

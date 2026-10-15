@@ -21,7 +21,7 @@ public final class WindowContext {
     @ObservationIgnored public let modals: ModalPresenter
     /// Shows the prompts git waits on.
     @ObservationIgnored lazy var promptHost = PromptHost(context: self)
-    /// Where avatars come from (snapshots use monograms).
+    /// Where avatars come from.
     @ObservationIgnored public var avatarLoader: any AvatarLoading = GitHubAvatarLoader.shared
     /// Where VoiceOver announcements go.
     @ObservationIgnored var announcer: Announcer = .voiceOver
@@ -59,6 +59,9 @@ public final class WindowContext {
         self.actions = actions
         presenter = WindowPresenter(app: app, actions: actions)
         modals = ModalPresenter()
+        if uiDefaults.bool(forKey: WindowState.sidebarHiddenKey) {
+            state.columnVisibility = .detailOnly
+        }
 
         actions.availability = { [weak self] kind in
             guard let self else {
@@ -187,8 +190,10 @@ struct WindowEnvironment: ViewModifier {
                 dateFormat: preferences.dateFormat,
                 timeFormat: preferences.timeFormat
             ))
+            .environment(\.numberFormat, preferences.numberFormat)
             .environment(\.avatarLoader, context.avatarLoader)
             .environment(\.announcer, context.announcer)
             .environment(\.scheduler, context.app.environment.scheduler)
+            .lookFont()
     }
 }

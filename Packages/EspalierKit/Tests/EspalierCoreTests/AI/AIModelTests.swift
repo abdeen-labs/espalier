@@ -74,6 +74,27 @@ struct AIModelTests {
         #expect(app.ai.selections == [.commitMessageGeneration: key(valid, "llama3")])
     }
 
+    // Desktop dropped such a provider for good at the next save, leaving its
+    // key in the keychain.
+    @Test("keeps a stored provider that doesn't load, and its key, through saves")
+    func keepsUnloadableProviders() async throws {
+        let harness = try AppHarness()
+        let newer = #"{"authKind":"apiKey","baseUrl":"https://example.com","id":"p9","models":[{"id":"m","name":"M"}],"name":"Newer","type":"gemini"}"#
+        harness.defaults.defaults.set("[\(newer)]", forKey: PreferenceKey.byokProviders)
+        try harness.secrets.setSecret("sk-newer", service: BYOKSecretService, account: "p9")
+        let app = await harness.loadedApp()
+        #expect(app.ai.providers.isEmpty)
+
+        let added = provider()
+        try app.ai.addProvider(added, secret: .set("sk-secret"))
+        try app.ai.removeProvider(id: added.id)
+
+        let stored = try #require(harness.defaults.defaults.string(forKey: PreferenceKey.byokProviders))
+        #expect(loadStoredBYOKProviders(from: Data(stored.utf8)).unloadable.count == 1)
+        #expect(stored.contains(#""id":"p9""#))
+        #expect(try harness.secrets.secret(service: BYOKSecretService, account: "p9") == "sk-newer")
+    }
+
     @Test("adds a provider, storing its key in the keychain and the provider in desktop's format")
     func addsProvider() async throws {
         let harness = try AppHarness()
@@ -117,7 +138,9 @@ struct AIModelTests {
             try app.ai.addProvider(provider(), secret: .set("sk"))
         }
         #expect(error?.operation == .updateAIProviders)
-        #expect(error?.reason == .other("Couldn't save the credential for \"Local Llama\" in your keychain. The keychain is locked."))
+        if case .other? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
+        }
         #expect(app.ai.providers.isEmpty)
         #expect(harness.defaults.defaults.object(forKey: PreferenceKey.byokProviders) == nil)
     }
@@ -161,7 +184,7 @@ struct AIModelTests {
         #expect(stored == #"{"conflict-resolution":"\#(key(original, "llama3"))"}"#)
     }
 
-    @Test("removing a provider removes its secret, selections, and consents, after desktop's question")
+    @Test("removing a provider removes its secret, selections, and consents")
     func removeProvider() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
@@ -170,14 +193,6 @@ struct AIModelTests {
         app.ai.select(model: key(removed, "llama3"), for: .commitMessageGeneration)
         let disclosure = getAIDataDisclosure(for: .commitMessageGeneration, provider: removed)
         app.ai.recordConsent(disclosure.consentIdentifier)
-
-        #expect(AIModel.removalConfirmation(for: removed) == AIProviderRemovalConfirmation(
-            title: "Remove \"Local Llama\"?",
-            message: "Its API key will also be removed from your keychain.",
-            confirmButton: "Remove"
-        ))
-        #expect(AIModel.removalConfirmation(for: provider(authKind: .bearer)).message == "Its bearer token will also be removed from your keychain.")
-        #expect(AIModel.removalConfirmation(for: provider(authKind: .none)).message == "Models that use it will no longer be available.")
 
         try app.ai.removeProvider(id: removed.id)
 

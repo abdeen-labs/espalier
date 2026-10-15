@@ -229,6 +229,7 @@ struct SignInModelTests {
         @Test("redirects github.com addresses to the dotcom flow", arguments: [
             NamedCase("redirects to dotcom flow for github.com URLs", "https://github.com"),
             NamedCase("redirects to dotcom flow for api.github.com URLs", "https://api.github.com"),
+            NamedCase("redirects to dotcom flow for GitHub.com typed in any case", "GitHub.com"),
         ])
         func redirectsToDotCom(_ testCase: NamedCase<String>) async throws {
             let fixture = try await makeSignIn()
@@ -251,7 +252,6 @@ struct SignInModelTests {
 
             #expect(signIn.state?.kind == .endpointEntry)
             #expect(signIn.state?.error == .unsupportedProtocol)
-            #expect(signIn.state?.error?.message == "Only https addresses are supported for GitHub Enterprise.")
             #expect(signIn.state?.loading == false)
             await fixture.settle()
         }

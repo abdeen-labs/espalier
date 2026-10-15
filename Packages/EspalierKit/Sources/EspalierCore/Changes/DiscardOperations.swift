@@ -6,6 +6,9 @@ import os
 
 private let logger = Log.logger(category: "discard")
 
+/// Why lines can't be discarded once the file's diff changed under them.
+private let fileChangedMessage = "The file changed since its changes were shown. Review them and try again."
+
 /// Discards the changes to files again.
 public struct DiscardChangesRetry: RetryableOperation {
     public let repositoryID: RepositoryID
@@ -201,11 +204,7 @@ extension ChangesModel {
         try await repository.perform(OperationDescriptor(kind: .discardLines)) { ctx in
             let current = try await getWorkingDirectoryDiff(ctx.repository, file)
             guard let text = textDiffData(current), text.hunks == expectedHunks else {
-                throw OperationError(
-                    .precondition("The file changed since its changes were shown. Review them and try again."),
-                    operation: .discardLines,
-                    repositoryID: repositoryID
-                )
+                throw OperationError(.precondition(fileChangedMessage), operation: .discardLines, repositoryID: repositoryID)
             }
             try await discardChangesFromSelection(ctx.repository, file.path, text, lineSelection)
         }
@@ -214,7 +213,19 @@ extension ChangesModel {
 
     /// Discards `lines` of the selected file: the selection of just those
     /// lines, discarded with `discardLines(_:in:confirmed:)`.
-    public func discardLines(_ lines: DiffLines, confirmed: Set<ConfirmationKind> = []) async throws(OperationError) {
+    ///
+    /// - Parameter generation: The `diffGeneration` of the diff the indexes
+    ///   were taken from; nil for the current one.
+    /// - Throws: `.precondition` when the diff changed since `generation`
+    ///   (each run checks, so a refresh while the user is asked counts).
+    public func discardLines(
+        _ lines: DiffLines,
+        inDiff generation: Int? = nil,
+        confirmed: Set<ConfirmationKind> = []
+    ) async throws(OperationError) {
+        guard isCurrentDiff(generation) else {
+            throw OperationError(.precondition(fileChangedMessage), operation: .discardLines, repositoryID: repository?.id)
+        }
         guard let file = shownFile, let range = range(of: lines) else {
             throw OperationError(
                 .precondition("There are no changes to discard in these lines."),

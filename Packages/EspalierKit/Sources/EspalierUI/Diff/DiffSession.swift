@@ -21,7 +21,7 @@ final class DiffSession {
     /// The file the state is for.
     private(set) var fileID: String?
     /// The file of the diff last loaded (shown while the next one loads).
-    private(set) var loadedFileID: String?
+    private(set) var loadedFile: DiffFileInfo?
     /// The file change's own ID (`FileChange.id`), which the contents
     /// loader reports.
     private var changeID: String?
@@ -84,7 +84,7 @@ final class DiffSession {
     func diffDidChange(_ diff: Diff?, file: DiffFileInfo?, repository: RepositoryModel?) {
         self.file = file
         if diff != nil {
-            loadedFileID = fileID
+            loadedFile = file
         }
         let text: TextDiff?
         var isLarge = false
@@ -150,6 +150,11 @@ final class DiffSession {
             return false
         }
         return contents.canBeExpanded && !contents.newLines.isEmpty
+    }
+
+    /// The ID of the file of the diff last loaded.
+    var loadedFileID: String? {
+        loadedFile?.id
     }
 
     /// Whether lines were expanded ("Collapse Expanded Lines").
@@ -269,12 +274,6 @@ final class DiffSession {
                 self.tokensGeneration &+= 1
             }
         }
-    }
-
-    /// Waits for the contents and tokens in flight (tests).
-    func idle() async {
-        await contentsTask?.value
-        await highlightTask?.value
     }
 
     // MARK: The DiffOpen interval

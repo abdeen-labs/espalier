@@ -1,10 +1,11 @@
-// The push/pull button's nine states, in order, and their copy, on a
-// selected repository whose git state is set directly, and nothing until
-// that state has loaded; the other Sync tests reach the states through
+// The push/pull button's nine states, in order, on a selected repository
+// whose git state is set directly, and nothing until that state has
+// loaded; the other Sync tests reach the states through
 // real operations.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
+import EspalierSupport
 import Foundation
 import GitHubKit
 import GitKit
@@ -31,7 +32,6 @@ struct SyncActionTests {
         let fixture = try await makeRepository()
         let action = fixture.model.sync.action
         #expect(action == .fetch(remote: "origin"))
-        #expect(action.title == "Fetch origin")
         #expect(action.description == nil)
         #expect(action.isEnabled)
         #expect(action.counts == nil)
@@ -139,8 +139,6 @@ struct SyncActionTests {
         setTip(fixture, upstream: nil)
         let action = fixture.model.sync.action
         #expect(action == .publishRepository)
-        #expect(action.title == "Publish repository")
-        #expect(action.description == "Publish this repository to GitHub")
         #expect(action.isEnabled)
 
         // A branch still tracking a remote that's gone names that remote.
@@ -154,14 +152,11 @@ struct SyncActionTests {
         fixture.model.gitState.tip = .detached(currentSha: sha)
         var action = fixture.model.sync.action
         #expect(action == .detachedHead(rebaseInProgress: false))
-        #expect(action.title == "Publish branch")
-        #expect(action.description == "Can't publish a detached HEAD")
         #expect(!action.isEnabled)
 
         fixture.model.gitState.inProgress = .rebase(RebaseInternalState(targetBranch: "main", baseBranchTip: sha, originalBranchTip: sha))
         action = fixture.model.sync.action
         #expect(action == .detachedHead(rebaseInProgress: true))
-        #expect(action.description == "Rebase in progress")
     }
 
     @Test("a branch without an upstream publishes, to GitHub or the remote")
@@ -171,16 +166,11 @@ struct SyncActionTests {
         fixture.model.gitState.aheadBehind = nil
         var action = fixture.model.sync.action
         #expect(action == .publishBranch(remote: "origin", isGitHubRepository: false))
-        #expect(action.title == "Publish branch")
-        #expect(action.description == "Publish this branch to the remote")
         #expect(action.alternatives == [.fetch(remote: "origin")])
-        #expect(action.alternatives.first?.title == "Fetch origin")
-        #expect(action.alternatives.first?.description == "Fetch the latest changes from origin")
 
         fixture.associate()
         action = fixture.model.sync.action
         #expect(action == .publishBranch(remote: "origin", isGitHubRepository: true))
-        #expect(action.description == "Publish this branch to GitHub")
     }
 
     @Test("nothing to push or pull fetches, unless tags wait to be pushed")
@@ -189,7 +179,6 @@ struct SyncActionTests {
         fixture.app.updateRecord(fixture.model.id) { $0.tagsToPush = ["v1.0", "v1.1"] }
         let action = fixture.model.sync.action
         #expect(action == .push(remote: "origin", aheadBehind: AheadBehind(ahead: 0, behind: 0), tagsToPush: 2))
-        #expect(action.title == "Push origin")
         #expect(action.counts == SyncCounts(toPush: 2, toPull: 0))
     }
 
@@ -198,10 +187,11 @@ struct SyncActionTests {
         let fixture = try await makeRepository()
         setTip(fixture)
         fixture.model.gitState.aheadBehind = AheadBehind(ahead: 1, behind: 2)
-        fixture.model.operations.rewrittenBranches["main"] = sha
+        // Rewritten while origin/main was where it is.
+        let upstreamTip = try #require(fixture.model.gitState.branches.upstreams[ExactString("refs/heads/main")]?.tip.sha)
+        fixture.app.updateRecord(fixture.model.id) { $0.rewrittenBranches["main"] = upstreamTip }
         let action = fixture.model.sync.action
         #expect(action == .forcePush(remote: "origin", aheadBehind: AheadBehind(ahead: 1, behind: 2), tagsToPush: 0))
-        #expect(action.title == "Force push origin")
         #expect(action.description == nil)
         #expect(action.counts == SyncCounts(toPush: 1, toPull: 2))
         #expect(action.alternatives == [.fetch(remote: "origin")])
@@ -214,13 +204,12 @@ struct SyncActionTests {
         fixture.model.gitState.aheadBehind = AheadBehind(ahead: 0, behind: 2)
         var action = fixture.model.sync.action
         #expect(action == .pull(remote: "origin", aheadBehind: AheadBehind(ahead: 0, behind: 2), tagsToPush: 0, withRebase: false, forcePushAvailable: false))
-        #expect(action.title == "Pull origin")
         #expect(action.alternatives == [.fetch(remote: "origin")])
 
         var branches = fixture.model.gitState.branches
         branches.pullWithRebase = true
         fixture.model.gitState.branches = branches
-        #expect(fixture.model.sync.action.title == "Pull origin with rebase")
+        #expect(fixture.model.sync.action == .pull(remote: "origin", aheadBehind: AheadBehind(ahead: 0, behind: 2), tagsToPush: 0, withRebase: true, forcePushAvailable: false))
 
         // Diverged, but nothing rewritten: a force push is available, not
         // recommended.
@@ -228,10 +217,6 @@ struct SyncActionTests {
         action = fixture.model.sync.action
         #expect(action == .pull(remote: "origin", aheadBehind: AheadBehind(ahead: 1, behind: 2), tagsToPush: 0, withRebase: true, forcePushAvailable: true))
         #expect(action.alternatives == [.fetch(remote: "origin"), .forcePush(remote: "origin")])
-        let forcePush = try #require(action.alternatives.last)
-        #expect(forcePush.title == "Force push origin")
-        #expect(forcePush.description == "Overwrite any changes on origin with your local changes")
-        #expect(SyncAlternative.forcePushWarning.hasPrefix("Force pushing rewrites the branch's history on the remote."))
     }
 
     @Test("a branch tracking a branch of another name shows the whole upstream")

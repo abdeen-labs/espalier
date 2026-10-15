@@ -1,9 +1,9 @@
 // The checks popover the toolbar's pull request chip opens: the header's
 // state ("All checks have passed", "Some checks haven't completed yet", ...)
-// and summary, Re-run Checks or Re-run ⌄, workflow groups, steps with "View
-// <step> on GitHub", and "Stand By" / "Check runs incoming!" while the
-// workflows load, then Show Pull Request, which opens the pull request's
-// place.
+// and summary, Re-run Checks or Re-run ⌄ (in the header, as in the pull
+// request's place), workflow groups, steps that open on GitHub, and "Stand
+// By" / "Check runs incoming!" while the workflows load, then Show Pull
+// Request, which opens the pull request's place.
 
 import EspalierCore
 import GitHubKit
@@ -54,7 +54,8 @@ struct ChecksPopover: View {
     }
 }
 
-/// The popover's content: the summary, the list, and Show Pull Request.
+/// The popover's content: the summary, the list (none with no checks: the
+/// title says so), and Show Pull Request.
 struct ChecksPopoverView: View {
     let number: Int
     let content: ChecksContent
@@ -65,13 +66,15 @@ struct ChecksPopoverView: View {
         VStack(alignment: .leading, spacing: 0) {
             ChecksHeader(content: content, actions: actions)
                 .padding(Metrics.Popover.padding)
-            Hairline()
-            ScrollView {
-                ChecksList(content: content, actions: actions)
-                    .padding(Metrics.insetMedium)
+            if !content.isEmpty {
+                Hairline()
+                ScrollView {
+                    ChecksList(content: content, actions: actions)
+                        .padding(Metrics.insetMedium)
+                }
+                .frame(maxHeight: 420)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxHeight: 420)
-            .fixedSize(horizontal: false, vertical: true)
             Hairline()
             HStack {
                 Spacer()
@@ -80,12 +83,11 @@ struct ChecksPopoverView: View {
                     .controlSize(.small)
             }
             .padding(.horizontal, Metrics.insetMedium)
-            .padding(.vertical, Metrics.insetSmall + 2)
+            .padding(.vertical, Metrics.insetSmall)
         }
         .frame(width: 400)
         .background(Color(espalier: Palette.background))
-        .flatPopoverPresentation()
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Checks for pull request \(number)")
+        .accessibilityLabel(Text(verbatim: "Checks for pull request \(number)"))
     }
 }

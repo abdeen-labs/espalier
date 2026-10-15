@@ -63,19 +63,35 @@ public func applyPatchToIndex(_ repository: Repository, _ file: WorkingDirectory
     }
     let diff = try await getWorkingDirectoryDiff(repository, file, textConv: false)
 
-    let patch: String
+    let patch: String?
     switch diff {
     case .text(let textDiff):
-        patch = try formatPatch(file, textDiff)
+        patch = try formatSelectedLines(file, textDiff)
     case .largeText(let largeTextDiff):
-        patch = try formatPatch(file, largeTextDiff)
+        patch = try formatSelectedLines(file, largeTextDiff)
     case .binary, .submodule, .image:
         throw GitLibError("Can't create partial commit in binary file: \(file.path)")
     case .unrenderable:
         throw GitLibError("File diff is too large to generate a partial commit: \(file.path)")
     }
 
+    guard let patch else {
+        return
+    }
     try await git(applyArgs, repository.path, "applyPatchToIndex", options: GitExecutionOptions(stdin: patch))
+}
+
+/// The patch of `file`'s selected lines of `diff`, the file's diff read
+/// now: its selection is carried over to `diff`'s lines first
+/// (`DiffSelection.carried(to:selectableLines:)`), since the file may have
+/// changed since the selection was made. Nil when none of `diff`'s lines is
+/// selected.
+private func formatSelectedLines(_ file: WorkingDirectoryFileChange, _ diff: some TextDiffData) throws -> String? {
+    let selection = file.selection.carried(to: diff.hunks, selectableLines: includeableLineIndexes(diff.hunks))
+    guard selection.getSelectionType() != .none else {
+        return nil
+    }
+    return try formatPatch(file.withSelection(selection), diff)
 }
 
 /// Discards the local changes for the specified file based on the passed diff

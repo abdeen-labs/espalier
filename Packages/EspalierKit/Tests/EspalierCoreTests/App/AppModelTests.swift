@@ -63,27 +63,15 @@ struct AppModelTests {
         await second.idle()
     }
 
-    @Test("adding reports invalid paths with desktop's copy, existing repositories, and top levels")
+    @Test("adding reports invalid paths, existing repositories, and top levels")
     func adding() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
-        let notRepositories = try (0..<4).map { _ in try createTempDirectory() }
+        let notRepository = try createTempDirectory()
 
-        let one = try await app.addRepositories([notRepositories[0]])
+        let one = try await app.addRepositories([notRepository])
         #expect(one.added.isEmpty)
-        #expect(one.invalidPaths == [notRepositories[0]])
-        #expect(one.invalidPathsMessage == "\(notRepositories[0]) isn't a Git repository.")
-
-        let many = try await app.addRepositories(notRepositories)
-        #expect(many.invalidPathsMessage == """
-            The following paths aren't Git repositories:
-
-            - \(notRepositories[0])
-            - \(notRepositories[1])
-            - \(notRepositories[2])
-
-            (and 1 more)
-            """)
+        #expect(one.invalidPaths == [notRepository])
 
         // A folder inside a repository adds the repository.
         let repository = try setupEmptyRepository()

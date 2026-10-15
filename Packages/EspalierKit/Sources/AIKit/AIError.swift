@@ -39,6 +39,9 @@ public struct AIProviderError: Error, LocalizedError, Sendable, Hashable {
         case invalidResponse
         /// The model declined to respond (a safety refusal).
         case refused
+        /// The response was cut off at the model's output limit before it
+        /// could be used (`AIResponse.reachedOutputLimit`).
+        case outputLimitReached
         /// The provider's settings can't be used, for example a plain http
         /// base URL for a remote host.
         case invalidConfiguration
@@ -74,26 +77,37 @@ public struct AIProviderError: Error, LocalizedError, Sendable, Hashable {
         case .authentication, .permissionDenied, .notFound, .billing, .quotaExceeded, .rateLimited, .network,
              .invalidConfiguration:
             true
-        case .requestTooLarge, .badRequest, .server, .timedOut, .invalidResponse, .refused:
+        case .requestTooLarge, .badRequest, .server, .timedOut, .invalidResponse, .refused, .outputLimitReached:
             false
         }
     }
+}
+
+/// The error for a response that was cut off at the model's output limit
+/// and can't be used.
+func outputLimitReachedError() -> AIProviderError {
+    AIProviderError(kind: .outputLimitReached, message: getFallbackErrorMessage(.outputLimitReached))
 }
 
 /// Classifies an HTTP error response from a provider and extracts its
 /// message.
 ///
 /// The message comes from `error.message` (OpenAI, Azure, Anthropic), a
-/// string `error` (Ollama), or a top-level `message`; a body that isn't
-/// JSON, or has none of these, is kept as raw text.
+/// string `error` (Ollama), or a top-level `message`; a body that's an array
+/// (Gemini's OpenAI-compatible endpoint) is read from its first element the
+/// same way, and a body that's a JSON string is the message. A plain-text
+/// body is the message as it is; other JSON, or an HTML page (a proxy's or
+/// gateway's), gives the description of the failure instead.
 public func parseProviderErrorResponse(statusCode: Int, responseText: String, retryAfter: String?) -> AIProviderError {
     let trimmedResponse = JSCompat.trim(responseText)
     var message = trimmedResponse
     var code: String?
 
-    if !trimmedResponse.isEmpty, let parsed = try? JSONValue.parse(trimmedResponse), parsed.isObject {
-        let error = parsed["error"]
-        let topLevelMessage = nonBlank(parsed["message"]?.stringValue)
+    if !trimmedResponse.isEmpty, let parsed = try? JSONValue.parse(trimmedResponse) {
+        message = nonBlank(parsed.stringValue) ?? ""
+        let body = parsed.arrayValue?.first ?? parsed
+        let error = body.isObject ? body["error"] : nil
+        let topLevelMessage = body.isObject ? nonBlank(body["message"]?.stringValue) : nil
 
         if let error, error.isObject {
             if let errorMessage = nonBlank(error["message"]?.stringValue) {
@@ -107,6 +121,8 @@ public func parseProviderErrorResponse(statusCode: Int, responseText: String, re
         } else if let topLevelMessage {
             message = topLevelMessage
         }
+    } else if JSCompat.startsWith(trimmedResponse, "<") {
+        message = ""
     }
 
     let kind = getProviderErrorKind(statusCode: statusCode, code: code, message: message)
@@ -134,7 +150,13 @@ func getProviderErrorKind(statusCode: Int, code: String?, message: String) -> AI
     case 413:
         return .requestTooLarge
     case 429:
-        return code == "insufficient_quota" ? .quotaExceeded : .rateLimited
+        if code == "insufficient_quota" {
+            return .quotaExceeded
+        }
+        // OpenAI's 429 for a request larger than the organization's tokens
+        // per minute reads "Request too large for <model> ... on tokens per
+        // min (TPM)": it counts as too large.
+        return message.lowercased().contains("request too large") ? .requestTooLarge : .rateLimited
     case 400..<500:
         return isContextLengthError(code: code, message: message) ? .requestTooLarge : .badRequest
     case 500...:
@@ -145,12 +167,14 @@ func getProviderErrorKind(statusCode: Int, code: String?, message: String) -> AI
 }
 
 /// OpenAI reports an over-long prompt as `context_length_exceeded`;
-/// Anthropic as "prompt is too long".
+/// Anthropic as "prompt is too long", or "input length and `max_tokens`
+/// exceed context limit" when the prompt leaves too little room for output.
 private func isContextLengthError(code: String?, message: String) -> Bool {
     let lowercased = message.lowercased()
     return code == "context_length_exceeded"
         || lowercased.contains("prompt is too long")
         || lowercased.contains("maximum context length")
+        || lowercased.contains("exceed context limit")
 }
 
 /// The kind of failure an error that a provider reported in the middle of a
@@ -215,6 +239,8 @@ func getFallbackErrorMessage(_ kind: AIProviderError.Kind) -> String {
         "The provider sent a response that couldn't be read."
     case .refused:
         "The model declined to respond."
+    case .outputLimitReached:
+        "The model's response was cut off at its output limit."
     case .invalidConfiguration:
         "Base URL must be an https URL, or an http URL pointing at the local machine."
     }
@@ -231,15 +257,15 @@ public struct AIErrorDisplayInfo: Sendable, Hashable {
 
 private let allDigits = JSCompat.regex(#"^[0-9]+\z"#)
 
-/// When to try again, from a `Retry-After` value. A number of seconds is
-/// written the way JavaScript's template literal writes `Number(retryAfter)`:
-/// in full below 10^21 (`12345678901234567000 seconds`), then in exponent
-/// form (`1e+21 seconds`), and `Infinity` past the largest double.
+/// When to try again, from a `Retry-After` value: a number of seconds, or
+/// the date as the server wrote it. A number too big for an `Int` is no
+/// real wait, so it's "later".
 func getRetryAfterMessage(_ retryAfter: String) -> String {
     if JS.test(allDigits, retryAfter) {
-        // All digits, so this is a number (infinity when it overflows).
-        let seconds = Double(retryAfter) ?? .infinity
-        return "You can try again in \(JS.numberToString(seconds)) \(seconds == 1 ? "second" : "seconds")."
+        guard let seconds = Int(retryAfter) else {
+            return "You can try again later."
+        }
+        return "You can try again in \(formatSeconds(seconds))."
     }
     return "You can try again after \(retryAfter)."
 }
@@ -266,6 +292,7 @@ public func getAIErrorDisplayInfo(_ error: AIProviderError) -> AIErrorDisplayInf
         case .network: "Couldn't reach the provider"
         case .invalidResponse: "Unexpected response"
         case .refused: "Request declined"
+        case .outputLimitReached: "Response cut off"
         case .invalidConfiguration: "Invalid provider settings"
         }
     return AIErrorDisplayInfo(

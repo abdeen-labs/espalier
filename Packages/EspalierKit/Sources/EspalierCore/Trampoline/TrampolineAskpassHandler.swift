@@ -46,7 +46,7 @@ struct TrampolineAskpassHandler: Sendable {
         }
 
         if JSCompat.startsWith(firstParameter, "Enter passphrase for key ") {
-            return await handleSSHKeyPassphrase(firstParameter)
+            return await handleSSHKeyPassphrase(firstParameter, from: command.parentProcessID)
         }
 
         if JSCompat.startsWith(firstParameter, "Enter passphrase for \"") {
@@ -54,7 +54,7 @@ struct TrampolineAskpassHandler: Sendable {
         }
 
         if firstParameter.unicodeScalars.reversed().starts(with: "'s password: ".unicodeScalars.reversed()) {
-            return await handleSSHUserPassword(firstParameter)
+            return await handleSSHUserPassword(firstParameter, from: command.parentProcessID)
         }
 
         return nil
@@ -86,18 +86,34 @@ struct TrampolineAskpassHandler: Sendable {
         return addHost ? "yes" : "no"
     }
 
-    private func handleSSHKeyPassphrase(_ prompt: String) async -> String? {
+    /// The stored secret `key` in `store` (read with `read`) to give
+    /// `process`, or nil when none is stored or `process` was given it
+    /// before. ssh asks again only when it rejected the answer, so then the
+    /// stored secret is deleted and the user is asked instead.
+    private func storedSecret(_ store: String, _ key: String, for process: pid_t?, read: () -> String?) -> String? {
+        guard let stored = read() else {
+            return nil
+        }
+        if invocation.recordStoredSSHSecret(store: store, key: key, givenTo: process) {
+            return stored
+        }
+        deleteSSHCredential(store, key, secrets)
+        return nil
+    }
+
+    private func handleSSHKeyPassphrase(_ prompt: String, from process: pid_t?) async -> String? {
         guard let matches = JSCompat.match(prompt, sshKeyPassphrasePromptRe), let keyPath = matches[1] else {
             return nil
         }
 
         // ssh truncates key paths longer than 100 bytes in this prompt, so the
-        // passphrase of such a key can't be found or stored.
+        // passphrase of such a key can't be found or stored, and the prompt
+        // doesn't offer to remember it.
+        let keyHash = try? getHashForSSHKey(keyPath)
 
-        if let storedPassphrase = getSSHKeyPassphrase(keyPath, secrets) {
-            // Keep this stored passphrase around in case it's not valid and we
-            // need to delete it if the git operation fails to authenticate.
-            setMostRecentSSHKeyPassphrase(invocation, keyPath)
+        if let keyHash,
+           let storedPassphrase = storedSecret(SSHKeyPassphraseTokenStoreKey, keyHash, for: process, read: { getSSHKeyPassphrase(keyPath, secrets) })
+        {
             return storedPassphrase
         }
 
@@ -106,7 +122,7 @@ struct TrampolineAskpassHandler: Sendable {
             return nil
         }
 
-        let response = await prompter.promptSSHKeyPassphrase(keyPath: keyPath)
+        let response = await prompter.promptSSHKeyPassphrase(keyPath: keyPath, canRemember: keyHash != nil)
 
         // If the user wanted us to remember the passphrase, we'll keep it
         // around to store it later if the git operation succeeds. However,
@@ -149,7 +165,7 @@ struct TrampolineAskpassHandler: Sendable {
             return nil
         }
 
-        let response = await prompter.promptSSHKeyPassphrase(keyPath: keyPath)
+        let response = await prompter.promptSSHKeyPassphrase(keyPath: keyPath, canRemember: (try? getHashForSSHKey(keyPath)) != nil)
 
         if let passphrase = response.secret, response.storeSecret {
             setSSHKeyPassphrase(invocation, keyPath, passphrase)
@@ -163,15 +179,12 @@ struct TrampolineAskpassHandler: Sendable {
         return response.secret ?? ""
     }
 
-    private func handleSSHUserPassword(_ prompt: String) async -> String? {
+    private func handleSSHUserPassword(_ prompt: String, from process: pid_t?) async -> String? {
         guard let matches = JSCompat.match(prompt, sshUserPasswordPromptRe), let username = matches[1] else {
             return nil
         }
 
-        if let storedPassword = getSSHUserPassword(username, secrets) {
-            // Keep this stored password around in case it's not valid and we
-            // need to delete it if the git operation fails to authenticate.
-            setMostRecentSSHUserPassword(invocation, username)
+        if let storedPassword = storedSecret(SSHUserPasswordTokenStoreKey, username, for: process, read: { getSSHUserPassword(username, secrets) }) {
             return storedPassword
         }
 

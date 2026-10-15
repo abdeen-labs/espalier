@@ -257,7 +257,9 @@ public struct HooksProxy: Sendable {
             }
         }
 
-        var env = shellEnv
+        // The login shell's variables, without those that locate a
+        // repository (`repositoryLocationVariables`), then git's own.
+        var env = shellEnv.filter { !repositoryLocationVariables.contains($0.key) }
         env.merge(safeEnv) { $1 }
         // No terminal is attached: tools that ask for the terminal's type
         // (tput) get one, which has no colors. A type the shell set stays.

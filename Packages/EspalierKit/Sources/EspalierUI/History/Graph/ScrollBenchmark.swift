@@ -4,6 +4,8 @@
 // (hitches), and reports the hitch time per second of scrolling.
 
 import AppKit
+import EspalierCore
+import GitKit
 import QuartzCore
 
 /// Runs the History Scroll Benchmark in a window.
@@ -21,7 +23,7 @@ enum HistoryScrollBenchmark {
         }
         controller.scroll(toY: 0, animated: false)
         let result = await ScrollRun(controller: controller).run()
-        return result.summary
+        return result.summary(context.app.preferences.numberFormat)
     }
 }
 
@@ -39,11 +41,12 @@ nonisolated struct ScrollRunResult: Sendable, Equatable {
         duration > 0 ? hitchTime * 1_000 / duration : 0
     }
 
-    var summary: String {
+    /// The result in words, counts in `numberFormat`.
+    func summary(_ numberFormat: NumberFormat) -> String {
         let seconds = String(format: "%.1f", duration)
         let ratio = String(format: "%.1f", hitchTimeRatio)
         let hitchWord = hitches == 1 ? "hitch" : "hitches"
-        return "Scrolled \(formatCount(rows)) commits in \(seconds) s: \(formatCount(frames)) frames, \(hitches) \(hitchWord), \(ratio) ms/s"
+        return "Scrolled \(formatCount(rows, numberFormat)) commits in \(seconds) s: \(formatCount(frames, numberFormat)) frames, \(hitches) \(hitchWord), \(ratio) ms/s"
     }
 
     /// Counts a frame of `length` seconds against the display's `interval`:
@@ -95,7 +98,7 @@ private final class ScrollRun: NSObject {
         let table = controller.tableView
         let clip = controller.scrollView.contentView
         let atBottom = clip.bounds.maxY >= table.frame.height - 1
-        let isComplete = controller.source?.isGraphComplete ?? true
+        let isComplete = controller.source?.isComplete ?? true
         if (atBottom && isComplete) || result.duration >= HistoryScrollBenchmark.maximumDuration {
             finish()
         }

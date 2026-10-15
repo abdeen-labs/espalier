@@ -13,23 +13,21 @@ struct RemotePane: View {
 
     var body: some View {
         if let remote {
-            VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                FieldLabel("Primary Remote Repository (\(remote.name)) URL")
-                TextField("Primary Remote Repository (\(remote.name)) URL", text: $url, prompt: Text("Remote URL"))
-                    .textFieldStyle(.capsule)
-                    .labelsHidden()
-                    .autocorrectionDisabled(true)
+            Form {
+                // The label in the form's column; the field is a capsule.
+                LabeledContent("Primary Remote Repository (\(remote.name)) URL") {
+                    TextField("Primary Remote Repository (\(remote.name)) URL", text: $url, prompt: Text("Remote URL").fieldPrompt())
+                        .labelsHidden()
+                        .autocorrectionDisabled(true)
+                }
             }
+            .formStyle(.columns)
+            .textFieldStyle(.capsule)
         } else {
-            VStack(spacing: Metrics.insetMedium) {
-                IconCircle("icloud.and.arrow.up", size: 36)
-                Text("Publish your repository to GitHub.")
-                    .foregroundStyle(.text2)
+            SheetCallToAction(systemImage: "icloud.and.arrow.up", message: "Publish your repository to GitHub.") {
                 Button("Publish", action: publish)
                     .buttonStyle(.quiet)
             }
-            .frame(maxWidth: .infinity)
-            .padding(Metrics.insetLarge)
         }
     }
 }

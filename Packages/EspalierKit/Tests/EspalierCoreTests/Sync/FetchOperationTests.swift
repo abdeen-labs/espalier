@@ -167,6 +167,12 @@ struct FetchOperationTests {
         // A branch tracking a remote that's gone fetches the default.
         let gone = Tip.valid(branch: ModelFixtures.branch("main", upstream: "gone/main"))
         #expect(try await remotesToFetch(local, tip: gone, record: plain).map(\.name) == ["origin"])
+
+        // A remote whose name has a slash, read from the remotes it loads
+        // (a status-only refresh made the tip without them).
+        try await runGit(["remote", "add", "team/alice", "https://example.com/alice/app.git"], local)
+        let slash = Tip.valid(branch: ModelFixtures.branch("main", upstream: "team/alice/main"))
+        #expect(try await remotesToFetch(local, tip: slash, record: plain).map(\.name) == ["team/alice", "origin"])
     }
 
     @Test("a remote that fails doesn't stop the others; the first failure is thrown afterwards, with a Retry")
@@ -184,7 +190,6 @@ struct FetchOperationTests {
             try await fixture.model.sync.fetch()
         }
         #expect(error?.operation == .fetch)
-        #expect(error?.title == "Error")
         #expect(error?.retry?.kind == .fetch)
         // Git's "Could not read from remote repository" reads as an
         // authentication failure; the failure is the broken remote's.
@@ -258,6 +263,21 @@ struct FetchOperationTests {
         try setModificationDate(now.addingTimeInterval(-60 * 60), of: fetchHead)
         #expect(await fixture.model.sync.fetchForIndicator(lastPush: now.addingTimeInterval(-2 * 60 * 60)) == .skipped)
         #expect(await fixture.model.sync.fetchForIndicator(lastPush: now.addingTimeInterval(-30 * 60)) == .fetched(AheadBehind(ahead: 0, behind: 0)))
+        await fixture.app.idle()
+    }
+
+    @Test("the indicator fetch leaves the background failure in place when its own fetch fails")
+    func indicatorFetchKeepsBackgroundFailure() async throws {
+        let fixture = try await makeSelectedRepository()
+        try await runGit(["remote", "set-url", "origin", POSIXPath.join(try createTempDirectory(), "gone.git")], fixture.local)
+        _ = try? await fixture.model.sync.backgroundFetch()
+        let failure = try #require(fixture.model.lastBackgroundFailure)
+
+        // The indicator fetch's fetch fails too; it goes on to the
+        // ahead/behind.
+        #expect(await fixture.model.sync.fetchForIndicator(lastPush: nil) != .skipped)
+        #expect(fixture.model.lastBackgroundFailure?.date == failure.date)
+        #expect(fixture.model.lastBackgroundFailure?.error.operation == .fetch)
         await fixture.app.idle()
     }
 

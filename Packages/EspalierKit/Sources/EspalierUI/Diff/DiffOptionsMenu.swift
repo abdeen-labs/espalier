@@ -1,24 +1,20 @@
-// The diff's options menu: Hide Whitespace Changes, Wrap Lines, the text
-// menu's expansion items, and the file's actions.
+// The diff's options menu: how the diff shows (Unified or Split, Hide
+// Whitespace Changes, Wrap Lines) and the text menu's expansion items. The
+// file's own actions are in the file lists' context menus.
 
 import GitKit
 import SwiftUI
 
 /// What the options menu offers.
 nonisolated struct DiffOptionsContent: Sendable, Equatable {
+    /// Unified (false) or Split (true).
+    var isSplit: Bool
     /// Hide Whitespace Changes, when the place has the setting.
     var hidesWhitespace: Bool?
     var wrapsLines: Bool?
     /// The expansion item: "Expand Whole File" (enabled or not) or, once
     /// expanded, "Collapse Expanded Lines".
     var expansion: Expansion?
-    /// Whether the file exists on disk (Show in Finder and Open with
-    /// Default App).
-    var fileExists: Bool
-    /// Discard Changes… (Changes only).
-    var canDiscard: Bool
-    /// The discard item's title.
-    var discardTitle: String = "Discard Changes…"
 
     enum Expansion: Sendable, Equatable {
         case expand(isEnabled: Bool)
@@ -28,15 +24,11 @@ nonisolated struct DiffOptionsContent: Sendable, Equatable {
 
 /// What the options menu's items do.
 struct DiffOptionsActions {
+    var setSplit: @MainActor (Bool) -> Void = { _ in }
     var setHidesWhitespace: @MainActor (Bool) -> Void = { _ in }
     var setWrapsLines: @MainActor (Bool) -> Void = { _ in }
     var expandWholeFile: @MainActor () -> Void = {}
     var collapseExpandedLines: @MainActor () -> Void = {}
-    var openWithDefaultProgram: @MainActor () -> Void = {}
-    var showInFinder: @MainActor () -> Void = {}
-    var copyFilePath: @MainActor () -> Void = {}
-    var copyRelativeFilePath: @MainActor () -> Void = {}
-    var discardChanges: @MainActor () -> Void = {}
 }
 
 /// The diff's options menu (an ellipsis at the end of the header row).
@@ -45,33 +37,8 @@ struct DiffOptionsMenu: View {
     let actions: DiffOptionsActions
 
     var body: some View {
-        Menu {
-            if let hidesWhitespace = content.hidesWhitespace {
-                Toggle("Hide Whitespace Changes", isOn: Binding(get: { hidesWhitespace }, set: actions.setHidesWhitespace))
-            }
-            if let wrapsLines = content.wrapsLines {
-                Toggle("Wrap Lines", isOn: Binding(get: { wrapsLines }, set: actions.setWrapsLines))
-            }
-            switch content.expansion {
-            case .expand(let isEnabled)?:
-                Button("Expand Whole File", action: actions.expandWholeFile)
-                    .disabled(!isEnabled)
-            case .collapse?:
-                Button("Collapse Expanded Lines", action: actions.collapseExpandedLines)
-            case nil:
-                EmptyView()
-            }
-            Divider()
-            Button("Open with Default App", action: actions.openWithDefaultProgram)
-                .disabled(!content.fileExists)
-            Button("Show in Finder", action: actions.showInFinder)
-                .disabled(!content.fileExists)
-            Button("Copy File Path", action: actions.copyFilePath)
-            Button("Copy Relative File Path", action: actions.copyRelativeFilePath)
-            if content.canDiscard {
-                Divider()
-                Button(content.discardTitle, role: .destructive, action: actions.discardChanges)
-            }
+        PullDownButton("Diff Options") { [content, actions] in
+            Self.menu(content, actions: actions)
         } label: {
             Label {
                 Text("Diff Options")
@@ -81,11 +48,39 @@ struct DiffOptionsMenu: View {
                     .foregroundStyle(.text3)
             }
         }
-        .menuStyle(.button)
         .buttonStyle(.icon)
-        .menuIndicator(.hidden)
         .fixedSize()
-        .help("Diff Options")
-        .accessibilityLabel("Diff Options")
+        .tooltip("Diff Options")
+    }
+
+    /// Unified or Split, the toggles that apply, then the expansion item.
+    @MenuBuilder
+    static func menu(_ content: DiffOptionsContent, actions: DiffOptionsActions) -> MenuContent {
+        MenuPicker(selection: Binding(get: { content.isSplit }, set: actions.setSplit)) {
+            MenuChoice("Unified", value: false)
+            MenuChoice("Split", value: true)
+        }
+        MenuDivider()
+        if let hidesWhitespace = content.hidesWhitespace {
+            MenuToggle("Hide Whitespace Changes", isOn: hidesWhitespace) {
+                actions.setHidesWhitespace(!hidesWhitespace)
+            }
+        }
+        if let wrapsLines = content.wrapsLines {
+            MenuToggle("Wrap Lines", isOn: wrapsLines) {
+                actions.setWrapsLines(!wrapsLines)
+            }
+        }
+        switch content.expansion {
+        case .expand(let isEnabled)?:
+            MenuDivider()
+            MenuAction("Expand Whole File", action: actions.expandWholeFile)
+                .disabled(!isEnabled)
+        case .collapse?:
+            MenuDivider()
+            MenuAction("Collapse Expanded Lines", action: actions.collapseExpandedLines)
+        case nil:
+            MenuContent()
+        }
     }
 }

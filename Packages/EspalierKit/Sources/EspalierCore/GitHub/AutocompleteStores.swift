@@ -54,7 +54,7 @@ public struct MentionableUser: Codable, Sendable, Hashable {
 /// A user is considered a hit if the query appears as a substring of their
 /// login or, when set, their real name. Hits are ordered primarily by how
 /// early in the text the match was found and secondarily by login
-/// (alphabetically).
+/// (alphabetically, ignoring case).
 ///
 /// - Parameters:
 ///   - users: The mentionable users to filter and rank.
@@ -83,7 +83,7 @@ public func matchMentionableUsers(_ users: [MentionableUser], _ query: String, m
             if x.ix != y.ix {
                 return x.ix < y.ix
             }
-            let byLogin = JSCompat.compare(x.user.login, y.user.login)
+            let byLogin = JSCompat.caseInsensitiveCompare(x.user.login, y.user.login)
             return byLogin != 0 ? byLogin < 0 : x.order < y.order
         }
         .prefix(maxHits)

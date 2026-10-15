@@ -6,6 +6,7 @@
 
 import AIKit
 import EspalierCore
+import GitKit
 import SwiftUI
 
 /// The provider sheet's fields and validation.
@@ -173,9 +174,9 @@ enum ProviderCopy {
         }
     }
 
-    /// "1 model", "3 models".
-    static func modelCount(_ count: Int) -> String {
-        count == 1 ? "1 model" : "\(count) models"
+    /// "1 model", "3 models", the count in `numberFormat`.
+    static func modelCount(_ count: Int, _ numberFormat: NumberFormat) -> String {
+        count == 1 ? "1 model" : "\(formatCount(count, numberFormat)) models"
     }
 
     /// A model row's heading: its name, else its identifier.
@@ -214,40 +215,41 @@ struct ProviderSheet: View {
         SheetScaffold(editor.title) {
             Form {
                 LabeledContent("Name") {
-                    TextField("Name", text: $editor.form.name, prompt: Text("My provider"))
+                    TextField("Name", text: $editor.form.name, prompt: Text("My provider").fieldPrompt())
                         .labelsHidden()
                 }
                 LabeledContent("Type") {
                     CapsulePopUp("Type", selection: $editor.form.type, title: ProviderCopy.typeTitle(editor.form.type)) {
-                        ForEach(BYOKProviderType.allCases, id: \.self) { type in
-                            Text(ProviderCopy.typeTitle(type)).tag(type)
+                        for type in BYOKProviderType.allCases {
+                            MenuChoice(ProviderCopy.typeTitle(type), value: type)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 LabeledContent("Base URL") {
-                    TextField("Base URL", text: $editor.form.baseUrl, prompt: Text(ProviderCopy.baseURLPlaceholder(editor.form.type)))
+                    TextField("Base URL", text: $editor.form.baseUrl, prompt: Text(ProviderCopy.baseURLPlaceholder(editor.form.type)).fieldPrompt())
                         .labelsHidden()
                 }
-                if editor.form.type == .openai {
+                if editor.form.type != .anthropic {
                     LabeledContent("API Format") {
                         CapsulePopUp("API Format", selection: $editor.form.wireApi, title: ProviderCopy.wireApiTitle(editor.form.wireApi)) {
-                            ForEach(BYOKWireApi.allCases, id: \.self) { wireApi in
-                                Text(ProviderCopy.wireApiTitle(wireApi)).tag(wireApi)
+                            for wireApi in BYOKWireApi.allCases {
+                                MenuChoice(ProviderCopy.wireApiTitle(wireApi), value: wireApi)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 if editor.form.type == .azure {
                     LabeledContent("Azure API Version") {
-                        TextField("Azure API Version", text: $editor.form.azureApiVersion, prompt: Text("2024-10-21"))
+                        TextField("Azure API Version", text: $editor.form.azureApiVersion, prompt: Text("2024-10-21").fieldPrompt())
                             .labelsHidden()
                     }
                 }
                 LabeledContent("Request Timeout") {
                     HStack(spacing: Metrics.insetSmall) {
-                        TextField("Request Timeout", text: $editor.form.requestTimeoutSeconds, prompt: Text("Default"))
+                        TextField("Request Timeout", text: $editor.form.requestTimeoutSeconds, prompt: Text("Default").fieldPrompt())
                             .labelsHidden()
-                            .multilineTextAlignment(.trailing)
                             .frame(width: Metrics.SettingsWindow.narrowControlWidth)
                         Text("seconds")
                             .foregroundStyle(.text2)
@@ -256,10 +258,11 @@ struct ProviderSheet: View {
                 }
                 LabeledContent("Authentication") {
                     CapsulePopUp("Authentication", selection: $editor.form.authKind, title: ProviderCopy.authTitle(editor.form.authKind)) {
-                        ForEach(BYOKAuthKind.allCases, id: \.self) { kind in
-                            Text(ProviderCopy.authTitle(kind)).tag(kind)
+                        for kind in BYOKAuthKind.allCases {
+                            MenuChoice(ProviderCopy.authTitle(kind), value: kind)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if editor.form.authKind == .none {
                     LabeledContent {
@@ -270,7 +273,7 @@ struct ProviderSheet: View {
                 } else {
                     let secretLabel = editor.form.authKind == .bearer ? "Bearer Token" : "API Key"
                     LabeledContent(secretLabel) {
-                        SecureField(secretLabel, text: $editor.form.secret, prompt: Text(editor.keepsStoredSecret ? "Unchanged" : "Required"))
+                        SecureField(secretLabel, text: $editor.form.secret, prompt: Text(editor.keepsStoredSecret ? "Unchanged" : "Required").fieldPrompt())
                             .labelsHidden()
                     }
                 }
@@ -303,7 +306,7 @@ struct ProviderSheet: View {
             }
 
             if let problem = editor.problem {
-                InlineMessage(problem, kind: .error)
+                FieldMessage(problem, kind: .error)
             }
         } buttons: {
             SheetButtons(editor.saveTitle, cancel: { dismiss() }) {
@@ -347,17 +350,17 @@ struct ModelRow: View {
         HStack(spacing: Metrics.SettingsWindow.rowSpacing) {
             SettingsRowText(title: ProviderCopy.modelHeading(model), description: ProviderCopy.modelDetail(model))
                 .accessibilityElement(children: .combine)
-            RowActionsMenu("Actions for \(ProviderCopy.modelHeading(model))") {
-                Button("Edit…", action: edit)
-                Button("Remove", role: .destructive, action: remove)
+            RowActionsMenu("Actions for \(ProviderCopy.modelHeading(model))") { [edit, remove] in
+                MenuAction("Edit…", action: edit)
+                MenuAction("Remove", role: .destructive, action: remove)
             }
         }
         .padding(.vertical, Metrics.SettingsWindow.rowVerticalPadding)
         .frame(minHeight: Metrics.SettingsWindow.rowHeight)
         .contentShape(Rectangle())
-        .contextMenu {
-            Button("Edit…", action: edit)
-            Button("Remove", role: .destructive, action: remove)
+        .contextMenuCard { [edit, remove] in
+            MenuAction("Edit…", action: edit)
+            MenuAction("Remove", role: .destructive, action: remove)
         }
     }
 }

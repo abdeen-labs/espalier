@@ -5,6 +5,7 @@
 
 import AppKit
 import EspalierSupport
+import GitKit
 import SwiftUI
 
 /// Asks VoiceOver to say a message.
@@ -34,11 +35,15 @@ struct Announcer: Sendable {
     }
 
     /// VoiceOver, through the key window (a popover or sheet in front),
-    /// else the main window.
+    /// else the main window, else the app. Nothing is said in a process
+    /// without an app (tests).
     static let voiceOver = Announcer(
         isListening: { NSWorkspace.shared.isVoiceOverEnabled },
         post: { message, priority in
-            let element: Any = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp as Any
+            guard let app = NSApp else {
+                return
+            }
+            let element: Any = app.keyWindow ?? app.mainWindow ?? app
             NSAccessibility.post(element: element, notification: .announcementRequested, userInfo: [
                 .announcement: message,
                 .priority: priority.level.rawValue,
@@ -66,12 +71,14 @@ final class FilterResultsAnnouncer {
     private var waiting: Task<Void, Never>?
 
     /// Follows the filter's new `text`. `count` gives the number of
-    /// matches, or nil while they load; it's read when the wait ends.
+    /// matches, or nil while they load; it's read when the wait ends and
+    /// said in `numberFormat`.
     func filterChanged(
         to text: String,
         count: @escaping @MainActor () -> Int?,
         scheduler: any Scheduler,
-        announcer: Announcer
+        announcer: Announcer,
+        numberFormat: NumberFormat
     ) {
         cancel()
         guard !text.isEmpty else {
@@ -94,7 +101,7 @@ final class FilterResultsAnnouncer {
             guard !Task.isCancelled, let matches else {
                 return
             }
-            announcer.announce(Self.message(forCount: matches))
+            announcer.announce(Self.message(forCount: matches, numberFormat: numberFormat))
         }
     }
 
@@ -104,11 +111,11 @@ final class FilterResultsAnnouncer {
         waiting = nil
     }
 
-    static func message(forCount count: Int) -> String {
+    static func message(forCount count: Int, numberFormat: NumberFormat) -> String {
         switch count {
         case 0: "No results"
         case 1: "1 result"
-        default: "\(formatCount(count)) results"
+        default: "\(formatCount(count, numberFormat)) results"
         }
     }
 }
@@ -128,12 +135,13 @@ private struct FilterResultsAnnouncement: ViewModifier {
     let count: @MainActor () -> Int?
     @Environment(\.announcer) private var announcer
     @Environment(\.scheduler) private var scheduler
+    @Environment(\.numberFormat) private var numberFormat
     @State private var announcement = FilterResultsAnnouncer()
 
     func body(content: Content) -> some View {
         content
             .onChange(of: filter) {
-                announcement.filterChanged(to: filter, count: count, scheduler: scheduler, announcer: announcer)
+                announcement.filterChanged(to: filter, count: count, scheduler: scheduler, announcer: announcer, numberFormat: numberFormat)
             }
             .onDisappear {
                 announcement.cancel()

@@ -152,18 +152,14 @@ struct CommitDropTargetModifier: ViewModifier {
 /// shown while commits are dragged: dropping them opens the New Branch
 /// sheet to cherry-pick them to a new branch.
 struct NewBranchDropRow: View {
-    /// Whose drops it takes (nil: none, for snapshots).
-    let repository: RepositoryModel?
+    /// Whose drops it takes.
+    let repository: RepositoryModel
     @State private var isDropTarget = false
 
     var body: some View {
-        let row = SidebarRowLabel("New Branch…", systemImage: "plus.circle")
+        SidebarRowLabel("New Branch…", systemImage: "plus.circle")
             .accessibilityLabel("Drop commits here to cherry-pick them to a new branch")
             .sidebarRow(nil, id: "newBranchDrop", isDropTarget: isDropTarget)
-        if let repository {
-            row.commitDropTarget(.newBranch, repository: repository, isTargeted: $isDropTarget)
-        } else {
-            row
-        }
+            .commitDropTarget(.newBranch, repository: repository, isTargeted: $isDropTarget)
     }
 }

@@ -2,6 +2,7 @@
 // lists the rest. Drawn with the design system's `RefCapsuleRenderer`.
 
 import AppKit
+import GitKit
 import SwiftUI
 
 /// Draws a row's ref capsules.
@@ -24,9 +25,22 @@ final class RefCapsulesView: NSView {
         }
     }
 
+    /// The format "+N" shows in.
+    var numberFormat = defaultNumberFormat {
+        didSet {
+            if numberFormat != oldValue {
+                items = []
+                laidOutWidth = nil
+                needsDisplay = true
+            }
+        }
+    }
+
     private var items: [RefCapsuleRenderer.Item] = []
     private var laidOutWidth: CGFloat?
-    private var popover: NSPopover?
+    /// The look the capsules were laid out in: their font's.
+    private var laidOutLook: Look?
+    private var popover: PopoverController?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -49,9 +63,10 @@ final class RefCapsulesView: NSView {
             items = []
             return 0
         }
-        if laidOutWidth != maximumWidth || items.isEmpty {
-            items = RefCapsuleRenderer.layout(refs, maximumWidth: maximumWidth)
+        if laidOutWidth != maximumWidth || items.isEmpty || laidOutLook != Look.current {
+            items = RefCapsuleRenderer.layout(refs, maximumWidth: maximumWidth, numberFormat: numberFormat)
             laidOutWidth = maximumWidth
+            laidOutLook = Look.current
             needsDisplay = true
         }
         return RefCapsuleRenderer.width(of: items)
@@ -82,11 +97,13 @@ final class RefCapsulesView: NSView {
         guard !rest.isEmpty else {
             return
         }
-        let popover = NSPopover()
-        popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: RefOverflowList(refs: rest, palette: palette))
+        self.popover?.close(animated: false)
+        let palette = palette
+        let popover = PopoverController(title: "More Refs") {
+            RefOverflowList(refs: rest, palette: palette)
+        }
         let anchor = rect ?? items.last?.frame ?? bounds
-        popover.show(relativeTo: anchor, of: self, preferredEdge: .maxY)
+        popover.show(relativeTo: anchor, of: self, edge: .bottom)
         self.popover = popover
     }
 }

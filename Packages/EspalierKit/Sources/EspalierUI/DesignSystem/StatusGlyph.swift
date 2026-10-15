@@ -60,8 +60,9 @@ nonisolated public enum FileStatusKind: String, CaseIterable, Sendable {
     }
 }
 
-/// A file's status badge: its letter in the status color on a 15% tint,
-/// in a 17-point square with radius 6.
+/// A file's status badge: its letter in the status color on a 15% tint, in
+/// a 17-point square with radius 6 (Classic's; a theme can fill it with the
+/// status color, and make it a circle).
 public struct StatusGlyph: View {
     private let kind: FileStatusKind
     @Environment(\.colorSchemeContrast) private var contrast
@@ -76,10 +77,10 @@ public struct StatusGlyph: View {
             .foregroundStyle(Color(espalier: Palette.statusForeground(kind)))
             .frame(width: Metrics.StatusBadge.size, height: Metrics.StatusBadge.size)
             .background(
-                RoundedRectangle(cornerRadius: Metrics.StatusBadge.cornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: Metrics.StatusBadge.radius, style: .continuous)
                     .fill(Color(espalier: Palette.statusBackground(kind)))
             )
-            .help(kind.title)
+            .tooltip(kind.title)
             .accessibilityLabel(kind.title)
     }
 }
@@ -88,13 +89,15 @@ public struct StatusGlyph: View {
 nonisolated public enum ChecksState: String, CaseIterable, Sendable {
     case success, failure, pending, neutral
 
-    /// A distinct shape per state, so color never stands alone.
+    /// A distinct shape per state, so color never stands alone: the checks
+    /// list's shapes, a minus for checks that ended neither passed nor
+    /// failed.
     public var systemImage: String {
         switch self {
         case .success: "checkmark.circle.fill"
         case .failure: "xmark.circle.fill"
-        case .pending: "circle.dashed"
-        case .neutral: "exclamationmark.triangle.fill"
+        case .pending: "clock.fill"
+        case .neutral: "minus.circle.fill"
         }
     }
 

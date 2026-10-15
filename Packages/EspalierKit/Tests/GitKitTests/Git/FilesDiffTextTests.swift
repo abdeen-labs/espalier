@@ -186,7 +186,6 @@ struct FilesDiffTextTests {
         let error = await #expect(throws: GitLibError.self) {
             try await getFilesDiffText(repo, [partialBinary])
         }
-        #expect(error?.message == "Can't create partial commit in binary file: new.bin")
         #expect(try readIndex(repo) == indexBefore)
         let desktopError = await #expect(throws: GitLibError.self) {
             try await getFilesDiffTextUsingRealIndex(repo, [partialBinary])

@@ -1,5 +1,5 @@
 // The repositories to clone, streamed page by page, refreshed in place,
-// and cancellable.
+// cancellable, and marked failed when a request fails.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -160,6 +160,28 @@ struct APIRepositoriesModelTests {
         // The collaborator page failed: "a" is kept rather than dropped from an
         // incomplete list.
         #expect(names(app, account) == ["a", "b", "c"])
+        #expect(model.repositories(for: account)?.failed == true)
+        await settle(app, harness)
+    }
+
+    @Test("a load that fails is marked failed, not taken for an account with no repositories; loading again clears it")
+    func failedLoad() async throws {
+        let (harness, app, account) = try await makeApp()
+        harness.gitHub.on("GET", "/user/repos", sequence: [.networkError(.notConnectedToInternet), page(["a"])])
+        let model = app.accounts.apiRepositories
+
+        model.load(account)
+        await model.idle()
+        #expect(model.repositories(for: account) == APIRepositoriesModel.AccountRepositories(repositories: [], loading: false, failed: true))
+
+        model.load(account)
+        #expect(model.repositories(for: account)?.failed == false)
+        await model.idle()
+        #expect(model.repositories(for: account) == APIRepositoriesModel.AccountRepositories(
+            repositories: [apiRepository(owner: "octocat", name: "a")],
+            loading: false,
+            failed: false
+        ))
         await settle(app, harness)
     }
 

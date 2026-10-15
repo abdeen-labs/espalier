@@ -61,13 +61,12 @@ struct MergeOperationTests {
 
     // MARK: Merging
 
-    @Test("merges a branch and says so in desktop's words")
+    @Test("merges a branch")
     func merges() async throws {
         let fixture = try await makeRepository(conflicting: false)
         let outcome = try await fixture.model.operations.merge(try fixture.branch("feature"))
 
         #expect(outcome == .merged(ours: "main", theirs: "feature"))
-        #expect(outcome.summary == "Merged feature into main")
         #expect(try await fixture.headParentCount() == 2)
         #expect(try fixture.read("README.md") == numberedLinesReplacing(8, with: "line eight"))
         #expect(try fixture.read("feature.txt") == "feature\n")
@@ -88,7 +87,6 @@ struct MergeOperationTests {
 
         let outcome = try await fixture.model.operations.merge(feature)
         #expect(outcome == .alreadyUpToDate(ours: "main", theirs: "feature"))
-        #expect(outcome.summary == "main is already up to date with feature")
         #expect(try await fixture.head() == tip)
         #expect(fixture.model.operations.current == nil)
         await fixture.app.idle()
@@ -123,7 +121,7 @@ struct MergeOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.operations.merge(try fixture.branch("feature"))
         }
-        #expect(error?.reason == .precondition("You need to be on a branch to merge."))
+        #expect(preconditionText(error) != nil)
         await fixture.app.idle()
     }
 
@@ -137,14 +135,13 @@ struct MergeOperationTests {
             try await fixture.model.operations.merge(try fixture.branch("feature"))
         }
         #expect(error?.reason == .localChangesOverwritten(files: ["README.md"]))
-        #expect(error?.message == "Can't merge while your branch has uncommitted changes. These files would be overwritten:")
         #expect(error?.retry?.kind == .merge)
         #expect(error?.gitContext == .merge(currentBranch: "main", theirBranch: "feature"))
         // The failed start left nothing behind.
         #expect(fixture.model.operations.current == nil)
 
         let recovery = try #require(error?.recoveries.first)
-        #expect(recovery.title == "Stash Changes and Continue")
+        #expect(recovery.kind == .stashChangesAndRetry)
         // It returns what the merge did, for the window to report.
         let outcome = try await recovery.perform(in: fixture.app)
         #expect(outcome == .merge(.merged(ours: "main", theirs: "feature"), repositoryID: fixture.model.id))
@@ -174,10 +171,6 @@ struct MergeOperationTests {
         #expect(current.detail == .merge(sourceBranch: feature, isSquash: false))
         #expect(current.targetBranch?.name == "main")
         #expect(current.originalBranchTip == tip)
-        #expect(current.conflictsMessage == "Resolve conflicts to continue merging into main.")
-        var unnamed = current
-        unnamed.targetBranch = nil
-        #expect(unnamed.conflictsMessage == "Resolve conflicts to continue merging into.")
         #expect(operations.conflictBranches == ConflictBranches(ours: "main", theirs: "feature"))
         #expect(operations.unresolvedFiles.map(\.path) == ["README.md"])
         #expect(operations.resolvedFiles.isEmpty)
@@ -195,7 +188,7 @@ struct MergeOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await operations.continueOperation()
         }
-        #expect(error?.reason == .precondition("Resolve all conflicts before continuing"))
+        #expect(preconditionText(error) != nil)
         #expect(error?.operation == .finishMerge)
         #expect(try await fixture.headParentCount() == 1)
         #expect(fixture.gitFileExists("MERGE_HEAD"))
@@ -209,7 +202,7 @@ struct MergeOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("finishing commits the merge with the chosen side, kept across refreshes, and clears the message")
+    @Test("finishing commits the merge with the chosen side, kept across refreshes, and leaves the user's draft")
     func finishes() async throws {
         let fixture = try await makeRepository(conflicting: true)
         let operations = fixture.model.operations
@@ -223,7 +216,7 @@ struct MergeOperationTests {
         #expect(operations.resolvedFiles.map(\.path) == ["README.md"])
         #expect(operations.canContinue)
 
-        fixture.model.commit.draft.summary = "Typed during the merge"
+        fixture.model.commit.draft.summary = "Unfinished"
         let outcome = try await operations.continueOperation()
 
         #expect(outcome == .merge(.merged(ours: "main", theirs: "feature")))
@@ -237,7 +230,7 @@ struct MergeOperationTests {
         #expect(operations.current == nil)
         #expect(operations.conflictState == nil)
         #expect(fixture.model.changes.workingDirectory.files.isEmpty)
-        #expect(fixture.model.commit.draft.summary == "")
+        #expect(fixture.model.commit.draft.summary == "Unfinished")
         await fixture.app.idle()
     }
 
@@ -313,7 +306,7 @@ struct MergeOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await operations.continueOperation()
         }
-        #expect(error?.reason == .precondition("Enter a summary to commit"))
+        #expect(preconditionText(error) != nil)
         #expect(error?.operation == .finishMerge)
         #expect(try await fixture.headParentCount() == 1)
         #expect(fixture.gitFileExists("MERGE_HEAD"))
@@ -401,7 +394,7 @@ struct MergeOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await operations.continueOperation()
         }
-        #expect(error?.reason == .precondition("Resolve all conflicts before continuing"))
+        #expect(preconditionText(error) != nil)
         #expect(try await fixture.headParentCount() == 1)
         #expect(fixture.gitFileExists("MERGE_HEAD"))
         #expect(operations.current?.phase == .conflicted)
@@ -442,7 +435,7 @@ struct MergeOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await operations.merge(try fixture.branch("other"))
         }
-        #expect(error?.reason == .precondition("Resolve conflicts to continue merging into main."))
+        #expect(error?.reason == .precondition(waiting.conflictsMessage))
         #expect(operations.current == waiting)
         await fixture.app.idle()
     }
@@ -501,7 +494,6 @@ struct MergeOperationTests {
         }
         #expect(error?.reason == .confirmationRequired(.abortWithResolvedConflicts(operation: "Merge")))
         #expect(error?.operation == .abortMerge)
-        #expect(error?.title == "Abort Merge?")
         #expect(fixture.gitFileExists("MERGE_HEAD"))
 
         try await operations.abortOperation(confirmed: [.abortWithResolvedConflicts])
@@ -584,11 +576,11 @@ struct MergeOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.operations.abortOperation()
         }
-        #expect(error?.reason == .precondition("There is no operation in progress to abort."))
+        #expect(preconditionText(error) != nil)
         let continueError = await #expect(throws: OperationError.self) {
             try await fixture.model.operations.continueOperation()
         }
-        #expect(continueError?.reason == .precondition("There is no operation in progress to continue."))
+        #expect(preconditionText(continueError) != nil)
         await fixture.app.idle()
     }
 

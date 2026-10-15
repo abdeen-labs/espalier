@@ -110,6 +110,23 @@ struct CheckoutTests {
         #expect(validBranch.upstreamRemoteName == "first-remote")
     }
 
+    @Test("checks out a remote branch as the branch of its name when the remote's name has a slash")
+    func remoteNameWithSlash() async throws {
+        let repository = try await setupTwoCommitRepo()
+        let remote = try setupEmptyDirectory()
+        _ = try await git(["init", "-q", "--bare"], remote.path, "remoteNameWithSlash")
+        _ = try await git(["remote", "add", "team/alice", remote.path], repository.path, "remoteNameWithSlash")
+        _ = try await git(["push", "-q", "team/alice", "master:feature"], repository.path, "remoteNameWithSlash")
+        _ = try await git(["fetch", "-q", "team/alice"], repository.path, "remoteNameWithSlash")
+
+        let remoteBranch = try #require(try await getBranches(repository).first { $0.ref == "refs/remotes/team/alice/feature" })
+        try await checkoutBranch(repository, remoteBranch, nil)
+
+        let branch = try #require(try await validBranch(repository))
+        #expect(branch.name == "feature")
+        #expect(branch.upstream == "team/alice/feature")
+    }
+
     @Test("will fail when an existing branch matches the remote branch")
     func existingBranchMatchesRemoteBranch() async throws {
         let path = try setupFixtureRepository("checkout-test-cases")
@@ -129,7 +146,7 @@ struct CheckoutTests {
         let error = await #expect(throws: GitError.self) {
             try await checkoutBranch(repository, remoteBranch, nil)
         }
-        #expect(error?.message.contains("A branch with that name already exists.") == true)
+        #expect(error?.result.gitError == .branchAlreadyExists)
     }
 
     @Suite("with submodules")
@@ -205,7 +222,6 @@ struct CheckoutTests {
             }
 
             #expect(error?.result.gitError == .localChangesOverwritten)
-            #expect(error?.message == "Switching branches would overwrite changes in your working directory. Commit or stash them first.")
             #expect(parseFilesToBeOverwritten(error?.result.stderr ?? "") == ["a"])
             #expect(try read(repository, "a") == "local change")
             #expect(try await validBranch(repository)?.name == "master")
@@ -255,11 +271,10 @@ struct CheckoutTests {
             try await checkoutBranch(repository, try await getBranchOrError(repository, "other"), nil, log.callback)
 
             let events = log.all
-            let title = "Checking out branch other"
-            #expect(events.first == CheckoutProgress(value: 0, title: title, description: "Switching to Branch", target: "other"))
-            #expect(events.last == CheckoutProgress(value: 1, title: title, description: "Submodules updated", target: "other"))
-            #expect(events.contains(CheckoutProgress(value: 0.9, title: title, description: "Updating submodules", target: "other")))
-            #expect(events.allSatisfy { $0.title == title && $0.target == "other" && (0...1).contains($0.value) })
+            #expect(events.first?.value == 0)
+            #expect(events.last?.value == 1)
+            #expect(events.contains { $0.value == 0.9 })
+            #expect(events.allSatisfy { $0.target == "other" && (0...1).contains($0.value) })
             #expect(zip(events, events.dropFirst()).allSatisfy { $0.value <= $1.value })
         }
 
@@ -307,8 +322,10 @@ struct CheckoutTests {
 
             let events = log.all
             let target = shortenSHA(first.sha)
-            #expect(events.first == CheckoutProgress(value: 0, title: "Checking out commit", description: "Checking out commit", target: target))
-            #expect(events.last == CheckoutProgress(value: 1, title: "Checking out commit", description: "Submodules updated", target: target))
+            #expect(events.first?.value == 0)
+            #expect(events.first?.target == target)
+            #expect(events.last?.value == 1)
+            #expect(events.last?.target == target)
         }
 
         @Test("refuses to overwrite local changes")

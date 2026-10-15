@@ -165,7 +165,7 @@ extension Dugite {
         // On macOS /etc/gitconfig is the system-wide configuration file and we
         // can't modify it. To provide our own sane defaults that the user's
         // global and local configuration can override, git uses
-        // dugite-native's custom gitconfig, which includes /etc/gitconfig.
+        // desktop's git build's custom gitconfig, which includes /etc/gitconfig.
         if env["GIT_CONFIG_SYSTEM"]?.isEmpty ?? true {
             env["GIT_CONFIG_SYSTEM"] = gitDir.appending(path: "etc/gitconfig").path(percentEncoded: false)
         }

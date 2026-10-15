@@ -23,9 +23,11 @@ nonisolated public struct BackgroundFailureSummary: Sendable, Equatable {
         self.init(title: failure.error.title, message: failure.error.message, recoveryTitles: failure.error.recoveries.map(\.title))
     }
 
-    /// The sync menu's line: "Background fetch failed: <title>".
+    /// The sync menu's line and the details' heading: "Background Fetch
+    /// Failed", with the error's title after it when it says more than
+    /// "Error".
     public var menuTitle: String {
-        "Background fetch failed: \(title)"
+        title == OperationError.genericTitle ? "Background Fetch Failed" : "Background Fetch Failed: \(title)"
     }
 }
 
@@ -82,6 +84,5 @@ public struct BackgroundFailureDetails: View {
         .padding(Metrics.Popover.padding)
         .frame(width: Metrics.Popover.width, alignment: .leading)
         .background(Color(espalier: Palette.background))
-        .flatPopoverPresentation()
     }
 }

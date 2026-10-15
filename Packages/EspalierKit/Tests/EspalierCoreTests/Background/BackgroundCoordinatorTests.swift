@@ -71,7 +71,7 @@ struct BackgroundCoordinatorTests {
         #expect(!app.background.indicators.isRunning)
     }
 
-    @Test("runs the fetcher and pruner for the selected GitHub repository; the fetcher after its first status pass")
+    @Test("runs the fetcher for the selected repository once its first pass has loaded, and the pruner for a GitHub one")
     func selectionServices() async throws {
         let harness = try AppHarness(backgroundServices: .all)
         let app = await harness.loadedApp()
@@ -80,9 +80,12 @@ struct BackgroundCoordinatorTests {
         let background = app.background!
 
         app.select(.repository(local))
+        #expect(!background.fetcher.isRunning)
         await app.idle()
         await settle()
-        #expect(!background.fetcher.isRunning)
+        #expect(background.fetcher.repositoryID == local)
+        // The first selection since launch: the initial skew.
+        #expect(background.fetcher.startedWithInitialSkew)
         #expect(!background.pruner.isRunning)
 
         app.select(.repository(gitHub))
@@ -94,13 +97,13 @@ struct BackgroundCoordinatorTests {
         // Not the first selection since launch: no initial skew.
         #expect(background.fetcher.startedWithInitialSkew == false)
 
-        app.select(.repository(local))
+        app.select(nil)
         #expect(!background.fetcher.isRunning)
         #expect(!background.pruner.isRunning)
         await app.idle()
     }
 
-    @Test("starts the fetcher and pruner once the selected repository is associated with GitHub")
+    @Test("starts the pruner once the selected repository is associated with GitHub; the fetcher runs on")
     func associatedAfterSelection() async throws {
         let harness = try AppHarness(backgroundServices: .all)
         let app = await harness.loadedApp()
@@ -110,7 +113,7 @@ struct BackgroundCoordinatorTests {
         app.select(.repository(id))
         await app.idle()
         await settle()
-        #expect(!background.fetcher.isRunning)
+        #expect(background.fetcher.repositoryID == id)
         #expect(!background.pruner.isRunning)
 
         // Signing in associates the selected repository; the association
@@ -121,12 +124,12 @@ struct BackgroundCoordinatorTests {
         await app.idle()
         await settle()
         #expect(background.fetcher.repositoryID == id)
-        // Selected once since launch: the late start keeps that.
+        // Selected once since launch: the fetcher keeps its initial skew.
         #expect(background.fetcher.startedWithInitialSkew)
 
         // A second update starts nothing twice.
         background.update()
-        #expect(background.fetcher.repositoryID == id)
+        #expect(background.pruner.repositoryID == id)
         await app.idle()
     }
 
@@ -146,6 +149,36 @@ struct BackgroundCoordinatorTests {
         #expect(app.background.fetcher.repositoryID == id)
         #expect(app.background.fetcher.startedWithInitialSkew)
         await app.idle()
+    }
+
+    @Test("a later selection starts the fetcher once its remotes have loaded, so a repository without one isn't fetched", .hangGuard(minutes: 5))
+    func laterSelectionWithoutRemote() async throws {
+        let harness = try AppHarness(skew: .seconds(7), backgroundServices: [.fetcher])
+        let first = await harness.loadedApp()
+        let other = try await add(gitHub: false, to: first)
+        let local = try await add(gitHub: false, to: first)
+        first.select(.repository(other))
+        await first.idle()
+        await first.prepareForTermination()
+
+        // Relaunched: the other repository is selected again, and this one's
+        // remotes haven't loaded.
+        let app = await harness.loadedApp()
+        #expect(app.selection == .repository(other))
+        await app.idle()
+        let model = try #require(app.repository(local))
+        #expect(!model.gitState.loaded.contains(.remotes))
+
+        // Not the first selection: the fetcher's first run comes at once,
+        // then its wait.
+        app.select(.repository(local))
+        await harness.scheduler.waitForSleepers(1)
+        await app.idle()
+        #expect(app.background.fetcher.repositoryID == local)
+        #expect(app.background.fetcher.startedWithInitialSkew == false)
+        #expect(model.gitState.remotes.all.isEmpty)
+        // A fetch would have refreshed after it.
+        #expect(!model.refreshScheduler.lastPassReasons.contains(.operation(.fetch)))
     }
 
     @Test("updates pull requests while active, for a GitHub repository with an account")

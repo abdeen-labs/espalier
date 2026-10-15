@@ -50,20 +50,24 @@ struct AliasForm: View {
 
     var body: some View {
         SheetScaffold(content.title, message: content.message, width: Metrics.Sheet.compactWidth) {
-            TextField("Alias", text: $alias)
-                .textFieldStyle(.capsule)
-                .focused($isFocused)
-                .onSubmit {
-                    if AliasContent.canSave(alias) {
-                        save()
-                    }
+            Form {
+                // The label in the form's column; the field is a capsule.
+                LabeledContent("Alias") {
+                    TextField("Alias", text: $alias)
+                        .labelsHidden()
+                        .focused($isFocused)
+                        .onSubmit {
+                            if AliasContent.canSave(alias) {
+                                save()
+                            }
+                        }
                 }
-            if content.isGitHubRepository {
-                Text(AliasContent.gitHubNote)
-                    .font(Typography.meta)
-                    .foregroundStyle(.text3)
-                    .fixedSize(horizontal: false, vertical: true)
+                if content.isGitHubRepository {
+                    FieldMessage(AliasContent.gitHubNote, kind: .note)
+                }
             }
+            .formStyle(.columns)
+            .textFieldStyle(.capsule)
         } buttons: {
             SheetButtons(content.confirmButton, isConfirmDisabled: !AliasContent.canSave(alias), cancel: cancel, confirm: save)
         }

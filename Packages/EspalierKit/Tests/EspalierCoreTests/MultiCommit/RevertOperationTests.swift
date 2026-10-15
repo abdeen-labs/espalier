@@ -67,7 +67,6 @@ struct RevertOperationTests {
         #expect(current.phase == .conflicted)
         #expect(current.detail == .revert(commit: two))
         #expect(current.originalBranchTip == head)
-        #expect(current.conflictsMessage == "Resolve conflicts to continue reverting on main.")
         #expect(operations.unresolvedFiles.map(\.path) == ["file.txt"])
         #expect(!operations.canContinue)
         #expect(fixture.model.gitState.inProgress == .revert)
@@ -76,7 +75,7 @@ struct RevertOperationTests {
         let blocked = await #expect(throws: OperationError.self) {
             try await operations.revert(try await fixture.commit("HEAD"))
         }
-        #expect(blocked?.reason == .precondition("Resolve conflicts to continue reverting on main."))
+        #expect(blocked?.reason == .precondition(current.conflictsMessage))
         await fixture.app.idle()
     }
 

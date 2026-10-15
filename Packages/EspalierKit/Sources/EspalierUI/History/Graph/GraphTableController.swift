@@ -21,25 +21,17 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     let scrollView: NSScrollView
 
     /// The history the table shows.
-    private(set) weak var source: (any GraphTableSource)?
+    private(set) weak var source: (HistoryModel)?
     /// What the table asks of its screen.
     var actions = GraphTableActions()
     /// Where avatars come from (monograms when nil).
     var avatarLoader: (any AvatarLoading)?
-    /// The time relative dates are measured from; nil for the clock, with
-    /// visible dates refreshed once a minute.
-    var fixedNow: Date? {
-        didSet {
-            updateMinuteTimer()
-        }
-    }
     /// How dates show.
     var dateFormatting = DateTimeFormatting() {
         didSet {
             guard dateFormatting != oldValue else {
                 return
             }
-            style.dateWidth = GraphRowStyle.dateWidth(for: dateFormatting)
             dates = DateTextCache(capacity: dates.capacity)
             reconfigureVisibleRows()
         }
@@ -49,6 +41,15 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         didSet {
             if timeZone != oldValue {
                 dates = DateTextCache(capacity: dates.capacity)
+            }
+        }
+    }
+
+    /// How counts show.
+    var numberFormat = defaultNumberFormat {
+        didSet {
+            if numberFormat != oldValue {
+                reconfigureVisibleRows()
             }
         }
     }
@@ -113,7 +114,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     override init() {
         let table = GraphNSTableView(frame: .zero)
         tableView = table
-        scrollView = NSScrollView(frame: .zero)
+        scrollView = UnbouncedScrollView()
         let palette = TrackPalette.Resolved()
         style = GraphRowStyle(
             geometry: GraphGeometry(laneCount: 1, increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast),
@@ -121,12 +122,12 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             palette: palette,
             avatars: nil,
             monograms: MonogramCache(),
-            scale: 2,
-            dateWidth: GraphRowStyle.dateWidth(for: DateTimeFormatting())
+            scale: 2
         )
         super.init()
         configureTable()
         observeSystem()
+        startMinuteTimer()
         tableView.setAccessibilityCustomRotors(GraphAccessibility.rotors(for: self))
     }
 
@@ -135,9 +136,10 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         column.resizingMask = .autoresizingMask
         tableView.addTableColumn(column)
         tableView.headerView = nil
-        // Rows draw their own selection, flush with the graph's edge
+        // Rows draw their own selection, in the row's rounded shape
         // (`GraphRowView`).
         tableView.style = .plain
+        tableView.focusRingType = .none
         tableView.rowHeight = Metrics.Graph.rowHeight
         tableView.usesAutomaticRowHeights = false
         tableView.intercellSpacing = .zero
@@ -171,6 +173,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     private func observeSystem() {
         NotificationCenter.default.addObserver(self, selector: #selector(systemColorsDidChange(_:)), name: NSColor.systemColorsDidChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(lookDidChange(_:)), name: Look.didChange, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(displayOptionsDidChange(_:)),
@@ -191,7 +194,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     /// Shows `source`'s rows with `presentation`, `selection` selected, and
     /// a keyboard reorder's insertion point, applying only what changed.
-    func update(source: any GraphTableSource, presentation: GraphPresentation, selection: GraphSelection, reorderInsertionRow: Int?) {
+    func update(source: HistoryModel, presentation: GraphPresentation, selection: GraphSelection, reorderInsertionRow: Int?) {
         if self.source !== source {
             // Another repository's history: from the top.
             self.source = source
@@ -462,7 +465,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             guard let self, let source = self.source, row < self.shownRowCount, row < source.graph.count else {
                 return nil
             }
-            return GraphAccessibility.value(forRow: row, source: source, presentation: self.presentation)
+            return GraphAccessibility.value(forRow: row, source: source, presentation: self.presentation, numberFormat: self.numberFormat)
         }
         cell.accessibilityActionsProvider = { [weak self] row in
             guard let self, row < self.shownRowCount else {
@@ -476,6 +479,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         let rowView = tableView.makeView(withIdentifier: GraphRowView.identifier, owner: self) as? GraphRowView ?? GraphRowView(frame: .zero)
         rowView.dropFeedback = feedback(forRow: row)
+        rowView.isContextMenuTarget = self.tableView.contextMenuTarget.isTarget(row)
         return rowView
     }
 
@@ -533,10 +537,9 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             return CommitRowContent()
         }
         guard let commit = source.commit(atRow: row) else {
-            return .workingCopy(presentation.workingCopy)
+            return .workingCopy(presentation.workingCopy, numberFormat: numberFormat)
         }
-        let now = fixedNow ?? Date()
-        let date = dates.text(for: commit.sha, date: commit.author.date, now: now, formatting: dateFormatting, timeZone: timeZone)
+        let date = dates.entry(for: commit.sha, date: commit.author.date, now: Date(), formatting: dateFormatting, timeZone: timeZone)
         let track = source.graph[row].track
         let refs = refCapsules(source.refs(at: commit.sha), sha: commit.sha, track: track)
         var unpushed: String?
@@ -544,11 +547,11 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             // Nowhere to push to.
             unpushed = nil
         } else if source.isLocalCommit(commit.sha) {
-            unpushed = "This commit has not been pushed to the remote repository"
+            unpushed = CommitRowContent.notPushedTooltip
         } else {
             let tags = source.refs(at: commit.sha).filter { $0.kind == .tag && presentation.tagsToPush.contains($0.name) }.count
             if tags > 0 {
-                unpushed = tags == 1 ? "This commit has 1 tag to push" : "This commit has \(tags) tags to push"
+                unpushed = tags == 1 ? "This commit has 1 tag to push" : "This commit has \(formatCount(tags, numberFormat)) tags to push"
             }
         }
         return CommitRowContent(
@@ -557,13 +560,15 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             authorName: commit.author.name,
             authorEmail: commit.author.email,
             date: date.text,
+            shortDate: date.short,
             dateTooltip: date.tooltip,
             refs: refs,
             unpushedTooltip: unpushed,
             isDimmed: presentation.search.map { !$0.matches(row: row) } ?? false,
             avatarEndpoint: presentation.avatarEndpoint,
             isMerge: commit.parentSHAs.count > 1,
-            isCurrentTip: commit.sha == presentation.headSHA
+            isCurrentTip: commit.sha == presentation.headSHA,
+            numberFormat: numberFormat
         )
     }
 
@@ -573,7 +578,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     }
 
     /// What `row`'s graph draws.
-    func drawing(forRow row: Int, in source: any GraphTableSource) -> GraphRowDrawing {
+    func drawing(forRow row: Int, in source: HistoryModel) -> GraphRowDrawing {
         let graph = source.graph
         let headRow = presentation.headSHA.flatMap { source.row(of: $0) }
         return GraphRowDrawing(
@@ -798,7 +803,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         guard let row = hit.row, let stub = hit.stub else {
             return false
         }
-        if stub.edge.kind == .outgoingStub, stub.edge.parentRow == nil, source?.isGraphComplete == true {
+        if stub.edge.kind == .outgoingStub, stub.edge.parentRow == nil, source?.isComplete == true {
             // The parent isn't in the history: nothing to go to.
             return true
         }
@@ -819,7 +824,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             let summary = commit.summary.isEmpty ? CommitRowContent.emptySummary : RichText.emojified(commit.summary)
             return refs.isEmpty ? summary : "\(summary)\n\(refs.joined(separator: ", "))"
         }
-        return StubNavigator.tooltip(for: stub.edge, row: row, source: source, isLoading: loadingStubRow == row)
+        return StubNavigator.tooltip(for: stub.edge, row: row, source: source, isLoading: loadingStubRow == row, numberFormat: numberFormat)
     }
 
     /// Marks `row`'s stub as loading its other end (or stops, with nil).
@@ -850,7 +855,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// the end; when the user scrolls to the end itself, keeps loading pages
     /// until the history ends or Esc.
     func prefetchIfNeeded() {
-        guard let source, !source.isGraphComplete, shownRowCount > 0 else {
+        guard let source, !source.isComplete, shownRowCount > 0 else {
             return
         }
         let visible = tableView.rows(in: tableView.visibleRect)
@@ -870,7 +875,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// Loads every older page (End, or scrolling to the end), until the
     /// history ends or `cancelLoading()`.
     func loadRemainingPages() {
-        guard let source, !source.isGraphComplete, !isLoadingRemaining else {
+        guard let source, !source.isComplete, !isLoadingRemaining else {
             return
         }
         isLoadingRemaining = true
@@ -970,22 +975,21 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         guard presentation.allowsDragging, let source, row < shownRowCount, source.commit(atRow: row) != nil else {
             return nil
         }
-        let rows = tableView.selectedRowIndexes.contains(row) ? Array(tableView.selectedRowIndexes) : [row]
-        let shas = rows.filter { $0 < shownRowCount }.compactMap { source.commit(atRow: $0)?.sha }
-        return actions.dragPayload(shas)?.pasteboardItem()
+        let candidates = tableView.selectedRowIndexes.contains(row) ? Array(tableView.selectedRowIndexes) : [row]
+        let rows = candidates.filter { $0 < shownRowCount && source.commit(atRow: $0) != nil }
+        // The first of the rows writes all their commits and the others
+        // nothing: one dragging item, with Espalier's image of the stack
+        // (`CommitDragImage`) and no count badge of the system's.
+        guard row == rows.first else {
+            return nil
+        }
+        return actions.dragPayload(rows.compactMap { source.commit(atRow: $0)?.sha })?.pasteboardItem()
     }
 
     func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint, forRowIndexes rowIndexes: IndexSet) {
-        session.draggingFormation = .stack
-        // A stack of at most three rows.
-        var index = 0
-        session.enumerateDraggingItems(options: [], for: tableView, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, _, _ in
-            if index >= 3 {
-                item.imageComponentsProvider = { [] }
-            }
-            index += 1
-        }
-        if let payload = CommitDragPayload.read(from: session.draggingPasteboard) {
+        let payload = CommitDragPayload.read(from: session.draggingPasteboard)
+        CommitDragImage.apply(to: session, in: tableView, at: screenPoint, rows: rowIndexes, count: payload?.shas.count ?? rowIndexes.count, numberFormat: numberFormat)
+        if let payload {
             actions.dragBegan(payload)
             watchDragEnd()
         }
@@ -1070,7 +1074,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     /// The context menu for a click on `row`: the selection when the row is
     /// in it, else the row alone.
-    func menu(forClickedRow row: Int) -> NSMenu? {
+    func menu(forClickedRow row: Int) -> MenuContent? {
         guard row >= 0, row < shownRowCount else {
             return nil
         }
@@ -1112,6 +1116,16 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         appearanceDidChange()
     }
 
+    /// The look changed: the rows' height, the lanes, the colors, and the
+    /// rows' fonts follow it.
+    @objc private func lookDidChange(_ notification: Notification) {
+        tableView.rowHeight = Metrics.Graph.rowHeight
+        tableView.backgroundColor = Palette.background
+        scrollView.backgroundColor = Palette.background
+        style.geometry = GraphGeometry(rowHeight: tableView.rowHeight, laneCount: lanesSeen, increaseContrast: isIncreasedContrast)
+        appearanceDidChange()
+    }
+
     @objc private func displayOptionsDidChange(_ notification: Notification) {
         isIncreasedContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         differentiatesWithoutColor = NSWorkspace.shared.accessibilityDisplayShouldDifferentiateWithoutColor
@@ -1119,12 +1133,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         reconfigureVisibleRows()
     }
 
-    private func updateMinuteTimer() {
-        minuteTimer?.invalidate()
-        minuteTimer = nil
-        guard fixedNow == nil else {
-            return
-        }
+    private func startMinuteTimer() {
         minuteTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.refreshVisibleDates()
@@ -1137,14 +1146,14 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         guard let source else {
             return
         }
-        let now = fixedNow ?? Date()
+        let now = Date()
         for row in Range(tableView.rows(in: tableView.visibleRect)) ?? 0..<0 where row < shownRowCount {
             guard let commit = source.commit(atRow: row),
                   let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? CommitRowCellView else {
                 continue
             }
-            let date = dates.text(for: commit.sha, date: commit.author.date, now: now, formatting: dateFormatting, timeZone: timeZone)
-            cell.updateDate(date.text, tooltip: date.tooltip)
+            let date = dates.entry(for: commit.sha, date: commit.author.date, now: now, formatting: dateFormatting, timeZone: timeZone)
+            cell.updateDate(date.text, short: date.short, tooltip: date.tooltip)
         }
     }
 
@@ -1198,13 +1207,15 @@ struct GraphSelection: Equatable {
     }
 }
 
-/// Relative dates by commit, for the rows shown, refreshed once a minute;
-/// with `abbreviates`, also their short form (`RelativeTime.abbreviated`).
+/// Relative dates by commit, for the rows shown, refreshed once a minute: in
+/// words, as History's rows show them (`RelativeTime.abbreviated`), and in
+/// full.
 struct DateTextCache {
     struct Text {
+        /// In words, as VoiceOver reads it ("12 minutes ago").
         var text: String
         var tooltip: String
-        /// The short form, when the cache makes it ("" otherwise).
+        /// As the rows show it ("12m", "Oct 5").
         var short: String
         /// The minute the text was made for.
         var minute: Int
@@ -1214,18 +1225,9 @@ struct DateTextCache {
     private var entries: [String: Text] = [:]
     private var counter: UInt64 = 0
     let capacity: Int
-    let abbreviates: Bool
 
-    init(capacity: Int, abbreviates: Bool = false) {
+    init(capacity: Int) {
         self.capacity = capacity
-        self.abbreviates = abbreviates
-    }
-
-    /// The date of `sha` in words, from the cache when it was made this
-    /// minute.
-    mutating func text(for sha: String, date: Date, now: Date, formatting: DateTimeFormatting, timeZone: TimeZone) -> (text: String, tooltip: String) {
-        let entry = entry(for: sha, date: date, now: now, formatting: formatting, timeZone: timeZone)
-        return (entry.text, entry.tooltip)
     }
 
     /// The date of `sha` in words, short and in full, from the cache when
@@ -1241,7 +1243,7 @@ struct DateTextCache {
         let entry = Text(
             text: RelativeTime.describe(date, now: now, formatting: formatting, timeZone: timeZone),
             tooltip: RelativeTime.formatDate(date, formatting: formatting, timeZone: timeZone),
-            short: abbreviates ? RelativeTime.abbreviated(date, now: now, formatting: formatting, timeZone: timeZone) : "",
+            short: RelativeTime.abbreviated(date, now: now, formatting: formatting, timeZone: timeZone),
             minute: minute,
             stamp: counter
         )
@@ -1260,7 +1262,7 @@ final class GraphFooterCellView: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("GraphFooter")
 
     private let spinner = ArcProgressView(.small)
-    private let label = NSTextField(labelWithString: "Loading older commits…")
+    fileprivate let label = NSTextField(labelWithString: "Loading older commits…")
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1287,6 +1289,13 @@ final class GraphFooterCellView: NSTableCellView {
         let x = max((bounds.width - total) / 2, Metrics.insetSmall)
         spinner.frame = CGRect(x: x, y: (bounds.height - size) / 2, width: size, height: size)
         label.frame = CGRect(x: x + size + Metrics.insetSmall, y: (bounds.height - labelSize.height) / 2, width: labelSize.width, height: labelSize.height)
+    }
+}
+
+extension GraphFooterCellView: LookChangeObserving {
+    func lookDidChange() {
+        label.font = AppKitTypography.secondary
+        label.textColor = Palette.text3
     }
 }
 

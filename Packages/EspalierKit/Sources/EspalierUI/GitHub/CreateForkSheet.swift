@@ -214,7 +214,7 @@ struct CreateForkView: View {
                     Button("Create the Fork on GitHub") {
                         open(repositoryURL)
                     }
-                    .buttonStyle(.link)
+                    .buttonStyle(.textLink)
                 }
                 buttons {
                     Button("Close", action: cancel)
@@ -270,7 +270,7 @@ struct ForkTargetDescription: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(lines.indices, id: \.self) { index in
-                HStack(alignment: .firstTextBaseline, spacing: Metrics.grid + 2) {
+                HStack(alignment: .firstTextBaseline, spacing: Metrics.bulletSpacing) {
                     Text("•")
                     Text(lines[index])
                         .fixedSize(horizontal: false, vertical: true)

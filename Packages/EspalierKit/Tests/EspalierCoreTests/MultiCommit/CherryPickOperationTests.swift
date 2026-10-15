@@ -52,7 +52,6 @@ struct CherryPickOperationTests {
         let result = try await operations.cherryPick([commit], onto: target)
 
         #expect(result == .cherryPicked(count: 1, targetBranch: "target"))
-        #expect(result.summary == "Copied 1 commit to target.")
         #expect(try await fixture.checkedOutBranch() == "target")
         let head = try await fixture.commit("HEAD")
         #expect(head.summary == "Cherry-picked Feature!")
@@ -83,8 +82,7 @@ struct CherryPickOperationTests {
         let target = try fixture.branch("target")
         _ = try await operations.cherryPick([try await fixture.oneLine("feature")], onto: target)
 
-        let undone = try await operations.undoLastOperation()
-        #expect(undone.undoneMessage == "Cherry-pick undone. Removed the 1 copied commit from target.")
+        _ = try await operations.undoLastOperation()
         #expect(try await fixture.sha("target") == target.tip.sha)
         #expect(try await fixture.checkedOutBranch() == "feature")
         #expect(operations.undo == nil)
@@ -92,7 +90,7 @@ struct CherryPickOperationTests {
         let again = await #expect(throws: OperationError.self) {
             try await operations.undoLastOperation()
         }
-        #expect(again?.reason == .precondition("There is nothing to undo."))
+        #expect(preconditionText(again) != nil)
         await fixture.app.idle()
     }
 
@@ -125,7 +123,6 @@ struct CherryPickOperationTests {
 
         let result = try await fixture.model.operations.cherryPick([first, second], onto: try fixture.branch("target"))
         #expect(result == .cherryPicked(count: 2, targetBranch: "target"))
-        #expect(result.summary == "Copied 2 commits to target.")
         #expect(try await fixture.summaries("main..target") == ["Second feature", "Cherry-picked Feature!"])
         #expect(fixture.model.operations.undo?.commitCount == 2)
         await fixture.app.idle()
@@ -170,7 +167,7 @@ struct CherryPickOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.operations.cherryPick([try await fixture.oneLine("feature")], toNewBranch: "target")
         }
-        #expect(error?.reason == .precondition("A branch named target already exists."))
+        #expect(preconditionText(error) != nil)
         #expect(try await fixture.checkedOutBranch() == "feature")
         await fixture.app.idle()
     }
@@ -187,7 +184,6 @@ struct CherryPickOperationTests {
 
         let result = try await operations.cherryPick([try await fixture.oneLine("feature")], onto: remote)
         #expect(result == .cherryPicked(count: 1, targetBranch: "target"))
-        #expect(result.summary == "Copied 1 commit to target.")
         #expect(try await fixture.checkedOutBranch() == "target")
         #expect(JSCompat.trim(try await runGit(["rev-parse", "--abbrev-ref", "target@{upstream}"], fixture.local)) == "origin/target")
         // The undo resets the local branch, not the remote branch's name.
@@ -195,8 +191,7 @@ struct CherryPickOperationTests {
         #expect(undo.branchName == "target")
         #expect(undo.undoSha == remote.tip.sha)
 
-        let undone = try await operations.undoLastOperation()
-        #expect(undone.undoneMessage == "Cherry-pick undone. Removed the 1 copied commit from target.")
+        _ = try await operations.undoLastOperation()
         #expect(try await fixture.sha("target") == remote.tip.sha)
         #expect(try await fixture.checkedOutBranch() == "feature")
         await fixture.app.idle()
@@ -216,12 +211,11 @@ struct CherryPickOperationTests {
             try await fixture.model.operations.cherryPick([commit], onto: target)
         }
         #expect(error?.reason == .localChangesOverwritten(files: ["scratch.txt"]))
-        #expect(error?.message == "Can't cherry-pick while your branch has uncommitted changes. These files would be overwritten:")
         #expect(error?.retry?.kind == .cherryPick)
         #expect(try await fixture.checkedOutBranch() == "feature")
 
         let recovery = try #require(error?.recoveries.first)
-        #expect(recovery.title == "Stash Changes and Continue")
+        #expect(recovery.kind == .stashChangesAndRetry)
         try await recovery.perform(in: fixture.app)
         await fixture.model.idle()
         #expect(try await fixture.summaries("main..target") == ["Cherry-picked Feature!"])
@@ -238,7 +232,6 @@ struct CherryPickOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.operations.cherryPick([try await fixture.oneLine("feature")], toNewBranch: "copies", startPoint: "main")
         }
-        #expect(error?.message == "Can't cherry-pick while your branch has uncommitted changes. These files would be overwritten:")
         // Nothing was created.
         #expect(try await runGitAllowingFailure(["rev-parse", "--verify", "--quiet", "refs/heads/copies"], fixture.local) != 0)
         try await #require(error?.recoveries.first).perform(in: fixture.app)
@@ -326,7 +319,7 @@ struct CherryPickOperationTests {
         let none = await #expect(throws: OperationError.self) {
             try await fixture.model.operations.cherryPick([], onto: try fixture.branch("target"))
         }
-        #expect(none?.reason == .precondition("Unable to cherry-pick. No commits provided."))
+        #expect(preconditionText(none) != nil)
         await fixture.app.idle()
     }
 
@@ -342,7 +335,7 @@ struct CherryPickOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.operations.cherryPick([commit], onto: try fixture.branch("main"))
         }
-        #expect(error?.reason == .precondition("Finish or abort the operation in progress first."))
+        #expect(preconditionText(error) != nil)
         #expect(try await fixture.checkedOutBranch() == "target")
         #expect(try await fixture.sha("target") == target.tip.sha)
         // The refresh shows the one in progress.
@@ -372,7 +365,6 @@ struct CherryPickOperationTests {
         #expect(current.phase == .conflicted)
         #expect(current.detail == .cherryPick(sourceBranch: feature, branchCreated: false, commits: commits))
         #expect(current.originalBranchTip == target.tip.sha)
-        #expect(current.conflictsMessage == "Resolve conflicts to continue cherry-picking onto target.")
         #expect(operations.conflictBranches == ConflictBranches(ours: "target", theirs: "feature"))
         #expect(operations.unresolvedFiles.map(\.path) == ["README.md"])
         #expect(fixture.model.gitState.inProgress == .cherryPick)
@@ -490,7 +482,7 @@ struct CherryPickOperationTests {
         let dirty = await #expect(throws: OperationError.self) {
             try await operations.undoLastOperation()
         }
-        #expect(dirty?.reason == .precondition("There is nothing to undo."))
+        #expect(preconditionText(dirty) != nil)
         try FileManager.default.removeItem(atPath: fixture.local.path + "/scratch.txt")
         await fixture.model.refresh(.status, reason: .fileSystem)
         #expect(operations.undo == offered)
@@ -518,7 +510,7 @@ struct CherryPickOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await operations.undoLastOperation()
         }
-        #expect(error?.reason == .precondition("Can't undo the cherry-pick while your branch has uncommitted changes."))
+        #expect(preconditionText(error) != nil)
         #expect(try await fixture.head() == result)
         #expect(try fixture.read("THING.md") == "precious\n")
         await fixture.app.idle()

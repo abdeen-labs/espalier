@@ -1,7 +1,11 @@
 // A choice between longer options as flat rows: a radio mark and the title,
 // the rows split by hairlines, the chosen title semibold. `ChoiceList`'s
-// rows are cards for sheets; these sit in a pane's list of rows. The up and
-// down arrows move the choice, and VoiceOver sees a native radio group.
+// rows are cards, for sheets' choices that each have a line about them;
+// these sit in a pane's list of rows, and in a form's column for plain
+// choices (Repository Settings' Git config, Configure Git's author). It's
+// one stop in the key view loop, with the focus ring around the chosen
+// row's mark; the up and down arrows move the choice, and VoiceOver sees a
+// radio group whose buttons have the lines under the titles as their hints.
 
 import SwiftUI
 
@@ -12,6 +16,7 @@ public struct RadioList<Value: Hashable>: View {
     private let choices: [ChoiceListItem<Value>]
     @Binding private var selection: Value
     @Environment(\.isEnabled) private var isEnabled
+    @FocusState private var isFocused: Bool
 
     /// - Parameter label: What VoiceOver calls the group.
     public init(_ label: String, selection: Binding<Value>, choices: [ChoiceListItem<Value>]) {
@@ -29,11 +34,11 @@ public struct RadioList<Value: Hashable>: View {
                 row(choice)
             }
         }
-        .opacity(isEnabled ? 1 : 0.45)
-        // Focus only with keyboard navigation on, as native radio buttons,
-        // with a ring in the rows' shape.
-        .contentShape(.focusEffect, RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
+        .opacity(isEnabled ? 1 : Palette.disabledOpacity)
+        // Focus only with keyboard navigation on.
         .focusable(interactions: .activate)
+        .focused($isFocused)
+        .focusEffectDisabled()
         .onKeyPress(.upArrow) {
             move(by: -1)
         }
@@ -43,7 +48,9 @@ public struct RadioList<Value: Hashable>: View {
         .accessibilityRepresentation {
             Picker(label, selection: $selection) {
                 ForEach(choices) { choice in
-                    Text(choice.title).tag(choice.value)
+                    Text(choice.title)
+                        .accessibilityHint(choice.accessibilityHint)
+                        .tag(choice.value)
                 }
             }
             .pickerStyle(.radioGroup)
@@ -55,6 +62,7 @@ public struct RadioList<Value: Hashable>: View {
         let markOffset = Metrics.RadioList.markBaselineOffset
         return HStack(alignment: .firstTextBaseline, spacing: Metrics.RadioList.markSpacing) {
             RadioMark(isSelected: isSelected)
+                .focusRing(isFocused && isSelected, in: Circle())
                 .alignmentGuide(.firstTextBaseline) { dimensions in
                     // The mark's center on the title's middle.
                     dimensions[VerticalAlignment.center] + markOffset
@@ -108,7 +116,8 @@ extension Metrics {
         public static let descriptionSpacing: CGFloat = 2
         /// Lowers the mark's center onto the middle of the title's first
         /// line (body text's x-height middle sits about 4 above the
-        /// baseline).
+        /// baseline), here, in a `ChoiceList`, and beside a checkbox
+        /// toggle's label.
         public static let markBaselineOffset: CGFloat = 4
     }
 }

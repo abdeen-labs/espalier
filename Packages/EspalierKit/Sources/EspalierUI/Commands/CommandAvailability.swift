@@ -28,7 +28,8 @@ struct CommandAvailability {
         case .addLocalRepository, .addRepositories: return capabilities.canAddLocalRepository
         case .cloneRepository: return capabilities.canCloneRepository
         case .switchRepository: return capabilities.canShowRepositoryList
-        case .push, .forcePush, .publishRepository, .publishBranch: return capabilities.canPush
+        case .push, .publishRepository, .publishBranch: return capabilities.canPush
+        case .forcePush: return capabilities.canForcePush
         case .pull: return capabilities.canPull
         case .fetch: return capabilities.canFetch
         case .removeRepository: return capabilities.canRemoveRepository
@@ -79,7 +80,7 @@ struct CommandAvailability {
     func title(for action: ActionID) -> String? {
         let capabilities = capabilities
         switch action {
-        case .push: return capabilities.pushTitle
+        case .forcePush: return capabilities.forcePushTitle
         case .removeRepository: return capabilities.removeRepositoryTitle
         case .changeAlias: return "\(capabilities.aliasTitle)…"
         case .openInTerminal: return capabilities.openInShellTitle
@@ -90,10 +91,12 @@ struct CommandAvailability {
         case .createPullRequest: return capabilities.createPullRequestTitle
         case .cherryPick(let shas, _):
             let count = shas?.count ?? context.repository?.history.selection.shas.count ?? 1
-            return count > 1 ? "Cherry-pick \(count) Commits…" : "Cherry-pick Commit…"
+            return count > 1 ? "Cherry-pick \(formatCount(count, context.app.preferences.numberFormat)) Commits…" : "Cherry-pick Commit…"
         case .squash(let shas, _):
             let count = shas?.count ?? context.repository?.history.selection.shas.count ?? 0
-            return count > 1 ? "Squash \(count) Commits…" : "Squash Commits…"
+            return count > 1 ? "Squash \(formatCount(count, context.app.preferences.numberFormat)) Commits…" : "Squash Commits…"
+        case .toggleSidebar:
+            return context.state.isSidebarHidden ? "Show Sidebar" : "Hide Sidebar"
         case .toggleInspector:
             return context.state.isInspectorPresented ? "Hide Inspector" : "Show Inspector"
         default:

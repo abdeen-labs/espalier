@@ -75,7 +75,7 @@ public struct LastCommitRow: View {
             .buttonStyle(.secondary)
             .controlSize(.small)
             .disabled(!content.isUndoEnabled)
-            .help(content.undoHelp)
+            .tooltip(content.undoHelp)
         }
     }
 }
@@ -84,22 +84,17 @@ public struct LastCommitRow: View {
 /// time in the tooltip.
 struct CommittedDateText: View {
     let date: Date
-    @Environment(\.fixedNow) private var fixedNow
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
 
     var body: some View {
-        if let fixedNow {
-            text(now: fixedNow)
-        } else {
-            TimelineView(.everyMinute) { context in
-                text(now: context.date)
-            }
+        TimelineView(.everyMinute) { context in
+            text(now: context.date)
         }
     }
 
     private func text(now: Date) -> some View {
         Text("Committed \(RelativeTime.describe(date, now: now, formatting: formatting, timeZone: timeZone))")
-            .help(RelativeTime.formatDate(date, formatting: formatting, timeZone: timeZone))
+            .tooltip(RelativeTime.formatDate(date, formatting: formatting, timeZone: timeZone))
     }
 }

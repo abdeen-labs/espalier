@@ -45,13 +45,12 @@ struct APIErrorHandlingTests {
             #expect(error.message == "Resource not accessible by integration")
         }
 
-        @Test("creates an error with fallback message when no API error")
-        func createsErrorWithFallbackMessage() {
+        @Test("creates an error without an API error")
+        func createsErrorWithoutAPIError() {
             let response = HTTPResponse(status: 404, statusText: "Not Found", url: URL(string: "https://api.github.com/test"))
 
             let error = APIError(response: response, apiError: nil)
             #expect(error.responseStatus == 404)
-            #expect(error.message == "API error https://api.github.com/test: Not Found (404)")
             #expect(error.apiError == nil)
         }
     }

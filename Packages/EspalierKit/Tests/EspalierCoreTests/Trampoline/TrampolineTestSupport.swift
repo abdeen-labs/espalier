@@ -91,7 +91,7 @@ func runHelper(
 nonisolated final class TestPrompter: TrampolinePrompter, Sendable {
     enum Call: Equatable, Sendable {
         case addSSHHost(host: String, ip: String, keyType: String, fingerprint: String)
-        case sshKeyPassphrase(keyPath: String)
+        case sshKeyPassphrase(keyPath: String, canRemember: Bool = true)
         case sshUserPassword(username: String)
         case genericGitAuthentication(endpoint: String, username: String?)
         case gitHubSignIn(endpoint: String)
@@ -142,8 +142,8 @@ nonisolated final class TestPrompter: TrampolinePrompter, Sendable {
         return await addSSHHost(host, fingerprint)
     }
 
-    func promptSSHKeyPassphrase(keyPath: String) async -> PromptSSHSecretResponse {
-        record(.sshKeyPassphrase(keyPath: keyPath))
+    func promptSSHKeyPassphrase(keyPath: String, canRemember: Bool) async -> PromptSSHSecretResponse {
+        record(.sshKeyPassphrase(keyPath: keyPath, canRemember: canRemember))
         return await sshKeyPassphrase(keyPath)
     }
 
@@ -173,9 +173,17 @@ nonisolated final class TestPrompter: TrampolinePrompter, Sendable {
 nonisolated final class TestAccounts: TrampolineAccountsProvider, Sendable {
     private let accounts: Mutex<[TrampolineAccount]>
     private let gitHubHost: @Sendable (String) -> Bool?
+    private let unreadable: [String: String]
 
-    init(_ accounts: [TrampolineAccount] = [], isGitHubHost: @escaping @Sendable (String) -> Bool? = { _ in false }) {
+    /// - Parameter unreadable: The message for each API endpoint whose
+    ///   account's token the keychain wouldn't give.
+    init(
+        _ accounts: [TrampolineAccount] = [],
+        unreadable: [String: String] = [:],
+        isGitHubHost: @escaping @Sendable (String) -> Bool? = { _ in false }
+    ) {
         self.accounts = Mutex(accounts)
+        self.unreadable = unreadable
         gitHubHost = isGitHubHost
     }
 
@@ -189,6 +197,10 @@ nonisolated final class TestAccounts: TrampolineAccountsProvider, Sendable {
 
     func isGitHubHost(_ url: String) async -> Bool? {
         gitHubHost(url)
+    }
+
+    func unreadableAccountMessage(endpoint: String) async -> String? {
+        unreadable[endpoint]
     }
 }
 

@@ -1,7 +1,7 @@
 // The Settings window's context. Settings is a window of its own, so it gets
 // its own `WindowContext`: a presenter, an action router, and a modal
-// presenter whose alerts and sheets attach to the Settings window, not the
-// main window. Panes use it exactly as the main window's views use theirs
+// presenter whose alerts and sheets cover the Settings window, not the main
+// window. Panes use it exactly as the main window's views use theirs
 // (`@Environment(WindowContext.self)`, `context.presenter.perform`,
 // `context.modals.presentSheet(id:)`, `context.actions.perform`).
 
@@ -33,17 +33,25 @@ enum SettingsWindowContext {
     }
 }
 
-/// Shows the Settings presenter's confirmations and errors on the Settings
-/// window. Prompts git waits on, decisions, and state notices belong to the
-/// main window, so they aren't shown twice.
+/// Shows the Settings presenter's confirmations, decisions (which editor
+/// opens the global Git config), and errors on the Settings window. Prompts
+/// git waits on and state notices belong to the main window, so they aren't
+/// shown twice. While a modal shows, VoiceOver can't reach the window behind
+/// it.
 struct SettingsPresentationHosts: ViewModifier {
     let context: WindowContext
 
     func body(content: Content) -> some View {
         content
+            .accessibilityHidden(context.modals.isPresenting)
             .onChange(of: context.presenter.confirmation?.id, initial: true) {
                 if let pending = context.presenter.confirmation {
                     ConfirmationHost.present(pending, in: context)
+                }
+            }
+            .onChange(of: context.presenter.decision?.id, initial: true) {
+                if let pending = context.presenter.decision {
+                    DecisionHost.present(pending, in: context)
                 }
             }
             .onChange(of: context.presenter.error?.id, initial: true) {
@@ -54,26 +62,66 @@ struct SettingsPresentationHosts: ViewModifier {
     }
 }
 
-/// Gives the Settings context's modal presenter the Settings window, and
-/// keeps the window on its screen.
+/// Gives the Settings context's modal presenter the Settings window, keeps
+/// the window on its screen, and looks up the installed editors and shells
+/// again when it opens.
 struct SettingsWindowReader: NSViewRepresentable {
     let context: WindowContext
 
-    func makeCoordinator() -> SettingsWindowFitter {
-        SettingsWindowFitter()
+    func makeCoordinator() -> SettingsWindowObservers {
+        SettingsWindowObservers()
     }
 
     func makeNSView(context representableContext: Context) -> WindowObserverView {
         let view = WindowObserverView()
-        let fitter = representableContext.coordinator
-        view.onWindow = { [weak context, weak fitter] window in
-            context?.modals.window = window
-            fitter?.follow(window)
+        let observers = representableContext.coordinator
+        view.onWindow = { [weak context, weak observers] window in
+            guard let context, let observers else {
+                return
+            }
+            context.modals.window = window
+            observers.fitter.follow(window)
+            observers.lookups.follow(window, app: context.app)
         }
         return view
     }
 
     func updateNSView(_ view: WindowObserverView, context representableContext: Context) {}
+}
+
+/// The Settings window's observers.
+@MainActor
+final class SettingsWindowObservers {
+    let fitter = SettingsWindowFitter()
+    let lookups = SettingsWindowLookups()
+}
+
+/// Looks up the installed editors and shells again each time the Settings
+/// window becomes key: when Settings opens, and when the user comes back to
+/// it, perhaps from installing one.
+@MainActor
+final class SettingsWindowLookups {
+    private var observer: (any NSObjectProtocol)?
+
+    func follow(_ window: NSWindow, app: AppModel) {
+        guard observer == nil else {
+            return
+        }
+        observer = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak app] _ in
+            MainActor.assumeIsolated {
+                app?.integrations.lookUpIntegrationsAgain()
+            }
+        }
+        if window.isKeyWindow {
+            app.integrations.lookUpIntegrationsAgain()
+        }
+    }
+
+    isolated deinit {
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
 }
 
 /// Keeps the Settings window on its screen: a window that would run past

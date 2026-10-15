@@ -242,8 +242,9 @@ extension BranchesModel {
     }
 
     /// Creates a local branch from a start point the New Branch sheet offers:
-    /// the default branch, the upstream default branch (without tracking it),
-    /// or HEAD for the current branch and HEAD.
+    /// the default branch or the upstream default branch, without tracking
+    /// either when it's a remote branch, or HEAD for the current branch and
+    /// HEAD.
     ///
     /// - Throws: `.precondition("Could not determine the default branch.")`
     ///   when the start point names a default branch the repository
@@ -264,10 +265,11 @@ extension BranchesModel {
                     repositoryID: repository?.id
                 )
             }
+            // Tracking a remote branch would push the new branch to it.
             return try await createBranch(
                 name,
                 startPoint: base.name,
-                noTrack: startPoint == .upstreamDefaultBranch,
+                noTrack: base.type == .remote,
                 checkout: checkout
             )
         }

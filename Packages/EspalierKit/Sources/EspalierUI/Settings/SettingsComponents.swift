@@ -2,7 +2,8 @@
 // the pane's header; sections with an uppercase label; flat rows split by
 // hairlines, each with its title and an optional description on the left
 // and its control on the right; rows for a message or for buttons alone;
-// inline messages; the "Local" badge; and a row's "⋯" menu.
+// the "Local" badge; and a row's "⋯" menu. Messages under a control are
+// `FieldMessage`s, as in sheets.
 
 import EspalierCore
 import SwiftUI
@@ -224,62 +225,7 @@ struct SettingsNote: View {
     }
 }
 
-// MARK: - Messages and badges
-
-/// A line under a control: a problem with what was typed, a warning, or a
-/// check that passed. Never color alone: each kind has its own symbol.
-struct InlineMessage: View {
-    nonisolated enum Kind: Equatable, Sendable {
-        /// What was typed can't be saved.
-        case error
-        /// It can be saved, but something deserves attention.
-        case warning
-        /// A check passed.
-        case success
-        /// Neutral information.
-        case note
-    }
-
-    private let text: String
-    private let kind: Kind
-
-    init(_ text: String, kind: Kind) {
-        self.text = text
-        self.kind = kind
-    }
-
-    var body: some View {
-        Label {
-            Text(text)
-                .foregroundStyle(kind == .error ? Color(espalier: Palette.error) : .text2)
-                .fixedSize(horizontal: false, vertical: true)
-        } icon: {
-            icon
-        }
-        .font(Typography.secondary)
-        .accessibilityElement(children: .combine)
-    }
-
-    @ViewBuilder
-    private var icon: some View {
-        switch kind {
-        case .error:
-            Image(systemName: "xmark.octagon.fill")
-                .foregroundStyle(Color(espalier: Palette.error))
-                .accessibilityLabel("Error")
-        case .warning:
-            WarningGlyph()
-        case .success:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(Color(espalier: Palette.success))
-                .accessibilityLabel("OK")
-        case .note:
-            Image(systemName: "info.circle")
-                .foregroundStyle(.text2)
-                .accessibilityHidden(true)
-        }
-    }
-}
+// MARK: - Badges and menus
 
 /// The "Local" badge: a provider whose server is this Mac.
 struct LocalBadge: View {
@@ -295,28 +241,23 @@ struct LocalBadge: View {
 }
 
 /// A row's trailing "⋯" menu.
-struct RowActionsMenu<Content: View>: View {
+struct RowActionsMenu: View {
     private let label: String
-    private let content: Content
+    private let content: () -> MenuContent
 
     /// - Parameter label: What VoiceOver reads ("Actions for OpenAI").
-    init(_ label: String, @ViewBuilder content: () -> Content) {
+    init(_ label: String, @MenuBuilder content: @escaping () -> MenuContent) {
         self.label = label
-        self.content = content()
+        self.content = content
     }
 
     var body: some View {
-        Menu {
-            content
-        } label: {
+        PullDownButton(label, menu: content) {
             Label(label, systemImage: "ellipsis.circle")
         }
-        .menuStyle(.button)
         .buttonStyle(.icon)
-        .menuIndicator(.hidden)
         .fixedSize()
-        .accessibilityLabel(label)
-        .help(label)
+        .tooltip(label)
     }
 }
 
@@ -346,6 +287,34 @@ extension View {
     /// width.
     func settingsControlWidth(_ width: CGFloat = Metrics.SettingsWindow.controlWidth) -> some View {
         frame(width: width)
+    }
+
+    /// A pop-up in a Settings row whose choices can be wider than the rows'
+    /// control width (`CapsulePopUp(fitting:)`): at that width, or at its
+    /// ideal width when that's wider, so the chosen title shows whole.
+    func settingsControlWidthFittingChoices() -> some View {
+        AtLeastIdealWidth(minimum: Metrics.SettingsWindow.controlWidth) {
+            self
+        }
+    }
+}
+
+/// Its view at its ideal width rounded up to a whole point, but at least
+/// `minimum`, offered that width so a view that fills its width fills it.
+private struct AtLeastIdealWidth: Layout {
+    let minimum: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let content = subviews.first else {
+            return .zero
+        }
+        let width = max(minimum, content.sizeThatFits(ProposedViewSize(width: nil, height: proposal.height)).width.rounded(.up))
+        let size = content.sizeThatFits(ProposedViewSize(width: width, height: proposal.height))
+        return CGSize(width: width, height: size.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
 }
 

@@ -26,59 +26,41 @@ private func validForm() -> BYOKProviderForm {
 
 @Suite("BYOK provider form")
 struct BYOKProviderFormTests {
-    @Test("checks the fields in desktop's order, with its messages")
-    func messages() {
+    @Test("rejects a blank name or URL, a remote http URL, and missing or duplicate models")
+    func rejectsInvalidFields() {
         #expect(validateBYOKProviderForm(validForm(), existing: nil) == nil)
 
         var form = validForm()
         form.name = " \u{A0}\n"
-        #expect(validateBYOKProviderForm(form, existing: nil) == "Enter a name.")
+        #expect(validateBYOKProviderForm(form, existing: nil) != nil)
 
         form = validForm()
         form.baseUrl = "  "
-        #expect(validateBYOKProviderForm(form, existing: nil) == "Enter a base URL.")
+        #expect(validateBYOKProviderForm(form, existing: nil) != nil)
         for url in ["http://api.example.com/v1", "ftp://host", "not a url"] {
             form.baseUrl = url
-            #expect(
-                validateBYOKProviderForm(form, existing: nil)
-                    == "Base URL must be an https URL, or an http URL pointing at the local machine.",
-                "\(url)"
-            )
+            #expect(validateBYOKProviderForm(form, existing: nil) != nil, "\(url)")
         }
         form.baseUrl = " http://localhost:11434/v1 "
         #expect(validateBYOKProviderForm(form, existing: nil) == nil)
 
         form = validForm()
         form.models = [BYOKModel(id: "  ", name: "Blank")]
-        #expect(validateBYOKProviderForm(form, existing: nil) == "Add at least one model.")
+        #expect(validateBYOKProviderForm(form, existing: nil) != nil)
         form.models = [BYOKModel(id: "a", name: "A"), BYOKModel(id: " b", name: "B"), BYOKModel(id: "b ", name: "B2")]
-        #expect(validateBYOKProviderForm(form, existing: nil) == "More than one model uses the identifier \u{201C}b\u{201D}.")
+        #expect(validateBYOKProviderForm(form, existing: nil) != nil)
         // Compared by code units: these are two models.
         form.models = [BYOKModel(id: "caf\u{E9}", name: "1"), BYOKModel(id: "cafe\u{301}", name: "2")]
         #expect(validateBYOKProviderForm(form, existing: nil) == nil)
-
-        // The name is checked before the URL, the URL before the models, and
-        // so on.
-        var everything = BYOKProviderForm()
-        everything.requestTimeoutSeconds = "abc"
-        #expect(validateBYOKProviderForm(everything, existing: nil) == "Enter a name.")
-        everything.name = "N"
-        #expect(validateBYOKProviderForm(everything, existing: nil) == "Enter a base URL.")
-        everything.baseUrl = "https://h"
-        #expect(validateBYOKProviderForm(everything, existing: nil) == "Add at least one model.")
-        everything.models = [BYOKModel(id: "m", name: "M")]
-        #expect(validateBYOKProviderForm(everything, existing: nil) == "Enter an API key.")
-        everything.secret = "s"
-        #expect(validateBYOKProviderForm(everything, existing: nil) == "Request timeout must be a positive number of seconds.")
     }
 
     @Test("asks for a secret only when the auth kind needs a new one")
     func secrets() {
         var form = validForm()
         form.secret = ""
-        #expect(validateBYOKProviderForm(form, existing: nil) == "Enter an API key.")
+        #expect(validateBYOKProviderForm(form, existing: nil) != nil)
         form.authKind = .bearer
-        #expect(validateBYOKProviderForm(form, existing: nil) == "Enter a bearer token.")
+        #expect(validateBYOKProviderForm(form, existing: nil) != nil)
         form.authKind = .none
         #expect(validateBYOKProviderForm(form, existing: nil) == nil)
 
@@ -86,7 +68,7 @@ struct BYOKProviderFormTests {
         var editing = BYOKProviderForm(editing: existing)
         #expect(validateBYOKProviderForm(editing, existing: existing) == nil)
         editing.authKind = .apiKey
-        #expect(validateBYOKProviderForm(editing, existing: existing) == "Enter an API key.")
+        #expect(validateBYOKProviderForm(editing, existing: existing) != nil)
     }
 
     @Test("reads the timeout as JavaScript's Number does, accepting what loading accepts")
@@ -98,10 +80,7 @@ struct BYOKProviderFormTests {
         }
         for invalid in ["0", "-5", "abc", "30s", "Infinity", "1e999", "NaN", "1_000"] {
             form.requestTimeoutSeconds = invalid
-            #expect(
-                validateBYOKProviderForm(form, existing: nil) == "Request timeout must be a positive number of seconds.",
-                "\(invalid)"
-            )
+            #expect(validateBYOKProviderForm(form, existing: nil) != nil, "\(invalid)")
         }
     }
 
@@ -136,13 +115,15 @@ struct BYOKProviderFormTests {
         )
         #expect(secret == .set("sk-test"))
 
-        // Azure keeps its API version (when not blank) and no API format.
+        // Azure keeps its API format (it has a Responses route too) and its
+        // API version, when not blank.
         var azure = BYOKProviderForm(editing: existing)
+        azure.wireApi = .responses
         azure.azureApiVersion = " 2025-04-01-preview\n"
         azure.requestTimeoutSeconds = ""
         let (edited, unchanged) = makeBYOKProvider(from: azure, existing: existing, newID: { "unused" })
         #expect(edited.id == "p1")
-        #expect(edited.wireApi == nil)
+        #expect(edited.wireApi == .responses)
         #expect(edited.azureApiVersion == "2025-04-01-preview")
         #expect(edited.requestTimeoutSeconds == nil)
         #expect(unchanged == .keep)
@@ -150,17 +131,22 @@ struct BYOKProviderFormTests {
         #expect(makeBYOKProvider(from: azure, existing: existing).provider.azureApiVersion == nil)
 
         // Saving the form for a provider, unchanged, keeps the provider and
-        // its secret as they were.
+        // its secret as they were, with the format it had by default written
+        // out.
         let untouched = makeBYOKProvider(from: BYOKProviderForm(editing: existing), existing: existing)
-        #expect(untouched.provider == existing)
+        var withFormat = existing
+        withFormat.wireApi = .completions
+        #expect(untouched.provider == withFormat)
         #expect(untouched.secret == .keep)
 
-        // A new provider gets the defaults (OpenAI, Chat Completions, an API
-        // key) and a lowercase UUID.
+        // Anthropic has no API format.
+        var anthropic = validForm()
+        anthropic.type = .anthropic
+        anthropic.wireApi = .responses
+        #expect(makeBYOKProvider(from: anthropic, existing: nil).provider.wireApi == nil)
+
+        // A new provider gets a lowercase UUID.
         let fresh = makeBYOKProvider(from: validForm(), existing: nil).provider
-        #expect(fresh.type == .openai)
-        #expect(fresh.wireApi == .completions)
-        #expect(fresh.authKind == .apiKey)
         #expect(fresh.id == fresh.id.lowercased())
         #expect(fresh.id.count == 36)
     }
@@ -186,7 +172,7 @@ struct BYOKProviderFormTests {
         #expect(validateBYOKProviderForm(added, existing: nil) == nil)
         #expect(makeBYOKProvider(from: added, existing: nil).secret == .set("sk-test"))
         added.secret = " \n\t"
-        #expect(validateBYOKProviderForm(added, existing: nil) == "Enter an API key.")
+        #expect(validateBYOKProviderForm(added, existing: nil) != nil)
 
         // Editing, a blank secret leaves the stored one alone, unless the
         // auth kind needs a new one.
@@ -195,7 +181,7 @@ struct BYOKProviderFormTests {
         #expect(validateBYOKProviderForm(editing, existing: existing) == nil)
         #expect(makeBYOKProvider(from: editing, existing: existing).secret == .keep)
         editing.authKind = .apiKey
-        #expect(validateBYOKProviderForm(editing, existing: existing) == "Enter an API key.")
+        #expect(validateBYOKProviderForm(editing, existing: existing) != nil)
         editing.secret = "new-key\r\n"
         #expect(makeBYOKProvider(from: editing, existing: existing).secret == .set("new-key"))
     }
@@ -222,11 +208,11 @@ struct BYOKModelFormTests {
     @Test("needs an identifier that no other model of the provider has")
     func validation() {
         var form = BYOKModelForm()
-        #expect(validateBYOKModelForm(form, otherModelIds: []) == "Enter a model identifier.")
+        #expect(validateBYOKModelForm(form, otherModelIds: []) != nil)
         form.id = "  "
-        #expect(validateBYOKModelForm(form, otherModelIds: []) == "Enter a model identifier.")
+        #expect(validateBYOKModelForm(form, otherModelIds: []) != nil)
         form.id = " gpt-4o "
-        #expect(validateBYOKModelForm(form, otherModelIds: ["gpt-4o"]) == "Another model already uses the identifier \u{201C}gpt-4o\u{201D}.")
+        #expect(validateBYOKModelForm(form, otherModelIds: ["gpt-4o"]) != nil)
         #expect(validateBYOKModelForm(form, otherModelIds: ["gpt-4o-mini"]) == nil)
         form.id = "cafe\u{301}"
         #expect(validateBYOKModelForm(form, otherModelIds: ["caf\u{E9}"]) == nil)

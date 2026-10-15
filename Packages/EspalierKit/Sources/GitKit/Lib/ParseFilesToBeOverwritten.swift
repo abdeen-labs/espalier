@@ -2,9 +2,13 @@
 
 import EspalierSupport
 
-/// The paths git lists after an "error: ... files would be overwritten ...:"
-/// line, as in the errors of a checkout, merge, or pull that would overwrite
-/// local changes. Empty when the message has no such list.
+/// The paths git lists after each "error: ... files would be overwritten
+/// ...:" line, as in the errors of a checkout, merge, or pull that would
+/// overwrite local changes: git lists changed files and untracked ones
+/// separately. Empty when the message has no such list.
+///
+/// Git writes each path after one tab, so a path keeps its own leading
+/// whitespace.
 public func parseFilesToBeOverwritten(_ errorMessage: String) -> [String] {
     var files: [String] = []
     let lines = JSCompat.split(errorMessage, "\n")
@@ -12,30 +16,14 @@ public func parseFilesToBeOverwritten(_ errorMessage: String) -> [String] {
     var inFilesList = false
 
     for line in lines {
-        if inFilesList {
-            if !JSCompat.startsWith(line, "\t") {
-                break
-            } else {
-                files.append(trimmingLeadingWhitespace(line))
-            }
+        if inFilesList, JSCompat.startsWith(line, "\t") {
+            files.append(JSCompat.dropFirst(line, 1))
         } else {
-            if JSCompat.startsWith(line, "error:")
+            inFilesList = JSCompat.startsWith(line, "error:")
                 && JSCompat.includes(line, "files would be overwritten")
                 && JSCompat.endsWith(line, ":")
-            {
-                inFilesList = true
-            }
         }
     }
 
     return files
-}
-
-/// JavaScript's `trimLeft()`.
-private func trimmingLeadingWhitespace(_ string: String) -> String {
-    let scalars = string.unicodeScalars
-    guard let first = scalars.firstIndex(where: { !JSCompat.isWhitespace($0) }) else {
-        return ""
-    }
-    return String(scalars[first...])
 }

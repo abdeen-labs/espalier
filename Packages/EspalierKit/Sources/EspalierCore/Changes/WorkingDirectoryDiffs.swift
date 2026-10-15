@@ -30,10 +30,11 @@ struct LoadedDiffs: Sendable, Equatable {
     /// with the load, off the main actor.
     let selectableLines: Set<Int>
     /// The file's selection when the load started, and that selection
-    /// pruned to `selectableLines`, with whether pruning changed it: worked
-    /// out off the main actor, since comparing two selections of a
-    /// 10,000,000-line diff takes seconds. Nil without a file.
-    let pruning: (base: DiffSelection, pruned: DiffSelection, changed: Bool)?
+    /// carried over to `full` (`carrySelection`), with whether that changed
+    /// it: worked out off the main actor, since carrying a selection over or
+    /// comparing two selections of a 10,000,000-line diff takes seconds. Nil
+    /// without a file.
+    let carried: (base: DiffSelection, carried: DiffSelection, changed: Bool)?
 
     init(shown: Diff, full: Diff, isTextConverted: Bool = false, for file: WorkingDirectoryFileChange? = nil) {
         self.shown = shown
@@ -41,9 +42,9 @@ struct LoadedDiffs: Sendable, Equatable {
         self.isTextConverted = isTextConverted
         let lines = EspalierCore.selectableLines(in: full)
         selectableLines = lines
-        pruning = file.map { file in
-            let pruned = file.selection.withSelectableLines(lines)
-            return (file.selection, pruned, pruned != file.selection)
+        carried = file.map { file in
+            let carried = carrySelection(file.selection, to: full, selectableLines: lines)
+            return (file.selection, carried, carried != file.selection)
         }
     }
 
@@ -78,20 +79,36 @@ func textDiffData(_ diff: Diff?) -> (any TextDiffData)? {
     }
 }
 
+/// Whether two diffs have the same lines at the same indexes: text diffs of
+/// the same text with the same last hunk (the text leaves out "No newline at
+/// end of file", which only the last hunk has), or neither a text diff.
+func hasSameLines(_ x: Diff?, _ y: Diff?) -> Bool {
+    switch (textDiffData(x), textDiffData(y)) {
+    case (nil, nil):
+        true
+    case (let x?, let y?):
+        ExactString(x.text) == ExactString(y.text) && x.hunks.count == y.hunks.count && x.hunks.last == y.hunks.last
+    default:
+        false
+    }
+}
+
 /// The lines of a diff that can be included in a commit, by index in the
 /// diff (`hunk.unifiedDiffStart` plus the line's index in its hunk): added
 /// and deleted lines of a text diff; other diffs have none.
 func selectableLines(in diff: Diff?) -> Set<Int> {
+    textDiffData(diff).map { includeableLineIndexes($0.hunks) } ?? []
+}
+
+/// `selection` as a selection of `diff`'s lines, whose selectable lines
+/// are `selectableLines`: carried over by the lines themselves to a text
+/// diff (`DiffSelection.carried(to:selectableLines:)`), pruned to none
+/// for another kind of diff.
+func carrySelection(_ selection: DiffSelection, to diff: Diff, selectableLines: Set<Int>) -> DiffSelection {
     guard let text = textDiffData(diff) else {
-        return []
+        return selection.withSelectableLines(selectableLines)
     }
-    var lines = Set<Int>()
-    for hunk in text.hunks {
-        for (index, line) in hunk.lines.enumerated() where line.isIncludeableLine() {
-            lines.insert(hunk.unifiedDiffStart + index)
-        }
-    }
-    return lines
+    return selection.carried(to: text.hunks, selectableLines: selectableLines)
 }
 
 /// Lines of the selected file's diff, by their index in the full diff
@@ -162,8 +179,8 @@ extension ChangesModel {
     /// A load that's no longer the latest never applies (a newer selection,
     /// status, or whitespace setting started another), and a result applies
     /// only while its file is still the one selected. The file's partial
-    /// selection is then pruned to the lines that can still be selected,
-    /// computed from the full diff.
+    /// selection is then carried over to the full diff's lines
+    /// (`carrySelection`).
     func loadSelectedDiff() {
         guard case .workingDirectory(let fileIDs) = selection, fileIDs.count == 1,
               let file = workingDirectory.findFileWithID(fileIDs[0]), let repository
@@ -276,20 +293,30 @@ extension ChangesModel {
         return inclusionType(of: range, in: text.hunks, file.selection)
     }
 
+    /// Whether line indexes taken from the diff of `generation` name the
+    /// same lines in the current one (nil: they were taken from it).
+    func isCurrentDiff(_ generation: Int?) -> Bool {
+        generation.map { $0 == diffGeneration } ?? true
+    }
+
     /// Includes or excludes `lines` of the selected file in the next commit.
     ///
+    /// - Parameter generation: The `diffGeneration` of the diff the indexes
+    ///   were taken from; nil for the current one.
     /// - Returns: Whether the selection changed; false while lines can't be
-    ///   selected (`canSelectLines`).
+    ///   selected (`canSelectLines`), or when the diff changed since
+    ///   `generation`.
     @discardableResult
-    public func setLines(_ lines: DiffLines, included: Bool) -> Bool {
-        guard canSelectLines, let file = shownFile, let text = textDiffData(fullDiff),
+    public func setLines(_ lines: DiffLines, included: Bool, inDiff generation: Int? = nil) -> Bool {
+        guard canSelectLines, isCurrentDiff(generation), let file = shownFile, let text = textDiffData(fullDiff),
               let range = lineRange(of: lines, in: text.hunks)
         else {
             return false
         }
         let selection = file.selection
-            .withSelectableLines(fullDiffSelectableLines)
+            .carried(to: text.hunks, selectableLines: fullDiffSelectableLines)
             .withRangeSelection(from: range.lowerBound, length: range.count, selected: included)
+            .withDiffHunks(text.hunks)
         guard selection != file.selection else {
             return false
         }
@@ -300,10 +327,11 @@ extension ChangesModel {
     /// Toggles `lines`: a line flips; a range, block, or hunk is excluded
     /// when the commit includes all of it, and included otherwise.
     ///
+    /// - Parameter generation: As `setLines(_:included:inDiff:)`'s.
     /// - Returns: Whether the selection changed.
     @discardableResult
-    public func toggleLines(_ lines: DiffLines) -> Bool {
-        guard let file = shownFile, let current = inclusion(of: lines) else {
+    public func toggleLines(_ lines: DiffLines, inDiff generation: Int? = nil) -> Bool {
+        guard isCurrentDiff(generation), let file = shownFile, let current = inclusion(of: lines) else {
             return false
         }
         let included: Bool
@@ -312,7 +340,7 @@ extension ChangesModel {
         } else {
             included = current != .all
         }
-        return setLines(lines, included: included)
+        return setLines(lines, included: included, inDiff: generation)
     }
 
     /// The selection to draw on the shown diff's lines: the file's own, or,
@@ -335,9 +363,10 @@ extension ChangesModel {
     /// The title of the action that discards `lines`: "Discard Added Line",
     /// "Discard Removed Lines", "Discard Modified Lines", with an ellipsis
     /// while discarding asks first (`confirmDiscardChanges`). Nil when there's
-    /// nothing to discard.
-    public func discardTitle(for lines: DiffLines) -> String? {
-        guard let text = textDiffData(fullDiff), let range = lineRange(of: lines, in: text.hunks),
+    /// nothing to discard, or the diff changed since `generation` (as
+    /// `setLines(_:included:inDiff:)`'s).
+    public func discardTitle(for lines: DiffLines, inDiff generation: Int? = nil) -> String? {
+        guard isCurrentDiff(generation), let text = textDiffData(fullDiff), let range = lineRange(of: lines, in: text.hunks),
               let type = rangeType(of: range, in: text.hunks)
         else {
             return nil

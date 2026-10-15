@@ -7,7 +7,7 @@ import Foundation
 /// Settings in `UserDefaults`.
 ///
 /// A value may be stored as a string: `'1'`/`'0'` for booleans, decimal
-/// strings for numbers, JSON for objects. Native types (`Bool`, `Int`,
+/// strings for numbers, JSON for objects. Property-list types (`Bool`, `Int`,
 /// `String`, `[String]`) are written and both are read, so a string value,
 /// or one set by hand with `defaults write`, reads the same. Objects stay
 /// JSON strings.
@@ -59,7 +59,7 @@ public struct PreferenceStore: Sendable {
         getBoolean(key) ?? defaultValue
     }
 
-    /// Stores a native Boolean.
+    /// Stores a property-list Boolean.
     public func setBoolean(_ key: String, _ value: Bool) {
         defaults.set(value, forKey: key)
     }
@@ -97,7 +97,7 @@ public struct PreferenceStore: Sendable {
         getNumber(key) ?? defaultValue
     }
 
-    /// Stores a native integer.
+    /// Stores a property-list integer.
     public func setNumber(_ key: String, _ value: Int) {
         defaults.set(value, forKey: key)
     }
@@ -131,7 +131,7 @@ public struct PreferenceStore: Sendable {
 
     // MARK: Arrays and objects
 
-    /// The strings stored under `key`: a native array of strings, or a JSON
+    /// The strings stored under `key`: a property-list array of strings, or a JSON
     /// array of strings. Empty if the key doesn't exist or holds anything
     /// else, including an array with a non-string element.
     public func getStringArray(_ key: String) -> [String] {
@@ -147,7 +147,7 @@ public struct PreferenceStore: Sendable {
         return array as? [String] ?? []
     }
 
-    /// Stores a native array of strings.
+    /// Stores a property-list array of strings.
     public func setStringArray(_ key: String, _ values: [String]) {
         defaults.set(values, forKey: key)
     }

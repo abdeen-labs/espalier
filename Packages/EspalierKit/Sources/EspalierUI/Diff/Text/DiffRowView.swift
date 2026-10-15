@@ -1,42 +1,20 @@
 // Drawing one row of the diff table. A row view draws its whole row: the
-// tints (added and deleted lines, none for a line left out, conflict
-// regions), the block handle, line numbers (while lines can be staged, an
-// included changed line's number cells are tinted with the accent, its
-// numbers in the accent, with an accent bar on their left, so included
-// lines read as one band; a line left out keeps text3 numbers with a
-// `line2` bar), the "+" and "−" markers (color never stands alone),
-// intra-line ranges, the text selection, and the text with syntax colors,
-// faded and struck through on a line left out. Hunk headers are `hunk`
-// rows between hairlines: the checkbox, the enclosing context, and the
-// range in SF Mono on the right. Text is drawn with Core Text at monospace
-// columns: runs of printable ASCII as one line, other characters glyph by
-// glyph at their columns, so wide and fallback glyphs never shift the
-// columns hit-testing assumes.
+// tints (added and deleted lines, faint for a line left out, conflict
+// regions), the line numbers (while lines can be staged, an included
+// changed line's number cells are tinted with the accent, so included lines
+// read as one band), the handle beside changed lines (the accent for a line
+// the commit includes, `line2` for one left out), the "+" and "−" markers
+// (color never stands alone), intra-line ranges, find's matches, the text
+// selection, and the text with syntax colors, faded on a line left out.
+// Hunk headers are `hunk` rows: the expansion buttons in the numbers'
+// gutter, the checkbox, and git's header line in the code font. Text is
+// drawn with Core Text at monospace columns: runs of printable ASCII as one
+// line, other characters glyph by glyph at their columns, so wide and
+// fallback glyphs never shift the columns hit-testing assumes.
 
 import AppKit
 import EspalierCore
 import GitKit
-
-/// Colors and sizes the table draws with, beyond `DiffColors`.
-enum DiffTableStyle {
-    /// The block handle's capsule while the pointer is over its block.
-    static var blockHandle: NSColor { Palette.text3 }
-    /// Rows under the keyboard's line cursor.
-    static var cursorFill: NSColor { Palette.accentSoft }
-    /// The divider between the halves of a split diff, and the hunk
-    /// headers' hairlines.
-    static var divider: NSColor { Palette.line }
-    /// The base of the common ancestor's lines in a conflicted file.
-    static var conflictBase: NSColor { DiffColors.ours }
-    /// A hovered hunk header button's background.
-    static var buttonHover: NSColor { Palette.hover }
-    /// Hunk header buttons, the missing-newline note, and other quiet marks.
-    static var quietMark: NSColor { Palette.text3 }
-    /// The point size of gutter symbols, relative to the code font.
-    static let symbolScale: CGFloat = 0.85
-    /// The missing-newline symbol's.
-    static let noNewlineSymbolScale: CGFloat = 0.7
-}
 
 /// A row of the diff table, drawn by its controller's renderer.
 final class DiffRowView: NSTableRowView {
@@ -55,7 +33,17 @@ final class DiffRowView: NSTableRowView {
         guard let controller, let context = NSGraphicsContext.current?.cgContext else {
             return
         }
-        DiffRowRenderer(controller: controller, row: row, bounds: bounds, context: context).draw()
+        Palette.background.setFill()
+        dirtyRect.fill()
+        // While lines don't wrap, the table is as wide as the longest line
+        // needs and scrolls sideways: the row draws where it shows, from
+        // the pane's left edge, and only its text moves (`textScrollX`).
+        let scrollX = controller.textScrollX
+        context.saveGState()
+        context.translateBy(x: scrollX, y: 0)
+        let shown = CGRect(x: 0, y: 0, width: max(bounds.width - scrollX, 0), height: bounds.height)
+        DiffRowRenderer(controller: controller, row: row, bounds: shown, context: context).draw()
+        context.restoreGState()
         controller.rowDidDraw()
     }
 
@@ -81,9 +69,18 @@ final class DiffRowView: NSTableRowView {
     override func accessibilityCustomActions() -> [NSAccessibilityCustomAction]? {
         controller?.accessibilityActions(ofRow: row)
     }
+
+    /// VoiceOver's Show Menu: the menu a right-click on the row's text
+    /// shows.
+    override func accessibilityPerformShowMenu() -> Bool {
+        guard let controller, let point = controller.textMenuPoint(ofRow: row) else {
+            return false
+        }
+        return controller.tableView.openContextMenu(at: point, trigger: .accessibility)
+    }
 }
 
-/// Draws one row.
+/// Draws one row, from the pane's left edge.
 @MainActor
 struct DiffRowRenderer {
     let controller: DiffTableController
@@ -120,9 +117,9 @@ struct DiffRowRenderer {
             drawLines(documentRow)
         }
         drawCursor()
-        if let divider = geometry.divider, documentRow.kind != .hunk {
-            DiffTableStyle.divider.setFill()
-            CGRect(x: divider, y: 0, width: 1, height: bounds.height).fill()
+        if documentRow.kind != .hunk {
+            drawDivider()
+            drawHandle(documentRow)
         }
     }
 
@@ -139,7 +136,6 @@ struct DiffRowRenderer {
         } else if let line = documentRow.unifiedLine {
             drawHalf(line: line, side: .before, documentRow: documentRow)
         }
-        drawHandle(documentRow)
     }
 
     /// One side of a row (unified rows have one, spanning the row).
@@ -147,31 +143,23 @@ struct DiffRowRenderer {
         let documentLine = document.lines[line]
         let half = geometry.half(side)
         let included = controller.isIncluded(line: line)
-        let halfRect: CGRect = {
-            guard let divider = geometry.divider else {
-                return bounds
-            }
-            return side == .before
-                ? CGRect(x: 0, y: 0, width: divider, height: bounds.height)
-                : CGRect(x: divider + 1, y: 0, width: bounds.width - divider - 1, height: bounds.height)
-        }()
 
         // The tint.
         if let tint = tint(for: documentLine, included: included) {
             tint.setFill()
-            halfRect.fill()
+            rect(spanning: half.extent).fill(using: .sourceOver)
         }
 
         // Line numbers: while lines can be staged, a changed line's cells
         // show whether it's included.
-        let inclusion: Bool? = documentLine.isChange ? included : nil
-        drawNumberCells(half, included: inclusion)
-        let isIncluded = inclusion == true
+        if let included, documentLine.isChange {
+            drawNumberCells(half, included: included, isHovered: isGutterHovered(side: side, documentRow: documentRow))
+        }
         if let oldNumber = half.oldNumber, documentLine.oldNumber > 0, documentLine.type != .add {
-            drawNumber(documentLine.oldNumber, in: oldNumber, isIncluded: isIncluded)
+            drawNumber(documentLine.oldNumber, in: oldNumber)
         }
         if let newNumber = half.newNumber, documentLine.newNumber > 0, documentLine.type != .delete {
-            drawNumber(documentLine.newNumber, in: newNumber, isIncluded: isIncluded)
+            drawNumber(documentLine.newNumber, in: newNumber)
         }
 
         // The marker.
@@ -187,14 +175,14 @@ struct DiffRowRenderer {
         drawText(line: line, side: side, half: half, excluded: included == false)
     }
 
-    /// The fill behind a line: added or deleted, halved when excluded; a
+    /// The fill behind a line: added or deleted, faint when left out; a
     /// conflicted file's regions instead.
     private func tint(for line: DocumentLine, included: Bool?) -> NSColor? {
         if let conflict = line.conflict {
             switch conflict {
             case .marker: return DiffColors.conflictMarker
             case .ours: return DiffColors.ours
-            case .base: return DiffTableStyle.conflictBase
+            case .base: return DiffColors.base
             case .theirs: return DiffColors.theirs
             }
         }
@@ -208,52 +196,97 @@ struct DiffRowRenderer {
         }
     }
 
-    /// The block handle: a capsule spanning the block the pointer is over.
+    /// Whether a click would toggle a changed line on a side of this row:
+    /// the pointer is on its numbers, or on its block's handle.
+    private func isGutterHovered(side: DiffColumn, documentRow: DocumentRow) -> Bool {
+        if documentRow.block >= 0, controller.hoveredBlock == Int(documentRow.block) {
+            return true
+        }
+        guard let hovered = controller.hoveredLine, hovered.row == row else {
+            return false
+        }
+        return !document.isSplit || hovered.column == side
+    }
+
+    /// The row's full height across a range of x.
+    private func rect(spanning range: ClosedRange<CGFloat>) -> CGRect {
+        CGRect(x: range.lowerBound, y: 0, width: range.upperBound - range.lowerBound, height: bounds.height)
+    }
+
+    // MARK: The handle and the divider
+
+    /// Split, the line between the halves (under the handle beside changed
+    /// lines while lines can be staged).
+    private func drawDivider() {
+        guard let divider = geometry.divider else {
+            return
+        }
+        DiffColors.divider.setFill()
+        CGRect(x: divider, y: 0, width: 1, height: bounds.height).fill()
+    }
+
+    /// The handle beside a row's changed lines while lines can be staged:
+    /// the accent for a line the commit includes, `line2` for one left out
+    /// (a split row whose two lines differ shows each in its half of the
+    /// bar), washed while the pointer is on its block's handle.
     private func drawHandle(_ documentRow: DocumentRow) {
-        guard let handle = geometry.handle, documentRow.block >= 0, controller.hoveredBlock == Int(documentRow.block) else {
+        guard let handle = geometry.handle, documentRow.isChange else {
             return
         }
-        let block = document.blocks[Int(documentRow.block)]
-        guard let first = block.rows.first, let last = block.rows.last else {
+        let lines = document.isSplit
+            ? [DiffColumn.before, .after].compactMap { documentRow.line($0) }
+            : (documentRow.unifiedLine.map { [$0] } ?? [])
+        let states = lines.compactMap { controller.isIncluded(line: $0) }
+        guard let first = states.first, let last = states.last else {
             return
         }
-        let table = controller.tableView
-        let top = table.rect(ofRow: first).minY - table.rect(ofRow: row).minY
-        let bottom = table.rect(ofRow: last).maxY - table.rect(ofRow: row).minY
-        let width = DiffTableMetrics.handleCapsuleWidth
-        let capsule = CGRect(
-            x: (handle.lowerBound + handle.upperBound - width) / 2,
-            y: top + 2,
-            width: width,
-            height: max(bottom - top - 4, width)
-        )
-        DiffTableStyle.blockHandle.setFill()
-        NSBezierPath(roundedRect: capsule, xRadius: width / 2, yRadius: width / 2).fill()
+        let bar = rect(spanning: handle)
+        if first == last {
+            handleColor(first).setFill()
+            bar.fill()
+        } else {
+            let (left, right) = bar.divided(atDistance: bar.width / 2, from: .minXEdge)
+            handleColor(first).setFill()
+            left.fill()
+            handleColor(last).setFill()
+            right.fill()
+        }
+        if documentRow.block >= 0, controller.hoveredBlock == Int(documentRow.block) {
+            DiffColors.gutterHover.setFill()
+            bar.fill(using: .sourceOver)
+        }
+    }
+
+    private func handleColor(_ included: Bool) -> NSColor {
+        included ? DiffColors.includedHandle : DiffColors.excludedHandle
     }
 
     // MARK: Hunk headers
 
+    /// A hunk header: the expansion buttons in the numbers' gutter, the
+    /// checkbox while lines can be staged, then git's header line.
     private func drawHunk(_ documentRow: DocumentRow) {
         DiffColors.hunkHeaderBackground.setFill()
         bounds.fill()
-        // Hairlines above (not atop the diff) and below.
-        DiffTableStyle.divider.setFill()
-        if row > 0 {
-            CGRect(x: 0, y: 0, width: bounds.width, height: 1).fill()
-        }
-        CGRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1).fill()
 
-        let hunk = document.hunks[Int(documentRow.hunk)]
+        let hunkIndex = Int(documentRow.hunk)
+        let hunk = document.hunks[hunkIndex]
         let buttons = DiffHunkButton.buttons(for: hunk.expansionType)
-        let buttonRects = geometry.expansionButtonRects(count: buttons.count, rowHeight: bounds.height)
-        let header = DiffHunkHeaderText(document.lines[Int(documentRow.before)].text)
+        for (button, rect) in zip(buttons, geometry.expansionButtonRects(count: buttons.count, rowHeight: bounds.height)) {
+            let isHovered = controller.hoveredButton.map { $0.hunk == hunkIndex && $0.button == button } ?? false
+            if isHovered {
+                DiffColors.expansionButtonHover.setFill()
+                let inset = rect.insetBy(dx: DiffTableMetrics.expansionHoverInset, dy: DiffTableMetrics.expansionHoverInset)
+                let radius = DiffTableMetrics.expansionHoverRadius
+                NSBezierPath(roundedRect: inset, xRadius: radius, yRadius: radius).fill()
+            }
+            drawSymbol(button.systemImage, color: isHovered ? DiffColors.expansionButtonHovered : DiffColors.expansionButton, in: rect, weight: .semibold)
+        }
 
-        // The checkbox.
-        var x = DiffTableMetrics.hunkLeadingInset
         if let checkbox = geometry.hunkCheckbox, let inclusion = controller.inclusion(ofHunk: hunk) {
             let size = CheckboxDrawing.size
             let box = CGRect(
-                x: ((checkbox.lowerBound + checkbox.upperBound - size) / 2).rounded(),
+                x: checkbox.lowerBound.rounded(),
                 y: ((bounds.height - size) / 2).rounded(),
                 width: size,
                 height: size
@@ -264,65 +297,28 @@ struct DiffRowRenderer {
             case .none: .off
             }
             CheckboxDrawing.draw(state, in: box, isEnabled: shownStaging?.canSelectLines ?? true, flipped: true)
-            x = box.maxX + DiffTableMetrics.hunkSpacing
         }
 
-        // The range, in SF Mono on the right, then the enclosing context
-        // in the room left.
-        var end = (buttonRects.first?.minX ?? bounds.width - DiffTableMetrics.hunkTrailingInset + DiffTableMetrics.textInset) - DiffTableMetrics.textInset
-        if let range = header.range {
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: range, attributes: [
-                .font: hunkRangeFont,
-                Self.foregroundKey: DiffTableStyle.quietMark.cgColor,
-            ]))
-            let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)).rounded(.up)
-            if end - width > x + DiffTableMetrics.hunkSpacing {
-                drawLine(line, x: end - width, baseline: centeredBaseline(of: line))
-                end -= width + DiffTableMetrics.hunkSpacing * 2
-            }
+        let start = geometry.hunkText
+        let end = geometry.width - DiffTableMetrics.trailingInset
+        guard end > start else {
+            return
         }
-        if !header.context.isEmpty, end > x {
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: header.context, attributes: [
-                .font: hunkTextFont,
-                Self.foregroundKey: DiffColors.hunkHeaderText.cgColor,
-            ]))
-            context.saveGState()
-            context.clip(to: CGRect(x: x, y: 0, width: end - x, height: bounds.height))
-            drawLine(line, x: x, baseline: centeredBaseline(of: line))
-            context.restoreGState()
-        }
-
-        // The expansion buttons.
-        for (button, rect) in zip(buttons, buttonRects) {
-            if let hovered = controller.hoveredButton, hovered.hunk == Int(documentRow.hunk), hovered.button == button {
-                DiffTableStyle.buttonHover.setFill()
-                let inset = rect.insetBy(dx: 2, dy: 3)
-                NSBezierPath(roundedRect: inset, xRadius: 6, yRadius: 6).fill()
-            }
-            drawSymbol(button.systemImage, color: DiffTableStyle.quietMark, in: rect, weight: .semibold)
-        }
+        let index = Int(documentRow.before)
+        let header = controller.textCache.header(
+            line: index,
+            text: document.lines[index].text,
+            color: DiffColors.hunkHeaderText,
+            font: controller.codeFont
+        )
+        context.saveGState()
+        context.clip(to: CGRect(x: start, y: 0, width: end - start, height: bounds.height))
+        drawLine(header, x: start, baseline: font.baseline)
+        context.restoreGState()
     }
 
     private var shownStaging: StagingState? {
         controller.shownContent?.staging
-    }
-
-    /// The hunk header's context: the secondary size, scaled with the code.
-    private var hunkTextFont: NSFont {
-        .systemFont(ofSize: (font.fontSize * DiffTableMetrics.hunkTextScale * 2).rounded() / 2)
-    }
-
-    /// The hunk header's range: SF Mono 11, scaled with the code.
-    private var hunkRangeFont: NSFont {
-        numberFont
-    }
-
-    /// The baseline that centers a line of text in the row.
-    private func centeredBaseline(of line: CTLine) -> CGFloat {
-        var ascent: CGFloat = 0
-        var descent: CGFloat = 0
-        CTLineGetTypographicBounds(line, &ascent, &descent, nil)
-        return ((bounds.height - ascent - descent) / 2 + ascent).rounded()
     }
 
     // MARK: Missing newlines
@@ -342,8 +338,8 @@ struct DiffRowRenderer {
         for side in sides {
             let half = geometry.half(side)
             let symbolRect = CGRect(x: half.marker.lowerBound, y: 0, width: font.characterWidth, height: font.lineHeight)
-            drawSymbol("nosign", color: DiffTableStyle.quietMark, in: symbolRect, scale: DiffTableStyle.noNewlineSymbolScale)
-            let attributed = NSAttributedString(string: "No newline at end of file", attributes: textAttributes(color: DiffTableStyle.quietMark))
+            drawSymbol("nosign", color: DiffColors.quietMark, in: symbolRect, scale: DiffTableMetrics.noNewlineSymbolScale)
+            let attributed = NSAttributedString(string: "No newline at end of file", attributes: textAttributes(color: DiffColors.quietMark))
             drawLine(CTLineCreateWithAttributedString(attributed), x: half.text.lowerBound + DiffTableMetrics.textInset, baseline: font.baseline)
         }
     }
@@ -362,20 +358,24 @@ struct DiffRowRenderer {
         context.saveGState()
         context.clip(to: textArea)
 
-        // The intra-line change (not on a line left out), then the
-        // selection, behind the text.
+        // The intra-line change (not on a line left out), find's matches
+        // (the current one stronger), then the selection, behind the text.
         if !excluded, let change = controller.intraLineChange(ofLine: line), documentLine.conflict == nil {
             (documentLine.type == .add ? DiffColors.addedChange : DiffColors.deletedChange).setFill()
             fill(range: change.location..<change.max, layout: layout, half: half, side: side, scrollX: scrollX, radius: DiffTableMetrics.intraLineRadius)
         }
         let selectionSide: DiffColumn = document.isSplit ? side : .before
+        for highlight in controller.find.highlights(row: row, column: selectionSide) {
+            (highlight.isCurrent ? DiffColors.currentFindMatch : DiffColors.findMatch).setFill()
+            fill(range: highlight.range, layout: layout, half: half, side: side, scrollX: scrollX, radius: DiffTableMetrics.intraLineRadius)
+        }
         if let selection = controller.textSelection, selection.column == selectionSide,
            let range = selection.range(inRow: row, contentLength: documentLine.info.utf16Count), !range.isEmpty {
-            (controller.isFocused ? NSColor.selectedTextBackgroundColor : NSColor.unemphasizedSelectedTextBackgroundColor).setFill()
+            (controller.isFocused ? Palette.textSelection : Palette.textSelectionInactive).setFill()
             fill(range: range, layout: layout, half: half, side: side, scrollX: scrollX)
         }
 
-        // The text: faded and struck through on a line left out.
+        // The text: faded on a line left out.
         let prepared = controller.textCache.text(
             line: line,
             documentLine: documentLine,
@@ -404,29 +404,7 @@ struct DiffRowRenderer {
                 }
             }
         }
-        if excluded {
-            drawStrikethrough(layout: layout, side: side, scrollX: scrollX)
-            context.setAlpha(1)
-        }
         context.restoreGState()
-    }
-
-    /// A line through a left-out line's text, visual line by visual line,
-    /// from its first column to its last.
-    private func drawStrikethrough(layout: LineLayout, side: DiffColumn, scrollX: CGFloat) {
-        DiffColors.excludedText.setFill()
-        let middle = (font.lineHeight / 2).rounded()
-        for visualLine in 0..<layout.visualLineCount {
-            let top = CGFloat(visualLine) * font.lineHeight
-            guard top < bounds.height else {
-                break
-            }
-            let x0 = geometry.x(ofColumn: 0, side: side, scrollX: scrollX)
-            let x1 = geometry.x(ofColumn: layout.endColumn(ofVisualLine: visualLine), side: side, scrollX: scrollX)
-            if x1 > x0 {
-                CGRect(x: x0, y: top + middle, width: x1 - x0, height: 1).fill()
-            }
-        }
     }
 
     /// Fills the rects a range of code units covers, visual line by visual
@@ -448,7 +426,7 @@ struct DiffRowRenderer {
                 let corner = min(radius, rect.width / 2)
                 NSBezierPath(roundedRect: rect, xRadius: corner, yRadius: corner).fill()
             } else {
-                rect.fill()
+                rect.fill(using: .sourceOver)
             }
         }
     }
@@ -515,38 +493,28 @@ struct DiffRowRenderer {
 
     // MARK: Gutter pieces
 
-    /// A changed line's number cells while lines can be staged: included,
-    /// the cells (old and new) tinted with the accent over the background,
-    /// the whole row high so included lines join into one band, with an
-    /// accent bar down the first cell's left edge; left out, a `line2` bar.
-    private func drawNumberCells(_ half: DiffRowGeometry.Half, included: Bool?) {
-        guard let included, let first = half.oldNumber ?? half.newNumber else {
-            return
-        }
-        let last = half.newNumber ?? first
-        let bar = CGRect(x: first.lowerBound, y: 0, width: DiffTableMetrics.numberBarWidth, height: bounds.height)
+    /// A changed line's number cells while lines can be staged: tinted
+    /// with the accent over the background while the commit includes the
+    /// line, the whole row high so included lines join into one band; a
+    /// wash over them while a click there or on the block's handle would
+    /// toggle the line.
+    private func drawNumberCells(_ half: DiffRowGeometry.Half, included: Bool, isHovered: Bool) {
+        let cells = rect(spanning: half.gutter)
         if included {
-            let cells = CGRect(x: first.lowerBound, y: 0, width: last.upperBound - first.lowerBound, height: bounds.height)
             Palette.background.setFill()
             cells.fill()
             DiffColors.includedNumberCell.setFill()
             cells.fill(using: .sourceOver)
-            DiffColors.includedNumberBar.setFill()
-        } else {
-            DiffColors.excludedNumberBar.setFill()
         }
-        bar.fill()
+        if isHovered {
+            DiffColors.gutterHover.setFill()
+            cells.fill(using: .sourceOver)
+        }
     }
 
-    /// A line number, right-aligned in its column: text3, or the accent
-    /// at semibold on an included line.
-    private func drawNumber(_ number: Int, in range: ClosedRange<CGFloat>, isIncluded: Bool = false) {
-        let line = controller.textCache.number(
-            number,
-            color: isIncluded ? DiffColors.includedNumber : DiffColors.lineNumber,
-            font: numberFont,
-            isSemibold: isIncluded
-        )
+    /// A line number, right-aligned in its column.
+    private func drawNumber(_ number: Int, in range: ClosedRange<CGFloat>) {
+        let line = controller.textCache.number(number, color: DiffColors.lineNumber, font: numberFont)
         let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
         drawLine(line, x: (range.upperBound - DiffTableMetrics.numberPadding - width).rounded(), baseline: font.baseline)
     }
@@ -563,7 +531,7 @@ struct DiffRowRenderer {
         drawLine(line, x: x, baseline: font.baseline)
     }
 
-    private func drawSymbol(_ name: String, color: NSColor, in rect: CGRect, weight: NSFont.Weight = .regular, scale: CGFloat = DiffTableStyle.symbolScale) {
+    private func drawSymbol(_ name: String, color: NSColor, in rect: CGRect, weight: NSFont.Weight = .regular, scale: CGFloat = DiffTableMetrics.symbolScale) {
         guard let image = DiffSymbols.image(name, pointSize: font.fontSize * scale, weight: weight, color: color) else {
             return
         }
@@ -578,7 +546,7 @@ struct DiffRowRenderer {
         guard let rows = controller.cursorRows, rows.contains(row) else {
             return
         }
-        DiffTableStyle.cursorFill.setFill()
+        DiffColors.cursor.setFill()
         bounds.fill(using: .sourceOver)
     }
 
@@ -620,29 +588,5 @@ enum DiffSymbols {
         }
         cache[key] = image
         return image
-    }
-}
-
-/// A hunk header's parts as the header row shows them: "@@ -24,9 +24,13 @@
-/// final class ForecastService {" is the range "−24,9 +24,13" and the
-/// context "final class ForecastService {".
-nonisolated struct DiffHunkHeaderText: Equatable {
-    /// The range, with a real minus sign; nil when the text isn't a header.
-    var range: String?
-    /// The enclosing context git found, or the whole text when it isn't a
-    /// header.
-    var context: String
-
-    init(_ text: String) {
-        guard text.hasPrefix("@@ "), let close = text.range(of: " @@", range: text.index(text.startIndex, offsetBy: 3)..<text.endIndex) else {
-            range = nil
-            context = text
-            return
-        }
-        let ranges = text[text.index(text.startIndex, offsetBy: 3)..<close.lowerBound]
-        range = ranges.split(separator: " ").map { part in
-            part.hasPrefix("-") ? "\u{2212}" + part.dropFirst() : String(part)
-        }.joined(separator: " ")
-        context = text[close.upperBound...].trimmingCharacters(in: .whitespaces)
     }
 }

@@ -111,10 +111,12 @@ extension MultiCommitOperationsModel {
 
         let run: RebaseRun
         let originalTip: String
+        let originalUpstreamTip: String?
         do {
-            (run, originalTip) = try await repository.perform(OperationDescriptor(kind: .rebase, retry: retry)) { ctx in
+            (run, originalTip, originalUpstreamTip) = try await repository.perform(OperationDescriptor(kind: .rebase, retry: retry)) { ctx in
                 try await self.requireNothingInProgress(.rebase, retry: retry, in: ctx)
                 let originalTip = await resolveCommit(ctx.repository, target.ref) ?? target.tip.sha
+                let originalUpstreamTip = await getUpstreamTip(ctx.repository, branchName: target.name)
                 let commits = (try? await getCommitsBetweenCommits(ctx.repository, base.ref, target.ref)) ?? nil
 
                 logger.info("[rebase] starting rebase for \(target.name, privacy: .private) at \(originalTip, privacy: .public)")
@@ -129,6 +131,7 @@ extension MultiCommitOperationsModel {
                     detail: .rebase(sourceBranch: base, commits: commits ?? [], currentTip: base.tip.sha),
                     phase: .running(initialProgress(commits ?? [])),
                     originalBranchTip: originalTip,
+                    originalUpstreamTip: originalUpstreamTip,
                     targetBranch: target,
                     origin: .espalier
                 )
@@ -139,7 +142,7 @@ extension MultiCommitOperationsModel {
                     let result = try await withOperationHooks(ctx.hooks) {
                         try await GitKit.rebase(ctx.repository, base, target, progressCallback: progress.callback)
                     }
-                    return (RebaseRun(result: result, head: await resolveCommit(ctx.repository, "HEAD")), originalTip)
+                    return (RebaseRun(result: result, head: await resolveCommit(ctx.repository, "HEAD")), originalTip, originalUpstreamTip)
                 } catch {
                     await abortRebaseStartedHere(ctx.repository)
                     throw error
@@ -157,7 +160,7 @@ extension MultiCommitOperationsModel {
         case .completedWithoutError:
             clearCurrentOperation()
             await repository.awaitOperationRefresh(covering: .full)
-            recordRewriteOfCurrentBranch(target.name, previousTip: originalTip)
+            await recordRewriteOfCurrentBranch(target.name, previousTip: originalTip, upstreamTip: originalUpstreamTip)
             return .rebased(targetBranch: target.name, baseBranch: base.name)
         case .alreadyUpToDate:
             clearCurrentOperation()
@@ -266,7 +269,11 @@ extension MultiCommitOperationsModel {
             await repository.awaitOperationRefresh(covering: .full)
             let targetName = operation.targetBranch?.name
             if let targetName, let originalTip = operation.originalBranchTip {
-                recordRewriteOfCurrentBranch(targetName, previousTip: originalTip)
+                var upstreamTip = operation.originalUpstreamTip
+                if operation.origin == .rebuilt {
+                    upstreamTip = currentUpstreamTip(of: targetName)
+                }
+                await recordRewriteOfCurrentBranch(targetName, previousTip: originalTip, upstreamTip: upstreamTip)
             }
             // This sets the history to the current tip.
             if let head = run.head {
@@ -359,12 +366,13 @@ extension MultiCommitOperationsModel {
     }
 
     /// Records that the current branch, if it's `branchName`, was rewritten
-    /// from `previousTip`, so the next push recommends force.
-    func recordRewriteOfCurrentBranch(_ branchName: String, previousTip: String) {
+    /// from `previousTip` while its upstream was at `upstreamTip`, so the
+    /// next push recommends force (`recordRewrite`).
+    func recordRewriteOfCurrentBranch(_ branchName: String, previousTip: String, upstreamTip: String?) async {
         guard case .valid(let branch) = repository?.gitState.tip, JSCompat.strictEquals(branch.name, branchName) else {
             return
         }
-        recordRewrite(of: branch, previousTip: previousTip)
+        await recordRewrite(of: branch, previousTip: previousTip, upstreamTip: upstreamTip)
     }
 
     /// Whether git was interrupted in the rebase in progress: its state

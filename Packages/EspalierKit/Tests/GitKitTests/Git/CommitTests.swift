@@ -603,7 +603,7 @@ struct CommitTests {
                 let error = await #expect(throws: GitError.self) {
                     try await createMergeCommit(repository, status.workingDirectory.files)
                 }
-                #expect(error?.message.contains("There are no changes to commit.") == true)
+                #expect(error?.result.gitError == .nothingToCommit)
             }
         }
     }
@@ -1046,7 +1046,6 @@ struct CommitTests {
             }
 
             #expect(error?.result.gitError == .lockFileAlreadyExists)
-            #expect(error?.message == "A lock file in the repository is blocking this operation.")
             #expect(try await getTipOrError(repo).sha == head.sha)
             #expect(try read(repo, "good-file") == "change")
             // Another process may own the lock; it's left alone.

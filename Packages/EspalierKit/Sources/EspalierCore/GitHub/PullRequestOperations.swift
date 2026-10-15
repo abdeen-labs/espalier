@@ -201,14 +201,17 @@ extension RepositoryGitHubModel {
         }
         var remote = remotes.first { urlMatchesRemote(headCloneURL, remoteURL: $0.url) }
 
-        // If we can't find one we'll create a fork remote. Remote
+        // If we can't find one we'll create a fork remote, marked as
+        // Espalier's so it's hidden and pruned once unused. Remote
         // configuration holds the network lane (it's shared by worktrees).
         if remote == nil {
             let forkRemoteName = forkPullRequestRemoteName(headRepositoryOwner)
             let descriptor = OperationDescriptor(kind: .checkoutPullRequest, lanes: [.network], refreshAfter: [.remotes, .refs])
             do {
                 remote = try await repository.perform(descriptor) { ctx in
-                    try await addRemote(ctx.repository, forkRemoteName, headCloneURL)
+                    let added = try await addRemote(ctx.repository, forkRemoteName, headCloneURL)
+                    try await markForkRemote(ctx.repository, forkRemoteName)
+                    return added
                 }
             } catch {
                 throw OperationError(

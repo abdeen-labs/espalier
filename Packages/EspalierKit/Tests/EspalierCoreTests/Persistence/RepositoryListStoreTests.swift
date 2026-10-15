@@ -95,6 +95,7 @@ private struct SampleList {
                 workflowPreferences: WorkflowPreferences(forkContributionTarget: .fork),
                 tagsToPush: ["v1.2", "v1.3"],
                 ignoresExistingUpstreamRemote: true,
+                rewrittenBranches: ["feature": String(repeating: "c", count: 40)],
                 addedAt: start
             ),
             RepositoryRecord(path: "/Users/me/src/cafe\u{301}", isMissing: true, addedAt: start.addingTimeInterval(60)),
@@ -181,8 +182,8 @@ struct RepositoryListStoreTests {
         let repository = try #require((json["repositories"] as? [[String: Any]])?.first)
         #expect(Set(repository.keys) == [
             "id", "path", "gitDir", "mainWorktreePath", "alias", "missing", "gitHubRepositoryID",
-            "workflowPreferences", "isTutorialRepository", "tagsToPush", "ignoreExistingUpstreamRemote", "addedAt",
-            "historyScope",
+            "workflowPreferences", "isTutorialRepository", "tagsToPush", "ignoreExistingUpstreamRemote", "rewrittenBranches",
+            "addedAt", "historyScope",
         ])
         #expect(repository["mainWorktreePath"] is NSNull)
         #expect(repository["historyScope"] is NSNull)

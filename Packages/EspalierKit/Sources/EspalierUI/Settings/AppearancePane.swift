@@ -1,6 +1,10 @@
-// Settings ▸ Appearance: the theme (System, Light, Dark), the accent color,
-// code, dates and numbers, accessibility, and the sidebar. The code text size
-// steps through the same sizes as View ▸ Bigger (⌘=) and Smaller (⌘−).
+// Settings ▸ Appearance: the theme (Classic, Orchard, Islands, Pop), its
+// color (Classic's is the Mac's accent color), its background tint, the
+// appearance (System, Light, Dark), and the app font; code (the code font,
+// its text size, the diff's tab size), dates and numbers, accessibility, and
+// the sidebar. Each font's name in its pop-up is drawn in that font. The
+// code text size steps through the same sizes as View ▸ Bigger (⌘=) and
+// Smaller (⌘−).
 
 import EspalierCore
 import GitKit
@@ -64,8 +68,9 @@ enum AppearanceSettings {
     }
 }
 
-/// The Appearance pane: the theme and the accent color, code, dates and
-/// numbers, accessibility, and the sidebar.
+/// The Appearance pane: the theme, its color and background tint, the
+/// appearance, and the app font; code (its font, text size, and tab size),
+/// dates and numbers, accessibility, and the sidebar.
 struct AppearanceForm: View {
     @Bindable var preferences: Preferences
     let openAppearanceSettings: () -> Void
@@ -73,17 +78,58 @@ struct AppearanceForm: View {
     var body: some View {
         SettingsPage {
             SettingsSection("Theme") {
+                SettingsRow("Theme") {
+                    EmptyView()
+                } footer: {
+                    ThemeCardPicker(
+                        selection: $preferences.designTheme,
+                        colors: preferences.designThemeColors,
+                        backgrounds: preferences.designThemeBackgrounds
+                    )
+                    .padding(.vertical, Metrics.FocusRing.outset)
+                }
+                if preferences.designTheme == .classic {
+                    SettingsRow("Color", description: "Espalier follows your Mac's accent color.") {
+                        Button("Appearance Settings…", action: openAppearanceSettings)
+                            .settingsButton()
+                    }
+                } else {
+                    SettingsRow("Color", description: preferences.designThemeColor?.title) {
+                        SwatchPicker("Color", values: preferences.designTheme.colors, selection: designThemeColor, title: \.title) { color in
+                            Theme.named(preferences.designTheme, color: color).accent
+                        }
+                    }
+                }
+                SettingsRow("Background", description: preferences.designThemeBackground.title) {
+                    SwatchPicker("Background", values: BackgroundTint.allCases, selection: $preferences.designThemeBackground, title: \.title) { tint in
+                        Theme.named(preferences.designTheme, color: preferences.designThemeColor, background: tint).backgroundSwatch
+                    }
+                }
                 SettingsRow("Appearance", labelsControl: true) {
                     CapsuleSegmentedControl("Appearance", selection: $preferences.theme, segments: AppearanceSettings.themes)
                         .fixedSize()
                 }
-                SettingsRow("Accent color", description: "Espalier follows your Mac's accent color.") {
-                    Button("Appearance Settings…", action: openAppearanceSettings)
-                        .settingsButton()
+                SettingsRow("Font", labelsControl: true) {
+                    CapsulePopUp("Font", selection: $preferences.appFont, title: preferences.appFont.title) {
+                        for font in AppFont.allCases {
+                            MenuChoice(font.title, value: font)
+                                .titleFont(Typography.sans(.body, in: font))
+                        }
+                    }
+                    .fixedSize()
                 }
             }
 
             SettingsSection("Code") {
+                SettingsRow("Font", labelsControl: true) {
+                    CapsulePopUp("Code font", selection: $preferences.codeFont, title: preferences.codeFont.title) {
+                        for font in CodeFont.allCases {
+                            MenuChoice(font.title, value: font)
+                                .titleFont(Typography.mono(size: TextStyleSizes.size(of: .body), in: font))
+                        }
+                    }
+                    .fixedSize()
+                }
                 SettingsRow("Text size", description: "View ▸ Bigger (⌘=) and Smaller (⌘−) change it too.", labelsControl: true) {
                     CapsuleStepper(
                         "Text size",
@@ -96,8 +142,8 @@ struct AppearanceForm: View {
                 }
                 SettingsRow("Diff tab size", labelsControl: true) {
                     CapsulePopUp("Diff tab size", selection: $preferences.tabSize, title: AppearanceSettings.tabSizeTitle(preferences.tabSize)) {
-                        ForEach(AppearanceSettings.tabSizes(including: preferences.tabSize), id: \.self) { size in
-                            Text(AppearanceSettings.tabSizeTitle(size)).tag(size)
+                        for size in AppearanceSettings.tabSizes(including: preferences.tabSize) {
+                            MenuChoice(AppearanceSettings.tabSizeTitle(size), value: size)
                         }
                     }
                     .settingsControlWidth()
@@ -107,25 +153,35 @@ struct AppearanceForm: View {
             SettingsSection("Dates and numbers") {
                 SettingsToggleRow("Prefer absolute dates over relative", isOn: $preferences.preferAbsoluteDates)
                 SettingsRow("Date format", labelsControl: true) {
-                    CapsulePopUp("Date format", selection: dateFormat, title: Self.title(dateFormat.wrappedValue)) {
-                        ForEach(DateFormatPattern.allCases, id: \.self) { format in
-                            Text(Self.title(format)).tag(format)
+                    CapsulePopUp(
+                        "Date format",
+                        selection: dateFormat,
+                        title: Self.title(dateFormat.wrappedValue),
+                        fitting: DateFormatPattern.allCases.map(Self.title)
+                    ) {
+                        for format in DateFormatPattern.allCases {
+                            MenuChoice(Self.title(format), value: format)
                         }
                     }
-                    .settingsControlWidth()
+                    .settingsControlWidthFittingChoices()
                 }
                 SettingsRow("Time format", labelsControl: true) {
-                    CapsulePopUp("Time format", selection: timeFormat, title: Self.title(timeFormat.wrappedValue)) {
-                        ForEach(TimeFormatPattern.allCases, id: \.self) { format in
-                            Text(Self.title(format)).tag(format)
+                    CapsulePopUp(
+                        "Time format",
+                        selection: timeFormat,
+                        title: Self.title(timeFormat.wrappedValue),
+                        fitting: TimeFormatPattern.allCases.map(Self.title)
+                    ) {
+                        for format in TimeFormatPattern.allCases {
+                            MenuChoice(Self.title(format), value: format)
                         }
                     }
-                    .settingsControlWidth()
+                    .settingsControlWidthFittingChoices()
                 }
                 SettingsRow("Number format", labelsControl: true) {
                     CapsulePopUp("Number format", selection: $preferences.numberFormat, title: AppearanceSettings.numberFormatExample(preferences.numberFormat)) {
-                        ForEach(numberFormats, id: \.self) { format in
-                            Text(AppearanceSettings.numberFormatExample(format)).tag(format)
+                        for format in numberFormats {
+                            MenuChoice(AppearanceSettings.numberFormatExample(format), value: format)
                         }
                     }
                     .settingsControlWidth()
@@ -156,6 +212,15 @@ struct AppearanceForm: View {
 
     private static func title(_ format: TimeFormatPattern) -> String {
         AppearanceSettings.formatTitle(example: format.example, pattern: format.rawValue)
+    }
+
+    /// The current design theme's color.
+    private var designThemeColor: Binding<DesignThemeColor> {
+        Binding {
+            preferences.designThemeColor ?? preferences.designTheme.defaultColor ?? .ink
+        } set: { color in
+            preferences.designThemeColor = color
+        }
     }
 
     /// The date format, the default when none (or an unknown one) is

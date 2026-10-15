@@ -1,9 +1,11 @@
 // Ported from desktop/app/src/lib/stores/copilot-store.ts (resolveConflicts) and app-store.ts
 //
-// - A failed chunk doesn't fail the run: the successful chunks are kept and
-//   the failed chunks' files are reported individually (`failedFiles`), to
-//   retry on their own with `ConflictResolutionContext.restricted(to:)` and
-//   `merging(_:)`. The run only throws when no chunk succeeded.
+// - A failed file doesn't fail the run: the resolved files are kept and the
+//   failed ones are reported individually (`failedFiles`), to retry on
+//   their own with `ConflictResolutionContext.restricted(to:)` and
+//   `merging(_:)`. The run only throws when no file was resolved.
+// - Chunks are packed by conflict size as well as file count, and a chunk
+//   too large for the model is split rather than sent again.
 // - Provider errors (401, 402, 429, ...) are the same `AIProviderError` as
 //   in commit message generation, available as `underlyingError`.
 // - Every completed round produces a complete `ConflictResolutionOutcome`
@@ -34,7 +36,7 @@ public struct AIConflictResolutionAbortError: Error, LocalizedError, Sendable, H
 private let log = Log.logger(category: "AIKit")
 
 /// Drives a single streaming turn to completion and returns the final
-/// response content.
+/// response, whose content isn't empty.
 ///
 /// The model's live reasoning is reported to `onReasoningSnippet` sentence by
 /// sentence. The first response text marks the transition from reasoning to
@@ -42,12 +44,14 @@ private let log = Log.logger(category: "AIKit")
 /// then rather than stranded.
 ///
 /// Cancelling the calling task cancels the request immediately and throws
-/// `AIConflictResolutionAbortError`.
+/// `AIConflictResolutionAbortError`. An empty response throws
+/// `AIResponseError`, or `AIProviderError` of kind `outputLimitReached` when
+/// the output limit cut it off (reasoning can use it all up).
 public func runConflictResolutionTurn(
     provider: any AIProvider,
     request: AIRequest,
     onReasoningSnippet: (@Sendable (String) -> Void)? = nil
-) async throws -> String {
+) async throws -> AIResponse {
     if Task.isCancelled {
         throw AIConflictResolutionAbortError()
     }
@@ -67,9 +71,9 @@ public func runConflictResolutionTurn(
         // The complete response is authoritative, not the accumulated
         // increments.
         guard !response.content.isEmpty else {
-            throw AIResponseError("No response from the model")
+            throw response.reachedOutputLimit ? outputLimitReachedError() : AIResponseError("No response from the model")
         }
-        return response.content
+        return response
     } catch {
         if error is CancellationError || Task.isCancelled {
             throw AIConflictResolutionAbortError()
@@ -78,15 +82,32 @@ public func runConflictResolutionTurn(
     }
 }
 
-/// What a chunk produced.
+/// What resolving some files produced.
 private struct ChunkResult: Sendable {
-    var resolutions: [FileResolution]
-    var summary: String?
-    var references: [AIConflictReference]
+    var resolutions: [FileResolution] = []
+    /// Each request's summary, covering the files it resolved.
+    var summaries: [AIChunkSummary] = []
+    var references: [AIConflictReference] = []
+    var failedFiles: [AIFailedFile] = []
+    /// Files not sent after an error that would fail every request.
+    var notAttemptedFiles: [String] = []
+    /// That error, when one stopped the chunk.
+    var haltingError: AIConflictResolutionError?
+
+    mutating func append(_ other: ChunkResult) {
+        resolutions += other.resolutions
+        summaries += other.summaries
+        references += other.references.filter { !references.contains($0) }
+        failedFiles += other.failedFiles
+        notAttemptedFiles += other.notAttemptedFiles
+        haltingError = haltingError ?? other.haltingError
+    }
 }
 
 /// The request settings shared by every chunk.
 private struct ChunkRequest: Sendable {
+    /// The whole context; each request sends some of its files.
+    var context: ConflictResolutionContext
     var modelId: String
     var reasoningEffort: ReasoningEffort?
     var timeout: Duration
@@ -95,10 +116,13 @@ private struct ChunkRequest: Sendable {
 
 /// Resolves conflicts with the selected model.
 ///
-/// Up to `SinglePromptFileLimit` files go in a single prompt. Larger sets
-/// are batched into dependency-aware chunks, with up to
-/// `MaxConcurrentChunks` requests at a time. Each chunk is retried once when
-/// the model's response can't be parsed or validated.
+/// Up to `SinglePromptFileLimit` files, with no more conflict content than
+/// `MaxChunkConflictContentSize`, go in a single prompt. Larger sets are
+/// batched into dependency-aware chunks within both limits, with up to
+/// `MaxConcurrentChunks` requests at a time. Each chunk is resolved by
+/// `resolveChunk`: asked again once when the response can't be read, its
+/// files with unusable resolutions asked about again once on their own, and
+/// split in two when it's too large for the model.
 ///
 /// - Parameters:
 ///   - context: The files, commits, and pull requests from both sides.
@@ -122,7 +146,7 @@ public func resolveConflicts(
     onProgress: (@Sendable (ConflictResolutionProgress) -> Void)? = nil
 ) async throws -> ReassembledConflictResolutionResponse {
     if !context.files.contains(where: \.isResolvable) {
-        return ReassembledConflictResolutionResponse(resolutions: [], summary: nil, references: [])
+        return ReassembledConflictResolutionResponse(resolutions: [], summaries: [], references: [])
     }
     let provider: any AIProvider
     do {
@@ -152,7 +176,7 @@ public func resolveConflicts(
     let filesTotal = resolvableFiles.count
 
     if filesTotal == 0 {
-        return ReassembledConflictResolutionResponse(resolutions: [], summary: nil, references: [])
+        return ReassembledConflictResolutionResponse(resolutions: [], summaries: [], references: [])
     }
 
     onProgress?(ConflictResolutionProgress(filesResolved: 0, filesTotal: filesTotal))
@@ -163,6 +187,7 @@ public func resolveConflicts(
     }
     let token = randomHexToken(byteCount: 8)
     let chunkRequest = ChunkRequest(
+        context: context,
         modelId: model.modelId,
         reasoningEffort: model.reasoningEffort,
         timeout: timeout,
@@ -173,37 +198,11 @@ public func resolveConflicts(
         ) + ConflictResolutionSystemPrompt
     )
 
-    if filesTotal <= SinglePromptFileLimit {
-        var filteredContext = context
-        filteredContext.files = resolvableFiles
-        let chunk = try await resolveChunk(
-            provider: provider,
-            prompt: formatConflictContextForPrompt(filteredContext),
-            expectedFiles: resolvableFiles,
-            request: chunkRequest
-        ) { reasoningSnippet in
-            onProgress?(ConflictResolutionProgress(filesResolved: 0, filesTotal: filesTotal, reasoningSnippet: reasoningSnippet))
-        }
-        onProgress?(ConflictResolutionProgress(filesResolved: filesTotal, filesTotal: filesTotal))
-        return ReassembledConflictResolutionResponse(
-            resolutions: chunk.resolutions,
-            summary: chunk.summary,
-            references: chunk.references
-        )
-    }
-
-    // Batch into chunks and resolve concurrently. Smaller chunks at high
-    // file counts protect output quality (less truncation, fewer malformed
-    // responses).
-    let chunkSize = filesTotal > 100 ? 15 : 20
+    // Smaller chunks at high file counts protect output quality (less
+    // truncation, fewer malformed responses).
+    let chunkSize = filesTotal > 100 ? 15 : SinglePromptFileLimit
     let chunks = createDependencyAwareChunks(resolvableFiles, chunkSize)
-    var allResolutions: [FileResolution] = []
-    var failedFiles: [AIFailedFile] = []
-    var notAttemptedFiles: [String] = []
-    var firstSummary: String?
-    var firstReferences: [AIConflictReference] = []
-    var firstError: AIConflictResolutionError?
-    var succeededChunks = 0
+    var all = ChunkResult()
     // An error that would fail every further request (bad credentials, no
     // quota, unreachable provider): later batches aren't started.
     var haltingError: AIConflictResolutionError?
@@ -221,23 +220,15 @@ public func resolveConflicts(
 
         // These files were never sent, so they have no error of their own.
         if haltingError != nil {
-            notAttemptedFiles += batch.flatMap { files in files.map(\.path) }
+            all.notAttemptedFiles += batch.flatMap { files in files.map(\.path) }
             continue
         }
 
         let results = await withTaskGroup(of: (Int, Result<ChunkResult, any Error>).self) { group in
             for (index, chunkFiles) in batch.enumerated() {
-                var chunkContext = context
-                chunkContext.files = chunkFiles
-                let prompt = formatConflictContextForPrompt(chunkContext)
                 group.addTask {
                     do {
-                        let result = try await resolveChunk(
-                            provider: provider,
-                            prompt: prompt,
-                            expectedFiles: chunkFiles,
-                            request: chunkRequest
-                        ) { reasoningSnippet in
+                        let result = try await resolveChunk(chunkFiles, request: chunkRequest, provider: provider) { reasoningSnippet in
                             onProgress?(
                                 ConflictResolutionProgress(
                                     filesResolved: filesResolved.withLock { $0 },
@@ -261,35 +252,21 @@ public func resolveConflicts(
 
         // Collect results in chunk order once the whole batch has settled.
         var aborted = false
-        for (index, result) in results.enumerated() {
+        for result in results {
             switch result {
             case .success(let chunk):
-                succeededChunks += 1
-                allResolutions += chunk.resolutions
-                let resolved = filesResolved.withLock { count in
-                    count += chunk.resolutions.count
-                    return count
+                all.append(chunk)
+                haltingError = haltingError ?? chunk.haltingError
+                if !chunk.resolutions.isEmpty {
+                    let resolved = filesResolved.withLock { count in
+                        count += chunk.resolutions.count
+                        return count
+                    }
+                    onProgress?(ConflictResolutionProgress(filesResolved: resolved, filesTotal: filesTotal))
                 }
-                if firstSummary == nil, let summary = chunk.summary {
-                    firstSummary = summary
-                }
-                if firstReferences.isEmpty, !chunk.references.isEmpty {
-                    firstReferences = chunk.references
-                }
-                onProgress?(ConflictResolutionProgress(filesResolved: resolved, filesTotal: filesTotal))
-            case .failure(let error):
-                if error is AIConflictResolutionAbortError {
-                    aborted = true
-                    continue
-                }
-                let failure = AIConflictResolutionError.wrapping(error, stage: .unknown)
-                failedFiles += batch[index].map { AIFailedFile(path: $0.path, error: failure) }
-                if firstError == nil {
-                    firstError = failure
-                }
-                if haltingError == nil, (failure.underlyingError as? AIProviderError)?.affectsAllRequests == true {
-                    haltingError = failure
-                }
+            case .failure:
+                // `resolveChunk` throws only when the task is cancelled.
+                aborted = true
             }
         }
 
@@ -298,37 +275,47 @@ public func resolveConflicts(
         }
     }
 
-    if succeededChunks == 0, let firstError {
+    if all.resolutions.isEmpty, let firstError = all.failedFiles.first?.error {
         throw firstError
     }
 
-    onProgress?(ConflictResolutionProgress(filesResolved: filesResolved.withLock { $0 }, filesTotal: filesTotal))
     return ReassembledConflictResolutionResponse(
-        resolutions: allResolutions,
-        summary: firstSummary,
-        references: firstReferences,
-        failedFiles: failedFiles,
-        notAttemptedFiles: notAttemptedFiles
+        resolutions: all.resolutions,
+        summaries: all.summaries,
+        references: all.references,
+        failedFiles: all.failedFiles,
+        notAttemptedFiles: all.notAttemptedFiles
     )
 }
 
-/// Resolves a single chunk of files. Streams the turn with
-/// `runConflictResolutionTurn`, then parses, validates, and reassembles the
-/// response. Retries once on a parse or validation failure; transport
-/// errors (timeouts, authentication) fail fast, and cancellation is never
-/// retried.
+/// Resolves `files` with one request, and then what's left:
+///
+/// - A response that can't be read is asked for again once.
+/// - Files whose resolutions can't be used (`checkResolutions`) are asked
+///   about again once, on their own; the rest are kept.
+/// - Files too many for one request (the provider calls it too large, or the
+///   response is cut off at the output limit) are split in two, each half
+///   resolved the same way, one after the other. A single file fails: the
+///   same request would fail again.
+///
+/// Any other failure (timeouts, authentication, ...) fails the files at
+/// once. Only cancellation throws (`AIConflictResolutionAbortError`).
+///
+/// - Parameter retried: Whether the files were already asked about again,
+///   so they aren't a third time.
 private func resolveChunk(
-    provider: any AIProvider,
-    prompt: String,
-    expectedFiles: [FileConflictContext],
+    _ files: [FileConflictContext],
     request: ChunkRequest,
+    provider: any AIProvider,
+    retried: Bool = false,
     onReasoningSnippet: @escaping @Sendable (String) -> Void
 ) async throws -> ChunkResult {
-    var lastError: (any Error)?
-    var lastStage = AIConflictResolutionFailureStage.unknown
-    var retriedValidation = false
+    var retried = retried
+    var context = request.context
+    context.files = files
+    let prompt = formatConflictContextForPrompt(context)
 
-    for attempt in 0..<2 {
+    while true {
         // Don't start (or retry) a turn that's already been cancelled.
         if Task.isCancelled {
             throw AIConflictResolutionAbortError()
@@ -336,7 +323,7 @@ private func resolveChunk(
 
         var stage = AIConflictResolutionFailureStage.streamResponse
         do {
-            let content = try await runConflictResolutionTurn(
+            let response = try await runConflictResolutionTurn(
                 provider: provider,
                 request: AIRequest(
                     model: request.modelId,
@@ -350,38 +337,98 @@ private func resolveChunk(
             )
 
             stage = .parseResponse
-            let parsed = try parseAIConflictResolution(content)
+            let parsed: AIConflictResolutionResponse
+            do {
+                parsed = try parseAIConflictResolution(response.content)
+            } catch where response.reachedOutputLimit {
+                // Cut off, not malformed.
+                stage = .streamResponse
+                throw outputLimitReachedError()
+            }
+
             stage = .validateResponse
-            try validateResolutionPaths(parsed.resolutions, expectedFiles)
-            stage = .reassembleResponse
-            let resolutions = try reassembleResolutions(parsed.resolutions, expectedFiles)
-
-            return ChunkResult(resolutions: resolutions, summary: parsed.summary, references: parsed.references)
+            let checked = checkResolutions(parsed, files)
+            var result = ChunkResult()
+            if !checked.resolutions.isEmpty {
+                result.resolutions = checked.resolutions
+                result.summaries = parsed.summary.map { [AIChunkSummary(markdown: $0, paths: checked.resolutions.map(\.path))] } ?? []
+                result.references = parsed.references
+            }
+            if checked.unresolved.isEmpty {
+                return result
+            }
+            if !retried {
+                log.warning("Conflict resolution left \(checked.unresolved.count, privacy: .public) file(s) unresolved, retrying them")
+                let unresolved = checked.unresolved.map(\.path).exactSet
+                let again = files.filter { unresolved.contains(ExactString($0.path)) }
+                result.append(
+                    try await resolveChunk(again, request: request, provider: provider, retried: true, onReasoningSnippet: onReasoningSnippet)
+                )
+                return result
+            }
+            log.warning("Conflict resolution left \(checked.unresolved.count, privacy: .public) file(s) unresolved after a retry")
+            result.failedFiles = checked.unresolved.map { file in
+                AIFailedFile(
+                    path: file.path,
+                    error: AIConflictResolutionError(file.error, stage: file.stage, retryState: .failedAfterValidationRetry)
+                )
+            }
+            return result
         } catch {
-            lastError = error
-            lastStage = stage
-
             // Never retry a user-initiated abort.
             if error is AIConflictResolutionAbortError {
                 throw error
             }
 
-            // Only retry on parse or validation failures.
-            if !(error is AIValidationError) || attempt > 0 {
-                break
+            // Ask again for a response that couldn't be read.
+            if error is AIValidationError, !retried {
+                retried = true
+                log.warning("Conflict resolution parse failed, retrying")
+                continue
             }
 
-            retriedValidation = true
-            log.warning("Conflict resolution parse/validation failed, retrying")
+            let kind = (error as? AIProviderError)?.kind
+            if files.count > 1, kind == .requestTooLarge || kind == .outputLimitReached {
+                log.warning("Conflict resolution request too large for the model, splitting \(files.count, privacy: .public) files")
+                let (first, second) = splitInHalf(files)
+                var result = try await resolveChunk(first, request: request, provider: provider, retried: retried, onReasoningSnippet: onReasoningSnippet)
+                if result.haltingError != nil {
+                    result.notAttemptedFiles += second.map(\.path)
+                    return result
+                }
+                result.append(
+                    try await resolveChunk(second, request: request, provider: provider, retried: retried, onReasoningSnippet: onReasoningSnippet)
+                )
+                return result
+            }
+
+            log.warning("Failed to resolve conflicts: \(describeForLog(error), privacy: .public)")
+            let failure = AIConflictResolutionError(
+                error,
+                stage: stage,
+                retryState: retried ? .failedAfterValidationRetry : .notRetried
+            )
+            var result = ChunkResult()
+            result.failedFiles = files.map { AIFailedFile(path: $0.path, error: failure) }
+            if (error as? AIProviderError)?.affectsAllRequests == true {
+                result.haltingError = failure
+            }
+            return result
         }
     }
+}
 
-    log.warning("Failed to resolve conflicts: \(describeForLog(lastError ?? CancellationError()), privacy: .public)")
-    throw AIConflictResolutionError(
-        lastError ?? AIResponseError("Conflict resolution failed"),
-        stage: lastStage,
-        retryState: retriedValidation ? .failedAfterValidationRetry : .notRetried
-    )
+/// `files` in two, in order, with about half the conflict content in each.
+private func splitInHalf(_ files: [FileConflictContext]) -> ([FileConflictContext], [FileConflictContext]) {
+    let sizes = files.map(conflictContentSize)
+    let half = sizes.reduce(0, +) / 2
+    var index = 1
+    var size = sizes[0]
+    while index < files.count - 1, size + sizes[index] <= half {
+        size += sizes[index]
+        index += 1
+    }
+    return (Array(files[..<index]), Array(files[index...]))
 }
 
 // MARK: Outcome
@@ -423,18 +470,19 @@ public struct ConflictResolutionOutcome: Sendable {
 
     /// This outcome with a retry of some of its failed or unattempted files
     /// merged in: the retry's resolutions are added, the retried files' old
-    /// entries replaced by the retry's, and the summary kept (or taken from
-    /// the retry when this one has none). Paths are compared by code units.
+    /// entries replaced by the retry's, and the retry's summaries and the
+    /// references not already here added after this outcome's. Paths are
+    /// compared by code units.
     public func merging(_ retry: ConflictResolutionOutcome) -> ConflictResolutionOutcome {
         let retried = (retry.resolutions.map(\.path) + retry.failedFiles.map(\.path) + retry.notAttemptedFiles).exactSet
         let skipped = skippedFiles.map(\.path).exactSet
         return ConflictResolutionOutcome(
             resolutions: resolutions.filter { !retried.contains(ExactString($0.path)) } + retry.resolutions,
             summary: AIResolutionSummary(
-                markdown: summary.markdown ?? retry.summary.markdown,
+                summaries: summary.summaries + retry.summary.summaries,
                 ourLabel: summary.ourLabel,
                 theirLabel: summary.theirLabel,
-                references: summary.references.isEmpty ? retry.summary.references : summary.references
+                references: summary.references + retry.summary.references.filter { !summary.references.contains($0) }
             ),
             skippedFiles: skippedFiles + retry.skippedFiles.filter { !skipped.contains(ExactString($0.path)) },
             failedFiles: failedFiles.filter { !retried.contains(ExactString($0.path)) } + retry.failedFiles,
@@ -462,7 +510,7 @@ public func makeConflictResolutionOutcome(
     return ConflictResolutionOutcome(
         resolutions: response.resolutions,
         summary: AIResolutionSummary(
-            markdown: response.summary,
+            summaries: response.summaries,
             ourLabel: context.ourLabel,
             theirLabel: context.theirLabel,
             references: references

@@ -253,17 +253,12 @@ nonisolated private struct FormatterCache {
 extension EnvironmentValues {
     /// How dates show; the app sets it from the settings.
     @Entry public var dateTimeFormatting = DateTimeFormatting()
-
-    /// The time relative dates are measured from. Nil means the current
-    /// time, refreshed once a minute; snapshots fix it.
-    @Entry public var fixedNow: Date? = nil
 }
 
 /// A date in words, refreshed once a minute, with the absolute date and time
 /// in the tooltip.
 public struct RelativeTimeText: View {
     private let date: Date
-    @Environment(\.fixedNow) private var fixedNow
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
 
@@ -272,17 +267,13 @@ public struct RelativeTimeText: View {
     }
 
     public var body: some View {
-        if let fixedNow {
-            text(now: fixedNow)
-        } else {
-            TimelineView(.everyMinute) { context in
-                text(now: context.date)
-            }
+        TimelineView(.everyMinute) { context in
+            text(now: context.date)
         }
     }
 
     private func text(now: Date) -> some View {
         Text(RelativeTime.describe(date, now: now, formatting: formatting, timeZone: timeZone))
-            .help(RelativeTime.formatDate(date, formatting: formatting, timeZone: timeZone))
+            .tooltip(RelativeTime.formatDate(date, formatting: formatting, timeZone: timeZone))
     }
 }

@@ -8,6 +8,7 @@ import Foundation
 import GitHubKit
 import GitKit
 import os
+import Synchronization
 
 private let logger = Log.logger(category: "clone")
 
@@ -80,15 +81,20 @@ public func cloneFolderName(_ urlOrAlias: String) -> String? {
 }
 
 /// The clone's local path after its URL changed from `previousURL` to
-/// `url`: a path that ended in the previous repository's name ends in the
-/// new one's instead (or in its folder, when the new URL names none);
-/// otherwise the new name is appended.
+/// `url`. When the previous URL named a repository, the path is the clone's
+/// own folder: one named for that repository is renamed for the new one
+/// (or dropped, when the new URL names none), and one the user named stays.
+/// Otherwise the path is the folder the clone goes in, and the new name is
+/// appended.
 ///
 /// The Clone sheet starts from `lastCloneLocation` with an empty previous
 /// URL, so the path is that folder plus the repository's name.
 public func clonePath(_ path: String, afterURLChangeFrom previousURL: String, to url: String) -> String {
     let safeName = cloneFolderName(url)
     if parseRepositoryIdentifier(previousURL) != nil {
+        guard let previousName = cloneFolderName(previousURL), JSCompat.strictEquals(POSIXPath.basename(path), previousName) else {
+            return path
+        }
         if let safeName {
             return POSIXPath.join(POSIXPath.dirname(path), safeName)
         }
@@ -120,8 +126,9 @@ extension CloneCoordinator {
     /// Without an account, and for wikis, the input is cloned as typed.
     ///
     /// - Throws: A precondition error when the account's API doesn't find
-    ///   the repository, and when no account can see an `owner/name` (cloning
-    ///   it as typed could only fail). Other API failures fall back to cloning
+    ///   the repository, and when no account can see an `owner/name`; an API
+    ///   error when GitHub couldn't be asked about an `owner/name` (cloning it
+    ///   as typed could only fail). Other API failures fall back to cloning
     ///   the input as typed.
     public func resolveCloneInfo(_ urlOrAlias: String) async throws(OperationError) -> APIRepositoryCloneInfo {
         let url = JSCompat.trim(urlOrAlias)
@@ -135,14 +142,43 @@ extension CloneCoordinator {
         let environment = app.environment
         let gitHub = environment.gitHub
         let accounts = app.accounts.accounts
+        struct Lookups {
+            /// The last lookup that failed for a reason other than not
+            /// finding the repository. An anonymous lookup's failure doesn't
+            /// count on a server where a signed-in account didn't find it.
+            var failure: (any Error)?
+            /// The servers (API endpoints) where a signed-in account didn't
+            /// find the repository.
+            var notFoundSignedIn: Set<String> = []
+        }
+        let lookups = Mutex(Lookups())
         let account = await environment.withRuntimes {
-            await findAccountForRemoteURL(url, accounts, runtime: gitHub)
+            await findAccountForRemoteURL(url, accounts, canAccessRepository: { account, owner, name in
+                do {
+                    let found = try await API.fromAccount(account, runtime: gitHub)
+                        .fetchRepositoryCloneInfo(owner: owner, name: name, protocol: nil) != nil
+                    if !found, !account.token.isEmpty {
+                        lookups.withLock { _ = $0.notFoundSignedIn.insert(account.endpoint) }
+                    }
+                    return found
+                } catch {
+                    lookups.withLock { lookups in
+                        if !account.token.isEmpty || !lookups.notFoundSignedIn.contains(account.endpoint) {
+                            lookups.failure = error
+                        }
+                    }
+                    return false
+                }
+            }, runtime: gitHub)
         }
         let identifier = parseRepositoryIdentifier(url)
         let remote = parseRemote(url)
 
         guard let identifier, let account else {
-            if identifier != nil, remote == nil {
+            if let identifier, remote == nil {
+                if let error = lookups.withLock({ $0.failure }) {
+                    throw lookupFailed(identifier, error)
+                }
                 throw repositoryNotFound
             }
             return APIRepositoryCloneInfo(url: url)
@@ -162,14 +198,31 @@ extension CloneCoordinator {
             throw error
         } catch {
             logger.error("Failed to look up repository clone info for '\(url, privacy: .private)': \(error.localizedDescription, privacy: .public)")
+            if remote == nil {
+                throw lookupFailed(identifier, error)
+            }
             return APIRepositoryCloneInfo(url: url)
         }
+    }
+
+    /// GitHub couldn't be asked about `identifier`: offline, rate limited,
+    /// or another error, in GitHub's or the connection's words.
+    private func lookupFailed(_ identifier: RepositoryIdentifier, _ error: any Error) -> OperationError {
+        let failure = apiFailure(from: error)
+        return OperationError(
+            .api(APIFailure(
+                message: "Espalier couldn't look up \(identifier.owner)/\(identifier.name) on GitHub. \(failure.message)",
+                status: failure.status
+            )),
+            operation: .clone,
+            underlying: error
+        )
     }
 
     private var repositoryNotFound: OperationError {
         OperationError(
             .precondition(
-                "Espalier couldn't find that repository. Check that you're signed in, that the network is available, and that the URL or owner/name is spelled correctly."
+                "Espalier couldn't find that repository. Check that you're signed in and that the URL or owner/name is spelled correctly."
             ),
             operation: .clone
         )

@@ -24,8 +24,9 @@ public struct GlobalGitSettings: Sendable, Equatable {
 
     /// The settings as Settings ▸ Git first shows them: a missing or empty
     /// name or email filled in from the GitHub.com account, else the first
-    /// account, with its login and its preferred email
-    /// (`lookupPreferredEmail`). Nothing is written until the user saves them.
+    /// account, with its name (`gitAuthorName`, as the welcome flow's) and
+    /// its preferred email (`lookupPreferredEmail`). Nothing is written until
+    /// the user saves them.
     public func fillingAuthor(from accounts: [Account]) -> GlobalGitSettings {
         var settings = self
         let hasName = !(name ?? "").isEmpty
@@ -34,7 +35,7 @@ public struct GlobalGitSettings: Sendable, Equatable {
             return settings
         }
         if !hasName {
-            settings.name = account.login
+            settings.name = gitAuthorName(account)
         }
         if !hasEmail {
             settings.email = lookupPreferredEmail(account)
@@ -55,9 +56,14 @@ public struct GitHubAuthorInfo: Sendable, Equatable {
         guard let account = accounts.first else {
             return nil
         }
-        name = account.name.isEmpty ? account.login : account.name
+        name = gitAuthorName(account)
         email = lookupPreferredEmail(account)
     }
+}
+
+/// The author name an account suggests: its name, or its login without one.
+private func gitAuthorName(_ account: Account) -> String {
+    account.name.isEmpty ? account.login : account.name
 }
 
 // MARK: - Account emails

@@ -144,8 +144,6 @@ struct ParsePrintenvzOutputTests {
         #expect(throws: ShellEnvError.missingEndMarker) {
             try parsePrintenvzOutput("--printenvz--begin\nA=1\0")
         }
-        #expect(ShellEnvError.missingStartMarker.description == "could not find start marker in shell output")
-        #expect(ShellEnvError.missingEndMarker.description == "could not find end marker in shell output")
     }
 
     @Test("matches Unicode scalars like desktop's regexes")

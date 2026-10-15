@@ -1,6 +1,7 @@
 // Espalier's text fields. A one-line field is a `field` capsule 28 high,
-// like the search field, with the accent ring while it has focus; a text
-// area (a description, a list of patterns) is the same fill in a rounded
+// like the search field, with the accent ring while it has focus and its
+// prompt in placeholder text (`fieldPrompt()`); a text area (a
+// description, a list of patterns) is the same fill in a rounded
 // rectangle.
 
 import AppKit
@@ -74,7 +75,7 @@ private struct CapsuleTextFieldBody<Field: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
             if let systemImage {
                 Image(systemName: systemImage)
                     .font(.system(size: 12, weight: .semibold))
@@ -107,7 +108,20 @@ private struct CapsuleTextFieldBody<Field: View>: View {
         .onTapGesture {
             isFocused = true
         }
-        .opacity(isEnabled ? 1 : 0.55)
+        .opacity(isEnabled ? 1 : Palette.disabledOpacity)
+    }
+}
+
+extension Text {
+    /// The text as a field's prompt, in placeholder text
+    /// (`Palette.placeholderText`): `TextField("Name", text: $name,
+    /// prompt: Text("Branch name").fieldPrompt())`. A text field style
+    /// never sees its field's prompt, so a prompt without a color of its
+    /// own draws in AppKit's placeholder color, nearly as dark as the text.
+    /// A prompt with a color draws at the field's leading edge, whatever
+    /// the field's alignment.
+    public func fieldPrompt() -> Text {
+        foregroundStyle(Color(nsColor: Palette.placeholderText))
     }
 }
 
@@ -132,7 +146,9 @@ extension Metrics {
     /// One-line fields.
     public enum CapsuleField {
         /// A line of `Typography.row` (body) text, as a field lays it out.
-        public static let lineHeight: CGFloat = measuredLineHeight(for: .preferredFont(forTextStyle: .body))
+        public static var lineHeight: CGFloat {
+            measuredLineHeight(for: AppKitTypography.row)
+        }
 
         /// A line of `font`, as a field lays it out.
         public static func measuredLineHeight(for font: NSFont) -> CGFloat {

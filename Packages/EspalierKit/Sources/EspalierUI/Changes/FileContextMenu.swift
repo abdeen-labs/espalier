@@ -1,6 +1,8 @@
 // The context menus of the Changes list and its header: their items and
-// their order, which items a rebase's conflicts leave, and when items are
-// disabled. `gitIgnoreMenuItems(for:)` builds the ignore items.
+// their order, which items a rebase's conflicts leave, a conflicted file's
+// sides to pick, and when items are disabled. `gitIgnoreMenuItems(for:)`
+// builds the ignore items; `FileMenuItem.menuContent(_:run:)` makes them a
+// menu's content, which the list's AppKit menu is built from.
 
 import EspalierCore
 import EspalierSupport
@@ -18,6 +20,8 @@ nonisolated public enum FileMenuCommand: Sendable, Hashable {
     case showInFinder
     case openInEditor
     case openWithDefaultProgram
+    /// Picks a conflicted file's side, or (nil) undoes the choice.
+    case resolve(ManualConflictResolution?)
 }
 
 /// An item of a changed file's context menu.
@@ -74,12 +78,14 @@ nonisolated public enum FileContextMenuContent {
     ///   - editorTitle: "Open in Xcode", or nil for the generic title.
     ///   - asksBeforeDiscarding: Whether discarding one file asks first
     ///     (several always do), for the ellipsis.
+    ///   - numberFormat: The format the files' count is in.
     public static func items(
         for files: [WorkingDirectoryFileChange],
         ignoreItems: [GitIgnoreMenuItem],
         editorTitle: String?,
         asksBeforeDiscarding: Bool,
-        isRebaseConflicts: Bool
+        isRebaseConflicts: Bool,
+        numberFormat: NumberFormat
     ) -> [FileMenuItem] {
         guard let first = files.first else {
             return []
@@ -93,12 +99,12 @@ nonisolated public enum FileContextMenuContent {
         if isRebaseConflicts {
             var items: [FileMenuItem] = []
             if first.status.kind == .untracked {
-                items += [discardItem(count: 1, asksFirst: asksBeforeDiscarding), .separator]
+                items += [discardItem(count: 1, asksFirst: asksBeforeDiscarding, numberFormat: numberFormat), .separator]
             }
             return items + copyOne + [.separator] + openItems
         }
 
-        var items = [discardItem(count: files.count, asksFirst: asksBeforeDiscarding || files.count > 1), .separator]
+        var items = [discardItem(count: files.count, asksFirst: asksBeforeDiscarding || files.count > 1, numberFormat: numberFormat), .separator]
         items += ignoreItems.map(item(for:))
         if files.count > 1 {
             items += [
@@ -115,10 +121,29 @@ nonisolated public enum FileContextMenuContent {
         return items + [.separator] + openItems
     }
 
-    /// "Discard Changes", "Discard 3 Selected Changes", with an ellipsis
-    /// when it asks first.
-    static func discardItem(count: Int, asksFirst: Bool) -> FileMenuItem {
-        let title = count == 1 ? "Discard Changes" : "Discard \(count) Selected Changes"
+    /// A conflicted file's sides to pick while it needs the user, or Undo
+    /// once one was picked, as its row's buttons offer them, after a
+    /// separator; none when there's nothing to pick (a stash restore's
+    /// conflicts, a file resolved in the editor).
+    public static func conflictItems(for conflict: ConflictFileRowContent) -> [FileMenuItem] {
+        var items: [FileMenuItem] = []
+        if conflict.isUnresolved {
+            if let oursLabel = conflict.oursLabel {
+                items.append(FileMenuItem(oursLabel, .resolve(.ours)))
+            }
+            if let theirsLabel = conflict.theirsLabel {
+                items.append(FileMenuItem(theirsLabel, .resolve(.theirs)))
+            }
+        } else if case .resolved(isUndoable: true) = conflict.state {
+            items.append(FileMenuItem("Undo", .resolve(nil)))
+        }
+        return items.isEmpty ? [] : [.separator] + items
+    }
+
+    /// "Discard Changes", "Discard 3 Selected Changes" (the count in
+    /// `numberFormat`), with an ellipsis when it asks first.
+    static func discardItem(count: Int, asksFirst: Bool, numberFormat: NumberFormat) -> FileMenuItem {
+        let title = count == 1 ? "Discard Changes" : "Discard \(formatCount(count, numberFormat)) Selected Changes"
         return FileMenuItem(asksFirst ? "\(title)…" : title, .discard)
     }
 
@@ -161,27 +186,19 @@ public struct ChangesHeaderMenuItem: Identifiable {
     }
 }
 
-/// A context menu's items as SwiftUI menu content.
-struct FileMenuItemsView: View {
-    let items: [FileMenuItem]
-    let run: (FileMenuCommand) -> Void
-
-    var body: some View {
-        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+extension FileMenuItem {
+    /// `items` as a menu's content, each running its command through `run`.
+    @MainActor
+    static func menuContent(_ items: [FileMenuItem], run: @escaping (FileMenuCommand) -> Void) -> MenuContent {
+        MenuContent(items.map { item in
             switch item.kind {
             case .separator:
-                Divider()
+                return .divider
             case .command(let command):
-                Button(item.title) {
-                    run(command)
-                }
-                .disabled(!item.isEnabled)
+                return .item(MenuItem(item.title, isEnabled: item.isEnabled, action: .run { run(command) }))
             case .submenu(let children):
-                Menu(item.title) {
-                    FileMenuItemsView(items: children, run: run)
-                }
-                .disabled(!item.isEnabled)
+                return .item(MenuItem(item.title, isEnabled: item.isEnabled, action: .submenu(menuContent(children, run: run))))
             }
-        }
+        })
     }
 }

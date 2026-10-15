@@ -158,6 +158,7 @@ public struct CommitWarningView: View {
             Text(warning.message)
                 .font(Typography.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .composerLinkTint()
                 .environment(\.openURL, OpenURLAction { url in
                     onLink(url)
                     return .handled
@@ -284,12 +285,12 @@ struct MessageRulesHint: View {
             Image(systemName: failures.canBypass ? "exclamationmark.triangle.fill" : "xmark.octagon.fill")
                 .foregroundStyle(Color(espalier: failures.canBypass ? Palette.warning : Palette.error))
         }
-        .buttonStyle(.borderless)
-        .help(failures.canBypass ? "The commit message fails repository rules you can bypass" : "The commit message fails repository rules")
+        .buttonStyle(.smallIcon)
+        .tooltip(failures.canBypass ? "The commit message fails repository rules you can bypass" : "The commit message fails repository rules")
         .accessibilityLabel(failures.canBypass
             ? "Warning: the commit message fails repository rules, but you can bypass them. View details."
             : "Error: the commit message fails repository rules. View details.")
-        .popover(isPresented: $isShowingDetails, arrowEdge: .trailing) {
+        .popoverCard(isPresented: $isShowingDetails, edge: .trailing, title: "Commit Message Rule Failures") {
             MessageRuleFailuresView(failures: failures, onLink: onLink)
         }
     }
@@ -318,6 +319,7 @@ struct MessageRuleFailuresView: View {
         }
         .padding(Metrics.insetLarge)
         .frame(width: Metrics.Composer.popoverWidth, alignment: .leading)
+        .composerLinkTint()
         .environment(\.openURL, OpenURLAction { url in
             onLink(url)
             return .handled
@@ -386,5 +388,13 @@ extension AttributedString {
             }
         }
         return result
+    }
+}
+
+extension View {
+    /// The links in the warnings' text in the link color (`Palette.link`);
+    /// Classic's in the system's tint, its accent.
+    fileprivate func composerLinkTint() -> some View {
+        tint(Theme.current.theme == .classic ? nil : Color(nsColor: Palette.link))
     }
 }

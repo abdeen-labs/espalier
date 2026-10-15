@@ -1,5 +1,7 @@
 // Ported from desktop/app/src/lib/trampoline/trampoline-command.ts
 
+import Foundation
+
 /// Represents a command in our trampoline mechanism.
 struct TrampolineCommand: Sendable {
     /// Identifier of the command: askpass, credential helper, or hook proxy.
@@ -29,6 +31,10 @@ struct TrampolineCommand: Sendable {
     /// Whether the helper forwards its standard input, which is streamed (see
     /// `TrampolineConnection.standardInput`).
     let forwardsStandardInput: Bool
+
+    /// The process that started the helper, or nil when it can't be found:
+    /// for askpass, the ssh or ssh-keygen process asking.
+    let parentProcessID: pid_t?
 }
 
 /// Represents a handler for trampoline commands, registered for one token.

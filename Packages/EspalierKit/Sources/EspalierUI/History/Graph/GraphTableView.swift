@@ -10,7 +10,7 @@ import SwiftUI
 /// The history graph's table.
 struct GraphTableView: NSViewRepresentable {
     /// The history shown.
-    let source: any GraphTableSource
+    let source: HistoryModel
     let presentation: GraphPresentation
     let selection: GraphSelection
     /// The keyboard reorder's insertion point, while reordering.
@@ -24,12 +24,12 @@ struct GraphTableView: NSViewRepresentable {
     let isLoadingMore: Bool
 
     @Environment(\.avatarLoader) private var avatarLoader
-    @Environment(\.fixedNow) private var fixedNow
     @Environment(\.dateTimeFormatting) private var dateTimeFormatting
+    @Environment(\.numberFormat) private var numberFormat
     @Environment(\.timeZone) private var timeZone
 
     init(
-        source: any GraphTableSource,
+        source: HistoryModel,
         presentation: GraphPresentation,
         selection: GraphSelection,
         reorderInsertionRow: Int? = nil,
@@ -62,17 +62,17 @@ struct GraphTableView: NSViewRepresentable {
         controller.avatarLoader = avatarLoader
         controller.dateFormatting = dateTimeFormatting
         controller.timeZone = timeZone
-        if controller.fixedNow != fixedNow {
-            controller.fixedNow = fixedNow
-        }
+        controller.numberFormat = numberFormat
         controller.update(source: source, presentation: presentation, selection: selection, reorderInsertionRow: reorderInsertionRow)
     }
 }
 
 /// The graph's `NSTableView`: the graph's keys, stub clicks, hover, and
 /// context menus.
-final class GraphNSTableView: NSTableView {
+final class GraphNSTableView: NSTableView, ContextMenuContentProviding {
     weak var controller: GraphTableController?
+    /// The row whose context menu is open.
+    lazy var contextMenuTarget = TableContextMenuTarget(table: self)
     /// Whether keyboard reorder is on: ↑↓ move the insertion point, Return
     /// confirms, Esc cancels.
     var isReordering = false
@@ -116,13 +116,12 @@ final class GraphNSTableView: NSTableView {
         super.mouseDown(with: event)
     }
 
-    override func menu(for event: NSEvent) -> NSMenu? {
-        let point = convert(event.locationInWindow, from: nil)
-        let row = row(at: point)
-        guard row >= 0 else {
-            return nil
-        }
-        return controller?.menu(forClickedRow: row)
+    func contextMenuContent(at point: CGPoint) -> MenuContent? {
+        controller?.menu(forClickedRow: row(at: point))
+    }
+
+    func markContextMenuTarget(at point: CGPoint) -> (() -> Void)? {
+        contextMenuTarget.mark(row(at: point))
     }
 
     override func keyDown(with event: NSEvent) {

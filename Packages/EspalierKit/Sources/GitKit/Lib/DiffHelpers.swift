@@ -2,23 +2,13 @@
 //
 // Partial port: only `getLargestLineNumber`, which DiffParser.swift uses.
 
-/// Utility function for getting the largest line number in an array of diff hunks
+/// The largest old or new line number in the hunks, 0 when there are none.
 public func getLargestLineNumber(_ hunks: [DiffHunk]) -> Int {
-    if hunks.isEmpty {
-        return 0
-    }
-
-    for hunk in hunks.reversed() {
-        for line in hunk.lines.reversed() {
-            if line.type == .hunk {
-                continue
-            }
-
-            let newLineNumber = line.newLineNumber ?? 0
-            let oldLineNumber = line.oldLineNumber ?? 0
-            return newLineNumber > oldLineNumber ? newLineNumber : oldLineNumber
+    var largest = 0
+    for hunk in hunks {
+        for line in hunk.lines where line.type != .hunk {
+            largest = max(largest, line.oldLineNumber ?? 0, line.newLineNumber ?? 0)
         }
     }
-
-    return 0
+    return largest
 }

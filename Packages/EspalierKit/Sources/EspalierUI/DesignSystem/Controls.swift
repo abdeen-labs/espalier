@@ -1,12 +1,13 @@
 // Espalier's small controls: key caps, the capsule search field, the
-// capsule segmented control, and file chips.
+// capsule segmented control, the ID chip, icon circles, repository badges,
+// and the progress bar.
 
 import AppKit
 import SwiftUI
 
 // MARK: - Key cap
 
-/// A visible keyboard shortcut: 10.5-point text in a rounded rectangle
+/// A visible keyboard shortcut: 10-point text in a rounded rectangle
 /// (radius 5) with a 1-point `line2` border.
 public struct KeyCap: View {
     private let keys: String
@@ -28,7 +29,7 @@ public struct KeyCap: View {
             .padding(.horizontal, 4)
             .frame(minWidth: 17, minHeight: 17)
             .overlay(
-                RoundedRectangle(cornerRadius: Metrics.Radius.keyCap, style: .continuous)
+                RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .continuous)
                     .strokeBorder(color?.opacity(0.5) ?? .line2, lineWidth: 1)
             )
             .fixedSize()
@@ -37,6 +38,13 @@ public struct KeyCap: View {
 }
 
 // MARK: - Search field
+
+extension EnvironmentValues {
+    /// Whether a capsule search field is drawn as a quiet capsule, raised,
+    /// rather than on the `field` fill: on the floating layout's backdrop,
+    /// beside quiet capsules.
+    @Entry public var searchFieldIsRaised = false
+}
 
 /// A capsule search or filter field: a magnifying glass, the field, and a
 /// key cap for its shortcut while it's empty, or a clear button once it
@@ -48,7 +56,14 @@ public struct CapsuleSearchField: View {
     private let systemImage: String
     private let keyCap: String?
     @FocusState private var isFocused: Bool
+    /// Whether the window's first responder is editing the field, which
+    /// SwiftUI's focus state doesn't follow in the toolbar.
+    @State private var isEditing = false
+    /// Counts the requests to focus the field, which reach it through
+    /// AppKit too: SwiftUI's focus state doesn't move it in the toolbar.
+    @State private var focusRequests = 0
     @Environment(\.controlSize) private var controlSize
+    @Environment(\.searchFieldIsRaised) private var isRaised
 
     /// - Parameters:
     ///   - focusRequest: Set to true to focus the field; the field sets it
@@ -64,50 +79,85 @@ public struct CapsuleSearchField: View {
     }
 
     public var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
             Image(systemName: systemImage)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.text3)
                 .accessibilityHidden(true)
-            TextField(prompt, text: $text, prompt: Text(prompt).foregroundStyle(.text3))
-                .textFieldStyle(.plain)
-                // AppKit's one-line mode: a pasted line break becomes a
-                // space.
-                .lineLimit(1)
-                .font(Typography.row)
-                .foregroundStyle(.text)
-                .focused($isFocused)
-                .onExitCommand {
-                    text = ""
+            // The prompt is drawn here, on the typed text's baseline, rather
+            // than by the field, so it holds still as editing starts and
+            // ends.
+            ZStack(alignment: Alignment(horizontal: .leading, vertical: .firstTextBaseline)) {
+                if text.isEmpty {
+                    Text(prompt)
+                        .lineLimit(1)
+                        .foregroundStyle(.text3)
+                        .accessibilityHidden(true)
                 }
-                // The line's inset from the capsule's top, rather than
-                // centered, as in a capsule field: the field draws its text
-                // at its own top, so one measured a little shorter or
-                // taller (as a field can be for a moment) would otherwise
-                // draw its text lower or higher.
-                .padding(.top, (Metrics.ControlHeight.height(for: controlSize) - Metrics.CapsuleField.lineHeight) / 2)
-                .frame(maxHeight: .infinity, alignment: .top)
+                TextField("", text: $text)
+                    .textFieldStyle(.plain)
+                    // AppKit's one-line mode: a pasted line break becomes a
+                    // space.
+                    .lineLimit(1)
+                    .foregroundStyle(.text)
+                    .focused($isFocused)
+                    .onExitCommand {
+                        text = ""
+                    }
+                    .accessibilityLabel(prompt)
+            }
+            .font(Typography.row)
+            // The line's inset from the capsule's top, rather than
+            // centered, as in a capsule field: the field draws its text at
+            // its own top, so one measured a little shorter or taller (as a
+            // field can be for a moment) would otherwise draw its text
+            // lower or higher.
+            .padding(.top, (Metrics.ControlHeight.height(for: controlSize) - Metrics.CapsuleField.lineHeight) / 2)
+            .frame(maxHeight: .infinity, alignment: .top)
             trailing
         }
         .motion(Motion.mark, value: trailingKind)
         .padding(.leading, 12)
         .padding(.trailing, 8)
         .frame(height: Metrics.ControlHeight.height(for: controlSize))
-        .background(Capsule(style: .circular).fill(.field))
-        .fieldRegion()
+        .background {
+            if isRaised {
+                // A quiet capsule, as the controls beside it on the
+                // backdrop.
+                Color.clear
+                    .surface(.quiet, elevation: .quiet)
+            } else {
+                Capsule(style: .circular).fill(.field)
+            }
+        }
+        .fieldRegion(focusRequest: focusRequests) { isEditing in
+            self.isEditing = isEditing
+        }
         .overlay {
-            CapsuleFocusRing(isFocused: isFocused)
+            CapsuleFocusRing(isFocused: hasFocus)
         }
         .contentShape(Capsule(style: .circular))
         .onTapGesture {
-            isFocused = true
+            focus()
         }
         .onChange(of: focusRequest, initial: true) {
             if focusRequest {
-                isFocused = true
+                focus()
                 focusRequest = false
             }
         }
+    }
+
+    /// Focuses the field, through SwiftUI and AppKit both.
+    private func focus() {
+        isFocused = true
+        focusRequests += 1
+    }
+
+    /// Whether the field has keyboard focus, by SwiftUI's account or
+    /// AppKit's.
+    private var hasFocus: Bool {
+        isFocused || isEditing
     }
 
     /// What the field ends with.
@@ -119,7 +169,7 @@ public struct CapsuleSearchField: View {
         if !text.isEmpty {
             return .clear
         }
-        return keyCap != nil && !isFocused ? .keyCap : .none
+        return keyCap != nil && !hasFocus ? .keyCap : .none
     }
 
     /// The clear button once there's text, else the key cap while the
@@ -134,7 +184,7 @@ public struct CapsuleSearchField: View {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.text3)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare(.circle))
             .accessibilityLabel("Clear")
             .transition(.opacity)
         case .keyCap:
@@ -148,25 +198,12 @@ public struct CapsuleSearchField: View {
     }
 }
 
-/// A capsule field's focus ring: the accent ring that fades in, settling
-/// from 1.04× to its size, over 0.15 s, and fades out over 0.1 s.
+/// A capsule field's focus ring: Espalier's ring on the capsule's edge.
 struct CapsuleFocusRing: View {
     let isFocused: Bool
-    @Environment(\.motion) private var motion
 
     var body: some View {
-        ZStack {
-            if isFocused {
-                Capsule(style: .circular)
-                    .strokeBorder(Color.accentColor.opacity(0.55), lineWidth: 2)
-                    .transition(.asymmetric(
-                        insertion: .scale(scale: Motion.focusRingScale).combined(with: .opacity),
-                        removal: .opacity
-                    ))
-            }
-        }
-        .animation(motion.animation(isFocused ? Motion.leave : Motion.focusOut), value: isFocused)
-        .allowsHitTesting(false)
+        FocusRing(isFocused: isFocused, shape: Capsule(style: .circular))
     }
 }
 
@@ -188,12 +225,12 @@ public struct CapsuleSegment<Value: Hashable>: Identifiable {
 }
 
 /// A capsule segmented control (Simple | Graph, Unified | Split): a `field`
-/// track 28 high with the selected segment raised on a quiet capsule. The
+/// track 28 high with the selected segment raised on a quiet capsule (or
+/// the theme's segment selection). The
 /// raised capsule slides to a new choice over 0.22 s, the labels' colors
-/// crossfading with it, as the native control's does. Like the native
-/// control, it takes focus only with keyboard navigation on (System
-/// Settings › Keyboard), and then shows a capsule field's ring; the left
-/// and right arrows move the selection. VoiceOver sees a native segmented
+/// crossfading with it. It takes focus only with keyboard navigation on
+/// (System Settings › Keyboard), and then shows a capsule field's ring; the
+/// left and right arrows move the selection. VoiceOver sees a segmented
 /// control.
 public struct CapsuleSegmentedControl<Value: Hashable>: View {
     private let label: String
@@ -228,9 +265,7 @@ public struct CapsuleSegmentedControl<Value: Hashable>: View {
                 .frame(maxHeight: .infinity)
                 .background {
                     if isSelected {
-                        Capsule(style: .circular)
-                            .fill(.clear)
-                            .surface(.quiet, elevation: .quiet)
+                        SegmentSelection()
                             .matchedGeometryEffect(id: "selection", in: namespace)
                     }
                 }
@@ -247,7 +282,7 @@ public struct CapsuleSegmentedControl<Value: Hashable>: View {
         .overlay {
             CapsuleFocusRing(isFocused: isFocused)
         }
-        .opacity(isEnabled ? 1 : 0.45)
+        .opacity(isEnabled ? 1 : Palette.disabledOpacity)
         .focusable(interactions: .activate)
         .focused($isFocused)
         .focusEffectDisabled()
@@ -280,96 +315,52 @@ public struct CapsuleSegmentedControl<Value: Hashable>: View {
     }
 }
 
+/// The selected segment's capsule: a quiet capsule with its ring and small
+/// shadow, or the theme's segment selection, raised as the sidebar's card
+/// is.
+private struct SegmentSelection: View {
+    var body: some View {
+        let theme = Theme.current
+        let shape = Capsule(style: .circular)
+        if let fill = theme.segmentSelection {
+            shape
+                .fill(Color(nsColor: fill))
+                .shadow(color: Color(nsColor: theme.raisedShadow), radius: 1, y: 1)
+                .overlay(shape.strokeBorder(Color(nsColor: theme.raisedRing), lineWidth: 1))
+        } else {
+            shape
+                .fill(.clear)
+                .surface(.quiet, elevation: .quiet)
+        }
+    }
+}
+
 // MARK: - Chips
-
-/// What a file chip shows: the status badge, the name, and the counts.
-nonisolated public struct FileChipContent: Sendable, Equatable {
-    public var name: String
-    public var status: FileStatusKind
-    /// Lines added and deleted; nil when unknown (binary files).
-    public var added: Int?
-    public var deleted: Int?
-
-    public init(name: String, status: FileStatusKind, added: Int? = nil, deleted: Int? = nil) {
-        self.name = name
-        self.status = status
-        self.added = added
-        self.deleted = deleted
-    }
-
-    /// "+6 −1", leaving out zero counts.
-    public var countsText: String? {
-        var parts: [String] = []
-        if let added, added > 0 {
-            parts.append("+\(added)")
-        }
-        if let deleted, deleted > 0 {
-            parts.append("−\(deleted)")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " ")
-    }
-}
-
-/// A file chip: a quiet capsule with the status badge, the name, and its
-/// counts in SF Mono; the selected one tinted with the accent.
-public struct FileChip: View {
-    private let content: FileChipContent
-    private let isSelected: Bool
-
-    public init(_ content: FileChipContent, isSelected: Bool = false) {
-        self.content = content
-        self.isSelected = isSelected
-    }
-
-    public var body: some View {
-        HStack(spacing: 6) {
-            StatusGlyph(content.status)
-            Text(content.name)
-                .font(Typography.smallButton)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            if let counts = content.countsText {
-                Text(counts)
-                    .font(Typography.tinyCount)
-                    .foregroundStyle(isSelected ? AnyShapeStyle(Color.accentColor.opacity(0.75)) : AnyShapeStyle(.text3))
-            }
-        }
-        .foregroundStyle(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.text))
-        .padding(.leading, 6)
-        .padding(.trailing, 11)
-        .frame(height: Metrics.ControlHeight.regular)
-        .background {
-            if isSelected {
-                Capsule(style: .circular).fill(.accentSoft)
-            } else {
-                Capsule(style: .circular).fill(.clear).surface(.quiet, elevation: .quiet)
-            }
-        }
-        .overlay {
-            if isSelected {
-                Capsule(style: .circular).inset(by: -0.5).stroke(Color.accentColor.opacity(0.35), lineWidth: 1)
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel([content.name, content.status.title, content.countsText].compactMap { $0 }.joined(separator: ", "))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
 
 /// A neutral chip: SF Mono text on the `field` fill (commit IDs).
 public struct MonoChip<Accessory: View>: View {
     private let text: String
+    private let isSelectable: Bool
     private let accessory: Accessory
 
-    public init(_ text: String, @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
+    /// - Parameter isSelectable: Whether its text can be selected and
+    ///   copied.
+    public init(_ text: String, isSelectable: Bool = false, @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
         self.text = text
+        self.isSelectable = isSelectable
         self.accessory = accessory()
     }
 
     public var body: some View {
         HStack(spacing: 5) {
-            Text(text)
-                .font(Typography.sha)
+            if isSelectable {
+                Text(text)
+                    .font(Typography.sha)
+                    .textSelection(.enabled)
+            } else {
+                Text(text)
+                    .font(Typography.sha)
+            }
             accessory
         }
         .foregroundStyle(.text2)
@@ -381,8 +372,10 @@ public struct MonoChip<Accessory: View>: View {
 
 // MARK: - Icon circles
 
-/// A symbol in a soft circle (the AI and co-author buttons, the empty
-/// state's check, simple mode's merge rows).
+/// A symbol in a soft circle: the action list's rows, a sheet's call to
+/// action, the cloning and push protection states, History's banners, and
+/// small headings and lists (the AI conflict sheet's phase, a squash's
+/// co-authors, a submodule's diff).
 public struct IconCircle: View {
     private let systemImage: String
     private let size: CGFloat
@@ -467,7 +460,6 @@ public struct CapsuleProgressBar: View {
     private let value: Double?
     private let tint: NSColor
     @Environment(\.motion) private var motion
-    @Environment(\.fixedNow) private var fixedNow
 
     /// - Parameters:
     ///   - value: How far the work has got, 0 to 1; nil sweeps a segment
@@ -490,9 +482,7 @@ public struct CapsuleProgressBar: View {
                         .frame(width: max(proxy.size.height, proxy.size.width * value))
                         .opacity(value > 0 ? 1 : 0)
                         .motion(Motion.leave, value: value)
-                } else if motion.animates, fixedNow == nil {
-                    // Panes hosted in AppKit carry the fixed clock but not
-                    // the suppressed motion: still under either.
+                } else if motion.animates {
                     TimelineView(.animation) { context in
                         segment(color, width: proxy.size.width, position: Self.sweep(at: context.date))
                     }

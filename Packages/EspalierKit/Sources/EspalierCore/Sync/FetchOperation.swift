@@ -139,7 +139,8 @@ extension SyncModel {
     /// The fetch the repository indicator updater makes for a repository
     /// that isn't selected, when `shouldBackgroundFetch(lastPush:)` says so:
     /// the bare minimum to know the current branch's ahead/behind. No
-    /// fast-forwarding, no refresh.
+    /// fast-forwarding, no refresh, and the repository's
+    /// `lastBackgroundFailure` stays as it is.
     ///
     /// Call it after a status pass, which loads the tip it uses.
     func fetchForIndicator(lastPush: Date?) async -> IndicatorFetchResult {
@@ -152,7 +153,13 @@ extension SyncModel {
         await refreshGitHubRepositoryIfNeeded()
         let tip = repository.gitState.tip
         let record = repository.record
-        let descriptor = OperationDescriptor(kind: .fetch, lanes: [.network], policy: .background, refreshAfter: [])
+        let descriptor = OperationDescriptor(
+            kind: .fetch,
+            lanes: [.network],
+            policy: .background,
+            refreshAfter: [],
+            updatesBackgroundFailure: false
+        )
         do {
             let result = try await repository.performIfIdle(descriptor) { ctx -> AheadBehind? in
                 let remotes = try await remotesToFetch(ctx.repository, tip: tip, record: record)
@@ -227,7 +234,7 @@ extension SyncModel {
 func remotesToFetch(_ repository: Repository, tip: Tip, record: RepositoryRecord) async throws -> [Remote] {
     let remotes = try await getRemotes(repository)
     let defaultRemote = findDefaultRemote(remotes)
-    let currentRemote = tip.branch?.upstreamRemoteName.flatMap { name in
+    let currentRemote = tip.branch?.resolvingRemotes(remotes.map(\.name)).upstreamRemoteName.flatMap { name in
         remotes.first { JSCompat.strictEquals($0.name, name) }
     } ?? defaultRemote
     let upstreamRemote = record.gitHubRepository?.parent.flatMap { findUpstreamRemote($0, remotes) }

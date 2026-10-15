@@ -159,7 +159,7 @@ extension SuggestionsContent.Primary {
             )
         case .pullRequest(let branch, .previewPullRequest):
             return SuggestionCard(
-                title: "Preview the pull request from your current branch",
+                title: "Open a pull request",
                 description: "The current branch (\(branch)) is already published to GitHub. Preview the changes a pull request would propose.",
                 discoverability: discoverability(.previewPullRequest),
                 buttonTitle: "Preview Pull Request",
@@ -167,7 +167,7 @@ extension SuggestionsContent.Primary {
             )
         case .pullRequest(let branch, .createPullRequest):
             return SuggestionCard(
-                title: "Create a pull request from your current branch",
+                title: "Open a pull request",
                 description: "The current branch (\(branch)) is already published to GitHub. Create a pull request to propose and discuss your changes.",
                 discoverability: discoverability(.createPullRequest),
                 buttonTitle: "Create Pull Request",
@@ -328,9 +328,9 @@ extension SuggestionsContent {
     }
 }
 
-/// The Suggestions: a check in a soft circle, "No Local Changes", a line
-/// about what's left to do, then the suggestions as rows in one card: the
-/// primary one with its prominent action, then the editor, Finder, and
+/// The Suggestions: a green check in a soft circle, "No Local Changes", a
+/// line about what's left to do, then the suggestions as rows in one card:
+/// the primary one with its prominent action, then the editor, Finder, and
 /// GitHub, each with its shortcut as a key cap.
 public struct NoChangesSuggestions: View {
     private let content: SuggestionsContent
@@ -362,10 +362,10 @@ public struct NoChangesSuggestions: View {
                 systemImage: "checkmark",
                 description: content.subtitle,
                 tint: Color(espalier: Palette.success),
-                isLarge: true
+                isLarge: true,
+                maximumWidth: SuggestionMetrics.listWidth
             ) {
                 rows
-                    .frame(maxWidth: SuggestionMetrics.listWidth)
                     .padding(.top, Metrics.insetSmall)
             }
             .frame(maxWidth: .infinity)
@@ -396,8 +396,8 @@ public struct NoChangesSuggestions: View {
                 }
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.actionList, style: .continuous))
-        .surface(.quiet, elevation: .quiet, in: RoundedRectangle(cornerRadius: Metrics.Radius.actionList, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+        .surface(.quiet, elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
     }
 
     /// The editor, Finder, and GitHub, with whether each can run.
@@ -420,16 +420,11 @@ public struct NoChangesSuggestions: View {
             SuggestionRow(card, isEnabled: content.isPrimaryEnabled, isProminent: true, perform: perform) {
                 SplitCapsuleButton(.prominent, menuLabel: "Pull Request Options", action: { perform(card.action) }) {
                     Text(card.buttonTitle)
-                } menu: {
-                    ForEach(PullRequestSuggestedNextAction.allCases, id: \.self) { action in
-                        Toggle(action.title, isOn: Binding(
-                            get: { action == choice },
-                            set: { isOn in
-                                if isOn {
-                                    onChoosePullRequestAction(action)
-                                }
-                            }
-                        ))
+                } menu: { [onChoosePullRequestAction] in
+                    MenuPicker(selection: Binding(get: { choice }, set: { onChoosePullRequestAction($0) })) {
+                        for action in PullRequestSuggestedNextAction.allCases {
+                            MenuChoice(action.title, value: action)
+                        }
                     }
                 }
                 .controlSize(.small)
@@ -454,10 +449,12 @@ extension PullRequestSuggestedNextAction {
 
 /// The Suggestions' sizes.
 enum SuggestionMetrics {
-    /// The action list's width.
+    /// The widest the action list and the message above it get.
     static let listWidth: CGFloat = 440
     /// A row's height on one line.
     static let rowHeight: CGFloat = 48
+    /// Space inside a row before its symbol and after its shortcut.
+    static let rowPadding: CGFloat = 14
     /// Space above the check.
     static let topInset: CGFloat = 80
     /// A row's symbol column.
@@ -487,7 +484,7 @@ struct SuggestionRow<Control: View>: View {
     var body: some View {
         if isProminent {
             content
-                .help(card.discoverability)
+                .tooltip(card.discoverability)
                 .accessibilityElement(children: .contain)
         } else {
             // The whole row runs the action; a description's link stays
@@ -500,11 +497,11 @@ struct SuggestionRow<Control: View>: View {
                         .hoverMotion(isHovered)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
                 .disabled(!isEnabled)
                 .onHover { isHovered = $0 }
                 .accessibilityLabel(card.buttonTitle)
-                .help(card.discoverability)
+                .tooltip(card.discoverability)
                 content
                     .allowsHitTesting(card.descriptionLinksToSettings)
                     .accessibilityHidden(card.description == nil)
@@ -516,7 +513,7 @@ struct SuggestionRow<Control: View>: View {
         HStack(alignment: .center, spacing: Metrics.insetMedium) {
             Image(systemName: card.action.systemImage)
                 .font(.system(size: 15))
-                .foregroundStyle(isProminent ? Color.accentColor : .text2)
+                .foregroundStyle(isProminent ? Color.accent : .text2)
                 .frame(width: SuggestionMetrics.symbolWidth)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Metrics.grid / 2) {
@@ -547,22 +544,19 @@ struct SuggestionRow<Control: View>: View {
                     .allowsHitTesting(false)
             }
         }
-        .padding(.horizontal, Metrics.insetMedium + 2)
+        .padding(.horizontal, SuggestionMetrics.rowPadding)
         .padding(.vertical, Metrics.insetSmall)
         .frame(minHeight: SuggestionMetrics.rowHeight)
-        .opacity(isProminent || isEnabled ? 1 : CheckboxDrawing.disabledOpacity)
+        .opacity(isProminent || isEnabled ? 1 : Palette.disabledOpacity)
     }
 
     /// The description, with "Settings" as a link when the card links it.
-    private func descriptionText(_ description: String) -> Text {
-        guard card.descriptionLinksToSettings, let range = description.range(of: "Settings") else {
-            return Text(description)
-        }
+    private func descriptionText(_ description: String) -> some View {
         var attributed = AttributedString(description)
-        if let linkRange = Range(range, in: attributed) {
+        if card.descriptionLinksToSettings, let range = description.range(of: "Settings"), let linkRange = Range(range, in: attributed) {
             attributed[linkRange].link = URL(string: "espalier-settings:integrations")
         }
-        return Text(attributed)
+        return LinkedText(attributed)
     }
 }
 

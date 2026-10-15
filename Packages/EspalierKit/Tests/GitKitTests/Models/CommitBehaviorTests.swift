@@ -1,6 +1,7 @@
 import Foundation
 import GitKit
 import Testing
+import TestSupport
 
 @Suite("Commit behavior")
 struct CommitBehaviorTests {
@@ -20,20 +21,6 @@ struct CommitBehaviorTests {
         #expect(GitAuthor.parse(" <x>") == GitAuthor(name: "", email: "x"))
     }
 
-    @Test("extracts co-authors and removes the first occurrence of each from the body")
-    func coAuthors() {
-        let commit = makeCommit(
-            body: "Body\n\nCo-Authored-By: Foo Bar <foo@bar.com>\nCo-Authored-By: Foo Bar <foo@bar.com>",
-            trailers: [
-                Trailer(token: "Co-Authored-By", value: "Foo Bar <foo@bar.com>"),
-                Trailer(token: "Signed-off-by", value: "X <x@y>"),
-                Trailer(token: "co-authored-by", value: "NoEmail"),
-            ]
-        )
-        #expect(commit.coAuthors == [GitAuthor(name: "Foo Bar", email: "foo@bar.com")])
-        #expect(commit.bodyNoCoAuthors == "Body\n\n\nCo-Authored-By: Foo Bar <foo@bar.com>")
-    }
-
     @Test("compares author and committer code unit by code unit")
     func authoredByCommitter() {
         let precomposed = identity("\u{E9}", "a")
@@ -46,7 +33,6 @@ struct CommitBehaviorTests {
     @Test("parses identities like desktop at the edges")
     func identityEdges() throws {
         let unsigned = try CommitIdentity.parseIdentity("A <b> 0 0130")
-        #expect(unsigned.tzOffset == 90)
         #expect(unsigned.date == Date(timeIntervalSince1970: 0))
 
         // The latest date a JavaScript Date can hold, and one second past it.
@@ -63,12 +49,11 @@ struct CommitBehaviorTests {
 
         // Trailing text after the time zone is ignored.
         let trailing = try CommitIdentity.parseIdentity("A <b> 1475670580 +0200 trailing")
-        #expect(trailing.tzOffset == 120)
         #expect(trailing.description == "A <b>")
     }
 
     private func identity(_ name: String, _ email: String) -> CommitIdentity {
-        CommitIdentity(name: name, email: email, date: Date(timeIntervalSince1970: 0), tzOffset: 0)
+        CommitIdentity(name: name, email: email, date: Date(timeIntervalSince1970: 0))
     }
 
     private func makeCommit(
@@ -89,5 +74,82 @@ struct CommitBehaviorTests {
             trailers: trailers,
             tags: []
         )
+    }
+}
+
+/// The co-authors git finds in a message's body, and the body without
+/// them.
+typealias CoAuthorTrailersCase = (body: String, coAuthors: [String], bodyNoCoAuthors: String)
+
+// Commits written with git and read back with `getCommit`, so git decides
+// what's a trailer.
+@Suite("Co-author trailers")
+struct CoAuthorTrailersTests {
+    @Test("only co-author trailers that are Name <email> leave the body, each once", arguments: [
+        NamedCase("an email alone stays in the body", (
+            body: "Paired.\n\nCo-authored-by: bob@example.com\nCo-authored-by: Alice <alice@example.com>\n",
+            coAuthors: ["Alice <alice@example.com>"],
+            bodyNoCoAuthors: "Paired.\n\nCo-authored-by: bob@example.com\n"
+        )),
+        NamedCase("no space after the colon", (
+            body: "Paired.\n\nCo-authored-by:Alice <alice@example.com>\n",
+            coAuthors: ["Alice <alice@example.com>"],
+            bodyNoCoAuthors: "Paired.\n\n"
+        )),
+        NamedCase("other trailers stay as written", (
+            body: "Signed-off-by:Bob <bob@example.com>\nco-authored-by :  Alice <alice@example.com>\nReviewed-by: Carol\n",
+            coAuthors: ["Alice <alice@example.com>"],
+            bodyNoCoAuthors: "Signed-off-by:Bob <bob@example.com>\nReviewed-by: Carol\n"
+        )),
+        NamedCase("a folded trailer, with its continuation line", (
+            body: "Paired.\n\nCo-authored-by: Alice\n  <alice@example.com>\nSigned-off-by: Bob <bob@example.com>\n",
+            coAuthors: ["Alice <alice@example.com>"],
+            bodyNoCoAuthors: "Paired.\n\nSigned-off-by: Bob <bob@example.com>\n"
+        )),
+        NamedCase("the same line in an earlier paragraph stays", (
+            body: "Co-authored-by: Alice <alice@example.com>\nwrote this line.\n\nCo-authored-by: Alice <alice@example.com>\n",
+            coAuthors: ["Alice <alice@example.com>"],
+            bodyNoCoAuthors: "Co-authored-by: Alice <alice@example.com>\nwrote this line.\n\n"
+        )),
+        NamedCase("not a trailer block", (
+            body: "Co-authored-by: Alice <alice@example.com> helped,\nas this paragraph says.\n",
+            coAuthors: [],
+            bodyNoCoAuthors: "Co-authored-by: Alice <alice@example.com> helped,\nas this paragraph says.\n"
+        )),
+    ] as [NamedCase<CoAuthorTrailersCase>])
+    func coAuthors(_ testCase: NamedCase<CoAuthorTrailersCase>) async throws {
+        let repository = try setupEmptyRepository()
+        let commit = try await commitMessage("Summary\n\n\(testCase.value.body)", in: repository)
+        #expect(commit.body == testCase.value.body)
+        #expect(commit.coAuthors.map(\.description) == testCase.value.coAuthors)
+        #expect(commit.bodyNoCoAuthors == testCase.value.bodyNoCoAuthors)
+    }
+
+    @Test("a squash keeps a co-author that isn't Name <email> in the description, and adds each other one once")
+    func squash() async throws {
+        let repository = try setupEmptyRepository()
+        let target = try await commitMessage("Base\n", in: repository)
+        let first = try await commitMessage("One\n\nCo-authored-by: bob@example.com\n", in: repository)
+        let second = try await commitMessage("Two\n\nCo-authored-by:Hubot <hubot@example.com>\n", in: repository)
+
+        // The squash's message, as the squash sheet writes it.
+        let coAuthors = getUniqueCoauthorsAsAuthors([first, second, target])
+        let message = try await formatCommitMessage(repository, CommitContext(
+            summary: target.summary,
+            description: getSquashedCommitDescription([first, second], target),
+            trailers: coAuthors.map { Trailer(token: "Co-Authored-By", value: "\($0.name) <\($0.email)>") }
+        ))
+        #expect(message == "Base\n\nOne\n\nCo-authored-by: bob@example.com\n\nTwo\n\nCo-Authored-By: Hubot <hubot@example.com>\n")
+    }
+
+    /// Commits `message` as is (with an empty commit) and reads it back.
+    private func commitMessage(_ message: String, in repository: Repository) async throws -> Commit {
+        try await git(
+            ["commit", "--allow-empty", "--cleanup=verbatim", "-F", "-"],
+            repository.path,
+            "commitMessage",
+            options: GitExecutionOptions(stdin: message)
+        )
+        return try #require(try await getCommit(repository, "HEAD"))
     }
 }

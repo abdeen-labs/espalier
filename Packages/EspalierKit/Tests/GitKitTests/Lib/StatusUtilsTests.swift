@@ -89,16 +89,5 @@ struct StatusUtilsTests {
             #expect(getUnmergedFiles(status).map(\.path) == ["resolved", "binary", "chosen", "markers"])
             #expect(getUntrackedFiles(status).map(\.path) == ["untracked"])
         }
-
-        @Test("describes manual resolutions")
-        func describesManualResolutions() {
-            #expect(getUnmergedStatusEntryDescription(.added) == "Using the added file")
-            #expect(getUnmergedStatusEntryDescription(.updatedButUnmerged, "main") == "Using the modified file from main")
-            #expect(getUnmergedStatusEntryDescription(.deleted, "") == "Using the deleted file")
-            #expect(getLabelForManualResolutionOption(.added, "main") == "Use the added file from main")
-            #expect(getLabelForManualResolutionOption(.updatedButUnmerged) == "Use the modified file")
-            #expect(getLabelForManualResolutionOption(.deleted, "main") == "Do not include this file on main")
-            #expect(getLabelForManualResolutionOption(.deleted) == "Do not include this file")
-        }
     }
 }

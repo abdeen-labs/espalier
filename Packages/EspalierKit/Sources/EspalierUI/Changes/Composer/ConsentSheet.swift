@@ -1,5 +1,6 @@
 // The sheet before the first request to a provider: it says what is sent and
-// where (AIKit's `getAIDataDisclosure`), and records the consent.
+// where (AIKit's `getAIDataDisclosure`), and records the consent. The
+// commit message's and the conflicts' sheets share its layout.
 
 import AIKit
 import SwiftUI
@@ -58,42 +59,71 @@ public struct ConsentSheet: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.insetMedium) {
-            Label(content.title, systemImage: "sparkles")
-                .font(Typography.heading)
-            Text(content.summary)
-                .fixedSize(horizontal: false, vertical: true)
-            VStack(alignment: .leading, spacing: Metrics.grid) {
-                ForEach(Array(content.sentData.enumerated()), id: \.offset) { _, item in
-                    Label(item, systemImage: "circle.fill")
-                        .labelStyle(RuleBulletLabelStyle())
-                }
-            }
-            .font(Typography.secondary)
-            Text(content.reviewAdvice)
-                .font(Typography.secondary)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: Metrics.insetSmall) {
-                Spacer(minLength: 0)
-                Button("Cancel", role: .cancel) {
-                    answer(false)
-                }
-                .buttonStyle(.secondary)
-                .keyboardShortcut(.cancelAction)
-                Button("Continue") {
-                    answer(true)
-                }
-                .buttonStyle(.prominent)
-                .keyboardShortcut(.defaultAction)
-            }
+        AIConsentScaffold(content.title, content: content) {
+            answer(false)
+        } confirm: {
+            answer(true)
         }
-        .padding(Metrics.insetLarge)
-        .frame(width: Metrics.Sheet.standardWidth, alignment: .leading)
     }
 
     private func answer(_ isConfirmed: Bool) {
         onAnswer(isConfirmed)
         dismissModal()
+    }
+}
+
+/// A consent sheet's layout, which every feature's shares: the title, the
+/// summary under it, what's sent as a bulleted list in a card, the advice
+/// to review the results, then Cancel and Continue.
+struct AIConsentScaffold: View {
+    private let title: String
+    private let content: AIConsentContent
+    private let cancel: () -> Void
+    private let confirm: () -> Void
+
+    init(_ title: String, content: AIConsentContent, cancel: @escaping () -> Void, confirm: @escaping () -> Void) {
+        self.title = title
+        self.content = content
+        self.cancel = cancel
+        self.confirm = confirm
+    }
+
+    var body: some View {
+        SheetScaffold(title, message: content.summary) {
+            VStack(alignment: .leading, spacing: Metrics.grid) {
+                ForEach(Array(content.sentData.enumerated()), id: \.offset) { _, item in
+                    BulletItem(text: item)
+                        .font(Typography.secondary)
+                        .foregroundStyle(.text)
+                }
+            }
+            .padding(Metrics.insetMedium)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
+                    .fill(.field)
+            )
+            Text(content.reviewAdvice)
+                .font(Typography.meta)
+                .foregroundStyle(.text3)
+                .fixedSize(horizontal: false, vertical: true)
+        } buttons: {
+            SheetButtons("Continue", cancel: cancel, confirm: confirm)
+        }
+    }
+}
+
+/// A bulleted line; wrapped lines align with the text, not the bullet.
+private struct BulletItem: View {
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
+            Text(verbatim: "•")
+                .foregroundStyle(.text2)
+                .accessibilityHidden(true)
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }

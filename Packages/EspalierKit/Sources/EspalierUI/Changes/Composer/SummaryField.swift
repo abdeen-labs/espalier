@@ -127,11 +127,12 @@ struct SummaryTextField: NSViewRepresentable {
         if field.stringValue != text, editor?.hasMarkedText() != true {
             field.stringValue = text
         }
-        if field.placeholderString != placeholder {
-            field.placeholderString = placeholder
-        }
         if field.font != font {
             field.font = font
+            field.applyPlaceholder()
+        }
+        if field.placeholder != placeholder {
+            field.placeholder = placeholder
         }
         if field.isEnabled != isEditable {
             field.isEnabled = isEditable
@@ -184,14 +185,10 @@ struct SummaryTextField: NSViewRepresentable {
             }
         }
 
-        func control(
-            _ control: NSControl,
-            textView: NSTextView,
-            completions words: [String],
-            forPartialWordRange charRange: NSRange,
-            indexOfSelectedItem index: UnsafeMutablePointer<Int>
-        ) -> [String] {
-            session.insertions(in: textView, forPartialWordRange: charRange, indexOfSelectedItem: index)
+        /// Shows the completions for the word at the cursor (`complete(_:)`).
+        func showCompletions(in editor: SummaryFieldEditor) {
+            session.completions = parent.completions
+            session.complete(in: editor)
         }
     }
 }
@@ -211,6 +208,24 @@ final class SummaryNSTextField: NSTextField {
         cell as? SummaryTextFieldCell
     }
 
+    /// What the field shows while it's empty.
+    var placeholder = "" {
+        didSet {
+            applyPlaceholder()
+        }
+    }
+
+    /// Sets the placeholder in the field's font, in placeholder text (as
+    /// the description draws its own). Set rather than computed by the
+    /// cell: the cell draws the placeholder it was given while the field
+    /// isn't editing.
+    func applyPlaceholder() {
+        placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
+            .font: font ?? AppKitTypography.row,
+            .foregroundColor: Palette.placeholderText,
+        ])
+    }
+
     /// Leaving the window (the shimmer replacing the field) takes the
     /// focus with it.
     override func viewDidMoveToWindow() {
@@ -218,6 +233,12 @@ final class SummaryNSTextField: NSTextField {
         if window == nil {
             focusBridge?.field(.summary, hasFocus: false)
         }
+    }
+}
+
+extension SummaryNSTextField: LookChangeObserving {
+    func lookDidChange() {
+        applyPlaceholder()
     }
 }
 
@@ -235,23 +256,6 @@ final class SummaryTextFieldCell: NSTextFieldCell {
 
     override func fieldEditor(for controlView: NSView) -> NSTextView? {
         editor
-    }
-
-    /// The placeholder in the field's font, in tertiary text (as the
-    /// description draws its own).
-    override var placeholderAttributedString: NSAttributedString? {
-        get {
-            guard let placeholder = placeholderString, !placeholder.isEmpty else {
-                return super.placeholderAttributedString
-            }
-            return NSAttributedString(string: placeholder, attributes: [
-                .font: font ?? AppKitTypography.row,
-                .foregroundColor: Palette.placeholderText,
-            ])
-        }
-        set {
-            super.placeholderAttributedString = newValue
-        }
     }
 
     override func setUpFieldEditorAttributes(_ textObj: NSText) -> NSText {
@@ -274,20 +278,12 @@ final class SummaryTextFieldCell: NSTextFieldCell {
 /// The summary's field editor: the completion range, the context menu, the
 /// spelling setting, Escape, and focus. It edits only the summary, so it
 /// has focus exactly while the summary does.
-final class SummaryFieldEditor: NSTextView {
+final class SummaryFieldEditor: EspalierFieldEditor {
     weak var coordinator: SummaryTextField.Coordinator?
     /// The cell whose editor this is.
     weak var ownerCell: SummaryTextFieldCell?
     /// Whether a completion is being inserted (not typed).
     private(set) var isInsertingCompletion = false
-
-    convenience init() {
-        self.init(frame: .zero)
-        isFieldEditor = true
-        isRichText = false
-        importsGraphics = false
-        allowsUndo = true
-    }
 
     /// The `@` or `#` word at the cursor, else the word the system picks.
     override var rangeForUserCompletion: NSRange {
@@ -306,13 +302,7 @@ final class SummaryFieldEditor: NSTextView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
-        guard let items = coordinator?.parent.menuItems, !items.isEmpty else {
-            return menu
-        }
-        menu.insertItem(.separator(), at: 0)
-        for item in items.reversed() {
-            menu.insertItem(MenuItemAction.item(title: item.title, isEnabled: item.isEnabled, handler: item.action), at: 0)
-        }
+        ComposerMenuItem.insert(coordinator?.parent.menuItems ?? [], atTopOf: menu)
         return menu
     }
 
@@ -330,12 +320,13 @@ final class SummaryFieldEditor: NSTextView {
         super.cancelOperation(sender)
     }
 
-    /// Escape runs `complete(_:)` in a text view: handle it first.
+    /// Escape runs `complete(_:)` in a text view: handle it first, else
+    /// show the completions for the word at the cursor.
     override func complete(_ sender: Any?) {
         if NSApp.currentEvent?.keyCode == 53, coordinator?.parent.onEscape() == true {
             return
         }
-        super.complete(sender)
+        coordinator?.showCompletions(in: self)
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -355,17 +346,16 @@ final class SummaryFieldEditor: NSTextView {
     }
 }
 
-/// "Generating commit details…", shimmering slowly (still under Reduce
-/// Motion and in snapshots).
+/// "Generating commit details…", shimmering slowly (still where motion
+/// doesn't run).
 struct GeneratingText: View {
     @Environment(\.motion) private var motion
-    @Environment(\.fixedNow) private var fixedNow
 
     var body: some View {
         let text = Text("Generating commit details…")
             .font(Typography.row)
             .foregroundStyle(.secondary)
-        if !motion.animates || fixedNow != nil {
+        if !motion.animates {
             text
         } else {
             TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
@@ -403,13 +393,13 @@ struct SummaryLengthHint: View {
         } label: {
             Image(systemName: "lightbulb")
                 .foregroundStyle(.secondary)
-                .frame(width: Metrics.Composer.sparkleSize, height: Metrics.Composer.sparkleSize)
+                .frame(width: Metrics.Composer.summaryHintSize, height: Metrics.Composer.summaryHintSize)
         }
-        .buttonStyle(.borderless)
-        .help("\(Self.title). \(Self.detail)")
+        .buttonStyle(.smallIcon)
+        .tooltip("\(Self.title). \(Self.detail)")
         .accessibilityLabel("Summary length")
         .accessibilityValue("\(Self.title). \(Self.detail)")
-        .popover(isPresented: $isShowingDetails, arrowEdge: .top) {
+        .popoverCard(isPresented: $isShowingDetails, edge: .top, title: Self.title) {
             VStack(alignment: .leading, spacing: Metrics.grid) {
                 Text(Self.title)
                     .font(Typography.heading)

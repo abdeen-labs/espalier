@@ -407,6 +407,14 @@ struct DiffParserTests {
         #expect(!diff.hasHiddenBidiChars)
     }
 
+    @Test("the largest line number is the largest old or new one, wherever it is")
+    func largestLineNumber() throws {
+        let deletions = (1...12).map { "-old\($0)" }
+        let diffText = (["--- a/a", "+++ b/a", "@@ -1,12 +1,2 @@"] + deletions + ["+new1", "+new2"]).joined(separator: "\n")
+        let diff = try DiffParser().parse(diffText)
+        #expect(diff.maxLineNumber == 12)
+    }
+
     @Test("decodes invalid UTF-8 per line as Node decodes the whole buffer")
     func invalidUTF8() throws {
         var bytes = Data("--- a/a\n+++ b/a\n@@ -1 +1 @@\n-caf".utf8)
@@ -430,8 +438,10 @@ struct DiffParserTests {
         // A "no newline" marker shorter than 12 UTF-16 code units, even
         // though it's 12 bytes long.
         "--- a/a\n+++ b/a\n@@ -1 +1 @@\n+a\n\\ \u{E9}\u{E9}\u{E9}\u{E9}\u{E9}\n",
-        // A blank line inside the diff, which git never writes.
+        // An empty line the hunk's counts leave no room for: an empty
+        // context line needs a line left in both files.
         "--- a/a\n+++ b/a\n@@ -1 +1 @@\n+a\n\n+b\n",
+        "--- a/a\n+++ b/a\n@@ -0,0 +1,2 @@\n+a\n\n",
         // A second file's patch.
         "--- a/a\n+++ b/a\n@@ -1 +1 @@\n+a\ndiff --git a/b b/b\n",
     ])
@@ -473,6 +483,22 @@ struct DiffParserTests {
 
         #expect(hunkCount == 3000)
         #expect(largeTime < smallTime * 40 * 6, "parsing 3,000 hunks took \(largeTime), 75 hunks \(smallTime)")
+    }
+
+    // `diff.suppressBlankEmpty` writes an empty context line as an empty
+    // line; the hunk's counts say where the hunk ends.
+    @Test("reads an empty line inside a hunk as an empty context line")
+    func emptyContextLines() throws {
+        let diff = try DiffParser().parse("+++ b/a\n@@ -1,3 +1,3 @@\n\n-a\n+b\n\n@@ -10,2 +10,3 @@\n x\n+y\n\n")
+
+        #expect(diff.hunks.map { $0.lines.map(\.text) } == [
+            ["@@ -1,3 +1,3 @@", " ", "-a", "+b", " "],
+            ["@@ -10,2 +10,3 @@", " x", "+y", " "],
+        ])
+        #expect(diff.hunks[0].lines.map(\.oldLineNumber) == [nil, 1, 2, nil, 3])
+        #expect(diff.hunks[0].lines.map(\.newLineNumber) == [nil, 1, nil, 2, 3])
+        #expect(diff.hunks[1].lines.map(\.originalLineNumber) == [1, 6, 7, 8])
+        #expect(diff.hunks[1].unifiedDiffStart == 5)
     }
 
     @Test("parses hunk headers with large and zero counts")

@@ -523,8 +523,10 @@ private func parseRebaseResult(_ result: GitResult) throws -> RebaseResult {
         return .outstandingFilesNotStaged
     }
 
+    let stderr = result.stderr
     throw GitLibError(
-        "Unhandled result found: '{\"exitCode\":\(result.exitCode),\"gitError\":\(result.gitError.map { "\"\($0.rawValue)\"" } ?? "null"),\"stdout\":\(String(reflecting: result.stdout)),\"stderr\":\(String(reflecting: result.stderr))}'"
+        "Unhandled result found: exit code \(result.exitCode), git error \(result.gitError?.rawValue ?? "none")"
+            + (stderr.isEmpty ? "" : "\n\(stderr)")
     )
 }
 

@@ -21,17 +21,17 @@ nonisolated struct StashRowContent: Sendable, Equatable, Identifiable {
         branch
     }
 
-    /// The badge: the file count, once counted.
-    var badge: String? {
-        fileCount.map { "\($0)" }
+    /// The badge: the file count, once counted, in `numberFormat`.
+    func badge(_ numberFormat: NumberFormat) -> String? {
+        fileCount.map { formatCount($0, numberFormat) }
     }
 
-    /// What VoiceOver reads: "main, 4 files".
-    var accessibilityLabel: String {
+    /// What VoiceOver reads: "main, 4 files", the count in `numberFormat`.
+    func accessibilityLabel(_ numberFormat: NumberFormat) -> String {
         guard let fileCount else {
             return branch
         }
-        return "\(branch), \(StashFilesSummary.files(fileCount))"
+        return "\(branch), \(StashFilesSummary.files(fileCount, numberFormat))"
     }
 
     /// The rows for the branches with stashes: the current branch's first,
@@ -68,18 +68,20 @@ nonisolated struct StashRowContent: Sendable, Equatable, Identifiable {
 /// One stash.
 struct StashRow: View {
     let content: StashRowContent
+    @Environment(\.isSidebarRowSelected) private var isSelected
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         SidebarRowLabel(content.branch, systemImage: "tray.full") {
-            if let badge = content.badge {
+            if let badge = content.badge(numberFormat) {
                 Text(badge)
                     .font(Typography.count)
-                    .foregroundStyle(.text3)
+                    .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
             }
         }
-        .help(content.tooltip)
+        .tooltip(content.tooltip)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(content.accessibilityLabel)
+        .accessibilityLabel(content.accessibilityLabel(numberFormat))
     }
 }
 
@@ -126,22 +128,15 @@ public struct StashesSection: View {
 }
 
 /// A stash row's context menu: Restore, which only the current branch's
-/// stash offers, and Discard….
-public struct StashContextMenu: View {
-    private let branch: String
-    @Environment(WindowContext.self) private var context
-
-    public init(branch: String) {
-        self.branch = branch
-    }
-
-    public var body: some View {
-        if context.repository?.gitState.tip.branch?.name == branch {
-            ActionButton(.restoreStash(branch: branch))
-        } else {
-            ActionButton(.restoreStash(branch: branch))
-                .help(StashActions.restoreUnavailableReason(branch: branch))
-        }
-        ActionButton(.discardStash(branch: branch))
+/// stash offers (another branch's says why under it), and Discard….
+enum StashContextMenu {
+    @MenuBuilder
+    static func content(branch: String, context: WindowContext) -> MenuContent {
+        let isCurrentBranch = context.repository?.gitState.tip.branch?.name == branch
+        context.actions.menuAction(
+            .restoreStash(branch: branch),
+            subtitle: isCurrentBranch ? nil : StashActions.restoreUnavailableReason(branch: branch)
+        )
+        context.actions.menuAction(.discardStash(branch: branch))
     }
 }

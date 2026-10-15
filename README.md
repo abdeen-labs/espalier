@@ -1,6 +1,6 @@
 # Espalier
 
-Espalier is a native Git client for macOS. It brings the workflows of
+Espalier is a Git client for macOS. It brings the workflows of
 [GitHub Desktop](https://github.com/desktop/desktop) to a Mac app written in
 Swift, SwiftUI, and AppKit: changes and commits, history with a commit graph,
 branches, merges and rebases, pull requests, and GitHub sign-in. It also

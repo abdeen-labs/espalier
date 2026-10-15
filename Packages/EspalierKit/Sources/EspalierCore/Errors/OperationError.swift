@@ -14,8 +14,8 @@ public struct OperationError: Error, Sendable {
     public let reason: Reason
     /// How to run the operation again with the same arguments, if it can be.
     public let retry: (any RetryableOperation)?
-    /// Whether a background task failed: never presented, kept as the
-    /// repository's `lastBackgroundFailure`.
+    /// Whether a background task failed: never presented as an error, kept
+    /// as the repository's `lastBackgroundFailure`.
     public let isBackgroundTask: Bool
     /// The error the operation threw.
     public let underlying: (any Error)?
@@ -277,7 +277,11 @@ public struct TrashFailedError: Error, Sendable {
 // MARK: - Presentation
 
 extension OperationError {
-    /// The error's title: the reason's own, else the failed operation's.
+    /// The title of an error with nothing more specific to say.
+    public static let genericTitle = "Error"
+
+    /// The error's title: the reason's own, else the failed operation's,
+    /// else `genericTitle`.
     public var title: String {
         switch reason {
         case .ai(.provider(let title?, _)):
@@ -322,7 +326,7 @@ extension OperationError {
         switch gitContext {
         case .createRepository?: return "Couldn't Create Repository"
         case .commit?: return "Commit Failed"
-        default: return signingFailure == nil ? "Error" : "Signing Failed"
+        default: return signingFailure == nil ? Self.genericTitle : "Signing Failed"
         }
     }
 

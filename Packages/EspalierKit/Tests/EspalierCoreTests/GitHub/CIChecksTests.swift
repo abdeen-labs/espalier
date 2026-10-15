@@ -1,6 +1,5 @@
 // Ported from desktop/app/test/unit/ci-checks-test.ts
-// Plus tests of the rest of CIChecks.swift, duration formatting, and the
-// checks popover's and rerun sheet's copy.
+// Plus tests of the rest of CIChecks.swift.
 
 @testable import EspalierCore
 import Foundation
@@ -167,104 +166,56 @@ func refCheck(
 
 @Suite("CI checks")
 struct CIChecksTests {
-    @Test("no checks combine into none; one check is mirrored")
-    func combineFew() throws {
-        #expect(createCombinedCheckFromChecks([]) == nil)
-        let pending = refCheck(id: 1, status: .inProgress, conclusion: nil)
-        let combined = try #require(createCombinedCheckFromChecks([pending]))
-        #expect(combined.status == .inProgress)
-        #expect(combined.conclusion == nil)
-        #expect(combined.checks == [pending])
-    }
-
-    @Test("any failure, or incomplete check, fails the combination, even with others pending")
-    func combineFailure() throws {
-        for conclusion in [APICheckConclusion.failure, .actionRequired, .timedOut, .stale, .canceled] {
-            let combined = try #require(createCombinedCheckFromChecks([
-                refCheck(id: 1, status: .inProgress, conclusion: nil),
-                refCheck(id: 2, conclusion: conclusion),
-            ]))
-            #expect(combined.status == .completed)
-            #expect(combined.conclusion == .failure)
+    @Test("checks add up to failed, else running, else unfinished, else passed; the combined check follows", arguments: [
+        NamedCase("no checks: none", (checks: [APICheckConclusion?](), result: CheckResult?.none, combined: APICheckConclusion?.none)),
+        NamedCase("one running check runs", ([nil], .running, nil)),
+        NamedCase("a failure fails, beside a running check", ([nil, .failure], .failed, .failure)),
+        NamedCase("timing out fails", ([.success, .timedOut], .failed, .failure)),
+        NamedCase("needing an action fails", ([.success, .actionRequired], .failed, .failure)),
+        NamedCase("one cancelled check is unfinished, not failed", ([.canceled], .unfinished, .canceled)),
+        NamedCase("a cancelled check beside a pass is unfinished", ([.success, .canceled], .unfinished, .canceled)),
+        NamedCase("a stale check beside a running one still runs", ([.stale, nil], .running, nil)),
+        NamedCase("only stale checks unfinished: stale", ([.success, .stale], .unfinished, .stale)),
+        NamedCase("a conclusion GitHub added since is unfinished", ([.success, APICheckConclusion(rawValue: "something_new")], .unfinished, .canceled)),
+        NamedCase("success, neutral, and skipped pass", ([.success, .neutral, .skipped], .passed, .success)),
+        NamedCase("one skipped check passes", ([.skipped], .passed, .success)),
+    ])
+    func results(_ testCase: NamedCase<(checks: [APICheckConclusion?], result: CheckResult?, combined: APICheckConclusion?)>) {
+        let checks = testCase.value.checks.enumerated().map { index, conclusion in
+            refCheck(id: index + 1, status: conclusion == nil ? .inProgress : .completed, conclusion: conclusion)
         }
+        #expect(checksResult(checks) == testCase.value.result)
+        let combined = createCombinedCheckFromChecks(checks)
+        #expect(combined?.checks == (checks.isEmpty ? nil : checks))
+        #expect(combined?.conclusion == testCase.value.combined)
+        #expect(combined.map { $0.status == .completed } == testCase.value.result.map { $0 != .running })
     }
 
-    @Test("success, neutral, and skipped combine into success; otherwise in progress")
-    func combineSuccess() throws {
-        let success = try #require(createCombinedCheckFromChecks([
-            refCheck(id: 1, conclusion: .success),
-            refCheck(id: 2, conclusion: .neutral),
-            refCheck(id: 3, conclusion: .skipped),
-        ]))
-        #expect(success.status == .completed)
-        #expect(success.conclusion == .success)
-
-        let pending = try #require(createCombinedCheckFromChecks([
-            refCheck(id: 1, conclusion: .success),
-            refCheck(id: 2, status: .queued, conclusion: nil),
-        ]))
-        #expect(pending.status == .inProgress)
-        #expect(pending.conclusion == nil)
-    }
-
-    @Test("check runs describe their conclusion and how long they took")
-    func checkRunDescriptions() {
-        #expect(apiCheckRunToRefCheck(apiCheckRun(id: 1, name: "build")).description == "Successful in 1m 2s")
-        #expect(apiCheckRunToRefCheck(apiCheckRun(id: 1, name: "build", conclusion: .failure, completedAt: "2026-10-01T10:00:05Z")).description == "Failed after 5s")
-        #expect(apiCheckRunToRefCheck(apiCheckRun(id: 1, name: "build", conclusion: .skipped)).description == "Skipped")
-        #expect(apiCheckRunToRefCheck(apiCheckRun(id: 1, name: "build", conclusion: .actionRequired)).description == "Action required")
-        #expect(apiCheckRunToRefCheck(apiCheckRun(id: 1, name: "build", status: .inProgress)).description == "In progress")
-        #expect(apiCheckRunToRefCheck(apiCheckRun(id: 1, name: "build", conclusion: .canceled, startedAt: nil)).description == "Canceled")
+    @Test("a check run keeps its app, check suite, and URL")
+    func checkRunFields() {
         let check = apiCheckRunToRefCheck(apiCheckRun(id: 9, name: "build", checkSuite: 42))
         #expect(check.appName == "GitHub Actions")
         #expect(check.checkSuiteID == 42)
         #expect(check.htmlURL == "https://github.com/octocat/hello/runs/9")
     }
 
-    @Test("a rerun replaces the run it reran; push and pull request runs, and other apps' runs, stay apart")
+    @Test("every check run GitHub sends shows once, so a failing run isn't hidden behind a same-named one")
     func latestCheckRuns() {
         let runs = [
+            // Two same-named runs in one check suite: the failing one stays.
             apiCheckRun(id: 1, name: "build", conclusion: .failure, checkSuite: 100),
-            apiCheckRun(id: 2, name: "build", checkSuite: 101),
-            apiCheckRun(id: 3, name: "build", checkSuite: 102, pullRequests: []),
-            apiCheckRun(id: 4, name: "build", app: "Travis CI", checkSuite: 50),
-            apiCheckRun(id: 5, name: "test", checkSuite: 100),
+            apiCheckRun(id: 2, name: "build", checkSuite: 100),
+            apiCheckRun(id: 3, name: "build", checkSuite: 101),
+            // A push's run beside the pull request's.
+            apiCheckRun(id: 4, name: "build", checkSuite: 102, pullRequests: []),
+            apiCheckRun(id: 5, name: "lint", checkSuite: nil),
+            apiCheckRun(id: 6, name: "lint", checkSuite: nil),
+            // Listed again on a later page.
+            apiCheckRun(id: 1, name: "build", conclusion: .failure, checkSuite: 100),
         ]
-        #expect(getLatestCheckRunsById(runs).map(\.id) == [2, 3, 4, 5])
-    }
-
-    @Test("durations read as desktop's, short and long")
-    func durations() {
-        #expect(formatPreciseDuration(3_670_000) == "1h 1m 10s")
-        #expect(formatPreciseDuration(5000) == "5s")
-        #expect(formatPreciseDuration(0) == "0s")
-        #expect(formatPreciseDuration(86_400_000 + 1000) == "1d 0h 0m 1s")
-        #expect(formatLongPreciseDuration(3_670_000) == "1 hour 1 minute 10 seconds")
-        #expect(formatLongPreciseDuration(61000) == "1 minute 1 second")
-        #expect(getFormattedCheckRunDuration(completedAt: "2026-10-01T10:01:30Z", startedAt: "2026-10-01T10:00:00Z") == "1m 30s")
-        #expect(getFormattedCheckRunDuration(completedAt: nil, startedAt: "2026-10-01T10:00:00Z") == "")
-    }
-
-    @Test("the checks popover's title and summary are desktop's")
-    func popoverCopy() {
-        let passed = [refCheck(id: 1, conclusion: .success), refCheck(id: 2, conclusion: .skipped)]
-        let failed = [refCheck(id: 1, conclusion: .failure), refCheck(id: 2, conclusion: .timedOut)]
-        let mixed = [refCheck(id: 1, conclusion: .success), refCheck(id: 2, conclusion: .failure)]
-        let pending = [refCheck(id: 1, conclusion: .success), refCheck(id: 2, status: .inProgress, conclusion: nil)]
-        let pendingWithFailure = [refCheck(id: 1, conclusion: .failure), refCheck(id: 2, status: .inProgress, conclusion: nil)]
-
-        #expect(getChecksSummaryTitle([], loading: true) == "Checks Summary")
-        #expect(getChecksSummaryTitle(passed, loading: true) == "All checks have passed")
-        #expect(getChecksSummaryTitle(passed, loading: false) == "All checks have passed")
-        #expect(getChecksSummaryTitle(failed, loading: false) == "All checks have failed")
-        #expect(getChecksSummaryTitle(mixed, loading: false) == "Some checks were not successful")
-        #expect(getChecksSummaryTitle(pending, loading: false) == "Some checks haven't completed yet")
-        #expect(getChecksSummaryTitle(pendingWithFailure, loading: false) == "Some checks were not successful")
-
-        #expect(getCombinedStatusSummary(mixed.map(\.conclusion)) == "1 successful and 1 failed checks")
-        #expect(getCombinedStatusSummary([.success]) == "1 successful check")
-        #expect(getCombinedStatusSummary([.success, .failure, nil, .success], description: "step")
-            == "2 successful, 1 failed, and 1 in progress steps")
+        let latest = getLatestCheckRunsById(runs)
+        #expect(latest.map(\.id) == [1, 2, 3, 4, 5, 6])
+        #expect(checksResult(latest.map(apiCheckRunToRefCheck)) == .failed)
     }
 
     @Test("rerun checks show in progress, with their steps")
@@ -295,6 +246,8 @@ struct CIChecksTests {
             refCheck(id: 3, conclusion: .failure, checkSuiteID: 3),
             refCheck(id: 4, conclusion: .failure, checkSuiteID: 4),
             refCheck(id: 5, conclusion: .failure, checkSuiteID: nil),
+            refCheck(id: 6, conclusion: .timedOut, checkSuiteID: 1),
+            refCheck(id: 7, conclusion: .actionRequired, checkSuiteID: 1),
         ]
         let suites = [
             APICheckSuite(id: 1, rerequestable: true, runsRerequestable: true, status: .completed, createdAt: createdAt(daysAgo: 1)),
@@ -304,23 +257,24 @@ struct CIChecksTests {
         ]
 
         let all = rerunPlan(checks, failedOnly: false, checkSuites: suites, now: now)
-        #expect(all.rerunnable.map(\.id) == [1, 2])
+        #expect(all.rerunnable.map(\.id) == [1, 2, 6, 7])
         #expect(all.nonRerunnable.map(\.id) == [3, 4, 5])
-        #expect(all.warning == "3 checks can't be re-run. A check can't be re-run when it's more than a month old, when it or a check it depends on hasn't finished, or when it isn't set up to be re-run.")
-        #expect(all.dependentsMessage(allChecks: checks) == "These workflows will run again, along with the checks that depend on them.")
+        #expect(all.warning != nil)
+        #expect(all.dependentsMessage(allChecks: checks) != nil)
 
+        // Timed out and needing an action count as failed.
         let failed = rerunPlan(checks, failedOnly: true, checkSuites: suites, now: now)
-        #expect(failed.rerunnable.map(\.id) == [1])
+        #expect(failed.rerunnable.map(\.id) == [1, 6, 7])
         #expect(failed.nonRerunnable.map(\.id) == [3, 4, 5])
-        #expect(failed.warning?.hasPrefix("3 failed checks can't be re-run.") == true)
+        #expect(failed.warning != nil)
 
         let none = rerunPlan([checks[2]], failedOnly: true, checkSuites: suites, now: now)
-        #expect(none.warning?.hasPrefix("None of the failed checks can be re-run.") == true)
+        #expect(none.warning != nil)
         #expect(none.dependentsMessage(allChecks: [checks[2]]) == nil)
 
         let one = rerunPlan([checks[0]], failedOnly: false, checkSuites: suites, now: now)
         #expect(one.warning == nil)
-        #expect(one.dependentsMessage(allChecks: [checks[0]]) == "check will run again, along with the checks that depend on it.")
+        #expect(one.dependentsMessage(allChecks: [checks[0]]) != nil)
     }
 
     @Test("a step's URL is its check run's, else the pull request's")

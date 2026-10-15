@@ -1,8 +1,9 @@
 // Espalier's switch: a capsule 32 by 19, the accent when on and `line2` when
-// off, with a white knob. It replaces the system's switch, which draws its
-// own colors and, in an inactive window, grey. The switch is a button, so it
-// joins the key view loop as the system's does (with keyboard navigation on)
-// and Space toggles it; VoiceOver sees a native switch.
+// off, with a white knob (in the theme's marks color, `onAccent`, while
+// on), in every window, active or not. Every switch in
+// Espalier is one (Settings' rows). The switch is a button, so it joins the
+// key view loop with keyboard navigation on, showing the focus ring around
+// the capsule, and Space toggles it; VoiceOver sees a switch.
 
 import AppKit
 import SwiftUI
@@ -19,7 +20,7 @@ public struct CapsuleSwitchStyle: ToggleStyle {
 
 extension ToggleStyle where Self == CapsuleSwitchStyle {
     /// Espalier's switch: the accent when on, `line2` when off, a white
-    /// knob.
+    /// knob (the theme's marks color while on).
     public static var capsuleSwitch: CapsuleSwitchStyle { CapsuleSwitchStyle() }
 }
 
@@ -51,21 +52,26 @@ private struct CapsuleSwitchBody: View {
 private struct CapsuleSwitchTrack: View {
     let isOn: Bool
     let toggle: () -> Void
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         Button(action: toggle) {
             EmptyView()
         }
-        .buttonStyle(CapsuleSwitchButtonStyle(isOn: isOn))
+        .buttonStyle(CapsuleSwitchButtonStyle(isOn: isOn, isFocused: isFocused))
+        .focusEffectDisabled()
+        .focused($isFocused)
     }
 }
 
-/// Draws the switch for its state, pressed and disabled included.
+/// Draws the switch for its state, pressed, focused, and disabled included.
 private struct CapsuleSwitchButtonStyle: ButtonStyle {
     let isOn: Bool
+    let isFocused: Bool
 
     func makeBody(configuration: Configuration) -> some View {
         CapsuleSwitchDrawing(isOn: isOn, isPressed: configuration.isPressed)
+            .focusRing(isFocused, in: Capsule(style: .circular))
     }
 }
 
@@ -79,9 +85,9 @@ struct CapsuleSwitchDrawing: View {
         let size = Metrics.Switch.self
         ZStack(alignment: isOn ? .trailing : .leading) {
             Capsule(style: .circular)
-                .fill(isOn ? Color.accentColor : .line2)
+                .fill(isOn ? Color.accent : .line2)
             Circle()
-                .fill(.white)
+                .fill(isOn ? Color(nsColor: Theme.current.onAccent) : .white)
                 .frame(width: size.knob, height: size.knob)
                 .shadow(color: .black.opacity(size.knobShadowOpacity), radius: size.knobShadowRadius, y: size.knobShadowOffset)
                 .padding(size.knobInset)
@@ -90,18 +96,16 @@ struct CapsuleSwitchDrawing: View {
                     .fill(.black.opacity(size.pressedOpacity))
             }
         }
-        // As the system's switch: the knob slides and the track's color
-        // crossfades over 0.22 s.
+        // The knob slides and the track's color crossfades over 0.22 s.
         .motion(Motion.arrive, value: isOn)
         .frame(width: size.width, height: size.height)
         .contentShape(Capsule(style: .circular))
-        .contentShape(.focusEffect, Capsule(style: .circular))
-        .opacity(isEnabled ? 1 : CheckboxDrawing.disabledOpacity)
+        .opacity(isEnabled ? 1 : Palette.disabledOpacity)
     }
 }
 
 extension Metrics {
-    /// Espalier's switch: 32 by 19, a white knob.
+    /// Espalier's switch: 32 by 19, a round knob.
     public enum Switch {
         public static let width: CGFloat = 32
         public static let height: CGFloat = 19

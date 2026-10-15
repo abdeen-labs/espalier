@@ -51,9 +51,9 @@ struct DiffContentsLoaderTests {
         let contents = try await load(file, in: fixture)
 
         #expect(contents.fileID == file.id)
-        #expect(contents.oldLines == ["one", "two", "three", ""])
+        #expect(contents.oldLines == ["one", "two", "three"])
         // `\r\n` endings are split like `\n`.
-        #expect(contents.newLines == ["one", "TWO", "three", ""])
+        #expect(contents.newLines == ["one", "TWO", "three"])
         #expect(contents.canBeExpanded)
         #expect(contents.isBinary == false)
     }
@@ -65,11 +65,11 @@ struct DiffContentsLoaderTests {
 
         let added = try await load(try #require(files["added.txt"]), in: fixture)
         #expect(added.oldLines.isEmpty)
-        #expect(added.newLines == ["new", ""])
+        #expect(added.newLines == ["new"])
         #expect(added.canBeExpanded)
 
         let deleted = try await load(try #require(files["deleted.txt"]), in: fixture)
-        #expect(deleted.oldLines == ["gone", ""])
+        #expect(deleted.oldLines == ["gone"])
         #expect(deleted.newLines.isEmpty)
         #expect(deleted.canBeExpanded == false)
     }
@@ -80,8 +80,8 @@ struct DiffContentsLoaderTests {
         let file = try #require(try await changedFiles(fixture, commit)["new-name.txt"])
         #expect(file.status.kind == .renamed)
         let contents = try await load(file, in: fixture)
-        #expect(contents.oldLines == ["renamed", "contents", ""])
-        #expect(contents.newLines == ["renamed", "contents", ""])
+        #expect(contents.oldLines == ["renamed", "contents"])
+        #expect(contents.newLines == ["renamed", "contents"])
     }
 
     @Test("a working directory file: HEAD's lines and the file on disk")
@@ -97,18 +97,18 @@ struct DiffContentsLoaderTests {
 
         loader.load(try #require(files["modified.txt"]))
         await loader.idle()
-        #expect(loader.contents.value?.oldLines == ["one", "TWO", "three", ""])
-        #expect(loader.contents.value?.newLines == ["one", "changed", ""])
+        #expect(loader.contents.value?.oldLines == ["one", "TWO", "three"])
+        #expect(loader.contents.value?.newLines == ["one", "changed"])
         #expect(loader.contents.value?.canBeExpanded == true)
 
         loader.load(try #require(files["untracked.txt"]))
         await loader.idle()
         #expect(loader.contents.value?.oldLines == [])
-        #expect(loader.contents.value?.newLines == ["fresh", ""])
+        #expect(loader.contents.value?.newLines == ["fresh"])
 
         loader.load(try #require(files["added.txt"]))
         await loader.idle()
-        #expect(loader.contents.value?.oldLines == ["new", ""])
+        #expect(loader.contents.value?.oldLines == ["new"])
         #expect(loader.contents.value?.newLines == [])
         #expect(loader.contents.value?.canBeExpanded == false)
 
@@ -149,11 +149,10 @@ struct DiffContentsLoaderTests {
         let contents = try await load(file, in: fixture)
 
         #expect(contents.canBeExpanded == false)
-        #expect(contents.oldLines == ["small", ""])
+        #expect(contents.oldLines == ["small"])
         // 1,024 lines of 1,024 bytes fill the 1 MiB read exactly.
-        #expect(contents.newLines.count == 1_025)
-        #expect(contents.newLines.first == String(repeating: "x", count: 1023))
-        #expect(contents.newLines.last == "")
+        #expect(contents.newLines.count == 1_024)
+        #expect(contents.newLines.allSatisfy { $0 == String(repeating: "x", count: 1023) })
 
         // Exactly one byte under the limit still expands; at the limit, it
         // doesn't (a cut file can't be told from one that size).
@@ -187,15 +186,16 @@ struct DiffContentsLoaderTests {
         }
         await loader.idle()
         #expect(loader.contents.value?.fileID == added.id)
-        #expect(loader.contents.value?.newLines == ["new", ""])
+        #expect(loader.contents.value?.newLines == ["new"])
     }
 
-    @Test("lines split like desktop's /\\r?\\n/")
+    @Test("lines split on \\n and \\r\\n, a final newline ending the last line")
     func splitting() {
-        #expect(splitLines(Data()) == [""])
+        #expect(splitLines(Data()) == [])
         #expect(splitLines(Data("a".utf8)) == ["a"])
-        #expect(splitLines(Data("a\n".utf8)) == ["a", ""])
-        #expect(splitLines(Data("a\r\nb\rc\n\r\n".utf8)) == ["a", "b\rc", "", ""])
+        #expect(splitLines(Data("a\n".utf8)) == ["a"])
+        #expect(splitLines(Data("\n".utf8)) == [""])
+        #expect(splitLines(Data("a\r\nb\rc\n\r\n".utf8)) == ["a", "b\rc", ""])
         #expect(splitLines(Data([0x61, 0xE2, 0x0A, 0x62])) == ["a\u{FFFD}", "b"])
     }
 }

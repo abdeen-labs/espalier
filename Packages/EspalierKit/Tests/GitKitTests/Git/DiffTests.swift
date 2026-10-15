@@ -710,6 +710,28 @@ struct DiffTests {
             #expect(workingDiff.text == "@@ -1,2 +1,3 @@\n one\n two\n+three")
         }
 
+        // With `diff.suppressBlankEmpty`, git writes an empty context line
+        // as an empty line. Lines picked from that diff still commit.
+        @Test("reads diffs and commits lines with diff.suppressBlankEmpty")
+        func suppressBlankEmpty() async throws {
+            let repo = try setupEmptyRepository()
+            try await setupLocalConfig(repo, [("diff.suppressBlankEmpty", "true")])
+            try await makeCommit(repo, Tree(entries: [TreeEntry(path: "file.txt", contents: "one\n\ntwo\n\nthree\n")]))
+            try writeFile(POSIXPath.join(repo.path, "file.txt"), "one\n\nTWO\n\nthree\nfour\n")
+
+            let file = WorkingDirectoryFileChange(path: "file.txt", status: .modified(), selection: .fromInitialSelection(.all))
+            let diff = try await getTextDiff(repo, file)
+            #expect(diff.hunks.map { $0.lines.map(\.text) } == [
+                ["@@ -1,5 +1,6 @@", " one", " ", "-two", "+TWO", " ", " three", "+four"],
+            ])
+
+            // Only "+four".
+            let selection = DiffSelection.fromInitialSelection(.none).withLineSelection(7, selected: true)
+            _ = try await createCommit(repo, "four", [file.withSelection(selection)])
+            let committed = try await git(["show", "HEAD:file.txt"], repo.path, "test").stdout
+            #expect(committed == "one\n\ntwo\n\nthree\nfour\n")
+        }
+
         @Test("marks diffs with very long lines or very large output as large")
         func largeDiffs() async throws {
             let repo = try setupEmptyRepository()

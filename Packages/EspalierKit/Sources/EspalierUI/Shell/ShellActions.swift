@@ -1,6 +1,6 @@
 // The actions the shell itself handles: navigation, the location control's
-// popovers, search and filter focus, the inspector, the sync button's fetch,
-// pull, and push, Settings, About, and Help.
+// popovers, the sidebar, search and filter focus, the inspector, the sync
+// button's fetch, pull, and push, Settings, About, and Help.
 
 import AppKit
 import EspalierCore
@@ -89,6 +89,16 @@ enum ShellActions {
             context?.select(.changes)
             context?.state.requestCommitMessageFocus()
         }
+        actions.register(.toggleSidebar) { [weak context] _ in
+            guard let state = context?.state else {
+                return
+            }
+            let visibility: NavigationSplitViewVisibility = state.isSidebarHidden ? .all : .detailOnly
+            let animates = Motion.allows(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, isSuppressed: false)
+            withAnimation(animates ? Motion.animation(Motion.arrive) : nil) {
+                state.columnVisibility = visibility
+            }
+        }
         actions.register(.filterSidebar) { [weak context] _ in
             context?.state.columnVisibility = .all
             context?.state.isSidebarFilterFocused = true
@@ -103,8 +113,10 @@ enum ShellActions {
         }) { [weak context] _ in
             context?.state.isInspectorPresented.toggle()
         }
+        // ⌘T and ⌘B open their popovers, and close them while they're
+        // open, as desktop's foldouts do.
         actions.register(.switchRepository) { [weak context] _ in
-            context?.state.isRepositoryPopoverPresented = true
+            context?.state.isRepositoryPopoverPresented.toggle()
         }
         actions.register(.switchBranch, isEnabled: { [weak context] _ in
             guard let repository = context?.repository, repository.isUsable else {
@@ -115,25 +127,28 @@ enum ShellActions {
             }
             return repository.localOperation?.kind != .checkoutBranch
         }) { [weak context] _ in
-            context?.state.isBranchPopoverPresented = true
+            context?.state.isBranchPopoverPresented.toggle()
         }
     }
 
     // MARK: Sync
 
     private static func registerSync(into actions: WindowActions, context: WindowContext) {
+        // Push never forces: a diverged branch's push fails as
+        // non-fast-forward.
         actions.register(.push) { [weak context] _ in
             guard let context, let repository = context.repository else {
                 return
             }
-            // The menu offers a force push whenever one is possible.
-            let force = repository.operations.forcePushState != .notAvailable
             let outcome = await context.presenter.perform { answers throws(OperationError) in
-                try await repository.sync.push(PushRequest(forceWithLease: force), confirmed: answers.confirmed)
+                try await repository.sync.push(PushRequest(), confirmed: answers.confirmed)
             }
             finish(outcome, in: context)
         }
-        actions.register(.forcePush) { [weak context] _ in
+        // Offered only while the current branch can be force pushed.
+        actions.register(.forcePush, isHidden: { [weak context] _ in
+            !(context?.capabilities.isForcePushAvailable ?? false)
+        }) { [weak context] _ in
             guard let context, let repository = context.repository else {
                 return
             }

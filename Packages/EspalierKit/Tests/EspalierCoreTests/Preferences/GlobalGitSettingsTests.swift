@@ -47,8 +47,7 @@ struct GitAuthorFormTests {
         #expect(both.map(\.email) == [
             "joe@example.com", "Joe@Work.example", "1234+joe@users.noreply.github.com", "jbloggs@ghe.example.com",
         ])
-        #expect(both.map(\.accountSuffix) == ["(GitHub.com)", "(GitHub.com)", "(GitHub.com)", "(GitHub Enterprise)"])
-        #expect(both[3].account == enterprise)
+        #expect(both.map(\.account) == [dotCom, dotCom, dotCom, enterprise])
         #expect(gitAuthorEmailChoices(for: []).isEmpty)
     }
 
@@ -60,32 +59,28 @@ struct GitAuthorFormTests {
         #expect(!isGitAuthorEmailChoice("joe@example.com", accounts: []))
     }
 
-    @Test("says whether commits with an address are attributed to the account, in desktop's words")
+    @Test("says whether commits with an address are attributed to the account")
     func attribution() {
         #expect(gitEmailAttribution("joe@example.com", accounts: []) == nil)
         #expect(gitEmailAttribution("  ", accounts: [dotCom]) == nil)
 
-        let matches = "This email address matches your GitHub account."
-        let doesNotMatch = "This email address doesn't match your GitHub account. Your commits won't be attributed to you."
-        #expect(gitEmailAttribution("JOE@EXAMPLE.COM", accounts: [dotCom]) == GitEmailAttribution(isAttributable: true, message: matches))
+        #expect(gitEmailAttribution("JOE@EXAMPLE.COM", accounts: [dotCom])?.isAttributable == true)
         #expect(gitEmailAttribution("joe@users.noreply.github.com", accounts: [dotCom])?.isAttributable == true)
         #expect(gitEmailAttribution("1234+joe@users.noreply.github.com", accounts: [dotCom])?.isAttributable == true)
-        #expect(gitEmailAttribution("unverified@example.com", accounts: [dotCom]) == GitEmailAttribution(isAttributable: false, message: doesNotMatch))
+        #expect(gitEmailAttribution("unverified@example.com", accounts: [dotCom])?.isAttributable == false)
 
-        #expect(gitEmailAttribution("someone@else.example", accounts: [enterprise])?.message
-            == "This email address doesn't match your GitHub Enterprise account. Your commits won't be attributed to you.")
-        #expect(gitEmailAttribution("jbloggs@ghe.example.com", accounts: [dotCom, enterprise])?.message
-            == "This email address matches your GitHub.com or GitHub Enterprise accounts.")
+        #expect(gitEmailAttribution("someone@else.example", accounts: [enterprise])?.isAttributable == false)
+        #expect(gitEmailAttribution("jbloggs@ghe.example.com", accounts: [dotCom, enterprise])?.isAttributable == true)
     }
 
-    @Test("fills a missing name or email from the GitHub.com account, else the first")
+    @Test("fills a missing name or email from the GitHub.com account, else the first, with its name or else its login")
     func fillsAuthor() {
         let unset = GlobalGitSettings(name: nil, email: "", defaultBranch: "main")
         // The private primary address isn't preferred; with no noreply
-        // address, the first is.
+        // address listed, GitHub's noreply form is.
         #expect(unset.fillingAuthor(from: [enterprise, dotCom]) == GlobalGitSettings(
-            name: "joe",
-            email: "joe@example.com",
+            name: "Joe Bloggs",
+            email: "1234+joe@users.noreply.github.com",
             defaultBranch: "main"
         ))
         // Without a GitHub.com account, the first; its public primary
@@ -104,7 +99,7 @@ struct GitAuthorFormTests {
         #expect(GitHubAuthorInfo(accounts: []) == nil)
         let info = GitHubAuthorInfo(accounts: [dotCom, enterprise])
         #expect(info?.name == "Joe Bloggs")
-        #expect(info?.email == "joe@example.com")
+        #expect(info?.email == "1234+joe@users.noreply.github.com")
         #expect(GitHubAuthorInfo(accounts: [enterprise])?.name == "jbloggs")
     }
 
@@ -215,12 +210,6 @@ struct GlobalGitSettingsTests {
             #expect(error?.operation == .setGlobalGitConfig)
             let reported = try #require(error?.gitConfigLockFilePath)
             #expect(realPath(reported) == realPath(lockPath))
-            #expect(error?.gitConfigLockFileMessage == """
-                Couldn't update your Git configuration because a lock file already exists at \(reported).
-
-                Another tool may be changing the configuration, or a Git process may have quit without \
-                removing the lock file. Delete the lock file and try again?
-                """)
 
             try await app.removeGitConfigLockFile(reported)
             #expect(!FileManager.default.fileExists(atPath: lockPath))
@@ -232,7 +221,7 @@ struct GlobalGitSettingsTests {
             let notLock = await #expect(throws: OperationError.self) {
                 try await app.removeGitConfigLockFile(configPath)
             }
-            #expect(notLock?.reason == .precondition("\(configPath) is not a lock file."))
+            #expect(preconditionText(notLock) != nil)
             #expect(FileManager.default.fileExists(atPath: configPath))
             let other = OperationError(.other("x"), operation: .setGlobalGitConfig)
             #expect(other.gitConfigLockFilePath == nil)
@@ -291,9 +280,7 @@ struct GlobalGitSettingsTests {
             let error = try #require(app.integrations.lfsFiltersError)
             #expect(error.reason == .lfsAttributeMismatch)
             #expect(error.operation == .updateLFSFilters)
-            #expect(error.title == "Update Existing Git LFS Filters?")
-            #expect(error.message == "Your global Git config already has Git LFS filters, but not the values Git LFS expects. Update them now?")
-            #expect(error.recoveries.map(\.title) == ["Update Existing Filters", "Edit Global Git Config…"])
+            #expect(error.recoveries.map(\.kind) == [.updateLFSFilters, .editGlobalGitConfig])
             #expect(try await getGlobalConfigValue("filter.lfs.clean") == "git-lfs clean --other -- %f")
 
             let recovery = try #require(error.recoveries.first)

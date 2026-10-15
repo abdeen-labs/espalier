@@ -14,9 +14,6 @@ import SwiftUI
 nonisolated enum WelcomeStep: Sendable, Equatable {
     case start
     case configureGit
-
-    /// How many steps the flow has, for its step indicator.
-    static let count = 2
 }
 
 /// The first step: what Espalier is, and signing in.
@@ -32,7 +29,6 @@ struct WelcomeStart: View {
                 .frame(width: Metrics.Welcome.iconSize, height: Metrics.Welcome.iconSize)
                 .accessibilityHidden(true)
             WelcomeHeading(
-                step: 1,
                 title: "Welcome to Espalier",
                 message: "Espalier helps you contribute to projects on GitHub and GitHub Enterprise. Sign in to get started with your existing projects."
             )
@@ -53,10 +49,10 @@ struct WelcomeStart: View {
             .frame(width: Metrics.Welcome.buttonWidth)
             VStack(spacing: Metrics.insetSmall) {
                 // The link opens github.com's sign-up page in the browser.
-                Text("New to GitHub? [Create your free account.](https://github.com/join)")
+                LinkedText(markdown: "New to GitHub? [Create your free account.](https://github.com/join)")
                     .foregroundStyle(.text2)
                 Button("Skip This Step", action: skip)
-                    .buttonStyle(.link)
+                    .buttonStyle(.textLink)
             }
             .font(Typography.secondary)
         }
@@ -64,32 +60,23 @@ struct WelcomeStart: View {
     }
 }
 
-/// A welcome step's heading: where the flow is (a step indicator), the
-/// title, and the line under it.
+/// A welcome step's heading: the title, and the line under it.
 struct WelcomeHeading: View {
-    /// The step, from 1.
-    let step: Int
     let title: String
     let message: String
 
     var body: some View {
-        VStack(spacing: Metrics.insetMedium) {
-            StepIndicator(
-                StepIndicator.steps(position: step, total: WelcomeStep.count),
-                label: "Step \(step) of \(WelcomeStep.count)"
-            )
-            VStack(spacing: Metrics.insetSmall) {
-                Text(title)
-                    .font(Typography.welcomeTitle)
-                    .foregroundStyle(.text)
-                    .accessibilityAddTraits(.isHeader)
-                Text(message)
-                    .font(Typography.welcomeBody)
-                    .foregroundStyle(.text2)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: Metrics.Welcome.textWidth)
-            }
+        VStack(spacing: Metrics.insetSmall) {
+            Text(title)
+                .font(Typography.welcomeTitle)
+                .foregroundStyle(.text)
+                .accessibilityAddTraits(.isHeader)
+            Text(message)
+                .font(Typography.welcomeBody)
+                .foregroundStyle(.text2)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: Metrics.Welcome.textWidth)
         }
     }
 }

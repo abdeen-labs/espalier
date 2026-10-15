@@ -96,6 +96,9 @@ public struct StoredRepository: Codable, Sendable, Hashable {
     public var isTutorialRepository: Bool
     public var tagsToPush: [String]
     public var ignoreExistingUpstreamRemote: Bool
+    /// The branches Espalier rewrote, by name, to their upstream's tip then
+    /// (`RepositoryRecord.rewrittenBranches`).
+    public var rewrittenBranches: [String: String]
     /// When the repository was added; nil only in documents not written by
     /// Espalier.
     public var addedAt: Date?
@@ -115,6 +118,7 @@ public struct StoredRepository: Codable, Sendable, Hashable {
         isTutorialRepository: Bool = false,
         tagsToPush: [String] = [],
         ignoreExistingUpstreamRemote: Bool = false,
+        rewrittenBranches: [String: String] = [:],
         addedAt: Date? = nil,
         historyScope: HistoryScope? = nil
     ) {
@@ -129,6 +133,7 @@ public struct StoredRepository: Codable, Sendable, Hashable {
         self.isTutorialRepository = isTutorialRepository
         self.tagsToPush = tagsToPush
         self.ignoreExistingUpstreamRemote = ignoreExistingUpstreamRemote
+        self.rewrittenBranches = rewrittenBranches
         self.addedAt = addedAt
         self.historyScope = historyScope
     }
@@ -147,6 +152,7 @@ public struct StoredRepository: Codable, Sendable, Hashable {
             isTutorialRepository: record.isTutorialRepository,
             tagsToPush: record.tagsToPush,
             ignoreExistingUpstreamRemote: record.ignoresExistingUpstreamRemote,
+            rewrittenBranches: record.rewrittenBranches,
             addedAt: record.addedAt,
             historyScope: record.historyScope
         )
@@ -154,7 +160,7 @@ public struct StoredRepository: Codable, Sendable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, path, gitDir, mainWorktreePath, alias, missing, gitHubRepositoryID, workflowPreferences
-        case isTutorialRepository, tagsToPush, ignoreExistingUpstreamRemote, addedAt, historyScope
+        case isTutorialRepository, tagsToPush, ignoreExistingUpstreamRemote, rewrittenBranches, addedAt, historyScope
     }
 
     /// Requires `id` and `path`; anything else missing or null takes its
@@ -173,6 +179,7 @@ public struct StoredRepository: Codable, Sendable, Hashable {
         isTutorialRepository = try container.decodeIfPresent(Bool.self, forKey: .isTutorialRepository) ?? false
         tagsToPush = try container.decodeIfPresent([String].self, forKey: .tagsToPush) ?? []
         ignoreExistingUpstreamRemote = try container.decodeIfPresent(Bool.self, forKey: .ignoreExistingUpstreamRemote) ?? false
+        rewrittenBranches = try container.decodeIfPresent([String: String].self, forKey: .rewrittenBranches) ?? [:]
         addedAt = try container.decodeIfPresent(Date.self, forKey: .addedAt)
         // A string this version doesn't know (a newer scope) isn't an error.
         historyScope = try container.decodeIfPresent(String.self, forKey: .historyScope).flatMap(HistoryScope.init(rawValue:))
@@ -193,6 +200,7 @@ public struct StoredRepository: Codable, Sendable, Hashable {
         try container.encode(isTutorialRepository, forKey: .isTutorialRepository)
         try container.encode(tagsToPush, forKey: .tagsToPush)
         try container.encode(ignoreExistingUpstreamRemote, forKey: .ignoreExistingUpstreamRemote)
+        try container.encode(rewrittenBranches, forKey: .rewrittenBranches)
         try container.encode(addedAt, forKey: .addedAt)
         try container.encode(historyScope, forKey: .historyScope)
     }
@@ -529,6 +537,7 @@ extension RepositoryListDocument {
                 isTutorialRepository: stored.isTutorialRepository,
                 tagsToPush: stored.tagsToPush,
                 ignoresExistingUpstreamRemote: stored.ignoreExistingUpstreamRemote,
+                rewrittenBranches: stored.rewrittenBranches,
                 addedAt: stored.addedAt ?? fallbackAddedAt,
                 historyScope: stored.historyScope
             )

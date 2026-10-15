@@ -24,8 +24,8 @@ enum PromptPresentation {
                 .addSSHHost(response.buttonIndex == 0)
             }
 
-        case .sshKeyPassphrase(let keyPath):
-            return .sheet(.passphrase(keyPath: keyPath) { answer in
+        case .sshKeyPassphrase(let keyPath, let canRemember):
+            return .sheet(.passphrase(keyPath: keyPath, canRemember: canRemember) { answer in
                 finish(answer.map { .sshSecret(PromptSSHSecretResponse(secret: $0.secret, storeSecret: $0.remember)) })
             })
 
@@ -59,7 +59,7 @@ enum PromptPresentation {
 /// A prompt's sheet, with the callback its buttons answer through: what
 /// `PromptPresentation.make` turns into the answer git gets back.
 enum PromptSheet {
-    case passphrase(keyPath: String, onAnswer: (SecretPromptAnswer?) -> Void)
+    case passphrase(keyPath: String, canRemember: Bool, onAnswer: (SecretPromptAnswer?) -> Void)
     case password(username: String, onAnswer: (SecretPromptAnswer?) -> Void)
     case genericAuthentication(endpoint: String, username: String?, onAnswer: (GenericAuthAnswer?) -> Void)
     case signIn(endpoint: String, onFinish: (Account?) -> Void)
@@ -69,8 +69,8 @@ enum PromptSheet {
     @MainActor
     var view: AnyView {
         switch self {
-        case .passphrase(let keyPath, let onAnswer):
-            AnyView(PassphrasePrompt(keyPath: keyPath, onAnswer: onAnswer))
+        case .passphrase(let keyPath, let canRemember, let onAnswer):
+            AnyView(PassphrasePrompt(keyPath: keyPath, canRemember: canRemember, onAnswer: onAnswer))
         case .password(let username, let onAnswer):
             AnyView(PasswordPrompt(username: username, onAnswer: onAnswer))
         case .genericAuthentication(let endpoint, let username, let onAnswer):

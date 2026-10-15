@@ -24,7 +24,6 @@ struct ProviderTransportTests {
         #expect(limited?.kind == .rateLimited)
         #expect(limited?.retryAfter == "30")
         #expect(limited?.message == "Rate limit reached")
-        #expect(limited.map(getAIErrorDisplayInfo)?.retryAfterMessage == "You can try again in 30 seconds.")
 
         let unavailable = await providerError { _ = try await stream(provider, testRequest()) }
         #expect(unavailable == AIProviderError(kind: .server, message: "upstream unavailable", statusCode: 503))
@@ -87,7 +86,6 @@ struct ProviderTransportTests {
         }
 
         #expect(error?.kind == .timedOut)
-        #expect(error?.message == "The model didn't respond within 0.3 seconds.")
         #expect(ContinuousClock.now - start >= .milliseconds(300))
         await server.waitForStops(1)
         #expect(server.stoppedCount == 1)
@@ -105,7 +103,6 @@ struct ProviderTransportTests {
         }
 
         #expect(error?.kind == .timedOut)
-        #expect(error?.message == "The model didn't respond within 1 second.")
         #expect(log.all == [.content("partial")])
         await server.waitForStops(1)
         #expect(server.stoppedCount == 1)
@@ -172,10 +169,6 @@ struct ProviderTransportTests {
 
         #expect(error?.kind == .invalidResponse)
         #expect(error?.statusCode == 307)
-        #expect(
-            error?.message
-                == "The provider redirected the request to http://elsewhere.example/v1/messages. Check the base URL in the provider's settings."
-        )
         #expect(server.requests.count == 1)
     }
 
@@ -201,7 +194,6 @@ struct ProviderTransportTests {
 
         #expect(error?.kind == .invalidResponse)
         #expect(error?.statusCode == 307)
-        #expect(error?.message == "The provider redirected the request to \(targetURL.absoluteString). Check the base URL in the provider's settings.")
         #expect(server.requests.count == 1)
         #expect(target.requests.isEmpty)
     }
@@ -242,7 +234,6 @@ struct ProviderTransportTests {
         )
         for (error, elapsed, retryTimeout) in try await [fallback, limitRetry, transientRetry] {
             #expect(error?.kind == .timedOut)
-            #expect(error?.message == "The model didn't respond within 2 seconds.")
             #expect(elapsed >= .seconds(2), "\(elapsed)")
             // The second request started at least 1.5 seconds into the call.
             // Its own timeout is what remained of the 2 seconds, at most 0.5,

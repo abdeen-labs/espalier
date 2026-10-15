@@ -2,7 +2,7 @@
 //
 // macOS 27 draws a `NavigationSplitView`'s sidebar on Liquid Glass, gives
 // every toolbar item a glass platter, and paints the titlebar over the
-// detail column. Espalier keeps the native split view (collapsing the
+// detail column. Espalier keeps AppKit's split view (collapsing the
 // sidebar, its toolbar toggle and tracking separator, full screen, the
 // traffic lights, toolbar customization) and makes each piece opaque:
 //
@@ -11,7 +11,8 @@
 //   with a hairline on its trailing edge. The glass behind it never shows.
 // - The titlebar is transparent (`titlebarAppearsTransparent`), so the
 //   detail column draws the toolbar's band itself (`toolbarBand()`): the
-//   `background` color and a hairline below, in the content's own colors.
+//   `background` color and a hairline below, in the content's own colors
+//   (the backdrop and no hairline in the floating layout).
 // - No toolbar item sits on a glass platter: SwiftUI's items hide theirs
 //   (`sharedBackgroundVisibility(.hidden)`), and the items SwiftUI adds on
 //   its own (the sidebar toggle) are made borderless as the toolbar adds
@@ -56,18 +57,22 @@ enum FlatWindowChrome {
 
 /// The toolbar's band over a column: the `background` color from the top
 /// of the window to the bottom of the toolbar, with a hairline as its last
-/// point. The content keeps to the safe area below it.
+/// point. The content keeps to the safe area below it. In the floating
+/// layout the column and its band are the backdrop, with no hairline.
 struct ToolbarBand: ViewModifier {
     func body(content: Content) -> some View {
+        let floats = PaneCards.floats
+        let fill = floats ? Theme.current.backdrop : Palette.background
         content
-            .background(Color(espalier: Palette.background).ignoresSafeArea())
+            .background(Color(espalier: fill).ignoresSafeArea())
             .overlay(alignment: .top) {
                 GeometryReader { proxy in
                     let height = proxy.safeAreaInsets.top
                     VStack(spacing: 0) {
-                        Color(espalier: Palette.background)
+                        Color(espalier: fill)
                             .frame(height: max(height - 1, 0))
                         Hairline()
+                            .opacity(floats ? 0 : 1)
                     }
                     .frame(height: height)
                     .offset(y: -height)

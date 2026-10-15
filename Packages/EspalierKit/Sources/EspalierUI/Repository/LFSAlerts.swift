@@ -10,11 +10,12 @@ import GitKit
 @MainActor
 enum LFSAlerts {
     /// Initialize Git LFS as an alert: the question, the folders listed
-    /// under it, [Initialize Git LFS] [Not Now].
-    static func initializeAlert(_ prompt: LFSInitializationPrompt) -> AlertContent {
+    /// under it (their count past the list in `numberFormat`), [Initialize
+    /// Git LFS] [Not Now].
+    static func initializeAlert(_ prompt: LFSInitializationPrompt, numberFormat: NumberFormat) -> AlertContent {
         var message = prompt.message
         if !prompt.paths.isEmpty {
-            message += "\n\n" + AlertList.lines(prompt.paths)
+            message += "\n\n" + AlertList.lines(prompt.paths, numberFormat: numberFormat)
         }
         return AlertContent(
             title: prompt.title,
@@ -33,7 +34,7 @@ enum LFSAlerts {
         guard let prompt = app.lfsInitializationPrompt(for: ids) else {
             return
         }
-        guard await context.modals.alert(initializeAlert(prompt)).buttonIndex == 0 else {
+        guard await context.modals.alert(initializeAlert(prompt, numberFormat: context.app.preferences.numberFormat)).buttonIndex == 0 else {
             return
         }
         for failure in await app.initializeLFS(in: prompt.repositories) {

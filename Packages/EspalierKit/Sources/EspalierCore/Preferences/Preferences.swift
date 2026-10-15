@@ -33,7 +33,24 @@ public enum PreferenceKey {
     public static let cacheHooksEnv = "git-cache-hooks-env"
 
     // Appearance and formatting.
+    /// The appearance: System, Light, or Dark (`ApplicationTheme`).
     public static let theme = "theme"
+    /// The design theme (`DesignTheme`), Espalier's own.
+    public static let designTheme = "design-theme"
+    /// The design theme's color, one key per theme
+    /// (`design-theme-color-orchard`), so each theme keeps its own.
+    public static func designThemeColor(_ theme: DesignTheme) -> String {
+        "design-theme-color-\(theme.rawValue)"
+    }
+    /// The design theme's background tint, one key per theme
+    /// (`design-theme-background-orchard`), so each theme keeps its own.
+    public static func designThemeBackground(_ theme: DesignTheme) -> String {
+        "design-theme-background-\(theme.rawValue)"
+    }
+    /// The app font (`AppFont`), Espalier's own.
+    public static let appFont = "app-font"
+    /// The code font (`CodeFont`), Espalier's own.
+    public static let codeFont = "code-font"
     public static let underlineLinks = "underline-links"
     public static let preferAbsoluteDates = "preferAbsoluteDates"
     public static let tabSize = "tab-size"
@@ -91,11 +108,86 @@ public enum ApplicationTheme: String, Sendable, Hashable, CaseIterable {
     case system, light, dark
 }
 
+/// Espalier's design theme: its colors, shapes, and marks, picked apart from
+/// the appearance (`ApplicationTheme`), the app font, and the code font. The
+/// raw values are the ones stored.
+public enum DesignTheme: String, Sendable, Hashable, CaseIterable {
+    /// The look Espalier had before themes, following the Mac's accent
+    /// color.
+    case classic
+    case orchard
+    case islands
+    case pop
+
+    /// The theme's colors, in the order Settings shows them; none for
+    /// Classic, which follows the Mac's accent color.
+    public var colors: [DesignThemeColor] {
+        switch self {
+        case .classic: []
+        case .orchard: [.plum, .clay, .ink, .teal, .espresso]
+        case .islands: [.berry, .lagoon, .indigo]
+        case .pop: [.tangerine, .electric, .magenta]
+        }
+    }
+
+    /// The color the theme has until the user picks another; nil for
+    /// Classic.
+    public var defaultColor: DesignThemeColor? {
+        switch self {
+        case .classic: nil
+        case .orchard: .ink
+        case .islands: .lagoon
+        case .pop: .tangerine
+        }
+    }
+}
+
+/// A design theme's color. Each belongs to one theme (`DesignTheme.colors`).
+/// The raw values are the ones stored.
+public enum DesignThemeColor: String, Sendable, Hashable, CaseIterable {
+    case plum, clay, ink, teal, espresso
+    case berry, lagoon, indigo
+    case tangerine, electric, magenta
+}
+
+/// The tint of a design theme's backgrounds: its panes, sidebar, fields, and
+/// lines. The raw values are the ones stored.
+public enum BackgroundTint: String, Sendable, Hashable, CaseIterable {
+    /// The theme's own backgrounds.
+    case own
+    case neutral, warm, cool, sage, rose, lavender
+}
+
+/// The app font: every piece of the interface's text. The raw values are
+/// the ones stored.
+public enum AppFont: String, Sendable, Hashable, CaseIterable {
+    /// SF Pro, the system's.
+    case sf
+    /// Fixel Text.
+    case fixel
+    /// Atkinson Hyperlegible Next.
+    case atkinson
+    /// Martian Grotesk.
+    case martian
+}
+
+/// The code font: what's drawn monospaced (commit IDs, counts, ref tags,
+/// code, terminal output). The raw values are the ones stored, apart from
+/// `AppFont`'s.
+public enum CodeFont: String, Sendable, Hashable, CaseIterable {
+    /// SF Mono, the system's.
+    case sfMono = "sfmono"
+    /// Geist Mono.
+    case geistMono = "geistmono"
+    /// Atkinson Hyperlegible Mono.
+    case atkinsonMono = "atkinsonmono"
+}
+
 /// The app's settings.
 ///
 /// Each property loads from its key when the model is made and writes its
 /// key when it changes; nothing is written until then, so a setting the user
-/// never changed follows the default. Values are written as native types.
+/// never changed follows the default. Values are written as property-list types.
 /// Settings that GitKit and the trampoline read themselves (the hooks
 /// environment, the external credential helper) go through their own
 /// functions, so a change takes effect at the next git command.
@@ -106,8 +198,10 @@ public final class Preferences {
     /// - Parameters:
     ///   - store: The settings' storage.
     ///   - homeDirectory: The home directory `lastCloneLocation`'s default is in.
-    public init(store: PreferenceStore, homeDirectory: String = NSHomeDirectory()) {
+    ///   - locale: The region `numberFormat`'s default follows.
+    public init(store: PreferenceStore, homeDirectory: String = NSHomeDirectory(), locale: Locale = .autoupdatingCurrent) {
         self.store = store
+        self.locale = locale
         defaultCloneLocation = POSIXPath.join(homeDirectory, "Developer")
 
         confirmRepositoryRemoval = store.getBoolean(PreferenceKey.confirmRepoRemoval, true)
@@ -141,11 +235,17 @@ public final class Preferences {
         cacheHooksEnv = getCacheHooksEnv(defaults: store.defaults)
 
         theme = Self.storedTheme(in: store)
+        designTheme = Self.storedDesignTheme(in: store)
+        designThemeColors = Self.storedDesignThemeColors(in: store)
+        designThemeBackgrounds = Self.storedDesignThemeBackgrounds(in: store)
+        appFont = Self.storedAppFont(in: store)
+        codeFont = Self.storedCodeFont(in: store)
         underlineLinks = store.getBoolean(PreferenceKey.underlineLinks, true)
         preferAbsoluteDates = store.getBoolean(PreferenceKey.preferAbsoluteDates, false)
         tabSize = store.getNumber(PreferenceKey.tabSize, 4)
-        numberFormat = store.getString(PreferenceKey.numberFormat).flatMap { $0.isEmpty ? nil : numberFormatFromKey($0) }
-            ?? defaultNumberFormat
+        pickedNumberFormat = store.getString(PreferenceKey.numberFormat).flatMap { key in
+            numberFormats.first { numberFormatToKey($0) == key }
+        }
         dateFormat = store.getString(PreferenceKey.dateFormat)
         timeFormat = store.getString(PreferenceKey.timeFormat)
 
@@ -338,6 +438,110 @@ public final class Preferences {
         store.getEnum(PreferenceKey.theme, ApplicationTheme.self) ?? .system
     }
 
+    /// The design theme (`design-theme`; Classic by default).
+    public var designTheme: DesignTheme {
+        didSet {
+            guard designTheme != oldValue else { return }
+            store.setEnum(PreferenceKey.designTheme, designTheme)
+        }
+    }
+
+    /// The color each design theme has, its default until the user picks
+    /// another (`design-theme-color-<theme>`). Only the themes whose color
+    /// changed are written.
+    public var designThemeColors: [DesignTheme: DesignThemeColor] {
+        didSet {
+            for theme in DesignTheme.allCases where designThemeColors[theme] != oldValue[theme] {
+                if let color = designThemeColors[theme] {
+                    store.setEnum(PreferenceKey.designThemeColor(theme), color)
+                }
+            }
+        }
+    }
+
+    /// The current design theme's color; nil for Classic. Setting a color
+    /// that isn't one of the theme's does nothing.
+    public var designThemeColor: DesignThemeColor? {
+        get { designThemeColors[designTheme] }
+        set {
+            guard let newValue, designTheme.colors.contains(newValue) else { return }
+            designThemeColors[designTheme] = newValue
+        }
+    }
+
+    /// The background tint each design theme has, its own backgrounds
+    /// until the user picks another (`design-theme-background-<theme>`).
+    /// Only the themes whose tint changed are written.
+    public var designThemeBackgrounds: [DesignTheme: BackgroundTint] {
+        didSet {
+            for theme in DesignTheme.allCases where designThemeBackgrounds[theme] != oldValue[theme] {
+                store.setEnum(PreferenceKey.designThemeBackground(theme), designThemeBackgrounds[theme] ?? .own)
+            }
+        }
+    }
+
+    /// The current design theme's background tint.
+    public var designThemeBackground: BackgroundTint {
+        get { designThemeBackgrounds[designTheme] ?? .own }
+        set { designThemeBackgrounds[designTheme] = newValue }
+    }
+
+    /// The app font (`app-font`; SF Pro by default).
+    public var appFont: AppFont {
+        didSet {
+            guard appFont != oldValue else { return }
+            store.setEnum(PreferenceKey.appFont, appFont)
+        }
+    }
+
+    /// The code font (`code-font`; SF Mono by default).
+    public var codeFont: CodeFont {
+        didSet {
+            guard codeFont != oldValue else { return }
+            store.setEnum(PreferenceKey.codeFont, codeFont)
+        }
+    }
+
+    /// The design theme stored in `store`; an unknown one is Classic. The
+    /// app applies it before the model loads, so its first windows open in
+    /// it.
+    public static func storedDesignTheme(in store: PreferenceStore) -> DesignTheme {
+        store.getEnum(PreferenceKey.designTheme, DesignTheme.self) ?? .classic
+    }
+
+    /// Each design theme's color stored in `store`: one that isn't the
+    /// theme's, or none, is the theme's default.
+    public static func storedDesignThemeColors(in store: PreferenceStore) -> [DesignTheme: DesignThemeColor] {
+        var colors: [DesignTheme: DesignThemeColor] = [:]
+        for theme in DesignTheme.allCases {
+            let stored = store.getEnum(PreferenceKey.designThemeColor(theme), DesignThemeColor.self)
+            if let stored, theme.colors.contains(stored) {
+                colors[theme] = stored
+            } else if let defaultColor = theme.defaultColor {
+                colors[theme] = defaultColor
+            }
+        }
+        return colors
+    }
+
+    /// Each design theme's background tint stored in `store`: an unknown
+    /// one, or none, is the theme's own.
+    public static func storedDesignThemeBackgrounds(in store: PreferenceStore) -> [DesignTheme: BackgroundTint] {
+        Dictionary(uniqueKeysWithValues: DesignTheme.allCases.map { theme in
+            (theme, store.getEnum(PreferenceKey.designThemeBackground(theme), BackgroundTint.self) ?? .own)
+        })
+    }
+
+    /// The app font stored in `store`; an unknown one is SF Pro.
+    public static func storedAppFont(in store: PreferenceStore) -> AppFont {
+        store.getEnum(PreferenceKey.appFont, AppFont.self) ?? .sf
+    }
+
+    /// The code font stored in `store`; an unknown one is SF Mono.
+    public static func storedCodeFont(in store: PreferenceStore) -> CodeFont {
+        store.getEnum(PreferenceKey.codeFont, CodeFont.self) ?? .sfMono
+    }
+
     /// Underline links (`underline-links`).
     public var underlineLinks: Bool {
         didSet { write(PreferenceKey.underlineLinks, underlineLinks, oldValue) }
@@ -357,14 +561,27 @@ public final class Preferences {
         }
     }
 
-    /// The number format (`numberFormat`, stored as GitKit's
-    /// `numberFormatToKey`). GitKit's `getNumberFormatPreference()` reads it
-    /// from the standard defaults, which are this store's in the app.
-    public var numberFormat: NumberFormat {
+    /// The region the number format's default follows.
+    private let locale: Locale
+
+    /// The number format picked in Settings (`numberFormat`, stored as
+    /// GitKit's `numberFormatToKey`); nil until one is picked, or when the
+    /// stored one is empty or unknown.
+    private var pickedNumberFormat: NumberFormat? {
         didSet {
-            guard numberFormat != oldValue else { return }
-            store.setString(PreferenceKey.numberFormat, numberFormatToKey(numberFormat))
+            guard pickedNumberFormat != oldValue, let pickedNumberFormat else { return }
+            store.setString(PreferenceKey.numberFormat, numberFormatToKey(pickedNumberFormat))
         }
+    }
+
+    /// The number format: the one picked, else the nearest to the region's
+    /// separators (`nearestNumberFormat(to:)`), which follows the region as
+    /// it changes. Setting it picks it, the region's own format too. GitKit's
+    /// `getNumberFormatPreference()` reads it from the standard defaults,
+    /// which are this store's in the app.
+    public var numberFormat: NumberFormat {
+        get { pickedNumberFormat ?? nearestNumberFormat(to: locale) }
+        set { pickedNumberFormat = newValue }
     }
 
     /// The date format pattern (`dateFormat`), or nil for the default. The

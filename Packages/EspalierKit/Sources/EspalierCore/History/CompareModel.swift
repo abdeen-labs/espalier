@@ -11,11 +11,16 @@ import os
 
 private let logger = Log.logger(category: "history")
 
-/// How the compared branch's commits come into the current branch.
-public enum CompareMethod: Sendable, Hashable, CaseIterable {
+/// How another branch's commits come into the current branch: Compare's
+/// call to action and the Integrate sheet.
+public enum CompareMethod: String, Sendable, Hashable, CaseIterable, Identifiable {
     case merge
     case squashMerge
     case rebase
+
+    public var id: String {
+        rawValue
+    }
 
     /// The option's label.
     public var label: String {
@@ -62,11 +67,15 @@ public final class CompareModel {
     /// How far the current branch is ahead of and behind the compared one;
     /// nil until the comparison loads.
     public private(set) var aheadBehind: AheadBehind?
-    /// Whether merging the compared branch into the current one would be
-    /// clean, conflict, or can't be done (unrelated histories); `.loading`
-    /// while git works it out. Nil when there's nothing to merge (the
-    /// current branch isn't behind) or git failed.
-    public private(set) var mergeStatus: MergeTreeResult?
+    /// What merging the compared branch into the current one would do: its
+    /// status is `.loading` while git works it out, then clean, conflicted,
+    /// or impossible (unrelated histories), or nil when git couldn't tell;
+    /// its commits are the ones behind. Nil when there's nothing to merge
+    /// (the current branch isn't behind), or while the check isn't running:
+    /// one stopped with the comparison's loads runs again when they resume
+    /// (`resumeLoads()`). A check git couldn't make runs again when the
+    /// comparison loads again or its loads resume.
+    public private(set) var mergePreview: MergePreview?
     /// What rebasing the current branch onto the compared one would apply;
     /// loaded while `method` is `.rebase`.
     public private(set) var rebasePreview: RebasePreview?
@@ -98,16 +107,6 @@ public final class CompareModel {
 
     // MARK: Copy
 
-    /// The Behind tab's title ("Behind (n)").
-    public var behindTitle: String {
-        "Behind (\(formatNumber(Double(aheadBehind?.behind ?? 0))))"
-    }
-
-    /// The Ahead tab's title ("Ahead (n)").
-    public var aheadTitle: String {
-        "Ahead (\(formatNumber(Double(aheadBehind?.ahead ?? 0))))"
-    }
-
     /// The message for an empty list of commits in the current direction.
     public var emptyListMessage: String? {
         guard let branch else {
@@ -134,15 +133,31 @@ public final class CompareModel {
     }
 
     /// The outcome the status message shows: the rebase preview's for a
-    /// rebase, the merge status's otherwise.
+    /// rebase, the merge preview's otherwise; nil when git couldn't check
+    /// the merge (`isMergeCheckFailed`).
     public var computedAction: ComputedAction? {
-        method == .rebase ? rebasePreview?.kind : mergeStatus?.kind
+        method == .rebase ? rebasePreview?.kind : mergePreview?.status?.kind
+    }
+
+    /// Whether git couldn't check what merging or squash merging would do:
+    /// the status message says so, and the merge can still start.
+    public var isMergeCheckFailed: Bool {
+        guard method != .rebase, let mergePreview else {
+            return false
+        }
+        return mergePreview.status == nil
     }
 
     /// What `method` would do, or nil when there's nothing to say (no
     /// commits to bring in).
     public var statusMessage: String? {
-        guard commitCount > 0, let action = computedAction, let branch, let currentBranch else {
+        guard commitCount > 0, let branch, let currentBranch else {
+            return nil
+        }
+        if isMergeCheckFailed {
+            return "Couldn't check whether this merges cleanly"
+        }
+        guard let action = computedAction else {
             return nil
         }
         switch action {
@@ -160,7 +175,7 @@ public final class CompareModel {
             }
             return "These branches have unrelated histories and can't be merged"
         case .conflicts:
-            guard method != .rebase, case .conflicts(let count) = mergeStatus else {
+            guard method != .rebase, case .conflicts(let count)? = mergePreview?.status else {
                 return nil
             }
             let files = count == 1 ? "file" : "files"
@@ -168,8 +183,9 @@ public final class CompareModel {
         }
     }
 
-    /// Whether `method` can start: there are commits to bring in, a rebase's
-    /// preview is clean, and a merge isn't between unrelated histories.
+    /// Whether `method` can start: there are commits to bring in, and a
+    /// rebase's preview is clean, or a merge's check allows it
+    /// (`MergePreview.canStart`, the merge sheet's rule).
     public var canStart: Bool {
         if commitCount <= 0 {
             return false
@@ -180,7 +196,7 @@ public final class CompareModel {
             }
             return false
         }
-        return mergeStatus?.kind != .invalid
+        return mergePreview?.canStart ?? false
     }
 
     // MARK: Updating (HistoryModel)
@@ -191,7 +207,7 @@ public final class CompareModel {
             && self.branch?.ref == branch.ref
         if !isSamePair {
             aheadBehind = nil
-            mergeStatus = nil
+            mergePreview = nil
             rebasePreview = nil
             mergeabilitySlot.cancel()
             rebasePreviewSlot.cancel()
@@ -202,20 +218,21 @@ public final class CompareModel {
         isLoading = true
     }
 
-    /// The comparison loaded: computes the merge status (only when the
-    /// current branch is behind) and, for a rebase, the rebase preview.
+    /// The comparison loaded: checks the merge (only when the current
+    /// branch is behind) and, for a rebase, the rebase preview.
     func didLoad(_ aheadBehind: AheadBehind) {
         isLoading = false
         self.aheadBehind = aheadBehind
         // `begin` forgot the results of another pair of commits; the same
-        // pair (another direction) keeps them.
+        // pair (another direction) keeps them, but for a check git couldn't
+        // make.
         if aheadBehind.behind > 0 {
-            if mergeStatus == nil {
+            if needsMergeCheck {
                 loadMergeability()
             }
-        } else if mergeStatus != nil || mergeabilitySlot.isRunning {
+        } else if mergePreview != nil || mergeabilitySlot.isRunning {
             mergeabilitySlot.cancel()
-            mergeStatus = nil
+            mergePreview = nil
         }
         if method == .rebase, rebasePreview == nil {
             loadRebasePreview()
@@ -235,7 +252,7 @@ public final class CompareModel {
         currentBranch = nil
         direction = .behind
         aheadBehind = nil
-        mergeStatus = nil
+        mergePreview = nil
         rebasePreview = nil
         isLoading = false
         method = .merge
@@ -245,8 +262,8 @@ public final class CompareModel {
     func cancelLoads() {
         if mergeabilitySlot.isRunning {
             mergeabilitySlot.cancel()
-            if mergeStatus == .loading {
-                mergeStatus = nil
+            if mergePreview?.status == .loading {
+                mergePreview = nil
             }
         }
         if rebasePreviewSlot.isRunning {
@@ -255,6 +272,30 @@ public final class CompareModel {
                 rebasePreview = nil
             }
         }
+    }
+
+    /// Runs again the checks `cancelLoads()` stopped, and a merge check git
+    /// couldn't make: the merge's, while the current branch is behind, and a
+    /// rebase's preview.
+    func resumeLoads() {
+        guard !isLoading, let aheadBehind else {
+            return
+        }
+        if aheadBehind.behind > 0, needsMergeCheck, !mergeabilitySlot.isRunning {
+            loadMergeability()
+        }
+        if method == .rebase, rebasePreview == nil, !rebasePreviewSlot.isRunning {
+            loadRebasePreview()
+        }
+    }
+
+    /// Whether the merge check is to run: it hasn't, it was stopped, or git
+    /// couldn't make it.
+    private var needsMergeCheck: Bool {
+        guard let mergePreview else {
+            return true
+        }
+        return mergePreview.status == nil
     }
 
     /// Whether a load is in flight.
@@ -273,12 +314,14 @@ public final class CompareModel {
     // MARK: Loads
 
     /// Dry-runs merging the compared branch into the current one
-    /// (`determineMergeability`), in a slot keyed by the two commits.
+    /// (`determineMergeability`), in a slot keyed by the two commits; a
+    /// failure leaves the preview's status nil.
     private func loadMergeability() {
         guard let branch, let currentBranch, let context = context() else {
             return
         }
-        mergeStatus = .loading
+        let commitCount = aheadBehind?.behind
+        mergePreview = MergePreview(status: .loading, commitCount: commitCount)
         mergeabilitySlot.run(
             CommitPair(first: currentBranch.tip.sha, second: branch.tip.sha),
             operation: { () async -> MergeTreeResult? in
@@ -295,7 +338,7 @@ public final class CompareModel {
             },
             apply: { [weak self] result in
                 guard let self, case .success(let status) = result else { return }
-                self.mergeStatus = status
+                self.mergePreview = MergePreview(status: status, commitCount: commitCount)
             }
         )
     }

@@ -203,10 +203,8 @@ extension MultiCommitOperationsModel {
             throw error
         }
 
-        // The refresh finds no merge in progress and ends the operation.
-        repository.commit.draft.summary = ""
-        repository.commit.draft.description = ""
-        repository.commit.draft.generatedByAI = false
+        // The refresh finds no merge in progress and ends the operation. The
+        // merge's message was its own, so the user's draft stays.
         await repository.awaitOperationRefresh(covering: .full)
         return .merged(ours: ours, theirs: theirs)
     }

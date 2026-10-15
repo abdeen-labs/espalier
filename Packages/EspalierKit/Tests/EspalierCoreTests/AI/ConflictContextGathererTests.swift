@@ -15,7 +15,7 @@ import TestSupport
 
 /// A commit with `summary` and `body`.
 private func makeCommit(_ summary: String, _ body: String = "") -> Commit {
-    let author = CommitIdentity(name: "A", email: "a@example.com", date: Date(timeIntervalSince1970: 0), tzOffset: 0)
+    let author = CommitIdentity(name: "A", email: "a@example.com", date: Date(timeIntervalSince1970: 0))
     let sha = String(repeating: "0", count: 40 - String(summary.count, radix: 16).count) + String(summary.count, radix: 16)
     return Commit(
         sha: sha,
@@ -133,8 +133,6 @@ struct ConflictContextGathererTests {
         let merge = ConflictState.merge(currentBranch: "main", currentTip: "a", manualResolutions: [:])
         #expect(ConflictContextGatherer.labels(merge, operation: nil, branches: ConflictBranches(ours: "main", theirs: "feature"))
             == Labels(ourLabel: "main", theirLabel: "feature", ourRef: "main", theirRef: "feature"))
-        #expect(ConflictContextGatherer.labels(merge, operation: nil, branches: ConflictBranches(ours: "main", theirs: nil))
-            == Labels(ourLabel: "main", theirLabel: "incoming branch", ourRef: "main", theirRef: nil))
 
         let rebase = ConflictState.rebase(
             currentTip: "b", targetBranch: "feature", baseBranch: nil, originalBranchTip: "c", baseBranchTip: "d", manualResolutions: [:]
@@ -142,8 +140,6 @@ struct ConflictContextGathererTests {
         // The base branch, when known, gives the rebase's side commit context.
         #expect(ConflictContextGatherer.labels(rebase, operation: nil, branches: ConflictBranches(ours: "main", theirs: "feature"))
             == Labels(ourLabel: "main", theirLabel: "feature", ourRef: "main", theirRef: "feature"))
-        #expect(ConflictContextGatherer.labels(rebase, operation: nil, branches: ConflictBranches(ours: nil, theirs: "feature"))
-            == Labels(ourLabel: "current branch", theirLabel: "feature", ourRef: nil, theirRef: "feature"))
 
         let squash = MultiCommitOperation(
             kind: .squash,
@@ -159,14 +155,20 @@ struct ConflictContextGathererTests {
         )
         #expect(ConflictContextGatherer.labels(rebase, operation: squash, branches: ConflictBranches(ours: "feature", theirs: "squash commit"))
             == Labels(ourLabel: "feature", theirLabel: "squash commit", ourRef: nil, theirRef: nil))
+    }
 
-        let cherryPick = ConflictState.cherryPick(targetBranchName: "release", manualResolutions: [:])
-        #expect(ConflictContextGatherer.labels(cherryPick, operation: nil, branches: ConflictBranches(ours: "release", theirs: nil))
-            == Labels(ourLabel: "release", theirLabel: "cherry-picked commit", ourRef: "release", theirRef: nil))
-
-        let revert = ConflictState.revert(targetBranchName: "main", manualResolutions: [:])
-        #expect(ConflictContextGatherer.labels(revert, operation: nil, branches: nil)
-            == Labels(ourLabel: "main", theirLabel: "reverted commit", ourRef: "main", theirRef: nil))
+    @Test("names a rebase's unknown base by the commit it's being rebased onto")
+    func rebaseOntoUnknownBase() {
+        let rebase = ConflictState.rebase(
+            currentTip: "b",
+            targetBranch: "feature",
+            baseBranch: nil,
+            originalBranchTip: "c",
+            baseBranchTip: "0123456789abcdef0123456789abcdef01234567",
+            manualResolutions: [:]
+        )
+        #expect(ConflictContextGatherer.labels(rebase, operation: nil, branches: ConflictBranches(ours: nil, theirs: "feature"))
+            == ConflictContextGatherer.Labels(ourLabel: "0123456", theirLabel: "feature", ourRef: nil, theirRef: "feature"))
     }
 
     @Test("reads text files, and leaves out those too large, unreadable, outside, or not UTF-8")

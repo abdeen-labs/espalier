@@ -42,7 +42,7 @@ nonisolated enum IntegrationChoice: Hashable, Sendable {
     case custom
     /// "Configure Custom Editor…" (or Shell…): opens the sheet.
     case configure
-    /// No editor is installed or selected.
+    /// No editor is selected, and there isn't exactly one installed.
     case none
 }
 
@@ -112,8 +112,10 @@ nonisolated struct IntegrationsContent: Equatable, Sendable {
             if !editors.contains(selected) {
                 missingEditor = selected
             }
-        } else if let first = editors.first {
-            editorSelection = .named(first)
+        } else if let only = integrations.editorResolution.defaultEditor {
+            // With one editor installed, it's the one used; with several,
+            // none is until opening asks.
+            editorSelection = .named(only.editor)
         }
 
         let shells = integrations.availableShells.map(\.shell.rawValue)
@@ -249,6 +251,7 @@ struct IntegrationsForm: View {
                         }
                         actions?.chooseEditor(choice)
                     })
+                    .settingsControlWidth()
                     .id(editorRevision)
                 }
                 if let custom = content.editor.custom, content.editor.selection == .custom {
@@ -262,7 +265,7 @@ struct IntegrationsForm: View {
                             Button("Install \(suggestedExternalEditor.name)?") {
                                 actions?.openSuggestedEditorPage()
                             }
-                            .buttonStyle(.link)
+                            .buttonStyle(.textLink)
                         }
                         .font(Typography.secondary)
                     }
@@ -279,6 +282,7 @@ struct IntegrationsForm: View {
                         }
                         actions?.chooseShell(choice)
                     })
+                    .settingsControlWidth()
                     .id(shellRevision)
                 }
                 if let custom = content.shell.custom, content.shell.selection == .custom {
@@ -305,7 +309,8 @@ struct IntegrationsForm: View {
 }
 
 /// An editor or shell pop-up: the installed ones, a choice that isn't
-/// installed, the saved custom one, and "Configure Custom…".
+/// installed, the saved custom one, and "Configure Custom…". Settings ▸
+/// Integrations and Open With show the editors in it.
 struct IntegrationPicker: View {
     let title: String
     let popUp: IntegrationPopUp
@@ -315,28 +320,33 @@ struct IntegrationPicker: View {
     var body: some View {
         CapsulePopUp(title, selection: $selection, title: selectionTitle) {
             if popUp.selection == .none {
-                Text("None").tag(IntegrationChoice.none)
+                MenuChoice("None", value: IntegrationChoice.none)
             }
-            ForEach(popUp.installed, id: \.self) { name in
-                Text(name).tag(IntegrationChoice.named(name))
+            for name in popUp.installed {
+                MenuChoice(name, value: IntegrationChoice.named(name))
             }
             if let missing = popUp.missing, let title = popUp.missingTitle {
-                Text(title).tag(IntegrationChoice.named(missing))
+                MenuChoice(title, value: IntegrationChoice.named(missing))
             }
-            Divider()
+            if popUp.selection == .none || !popUp.installed.isEmpty || popUp.missing != nil {
+                MenuDivider()
+            }
             if let customTitle = popUp.customTitle {
-                Text("Custom: \(customTitle)").tag(IntegrationChoice.custom)
+                MenuChoice("Custom: \(customTitle)", value: IntegrationChoice.custom)
+            } else if popUp.selection == .custom {
+                MenuChoice("Custom", value: IntegrationChoice.custom)
             }
-            Text(configureTitle).tag(IntegrationChoice.configure)
+            MenuChoice(configureTitle, value: IntegrationChoice.configure)
         }
-        .settingsControlWidth()
     }
 
     /// The chosen item's title.
     private var selectionTitle: String {
-        switch popUp.selection {
-        case .none, .configure:
+        switch selection {
+        case .none:
             "None"
+        case .configure:
+            configureTitle
         case .custom:
             popUp.customTitle.map { "Custom: \($0)" } ?? "Custom"
         case .named(let name):
@@ -351,7 +361,7 @@ struct CustomIntegrationSummary: View {
 
     var body: some View {
         SettingsRow("Command") {
-            Text("\(integration.path) \(integration.arguments)")
+            Text(verbatim: "\(integration.path) \(integration.arguments)")
                 .font(Typography.sha)
                 .foregroundStyle(.text2)
                 .textSelection(.enabled)

@@ -1,8 +1,9 @@
-// The welcome flow's Configure Git step: "Use my GitHub account name and
-// email address" or "Configure manually" when an account is signed in, the
-// name and email (the account's addresses in a pop-up), the attribution
-// check, the example commit, and Finish, which writes only what changed
-// through the global git settings.
+// The welcome flow's Configure Git step, a form: "Use my GitHub account
+// name and email address" or "Configure manually" when an account is signed
+// in, the name and email (`GitAuthorForm`: the account's name and its
+// addresses in a pop-up, or typed ones with the attribution check), the
+// example commit, and Finish, which writes only what changed through the
+// global git settings.
 //
 // The pop-up offers the account's verified addresses and its private
 // noreply one; a name git would reject can't be saved; and a write that
@@ -37,7 +38,6 @@ final class ConfigureGitModel {
 
     @ObservationIgnored let app: AppModel
     @ObservationIgnored let presenter: WindowPresenter
-    @ObservationIgnored private let accountOverride: Account??
 
     var source: Source
     var manualName = ""
@@ -50,13 +50,10 @@ final class ConfigureGitModel {
     /// The global configuration when the step loaded it.
     private(set) var configured = GlobalGitSettings(name: nil, email: nil, defaultBranch: "main")
 
-    /// - Parameter account: The account to offer; the first signed-in one
-    ///   when not given (snapshots pass one).
-    init(app: AppModel, presenter: WindowPresenter, account: Account?? = nil) {
+    init(app: AppModel, presenter: WindowPresenter) {
         self.app = app
         self.presenter = presenter
-        accountOverride = account
-        let initial = account ?? app.accounts.accounts.first
+        let initial = app.accounts.accounts.first
         source = initial == nil ? .manual : .account
         if let initial {
             let preferred = lookupPreferredEmail(initial)
@@ -70,9 +67,10 @@ final class ConfigureGitModel {
 
     // MARK: Derived
 
-    /// The account whose name and addresses are offered.
+    /// The account whose name and addresses are offered: the first
+    /// signed-in one.
     var account: Account? {
-        accountOverride ?? app.accounts.accounts.first
+        app.accounts.accounts.first
     }
 
     /// "Use my GitHub account name and email address", or "… GitHub
@@ -232,14 +230,10 @@ struct ExampleCommitRow: View {
 struct ConfigureGitStep: View {
     @Bindable var model: ConfigureGitModel
     var back: @MainActor () -> Void = {}
-    /// Whether the step reads the configuration when it appears (snapshots
-    /// show fixed values).
-    var loadsOnAppear = true
 
     var body: some View {
         VStack(spacing: Metrics.Welcome.sectionSpacing) {
             WelcomeHeading(
-                step: 2,
                 title: "Configure Git",
                 message: "This is used to identify the commits you create. Anyone will be able to see this information if you publish commits."
             )
@@ -258,17 +252,22 @@ struct ConfigureGitStep: View {
                     .padding(Metrics.insetMedium)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
-                        RoundedRectangle(cornerRadius: Metrics.Radius.banner, style: .continuous)
+                        RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
                             .fill(Color(espalier: StatusBarTone.attention.fill))
                     )
                 }
-                if model.account != nil {
-                    ChoiceList("Author", selection: $model.source, choices: [
-                        ChoiceListItem(model.accountChoiceTitle, value: ConfigureGitModel.Source.account),
-                        ChoiceListItem("Configure manually", value: ConfigureGitModel.Source.manual),
-                    ])
+                Form {
+                    if model.account != nil {
+                        LabeledContent("Author") {
+                            RadioList("Author", selection: $model.source, choices: [
+                                ChoiceListItem(model.accountChoiceTitle, value: ConfigureGitModel.Source.account),
+                                ChoiceListItem("Configure manually", value: ConfigureGitModel.Source.manual),
+                            ])
+                        }
+                    }
+                    author
                 }
-                author
+                .formStyle(.columns)
                 VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
                     SectionLabel("Example Commit")
                         .padding(.leading, Metrics.grid)
@@ -300,75 +299,39 @@ struct ConfigureGitStep: View {
         }
         .padding(Metrics.insetLarge * 2)
         .task {
-            if loadsOnAppear {
-                await model.load()
-            }
+            await model.load()
         }
     }
 
-    /// A row of the account's author: the label on the left, the value on
-    /// the right.
-    private func authorRow(_ label: String, @ViewBuilder value: () -> some View) -> some View {
-        HStack(spacing: Metrics.insetSmall) {
-            Text(label)
-                .foregroundStyle(.text2)
-            Spacer(minLength: Metrics.insetSmall)
-            value()
-        }
-        .frame(minHeight: Metrics.ListRow.height)
-        .padding(.vertical, Metrics.grid)
-    }
-
+    /// The author's rows: the account's name and a pop-up of its addresses,
+    /// or the typed name and address.
     @ViewBuilder
     private var author: some View {
         switch model.source {
         case .account:
-            VStack(spacing: 0) {
-                authorRow("Name") {
-                    Text(model.name)
-                        .foregroundStyle(.text)
-                        .textSelection(.enabled)
-                }
-                Hairline()
-                if model.emailChoices.isEmpty {
-                    authorRow("Email") {
-                        Text(model.accountEmail)
-                            .foregroundStyle(.text)
-                            .textSelection(.enabled)
+            GitAuthorForm(
+                name: .constant(model.name),
+                nameProblem: model.nameProblem,
+                emailSelection: Binding {
+                    .account(model.accountEmail)
+                } set: { selection in
+                    if case .account(let email) = selection {
+                        model.accountEmail = email
                     }
-                } else {
-                    authorRow("Email") {
-                        Picker("Email", selection: $model.accountEmail) {
-                            ForEach(model.emailChoices, id: \.email) { choice in
-                                Text(choice.email).tag(choice.email)
-                            }
-                        }
-                        .labelsHidden()
-                        .fixedSize()
-                    }
-                }
-            }
-            .padding(.horizontal, Metrics.insetMedium)
-            .cardSurface()
+                },
+                otherEmail: .constant(model.accountEmail),
+                emailChoices: model.emailChoices,
+                isAccountAuthor: true
+            )
         case .manual:
-            VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                FieldLabel("Name")
-                TextField("Name", text: $model.manualName, prompt: Text("Your Name"))
-                    .labelsHidden()
-                    .textFieldStyle(.capsule)
-                if let problem = model.nameProblem {
-                    FieldMessage(problem, kind: .error)
-                }
-            }
-            VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                FieldLabel("Email")
-                TextField("Email", text: $model.manualEmail, prompt: Text(verbatim: "your-email@example.com"))
-                    .labelsHidden()
-                    .textFieldStyle(.capsule)
-                if let attribution = model.attribution {
-                    FieldMessage(attribution.message, kind: attribution.isAttributable ? .success : .warning)
-                }
-            }
+            GitAuthorForm(
+                name: $model.manualName,
+                nameProblem: model.nameProblem,
+                emailSelection: .constant(.other),
+                otherEmail: $model.manualEmail,
+                emailChoices: [],
+                attribution: model.attribution
+            )
         }
     }
 }

@@ -292,12 +292,10 @@ public final class CommitStatusStore {
 
         async let fetchedStatuses = api.fetchCombinedRefStatus(owner: key.owner, name: key.name, ref: key.ref)
         async let fetchedCheckRuns = api.fetchRefCheckRuns(owner: key.owner, name: key.name, ref: key.ref)
-        let statuses = (try? await fetchedStatuses) ?? nil
-        let checkRuns = (try? await fetchedCheckRuns) ?? nil
-
-        if statuses == nil, checkRuns == nil {
-            // Okay, so we failed retrieving the status for one reason or another.
-            // That's a bummer, but we still need to note the attempt
+        guard let statuses = (try? await fetchedStatuses) ?? nil, let checkRuns = (try? await fetchedCheckRuns) ?? nil else {
+            // Okay, so we failed retrieving the statuses or the check runs
+            // for one reason or another; the other alone isn't the ref's
+            // checks. We still need to note the attempt
             // or else we'll consider this subscription eligible for refresh
             // from here on until we succeed in fetching. By keeping the last
             // checks and not telling subscribers we ensure they keep their
@@ -491,50 +489,80 @@ public final class CommitStatusStore {
     /// Triggers GitHub to rerun checks, without pushing new code: one
     /// Actions check reruns that job; with `failedOnly`, Actions checks
     /// rerun their workflow runs' failed jobs; other checks rerequest their
-    /// check suites. Then the rerun checks show as in progress until the next
-    /// refresh.
-    ///
-    /// - Returns: Whether each request succeeded, in the order made.
-    func rerun(_ checkRuns: [RefCheck], failedOnly: Bool, key: CheckRunsKey) async -> [Bool] {
+    /// check suites. Then the checks GitHub reruns show as in progress until
+    /// the next refresh.
+    func rerun(_ checkRuns: [RefCheck], failedOnly: Bool, key: CheckRunsKey) async -> CheckRerunResult {
         guard let repository, let app = repository.app,
               let account = app.accounts.account(forEndpoint: key.endpoint)
         else {
-            return []
+            return CheckRerunResult(accepted: [], refused: checkRuns, reasons: [
+                "Sign in to \(getHTMLURL(key.endpoint)) to re-run checks.",
+            ])
         }
         let api = API.fromAccount(account, runtime: repository.environment.gitHub)
-        var results: [Bool] = []
 
-        // If it is one and in actions check, we can rerun it individually.
-        if checkRuns.count == 1, checkRuns[0].actionsWorkflow != nil {
-            results.append(await api.rerunJob(owner: key.owner, name: key.name, jobId: checkRuns[0].id))
-        } else {
-            var checkSuiteIDs: [Int] = []
-            var workflowRunIDs: [Int] = []
-            for checkRun in checkRuns {
-                if failedOnly, let workflow = checkRun.actionsWorkflow {
-                    if !workflowRunIDs.contains(workflow.id) {
-                        workflowRunIDs.append(workflow.id)
-                    }
-                    continue
-                }
-
-                // There could still be failed ones that are not action and only way to
-                // rerun them is to rerun their whole check suite
-                if let checkSuiteID = checkRun.checkSuiteID, !checkSuiteIDs.contains(checkSuiteID) {
-                    checkSuiteIDs.append(checkSuiteID)
-                }
-            }
-
-            for id in workflowRunIDs {
-                results.append(await api.rerunFailedJobs(owner: key.owner, name: key.name, workflowRunId: id))
-            }
-            for id in checkSuiteIDs {
-                results.append(await api.rerequestCheckSuite(owner: key.owner, name: key.name, checkSuiteId: id))
+        enum Request: Equatable {
+            case job(Int)
+            case failedJobs(workflowRun: Int)
+            case checkSuite(Int)
+        }
+        typealias Requests = [(request: Request, checks: [RefCheck])]
+        /// Adds `check` to the checks `request` reruns.
+        func add(_ check: RefCheck, _ request: Request, to requests: inout Requests) {
+            if let index = requests.firstIndex(where: { $0.request == request }) {
+                requests[index].checks.append(check)
+            } else {
+                requests.append((request, [check]))
             }
         }
 
-        manualRefreshSubscription(key, pendingChecks: checkRuns)
-        return results
+        // Each request, with the checks it reruns.
+        let requests: Requests
+        // If it is one and in actions check, we can rerun it individually.
+        if checkRuns.count == 1, checkRuns[0].actionsWorkflow != nil {
+            requests = [(.job(checkRuns[0].id), checkRuns)]
+        } else {
+            var workflowRuns: Requests = []
+            var checkSuites: Requests = []
+            for checkRun in checkRuns {
+                if failedOnly, let workflow = checkRun.actionsWorkflow {
+                    add(checkRun, .failedJobs(workflowRun: workflow.id), to: &workflowRuns)
+                } else if let checkSuiteID = checkRun.checkSuiteID {
+                    // There could still be failed ones that are not action and only way to
+                    // rerun them is to rerun their whole check suite
+                    add(checkRun, .checkSuite(checkSuiteID), to: &checkSuites)
+                }
+            }
+            requests = workflowRuns + checkSuites
+        }
+
+        var accepted: [RefCheck] = []
+        var refused: [RefCheck] = []
+        var reasons: [String] = []
+        for (request, checks) in requests {
+            do {
+                switch request {
+                case .job(let id):
+                    try await api.rerunJob(owner: key.owner, name: key.name, jobId: id)
+                case .failedJobs(let id):
+                    try await api.rerunFailedJobs(owner: key.owner, name: key.name, workflowRunId: id)
+                case .checkSuite(let id):
+                    try await api.rerequestCheckSuite(owner: key.owner, name: key.name, checkSuiteId: id)
+                }
+                accepted += checks
+            } catch {
+                refused += checks
+                let reason = apiFailure(from: error).message
+                if !reasons.contains(reason) {
+                    reasons.append(reason)
+                }
+            }
+        }
+
+        if !accepted.isEmpty {
+            manualRefreshSubscription(key, pendingChecks: accepted)
+        }
+        return CheckRerunResult(accepted: accepted, refused: refused, reasons: reasons)
     }
 
     /// Which of `checkRuns` can be rerun, from their check suites
@@ -548,7 +576,7 @@ public final class CommitStatusStore {
             return EspalierCore.rerunPlan(checkRuns, failedOnly: failedOnly, checkSuites: [], now: now)
         }
         let api = API.fromAccount(account, runtime: repository.environment.gitHub)
-        let considered = failedOnly ? checkRuns.filter { $0.conclusion == .failure } : checkRuns
+        let considered = failedOnly ? checkRuns.filter(isFailure) : checkRuns
         var ids: [Int] = []
         for id in considered.compactMap(\.checkSuiteID) where !ids.contains(id) {
             ids.append(id)

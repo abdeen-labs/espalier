@@ -11,9 +11,10 @@ import os
 
 private let logger = Log.logger(category: "background-fetch")
 
-/// Fetches the selected GitHub repository in the background:
-/// `max(X-Poll-Interval seconds, 5 min)`, else 1 hour, plus the skew;
-/// skipped while `FETCH_HEAD` is under 30 minutes old.
+/// Fetches the selected repository in the background: a GitHub repository
+/// every `max(X-Poll-Interval seconds, 5 min)`, else every hour, plus the
+/// skew; skipped while `FETCH_HEAD` is under 30 minutes old, and while the
+/// repository has no remote.
 ///
 /// The first fetch waits for the skew on the first selection after launch,
 /// and otherwise runs at once. It keeps fetching while the app is
@@ -64,12 +65,9 @@ final class BackgroundFetcher: SelectionScopedService {
         startedWithInitialSkew = isFirstSelectionSinceLaunch
         self.repository = repository
 
-        guard let gitHubRepository = repository.record.gitHubRepository else {
-            return
-        }
         let generation = generation
         loop.start(firstDelay: isFirstSelectionSinceLaunch ? skew : .zero) { [weak self] in
-            await self?.performAndScheduleFetch(gitHubRepository, generation: generation)
+            await self?.performAndScheduleFetch(generation: generation)
         }
     }
 
@@ -81,14 +79,18 @@ final class BackgroundFetcher: SelectionScopedService {
         repository = nil
     }
 
-    /// Fetches if the gate allows, then works out the next wait. Each await
-    /// is followed by a check that the run wasn't stopped.
-    private func performAndScheduleFetch(_ gitHubRepository: GitHubRepository, generation: UInt64) async -> Duration? {
+    /// Fetches if the repository has a remote and the gate allows, then
+    /// works out the next wait. Each await is followed by a check that the
+    /// run wasn't stopped.
+    private func performAndScheduleFetch(generation: UInt64) async -> Duration? {
         guard generation == self.generation, let repository else {
             return nil
         }
 
-        let shouldFetch = await repository.sync.shouldBackgroundFetch(lastPush: nil)
+        // Remotes not loaded yet are loaded by the fetch.
+        let state = repository.gitState
+        let hasNoRemote = state.loaded.contains(.remotes) && state.remotes.all.isEmpty
+        let shouldFetch = hasNoRemote ? false : await repository.sync.shouldBackgroundFetch(lastPush: nil)
         guard generation == self.generation else {
             return nil
         }
@@ -104,7 +106,7 @@ final class BackgroundFetcher: SelectionScopedService {
             return nil
         }
 
-        let interval = await fetchInterval(gitHubRepository)
+        let interval = await fetchInterval(repository.record.gitHubRepository)
         guard generation == self.generation else {
             return nil
         }
@@ -112,12 +114,13 @@ final class BackgroundFetcher: SelectionScopedService {
         return interval
     }
 
-    /// The allowed fetch interval from the server, plus the skew.
+    /// The allowed fetch interval from the server for a GitHub repository,
+    /// else the default, plus the skew.
     ///
     /// `X-Poll-Interval` is in seconds, as GitHub documents it.
-    private func fetchInterval(_ gitHubRepository: GitHubRepository) async -> Duration {
+    private func fetchInterval(_ gitHubRepository: GitHubRepository?) async -> Duration {
         var interval = Self.defaultInterval
-        if let account = getAccountForEndpoint(accounts.accounts, gitHubRepository.endpoint) {
+        if let gitHubRepository, let account = getAccountForEndpoint(accounts.accounts, gitHubRepository.endpoint) {
             let api = API.fromAccount(account, runtime: environment.gitHub)
             let pollInterval = await api.getFetchPollInterval(owner: gitHubRepository.owner.login, name: gitHubRepository.name)
             if let pollInterval, pollInterval > 0 {

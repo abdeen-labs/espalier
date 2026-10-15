@@ -75,17 +75,18 @@ extension CommitHeaderContent {
 }
 
 extension Metrics {
-    /// The top of a commit's details.
+    /// The top of a commit's details, inset as the list's header is.
     enum CommitDetail {
-        static let horizontalPadding: CGFloat = 18
-        static let topPadding: CGFloat = 16
+        static let horizontalPadding: CGFloat = Metrics.HistoryHeader.horizontalPadding
+        static let topPadding: CGFloat = Metrics.insetLarge
         static let bottomPadding: CGFloat = 14
-        /// Between the title, the author line, the body, and the files.
-        static let titleSpacing: CGFloat = 8
+        /// Between the title, the author line, and the body.
+        static let titleSpacing: CGFloat = Metrics.insetSmall
         static let bodySpacing: CGFloat = 10
-        static let filesSpacing: CGFloat = 14
         /// The body's extra space between lines (18-point lines at 12).
         static let bodyLineSpacing: CGFloat = 3
+        /// The author's avatar, beside the secondary text.
+        static let avatarSize: CGFloat = 18
         /// The symbol's circle when the details can't show changes.
         static let placeholderSymbolSize: CGFloat = 44
     }
@@ -105,6 +106,7 @@ struct CommitHeader: View {
             Text(content.summary.isEmpty ? AttributedString(CommitRowContent.emptySummary) : content.richSummary)
                 .font(Typography.commitSummary)
                 .foregroundStyle(content.summary.isEmpty ? .text3 : .text)
+                .tint(Color(espalier: Palette.link))
                 .textSelection(.enabled)
                 .lineLimit(isExpanded ? nil : 3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -123,11 +125,11 @@ struct CommitHeader: View {
 
     private var metadata: some View {
         HStack(spacing: Metrics.insetSmall) {
-            Avatar(content.avatarUser, size: Metrics.CommitRow.graphAvatarSize)
+            Avatar(content.avatarUser, size: Metrics.CommitDetail.avatarSize)
             Text(content.authorName)
                 .fontWeight(.medium)
                 .foregroundStyle(.text)
-                .help(content.authorEmail.isEmpty ? content.authorName : "\(content.authorName) <\(content.authorEmail)>")
+                .tooltip(content.authorEmail.isEmpty ? content.authorName : "\(content.authorName) <\(content.authorEmail)>")
             HStack(spacing: 3) {
                 Text("committed")
                 RelativeTimeText(content.date)
@@ -137,10 +139,9 @@ struct CommitHeader: View {
                 RefCapsuleList(content.tags, palette: palette)
             }
             Spacer(minLength: Metrics.insetSmall)
-            MonoChip(content.shortSHA) {
+            MonoChip(content.shortSHA, isSelectable: true) {
                 CommitSHACopyButton(sha: content.sha)
             }
-            .textSelection(.enabled)
             .fixedSize()
         }
         .font(Typography.secondary)
@@ -152,6 +153,7 @@ struct CommitHeader: View {
             Text(content.richDescription)
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)
+                .tint(Color(espalier: Palette.link))
                 .lineSpacing(Metrics.CommitDetail.bodyLineSpacing)
                 .textSelection(.enabled)
                 .lineLimit(isExpanded ? nil : 2)
@@ -168,8 +170,8 @@ struct CommitHeader: View {
                     .frame(width: Metrics.insetLarge, height: Metrics.insetLarge)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .help(isExpanded ? "Collapse" : "Expand")
+            .buttonStyle(.bare(.circle))
+            .tooltip(isExpanded ? "Collapse" : "Expand")
             .accessibilityLabel(isExpanded ? "Collapse commit details" : "Expand commit details")
         }
     }
@@ -179,10 +181,9 @@ struct CommitHeader: View {
 /// a moment after.
 struct CommitSHACopyButton: View {
     let sha: String
-    var showsCheck = false
 
     var body: some View {
-        CopyButton(sha, showsCheck: showsCheck) { systemImage in
+        CopyButton(sha) { systemImage in
             // The copy symbol's room, whichever shows, so the chip keeps
             // its width.
             ZStack {
@@ -193,8 +194,8 @@ struct CommitSHACopyButton: View {
             .font(.system(size: 10))
             .foregroundStyle(.text3)
         }
-        .buttonStyle(.plain)
-        .help("Copy the full SHA")
+        .buttonStyle(.bare)
+        .tooltip("Copy the full SHA")
         .accessibilityLabel("Copy the full SHA")
     }
 }

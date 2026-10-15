@@ -108,7 +108,6 @@ struct IntegrationLauncherTests {
             )
         }
         #expect(error == SpawnError(path: "\(directory)/missing", code: "ENOENT"))
-        #expect(error?.localizedDescription == "spawn \(directory)/missing ENOENT")
     }
 
     @Test("reports a file or folder it may not execute as Node does")

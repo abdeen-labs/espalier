@@ -16,6 +16,24 @@ final class FakeApplicationLocator: ApplicationLocator {
     }
 }
 
+/// An application locator whose applications can be installed and removed
+/// while a test runs.
+final class MutableApplicationLocator: ApplicationLocator {
+    private let paths = Mutex<[String: String]>([:])
+
+    func install(_ bundleIdentifier: String, at path: String) {
+        paths.withLock { $0[bundleIdentifier] = path }
+    }
+
+    func remove(_ bundleIdentifier: String) {
+        paths.withLock { $0[bundleIdentifier] = nil }
+    }
+
+    func appPath(_ bundleIdentifier: String) -> String? {
+        paths.withLock { $0[bundleIdentifier] }
+    }
+}
+
 /// A launcher that records commands instead of starting anything.
 final class RecordingLauncher: IntegrationLauncher {
     private let recorded = Mutex<[(command: LaunchCommand, traced: Bool)]>([])

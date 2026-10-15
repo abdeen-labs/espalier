@@ -1,11 +1,12 @@
 // The pull request place. Left: the overview (title, Draft, "#142 opened 2
 // days ago by octo", the branches, Check Out through the uncommitted changes
-// decision, View on GitHub, the checks with their steps, and the description
-// in Markdown). Right: the changes since the merge base when the pull
-// request's head is in the repository (`pullRequestChanges`), else "Changes
-// Not Available" with Check Out. A link's pull request is the one GitHub
-// returned for it; another that isn't open (a notification's) loads from
-// GitHub.
+// decision or "Checked Out" for the current branch's, View on GitHub, Check
+// Out in New Worktree…, the checks with their steps, and the description in
+// Markdown). Right: the changes since the merge base when the pull request's
+// head is in the repository (`pullRequestChanges`), else "Changes Not
+// Available" with a quiet Check Out (the overview's is the prominent one).
+// A link's pull request is the one GitHub returned for it; another that
+// isn't open (a notification's) loads from GitHub.
 
 import EspalierCore
 import EspalierSupport
@@ -117,8 +118,8 @@ nonisolated struct PullRequestOverviewContent: Sendable, Equatable {
     /// The branch it comes from: "octo:feature/sign-in" from a fork,
     /// "feature/sign-in" from the same repository.
     var head: String
-    /// Whether it's the current branch's pull request: Check Out reads
-    /// "Current Branch" and is off.
+    /// Whether it's the current branch's pull request: "Checked Out" shows
+    /// in Check Out's place.
     var isCurrentBranch: Bool
     /// The pull request's page.
     var url: URL?
@@ -193,8 +194,6 @@ struct PullRequestOverviewActions {
     var checkOutInNewWorktree: (() -> Void)?
     var open: (URL) -> Void
     var checks: ChecksListActions
-
-    static let none = PullRequestOverviewActions(checkOut: {}, checkOutInNewWorktree: nil, open: { _ in }, checks: .none)
 }
 
 /// The overview, from the models.
@@ -202,7 +201,6 @@ struct PullRequestOverview: View {
     let repository: RepositoryModel
     let pullRequest: PullRequest
     @Environment(WindowContext.self) private var context
-    @Environment(\.markdownParsesSynchronously) private var parsesSynchronously
     @State private var description: ParsedDescription?
 
     var body: some View {
@@ -243,10 +241,7 @@ struct PullRequestOverview: View {
     /// The description parsed for the current body and setting; nil while
     /// it's being parsed.
     private func parsedDescription(underlineLinks: Bool) -> MarkdownDocument? {
-        if parsesSynchronously {
-            return MarkdownDocument.parse(pullRequest.body, underlineLinks: underlineLinks)
-        }
-        return description?.matches(pullRequest.body, underlineLinks: underlineLinks) == true ? description?.document : nil
+        description?.matches(pullRequest.body, underlineLinks: underlineLinks) == true ? description?.document : nil
     }
 
     private var actions: PullRequestOverviewActions {
@@ -330,7 +325,7 @@ struct PullRequestOverviewView: View {
                 }
             }
             HStack(spacing: Metrics.grid) {
-                Text("#\(content.number) opened")
+                Text(verbatim: "#\(content.number) opened")
                 RelativeTimeText(content.created)
                 Text("by")
                 Avatar(content.authorAvatar)
@@ -352,43 +347,60 @@ struct PullRequestOverviewView: View {
         }
     }
 
+    /// Check Out (or "Checked Out"), View on GitHub, and Check Out in New
+    /// Worktree…, on a second line when the column is too narrow for them.
     private var buttons: some View {
-        HStack(spacing: Metrics.insetSmall) {
-            Button(content.isCurrentBranch ? "Current Branch" : "Check Out", action: actions.checkOut)
-                .buttonStyle(.prominent)
-                .disabled(content.isCurrentBranch)
-            if let url = content.url {
-                Button(content.viewOnGitHubTitle) {
-                    actions.open(url)
-                }
-                .buttonStyle(.quiet)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Metrics.insetSmall) {
+                checkOutButtons
+                worktreeButton
             }
-            if let checkOutInNewWorktree = actions.checkOutInNewWorktree {
-                Menu {
-                    Button("Check Out in New Worktree…", action: checkOutInNewWorktree)
-                } label: {
-                    Label("More", systemImage: "ellipsis.circle")
+            VStack(alignment: .leading, spacing: Metrics.insetSmall) {
+                HStack(spacing: Metrics.insetSmall) {
+                    checkOutButtons
                 }
-                .menuStyle(.button)
-                .buttonStyle(.icon)
-                .menuIndicator(.hidden)
+                worktreeButton
+            }
+        }
+    }
+
+    /// Check Out, the area's prominent button, or the plain "Checked Out"
+    /// when it's the current branch's pull request; and View on GitHub.
+    @ViewBuilder
+    private var checkOutButtons: some View {
+        if content.isCurrentBranch {
+            Text("Checked Out")
+                .font(Typography.row)
+                .foregroundStyle(.text2)
                 .fixedSize()
-                .accessibilityLabel("More")
+        } else {
+            Button("Check Out", action: actions.checkOut)
+                .buttonStyle(.prominent)
+                .fixedSize()
+        }
+        if let url = content.url {
+            Button(content.viewOnGitHubTitle) {
+                actions.open(url)
             }
+            .buttonStyle(.quiet)
+            .fixedSize()
+        }
+    }
+
+    @ViewBuilder
+    private var worktreeButton: some View {
+        if let checkOutInNewWorktree = actions.checkOutInNewWorktree {
+            Button("Check Out in New Worktree…", action: checkOutInNewWorktree)
+                .buttonStyle(.quiet)
+                .fixedSize()
         }
     }
 
     private var checksSection: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-            HStack {
-                SectionLabel("Checks")
-                Spacer()
-                ChecksRerunButton(options: checks.rerun, isEnabled: checks.canRerun) { failedOnly in
-                    actions.checks.rerun(failedOnly, nil)
-                }
-            }
+            SectionLabel("Checks")
             if !checks.isEmpty, !(checks.isLoading && checks.overall == nil) {
-                ChecksHeader(content: checks, actions: actions.checks, showsRerun: false)
+                ChecksHeader(content: checks, actions: actions.checks)
             }
             ChecksList(content: checks, actions: actions.checks)
         }
@@ -428,7 +440,7 @@ struct QuietCapsule: View {
             .padding(.horizontal, Metrics.RefCapsule.horizontalPadding)
             .frame(height: Metrics.RefCapsule.height)
             .background(Capsule(style: .circular).fill(Color(espalier: Palette.field)))
-            .help(text)
+            .tooltip(text)
     }
 }
 
@@ -459,7 +471,7 @@ struct PullRequestChangesView: View {
                         Button("Check Out") {
                             context.actions.perform(.checkoutPullRequest(number: pullRequest.pullRequestNumber))
                         }
-                        .buttonStyle(.prominent)
+                        .buttonStyle(.quiet)
                     }
                 case .failed(let error):
                     CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
@@ -491,18 +503,17 @@ struct PullRequestChangesView: View {
     }
 }
 
-/// The changed files beside the selected file's diff.
+/// The changed files beside the selected file's diff. When the toolbar
+/// search hides the selected file, the first file it lists is selected, or
+/// none when it lists none (`filteredSelection`).
 private struct PullRequestFilesAndDiff: View {
     let changes: PullRequestPreviewModel
     let repository: RepositoryModel
     let pullRequest: PullRequest
-    /// History's prefix for its inner splits' dividers (snapshots use
-    /// their own).
-    @Environment(\.historySplitAutosavePrefix) private var autosavePrefix
     @Environment(WindowContext.self) private var context
 
     var body: some View {
-        SplitView(autosaveName: "\(autosavePrefix).pullRequestFiles", leadingColumn: Metrics.Column.commitFileList) {
+        SplitView(autosaveName: "Espalier.Split.pullRequestFiles", leadingColumn: Metrics.Column.commitFileList) {
             ChangedFilesList(
                 selection: changes.selection,
                 repositoryPath: repository.record.path,
@@ -516,6 +527,30 @@ private struct PullRequestFilesAndDiff: View {
         } trailing: {
             DiffContainer(changes.selection.diff, file: changes.selection.file.map(DiffFileInfo.init), context: .pullRequest)
         }
+        .onChange(of: searchedFileIDs, initial: true) {
+            selectSearchedFile()
+        }
+    }
+
+    /// The IDs of the files the search lists, once they've loaded; nil
+    /// without a search.
+    private var searchedFileIDs: [String]? {
+        let filter = context.state.searchText
+        guard !filter.isEmpty, let files = changes.selection.changeset.value?.files else {
+            return nil
+        }
+        return ChangedFilesList.files(files, filter: filter).map(\.id)
+    }
+
+    /// Keeps the selected file to those the search lists, as a click
+    /// selects (`filteredSelection`).
+    private func selectSearchedFile() {
+        guard let listed = searchedFileIDs, let files = changes.selection.changeset.value?.files,
+              let kept = filteredSelection(changes.selection.file.map { [$0.id] } ?? [], listed: listed)
+        else {
+            return
+        }
+        changes.selectFile(kept.first.flatMap { id in files.first { $0.id == id } })
     }
 }
 
@@ -567,7 +602,15 @@ struct ChangedFilesList: View {
         VStack(spacing: 0) {
             if let changeset = selection.changeset.value {
                 let files = Self.files(changeset.files, filter: filter)
-                ChangedFilesHeader(fileCount: changeset.files.count, linesAdded: changeset.linesAdded, linesDeleted: changeset.linesDeleted)
+                ChangedFilesHeader(
+                    title: ChangesHeaderContent.title(
+                        fileCount: changeset.files.count,
+                        visibleCount: files.count,
+                        numberFormat: context.app.preferences.numberFormat
+                    ),
+                    linesAdded: changeset.linesAdded,
+                    linesDeleted: changeset.linesDeleted
+                )
                 Hairline()
                 if files.isEmpty && !filter.isEmpty {
                     CenteredMessage("No Matching Files", systemImage: "magnifyingglass", description: "No changed files match \u{201C}\(filter)\u{201D}.")
@@ -581,7 +624,8 @@ struct ChangedFilesList: View {
                     )) {
                         ForEach(files, id: \.id) { file in
                             ChangedFileRow(content: ChangedFileRowContent(file))
-                                .selectableRow(isSelected: file.id == selection.file?.id)
+                                .selectableRow(isSelected: file.id == selection.file?.id, showsSelectionBar: true)
+                                .contextMenuRow(file.id)
                                 .tag(file.id)
                                 .listRowInsets(Metrics.ListRow.insets(isFirst: file.id == files.first?.id, isLast: file.id == files.last?.id))
                                 .listRowSeparator(.hidden)
@@ -590,9 +634,9 @@ struct ChangedFilesList: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
-                    .contextMenu(forSelectionType: String.self) { ids in
+                    .contextMenuCard(forSelectionType: String.self, selection: selection.file.map { [$0.id] } ?? []) { [context, menuContent] ids in
                         if let menuContent, let id = ids.first, let file = changeset.files.first(where: { $0.id == id }) {
-                            CommittedFileContextMenu(content: menuContent(file))
+                            CommittedFileContextMenu.content(menuContent(file), context: context)
                         }
                     } primaryAction: { ids in
                         if let repositoryPath, let id = ids.first, let file = changeset.files.first(where: { $0.id == id }) {
@@ -645,34 +689,22 @@ enum PullRequestFileMenus {
     }
 }
 
-/// A count with grouping separators ("1,204").
-nonisolated private func countText(_ count: Int) -> String {
-    count.formatted(.number.locale(Locale(identifier: "en_US")))
-}
-
-/// "3 changed files", "+12 −4".
+/// "3 changed files", or "0 of 3 changed files" while the search hides
+/// some, and the lines added and removed ("+12 −4", zero counts left out).
 struct ChangedFilesHeader: View {
-    let fileCount: Int
+    let title: String
     let linesAdded: Int
     let linesDeleted: Int
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
-            Text(fileCount == 1 ? "1 changed file" : "\(countText(fileCount)) changed files")
+            Text(title)
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)
                 .lineLimit(1)
             Spacer(minLength: Metrics.grid)
             if linesAdded > 0 || linesDeleted > 0 {
-                HStack(spacing: Metrics.grid) {
-                    Text("+\(countText(linesAdded))")
-                        .foregroundStyle(Color(espalier: DiffColors.addedMarker))
-                    Text("−\(countText(linesDeleted))")
-                        .foregroundStyle(Color(espalier: DiffColors.deletedMarker))
-                }
-                .font(Typography.secondaryCount)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(linesAdded) added lines, \(linesDeleted) removed lines")
+                HistoryLineCounts(added: linesAdded, deleted: linesDeleted)
             }
         }
         .padding(.horizontal, Metrics.insetMedium)
@@ -685,7 +717,7 @@ struct ChangedFileRow: View {
     let content: ChangedFileRowContent
 
     var body: some View {
-        HStack(spacing: Metrics.grid + 2) {
+        HStack(spacing: Metrics.insetSmall) {
             StatusGlyph(content.status)
             Text(content.fileName)
                 .foregroundStyle(.text)
@@ -700,7 +732,7 @@ struct ChangedFileRow: View {
                     .truncationMode(.head)
             }
         }
-        .help(content.oldPath.map { "\($0) → \(content.path)" } ?? content.path)
+        .tooltip(content.oldPath.map { "\($0) → \(content.path)" } ?? content.path)
         .accessibilityElement(children: .combine)
     }
 }

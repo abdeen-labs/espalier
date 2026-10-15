@@ -1,7 +1,8 @@
-// A branch's row in the sidebar's Branches section: the name, the branch's
-// pull request, and how it compares with its upstream ("↑2 ↓3", or not
-// published). Value-driven: `BranchRowContent` is built from the models by
-// `BranchesSectionContent` and snapshotted on its own.
+// A branch's row in the sidebar's Branches section: the name (the current
+// branch's semibold, the one way it's marked), the branch's pull request,
+// and how it compares with its upstream ("↑2 ↓3", not published, or its
+// upstream gone). Value-driven: `BranchRowContent` is built from the models
+// by `BranchesSectionContent`.
 
 import EspalierCore
 import GitHubKit
@@ -19,33 +20,34 @@ nonisolated public enum BranchTracking: Sendable, Equatable {
     /// The upstream is configured but gone from the remote.
     case upstreamGone
 
-    /// "↑2 ↓3", leaving out zero counts; nil when in sync or not tracking.
-    public var countsText: String? {
+    /// "↑2 ↓3", leaving out zero counts, in `numberFormat`; nil when in
+    /// sync or not tracking.
+    public func countsText(_ numberFormat: NumberFormat) -> String? {
         guard case .aheadBehind(let ahead, let behind) = self else {
             return nil
         }
         var parts: [String] = []
         if ahead > 0 {
-            parts.append("↑\(Self.formatCount(ahead))")
+            parts.append("↑\(Self.formatCompactCount(ahead, numberFormat))")
         }
         if behind > 0 {
-            parts.append("↓\(Self.formatCount(behind))")
+            parts.append("↓\(Self.formatCompactCount(behind, numberFormat))")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
-    /// What VoiceOver and the tooltip say.
-    public var description: String? {
+    /// What VoiceOver and the tooltip say, the counts in `numberFormat`.
+    public func description(_ numberFormat: NumberFormat) -> String? {
         switch self {
         case .none:
             return nil
         case .aheadBehind(let ahead, let behind):
             var parts: [String] = []
             if ahead > 0 {
-                parts.append("\(ahead) \(ahead == 1 ? "commit" : "commits") ahead")
+                parts.append("\(formatCount(ahead, numberFormat)) \(ahead == 1 ? "commit" : "commits") ahead")
             }
             if behind > 0 {
-                parts.append("\(behind) \(behind == 1 ? "commit" : "commits") behind")
+                parts.append("\(formatCount(behind, numberFormat)) \(behind == 1 ? "commit" : "commits") behind")
             }
             return parts.isEmpty ? "Up to date with its upstream" : parts.joined(separator: ", ")
         case .notPublished:
@@ -55,13 +57,10 @@ nonisolated public enum BranchTracking: Sendable, Equatable {
         }
     }
 
-    /// Counts past 999 shrink ("1.2k"), as the sync button's.
-    static func formatCount(_ count: Int) -> String {
-        guard count >= 1_000 else {
-            return "\(count)"
-        }
-        let thousands = Double(count) / 1_000
-        return thousands >= 10 ? "\(Int(thousands))k" : String(format: "%.1fk", thousands)
+    /// A count in `numberFormat`, shrunk past 999 ("1.2k") as the sync
+    /// button's.
+    static func formatCompactCount(_ count: Int, _ numberFormat: NumberFormat) -> String {
+        formatCompactNumber(Double(count), CompactFormatOptions(numberFormat: numberFormat))
     }
 }
 
@@ -87,18 +86,10 @@ nonisolated public struct BranchPullRequestBadge: Sendable, Equatable {
         return text
     }
 
-    /// The glyph's state for a pull request's combined checks: pending
-    /// until they conclude; failed when they failed, timed out, or need an
-    /// action; neutral when cancelled, skipped, stale, or neutral.
+    /// The glyph's state for a pull request's combined checks, as every
+    /// checks glyph shows it.
     public static func checksState(of check: CombinedRefCheck) -> ChecksState {
-        guard let conclusion = check.conclusion, check.status == .completed else {
-            return .pending
-        }
-        switch conclusion {
-        case .success: return .success
-        case .failure, .timedOut, .actionRequired: return .failure
-        default: return .neutral
-        }
+        CheckGlyphKind(status: check.status, conclusion: check.conclusion).tone
     }
 }
 
@@ -153,14 +144,9 @@ nonisolated public struct BranchRowContent: Sendable, Equatable, Identifiable {
         ref
     }
 
-    /// The row's symbol: the current branch's check, else a branch.
-    public var systemImage: String {
-        isCurrent ? "checkmark.circle.fill" : "arrow.trianglehead.branch"
-    }
-
     /// The row as VoiceOver reads it: the name, then what the trailing
-    /// glyphs say.
-    public var accessibilityLabel: String {
+    /// glyphs say, counts in `numberFormat`.
+    public func accessibilityLabel(_ numberFormat: NumberFormat) -> String {
         var parts = [name]
         if isCurrent {
             parts.append("current branch")
@@ -168,20 +154,21 @@ nonisolated public struct BranchRowContent: Sendable, Equatable, Identifiable {
         if let pullRequest {
             parts.append(pullRequest.tooltip)
         }
-        if let tracking = tracking.description {
+        if let tracking = tracking.description(numberFormat) {
             parts.append(tracking)
         }
         return parts.joined(separator: ", ")
     }
 }
 
-/// A branch's row: a dot in its track color, its name (the current one
+/// A branch's row: a dot in its branch color, its name (the current one
 /// semibold, a selected one medium), the pull request glyph, and its
 /// comparison with its upstream.
 public struct BranchRow: View {
     private let content: BranchRowContent
     private let dotColor: NSColor?
     @Environment(\.isSidebarRowSelected) private var isSelected
+    @Environment(\.numberFormat) private var numberFormat
 
     /// - Parameter dotColor: The branch's color in the graph; nil for
     ///   `content.fallbackColor`.
@@ -195,38 +182,40 @@ public struct BranchRow: View {
             Circle()
                 .fill(Color(nsColor: dotColor ?? content.fallbackColor))
                 .frame(width: Metrics.Sidebar.dotSize, height: Metrics.Sidebar.dotSize)
-                .frame(width: 16)
+                .frame(width: Metrics.Sidebar.symbolWidth)
                 .accessibilityHidden(true)
             Text(content.title)
                 .font(SidebarRowFont.title(isSelected: isSelected, isEmphasized: content.isCurrent))
-                .foregroundStyle(.text)
+                .foregroundStyle(.sidebarRowText(isSelected: isSelected))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 // The name first; what follows takes the room left.
                 .layoutPriority(1)
-            Spacer(minLength: Metrics.grid)
-            if let pullRequest = content.pullRequest {
-                PullRequestBadgeGlyph(pullRequest)
+            HStack(spacing: Metrics.insetSmall) {
+                if let pullRequest = content.pullRequest {
+                    PullRequestBadgeGlyph(pullRequest)
+                }
+                BranchTrackingView(content.tracking)
             }
-            BranchTrackingView(content.tracking)
-                // After the name, before the spacer: "Not published" gets the
-                // room the name leaves. At the spacer's priority it would be
-                // offered half of it and fall back to the glyph even in wide
-                // rows.
-                .layoutPriority(0.5)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            // "Not published" gets all the room the name leaves.
+            .layoutPriority(0.5)
         }
-        .help(content.name)
+        .tooltip(content.name)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(content.accessibilityLabel)
+        .accessibilityLabel(content.accessibilityLabel(numberFormat))
     }
 }
 
-/// The trailing comparison: "↑2" in the accent and "↓3" in tertiary text,
-/// in SF Mono; a dashed circle and "Not published" for a branch that isn't
-/// published; the dashed circle alone, with a tooltip, for a branch whose
-/// upstream is gone.
+/// The trailing comparison: "↑2" in the theme's ahead color (Classic's
+/// accent) and "↓3" as the sidebar's counts are
+/// (`sidebarRowCount(isSelected:)`), in SF Mono; a dashed circle and "Not
+/// published" for a branch that isn't published; a crossed-out cloud, with
+/// a tooltip, for a branch whose upstream is gone from its remote.
 struct BranchTrackingView: View {
     let tracking: BranchTracking
+    @Environment(\.isSidebarRowSelected) private var isSelected
+    @Environment(\.numberFormat) private var numberFormat
 
     init(_ tracking: BranchTracking) {
         self.tracking = tracking
@@ -237,47 +226,47 @@ struct BranchTrackingView: View {
         case .none:
             EmptyView()
         case .aheadBehind(let ahead, let behind):
-            if tracking.countsText != nil {
-                HStack(spacing: 4) {
+            if tracking.countsText(numberFormat) != nil {
+                HStack(spacing: Metrics.grid) {
                     if ahead > 0 {
-                        Text("↑\(BranchTracking.formatCount(ahead))")
+                        Text("↑\(BranchTracking.formatCompactCount(ahead, numberFormat))")
                             .font(Typography.aheadCount)
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(.aheadText)
                     }
                     if behind > 0 {
-                        Text("↓\(BranchTracking.formatCount(behind))")
+                        Text("↓\(BranchTracking.formatCompactCount(behind, numberFormat))")
                             .font(Typography.secondaryCount)
-                            .foregroundStyle(.text3)
+                            .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
                     }
                 }
                 .lineLimit(1)
                 .fixedSize()
-                .help(tracking.description ?? "")
+                .tooltip(tracking.description(numberFormat))
             }
         case .notPublished:
             // The words give way to the name in a narrow row.
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Metrics.grid) {
                     Image(systemName: "circle.dashed")
-                    Text(tracking.description ?? "")
+                    Text(tracking.description(numberFormat) ?? "")
                 }
                 .fixedSize()
                 Image(systemName: "circle.dashed")
-                    .help(tracking.description ?? "")
+                    .tooltip(tracking.description(numberFormat))
             }
             .font(Typography.secondary)
-            .foregroundStyle(.text3)
+            .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
             .lineLimit(1)
         case .upstreamGone:
-            Image(systemName: "circle.dashed")
+            Image(systemName: "icloud.slash")
                 .font(Typography.secondary)
-                .foregroundStyle(.text3)
-                .help(tracking.description ?? "")
+                .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
+                .tooltip(tracking.description(numberFormat))
         }
     }
 }
 
-/// A pull request's glyph, drafts in a secondary tint, with its checks.
+/// A pull request's glyph, drafts in a lighter tint, with its checks.
 struct PullRequestBadgeGlyph: View {
     let badge: BranchPullRequestBadge
 
@@ -286,16 +275,14 @@ struct PullRequestBadgeGlyph: View {
     }
 
     var body: some View {
-        HStack(spacing: 2) {
-            Image(systemName: "arrow.trianglehead.pull")
-                .foregroundStyle(Color(espalier: badge.isDraft ? Palette.text3 : Palette.text2))
-                .imageScale(.small)
+        HStack(spacing: Metrics.grid) {
+            Image(systemName: PullRequestGlyph.systemImage)
+                .foregroundStyle(badge.isDraft ? Color.text3 : .text2)
             if let checks = badge.checks {
                 ChecksGlyph(checks)
-                    .imageScale(.small)
             }
         }
         .font(Typography.secondary)
-        .help(badge.tooltip)
+        .tooltip(badge.tooltip)
     }
 }

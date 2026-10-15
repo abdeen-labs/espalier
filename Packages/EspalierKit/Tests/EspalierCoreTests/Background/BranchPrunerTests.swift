@@ -2,8 +2,9 @@
 // desktop/app/test/helpers/repository-builder-branch-pruner.ts. The pruner
 // runs over the app model (`BranchPruner.prune(_:dryRun:)`), with the last
 // prune date in the GitHub repository table. Further tests follow: the dry
-// run, recorded and restorable deletions, the 14-day reflog window,
-// branches that moved, a busy lane, and the loop's cadence.
+// run, recorded and restorable deletions, branches tracking local branches,
+// the 14-day reflog window, branches that moved, a busy lane, and the loop's
+// cadence.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -230,6 +231,26 @@ struct BranchPrunerTests {
         await fixture.model.idle()
         #expect(!fixture.model.gitState.branches.all.contains { $0.name == "deleted-branch-1" })
         #expect(await fixture.runOnce().isEmpty)
+        await fixture.app.idle()
+    }
+
+    @Test("never prunes a branch that tracks a local branch, whether that branch exists or not")
+    func tracksLocalBranch() async throws {
+        let path = try setupFixtureRepository("branch-prune-tests")
+        let repository = Repository(path: path)
+        // Merged into master as deleted-branch-1 is, but tracking local
+        // branches (`branch.<name>.remote` is `.`).
+        for (branch, upstream) in [("tracks-master", "master"), ("tracks-missing", "missing")] {
+            try await runGit(["branch", branch, deletedBranchSHA], repository)
+            try await runGit(["config", "branch.\(branch).remote", "."], repository)
+            try await runGit(["config", "branch.\(branch).merge", "refs/heads/\(upstream)"], repository)
+        }
+        let fixture = try await setupRepository(path, includesGhRepo: true, lastPruneDate: offsetFromNow(hours: -25))
+
+        #expect(await fixture.runOnce().map(\.name) == ["deleted-branch-1"])
+        let remaining = try await localBranchNames(repository)
+        #expect(remaining.contains("tracks-master"))
+        #expect(remaining.contains("tracks-missing"))
         await fixture.app.idle()
     }
 

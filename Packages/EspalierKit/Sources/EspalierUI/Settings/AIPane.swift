@@ -7,6 +7,7 @@
 import AIKit
 import EspalierCore
 import EspalierSupport
+import GitKit
 import SwiftUI
 
 /// Settings ▸ AI.
@@ -244,6 +245,7 @@ struct ProviderRow: View {
     let provider: BYOKProvider
     let edit: () -> Void
     let remove: () -> Void
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         HStack(spacing: Metrics.SettingsWindow.rowSpacing) {
@@ -256,23 +258,23 @@ struct ProviderRow: View {
                         LocalBadge()
                     }
                 }
-                Text("\(ProviderCopy.typeShortTitle(provider.type)) · \(ProviderCopy.modelCount(provider.models.count))")
+                Text("\(ProviderCopy.typeShortTitle(provider.type)) · \(ProviderCopy.modelCount(provider.models.count, numberFormat))")
                     .font(Typography.secondary)
                     .foregroundStyle(.text3)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
-            RowActionsMenu("Actions for \(provider.name)") {
-                Button("Edit…", action: edit)
-                Button("Remove…", role: .destructive, action: remove)
+            RowActionsMenu("Actions for \(provider.name)") { [edit, remove] in
+                MenuAction("Edit…", action: edit)
+                MenuAction("Remove…", role: .destructive, action: remove)
             }
         }
         .padding(.vertical, Metrics.SettingsWindow.rowVerticalPadding)
         .frame(minHeight: Metrics.SettingsWindow.rowHeight)
         .contentShape(Rectangle())
-        .contextMenu {
-            Button("Edit…", action: edit)
-            Button("Remove…", role: .destructive, action: remove)
+        .contextMenuCard { [edit, remove] in
+            MenuAction("Edit…", action: edit)
+            MenuAction("Remove…", role: .destructive, action: remove)
         }
     }
 }

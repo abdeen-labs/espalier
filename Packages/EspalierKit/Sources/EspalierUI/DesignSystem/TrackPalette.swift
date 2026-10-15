@@ -4,25 +4,27 @@
 import AppKit
 import SwiftUI
 
-/// The colors of the history graph's tracks.
+/// The colors of the history graph's tracks, in the current theme.
 ///
-/// The current branch's track takes the user's accent color; the trunk
-/// (track 0, the default branch's line) is teal. Other tracks take the
-/// palette (pink, violet, orange, green, indigo, and cyan, without the
-/// entry nearest the accent's hue, so no branch is mistaken for the current
-/// one). Red and yellow are left out: they read as errors and warnings. A
+/// The current branch's track takes the accent color; the trunk (track 0,
+/// the default branch's line) is the theme's default-branch color, Classic's
+/// teal. Other tracks take the theme's tones (Classic's are pink, violet,
+/// orange, green, indigo, and cyan, without the entry nearest the accent's
+/// hue, so no branch is mistaken for the current one). Red and yellow are
+/// left out: they read as errors and warnings. A
 /// track a local branch starts takes that branch's color (`BranchColors`),
 /// so a line, its branch's tag, and its sidebar dot agree; other tracks
 /// take entry `(t − 1) mod count` of the entries no branch has. Colors
 /// follow the engine's tracks, so a line of development keeps its color as
 /// lanes are reused.
 public enum TrackPalette {
-    /// A branch color.
+    /// A branch color: a hue each theme gives its own shade
+    /// (`Theme.toneColors`).
     nonisolated public enum Tone: String, CaseIterable, Sendable {
         case pink, violet, orange, green, indigo, cyan
 
-        /// The color, light and dark (three are Tailwind's 600 and 400
-        /// shades).
+        /// Classic's shade, light and dark (three are Tailwind's 600 and
+        /// 400 shades).
         public var color: NSColor {
             switch self {
             case .pink: .espalierDynamic(light: .hex(0xDB2777), dark: .hex(0xF472B6))
@@ -40,27 +42,27 @@ public enum TrackPalette {
         }
     }
 
-    /// The branch palette, in order, before the accent's neighbor is skipped.
+    /// Classic's branch palette, in order, before the accent's neighbor is
+    /// skipped.
     nonisolated public static let tones: [Tone] = [.pink, .violet, .orange, .green, .indigo, .cyan]
 
-    /// The trunk's teal.
-    nonisolated public static let trunk = Palette.readable(
-        .espalierDynamic(light: .hex(0x0F766E), dark: .hex(0x2DD4BF)),
-        minimumContrast: 3
-    )
-
-    /// Each tone as track lines, dots, and tags draw it: 3:1 against the
-    /// content background (4.5:1 under Increase Contrast).
-    nonisolated static let toneColors: [Tone: NSColor] = Dictionary(
-        uniqueKeysWithValues: tones.map { ($0, Palette.readable($0.color, minimumContrast: 3)) }
-    )
+    /// The default branch's color: Classic's teal.
+    nonisolated public static var trunk: NSColor {
+        Theme.current.trunk
+    }
 
     /// An accent with less saturation than this (graphite) skips nothing.
     nonisolated static let minimumAccentSaturation: CGFloat = 0.15
 
-    /// The palette for an accent color: `tones` without the entry nearest
-    /// the accent's hue.
-    public static func palette(accent: NSColor = .controlAccentColor) -> [Tone] {
+    /// The current theme's palette for an accent color: its tones, without
+    /// the entry nearest the accent's hue when the theme leaves it out
+    /// (Classic).
+    public static func palette(accent: NSColor = Palette.accent) -> [Tone] {
+        let theme = Theme.current
+        let tones = theme.tones
+        guard theme.skipsToneNearestAccent else {
+            return tones
+        }
         let accent = accent.resolved(in: .light)
         guard accent.saturationComponent >= minimumAccentSaturation else {
             return tones
@@ -78,16 +80,16 @@ public enum TrackPalette {
     }
 
     /// The color of track `track`.
-    public static func color(forTrack track: Int, currentTrack: Int? = nil, accent: NSColor = .controlAccentColor) -> NSColor {
+    public static func color(forTrack track: Int, currentTrack: Int? = nil, accent: NSColor = Palette.accent) -> NSColor {
         Resolved(accent: accent, currentTrack: currentTrack).color(forTrack: track)
     }
 
     /// The color a branch gets without the repository's other branches (a
     /// row outside the sidebar): the current branch's accent, the default
-    /// branch's teal, or the palette entry its name hashes to, so it stays
+    /// branch's color, or the palette entry its name hashes to, so it stays
     /// the same between launches. `BranchColors` gives the sidebar's and
     /// the graph's, which keep branches apart.
-    public static func color(forBranch name: String, isCurrent: Bool, isDefault: Bool, accent: NSColor = .controlAccentColor) -> NSColor {
+    public static func color(forBranch name: String, isCurrent: Bool, isDefault: Bool, accent: NSColor = Palette.accent) -> NSColor {
         if isCurrent {
             return accent
         }
@@ -98,9 +100,10 @@ public enum TrackPalette {
         return color(of: palette[BranchColors.index(of: name, count: palette.count)])
     }
 
-    /// A tone as lines, dots, and tags draw it.
+    /// A tone as lines, dots, and tags draw it in the current theme: 3:1
+    /// against the content background (4.5:1 under Increase Contrast).
     public static func color(of tone: Tone) -> NSColor {
-        toneColors[tone] ?? tone.color
+        Theme.current.color(of: tone)
     }
 
     /// The palette for one accent color, current branch, and set of
@@ -108,7 +111,7 @@ public enum TrackPalette {
     public struct Resolved: Equatable {
         /// The current branch's track's color: the accent.
         public let current: NSColor
-        /// The trunk's teal.
+        /// The default branch's color.
         public let trunk: NSColor
         /// The palette, before branches take their colors.
         public let branches: [NSColor]
@@ -130,7 +133,7 @@ public enum TrackPalette {
         ///   - branchColors: The repository's branches' colors.
         ///   - trackBranches: The tracks local branches start, with their
         ///     branch.
-        public init(accent: NSColor = .controlAccentColor, currentTrack: Int? = nil, branchColors: BranchColors? = nil, trackBranches: [Int: String] = [:]) {
+        public init(accent: NSColor = Palette.accent, currentTrack: Int? = nil, branchColors: BranchColors? = nil, trackBranches: [Int: String] = [:]) {
             current = accent
             trunk = TrackPalette.trunk
             branches = TrackPalette.palette(accent: accent).map(TrackPalette.color(of:))

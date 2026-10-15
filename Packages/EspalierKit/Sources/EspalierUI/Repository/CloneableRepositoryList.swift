@@ -1,7 +1,7 @@
 // The repositories an account can clone, in the Clone sheet and Get Started:
 // "Your Repositories" first, then each owner; a lock for private
 // repositories, a fork glyph for forks, "Archived"; the filter and Refresh;
-// and three empty states.
+// and four empty states.
 
 import EspalierCore
 import GitHubKit
@@ -14,6 +14,8 @@ nonisolated struct CloneableListContent: Sendable, Equatable {
     enum EmptyState: Sendable, Equatable {
         /// "Loading repositories from <endpoint>…"
         case loading(endpoint: String)
+        /// "Couldn't load repositories from <endpoint>.", with Try Again.
+        case failed(endpoint: String)
         /// "No repositories match <filter>"
         case noMatch(filter: String)
         /// "<login> has no repositories on <endpoint>.
@@ -39,6 +41,8 @@ nonisolated struct CloneableListContent: Sendable, Equatable {
             emptyState = nil
         } else if isLoading, loaded.isEmpty {
             emptyState = .loading(endpoint: account.friendlyEndpoint)
+        } else if repositories?.failed == true, loaded.isEmpty {
+            emptyState = .failed(endpoint: account.friendlyEndpoint)
         } else if !filter.isEmpty {
             emptyState = .noMatch(filter: filter)
         } else {
@@ -107,7 +111,7 @@ struct CloneableRepositoryListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
             HStack(spacing: Metrics.grid) {
-                TextField("Filter", text: $filter, prompt: Text("Filter your repositories"))
+                TextField("Filter", text: $filter, prompt: Text("Filter your repositories").fieldPrompt())
                     .textFieldStyle(.capsule(systemImage: "magnifyingglass"))
                 Button(action: refresh) {
                     if content.isLoading {
@@ -118,7 +122,7 @@ struct CloneableRepositoryListView: View {
                 }
                 .buttonStyle(.icon)
                 .disabled(content.isLoading)
-                .help("Refresh the list of repositories")
+                .tooltip("Refresh the list of repositories")
                 .accessibilityLabel("Refresh the list of repositories")
             }
             Group {
@@ -150,21 +154,14 @@ struct CloneableRepositoryListView: View {
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                     .rowsDrawSelection()
-                    .contextMenu(forSelectionType: CloneableRepositoryListItem.ID.self) { _ in
-                    } primaryAction: { ids in
+                    .listPrimaryAction(forSelectionType: CloneableRepositoryListItem.ID.self) { ids in
                         if let id = ids.first, let item = content.item(id) {
                             activate(item)
                         }
                     }
                 }
             }
-            .padding(.vertical, Metrics.SheetList.inset)
-            .background(Color(espalier: Palette.background))
-            .clipShape(RoundedRectangle(cornerRadius: Metrics.SheetList.cornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Metrics.SheetList.cornerRadius, style: .continuous)
-                    .strokeBorder(.line, lineWidth: 1)
-            )
+            .sheetListCard()
         }
     }
 }
@@ -210,6 +207,11 @@ struct CloneableListEmptyState: View {
                 ArcProgress(.small)
                 Text("Loading repositories from \(endpoint)…")
                     .foregroundStyle(.text2)
+            case .failed(let endpoint):
+                Text("Couldn't load repositories from \(endpoint).")
+                    .foregroundStyle(.text2)
+                Button("Try Again", action: refresh)
+                    .buttonStyle(.textLink)
             case .noMatch(let filter):
                 Text("No repositories match \(Text(filter).font(Typography.sha))")
                     .foregroundStyle(.text2)
@@ -218,7 +220,7 @@ struct CloneableListEmptyState: View {
                     .foregroundStyle(.text2)
                 HStack(spacing: Metrics.grid) {
                     Button("Refresh this list", action: refresh)
-                        .buttonStyle(.link)
+                        .buttonStyle(.textLink)
                     Text("if you've created a repository recently.")
                         .foregroundStyle(.text2)
                 }

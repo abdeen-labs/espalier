@@ -232,7 +232,6 @@ struct AIGatePopover: View {
         .padding(Metrics.Popover.padding)
         .frame(width: Self.width, alignment: .leading)
         .background(Color(espalier: Palette.background))
-        .flatPopoverPresentation()
     }
 }
 
@@ -279,50 +278,17 @@ struct AIConsentSheet: View {
     }
 
     var body: some View {
-        SheetScaffold("Send Conflicts to \(disclosure.providerName)?", message: disclosure.summary) {
-            VStack(alignment: .leading, spacing: Metrics.grid) {
-                ForEach(disclosure.sentData, id: \.self) { item in
-                    BulletItem(text: item)
-                        .font(Typography.secondary)
-                        .foregroundStyle(.text)
-                }
-            }
-            .padding(Metrics.insetMedium)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
-                    .fill(.field)
-            )
-            Text(disclosure.reviewAdvice)
-                .font(Typography.meta)
-                .foregroundStyle(.text3)
-                .fixedSize(horizontal: false, vertical: true)
-        } buttons: {
-            SheetButtons("Continue", cancel: { dismissModal() }) {
-                dismissModal()
-                onContinue()
-            }
+        AIConsentScaffold("Send Conflicts to \(disclosure.providerName)?", content: AIConsentContent(disclosure)) {
+            dismissModal()
+        } confirm: {
+            dismissModal()
+            onContinue()
         }
     }
 
     static func present(_ disclosure: AIDataDisclosure, in context: WindowContext, onContinue: @escaping () -> Void) {
         context.modals.presentSheet(id: sheetID) {
             AIConsentSheet(disclosure: disclosure, onContinue: onContinue)
-        }
-    }
-}
-
-/// A bulleted line; wrapped lines align with the text, not the bullet.
-private struct BulletItem: View {
-    let text: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
-            Text(verbatim: "•")
-                .foregroundStyle(.text2)
-                .accessibilityHidden(true)
-            Text(text)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -389,6 +355,7 @@ public struct AIConflictSheet: View {
 
     private let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
+    @Environment(\.numberFormat) private var numberFormat
 
     public init(repository: RepositoryModel) {
         self.repository = repository
@@ -402,7 +369,7 @@ public struct AIConflictSheet: View {
                 Color.clear
             case .resolving(let round):
                 AIConflictLoadingView(
-                    content: AIConflictLoadingContent(round, operationName: operationName),
+                    content: AIConflictLoadingContent(round, operationName: operationName, numberFormat: numberFormat),
                     onStop: { repository.ai.stopResolvingConflicts() },
                     onAbort: { AIConflictFlow.abort(in: context, repository: repository) }
                 )
@@ -413,7 +380,8 @@ public struct AIConflictSheet: View {
                         repository: repository,
                         operationName: operationName,
                         isContinuing: flow.isContinuing,
-                        error: flow.applyError
+                        error: flow.applyError,
+                        numberFormat: numberFormat
                     ),
                     repository: repository,
                     alwaysUseAI: alwaysUseAIBinding
@@ -503,7 +471,8 @@ nonisolated public struct AIConflictLoadingContent: Sendable, Equatable {
         self.abortTitle = abortTitle
     }
 
-    init(_ round: ConflictResolutionRound, operationName: String) {
+    /// The loading view for `round`, its counts in `numberFormat`.
+    init(_ round: ConflictResolutionRound, operationName: String, numberFormat: NumberFormat) {
         let gathering = round.phase == .gatheringContext
         let names = round.files.map { POSIXPath.basename($0) }
         var fallback: [String]
@@ -514,14 +483,16 @@ nonisolated public struct AIConflictLoadingContent: Sendable, Equatable {
             fallback = ["Cross-referencing related files", "Considering both sides of each conflict"]
             fallback += names.prefix(6).map { "Analyzing \($0)" }
             if names.count > 6 {
-                fallback.append("…and \(names.count - 6) more")
+                fallback.append("…and \(formatCount(names.count - 6, numberFormat)) more")
             }
         }
         self.init(
             title: "Resolving conflicts for \(operationName.lowercased())",
             modelLabel: aiModelLabel(round.model),
             phase: gathering ? "Gathering context…" : "Analyzing conflicts…",
-            progress: round.filesTotal > 0 ? "\(round.filesResolved) of \(round.filesTotal) files" : nil,
+            progress: round.filesTotal > 0
+                ? "\(formatCount(round.filesResolved, numberFormat)) of \(formatCount(round.filesTotal, numberFormat)) \(round.filesTotal == 1 ? "file" : "files")"
+                : nil,
             reasoning: Array(round.reasoning.compactMap(Self.clean).suffix(Self.maxLines)),
             fallbackLines: fallback,
             abortTitle: "Abort \(operationName)"
@@ -554,7 +525,6 @@ struct AIConflictLoadingView: View {
     let content: AIConflictLoadingContent
     var onStop: () -> Void
     var onAbort: () -> Void
-    @Environment(\.fixedNow) private var fixedNow
 
     init(content: AIConflictLoadingContent, onStop: @escaping () -> Void = {}, onAbort: @escaping () -> Void = {}) {
         self.content = content
@@ -573,7 +543,7 @@ struct AIConflictLoadingView: View {
                     Text(content.phase)
                         .foregroundStyle(.text)
                 } icon: {
-                    IconCircle("sparkles", size: 24, tint: .accentColor)
+                    IconCircle("sparkles", size: 24, tint: .accent)
                 }
                 .font(Typography.heading)
                 Spacer()
@@ -586,12 +556,8 @@ struct AIConflictLoadingView: View {
             Hairline()
             VStack(alignment: .leading, spacing: Metrics.grid) {
                 if content.reasoning.isEmpty {
-                    if fixedNow != nil {
-                        fallback(at: 0)
-                    } else {
-                        TimelineView(.periodic(from: .now, by: Self.fallbackInterval)) { timeline in
-                            fallback(at: Int(timeline.date.timeIntervalSinceReferenceDate / Self.fallbackInterval))
-                        }
+                    TimelineView(.periodic(from: .now, by: Self.fallbackInterval)) { timeline in
+                        fallback(at: Int(timeline.date.timeIntervalSinceReferenceDate / Self.fallbackInterval))
                     }
                 } else {
                     ForEach(Array(content.reasoning.enumerated()), id: \.offset) { index, line in
@@ -648,7 +614,7 @@ struct AIConflictSheetHeader: View {
                     Label("AI Settings", systemImage: "gearshape")
                 }
                 .buttonStyle(.icon)
-                .help("AI Settings")
+                .tooltip("AI Settings")
                 .accessibilityLabel("AI Settings")
             }
         }
@@ -705,19 +671,25 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
     public var isContinuing: Bool
     public var error: String?
 
-    /// "5 Conflicted files".
-    public var conflictedHeader: String {
-        "\(conflicted.count) Conflicted \(conflicted.count == 1 ? "file" : "files")"
+    /// "5 Conflicted files", the count in `numberFormat`.
+    public func conflictedHeader(_ numberFormat: NumberFormat) -> String {
+        "\(formatCount(conflicted.count, numberFormat)) Conflicted \(conflicted.count == 1 ? "file" : "files")"
     }
 
-    /// "1 Skipped by the model".
-    public var skippedHeader: String {
-        "\(skipped.count) Skipped by the model"
+    /// "1 Skipped by the model", the count in `numberFormat`.
+    public func skippedHeader(_ numberFormat: NumberFormat) -> String {
+        "\(formatCount(skipped.count, numberFormat)) Skipped by the model"
     }
 
-    /// "2 files couldn't be resolved."
-    public var failedHeader: String {
-        failed.count == 1 ? "1 file couldn't be resolved." : "\(failed.count) files couldn't be resolved."
+    /// "2 Couldn't be resolved", the count in `numberFormat`.
+    public func failedHeader(_ numberFormat: NumberFormat) -> String {
+        "\(formatCount(failed.count, numberFormat)) Couldn't be resolved"
+    }
+
+    /// "2 files couldn't be resolved.", beside Try Again, the count in
+    /// `numberFormat`.
+    public func failedStatus(_ numberFormat: NumberFormat) -> String {
+        failed.count == 1 ? "1 file couldn't be resolved." : "\(formatCount(failed.count, numberFormat)) files couldn't be resolved."
     }
 
     /// The paths in the Changes tab: every file the results cover.
@@ -725,20 +697,31 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
         (conflicted + skipped + failed).map(\.path)
     }
 
-    /// Continue's tooltip while skipped files need the user.
-    public static let skippedHelp = "The model skipped some files. You'll need to resolve those yourself."
+    /// Continue's tooltip while files need the user: those the model
+    /// skipped, those whose request failed or wasn't attempted, or both.
+    /// Nil when none do.
+    public static func continueHelp(skipped: Bool, failed: Bool) -> String? {
+        switch (skipped, failed) {
+        case (true, false): "The model skipped some files. You'll need to resolve those yourself."
+        case (false, true): "Some files couldn't be resolved. Try again, or resolve them yourself."
+        case (true, true): "The model skipped some files and couldn't resolve others. Resolve them yourself, or try again."
+        case (false, false): nil
+        }
+    }
 
-    /// The results for a repository.
+    /// The results for a repository, counts in `numberFormat`.
     @MainActor
     static func make(
         _ results: ConflictResolutionResults,
         repository: RepositoryModel,
         operationName: String,
         isContinuing: Bool,
-        error: String?
+        error: String?,
+        numberFormat: NumberFormat
     ) -> AIConflictResultsContent {
         let ai = repository.ai
         let branches = repository.operations.conflictBranches
+        let roundLabels = (ours: results.summary.ourLabel, theirs: results.summary.theirLabel)
         let files = repository.changes.workingDirectory.files
         let skippedPaths = Set(results.skippedFiles.map(\.path))
         let failures = Dictionary(results.failedFiles.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
@@ -761,6 +744,7 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
                 choice: ai.resolutionChoice(forPath: path),
                 resolution: results.resolution(forPath: path),
                 branches: branches,
+                roundLabels: roundLabels,
                 offersModel: failures[path] == nil && !notAttempted.contains(path),
                 failure: failures[path]?.message ?? (notAttempted.contains(path) ? "Not attempted after an earlier request failed." : nil)
             )
@@ -777,22 +761,25 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
                 choice: ai.resolutionChoice(forPath: skippedFile.path),
                 resolution: nil,
                 branches: branches,
+                roundLabels: roundLabels,
                 offersModel: false,
                 failure: skippedFile.reason
             )
         }
 
         let retryProgress = results.retry.map { round in
-            round.filesTotal > 0
-                ? "Retrying \(round.files.count) files… \(round.filesResolved) of \(round.filesTotal)"
-                : "Retrying \(round.files.count) \(round.files.count == 1 ? "file" : "files")…"
+            let retrying = "Retrying \(formatCount(round.files.count, numberFormat)) \(round.files.count == 1 ? "file" : "files")…"
+            return round.filesTotal > 0
+                ? "\(retrying) \(formatCount(round.filesResolved, numberFormat)) of \(formatCount(round.filesTotal, numberFormat))"
+                : retrying
         }
-        let needsResolution = !ai.filesNeedingResolution.isEmpty
+        let needingResolution = ai.filesNeedingResolution
         return AIConflictResultsContent(
             title: "Resolve conflicts before \(operationName)",
             modelLabel: aiModelLabel(results.model),
             summary: AIConflictSummaryContent.make(
                 results.summary,
+                resolvedPaths: results.resolutions.map(\.path),
                 operation: results.operation,
                 htmlURL: repository.record.gitHubRepository?.htmlURL
             ),
@@ -802,27 +789,35 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
             retryProgress: retryProgress,
             abortTitle: "Abort \(operationName)",
             continueTitle: operationName == "Merge" ? "Commit Merge" : "Continue \(operationName)",
-            canContinue: !needsResolution && results.retry == nil && !isContinuing,
-            continueHelp: needsResolution ? skippedHelp : nil,
+            canContinue: needingResolution.isEmpty && results.retry == nil && !isContinuing,
+            continueHelp: continueHelp(
+                skipped: needingResolution.contains { skippedPaths.contains($0) },
+                failed: needingResolution.contains { !skippedPaths.contains($0) }
+            ),
             isContinuing: isContinuing,
             error: error
         )
     }
 
-    /// A file's row: its explanation, its choice, and the menu.
+    /// A file's row: its explanation, its choice, and the menu. The
+    /// explanation names a side by its branch, else by the label the round
+    /// gave it (`results.summary`): a rebase's unknown base is the short SHA
+    /// of the commit it's being rebased onto, a revert's theirs "reverted
+    /// commit".
     static func resolutionRow(
         path: String,
         status: ConflictedFileStatus?,
         choice: ConflictResolutionChoice,
         resolution: FileResolution?,
         branches: ConflictBranches?,
+        roundLabels: (ours: String, theirs: String),
         offersModel: Bool,
         failure: String?
     ) -> AIResolutionRow {
         // Resolved in an editor: no markers left, or no longer conflicted.
         let isResolved: Bool = switch status {
         case nil: true
-        case .conflictsWithMarkers(_, let markers, _)?: markers == 0
+        case .conflictsWithMarkers(_, let markers, _, _)?: markers == 0
         case .manualConflict?: false
         }
         if isResolved {
@@ -860,13 +855,13 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
             explanation = offersModel ? (resolution?.reasoning ?? failure) : failure
         case .ours, .theirs:
             if let deletedSide {
-                let branch = deletedSide == .ours ? (ours ?? "current branch") : (theirs ?? "incoming branch")
+                let branch = deletedSide == .ours ? (ours ?? roundLabels.ours) : (theirs ?? roundLabels.theirs)
                 let deletes = (deletedSide == .ours) == (choice == .ours)
                 explanation = deletes ? "Deleting file (deleted on \(branch))" : "Keeping modified file"
             } else if choice == .ours {
-                explanation = "Using changes from \(ours ?? "current branch")"
+                explanation = "Using changes from \(ours ?? roundLabels.ours)"
             } else {
-                explanation = "Using changes from \(theirs ?? "incoming branch")"
+                explanation = "Using changes from \(theirs ?? roundLabels.theirs)"
             }
         }
         return AIResolutionRow(path: path, explanation: explanation, choiceLabel: choiceLabel, options: options, isResolved: false)
@@ -912,14 +907,14 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
 /// The results phase: Summary and Changes, the files, and Continue.
 struct AIConflictResultsView: View {
     let content: AIConflictResultsContent
-    var repository: RepositoryModel?
+    /// Whose files the rows act on.
+    let repository: RepositoryModel
     @Binding var alwaysUseAI: Bool
     @State private var tab = Tab.summary
     @Environment(WindowContext.self) private var context
+    @Environment(\.numberFormat) private var numberFormat
 
-    /// - Parameter repository: Whose files the rows act on (nil: none, for
-    ///   snapshots).
-    init(content: AIConflictResultsContent, repository: RepositoryModel? = nil, alwaysUseAI: Binding<Bool>) {
+    init(content: AIConflictResultsContent, repository: RepositoryModel, alwaysUseAI: Binding<Bool>) {
         self.content = content
         self.repository = repository
         _alwaysUseAI = alwaysUseAI
@@ -947,6 +942,9 @@ struct AIConflictResultsView: View {
                     .transition(.opacity)
             }
             .motion(Motion.leave, value: tab)
+            if !content.failed.isEmpty {
+                failedBar
+            }
             if let error = content.error {
                 Text(error)
                     .font(Typography.subheadline)
@@ -968,14 +966,12 @@ struct AIConflictResultsView: View {
                     .padding(.vertical, Metrics.grid)
             }
         case .changes:
-            if let repository {
-                AIResolutionChanges(repository: repository, paths: content.paths)
-                    .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
-                            .strokeBorder(.line, lineWidth: 1)
-                    )
-            }
+            AIResolutionChanges(repository: repository, paths: content.paths)
+                .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
+                        .strokeBorder(.line, lineWidth: 1)
+                )
         }
     }
 
@@ -984,43 +980,54 @@ struct AIConflictResultsView: View {
             AIConflictSummary(content: content.summary) { url in
                 context.app.integrations.openInBrowser(url)
             }
-            fileSection(header: content.conflictedHeader, systemImage: "doc.text", rows: content.conflicted)
+            fileSection(header: content.conflictedHeader(numberFormat), systemImage: "doc.text", rows: content.conflicted)
             if !content.skipped.isEmpty {
-                fileSection(header: content.skippedHeader, systemImage: "exclamationmark.triangle", rows: content.skipped)
+                fileSection(header: content.skippedHeader(numberFormat), systemImage: "exclamationmark.triangle", rows: content.skipped)
             }
             if !content.failed.isEmpty {
-                VStack(alignment: .leading, spacing: Metrics.grid) {
-                    HStack {
-                        Text(content.failedHeader)
-                            .font(Typography.heading)
-                            .foregroundStyle(.text)
-                        Spacer()
-                        if let progress = content.retryProgress {
-                            ArcProgress(.small)
-                            Text(progress)
-                                .font(Typography.secondary)
-                                .foregroundStyle(.text2)
-                            Button("Stop") {
-                                repository?.ai.stopResolvingConflicts()
-                            }
-                            .buttonStyle(.quiet)
-                            .controlSize(.small)
-                        } else {
-                            Button("Try Again") {
-                                if let repository {
-                                    AIConflictFlow.retry(in: context, repository: repository)
-                                }
-                            }
-                            .buttonStyle(.quiet)
-                            .controlSize(.small)
-                        }
-                    }
-                    ForEach(content.failed) { row in
-                        AIResolutionRowView(row: row, actions: rowActions(row))
-                    }
-                }
+                fileSection(header: content.failedHeader(numberFormat), systemImage: "xmark.octagon", rows: content.failed)
             }
         }
+    }
+
+    /// The failed files' count and Try Again, or the retry's progress, below
+    /// both tabs, on the attention tint.
+    private var failedBar: some View {
+        HStack(spacing: Metrics.insetSmall) {
+            Label {
+                Text(content.failedStatus(numberFormat))
+                    .foregroundStyle(.text)
+            } icon: {
+                Image(systemName: "xmark.octagon.fill")
+                    .foregroundStyle(Color(espalier: Palette.error))
+            }
+            .font(Typography.secondary)
+            Spacer()
+            if let progress = content.retryProgress {
+                ArcProgress(.small)
+                Text(progress)
+                    .font(Typography.secondary)
+                    .foregroundStyle(.text2)
+                Button("Stop") {
+                    repository.ai.stopResolvingConflicts()
+                }
+                .buttonStyle(.quiet)
+                .controlSize(.small)
+            } else {
+                Button("Try Again") {
+                    AIConflictFlow.retry(in: context, repository: repository)
+                }
+                .buttonStyle(.quiet)
+                .controlSize(.small)
+            }
+        }
+        .padding(.leading, Metrics.insetMedium)
+        .padding(.trailing, Metrics.insetSmall)
+        .padding(.vertical, Metrics.insetSmall)
+        .background(
+            Color(nsColor: StatusBarTone.attention.fill),
+            in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
+        )
     }
 
     private func fileSection(header: String, systemImage: String, rows: [AIResolutionRow]) -> some View {
@@ -1035,9 +1042,6 @@ struct AIConflictResultsView: View {
     }
 
     private func rowActions(_ row: AIResolutionRow) -> AIResolutionRowActions {
-        guard let repository else {
-            return AIResolutionRowActions()
-        }
         let path = POSIXPath.join(repository.record.path, row.path)
         let actions = context.actions
         let integrations = context.app.integrations
@@ -1053,31 +1057,27 @@ struct AIConflictResultsView: View {
     private var footer: some View {
         HStack(spacing: Metrics.insetSmall) {
             Toggle("Always use AI when conflicts are detected", isOn: $alwaysUseAI)
-                .toggleStyle(.checkbox)
+                .toggleStyle(.checkboxMark)
                 .font(Typography.secondary)
             Spacer()
             Button("Switch to Manual") {
-                repository?.ai.dismissConflictResolution()
+                repository.ai.dismissConflictResolution()
             }
             .buttonStyle(.secondary)
             .keyboardShortcut(.cancelAction)
             .disabled(content.isContinuing)
             Button(content.abortTitle) {
-                if let repository {
-                    AIConflictFlow.abort(in: context, repository: repository)
-                }
+                AIConflictFlow.abort(in: context, repository: repository)
             }
             .buttonStyle(.quiet)
             .disabled(content.isContinuing)
             Button(content.continueTitle) {
-                if let repository {
-                    AIConflictFlow.applyAndContinue(in: context, repository: repository)
-                }
+                AIConflictFlow.applyAndContinue(in: context, repository: repository)
             }
             .buttonStyle(.prominent)
             .keyboardShortcut(.defaultAction)
             .disabled(!content.canContinue)
-            .help(content.continueHelp ?? "")
+            .tooltip(content.continueHelp)
         }
     }
 }
@@ -1114,45 +1114,41 @@ struct AIResolutionRowView: View {
             }
             Spacer(minLength: Metrics.insetSmall)
             if row.isResolved {
+                // In the file options button's place, centered as its
+                // symbol is.
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(Color(espalier: Palette.success))
+                    .frame(width: Metrics.ControlHeight.regular)
                     .accessibilityLabel("Resolved")
             } else {
-                Menu {
-                    ForEach(row.options) { option in
-                        Toggle(option.title, isOn: Binding(
-                            get: { option.isChecked },
-                            set: { _ in actions.choose(option.choice) }
-                        ))
+                PullDownButton("Resolution for \(row.path)", value: row.choiceLabel) { [row, actions] in
+                    for option in row.options {
+                        MenuToggle(option.title, isOn: option.isChecked) {
+                            actions.choose(option.choice)
+                        }
                     }
                 } label: {
                     MenuCapsuleLabel(row.choiceLabel)
                 }
-                .menuStyle(.button)
                 .buttonStyle(.quiet)
-                .menuIndicator(.hidden)
                 .controlSize(.small)
                 .fixedSize()
-                .accessibilityLabel("Resolution for \(row.path): \(row.choiceLabel)")
-                Menu {
+                PullDownButton("File Options") { [actions] in
                     if let editorName = actions.editorName {
-                        Button("Open in \(editorName)", action: actions.openInEditor)
+                        MenuAction("Open in \(editorName)", action: actions.openInEditor)
                     }
-                    Button("Open with Default App", action: actions.openWithDefaultProgram)
-                    Button("Show in Finder", action: actions.showInFinder)
+                    MenuAction("Open with Default App", action: actions.openWithDefaultProgram)
+                    MenuAction("Show in Finder", action: actions.showInFinder)
                 } label: {
                     Label("File Options", systemImage: "ellipsis.circle")
                 }
-                .menuStyle(.button)
                 .buttonStyle(.icon)
-                .menuIndicator(.hidden)
                 .fixedSize()
-                .accessibilityLabel("File Options")
             }
         }
         .padding(.vertical, Metrics.grid)
         .padding(.horizontal, Metrics.ListRow.horizontalPadding)
-        .help(row.path)
+        .tooltip(row.path)
     }
 }
 
@@ -1220,7 +1216,7 @@ struct AIConflictFailureView: View {
             Spacer()
             HStack(spacing: Metrics.insetSmall) {
                 Toggle("Always use AI when conflicts are detected", isOn: $alwaysUseAI)
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(.checkboxMark)
                     .font(Typography.secondary)
                 Spacer()
                 Button("Switch to Manual", action: onSwitchToManual)

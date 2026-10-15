@@ -188,7 +188,7 @@ extension MultiCommitOperationsModel {
     /// nil: an interactive rebase of the current branch from
     /// `lastRetainedCommitRef` (its root when nil), with what `squash` does
     /// around it ("Can't reorder. …" for a merge commit in the range, "Reorder
-    /// Requires a Force Push").
+    /// Pushed Commits?").
     ///
     /// - Returns: `.reordered` with the banner copy; `.conflicted`.
     public func reorder(
@@ -311,7 +311,8 @@ extension MultiCommitOperationsModel {
                         repositoryID: id
                     )
                 }
-                let operation = makeOperation(original)
+                var operation = makeOperation(original)
+                operation.originalUpstreamTip = await getUpstreamTip(ctx.repository, branchName: branch.name)
 
                 logger.info("[\(name, privacy: .public)] starting rebase for \(branch.name, privacy: .private) at \(original, privacy: .public)")
                 logger.info("[\(name, privacy: .public)] to restore the previous state if this completed rebase is unsatisfactory:")

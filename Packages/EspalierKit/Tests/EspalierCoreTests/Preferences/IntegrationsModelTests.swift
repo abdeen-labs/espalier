@@ -6,7 +6,6 @@ import EspalierCoreTestSupport
 import EspalierSupport
 import Foundation
 import GitKit
-import Synchronization
 import Testing
 import TestSupport
 
@@ -28,11 +27,51 @@ struct IntegrationsModelTests {
         #expect(integrations.hasLoadedIntegrations)
         #expect(integrations.availableEditors.map(\.editor) == ["Visual Studio Code", "Zed"])
         #expect(integrations.availableShells.map(\.shell) == [.terminal, .iTerm2])
-        // The first installed editor is the default; nothing is written.
-        #expect(integrations.resolvedEditor?.editor == "Visual Studio Code")
-        #expect(integrations.editorLabel == "Visual Studio Code")
+        // With several installed and none chosen, opening asks; nothing is
+        // written.
+        #expect(integrations.resolvedEditor == nil)
+        #expect(integrations.asksForEditor)
+        #expect(integrations.isEditorAvailable)
+        #expect(integrations.editorLabel == nil)
         #expect(fixture.app.preferences.integrations.selectedExternalEditor == nil)
         #expect(fixture.harness.defaults.defaults.object(forKey: "externalEditor") == nil)
+
+        // With one installed, it's the editor, and named.
+        let one = try await makeIntegrationsFixture(editors: [zed])
+        #expect(one.integrations.resolvedEditor?.editor == "Zed")
+        #expect(!one.integrations.asksForEditor)
+        #expect(one.integrations.editorLabel == "Zed")
+    }
+
+    @Test("looks up the installed editors and shells again each time Espalier becomes active, and when asked")
+    func looksAgain() async throws {
+        let harness = try AppHarness()
+        let applications = try createTempDirectory()
+        let locator = MutableApplicationLocator()
+        var environment = harness.environment
+        environment.editors = ExternalEditorLookup(locator: locator)
+        environment.shells = ShellLookup(locator: locator)
+        let app = AppModel(environment: environment)
+        await app.load()
+        await app.integrations.launchIdle()
+        #expect(app.integrations.availableEditors.isEmpty)
+        #expect(app.integrations.availableShells.isEmpty)
+
+        locator.install(zed.bundleID, at: try makeFakeApplication(in: applications, named: zed.name, bundleIdentifier: zed.bundleID))
+        locator.install(iTerm.bundleID, at: try makeFakeApplication(in: applications, named: iTerm.name, bundleIdentifier: iTerm.bundleID))
+        app.setActive(false)
+        app.setActive(true)
+        await app.idle()
+        #expect(app.integrations.availableEditors.map(\.editor) == ["Zed"])
+        #expect(app.integrations.availableShells.map(\.shell) == [.iTerm2])
+        #expect(app.integrations.editorLabel == "Zed")
+
+        // Settings opening looks again too.
+        locator.remove(zed.bundleID)
+        app.integrations.lookUpIntegrationsAgain()
+        await app.integrations.launchIdle()
+        #expect(app.integrations.availableEditors.isEmpty)
+        #expect(app.integrations.editorLabel == nil)
     }
 
     @Test("resolves the selected editor, and keeps a selected editor that isn't installed")
@@ -124,7 +163,7 @@ struct IntegrationsModelTests {
         #expect(fixture.app.preferences.integrations.selectedExternalEditor == "Zed")
     }
 
-    @Test("saves a custom editor or shell only when it is valid, with desktop's messages otherwise")
+    @Test("saves a custom editor or shell only when it is valid, with an error for what isn't")
     func customIntegrations() async throws {
         let fixture = try await makeIntegrationsFixture()
         let integrations = fixture.integrations
@@ -136,9 +175,9 @@ struct IntegrationsModelTests {
         let noPlaceholder = await integrations.setCustomEditor(path: executable, arguments: "--wait")
         #expect(!noPlaceholder.isValid)
         #expect(noPlaceholder.pathError == nil)
-        #expect(noPlaceholder.argumentsError == "Arguments must include the target path placeholder (%TARGET_PATH%).")
+        #expect(noPlaceholder.argumentsError != nil)
         let badPath = await integrations.setCustomEditor(path: POSIXPath.join(directory, "missing"), arguments: TargetPathArgument)
-        #expect(badPath.pathError == "This path isn't an app or an executable.")
+        #expect(badPath.pathError != nil)
         #expect(badPath.argumentsError == nil)
         #expect(fixture.app.preferences.integrations.customEditor == nil)
         #expect(!fixture.app.preferences.integrations.useCustomEditor)
@@ -166,13 +205,32 @@ struct IntegrationsModelTests {
 
     // MARK: Opening in the editor
 
-    @Test("opens a path in the default editor with open -a")
-    func opensInDefaultEditor() async throws {
-        let fixture = try await makeIntegrationsFixture(editors: [zed, vsCode])
+    @Test("with no editor chosen, opens a path in the only one installed with open -a, without asking or saving it")
+    func opensInOnlyEditor() async throws {
+        let fixture = try await makeIntegrationsFixture(editors: [zed])
 
         try await fixture.integrations.openInEditor("/repo")
 
-        #expect(fixture.launcher.commands == [openApplicationCommand(fixture.applicationPath(vsCode.name), ["/repo"])])
+        #expect(fixture.launcher.commands == [openApplicationCommand(fixture.applicationPath(zed.name), ["/repo"])])
+        #expect(fixture.app.preferences.integrations.selectedExternalEditor == nil)
+    }
+
+    @Test("with no editor chosen and several installed, asks which one, then opens in the editor chosen")
+    func asksForEditor() async throws {
+        let fixture = try await makeIntegrationsFixture(editors: [zed, vsCode])
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.integrations.openInEditor("/repo")
+        }
+        #expect(error?.reason == .decisionRequired(.externalEditor(editors: ["Visual Studio Code", "Zed"])))
+        #expect(error?.operation == .openInEditor)
+        #expect(fixture.launcher.commands.isEmpty)
+
+        // The answer is saved as the editor, and opening runs again.
+        fixture.integrations.selectEditor("Zed")
+        try await fixture.integrations.openInEditor("/repo")
+        #expect(fixture.launcher.commands == [openApplicationCommand(fixture.applicationPath(zed.name), ["/repo"])])
+        #expect(fixture.harness.defaults.defaults.string(forKey: "externalEditor") == "Zed")
     }
 
     @Test("opens a path in the custom editor, with the path in its arguments")
@@ -199,11 +257,11 @@ struct IntegrationsModelTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.integrations.openInEditor("/repo")
         }
-        let message = "Espalier couldn't find a supported editor. Install Visual Studio Code, then restart Espalier and try again."
         #expect(error?.operation == .openInEditor)
-        #expect(error?.reason == .integration(.editor(message: message, suggestDefaultEditor: true, openPreferences: false)))
-        #expect(error?.title == "Unable to Open External Editor")
-        #expect(error?.recoveries.map(\.title) == ["Download Visual Studio Code"])
+        if case .integration(.editor(message: _, suggestDefaultEditor: true, openPreferences: false))? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
+        }
+        #expect(error?.recoveries.map(\.kind) == [.downloadSuggestedEditor])
         #expect(fixture.launcher.commands.isEmpty)
 
         // The recovery opens the suggested editor's website.
@@ -221,17 +279,10 @@ struct IntegrationsModelTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.integrations.openInEditor("/repo")
         }
-        #expect(error?.reason == .integration(.editor(
-            message: "Espalier couldn't find the editor Xcode. Choose an available editor in Settings ▸ Integrations.",
-            suggestDefaultEditor: false,
-            openPreferences: true
-        )))
-        #expect(error?.recoveries.map(\.title) == ["Open Settings"])
-        if case .openSettings(let pane)? = error?.recoveries.first {
-            #expect(pane == .integrations)
-        } else {
-            Issue.record("Expected the recovery to open Settings")
+        if case .integration(.editor(message: _, suggestDefaultEditor: false, openPreferences: true))? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
         }
+        #expect(error?.recoveries.map(\.kind) == [.openSettings(.integrations)])
         #expect(fixture.launcher.commands.isEmpty)
     }
 
@@ -248,7 +299,7 @@ struct IntegrationsModelTests {
         await app.load()
         await app.integrations.launchIdle()
         #expect(app.integrations.availableEditors.isEmpty)
-        #expect(app.capabilities.openInEditorTitle == "Open in External Editor")
+        #expect(app.integrations.editorLabel == nil)
 
         let path = try makeFakeApplication(in: applications, named: zed.name, bundleIdentifier: zed.bundleID)
         locator.install(zed.bundleID, at: path)
@@ -256,7 +307,7 @@ struct IntegrationsModelTests {
 
         #expect(launcher.commands == [openApplicationCommand(path, ["/repo"])])
         #expect(app.integrations.availableEditors.map(\.editor) == ["Zed"])
-        #expect(app.capabilities.openInEditorTitle == "Open in Zed")
+        #expect(app.integrations.editorLabel == "Zed")
     }
 
     // MARK: Open With
@@ -276,7 +327,9 @@ struct IntegrationsModelTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.integrations.openWith("/repo", editor: gone)
         }
-        #expect(error?.message == "Espalier couldn't find the editor Xcode. Choose an available editor in Settings ▸ Integrations.")
+        if case .integration(.editor)? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
+        }
     }
 
     @Test("opens a path once with a custom editor, an application through open -a, and nothing without a path")
@@ -300,7 +353,9 @@ struct IntegrationsModelTests {
                 customEditor: CustomIntegration(path: POSIXPath.join(directory, "gone"), arguments: TargetPathArgument)
             )
         }
-        #expect(error?.message == "Espalier couldn't find custom editor at path '\(POSIXPath.join(directory, "gone"))'. Choose an available editor in Settings ▸ Integrations.")
+        if case .integration(.editor)? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
+        }
     }
 
     // MARK: Opening in the shell
@@ -317,14 +372,11 @@ struct IntegrationsModelTests {
         #expect(fixture.launcher.traced == [true])
     }
 
-    @Test("opens a folder in the selected shell, its executable for Kitty, and Terminal when it isn't installed")
+    @Test("opens a folder in the selected shell, its executable for Kitty")
     func opensInSelectedShell() async throws {
         let fixture = try await makeIntegrationsFixture(shells: [terminal, kitty]) { preferences in
             preferences.integrations.selectedShell = .kitty
         }
-        try await fixture.integrations.openInShell("/repo")
-
-        fixture.app.preferences.integrations.selectedShell = .warp
         try await fixture.integrations.openInShell("/repo")
 
         #expect(fixture.launcher.commands == [
@@ -333,9 +385,25 @@ struct IntegrationsModelTests {
                 arguments: ["--single-instance", "--directory", "/repo"],
                 isDetached: false
             ),
-            LaunchCommand(executable: "/usr/bin/open", arguments: ["-b", "com.apple.Terminal", "/repo"], isDetached: false),
         ])
-        // The label still names the selected shell.
+    }
+
+    @Test("reports a selected shell that isn't installed, offering Settings, and opens nothing else")
+    func selectedShellNotInstalled() async throws {
+        let fixture = try await makeIntegrationsFixture(shells: [terminal]) { preferences in
+            preferences.integrations.selectedShell = .warp
+        }
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.integrations.openInShell("/repo")
+        }
+        if case .integration(.shell)? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
+        }
+        #expect(error?.recoveries.map(\.kind) == [.openSettings(.integrations)])
+        #expect(fixture.launcher.commands.isEmpty)
+        // The choice is kept, and the label names it.
+        #expect(fixture.app.preferences.integrations.selectedShell == .warp)
         #expect(fixture.integrations.shellLabel == "Warp")
     }
 
@@ -366,13 +434,11 @@ struct IntegrationsModelTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.integrations.openInShell("/repo")
         }
-        let path = POSIXPath.join(fixture.applicationPath(kitty.name), "Contents/MacOS/kitty")
         #expect(error?.operation == .openInShell)
-        #expect(error?.reason == .integration(.shell(
-            message: "Espalier couldn't find Kitty at \(path). Choose an available shell in Settings ▸ Integrations."
-        )))
-        #expect(error?.title == "Unable to Open Shell")
-        #expect(error?.recoveries.map(\.title) == ["Open Settings"])
+        if case .integration(.shell)? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
+        }
+        #expect(error?.recoveries.map(\.kind) == [.openSettings(.integrations)])
         #expect(fixture.launcher.commands.isEmpty)
     }
 
@@ -386,8 +452,9 @@ struct IntegrationsModelTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.integrations.openInShell("/repo")
         }
-        #expect(error?.reason == .other("spawn /usr/bin/open ENOENT"))
-        #expect(error?.title == "Error")
+        if case .other? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
+        }
         #expect(error?.recoveries.isEmpty == true)
     }
 
@@ -398,7 +465,9 @@ struct IntegrationsModelTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.integrations.openInShell("/repo")
         }
-        #expect(error?.reason == .integration(.shell(message: "Espalier couldn't find Terminal. Choose an available shell in Settings ▸ Integrations.")))
+        if case .integration(.shell)? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
+        }
     }
 
     // MARK: Finder and browser
@@ -437,9 +506,10 @@ struct IntegrationsModelTests {
         let error = #expect(throws: OperationError.self) {
             try fixture.integrations.openWithDefaultApplication("/repo/data.unknown")
         }
-        #expect(error?.reason == .other("Couldn't open /repo/data.unknown. Check that an app is set to open this kind of file."))
+        if case .other? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
+        }
         #expect(error?.operation == .openFile)
-        #expect(error?.title == "Error")
         #expect(error?.recoveries.isEmpty == true)
     }
 
@@ -476,7 +546,7 @@ struct IntegrationsModelTests {
             try await setGlobalConfigValue("filter.lfs.clean", "git-lfs clean --other -- %f")
             let fixture = try await makeIntegrationsFixture(editors: [vsCode])
             let error = try #require(fixture.integrations.lfsFiltersError)
-            #expect(error.recoveries.map(\.title) == ["Update Existing Filters", "Edit Global Git Config…"])
+            #expect(error.recoveries.map(\.kind) == [.updateLFSFilters, .editGlobalGitConfig])
             let recovery = error.recoveries[1]
             #expect(recovery.isHeadless)
 
@@ -485,19 +555,5 @@ struct IntegrationsModelTests {
             // The filters are left to the user.
             #expect(try await getGlobalConfigValue("filter.lfs.clean") == "git-lfs clean --other -- %f")
         }
-    }
-}
-
-/// An application locator whose applications can be installed while a test
-/// runs.
-private final class MutableApplicationLocator: ApplicationLocator {
-    private let paths = Mutex<[String: String]>([:])
-
-    func install(_ bundleIdentifier: String, at path: String) {
-        paths.withLock { $0[bundleIdentifier] = path }
-    }
-
-    func appPath(_ bundleIdentifier: String) -> String? {
-        paths.withLock { $0[bundleIdentifier] }
     }
 }

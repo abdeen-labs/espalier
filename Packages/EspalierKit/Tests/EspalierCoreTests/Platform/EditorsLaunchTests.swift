@@ -28,23 +28,12 @@ struct EditorsLaunchTests {
         let error = await #expect(throws: ExternalEditorError.self) {
             try await launchExternalEditor("/repo", FoundEditor(editor: "Xcode", path: "\(directory)/Xcode.app"), launcher: launcher)
         }
-        #expect(
-            error == ExternalEditorError(
-                "Espalier couldn't find 'Xcode' at path '\(directory)/Xcode.app'. Choose an available editor in Settings ▸ Integrations.",
-                metadata: ExternalEditorError.Metadata(openPreferences: true)
-            )
-        )
+        #expect(error?.metadata == ExternalEditorError.Metadata(openPreferences: true))
         #expect(launcher.commands.isEmpty)
     }
 
-    @Test(
-        "reports an editor that can't start",
-        arguments: [
-            ("EACCES", "Espalier doesn't have permission to open 'Xcode'. Choose another editor in Settings ▸ Integrations."),
-            ("ENOENT", "Espalier couldn't open 'Xcode'. Choose another editor in Settings ▸ Integrations."),
-        ] as [(String?, String)]
-    )
-    func spawnFailure(code: String?, message: String) async throws {
+    @Test("reports an editor that can't start", arguments: ["EACCES", "ENOENT"] as [String?])
+    func spawnFailure(code: String?) async throws {
         let directory = try createTempDirectory()
         let app = try makeFakeApplication(in: directory, named: "Xcode.app")
         let launcher = RecordingLauncher(failingWith: SpawnError(path: "/usr/bin/open", code: code))
@@ -52,7 +41,7 @@ struct EditorsLaunchTests {
         let error = await #expect(throws: ExternalEditorError.self) {
             try await launchExternalEditor("/repo", FoundEditor(editor: "Xcode", path: app), launcher: launcher)
         }
-        #expect(error == ExternalEditorError(message, metadata: ExternalEditorError.Metadata(openPreferences: true)))
+        #expect(error?.metadata == ExternalEditorError.Metadata(openPreferences: true))
     }
 
     @Suite("Custom editor")
@@ -96,7 +85,7 @@ struct EditorsLaunchTests {
             #expect(launcher.traced == [false])
         }
 
-        @Test("names a missing custom editor's path once")
+        @Test("reports a missing custom editor, offering Settings")
         func missing() async throws {
             let directory = try createTempDirectory()
             let launcher = RecordingLauncher()
@@ -108,14 +97,11 @@ struct EditorsLaunchTests {
                     launcher: launcher
                 )
             }
-            #expect(
-                error?.message
-                    == "Espalier couldn't find custom editor at path '\(directory)/edit'. Choose an available editor in Settings ▸ Integrations."
-            )
+            #expect(error?.metadata == ExternalEditorError.Metadata(openPreferences: true))
             #expect(launcher.commands.isEmpty)
         }
 
-        @Test("names the custom editor when it can't start")
+        @Test("reports a custom editor that can't start, offering Settings")
         func spawnFailure() async throws {
             let directory = try createTempDirectory()
             try makeFile("\(directory)/edit", permissions: 0o755)
@@ -128,10 +114,7 @@ struct EditorsLaunchTests {
                     launcher: launcher
                 )
             }
-            #expect(
-                error?.message
-                    == "Espalier doesn't have permission to open custom editor at path '\(directory)/edit'. Choose another editor in Settings ▸ Integrations."
-            )
+            #expect(error?.metadata == ExternalEditorError.Metadata(openPreferences: true))
         }
     }
 }

@@ -366,7 +366,8 @@ public func git(
                 errorMessage.append(String(terminalOutput.suffix(1024)))
             }
             if let gitError {
-                errorMessage.append("(The error was parsed as \(gitError.rawValue): \(gitErrorDescription ?? "null"))")
+                let description = gitErrorDescription.map { ": \($0)" } ?? ""
+                errorMessage.append("(The error was parsed as \(gitError.rawValue)\(description))")
             }
             logger.error("\(errorMessage.joined(separator: "\n"), privacy: .public)")
 

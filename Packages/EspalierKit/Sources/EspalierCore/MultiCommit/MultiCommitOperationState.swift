@@ -48,6 +48,11 @@ public struct MultiCommitOperation: Sendable, Equatable {
     /// its rounds): aborting then asks first.
     public var userHasResolvedConflicts: Bool
     public var originalBranchTip: String?
+    /// The tip of the target branch's upstream when Espalier started the
+    /// operation, which a completed rewrite is recorded with for the force
+    /// push recommendation (`recordRewrite`); nil without an upstream, and
+    /// for an operation rebuilt from `.git`.
+    public var originalUpstreamTip: String?
     public var targetBranch: Branch?
     public let origin: Origin
 
@@ -57,6 +62,7 @@ public struct MultiCommitOperation: Sendable, Equatable {
         phase: MultiCommitOperationPhase,
         userHasResolvedConflicts: Bool = false,
         originalBranchTip: String? = nil,
+        originalUpstreamTip: String? = nil,
         targetBranch: Branch? = nil,
         origin: Origin
     ) {
@@ -65,6 +71,7 @@ public struct MultiCommitOperation: Sendable, Equatable {
         self.phase = phase
         self.userHasResolvedConflicts = userHasResolvedConflicts
         self.originalBranchTip = originalBranchTip
+        self.originalUpstreamTip = originalUpstreamTip
         self.targetBranch = targetBranch
         self.origin = origin
     }

@@ -173,8 +173,6 @@ struct ReviewNotificationActions {
     var open: (URL) -> Void
     var checkOut: () -> Void
     var close: () -> Void
-
-    static let none = ReviewNotificationActions(open: { _ in }, checkOut: {}, close: {})
 }
 
 /// The sheet's content.
@@ -185,14 +183,14 @@ struct ReviewNotificationView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetMedium) {
             HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
-                Image(systemName: "arrow.trianglehead.pull")
+                Image(systemName: PullRequestGlyph.systemImage)
                     .foregroundStyle(.text2)
                     .accessibilityHidden(true)
                 Text(content.pullRequestTitle)
                     .font(Typography.sheetTitle)
                     .foregroundStyle(.text)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("#\(content.pullRequestNumber)")
+                Text(verbatim: "#\(content.pullRequestNumber)")
                     .font(Typography.sheetTitle.monospaced())
                     .foregroundStyle(.text3)
             }

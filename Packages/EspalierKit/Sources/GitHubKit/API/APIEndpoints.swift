@@ -27,12 +27,21 @@ public func getOAuthApplicationSettingsURL(endpoint: String, clientID: String) -
 }
 
 /// Fetch the user authenticated by the token.
-public func fetchUser(endpoint: String, token: String, runtime: GitHubRuntime = .current) async throws -> Account {
+///
+/// - Parameter previousEmails: The emails the account has when its emails
+///   can't be fetched.
+public func fetchUser(
+    endpoint: String,
+    token: String,
+    previousEmails: [APIEmail] = [],
+    runtime: GitHubRuntime = .current
+) async throws -> Account {
     let api = API(endpoint: endpoint, token: token, runtime: runtime)
     do {
         async let user = api.fetchAccount()
         async let emails = api.fetchEmails()
-        let (fetchedUser, fetchedEmails) = try await (user, emails)
+        let fetchedUser = try await user
+        let fetchedEmails = (try? await emails) ?? previousEmails
 
         return Account(
             login: fetchedUser.login,
@@ -71,7 +80,8 @@ public func getEndpointForRepository(_ url: String) -> String {
 /// Get the URL for the HTML site. For example:
 ///
 /// https://api.github.com -> https://github.com
-/// http://github.mycompany.com/api -> http://github.mycompany.com/
+/// http://github.mycompany.com/api -> http://github.mycompany.com
+/// https://github.mycompany.com:8443/api/v3 -> https://github.mycompany.com:8443
 public func getHTMLURL(_ endpoint: String) -> String {
     // In the case of GitHub.com, the HTML site lives on the parent domain.
     //  E.g., https://api.github.com -> https://github.com
@@ -97,7 +107,7 @@ public func getHTMLURL(_ endpoint: String) -> String {
         }
 
         let parsed = ParsedURL(endpoint)
-        return "\(parsed.protocol ?? "")//\(parsed.hostname ?? "")"
+        return "\(parsed.protocol ?? "")//\(parsed.host ?? "")"
     }
 }
 

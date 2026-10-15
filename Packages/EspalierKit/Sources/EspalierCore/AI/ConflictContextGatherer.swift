@@ -52,7 +52,8 @@ enum ConflictContextGatherer {
     /// a cherry-pick's target and source; a squash's or reorder's branch and
     /// the commit being moved; a revert's branch and the reverted commit.
     /// A side that isn't known gets a generic name ("incoming branch",
-    /// "current branch", "cherry-picked commit").
+    /// "cherry-picked commit"), except a rebase's base, which is named by
+    /// the short SHA of the commit it's being rebased onto.
     static func labels(
         _ conflictState: ConflictState,
         operation: MultiCommitOperation?,
@@ -67,7 +68,7 @@ enum ConflictContextGatherer {
                 ourRef: currentBranch,
                 theirRef: theirBranch
             )
-        case .rebase(_, let targetBranch, _, _, _, _):
+        case .rebase(_, let targetBranch, _, _, let baseBranchTip, _):
             switch operation?.detail {
             case .squash?, .reorder?:
                 // The commits being moved aren't a branch: no commit context.
@@ -80,7 +81,7 @@ enum ConflictContextGatherer {
             default:
                 let baseBranch = branches?.ours
                 return Labels(
-                    ourLabel: baseBranch ?? "current branch",
+                    ourLabel: baseBranch ?? shortenSHA(baseBranchTip),
                     theirLabel: targetBranch,
                     ourRef: baseBranch,
                     theirRef: targetBranch
@@ -150,12 +151,11 @@ enum ConflictContextGatherer {
     }
 
     /// Reads a conflicted file: too large (by `stat`, following symbolic
-    /// links), unreadable, or its text. Unlike with AIKit's
-    /// `readConflictedFile`, a file with conflict markers whose bytes aren't
-    /// valid UTF-8 is unreadable: its resolution would be written back as
-    /// UTF-8, replacing them throughout the file. Without markers (a binary
-    /// file) it's read with those bytes replaced, and skipped for having no
-    /// conflict markers.
+    /// links), unreadable, or its text. A file with conflict markers whose
+    /// bytes aren't valid UTF-8 is unreadable: its resolution would be
+    /// written back as UTF-8, replacing them throughout the file. Without
+    /// markers (a binary file) it's read with those bytes replaced, and
+    /// skipped for having no conflict markers.
     static func readConflictedFileContents(atPath absolutePath: String) -> ConflictedFileContents {
         var info = stat()
         guard stat(absolutePath, &info) == 0 else {

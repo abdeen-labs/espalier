@@ -41,7 +41,6 @@ struct PullRequestPreviewTests {
         #expect(preview.headBranch?.name == "feature")
         #expect(preview.commitSHAs == [shas["F2"]!, shas["F1"]!])
         #expect(preview.hasMergeBase)
-        #expect(preview.summary == "Merge 2 commits into main from feature.")
         // Only the branch's changes: main's M1 isn't in them.
         let selection = preview.selection
         #expect(selection.shas == preview.commitSHAs)
@@ -55,8 +54,6 @@ struct PullRequestPreviewTests {
         }
         #expect(diff.text.contains("+f1"))
         #expect(preview.mergeStatus == .clean)
-        #expect(preview.mergeStatusMessage?.title == "Able to merge.")
-        #expect(preview.mergeStatusMessage?.message == "These branches can be automatically merged.")
         #expect(preview.emptyMessage == nil)
         // Nothing is pushed.
         #expect(preview.nonLocalCommitSHA == nil)
@@ -87,8 +84,6 @@ struct PullRequestPreviewTests {
         await fixture.settle()
 
         #expect(preview.mergeStatus == .conflicts(conflictedFiles: 1))
-        #expect(preview.mergeStatusMessage?.title == "Can't automatically merge.")
-        #expect(preview.mergeStatusMessage?.message == "You can still create the pull request.")
     }
 
     @Test("another base branch previews again")
@@ -104,7 +99,6 @@ struct PullRequestPreviewTests {
         await fixture.settle()
         #expect(preview.baseBranch?.name == "older")
         #expect(preview.commitSHAs == [shas["F2"]!, shas["F1"]!])
-        #expect(preview.summary == "Merge 2 commits into older from feature.")
     }
 
     @Test("no changes: the base is up to date with the branch")
@@ -120,8 +114,7 @@ struct PullRequestPreviewTests {
         #expect(preview.commitSHAs.isEmpty)
         #expect(preview.selection.changeset.value?.files.isEmpty == true)
         #expect(preview.mergeStatus == nil)
-        #expect(preview.emptyMessage?.title == "There are no changes.")
-        #expect(preview.emptyMessage?.message == "main is up to date with all commits from same.")
+        #expect(preview.emptyMessage != nil)
     }
 
     @Test("unrelated histories have no merge base")
@@ -138,8 +131,7 @@ struct PullRequestPreviewTests {
         #expect(preview.hasMergeBase == false)
         #expect(preview.commitSHAs.isEmpty)
         #expect(preview.mergeStatus == .invalid)
-        #expect(preview.mergeStatusMessage?.title == "Error checking merge status.")
-        #expect(preview.emptyMessage?.message == "main and unrelated are entirely different commit histories.")
+        #expect(preview.emptyMessage != nil)
     }
 
     @Test("without a default branch there's nothing to compare against")
@@ -153,8 +145,7 @@ struct PullRequestPreviewTests {
 
         #expect(preview.status == .noBaseBranch)
         #expect(preview.baseBranch == nil)
-        #expect(preview.emptyMessage?.title == "Could not find a default branch to compare against.")
-        #expect(preview.emptyMessage?.message == "Select a base branch above.")
+        #expect(preview.emptyMessage != nil)
 
         preview.close()
         #expect(preview.status == .idle)

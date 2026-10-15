@@ -25,18 +25,22 @@ public struct AccountsIssue: Sendable, Equatable, Identifiable {
 /// Mirrors GitHubKit's `AccountsStore`: it loads the accounts at launch,
 /// refreshes their details from GitHub at launch and then at most once a
 /// day when Espalier becomes active, and follows the store's events, so an
-/// account GitHub rejects (a 401 from GitHub itself) or whose token expired
-/// is signed out and listed in `invalidatedAccounts` for the user to sign in
-/// again.
+/// account GitHub rejects (a 401 from GitHub itself), or whose token expired
+/// or is missing from the keychain, is signed out and listed in
+/// `invalidatedAccounts` for the user to sign in again.
 @MainActor @Observable
 public final class AccountsModel {
     /// The accounts, GitHub.com first, then the others in the order they
     /// were added; one per endpoint.
     public private(set) var accounts: [Account] = []
-    /// Accounts signed out because GitHub rejected their tokens or the
-    /// tokens expired, without tokens, until the user signs in to their
-    /// servers again or dismisses them.
+    /// Accounts signed out because GitHub rejected their tokens, or the
+    /// tokens expired or are missing, without tokens, until the user signs
+    /// in to their servers again or dismisses them.
     public internal(set) var invalidatedAccounts: [Account] = []
+    /// Accounts whose tokens the keychain refused to read (it's locked, or
+    /// access was denied), without tokens. They stay saved but aren't used
+    /// until `retryUnreadableAccounts()` reads their tokens.
+    public private(set) var unreadableAccounts: [Account] = []
     /// Problems with the stored accounts, to tell the user about.
     public private(set) var issues: [AccountsIssue] = []
     /// When the accounts' details were last refreshed from GitHub.
@@ -118,6 +122,15 @@ public final class AccountsModel {
         }
     }
 
+    /// Reads the tokens of `unreadableAccounts` from the keychain again; an
+    /// account whose token reads is signed in again.
+    public func retryUnreadableAccounts() async {
+        await track {
+            await self.store.retryUnreadableAccounts()
+            await self.reloadAccounts()
+        }
+    }
+
     /// Forgets a signed-out account the user doesn't want to sign in to
     /// again.
     public func dismissInvalidatedAccount(_ account: Account) {
@@ -133,10 +146,13 @@ public final class AccountsModel {
 
     /// Takes the accounts the store loaded at launch, and from then on
     /// follows the store and the app's activation.
-    func load(_ accounts: [Account]) {
+    func load(_ accounts: [Account], unreadable: [Account]) {
         if accounts != self.accounts {
             self.accounts = accounts
             apiRepositories.accountsDidChange(accounts)
+        }
+        if unreadable != unreadableAccounts {
+            unreadableAccounts = unreadable
         }
         followStore()
         observeActivation()
@@ -177,7 +193,10 @@ public final class AccountsModel {
     /// main actor in the order the store's actor ran it, so the list applied
     /// last is the one read last.
     func reloadAccounts() async {
-        let loaded = await store.getAll()
+        let (loaded, unreadable) = await store.getAllWithUnreadable()
+        if unreadable != unreadableAccounts {
+            unreadableAccounts = unreadable
+        }
         guard loaded != accounts else {
             return
         }
@@ -241,7 +260,7 @@ public final class AccountsModel {
     }
 
     /// Follows the store's events: updates, errors, and accounts signed out
-    /// because their tokens were rejected or expired.
+    /// because their tokens were rejected, expired, or are missing.
     ///
     /// The store's event stream has one reader for the life of the app;
     /// when the model goes away the stream ends.
@@ -275,6 +294,10 @@ public final class AccountsModel {
             await reloadAccounts()
         case .tokenExpired(let account):
             logger.info("The token of \(account.login, privacy: .public) on \(account.endpoint, privacy: .public) expired; signed out")
+            markInvalidated(account)
+            await reloadAccounts()
+        case .tokenMissing(let account):
+            logger.info("The token of \(account.login, privacy: .public) on \(account.endpoint, privacy: .public) is missing; signed out")
             markInvalidated(account)
             await reloadAccounts()
         }

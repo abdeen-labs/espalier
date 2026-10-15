@@ -23,19 +23,19 @@ nonisolated struct RangeSummaryContent: Sendable, Equatable {
     /// The selected commits it leaves out.
     var unreachable: [CommitLine]
 
-    /// "Showing changes from 3 commits".
-    var title: String {
+    /// "Showing changes from 3 commits", the count in `numberFormat`.
+    func title(_ numberFormat: NumberFormat) -> String {
         let count = reachable.count
-        return "Showing changes from \(formatCount(count)) \(count == 1 ? "commit" : "commits")"
+        return "Showing changes from \(formatCount(count, numberFormat)) \(count == 1 ? "commit" : "commits")"
     }
 
-    /// "2 unreachable commits", the link.
-    var unreachableTitle: String? {
+    /// "2 unreachable commits", the link, the count in `numberFormat`.
+    func unreachableTitle(_ numberFormat: NumberFormat) -> String? {
         let count = unreachable.count
         guard count > 0 else {
             return nil
         }
-        return "\(formatCount(count)) unreachable \(count == 1 ? "commit" : "commits")"
+        return "\(formatCount(count, numberFormat)) unreachable \(count == 1 ? "commit" : "commits")"
     }
 }
 
@@ -62,25 +62,26 @@ extension RangeSummaryContent {
 struct RangeSummary: View {
     let content: RangeSummaryContent
     @State private var showsReachability: ReachabilityTab?
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.CommitDetail.titleSpacing) {
-            Text(content.title)
+            Text(content.title(numberFormat))
                 .font(Typography.commitSummary)
                 .foregroundStyle(.text)
-            if let link = content.unreachableTitle {
+            if let link = content.unreachableTitle(numberFormat) {
                 HStack(spacing: Metrics.grid) {
                     Image(systemName: "info.circle")
                         .foregroundStyle(.text3)
                     Button(link) {
                         showsReachability = .unreachable
                     }
-                    .buttonStyle(.link)
+                    .buttonStyle(.textLink)
                     Text("not included.")
                         .foregroundStyle(.text3)
                 }
                 .font(Typography.secondary)
-                .popover(item: $showsReachability, arrowEdge: .bottom) { tab in
+                .popoverCard(item: $showsReachability, title: "Commit Reachability") { tab in
                     UnreachableCommitsPopover(content: content, initialTab: tab)
                 }
             }

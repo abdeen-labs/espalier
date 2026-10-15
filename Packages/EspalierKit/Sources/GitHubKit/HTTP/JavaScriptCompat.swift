@@ -38,7 +38,12 @@ struct ParsedURL {
     /// The host name, lowercased, without a port.
     let hostname: String?
 
-    /// The host name and port, if any (`ghe.io:9000`).
+    /// The port, unless it's the scheme's default (443 for HTTPS, 80 for
+    /// HTTP), as WHATWG `new URL().port` reports it.
+    let port: Int?
+
+    /// The host name and port, if any (`ghe.io:9000`); without the scheme's
+    /// default port, as WHATWG `new URL().host` reports it.
     let host: String?
 
     /// The percent-encoded path.
@@ -54,10 +59,15 @@ struct ParsedURL {
 
     init(_ string: String) {
         let components = URLComponents(string: string.trimmingCharacters(in: .whitespacesAndNewlines))
-        `protocol` = components?.scheme.map { "\($0.lowercased()):" }
+        let scheme = components?.scheme?.lowercased()
+        `protocol` = scheme.map { "\($0):" }
         let hostname = components?.host.flatMap { $0.isEmpty ? nil : $0.lowercased() }
         self.hostname = hostname
-        if let hostname, let port = components?.port {
+        let port = components?.port.flatMap { port in
+            scheme == "https" && port == 443 || scheme == "http" && port == 80 ? nil : port
+        }
+        self.port = port
+        if let hostname, let port {
             host = "\(hostname):\(port)"
         } else {
             host = hostname

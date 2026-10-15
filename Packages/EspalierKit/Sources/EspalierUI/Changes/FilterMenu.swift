@@ -16,6 +16,8 @@ nonisolated public struct FilterMenuContent: Sendable, Equatable {
     public var newCount: Int
     public var modifiedCount: Int
     public var deletedCount: Int
+    /// The format the counts show in.
+    public var numberFormat: NumberFormat
 
     public init(
         filter: FileListFilter = FileListFilter(),
@@ -23,7 +25,8 @@ nonisolated public struct FilterMenuContent: Sendable, Equatable {
         excludedCount: Int = 0,
         newCount: Int = 0,
         modifiedCount: Int = 0,
-        deletedCount: Int = 0
+        deletedCount: Int = 0,
+        numberFormat: NumberFormat = defaultNumberFormat
     ) {
         self.filter = filter
         self.includedCount = includedCount
@@ -31,17 +34,18 @@ nonisolated public struct FilterMenuContent: Sendable, Equatable {
         self.newCount = newCount
         self.modifiedCount = modifiedCount
         self.deletedCount = deletedCount
+        self.numberFormat = numberFormat
     }
 
-    /// The counts over `visibleFiles`, the files the list shows.
-    public init(filter: FileListFilter, visibleFiles: [WorkingDirectoryFileChange]) {
-        self.init(filter: filter)
+    /// The counts over `visibleFiles`, the files the list shows, in
+    /// `numberFormat`.
+    public init(filter: FileListFilter, visibleFiles: [WorkingDirectoryFileChange], numberFormat: NumberFormat) {
+        self.init(filter: filter, numberFormat: numberFormat)
         for file in visibleFiles {
-            if file.isIncludedInCommit() {
-                includedCount += 1
-            }
             if file.isExcludedFromCommit() {
                 excludedCount += 1
+            } else {
+                includedCount += 1
             }
             switch file.status.kind {
             case .new, .untracked: newCount += 1
@@ -59,23 +63,23 @@ nonisolated public struct FilterMenuContent: Sendable, Equatable {
 
     /// The button's tooltip.
     public var help: String {
-        activeOptionCount > 0 ? "Filter Options (\(activeOptionCount) Applied)" : "Filter Options"
+        activeOptionCount > 0 ? "Filter Options (\(formatCount(activeOptionCount, numberFormat)) Applied)" : "Filter Options"
     }
 
-    /// The button's symbol: plain, and filled in a circle while options
-    /// are on.
+    /// The button's symbol: in a circle, filled while options are on (one
+    /// size either way).
     public var systemImage: String {
-        activeOptionCount > 0 ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease"
+        activeOptionCount > 0 ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle"
     }
 
     /// The menu's options, in order, with their titles.
     public var options: [FilterOption] {
         [
-            FilterOption(title: "Included in Commit (\(includedCount))", keyPath: \.includedInCommit),
-            FilterOption(title: "Excluded from Commit (\(excludedCount))", keyPath: \.excludedFromCommit),
-            FilterOption(title: "New Files (\(newCount))", keyPath: \.newFiles),
-            FilterOption(title: "Modified Files (\(modifiedCount))", keyPath: \.modifiedFiles),
-            FilterOption(title: "Deleted Files (\(deletedCount))", keyPath: \.deletedFiles),
+            FilterOption(title: "Included in Commit (\(formatCount(includedCount, numberFormat)))", keyPath: \.includedInCommit),
+            FilterOption(title: "Excluded from Commit (\(formatCount(excludedCount, numberFormat)))", keyPath: \.excludedFromCommit),
+            FilterOption(title: "New Files (\(formatCount(newCount, numberFormat)))", keyPath: \.newFiles),
+            FilterOption(title: "Modified Files (\(formatCount(modifiedCount, numberFormat)))", keyPath: \.modifiedFiles),
+            FilterOption(title: "Deleted Files (\(formatCount(deletedCount, numberFormat)))", keyPath: \.deletedFiles),
         ]
     }
 }
@@ -106,35 +110,30 @@ public struct FilterMenu: View {
     }
 
     public var body: some View {
-        Menu {
-            ForEach(content.options) { option in
-                Toggle(option.title, isOn: Binding(
-                    get: { content.filter[keyPath: option.keyPath] },
-                    set: { isOn in
-                        var filter = content.filter
-                        filter[keyPath: option.keyPath] = isOn
-                        onChange(filter)
-                    }
-                ))
+        PullDownButton(content.help) { [content, onChange, onClear] in
+            for option in content.options {
+                let isOn = content.filter[keyPath: option.keyPath]
+                MenuToggle(option.title, isOn: isOn) {
+                    var filter = content.filter
+                    filter[keyPath: option.keyPath] = !isOn
+                    onChange(filter)
+                }
             }
             if content.filter.hasActiveFilters {
-                Divider()
-                Button("Clear Filters", action: onClear)
+                MenuDivider()
+                MenuAction("Clear Filters", action: onClear)
             }
         } label: {
+            // While options are on, the symbol fills in the accent.
             Label {
                 Text("Filter Options")
             } icon: {
                 Image(systemName: content.systemImage)
-                    .font(.system(size: content.activeOptionCount > 0 ? 15 : 13))
-                    .foregroundStyle(content.activeOptionCount > 0 ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.text3))
+                    .foregroundStyle(content.activeOptionCount > 0 ? AnyShapeStyle(Color.accent) : AnyShapeStyle(.text2))
             }
         }
-        .menuStyle(.button)
         .buttonStyle(.icon)
-        .menuIndicator(.hidden)
         .fixedSize()
-        .help(content.help)
-        .accessibilityLabel(content.help)
+        .tooltip(content.help)
     }
 }

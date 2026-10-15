@@ -79,10 +79,23 @@ nonisolated public struct LocationControlState: Sendable, Equatable {
         case .hidden: nil
         case .branch(let name): name
         case .unborn(let ref): ref
-        case .detached(let sha): "On \(JSCompat.prefix(sha, 7))"
+        case .detached(let sha): "On \(Self.shortSHA(sha))"
         case .checkingOut(let target, _, _): target
         case .rebasing(let target): "Rebasing \(target)"
         }
+    }
+
+    /// A detached HEAD's short SHA in the branch segment's title
+    /// ("a1b2c3d"); nil on a branch.
+    var detachedShortSHA: String? {
+        guard case .detached(let sha) = branch else {
+            return nil
+        }
+        return Self.shortSHA(sha)
+    }
+
+    private static func shortSHA(_ sha: String) -> String {
+        JSCompat.prefix(sha, 7)
     }
 
     /// The branch segment's tooltip, or why it's disabled.
@@ -171,7 +184,7 @@ nonisolated public struct LocationControlState: Sendable, Equatable {
     }
 }
 
-/// The location control's look, value-driven (snapshots render each state):
+/// The location control's look, value-driven (`LocationControlState`):
 /// one quiet capsule with the repository (a folder and its name), a
 /// chevron, and the branch (its symbol in the current branch's accent, its
 /// name, and a down chevron). Each part opens its popover.
@@ -199,34 +212,34 @@ public struct LocationControlView: View {
     public var body: some View {
         HStack(spacing: 0) {
             LocationSegment(action: onRepository) {
-                HStack(spacing: 7) {
+                HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
                     Image(systemName: "folder")
-                        .font(.system(size: 13))
+                        .font(Typography.row)
                         .foregroundStyle(.text2)
                     Text(state.repositoryTitle)
                         .lineLimit(1)
                 }
             }
-            .help(state.repositoryTooltip ?? state.repositoryTitle)
+            .tooltip(state.repositoryTooltip ?? state.repositoryTitle)
             .accessibilityLabel("Repository: \(state.repositoryTitle)")
 
             if let branchTitle = state.branchTitle {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: Metrics.CapsuleMenu.chevronSize, weight: .semibold))
                     .foregroundStyle(.text3)
                     .padding(.horizontal, -1)
                     .accessibilityHidden(true)
                 LocationSegment(action: onBranch) {
-                    HStack(spacing: 7) {
+                    HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
                         if case .checkingOut(_, _, let progress) = state.branch {
                             // It turns until git reports how far it has got.
                             ArcProgress(.mini, value: progress > 0 ? progress : nil)
                         } else {
                             Image(systemName: state.branchSystemImage)
-                                .font(.system(size: 13))
+                                .font(Typography.row)
                                 .foregroundStyle(branchSymbolColor)
                         }
-                        Text(branchTitle)
+                        branchText(branchTitle)
                             .lineLimit(1)
                             .opacity(branchOpacity)
                             .onAppear {
@@ -238,21 +251,30 @@ public struct LocationControlView: View {
                             }
                         if state.isBranchEnabled {
                             Image(systemName: "chevron.down")
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(.system(size: Metrics.CapsuleMenu.chevronSize, weight: .semibold))
                                 .foregroundStyle(.text3)
                         }
                     }
                 }
                 .disabled(!state.isBranchEnabled)
-                .help(state.branchTooltip ?? branchTitle)
+                .tooltip(state.branchTooltip ?? branchTitle)
                 .accessibilityLabel("Branch: \(branchTitle)")
             }
         }
         .font(Typography.button)
         .foregroundStyle(.text)
-        .padding(.horizontal, 4)
+        .padding(.horizontal, Metrics.grid)
         .frame(height: Metrics.ControlHeight.toolbar)
-        .surface(.quiet, elevation: .quiet)
+        .quietControlSurface()
+    }
+
+    /// The branch segment's title as one text: a detached HEAD's SHA in the
+    /// code font, in the control's weight ("On a1b2c3d").
+    private func branchText(_ title: String) -> Text {
+        guard let sha = state.detachedShortSHA else {
+            return Text(title)
+        }
+        return Text("On \(Text(sha).font(Typography.sha(weight: Theme.current.buttonWeights.quiet)))")
     }
 
     /// The current branch's accent; a detached HEAD is neutral.
@@ -283,9 +305,9 @@ private struct LocationSegment<Label: View>: View {
                         .padding(.vertical, 3)
                 }
                 .contentShape(Capsule(style: .circular))
-                .opacity(isEnabled ? 1 : 0.6)
         }
-        .buttonStyle(.plain)
+        // Fades the label while disabled.
+        .buttonStyle(.bare(.capsule))
         .onHover { isHovered = $0 }
     }
 }
@@ -318,7 +340,7 @@ struct LocationControl: View {
         .onChange(of: control.measuredTitles, initial: true) {
             shownTitles = ShownTitles(repository: control.repositoryTitle, branch: control.branchTitle)
         }
-        .popover(isPresented: $state.isRepositoryPopoverPresented, arrowEdge: .bottom) {
+        .popoverCard(isPresented: $state.isRepositoryPopoverPresented, title: "Repositories") {
             RepositoryPopover()
                 .windowEnvironment(context)
         }
@@ -326,21 +348,21 @@ struct LocationControl: View {
             // The branch popover anchors on the control.
             Color.clear
                 .allowsHitTesting(false)
-                .popover(isPresented: $state.isBranchPopoverPresented, arrowEdge: .bottom) {
+                .popoverCard(isPresented: $state.isBranchPopoverPresented, title: "Branches") {
                     if let repository = context.repository {
                         BranchPopover(repository: repository)
                             .windowEnvironment(context)
                     }
                 }
         }
-        .contextMenu {
-            if case .branch(let name) = control.branch {
-                Button(ActionKind.renameBranch.title) { context.actions.perform(.renameBranch(name: name)) }
-                Button(ActionKind.copyBranchName.title) { context.actions.perform(.copyBranchName(name: name)) }
-                Button(ActionKind.viewBranchOnGitHub.title) { context.actions.perform(.viewBranchOnGitHub(name: name)) }
-                Button(ActionKind.viewPullRequestOnGitHub.title) { context.actions.perform(.viewPullRequestOnGitHub(number: nil)) }
-                Divider()
-                Button(ActionKind.deleteBranch.title) { context.actions.perform(.deleteBranch(name: name)) }
+        .contextMenuCard { [context] in
+            if case .branch(let name) = LocationControlState.make(context.app).branch {
+                MenuAction(ActionKind.renameBranch.title) { context.actions.perform(.renameBranch(name: name)) }
+                MenuAction(ActionKind.copyBranchName.title) { context.actions.perform(.copyBranchName(name: name)) }
+                MenuAction(ActionKind.viewBranchOnGitHub.title) { context.actions.perform(.viewBranchOnGitHub(name: name)) }
+                MenuAction(ActionKind.viewPullRequestOnGitHub.title) { context.actions.perform(.viewPullRequestOnGitHub(number: nil)) }
+                MenuDivider()
+                MenuAction(ActionKind.deleteBranch.title) { context.actions.perform(.deleteBranch(name: name)) }
             }
         }
     }
@@ -355,17 +377,18 @@ struct LocationControl: View {
     }
 }
 
-/// The location control's toolbar item: its content's width rounded up to a
-/// whole point, the content at its leading edge. The toolbar rounds the
-/// width it measures, and a title even a fraction of a point short of its
-/// width truncates, often to its first letter ("ma…" is wider than "main",
-/// so "main" shows "m…"); a whole-point width has nothing to round away.
-private struct WholePointWidth: Layout {
+/// The location control's toolbar item: its content at its ideal width,
+/// whatever width the toolbar proposes, and that width rounded up to a
+/// whole point, the content at its leading edge. A title given a width,
+/// even one a little wider than it needs, can truncate ("ui-audit" given
+/// 215 points of the 214.5 it needs showed "ui-…"), and the toolbar rounds
+/// the width it measures, which would cut a fraction of a point off.
+struct WholePointWidth: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         guard let content = subviews.first else {
             return .zero
         }
-        let size = content.sizeThatFits(proposal)
+        let size = content.sizeThatFits(ProposedViewSize(width: nil, height: proposal.height))
         return CGSize(width: size.width.rounded(.up), height: size.height)
     }
 
@@ -373,7 +396,7 @@ private struct WholePointWidth: Layout {
         subviews.first?.place(
             at: CGPoint(x: bounds.minX, y: bounds.midY),
             anchor: .leading,
-            proposal: ProposedViewSize(bounds.size)
+            proposal: ProposedViewSize(width: nil, height: bounds.height)
         )
     }
 }

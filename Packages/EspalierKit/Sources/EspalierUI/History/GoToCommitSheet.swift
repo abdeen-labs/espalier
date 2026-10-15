@@ -39,7 +39,7 @@ struct GoToCommitForm: View {
     var body: some View {
         SheetScaffold("Go to Commit", width: Metrics.Sheet.compactWidth) {
             VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                TextField("SHA", text: $text, prompt: Text("Commit SHA"))
+                TextField("SHA", text: $text, prompt: Text("Commit SHA").fieldPrompt())
                     .textFieldStyle(.capsule(font: AppKitTypography.shaField))
                     .focused($isFocused)
                     .onSubmit {
@@ -120,9 +120,10 @@ struct GoToCommitSheet: View {
     }
 }
 
-/// Branch ▸ Compare to Branch…: picks the branch Compare shows, from every
-/// branch but the current one and fork remotes', each with how far the
-/// current branch is behind and ahead of it.
+/// Branch ▸ Compare to Branch…: picks the branch whose place shows its
+/// comparison (Behind), from every branch but the current one and fork
+/// remotes', each with how far the current branch is behind and ahead of
+/// it.
 struct CompareToBranchSheet: View {
     static let sheetID = "history.compareToBranch"
 
@@ -147,7 +148,7 @@ struct CompareToBranchSheet: View {
                 cancel: { dismiss() },
                 confirm: {
                     if let branch {
-                        context.select(.branch(ref: branch.ref))
+                        HistoryPlaces.showComparison(of: branch, in: context)
                     }
                     dismiss()
                 }

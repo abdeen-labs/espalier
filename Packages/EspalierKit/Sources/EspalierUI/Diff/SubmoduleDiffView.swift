@@ -54,7 +54,7 @@ struct SubmoduleDiffView: View {
                 .padding(.bottom, Metrics.grid)
                 if let info = repositoryInfo {
                     item(systemImage: "info.circle") {
-                        info
+                        LinkedText(info)
                     }
                 }
                 commitChangeInfo
@@ -88,7 +88,7 @@ struct SubmoduleDiffView: View {
     }
 
     /// "This is a submodule based on the repository owner/name (host)."
-    private var repositoryInfo: Text? {
+    private var repositoryInfo: AttributedString? {
         guard let url = content.diff.url, let identifier = parseRepositoryIdentifier(url) else {
             return nil
         }
@@ -98,7 +98,7 @@ struct SubmoduleDiffView: View {
         let name = "\(identifier.owner)/\(identifier.name)\(hostname)"
         var link = AttributedString(name)
         link.link = URL(string: "https://\(host)/\(identifier.owner)/\(identifier.name)")
-        return Text("This is a submodule based on the repository \(Text(link)).")
+        return AttributedString("This is a submodule based on the repository ") + link + AttributedString(".")
     }
 
     @ViewBuilder
@@ -161,7 +161,7 @@ struct SubmoduleDiffView: View {
             Button("Open Repository", action: open)
                 .buttonStyle(.prominent)
         }
-        .padding(Metrics.insetMedium + 2)
+        .padding(Metrics.insetMedium)
         .cardSurface()
         .padding(.top, Metrics.insetSmall)
     }
@@ -187,8 +187,8 @@ private struct CopySHAButton: View {
                 .foregroundStyle(.text3)
             }
         }
-        .buttonStyle(.plain)
-        .help("Copy the full SHA")
+        .buttonStyle(.bare(.capsule))
+        .tooltip("Copy the full SHA")
         .accessibilityLabel(which.map { "Copy the full \($0) SHA" } ?? "Copy the full SHA")
     }
 }

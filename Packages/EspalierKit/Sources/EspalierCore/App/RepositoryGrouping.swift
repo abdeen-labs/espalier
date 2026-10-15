@@ -21,9 +21,8 @@ public enum RepositoryListGroup: Hashable, Sendable {
 }
 
 /// Returns a unique grouping key (string) for a repository group. Doubles as
-/// a case sensitive sorting key (i.e the case sensitive sort order of the
-/// keys is the order in which the groups will be displayed in the repository
-/// list).
+/// a sorting key: the keys' order, ignoring case (`compareIgnoringCase`), is
+/// the order in which the groups will be displayed in the repository list.
 public func getGroupKey(_ group: RepositoryListGroup) -> String {
     switch group {
     case .recent: "0:recent"
@@ -31,6 +30,13 @@ public func getGroupKey(_ group: RepositoryListGroup) -> String {
     case .enterprise(let host): "2:enterprise:\(host)"
     case .other: "3:other"
     }
+}
+
+/// Orders two strings ignoring case, then, between strings that differ only
+/// in case, by code units.
+private func compareIgnoringCase(_ x: String, _ y: String) -> Int {
+    let ignoringCase = JSCompat.caseInsensitiveCompare(x, y)
+    return ignoringCase != 0 ? ignoringCase : JSCompat.compare(x, y)
 }
 
 /// A repository in the list, or a clone in progress.
@@ -147,7 +153,7 @@ public func groupRepositories(
     }
 
     return keys
-        .sorted { JSCompat.compare($0, $1) < 0 }
+        .sorted { compareIgnoringCase($0, $1) < 0 }
         .compactMap { key in
             groups[key].map { group in
                 RepositoryListGroupItems(
@@ -273,30 +279,6 @@ private func compareCodeUnits(_ x: [UInt16], _ y: [UInt16]) -> Int {
     return x.count == y.count ? 0 : (x.count < y.count ? -1 : 1)
 }
 
-/// The repository list as one list, for the sidebar: every repository, then
-/// the clones in progress, sorted by title as a group's items are. A title
-/// that repeats anywhere in the list needs disambiguating (the sidebar
-/// shows the owner, or the folder).
-public func flatRepositoryList(
-    _ repositories: [RepositoryListEntry],
-    _ localRepositoryStateLookup: [RepositoryID: RepositoryIndicator]
-) -> [RepositoryListItem] {
-    let titles = repositories.map(\.displayTitle)
-    var titleCounts: [ExactString: Int] = [:]
-    for title in titles {
-        titleCounts[ExactString(title), default: 0] += 1
-    }
-    let items = zip(repositories, titles).map { repository, title in
-        listItem(
-            repository,
-            title: title,
-            localRepositoryStateLookup,
-            needsDisambiguation: (titleCounts[ExactString(title)] ?? 0) > 1
-        )
-    }
-    return sortedByTitle(items)
-}
-
 /// Sorts as JavaScript's `Array.prototype.sort` does with `compare`:
 /// stably, keeping the order of items that compare equal.
 func stableSorted<Element>(_ elements: [Element], by compare: (Element, Element) -> Int) -> [Element] {
@@ -309,23 +291,14 @@ func stableSorted<Element>(_ elements: [Element], by compare: (Element, Element)
 }
 
 extension AppModel {
-    /// The repository list as the sidebar and the repository popover group
-    /// it: the repositories, then the clones in progress, with their badges
-    /// and the recent group (`groupRepositories`).
+    /// The repository list as the repository popover groups it: the
+    /// repositories, then the clones in progress, with their badges and the
+    /// recent group (`groupRepositories`).
     public var repositoryListGroups: [RepositoryListGroupItems] {
         groupRepositories(
             repositories.map(RepositoryListEntry.repository) + clones.clones.map(RepositoryListEntry.clone),
             indicators,
             recentRepositoryIDs
-        )
-    }
-
-    /// The repository list as the sidebar lists it, in one list
-    /// (`flatRepositoryList`).
-    public var repositoryListItems: [RepositoryListItem] {
-        flatRepositoryList(
-            repositories.map(RepositoryListEntry.repository) + clones.clones.map(RepositoryListEntry.clone),
-            indicators
         )
     }
 
@@ -408,7 +381,7 @@ private func toListItems(_ repositories: [APIRepository]) -> [CloneableRepositor
 
 /// Groups an account's repositories to clone by owner: the account's own
 /// first ("Your Repositories", matching `login` ignoring case), then each
-/// other owner in case-sensitive order; repositories sort by name.
+/// other owner in order ignoring case; repositories sort by name.
 public func groupRepositories(_ repositories: [APIRepository], login: String) -> [CloneableRepositoryGroup] {
     var identifiers: [String] = []
     var groups: [ExactString: [APIRepository]] = [:]
@@ -430,7 +403,7 @@ public func groupRepositories(_ repositories: [APIRepository], login: String) ->
             } else if JSCompat.strictEquals(y.identifier, yourRepositoriesIdentifier) {
                 return false
             } else {
-                return JSCompat.compare(x.identifier, y.identifier) < 0
+                return compareIgnoringCase(x.identifier, y.identifier) < 0
             }
         }
 }

@@ -13,7 +13,7 @@ protocol SelectionScopedService: AnyObject {
 ///
 /// | Service | Runs for | Starts | Stops | Pauses |
 /// |---|---|---|---|---|
-/// | BackgroundFetcher | the selected GitHub repository | after the selection's first status pass, or once the selection is associated | selection change, quit | never |
+/// | BackgroundFetcher | the selected repository | once the selection's pass has loaded its status and remotes | selection change, quit | never |
 /// | BranchPruner | the selected GitHub repository | on selection, or once the selection is associated | selection change, quit | — |
 /// | PullRequestUpdater | the selected GitHub repository with an account | selection while active; activation | inactive, selection change | — |
 /// | RepositoryIndicatorUpdater | every other repository | 2 min after launch if enabled; when the setting turns on | setting off, quit | while inactive |
@@ -42,8 +42,10 @@ final class BackgroundCoordinator {
     private var hasSelectedSinceLaunch = false
     /// Whether the selection was the first since launch.
     private var selectionIsFirstSinceLaunch = false
-    /// Whether the fetcher and pruner were started for the selection.
-    private var selectionServicesStarted = false
+    /// Whether the fetcher was started for the selection.
+    private var fetcherStarted = false
+    /// Whether the pruner was started for the selection.
+    private var prunerStarted = false
     private var fetcherStart: Task<Void, Never>?
     private var isStopped = false
 
@@ -68,27 +70,33 @@ final class BackgroundCoordinator {
         if selected?.id != selectionRepositoryID {
             stopSelectionServices()
             selectionRepositoryID = selected?.id
-            selectionServicesStarted = false
+            fetcherStarted = false
+            prunerStarted = false
             if selected != nil {
                 selectionIsFirstSinceLaunch = !hasSelectedSinceLaunch
                 hasSelectedSinceLaunch = true
             }
         }
 
-        // The fetcher and pruner run for a GitHub repository. One associated
-        // after it was selected (signing in for the first time) gets them
-        // then.
-        if let selected, !selectionServicesStarted, selected.record.gitHubRepository != nil {
-            selectionServicesStarted = true
-            let isFirst = selectionIsFirstSinceLaunch
+        // The pruner runs for a GitHub repository. One associated after it
+        // was selected (signing in for the first time) gets it then.
+        if let selected, !prunerStarted, selected.record.gitHubRepository != nil {
+            prunerStarted = true
             if services.contains(.pruner) {
-                pruner.start(for: selected, isFirstSelectionSinceLaunch: isFirst)
+                pruner.start(for: selected, isFirstSelectionSinceLaunch: selectionIsFirstSinceLaunch)
             }
-            // The fetcher starts after the selection's first status pass, or at
-            // once when that has happened.
+        }
+
+        // The fetcher runs for any repository. It starts once the
+        // selection's pass has loaded the status and the remotes (which
+        // tell a repository without a remote), or at once when that has
+        // happened.
+        if let selected, !fetcherStarted {
+            fetcherStarted = true
+            let isFirst = selectionIsFirstSinceLaunch
             if services.contains(.fetcher) {
                 fetcherStart = Task { [weak self] in
-                    await selected.refreshScheduler.waitForRequestedPass(covering: .status)
+                    await selected.refreshScheduler.waitForRequestedPass(covering: [.status, .remotes])
                     guard let self, !Task.isCancelled, self.selectionRepositoryID == selected.id else {
                         return
                     }

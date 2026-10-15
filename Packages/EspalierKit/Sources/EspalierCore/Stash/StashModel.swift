@@ -275,6 +275,17 @@ public final class StashModel: RepositoryFeature {
         })
     }
 
+    /// Selects no file of the shown entry, and drops the diff (the search
+    /// lists none of its files).
+    public func deselectFile() {
+        guard isShowing, let shownEntry, selectedFile != nil else {
+            return
+        }
+        selectedFile = nil
+        repository?.changes.showStash(fileID: nil)
+        loadDiff(of: nil, in: shownEntry)
+    }
+
     /// Goes back to the working directory, with the files selected before the
     /// stash was shown.
     public func hide() {

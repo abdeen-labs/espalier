@@ -1,6 +1,6 @@
 // A repository with a remote, selected in an app with a window context, for
 // the action tests: they run the actions the menus and sheets run, answer
-// the presenter's confirmations and decisions, and check git.
+// the presenter's confirmations, and check git.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -69,12 +69,6 @@ struct OperationsFixture {
     func confirmation() async -> PendingConfirmation {
         await waitUntil { presenter.confirmation != nil }
         return presenter.confirmation!
-    }
-
-    /// The decision the presenter shows, once it does.
-    func decision() async -> PendingDecision {
-        await waitUntil { presenter.decision != nil }
-        return presenter.decision!
     }
 
     /// Shows History, so its commits load.

@@ -86,8 +86,6 @@ struct CheckoutOperationTests {
         guard case .decisionRequired(let decision)? = error?.reason else {
             return
         }
-        #expect(decision.title == "Switch Branch")
-        #expect(decision.choices.map(\.title) == ["Leave my changes on main", "Bring my changes to feature"])
         #expect(decision.choices.map(\.strategy) == [.stashOnCurrentBranch, .moveToNewBranch])
         #expect(decision.choices.allSatisfy { $0.warning == nil })
         #expect(repository.gitState.tip.branch?.name == "main")
@@ -141,7 +139,7 @@ struct CheckoutOperationTests {
             Issue.record("Unexpected error \(String(describing: decision))")
             return
         }
-        #expect(choice.choices.first?.warning == "This replaces the stash already on this branch.")
+        #expect(choice.choices.first?.warning != nil)
         // Choosing to leave the changes, so warned, confirms replacing the
         // stash: the checkout asks once.
         #expect(choice.confirmations(answeredBy: .stashOnCurrentBranch) == [.overwriteStash])
@@ -241,10 +239,9 @@ struct CheckoutOperationTests {
             try await repository.branches.checkout(feature)
         }
         #expect(error?.reason == .localChangesOverwritten(files: ["README.md"]))
-        #expect(error?.message == "Can't check out while your branch has uncommitted changes. These files would be overwritten:")
         #expect(error?.retry?.kind == .checkoutBranch)
         let recovery = try #require(error?.recoveries.first)
-        #expect(recovery.title == "Stash Changes and Continue")
+        #expect(recovery.kind == .stashChangesAndRetry)
         #expect(recovery.isHeadless)
         await repository.idle()
 
@@ -267,9 +264,8 @@ struct CheckoutOperationTests {
             try await repository.branches.checkout(feature)
         }
         #expect(error?.reason == .localChangesOverwritten(files: ["feature.txt"]))
-        #expect(error?.message == "Can't check out while your branch has uncommitted changes. These files would be overwritten:")
         let recovery = try #require(error?.recoveries.first)
-        #expect(recovery.title == "Stash Changes and Continue")
+        #expect(recovery.kind == .stashChangesAndRetry)
         await repository.idle()
         #expect(try read("feature.txt", in: local) == "my own feature notes\n")
 

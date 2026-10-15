@@ -1,7 +1,6 @@
-// The commit context menus, and the working copy's. The menus are SwiftUI
-// views turned into the table's `NSMenu` (`NSHostingMenu`), and their items
-// run through the window's actions, so they're titled and enabled as the
-// menu bar's are.
+// The commit context menus, and the working copy's, shown as Espalier's
+// card by History's tables. Their items run through the window's actions,
+// so they're titled and enabled as the menu bar's are.
 
 import AppKit
 import EspalierCore
@@ -28,75 +27,73 @@ nonisolated struct CommitMenuContent: Sendable, Equatable {
 }
 
 /// A commit's context menu.
-struct CommitContextMenu: View {
-    let content: CommitMenuContent
-    var amend: () -> Void = {}
-    @Environment(WindowContext.self) private var context
-
-    var body: some View {
+enum CommitContextMenu {
+    @MenuBuilder
+    static func content(_ content: CommitMenuContent, context: WindowContext, amend: @escaping () -> Void = {}) -> MenuContent {
+        let actions = context.actions
         let sha = content.clickedSHA
         if content.isMultiple {
-            ActionButton(.cherryPick(shas: content.shas, target: nil))
-            ActionButton(.squash(shas: content.shas, into: sha))
-            ActionButton(.reorder(shas: content.shas, before: nil))
+            actions.menuAction(.cherryPick(shas: content.shas, target: nil))
+            actions.menuAction(.squash(shas: content.shas, into: sha))
+            actions.menuAction(.reorder(shas: content.shas, before: nil))
         } else {
             if content.canAmend {
-                Button("Amend Commit…", action: amend)
+                MenuAction("Amend Commit…", action: amend)
             }
             if content.canUndo {
-                ActionButton(.undoCommit)
+                actions.menuAction(.undoCommit)
             }
-            ActionButton(.resetToCommit(sha: sha))
-            ActionButton(.checkoutCommit(sha: sha))
-            ActionButton(.reorder(shas: [sha], before: nil))
-            ActionButton(.revertCommit(sha: sha))
-            Divider()
-            ActionButton(.createBranchFromCommit(sha: sha))
-            ActionButton(.createTag(sha: sha))
+            actions.menuAction(.resetToCommit(sha: sha))
+            actions.menuAction(.checkoutCommit(sha: sha))
+            actions.menuAction(.reorder(shas: [sha], before: nil))
+            actions.menuAction(.revertCommit(sha: sha))
+            MenuDivider()
+            actions.menuAction(.createBranchFromCommit(sha: sha))
+            actions.menuAction(.createTag(sha: sha))
             if !content.tags.isEmpty {
-                Divider()
+                MenuDivider()
                 if let tag = content.tags.first, content.tags.count == 1 {
-                    ActionButton(.deleteTag(name: tag), title: "Delete Tag \(tag)…")
+                    actions.menuAction(.deleteTag(name: tag), title: "Delete Tag \(tag)…")
                 } else {
-                    Menu("Delete Tag") {
-                        ForEach(content.tags, id: \.self) { tag in
-                            ActionButton(.deleteTag(name: tag), title: tag)
+                    Submenu("Delete Tag") {
+                        for tag in content.tags {
+                            actions.menuAction(.deleteTag(name: tag), title: tag)
                         }
                     }
                 }
             }
-            ActionButton(.cherryPick(shas: [sha], target: nil))
-            Divider()
-            ActionButton(.copySHA(shas: [sha]))
-            Button(content.tags.count > 1 ? "Copy Tags" : "Copy Tag") {
+            actions.menuAction(.cherryPick(shas: [sha], target: nil))
+            MenuDivider()
+            actions.menuAction(.copySHA(shas: [sha]))
+            MenuAction(content.tags.count > 1 ? "Copy Tags" : "Copy Tag") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(content.tags.joined(separator: " "), forType: .string)
             }
             .disabled(content.tags.isEmpty)
-            ActionButton(.viewCommitOnGitHub(sha: sha))
+            actions.menuAction(.viewCommitOnGitHub(sha: sha))
         }
     }
 }
 
 /// The working copy's context menu.
-struct WorkingCopyContextMenu: View {
-    var body: some View {
-        ActionButton(.reviewChanges)
-        Divider()
-        ActionButton(.stashAllChanges)
-        ActionButton(.discardAllChanges)
+enum WorkingCopyContextMenu {
+    @MenuBuilder
+    static func content(context: WindowContext) -> MenuContent {
+        context.actions.menuAction(.reviewChanges)
+        MenuDivider()
+        context.actions.menuAction(.stashAllChanges)
+        context.actions.menuAction(.discardAllChanges)
     }
 }
 
 /// Building the graph's context menus.
 @MainActor
 enum CommitContextMenus {
-    /// The menu for `rows` (the selection, or the row clicked), as an
-    /// `NSMenu` for the table.
-    static func menu(rows: [Int], clickedRow: Int, repository: RepositoryModel, context: WindowContext) -> NSMenu? {
+    /// The menu for `rows` (the selection, or the row clicked).
+    static func menu(rows: [Int], clickedRow: Int, repository: RepositoryModel, context: WindowContext) -> MenuContent {
         let history = repository.history
         guard let clicked = history.commit(atRow: clickedRow) else {
-            return NSHostingMenu(rootView: WorkingCopyContextMenu().windowEnvironment(context))
+            return WorkingCopyContextMenu.content(context: context)
         }
         return menu(content: menuContent(rows: rows, clicked: clicked, repository: repository), repository: repository, context: context)
     }
@@ -104,16 +101,16 @@ enum CommitContextMenus {
     /// The menu for `shas` (the selection, or the commit clicked, top to
     /// bottom), clicked on `clicked`: the simple list's, whose rows include
     /// a merge's commits.
-    static func menu(shas: [String], clicked: Commit, repository: RepositoryModel, context: WindowContext) -> NSMenu {
+    static func menu(shas: [String], clicked: Commit, repository: RepositoryModel, context: WindowContext) -> MenuContent {
         menu(content: menuContent(shas: shas, clicked: clicked, repository: repository), repository: repository, context: context)
     }
 
-    private static func menu(content: CommitMenuContent, repository: RepositoryModel, context: WindowContext) -> NSMenu {
-        NSHostingMenu(rootView: CommitContextMenu(content: content) {
+    private static func menu(content: CommitMenuContent, repository: RepositoryModel, context: WindowContext) -> MenuContent {
+        CommitContextMenu.content(content, context: context) {
             Task {
                 await amend(repository: repository, context: context)
             }
-        }.windowEnvironment(context))
+        }
     }
 
     /// What the menu for `rows`, clicked on `clicked`, offers.
@@ -126,12 +123,13 @@ enum CommitContextMenus {
     static func menuContent(shas: [String], clicked: Commit, repository: RepositoryModel) -> CommitMenuContent {
         let history = repository.history
         let isHead = repository.gitState.tip.sha == clicked.sha
-        let isHistory = history.mode == .history
+        // Amend and Undo rewrite the current branch: only in its history.
+        let isCurrentBranch = history.showsCurrentBranchHistory
         return CommitMenuContent(
             shas: shas.isEmpty ? [clicked.sha] : shas,
             clickedSHA: clicked.sha,
-            canAmend: isHead && isHistory && repository.commit.canStartAmending,
-            canUndo: isHistory && repository.commit.undoableCommitSHA == clicked.sha,
+            canAmend: isHead && isCurrentBranch && repository.commit.canStartAmending,
+            canUndo: isCurrentBranch && repository.commit.undoableCommitSHA == clicked.sha,
             tags: history.refs(at: clicked.sha).filter { $0.kind == .tag }.map(\.name)
         )
     }

@@ -41,7 +41,9 @@ nonisolated public struct BranchNameValidation: Sendable, Equatable {
         !JSCompat.trim(sanitizedName).isEmpty && !messages.contains(where: \.isError)
     }
 
-    /// Checks `proposed` against the repository's branches.
+    /// Checks `proposed` against the repository's branches: a name that's
+    /// taken, or that git can't keep beside a local branch
+    /// (`refNameConflict`), is an error.
     ///
     /// - Parameters:
     ///   - verb: How the warning names what happens to the name ("Will be
@@ -62,8 +64,19 @@ nonisolated public struct BranchNameValidation: Sendable, Equatable {
             messages.append(.warning("Will be \(verb) as \(sanitized)."))
         }
         let isCurrentName = currentName.map { JSCompat.strictEquals($0, sanitized) } ?? false
+        // The local branches the new name has to fit beside; a rename's own
+        // branch doesn't count.
+        let otherLocalNames = branches.lazy
+            .filter { branch in branch.type == .local && !(currentName.map { JSCompat.strictEquals($0, branch.name) } ?? false) }
+            .map(\.name)
         if !isCurrentName, branches.contains(where: { JSCompat.strictEquals($0.name, sanitized) }) {
             messages.append(.error("A branch named \(sanitized) already exists."))
+        } else if !isCurrentName, let conflict = refNameConflict(sanitized, among: otherLocalNames) {
+            messages.append(.error(
+                conflict.isSameName
+                    ? "A branch named \(conflict.existingName) already exists."
+                    : "A branch named \(conflict.existingName) already exists, so \(sanitized) can't be used."
+            ))
         } else if currentName == nil,
                   branches.contains(where: { $0.type == .remote && JSCompat.strictEquals($0.nameWithoutRemote, sanitized) }) {
             messages.append(.warning("A branch named \(sanitized) already exists on the remote."))
@@ -348,7 +361,7 @@ public struct NewBranchSheet: View {
         let validation = BranchNameRuleCheck.applying(ruleCheck, to: basic)
         SheetScaffold(content.title) {
             VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
-                TextField("Name", text: $name, prompt: Text("Branch name"))
+                TextField("Name", text: $name, prompt: Text("Branch name").fieldPrompt())
                     .textFieldStyle(.capsule)
                     .focused($isNameFocused)
                     .onSubmit { create(validation) }
@@ -357,7 +370,7 @@ public struct NewBranchSheet: View {
             baseView
             if content.showsForkBehaviorLink, let onForkBehavior {
                 // The link inside the sentence, so the sentence wraps as one.
-                Text(Self.forkBehaviorSentence)
+                LinkedText(Self.forkBehaviorSentence)
                     .font(Typography.meta)
                     .foregroundStyle(.text3)
                     .fixedSize(horizontal: false, vertical: true)

@@ -30,7 +30,7 @@ public struct PullRequestsSection: View {
                     if filter.isEmpty, !gitHub.isLoadingPullRequests {
                         Text("No Open Pull Requests")
                             .font(Typography.row)
-                            .foregroundStyle(.text3)
+                            .foregroundStyle(.sidebarText3)
                             .selectionDisabled()
                             .sidebarRow(nil)
                     }
@@ -84,8 +84,8 @@ struct PullRequestsHeader: View {
                 DelayedSpinner()
             }
         }
-        .contextMenu {
-            Button("Refresh Pull Requests", action: refresh)
+        .contextMenuCard { [refresh] in
+            MenuAction("Refresh Pull Requests", action: refresh)
         }
     }
 }
@@ -94,11 +94,10 @@ struct PullRequestsHeader: View {
 /// shows nothing.
 struct DelayedSpinner: View {
     @State private var isVisible = false
-    @Environment(\.showsDelayedContentImmediately) private var showsImmediately
 
     var body: some View {
         Group {
-            if isVisible || showsImmediately {
+            if isVisible {
                 ArcProgress(.mini)
                     .accessibilityLabel("Loading")
             }
@@ -149,23 +148,14 @@ private struct PullRequestSidebarRow: View {
 }
 
 /// A pull request row's context menu.
-public struct PullRequestContextMenu: View {
-    private let number: Int
-    @Environment(WindowContext.self) private var context
-
-    public init(number: Int) {
-        self.number = number
-    }
-
-    public var body: some View {
-        ActionButton(.checkoutPullRequest(number: number))
-        ActionButton(.newWorktree(branch: headBranch, pullRequest: number), title: "Check Out in New Worktree…")
-        Divider()
-        ActionButton(.viewPullRequestOnGitHub(number: number))
-    }
-
-    /// The pull request's head branch, for its new worktree.
-    private var headBranch: String? {
-        context.repository?.gitHub.openPullRequests.first { $0.pullRequestNumber == number }?.head.ref
+enum PullRequestContextMenu {
+    @MenuBuilder
+    static func content(number: Int, context: WindowContext) -> MenuContent {
+        // The pull request's head branch, for its new worktree.
+        let headBranch = context.repository?.gitHub.openPullRequests.first { $0.pullRequestNumber == number }?.head.ref
+        context.actions.menuAction(.checkoutPullRequest(number: number))
+        context.actions.menuAction(.newWorktree(branch: headBranch, pullRequest: number), title: "Check Out in New Worktree…")
+        MenuDivider()
+        context.actions.menuAction(.viewPullRequestOnGitHub(number: number))
     }
 }

@@ -1,7 +1,7 @@
-// The commit description, an `NSTextView` that shows 3 to 8 lines and then
+// The commit description, an `EspalierTextView` that shows 3 to 8 lines and then
 // scrolls (a shorter text, or the placeholder, doesn't move under a
-// scroll), with a placeholder, `@` and `#` completion (native text
-// completion), the composer's items at the top of its context menu, and
+// scroll), with a placeholder, `@` and `#` completion (a suggestion
+// list), the composer's items at the top of its context menu, and
 // spell checking that remembers its setting (`commit-spellcheck-enabled`).
 // Tab moves to the next field, as in a form. The summary and the
 // description tell the composer which of them has focus.
@@ -10,11 +10,22 @@ import AppKit
 import EspalierSupport
 import SwiftUI
 
-/// An item the description's context menu adds above the standard ones.
+/// An item the summary's and the description's context menus start with.
 struct ComposerMenuItem {
     var title: String
     var isEnabled = true
     var action: () -> Void
+
+    /// `items` at the top of `menu`, above a separator.
+    static func insert(_ items: [ComposerMenuItem], atTopOf menu: NSMenu) {
+        guard !items.isEmpty else {
+            return
+        }
+        menu.insertItem(.separator(), at: 0)
+        for item in items.reversed() {
+            menu.insertItem(MenuItemAction.item(title: item.title, isEnabled: item.isEnabled, handler: item.action), at: 0)
+        }
+    }
 }
 
 /// The commit description.
@@ -41,7 +52,7 @@ struct DescriptionEditor: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> ComposerScrollView {
-        let textView = ComposerTextView(usingTextLayoutManager: true)
+        let textView = ComposerTextView()
         textView.delegate = context.coordinator
         textView.coordinator = context.coordinator
         textView.isRichText = false
@@ -55,6 +66,8 @@ struct DescriptionEditor: NSViewRepresentable {
         textView.textContainer?.widthTracksTextView = true
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
+        textView.minSize = .zero
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.autoresizingMask = [.width]
         // A commit message is plain text: no smart quotes, dashes,
         // replacements, or corrections.
@@ -80,6 +93,7 @@ struct DescriptionEditor: NSViewRepresentable {
 
     func updateNSView(_ scrollView: ComposerScrollView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.session.list.numberFormat = context.environment.numberFormat
         guard let textView = context.coordinator.textView else {
             return
         }
@@ -89,6 +103,13 @@ struct DescriptionEditor: NSViewRepresentable {
     }
 
     private func apply(to textView: ComposerTextView) {
+        // The look's font and color.
+        if textView.font != Self.font {
+            textView.font = Self.font
+        }
+        if textView.textColor != textColor {
+            textView.textColor = textColor
+        }
         if textView.string != text, !textView.hasMarkedText() {
             textView.string = text
             textView.needsDisplay = true
@@ -178,20 +199,19 @@ struct DescriptionEditor: NSViewRepresentable {
             session.lookUp(in: textView)
         }
 
-        func textView(
-            _ textView: NSTextView,
-            completions words: [String],
-            forPartialWordRange charRange: NSRange,
-            indexOfSelectedItem index: UnsafeMutablePointer<Int>?
-        ) -> [String] {
-            session.insertions(in: textView, forPartialWordRange: charRange, indexOfSelectedItem: index)
+        /// Shows the completions for the word at the cursor (`complete(_:)`).
+        func showCompletions(in textView: ComposerTextView) {
+            session.completions = parent.completions
+            session.complete(in: textView)
         }
     }
 }
 
 /// Looks up the `@` and `#` completions for the word at a text view's
-/// cursor and offers them once they arrive: the description's, and the
-/// summary's field editor's.
+/// cursor and shows them in a suggestion list under the word once they
+/// arrive, updating them as the word is typed: the description's, and the
+/// summary's field editor's. Accepting one puts it and a space in place of
+/// the word.
 @MainActor
 final class ComposerCompletionSession {
     var completions: ComposerCompletions
@@ -199,20 +219,27 @@ final class ComposerCompletionSession {
     private(set) var loaded: (token: CompletionToken, suggestions: [ComposerSuggestion])?
     /// The lookup for the word being typed.
     private(set) var lookup: Task<Void, Never>?
-    /// Shows the text view's completions (tests replace it).
-    var presentCompletions: (NSTextView) -> Void = { $0.complete(nil) }
+    /// The list the completions show in.
+    let list = SuggestionList()
+    /// Shows the completions for the word at the text view's cursor (tests
+    /// replace it).
+    var presentCompletions: (NSTextView) -> Void = { _ in }
 
     init(_ completions: ComposerCompletions) {
         self.completions = completions
+        presentCompletions = { [weak self] textView in
+            self?.showList(in: textView)
+        }
     }
 
     /// Looks up the completions for the `@` or `#` word at the cursor, then
-    /// offers them while it's still the word being typed and `textView` has
-    /// focus.
+    /// shows them while it's still the word being typed and `textView` has
+    /// focus; without a word, or with no completions, the list closes.
     func lookUp(in textView: NSTextView) {
         lookup?.cancel()
         guard let token = CompletionToken.at(textView.selectedRange().location, in: textView.string) else {
             loaded = nil
+            list.close()
             return
         }
         let completions = completions
@@ -226,23 +253,66 @@ final class ComposerCompletionSession {
             self.loaded = (token, suggestions)
             if !suggestions.isEmpty, textView.window?.firstResponder === textView {
                 self.presentCompletions(textView)
+            } else {
+                self.list.close()
             }
         }
     }
 
-    /// What the text view's completion list offers for the word ending at
-    /// the end of `charRange`: the insertions looked up for it.
-    func insertions(
-        in textView: NSTextView,
-        forPartialWordRange charRange: NSRange,
-        indexOfSelectedItem index: UnsafeMutablePointer<Int>?
-    ) -> [String] {
-        let cursor = charRange.location + charRange.length
-        guard let token = CompletionToken.at(cursor, in: textView.string), let loaded, loaded.token == token else {
+    /// Shows the completions for the word at the cursor (`complete(_:)`:
+    /// Escape, F5), looking them up first unless they're in.
+    func complete(in textView: NSTextView) {
+        if !suggestions(in: textView).isEmpty {
+            presentCompletions(textView)
+        } else {
+            lookUp(in: textView)
+        }
+    }
+
+    /// The completions for the word ending at `textView`'s cursor, once
+    /// looked up.
+    func suggestions(in textView: NSTextView) -> [ComposerSuggestion] {
+        guard let token = CompletionToken.at(textView.selectedRange().location, in: textView.string), let loaded, loaded.token == token else {
             return []
         }
-        index?.pointee = 0
-        return loaded.suggestions.map(\.insertion)
+        return loaded.suggestions
+    }
+
+    /// Shows the completions for the word at `textView`'s cursor in the
+    /// list, under the word with their text lined up with it, until the
+    /// cursor leaves the word.
+    func showList(in textView: NSTextView) {
+        guard let token = CompletionToken.at(textView.selectedRange().location, in: textView.string) else {
+            list.close()
+            return
+        }
+        list.show(
+            suggestions(in: textView).map { Suggestion(title: $0.insertion, detail: $0.detail) },
+            for: textView,
+            below: Self.anchor(of: token.range, in: textView),
+            in: textView,
+            accept: { [weak textView] suggestion in
+                textView?.insertCompletion(
+                    suggestion.title,
+                    forPartialWordRange: textView?.rangeForUserCompletion ?? token.range,
+                    movement: NSTextMovement.return.rawValue,
+                    isFinal: true
+                )
+            },
+            stillApplies: { textView in
+                CompletionToken.at(textView.selectedRange().location, in: textView.string)?.range.location == token.range.location
+            }
+        )
+    }
+
+    /// The first line of `range` in `textView`, in its coordinates, moved
+    /// so the list's text lines up with the word's.
+    static func anchor(of range: NSRange, in textView: NSTextView) -> CGRect {
+        guard let window = textView.window else {
+            return .zero
+        }
+        let screenRect = textView.firstRect(forCharacterRange: range, actualRange: nil)
+        return textView.convert(window.convertFromScreen(screenRect), from: nil).offsetBy(dx: -SuggestionList.textInset, dy: 0)
     }
 }
 
@@ -261,7 +331,7 @@ final class ComposerScrollView: NSScrollView {
 
 /// The description's text view: the placeholder, the completion range, the
 /// context menu, the spelling setting, Escape, Tab, and focus.
-final class ComposerTextView: NSTextView {
+final class ComposerTextView: EspalierTextView {
     weak var coordinator: DescriptionEditor.Coordinator?
     /// Told when the description takes and loses focus.
     weak var focusBridge: ComposerFocusBridge?
@@ -298,13 +368,7 @@ final class ComposerTextView: NSTextView {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
-        guard let items = coordinator?.parent.menuItems, !items.isEmpty else {
-            return menu
-        }
-        menu.insertItem(.separator(), at: 0)
-        for item in items.reversed() {
-            menu.insertItem(MenuItemAction.item(title: item.title, isEnabled: item.isEnabled, handler: item.action), at: 0)
-        }
+        ComposerMenuItem.insert(coordinator?.parent.menuItems ?? [], atTopOf: menu)
         return menu
     }
 
@@ -320,12 +384,13 @@ final class ComposerTextView: NSTextView {
         super.cancelOperation(sender)
     }
 
-    /// Escape runs `complete(_:)` in a text view: cancel generating first.
+    /// Escape runs `complete(_:)` in a text view: cancel generating first,
+    /// else show the completions for the word at the cursor.
     override func complete(_ sender: Any?) {
         if NSApp.currentEvent?.keyCode == 53, coordinator?.parent.onEscape() == true {
             return
         }
-        super.complete(sender)
+        coordinator?.showCompletions(in: self)
     }
 
     override func insertTab(_ sender: Any?) {
@@ -361,7 +426,7 @@ final class ComposerTextView: NSTextView {
     }
 }
 
-/// Runs a menu item's closure; the item keeps it as its represented object.
+/// A target for a menu item that runs a closure.
 final class MenuItemAction: NSObject {
     private let handler: () -> Void
 
@@ -385,15 +450,16 @@ final class MenuItemAction: NSObject {
     }
 }
 
-/// One of the commit message's two fields.
+/// One of the commit message card's fields.
 nonisolated enum ComposerField: Hashable, Sendable {
     case summary
     case description
+    case coAuthors
 }
 
 /// Lets the composer move focus to the summary (Go to Commit Message) and
-/// the description (Return in the summary), and know which of them has
-/// focus.
+/// the description (Return in the summary), and know which of the card's
+/// fields has focus.
 @MainActor @Observable
 final class ComposerFocusBridge {
     @ObservationIgnored weak var summaryView: NSTextField?

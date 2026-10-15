@@ -45,9 +45,13 @@ public struct RepositoryCapabilities: Sendable, Equatable {
     /// flow and any modal: the Repository and Branch menus' commands apply.
     public let isRepositoryActive: Bool
 
-    /// Push, or force push (`isForcePush`).
+    /// Push: on a branch, with no network operation running. Push never
+    /// forces.
     public let canPush: Bool
-    /// Pull: the current branch is published.
+    /// Force Push: as Push, and the current branch can be force pushed
+    /// (`isForcePushAvailable`).
+    public let canForcePush: Bool
+    /// Pull: the current branch is published (its upstream exists).
     public let canPull: Bool
     /// Fetch: the repository has a remote.
     public let canFetch: Bool
@@ -110,9 +114,11 @@ public struct RepositoryCapabilities: Sendable, Equatable {
     public let canSquashAndMergeBranch: Bool
     /// Rebase Current Branch…: on a branch.
     public let canRebaseBranch: Bool
-    /// Compare on GitHub: on GitHub, and the branch is published.
+    /// Compare on GitHub: on GitHub, and the branch is published (its
+    /// upstream exists).
     public let canCompareOnGitHub: Bool
-    /// View Branch on GitHub: on GitHub, and the branch is published.
+    /// View Branch on GitHub: on GitHub, and the branch is published (its
+    /// upstream exists).
     public let canViewBranchOnGitHub: Bool
     /// Create Pull Request, or View Pull Request on GitHub: on GitHub, on a
     /// branch with commits.
@@ -124,12 +130,11 @@ public struct RepositoryCapabilities: Sendable, Equatable {
 
     // MARK: Labels
 
-    /// "Push", or "Force Push…" / "Force Push" (asking first or not) when
-    /// the current branch has diverged from its upstream.
-    public let pushTitle: String
-    /// Whether Push force pushes: the branch can be force pushed
-    /// (`ForcePushBranchState` available or recommended).
-    public let isForcePush: Bool
+    /// Whether Force Push is offered: the current branch has diverged from
+    /// its upstream (`ForcePushBranchState` available or recommended).
+    public let isForcePushAvailable: Bool
+    /// "Force Push…" when force pushing asks first, else "Force Push".
+    public let forcePushTitle: String
     /// "Remove…" when removing asks first, else "Remove".
     public let removeRepositoryTitle: String
     /// "Change Alias" when the repository has an alias, else "Create Alias"
@@ -220,6 +225,10 @@ extension RepositoryCapabilities {
     /// The selected repository's state the rules read.
     public struct RepositoryState: Sendable, Equatable {
         public var tip: Tip
+        /// Whether the current branch is published
+        /// (`RepositoryGitState.isCurrentBranchPublished`): its upstream
+        /// exists.
+        public var isBranchPublished: Bool
         /// The default branch.
         public var defaultBranch: Branch?
         /// `findContributionTargetDefaultBranch`.
@@ -254,6 +263,7 @@ extension RepositoryCapabilities {
 
         public init(
             tip: Tip = .unknown,
+            isBranchPublished: Bool = false,
             defaultBranch: Branch? = nil,
             contributionTargetDefaultBranch: Branch? = nil,
             hasStash: Bool = false,
@@ -270,6 +280,7 @@ extension RepositoryCapabilities {
             hasCurrentPullRequest: Bool = false
         ) {
             self.tip = tip
+            self.isBranchPublished = isBranchPublished
             self.defaultBranch = defaultBranch
             self.contributionTargetDefaultBranch = contributionTargetDefaultBranch
             self.hasStash = hasStash
@@ -319,7 +330,8 @@ extension RepositoryCapabilities {
         } else {
             true
         }
-        let hasPublishedBranch = !(branch?.upstream ?? "").isEmpty
+        // The sync button offers Publish for the same branches.
+        let hasPublishedBranch = onBranch && repo?.isBranchPublished == true
         let branchHasStashEntry = onBranch && repo?.hasStash == true
         let target = repo?.contributionTargetDefaultBranch
         let onContributionTargetDefaultBranch = branch.map { branch in
@@ -381,6 +393,9 @@ extension RepositoryCapabilities {
         canCreatePullRequest = canBranch && isHostedOnGitHub
         canPreviewPullRequest = canBranch && isHostedOnGitHub
         canPush = canBranch && !networkActionInProgress
+        let forcePushState = repository?.forcePushState ?? .notAvailable
+        isForcePushAvailable = forcePushState != .notAvailable
+        canForcePush = canPush && isForcePushAvailable
         canPull = active && hasPublishedBranch && !networkActionInProgress
         canFetch = active && hasRemote && !networkActionInProgress
         canCreateBranch = active && !tipStateIsUnknown && !branchIsUnborn && !rebaseInProgress && !operationInProgress
@@ -392,9 +407,7 @@ extension RepositoryCapabilities {
         // Labels: without a repository's state (none, cloning, missing) they
         // take their defaults.
         let repositoryState = repository
-        let forcePushState = repositoryState?.forcePushState ?? .notAvailable
-        isForcePush = forcePushState != .notAvailable
-        pushTitle = isForcePush ? (state.confirmForcePush ? "Force Push…" : "Force Push") : "Push"
+        forcePushTitle = state.confirmForcePush ? "Force Push…" : "Force Push"
         removeRepositoryTitle = state.confirmRepositoryRemoval ? "Remove…" : "Remove"
         aliasTitle = state.alias == nil ? "Create Alias" : "Change Alias"
         openInShellTitle = "Open in \(state.shellLabel ?? "Shell")"
@@ -469,6 +482,7 @@ extension RepositoryModel {
         let isShowingStash: Bool = if case .stash = changes.selection { true } else { false }
         return RepositoryCapabilities.RepositoryState(
             tip: state.tip,
+            isBranchPublished: state.isCurrentBranchPublished,
             defaultBranch: state.branches.defaultBranch,
             contributionTargetDefaultBranch: findContributionTargetDefaultBranch(record, state.branches),
             hasStash: stash.current != nil,

@@ -1,5 +1,5 @@
-// The alert for an account signed out because GitHub rejected its token or
-// the token expired: "Signed Out" [Not Now] [Sign In…]. Sign In… opens the
+// The alert for an account signed out because GitHub rejected its token, or
+// the token expired or is missing: "Signed Out" [Not Now] [Sign In…]. Sign In… opens the
 // sign-in sheet for that server, with what Espalier knows of it filled in.
 // Problems reading or storing the accounts show as alerts too. Both show on
 // the main window, once each.

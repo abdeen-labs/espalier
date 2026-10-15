@@ -473,6 +473,12 @@ public struct APICheckStatus: RawRepresentable, Codable, Sendable, Hashable {
     public static let queued = APICheckStatus(rawValue: "queued")
     public static let inProgress = APICheckStatus(rawValue: "in_progress")
     public static let completed = APICheckStatus(rawValue: "completed")
+    /// GitHub Actions only: waiting for a deployment protection rule.
+    public static let waiting = APICheckStatus(rawValue: "waiting")
+    /// GitHub Actions only: not started yet.
+    public static let requested = APICheckStatus(rawValue: "requested")
+    /// GitHub Actions only: not started yet.
+    public static let pending = APICheckStatus(rawValue: "pending")
 }
 
 /// The conclusion of a completed check run

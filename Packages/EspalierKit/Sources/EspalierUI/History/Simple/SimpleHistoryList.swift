@@ -1,6 +1,6 @@
-// History's simple list: the current branch's commits one after another,
-// newest first, with a notice above them when the branch's base has moved
-// on. Its rows are the history's (`HistoryModel.simpleOutline`); selection,
+// History's simple list: one branch's commits one after another, newest
+// first (the current branch's, or another branch's in its place), with a
+// notice above the current branch's when its base has moved on. Its rows are the history's (`HistoryModel.simpleOutline`); selection,
 // the commit menus, drags, drops, search, and Go to Commit work as in the
 // graph.
 
@@ -22,7 +22,7 @@ struct SimpleHistoryList: View {
                 // Grows in over 0.22 s and leaves over 0.15 s, the list
                 // moving with it.
                 SimpleListBanner(status: status)
-                    .padding(.horizontal, Metrics.SimpleList.rowInset)
+                    .padding(.horizontal, Metrics.CommitRow.selectionInset)
                     .padding(.top, Metrics.insetSmall)
                     .padding(.bottom, Metrics.grid)
                     .barTransition()
@@ -57,33 +57,22 @@ struct SimpleHistoryList: View {
 /// merges the base into the branch (Update from <base>).
 struct SimpleListBanner: View {
     let status: SimpleHistoryBaseStatus
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
-        HStack(spacing: Metrics.insetMedium) {
-            IconCircle("arrow.down", size: Metrics.SimpleList.avatarSize, tint: .accentColor)
-            Text(Self.message(status))
-                .font(Typography.secondary)
-                .foregroundStyle(.text2)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        HistoryBanner(systemImage: "arrow.down", message: Self.message(status, numberFormat: numberFormat)) {
             ActionButton(.updateFromDefaultBranch, title: "Update")
-                .buttonStyle(.quiet)
-                .controlSize(.small)
         }
-        .padding(.leading, Metrics.insetSmall)
-        .padding(.trailing, Metrics.insetMedium)
-        .padding(.vertical, Metrics.insetSmall)
-        .cardSurface(cornerRadius: Metrics.Radius.banner)
-        .accessibilityElement(children: .contain)
     }
 
-    /// "**main** has 5 new commits since this branch started."
-    static func message(_ status: SimpleHistoryBaseStatus) -> AttributedString {
+    /// "**main** has 5 new commits since this branch started.", the count
+    /// in `numberFormat`.
+    static func message(_ status: SimpleHistoryBaseStatus, numberFormat: NumberFormat) -> AttributedString {
         var name = AttributedString(status.name)
         name.font = Typography.secondary.weight(.semibold)
         name.foregroundColor = .text
         let count = status.newCommitCount
-        let commits = count == 1 ? "1 new commit" : "\(formatCount(count)) new commits"
+        let commits = count == 1 ? "1 new commit" : "\(formatCount(count, numberFormat)) new commits"
         return name + AttributedString(" has \(commits) since this branch started.")
     }
 }
@@ -95,10 +84,15 @@ extension SimpleListPresentation {
         self.init()
         hasRemote = !repository.gitState.remotes.all.isEmpty
         search = repository.history.search
+        headSHA = repository.gitState.tip.sha
         avatarEndpoint = repository.record.gitHubRepository?.endpoint
         allowsDragging = repository.operations.current == nil && repository.operations.conflictState == nil
         decorations = repository.history.decorationsGeneration
-        railColors = SimpleRailColors(branchColors: BranchColors.of(repository), start: repository.history.simpleStart)
+        railColors = SimpleRailColors(
+            branchColors: BranchColors.of(repository),
+            start: repository.history.simpleStart,
+            branch: repository.history.shownBranch
+        )
     }
 }
 

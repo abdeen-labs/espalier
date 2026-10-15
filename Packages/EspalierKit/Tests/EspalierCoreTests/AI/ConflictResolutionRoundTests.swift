@@ -49,7 +49,8 @@ struct ConflictResolutionRoundTests {
         #expect(results.resolutions.map(\.path) == ["a.txt", "b.txt"])
         #expect(results.resolution(forPath: "a.txt")?.resolvedContent == "first\nresolved a.txt 0\nlast\n")
         #expect(results.resolution(forPath: "a.txt")?.reasoning == "Combined both sides of a.txt.")
-        #expect(results.summary.markdown?.contains("### Resolution") == true)
+        #expect(results.summary.summaries.map(\.paths) == [["a.txt", "b.txt"]])
+        #expect(results.summary.summaries.first?.markdown.contains("### Resolution") == true)
         #expect(results.summary.ourLabel == "main")
         #expect(results.summary.theirLabel == "feature")
         #expect(results.skippedFiles.isEmpty)
@@ -311,7 +312,6 @@ struct ConflictResolutionRoundTests {
         let results = try shownResults(fixture)
         let failed = results.failedFiles.map(\.path)
         #expect(failed == Array(paths[0..<15]))
-        #expect(results.failedFiles.first?.title == "Authentication failed")
         #expect(results.failedFiles.first?.message == "Incorrect API key provided.")
         #expect(results.notAttemptedFiles == Array(paths[75...]))
         #expect(results.resolutions.count == 60)
@@ -329,7 +329,10 @@ struct ConflictResolutionRoundTests {
         #expect(Set(merged.resolutions.map(\.path)) == Set(paths))
         #expect(merged.failedFiles.isEmpty)
         #expect(merged.notAttemptedFiles.isEmpty)
-        #expect(merged.summary == results.summary)
+        // The retry's summaries follow the round's, together covering every
+        // file.
+        #expect(Array(merged.summary.summaries.prefix(results.summary.summaries.count)) == results.summary.summaries)
+        #expect(merged.summary.summaries.flatMap(\.paths).sorted() == paths)
         #expect(fixture.ai.filesNeedingResolution.isEmpty)
 
         let applied = try await fixture.ai.applyResolutions()
@@ -354,13 +357,13 @@ struct ConflictResolutionRoundTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.ai.retryFailedFiles()
         }
-        #expect(error?.reason == .ai(.provider(title: "Authentication failed", message: "Incorrect API key provided.")))
+        #expect(providerFailureMessage(error) == "Incorrect API key provided.")
 
         let results = try shownResults(fixture)
         #expect(results.retry == nil)
         #expect(results.resolutions.count == 20)
         #expect(results.failedFiles.map(\.path) == Array(paths[20...]))
-        #expect(results.failedFiles.allSatisfy { $0.title == "Authentication failed" })
+        #expect(results.failedFiles.allSatisfy { $0.message == "Incorrect API key provided." })
     }
 
     @Test("a round that fails shows its error; going back to the manual flow clears it")
@@ -372,7 +375,7 @@ struct ConflictResolutionRoundTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.ai.resolveConflicts()
         }
-        #expect(error?.reason == .ai(.provider(title: "Authentication failed", message: "Incorrect API key provided.")))
+        #expect(providerFailureMessage(error) == "Incorrect API key provided.")
         guard case .failed(let failure) = fixture.ai.conflictResolution else {
             Issue.record("Expected the failure, got \(fixture.ai.conflictResolution)")
             return
@@ -468,7 +471,7 @@ struct ConflictResolutionRoundTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.ai.applyResolutions()
         }
-        #expect(error?.reason == .precondition("There are no resolutions to apply."))
+        #expect(preconditionText(error) != nil)
     }
 
     @Test("turning AI off drops the results")

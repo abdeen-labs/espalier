@@ -10,8 +10,9 @@ private let logger = Log.logger(category: "prompts")
 public enum Prompt: Sendable, Equatable {
     /// ssh doesn't know the host's key: add it to `known_hosts` and connect?
     case addSSHHost(host: String, ip: String, keyType: String, fingerprint: String)
-    /// The passphrase for the SSH key at `keyPath`.
-    case sshKeyPassphrase(keyPath: String)
+    /// The passphrase for the SSH key at `keyPath`, offering to remember it
+    /// when `canRemember`.
+    case sshKeyPassphrase(keyPath: String, canRemember: Bool)
     /// The password for `username` (`user@host`).
     case sshUserPassword(username: String)
     /// A username and password (or token) for a host that isn't GitHub.
@@ -165,8 +166,8 @@ public final class PromptCenter: TrampolinePrompter {
         return add
     }
 
-    public func promptSSHKeyPassphrase(keyPath: String) async -> PromptSSHSecretResponse {
-        guard case .sshSecret(let response) = await ask(.sshKeyPassphrase(keyPath: keyPath)) else {
+    public func promptSSHKeyPassphrase(keyPath: String, canRemember: Bool) async -> PromptSSHSecretResponse {
+        guard case .sshSecret(let response) = await ask(.sshKeyPassphrase(keyPath: keyPath, canRemember: canRemember)) else {
             return PromptSSHSecretResponse(secret: nil, storeSecret: false)
         }
         return response

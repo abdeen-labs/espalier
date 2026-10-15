@@ -68,7 +68,7 @@ extension DiffTableController {
         if hunk.isBottomDummy {
             return "Unchanged lines \(first) to \(last), not shown."
         }
-        var label = "Hunk, lines \(first) to \(last): \(hunk.addedCount) added, \(hunk.deletedCount) deleted."
+        var label = "Hunk, lines \(first) to \(last): \(formatCount(hunk.addedCount, numberFormat)) added, \(formatCount(hunk.deletedCount, numberFormat)) deleted."
         if let inclusion = inclusion(ofHunk: hunk) {
             switch inclusion {
             case .all: label += " Included in commit."
@@ -80,9 +80,9 @@ extension DiffTableController {
     }
 
     /// A row's actions: staging and discarding in Changes, expanding on hunk
-    /// headers.
+    /// headers. None while a new document builds.
     func accessibilityActions(ofRow row: Int) -> [NSAccessibilityCustomAction] {
-        guard document.rows.indices.contains(row), shownContent?.isInteractive == true else {
+        guard document.rows.indices.contains(row), shownContent?.isInteractive == true, !isBuilding else {
             return []
         }
         let documentRow = document.rows[row]
@@ -104,7 +104,7 @@ extension DiffTableController {
             if let staging = shownContent?.staging, staging.canSelectLines, let range = hunk.changedDiffLines, let inclusion = inclusion(ofHunk: hunk) {
                 let include = inclusion != .all
                 actions.append(NSAccessibilityCustomAction(name: include ? "Include Hunk" : "Exclude Hunk") { [weak self] in
-                    self?.actions.staging?.setLines(.range(range), include)
+                    self?.actions.staging?.setLines(.range(range), include, staging.diffGeneration)
                     return true
                 })
             }
@@ -126,7 +126,7 @@ extension DiffTableController {
                     ? (included ? "Exclude \(column == .before ? "Deleted" : "Added") Line" : "Include \(column == .before ? "Deleted" : "Added") Line")
                     : (included ? "Exclude Line" : "Include Line")
                 actions.append(NSAccessibilityCustomAction(name: name) { [weak self] in
-                    self?.actions.staging?.setLines(.line(number), !included)
+                    self?.actions.staging?.setLines(.line(number), !included, staging.diffGeneration)
                     return true
                 })
             }
@@ -135,15 +135,15 @@ extension DiffTableController {
                 let includedCount = lines.filter { staging.selection.isSelected($0) }.count
                 let include = includedCount != lines.count
                 actions.append(NSAccessibilityCustomAction(name: include ? "Include Block" : "Exclude Block") { [weak self] in
-                    self?.actions.staging?.setLines(.block(containing: block.diffLines.lowerBound), include)
+                    self?.actions.staging?.setLines(.block(containing: block.diffLines.lowerBound), include, staging.diffGeneration)
                     return true
                 })
             }
         }
         if staging.canDiscard, let number = document.diffLines(ofRow: row).first,
-           let title = self.actions.staging?.discardTitle(.line(number)) {
+           let title = self.actions.staging?.discardTitle(.line(number), staging.diffGeneration) {
             actions.append(NSAccessibilityCustomAction(name: title) { [weak self] in
-                self?.actions.staging?.discardLines(.line(number))
+                self?.actions.staging?.discardLines(.line(number), staging.diffGeneration)
                 return true
             })
         }
@@ -177,7 +177,7 @@ extension DiffTableController {
 
     /// A row's view, scrolled into view, as a rotor's target.
     func rotorTarget(row: Int) -> NSView? {
-        tableView.scrollRowToVisible(row)
+        scrollRowIntoView(row)
         return tableView.rowView(atRow: row, makeIfNecessary: true)
     }
 }

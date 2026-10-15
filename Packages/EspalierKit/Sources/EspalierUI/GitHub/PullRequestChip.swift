@@ -45,9 +45,9 @@ public struct PullRequestChip: View {
                 PullRequestChipLabel(content: content)
             }
             .buttonStyle(.quiet)
-            .help(content.tooltip)
+            .tooltip(content.tooltip)
             .accessibilityLabel(content.tooltip)
-            .popover(isPresented: $isPopoverPresented, arrowEdge: .bottom) {
+            .popoverCard(isPresented: $isPopoverPresented, title: "Checks for pull request \(pullRequest.pullRequestNumber)") {
                 ChecksPopover(repository: repository, pullRequest: pullRequest) {
                     isPopoverPresented = false
                 }
@@ -65,11 +65,11 @@ struct PullRequestChipLabel: View {
     let content: PullRequestChipContent
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "arrow.trianglehead.pull")
-                .font(.system(size: 12))
+        HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
+            Image(systemName: PullRequestGlyph.systemImage)
+                .font(Typography.secondary)
                 .foregroundStyle(.text2)
-            Text("#\(content.number)")
+            Text(verbatim: "#\(content.number)")
                 .font(Typography.count)
             if let checks = content.checks {
                 ChecksGlyph(checks)

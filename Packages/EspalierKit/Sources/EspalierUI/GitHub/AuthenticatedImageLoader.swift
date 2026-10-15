@@ -23,7 +23,8 @@ nonisolated private let logger = Log.logger(category: "images")
 
 /// Loads images from the web for views that show them (pull request
 /// descriptions, reviews, comments). The windows' avatar loader also loads
-/// these; snapshots' monogram loader doesn't, so their images show as links.
+/// these; under a loader that doesn't (the monogram loader), images show
+/// as links.
 nonisolated public protocol RemoteImageLoading: Sendable {
     /// The image at `url`, if it's already loaded.
     func cachedImage(at url: URL, maximumPixels: Int) -> CGImage?
@@ -92,15 +93,6 @@ nonisolated public final class AuthenticatedImageLoader: AvatarLoading, RemoteIm
         avatars.setAccounts(accounts)
     }
 
-    /// How many origins have a token (tests).
-    var tokenCount: Int {
-        tokens.withLock { $0.count }
-    }
-
-    /// Runs after each time `follow(_:)` applies the accounts (tests wait
-    /// on it: a change reaches the loader in a task).
-    var accountsFollowed: (@MainActor () -> Void)?
-
     /// Keeps the loader's tokens those of `accounts`' signed-in accounts.
     @MainActor
     public func follow(_ accounts: AccountsModel) {
@@ -115,7 +107,6 @@ nonisolated public final class AuthenticatedImageLoader: AvatarLoading, RemoteIm
             }
         }
         setAccounts(current)
-        accountsFollowed?()
     }
 
     // MARK: Avatars

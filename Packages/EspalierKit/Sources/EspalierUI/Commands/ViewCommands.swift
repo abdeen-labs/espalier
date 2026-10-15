@@ -1,5 +1,6 @@
-// The View menu. The system adds Show/Hide Sidebar (⌃⌘S), the inspector,
-// the toolbar items, and Enter Full Screen (⌃⌘F) around these.
+// The View menu. The system adds the inspector, the toolbar items, and
+// Enter Full Screen (⌃⌘F) around these; Show/Hide Sidebar (⌘S) is
+// Espalier's.
 
 import SwiftUI
 

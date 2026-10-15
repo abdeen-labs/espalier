@@ -164,9 +164,9 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
         }
     }
 
-    /// The ahead count ("↑2"): commits plus tags to push, compact; nil when
-    /// zero.
-    public var aheadCount: String? {
+    /// The ahead count ("↑2"): commits plus tags to push, compact, in
+    /// `numberFormat`; nil when zero.
+    public func aheadCount(_ numberFormat: NumberFormat) -> String? {
         let (aheadBehind, tags): (AheadBehind?, Int) = switch shownKind {
         case .forcePush(_, let aheadBehind, let tags)?, .pull(_, _, let aheadBehind, let tags, _)?, .push(_, let aheadBehind, let tags)?: (aheadBehind, tags)
         default: (nil, 0)
@@ -174,11 +174,11 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
         guard let aheadBehind, aheadBehind.ahead + tags > 0 else {
             return nil
         }
-        return formatCompactNumber(Double(aheadBehind.ahead + tags))
+        return formatCompactNumber(Double(aheadBehind.ahead + tags), CompactFormatOptions(numberFormat: numberFormat))
     }
 
-    /// The behind count ("↓3"); nil when zero.
-    public var behindCount: String? {
+    /// The behind count ("↓3"), compact, in `numberFormat`; nil when zero.
+    public func behindCount(_ numberFormat: NumberFormat) -> String? {
         let aheadBehind: AheadBehind? = switch shownKind {
         case .forcePush(_, let aheadBehind, _)?, .pull(_, _, let aheadBehind, _, _)?, .push(_, let aheadBehind, _)?: aheadBehind
         default: nil
@@ -186,26 +186,26 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
         guard let aheadBehind, aheadBehind.behind > 0 else {
             return nil
         }
-        return formatCompactNumber(Double(aheadBehind.behind))
+        return formatCompactNumber(Double(aheadBehind.behind), CompactFormatOptions(numberFormat: numberFormat))
     }
 
-    /// The button's label: the title, then the counts ("Push origin ↑2";
-    /// "Pull origin ↓3 ↑2", behind first when pulling).
-    public var label: String {
-        ([title] + [countsText].compactMap { $0 }).joined(separator: " ")
+    /// The button's label: the title, then the counts in `numberFormat`
+    /// ("Push origin ↑2"; "Pull origin ↓3 ↑2", behind first when pulling).
+    public func label(_ numberFormat: NumberFormat) -> String {
+        ([title] + [countsText(numberFormat)].compactMap { $0 }).joined(separator: " ")
     }
 
     /// What VoiceOver calls the button: its label, or while an operation
     /// runs, what it is ("Fetching origin").
-    public var accessibilityTitle: String {
-        activityTitle ?? label
+    public func accessibilityTitle(_ numberFormat: NumberFormat) -> String {
+        activityTitle ?? label(numberFormat)
     }
 
-    /// The counts after the title ("↑2"; "↓3 ↑2", behind first when
-    /// pulling); nil when there are none.
-    public var countsText: String? {
-        let ahead = aheadCount.map { "↑\($0)" }
-        let behind = behindCount.map { "↓\($0)" }
+    /// The counts after the title in `numberFormat` ("↑2"; "↓3 ↑2", behind
+    /// first when pulling); nil when there are none.
+    public func countsText(_ numberFormat: NumberFormat) -> String? {
+        let ahead = aheadCount(numberFormat).map { "↑\($0)" }
+        let behind = behindCount(numberFormat).map { "↓\($0)" }
         let counts: [String?] = if case .pull? = shownKind { [behind, ahead] } else { [ahead, behind] }
         let shown = counts.compactMap { $0 }
         return shown.isEmpty ? nil : shown.joined(separator: " ")
@@ -372,7 +372,7 @@ nonisolated public enum SyncMenuItem: Sendable, Equatable {
 
 // MARK: - The view
 
-/// The sync button, value-driven: snapshots render every state. A capsule:
+/// The sync button, value-driven: it draws `SyncButtonState`. A capsule:
 /// prominent while there's something to push, pull, publish, or force
 /// push, and while that runs; quiet otherwise. With alternatives (Fetch,
 /// Force Push) or a background failure, a chevron opens its menu. While a
@@ -384,9 +384,9 @@ public struct SyncButtonView: View {
     private let onPrimary: () -> Void
     private let onMenuItem: (SyncMenuItem) -> Void
     private let onShowFailure: () -> Void
-    @Environment(\.fixedNow) private var fixedNow
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
+    @Environment(\.numberFormat) private var numberFormat
 
     /// How far left of the button's trailing edge the capsules of a
     /// crossfade can reach: more than the widest capsule.
@@ -446,7 +446,7 @@ public struct SyncButtonView: View {
 
     @ViewBuilder
     private var capsule: some View {
-        let detail = state.detail(now: fixedNow ?? Date(), formatting: formatting, timeZone: timeZone)
+        let detail = state.detail(now: Date(), formatting: formatting, timeZone: timeZone)
         if case .progress(_, let description, _, _) = state.kind {
             // While it runs: the capsule it was, legible, taking no clicks;
             // what runs and git's step are its tooltip.
@@ -455,15 +455,15 @@ public struct SyncButtonView: View {
                 .overlay {
                     Color.clear
                         .contentShape(Capsule(style: .circular))
-                        .help(detail)
+                        .tooltip(detail)
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(state.accessibilityTitle)
+                .accessibilityLabel(state.accessibilityTitle(numberFormat))
                 .accessibilityValue(description)
         } else {
             control(look, detail: detail)
                 .disabled(!state.isEnabled)
-                .help(detail)
+                .tooltip(detail)
         }
     }
 
@@ -487,25 +487,18 @@ public struct SyncButtonView: View {
 
     /// The chevron's menu: the alternatives under the last fetch, and the
     /// background failure.
-    @ViewBuilder
-    private func menu(detail: String) -> some View {
-        Section(detail) {
-            ForEach(state.menuItems, id: \.title) { item in
-                Button {
+    @MenuBuilder
+    private func menu(detail: String) -> MenuContent {
+        MenuSection(detail) {
+            for item in state.menuItems {
+                MenuAction(item.title, systemImage: item.systemImage, subtitle: item.description) {
                     onMenuItem(item)
-                } label: {
-                    Label {
-                        Text(item.title)
-                        Text(item.description)
-                    } icon: {
-                        Image(systemName: item.systemImage)
-                    }
                 }
             }
         }
         if let failure = state.backgroundFailure {
-            Section {
-                Button("\(failure.menuTitle) — Show Details…", action: onShowFailure)
+            MenuSection {
+                MenuAction("\(failure.menuTitle) — Show Details…", action: onShowFailure)
             }
         }
     }
@@ -514,12 +507,12 @@ public struct SyncButtonView: View {
     /// menu and toolbar labels, which keep only an image and a title), the
     /// title, and its counts in SF Mono ("Push origin ↑2").
     private func label(kind: CapsuleButtonKind, detail: String, drawsArc: Bool) -> some View {
-        let symbolColor: NSColor = kind == .prominent ? .white : Palette.text2
-        return HStack(spacing: 7) {
+        let symbolColor: NSColor = kind == .prominent ? Palette.buttonText : Palette.text2
+        return HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
             symbol(color: symbolColor, drawsArc: drawsArc)
             Text(state.title)
                 .lineLimit(1)
-            if let counts = state.countsText {
+            if let counts = state.countsText(numberFormat) {
                 // The counts roll to a new value over 0.2 s (a commit adds
                 // one to push).
                 Text(counts)
@@ -532,7 +525,7 @@ public struct SyncButtonView: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(state.label)
+        .accessibilityLabel(state.label(numberFormat))
         .accessibilityValue(detail)
     }
 
@@ -612,7 +605,6 @@ enum BadgedSymbol {
 /// detail is the last fetch.
 public struct LastFetchedLabel: View {
     private let lastFetched: Date?
-    @Environment(\.fixedNow) private var fixedNow
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
 
@@ -628,7 +620,7 @@ public struct LastFetchedLabel: View {
     public var body: some View {
         if let lastFetched {
             TimelineView(.everyMinute) { context in
-                Text("Fetched \(RelativeTime.describe(lastFetched, now: fixedNow ?? context.date, formatting: formatting, timeZone: timeZone))")
+                Text("Fetched \(RelativeTime.describe(lastFetched, now: context.date, formatting: formatting, timeZone: timeZone))")
                     .font(Typography.meta)
                     .foregroundStyle(.text3)
                     .lineLimit(1)
@@ -666,12 +658,9 @@ public struct SyncButtonGroup: View {
     /// - Parameters:
     ///   - scope: What the state belongs to (the repository): what the
     ///     group showed for another doesn't stay while an operation runs.
-    ///   - shownWidth: The width to keep while loading before the group has
-    ///     shown anything.
     public init(
         _ state: SyncButtonState,
         scope: AnyHashable? = nil,
-        shownWidth: CGFloat? = nil,
         onPrimary: @escaping () -> Void = {},
         onMenuItem: @escaping (SyncMenuItem) -> Void = { _ in },
         onShowFailure: @escaping () -> Void = {}
@@ -681,7 +670,6 @@ public struct SyncButtonGroup: View {
         self.onPrimary = onPrimary
         self.onMenuItem = onMenuItem
         self.onShowFailure = onShowFailure
-        _shownWidth = State(initialValue: shownWidth)
     }
 
     public var body: some View {
@@ -744,7 +732,7 @@ struct SyncButton: View {
         // Another repository's button shows at once, as navigation between
         // repositories does.
         .motionScope(AnyHashable(ObjectIdentifier(repository)))
-        .popover(isPresented: $isShowingFailure) {
+        .popoverCard(isPresented: $isShowingFailure, title: repository.lastBackgroundFailure.map { BackgroundFailureSummary($0).menuTitle }) {
             if let failure = repository.lastBackgroundFailure {
                 BackgroundFailureDetails(BackgroundFailureSummary(failure)) { index in
                     isShowingFailure = false

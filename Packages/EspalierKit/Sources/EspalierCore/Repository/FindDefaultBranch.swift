@@ -8,15 +8,14 @@ import GitKit
 /// exists, falling back to the value of the `init.defaultBranch`
 /// configuration and finally a const value of `main`.
 ///
-/// In determining the default branch we prioritize finding a local branch
-/// but if no local branch matches the default branch name nor is tracking
-/// the contribution target remote HEAD we'll fall back to looking for the
-/// remote branch itself.
+/// The default branch is the local branch with the default branch's name,
+/// else the contribution target remote's branch itself.
 ///
 /// - Parameters:
 ///   - repository: The repository; a fork contributing to its parent looks
 ///     at the `upstream` remote.
-///   - branches: The repository's branches, local and remote.
+///   - branches: The repository's branches, local and remote, including the
+///     remote branches local branches track.
 ///   - defaultRemoteName: The name of the default remote (see
 ///     `findDefaultRemote`), if there is one.
 public func findDefaultBranch(
@@ -47,7 +46,6 @@ public func findDefaultBranch(
     }
 
     var localHit: Branch?
-    var localTrackingHit: Branch?
     var remoteHit: Branch?
 
     for branch in branches {
@@ -55,26 +53,10 @@ public func findDefaultBranch(
             if JSCompat.strictEquals(branch.name, defaultBranchName) {
                 localHit = branch
             }
-
-            if let remoteRef, let upstream = branch.upstream, JSCompat.strictEquals(upstream, remoteRef) {
-                // Give preference to local branches that target the upstream
-                // default branch that also match the name. In other words, if there
-                // are two local branches which both track the origin default branch
-                // we'll prefer a branch which is also named the same as the default
-                // branch name.
-                if localTrackingHit == nil || JSCompat.strictEquals(branch.name, defaultBranchName) {
-                    localTrackingHit = branch
-                }
-            }
         } else if let remoteRef, JSCompat.strictEquals(branch.name, remoteRef) {
             remoteHit = branch
         }
     }
 
-    // When determining what the default branch is we give priority to local
-    // branches tracking the default branch of the contribution target (think
-    // origin) remote, then we consider local branches that are named the same
-    // as the default branch, and finally we look for the remote branch
-    // representing the default branch of the contribution target
-    return localTrackingHit ?? localHit ?? remoteHit
+    return localHit ?? remoteHit
 }

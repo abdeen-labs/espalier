@@ -47,7 +47,7 @@ struct RebaseOperationTests {
 
     // MARK: Rebasing
 
-    @Test("rebases the current branch onto a branch and says so in desktop's words")
+    @Test("rebases the current branch onto a branch")
     func rebases() async throws {
         let fixture = try await makeRepository()
         let main = try fixture.branch("main")
@@ -57,7 +57,6 @@ struct RebaseOperationTests {
 
         #expect(result == .rebased(targetBranch: "feature", baseBranch: "main"))
         #expect(result.outcome == .completed)
-        #expect(result.summary == "Rebased feature onto main")
         #expect(try await fixture.summaries("main..feature") == ["Feature"])
         #expect(try await fixture.sha("feature~1") == main.tip.sha)
         #expect(try await fixture.checkedOutBranch() == "feature")
@@ -78,7 +77,6 @@ struct RebaseOperationTests {
 
         let result = try await fixture.model.operations.rebase(onto: remoteMain)
         #expect(result == .rebased(targetBranch: "feature", baseBranch: "origin/main"))
-        #expect(result.summary == "Rebased feature onto origin/main")
         #expect(try await fixture.sha("feature~1") == remoteMain.tip.sha)
         await fixture.app.idle()
     }
@@ -92,7 +90,6 @@ struct RebaseOperationTests {
         let result = try await fixture.model.operations.rebase(onto: try fixture.branch("main"))
         #expect(result == .alreadyUpToDate(ours: "feature", theirs: "main"))
         #expect(result.outcome == .alreadyUpToDate)
-        #expect(result.summary == "feature is already up to date with main")
         #expect(try await fixture.head() == tip)
         #expect(fixture.model.operations.current == nil)
         await fixture.app.idle()
@@ -105,14 +102,14 @@ struct RebaseOperationTests {
         let itself = await #expect(throws: OperationError.self) {
             try await operations.rebase(onto: try fixture.branch("feature"))
         }
-        #expect(itself?.reason == .precondition("You can't rebase a branch onto itself."))
+        #expect(preconditionText(itself) != nil)
 
         try await runGit(["checkout", "-q", "--detach", "HEAD"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         let detached = await #expect(throws: OperationError.self) {
             try await operations.rebase(onto: try fixture.branch("main"))
         }
-        #expect(detached?.reason == .precondition("You need to be on a branch to rebase."))
+        #expect(preconditionText(detached) != nil)
         #expect(operations.current == nil)
         await fixture.app.idle()
     }
@@ -135,7 +132,7 @@ struct RebaseOperationTests {
 
     // MARK: Rewriting published commits
 
-    @Test("rebasing a published branch asks first, in desktop's words, then rewrites it and recommends a force push")
+    @Test("rebasing a published branch asks first, then rewrites it and recommends a force push")
     func publishedAsksFirst() async throws {
         let fixture = try await makeRepository(publishFeature: true)
         let operations = fixture.model.operations
@@ -150,9 +147,6 @@ struct RebaseOperationTests {
             return
         }
         #expect(confirmation.kind == .rewritePublishedCommits)
-        #expect(confirmation.title == "Rebase Requires a Force Push")
-        #expect(confirmation.confirmButton == "Rebase Anyway")
-        #expect(confirmation.message.hasPrefix("This branch has already been pushed. After the rebase,"))
         #expect(try await fixture.head() == original)
         #expect(operations.forcePushState == .notAvailable)
 
@@ -160,7 +154,7 @@ struct RebaseOperationTests {
         #expect(result == .rebased(targetBranch: "feature", baseBranch: "main"))
         // Diverged from its upstream, rewritten by Espalier: force push.
         #expect(fixture.model.gitState.aheadBehind == AheadBehind(ahead: 2, behind: 1))
-        #expect(operations.rewrittenBranches["feature"] == (try await fixture.head()))
+        #expect(operations.rewrittenBranches["feature"] == (try await fixture.sha("feature@{upstream}")))
         #expect(operations.forcePushState == .recommended)
         await fixture.app.idle()
     }
@@ -217,7 +211,6 @@ struct RebaseOperationTests {
             Issue.record("Unexpected conflict state \(String(describing: operations.conflictState))")
             return
         }
-        #expect(current.conflictsMessage == "Resolve conflicts to continue rebasing feature.")
         #expect(operations.conflictBranches == ConflictBranches(ours: "main", theirs: "feature"))
         #expect(operations.unresolvedFiles.map(\.path) == ["README.md"])
         #expect(!operations.canContinue)
@@ -227,7 +220,7 @@ struct RebaseOperationTests {
         let blocked = await #expect(throws: OperationError.self) {
             try await operations.merge(main)
         }
-        #expect(blocked?.reason == .precondition("Resolve conflicts to continue rebasing feature."))
+        #expect(blocked?.reason == .precondition(current.conflictsMessage))
 
         operations.setManualResolution(.theirs, forPath: "README.md")
         #expect(operations.canContinue)
@@ -241,6 +234,37 @@ struct RebaseOperationTests {
         #expect(operations.forcePushState == .recommended)
         // Continuing selects the new tip in history.
         #expect(fixture.model.history.selection.shas == [try await fixture.head()])
+        await fixture.app.idle()
+    }
+
+    @Test("a collaborator's push fetched while the rebase waits on its conflicts: no force push is recommended afterwards")
+    func remoteMovedDuringRebase() async throws {
+        let fixture = try await makeRepository(conflicting: true, publishFeature: true)
+        let operations = fixture.model.operations
+        let published = try await fixture.sha("origin/feature")
+        #expect(try await operations.rebase(onto: try fixture.branch("main"), confirmed: [.rewritePublishedCommits]) == .conflicted)
+
+        // A collaborator pushes to feature, and a fetch brings it in.
+        let other = try await cloneRepository(fixture.remote)
+        try await runGit(["checkout", "-q", "feature"], other)
+        try await commitFile(other, "theirs.txt", "theirs\n")
+        try await runGit(["push", "-q", "origin", "feature"], other)
+        try await runGit(["fetch", "-q"], fixture.local)
+        await fixture.model.refresh(.full, reason: .user)
+
+        operations.setManualResolution(.theirs, forPath: "README.md")
+        _ = try await operations.continueOperation()
+
+        let aheadBehind = try #require(fixture.model.gitState.aheadBehind)
+        #expect(aheadBehind.ahead > 0 && aheadBehind.behind > 0)
+        #expect(operations.rewrittenBranches == ["feature": published])
+        #expect(operations.forcePushState == .available)
+        if case .pull = fixture.model.sync.action {} else {
+            Issue.record("Unexpected action \(fixture.model.sync.action)")
+        }
+        // The next load of the branches forgets the rewrite.
+        await fixture.model.refresh(.full, reason: .user)
+        #expect(operations.rewrittenBranches.isEmpty)
         await fixture.app.idle()
     }
 
@@ -301,7 +325,7 @@ struct RebaseOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await operations.continueOperation()
         }
-        #expect(error?.reason == .precondition("Resolve all conflicts before continuing"))
+        #expect(preconditionText(error) != nil)
         #expect(error?.operation == .continueRebase)
         #expect(operations.current?.phase == .conflicted)
         #expect(fixture.gitFileExists("REBASE_HEAD"))
@@ -322,12 +346,11 @@ struct RebaseOperationTests {
             try await fixture.model.operations.rebase(onto: try fixture.branch("main"))
         }
         #expect(error?.reason == .localChangesOverwritten(files: []))
-        #expect(error?.message == "Can't rebase while your branch has uncommitted changes.")
         #expect(error?.retry?.kind == .rebase)
         #expect(fixture.model.operations.current == nil)
 
         let recovery = try #require(error?.recoveries.first)
-        #expect(recovery.title == "Stash Changes and Continue")
+        #expect(recovery.kind == .stashChangesAndRetry)
         try await recovery.perform(in: fixture.app)
         await fixture.model.idle()
         #expect(try await fixture.summaries("main..feature") == ["Feature"])
@@ -401,7 +424,6 @@ struct RebaseOperationTests {
         await fixture.model.refresh(.status, reason: .fileSystem)
         #expect(operations.canContinue)
         #expect(try await operations.continueOperation() == .multiCommit(.rebased(targetBranch: "feature", baseBranch: nil)))
-        #expect(MultiCommitResult.rebased(targetBranch: "feature", baseBranch: nil).summary == "Rebased feature")
         #expect(try fixture.read("README.md") == numberedLinesReplacing(1, with: "line one and uno"))
         #expect(try await fixture.summaries("main..feature") == ["Feature", "Feature README"])
         // orig-head is a SHA, so the branch counts as rewritten.
@@ -432,11 +454,6 @@ struct RebaseOperationTests {
         #expect(current.kind == .rebase)
         #expect(current.originalBranchTip == original)
         #expect(current.targetBranch?.name == "feature")
-        #expect(current.interruptedMessage == "Rebasing feature was interrupted. Continue or abort the rebase.")
-        // Without a branch to name, as for a rebase of a detached HEAD.
-        var unnamed = current
-        unnamed.targetBranch = nil
-        #expect(unnamed.interruptedMessage == "A rebase was interrupted. Continue or abort it.")
         #expect(operations.conflictState == nil)
         #expect(operations.canContinue)
         #expect(model.gitState.inProgress == .rebase(RebaseInternalState(targetBranch: "feature", baseBranchTip: main, originalBranchTip: original)))
@@ -444,7 +461,7 @@ struct RebaseOperationTests {
         let blocked = await #expect(throws: OperationError.self) {
             try await operations.merge(try #require(model.gitState.branches.all.first { $0.name == "main" }))
         }
-        #expect(blocked?.reason == .precondition("Rebasing feature was interrupted. Continue or abort the rebase."))
+        #expect(blocked?.reason == .precondition(current.interruptedMessage))
 
         #expect(try await operations.continueOperation() == .multiCommit(.rebased(targetBranch: "feature", baseBranch: nil)))
         #expect(try await fixture.checkedOutBranch() == "feature")

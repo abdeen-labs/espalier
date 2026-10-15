@@ -3,8 +3,8 @@
 // quarter of the way round turns clockwise once every 0.9 s; with a value,
 // the arc fills the ring clockwise from twelve o'clock. `ArcProgress` draws
 // both in SwiftUI and `ArcProgressView` the spinner in AppKit, both from
-// `Metrics.Progress`. Where motion doesn't run (Reduce Motion, snapshots,
-// offscreen windows) the spinner's arc stays still at twelve o'clock.
+// `Metrics.Progress`. Where motion doesn't run (Reduce Motion, offscreen
+// windows) the spinner's arc stays still at twelve o'clock.
 
 import AppKit
 import QuartzCore
@@ -16,7 +16,6 @@ public struct ArcProgress: View {
     private let value: Double?
     private let tint: NSColor
     @Environment(\.motion) private var motion
-    @Environment(\.fixedNow) private var fixedNow
 
     /// - Parameters:
     ///   - size: Mini in a symbol's place, small beside text, large alone.
@@ -36,9 +35,7 @@ public struct ArcProgress: View {
                 // progress bar's fill does.
                 ring(arc: value, turn: 0)
                     .motion(Motion.leave, value: value)
-            } else if motion.animates, fixedNow == nil {
-                // Panes hosted in AppKit carry the fixed clock but not the
-                // suppressed motion: still under either.
+            } else if motion.animates {
                 TimelineView(.animation) { context in
                     ring(arc: size.arc, turn: Self.turn(at: context.date))
                 }
@@ -203,7 +200,7 @@ final class ArcProgressView: NSView {
         CATransaction.commit()
     }
 
-    private func updateColors() {
+    fileprivate func updateColors() {
         var color = tint.cgColor
         effectiveAppearance.performAsCurrentDrawingAppearance {
             color = tint.cgColor
@@ -235,5 +232,11 @@ final class ArcProgressView: NSView {
         spin.isRemovedOnCompletion = false
         arc.add(spin, forKey: Self.spinKey)
         spinAngle = angle
+    }
+}
+
+extension ArcProgressView: LookChangeObserving {
+    func lookDidChange() {
+        updateColors()
     }
 }

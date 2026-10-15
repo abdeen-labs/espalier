@@ -35,7 +35,7 @@ struct EnterpriseAddressStep: View {
                 // placeholder as a link.
                 // The labels in the form's column; the fields are capsules.
                 LabeledContent("Enterprise address") {
-                    TextField("Enterprise address", text: $address, prompt: Text(verbatim: "https://example.ghe.com"))
+                    TextField("Enterprise address", text: $address, prompt: Text(verbatim: "https://example.ghe.com").fieldPrompt())
                         .labelsHidden()
                         .focused($focusedField, equals: .address)
                         .textContentType(.URL)

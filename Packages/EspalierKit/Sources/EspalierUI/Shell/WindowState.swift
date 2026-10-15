@@ -57,7 +57,11 @@ public final class WindowState {
     /// The selected place in the selected repository (the sidebar's
     /// selection).
     public var place: SidebarPlace?
+    /// Whether the sidebar shows (`.detailOnly` hidden).
     public var columnVisibility: NavigationSplitViewVisibility = .all
+    public var isSidebarHidden: Bool {
+        columnVisibility == .detailOnly
+    }
     /// Whether Commit Info shows (History-like places only).
     public var isInspectorPresented = false
     /// The toolbar search field's text: filters the list being shown.
@@ -84,6 +88,10 @@ public final class WindowState {
     @ObservationIgnored private var featureStates: [ObjectIdentifier: AnyObject] = [:]
     /// The state notices already shown.
     @ObservationIgnored var shownNotices: Set<String> = []
+
+    /// The UI defaults key of whether the sidebar was last hidden: a new
+    /// window opens with its sidebar as the last one left it.
+    static let sidebarHiddenKey = "sidebar.hidden"
 
     public init() {}
 

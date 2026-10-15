@@ -1,38 +1,52 @@
-// Open With… (⌥⇧⌘A): the detected editors and "Configure Custom Editor…",
-// whose Path and Arguments are checked as Settings checks them; Open opens
-// once, without changing the settings (`openWith`).
+// Open With (⌥⇧⌘A): the editors' pop-up, as Settings ▸ Integrations shows
+// it (`IntegrationPicker`), with the detected editors and "Configure Custom
+// Editor…", whose Path and Arguments show under it and are checked as
+// Settings checks them; Open opens once, without changing the settings
+// (`openWith`).
 
 import AppKit
 import EspalierCore
 import GitKit
 import SwiftUI
 
-/// What Open With opens with.
-nonisolated enum OpenWithChoice: Hashable, Sendable {
-    case editor(String)
-    case custom
-}
-
 /// Open With's state.
 @MainActor @Observable
 final class OpenWithModel {
     @ObservationIgnored let integrations: IntegrationsModel
     let path: String
-    var choice: OpenWithChoice?
+    /// An editor by name, or `.configure` for the custom editor's fields.
+    var choice: IntegrationChoice
     var customPath = ""
     var customArguments = TargetPathArgument
     /// The custom fields' check, once it has run for them.
     private(set) var validation: CustomIntegrationValidation?
 
-    init(integrations: IntegrationsModel, path: String) {
+    /// Preselects the editor chosen in Settings: the custom editor, with
+    /// its path and arguments, or the selected editor when it's installed.
+    /// Without either, the first editor; with none installed, the custom
+    /// editor's fields.
+    init(integrations: IntegrationsModel, settings: IntegrationSettings, path: String) {
         self.integrations = integrations
         self.path = path
-        // The first editor; with none, the custom editor.
-        choice = integrations.availableEditors.first.map { .editor($0.editor) } ?? .custom
+        if let custom = settings.activeCustomEditor {
+            choice = .configure
+            customPath = custom.path
+            customArguments = custom.arguments
+        } else if let selected = integrations.editorResolution.selectedEditor {
+            choice = .named(selected.editor)
+        } else {
+            choice = integrations.availableEditors.first.map { .named($0.editor) } ?? .configure
+        }
     }
 
     var editors: [FoundEditor] {
         integrations.availableEditors
+    }
+
+    /// The editors' pop-up: the detected editors and "Configure Custom
+    /// Editor…".
+    var popUp: IntegrationPopUp {
+        IntegrationPopUp(installed: editors.map(\.editor), selection: choice)
     }
 
     /// The check of the custom fields as they are now.
@@ -55,9 +69,9 @@ final class OpenWithModel {
     /// Whether Open can be pressed: an editor, or a valid custom one.
     var canOpen: Bool {
         switch choice {
-        case .editor?: true
-        case .custom?: currentValidation?.isValid ?? false
-        case nil: false
+        case .named: true
+        case .configure: currentValidation?.isValid ?? false
+        case .custom, .none: false
         }
     }
 
@@ -65,21 +79,21 @@ final class OpenWithModel {
         let integrations = integrations
         let path = path
         switch choice {
-        case .editor(let name)?:
+        case .named(let name):
             guard let editor = editors.first(where: { $0.editor == name }) else {
                 return
             }
             await presenter.perform { _ throws(OperationError) in
                 try await integrations.openWith(path, editor: editor)
             }
-        case .custom?:
+        case .configure:
             guard let integration = currentValidation?.integration else {
                 return
             }
             await presenter.perform { _ throws(OperationError) in
                 try await integrations.openWith(path, customEditor: integration)
             }
-        case nil:
+        case .custom, .none:
             break
         }
     }
@@ -92,30 +106,27 @@ struct OpenWithForm: View {
     var open: () -> Void = {}
 
     var body: some View {
-        SheetScaffold("Open With…") {
+        SheetScaffold("Open With") {
             Form {
-                Picker("Select an editor", selection: $model.choice) {
-                    ForEach(model.editors, id: \.editor) { editor in
-                        Text(editor.editor).tag(Optional(OpenWithChoice.editor(editor.editor)))
-                    }
-                    if !model.editors.isEmpty {
-                        Divider()
-                    }
-                    Text("Configure Custom Editor…").tag(Optional(OpenWithChoice.custom))
+                // The labels in the form's column; the fields are capsules,
+                // and the pop-up as wide as they are.
+                LabeledContent("Editor") {
+                    IntegrationPicker(title: "Editor", popUp: model.popUp, configureTitle: "Configure Custom Editor…", selection: $model.choice)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                if model.choice == .custom {
+                if model.choice == .configure {
                     FolderField(label: "Path", path: $model.customPath, prompt: "Path to executable") {
                         choosePath()
                     }
                     if !model.customPath.isEmpty, let error = model.currentValidation?.pathError {
-                        SheetMessage(error, kind: .error)
+                        FieldMessage(error, kind: .error)
                     }
                     LabeledContent("Arguments") {
-                        TextField("Arguments", text: $model.customArguments, prompt: Text("Command line arguments"))
+                        TextField("Arguments", text: $model.customArguments, prompt: Text("Command line arguments").fieldPrompt())
                             .labelsHidden()
                     }
                     if let error = model.currentValidation?.argumentsError {
-                        SheetMessage(error, kind: .error)
+                        FieldMessage(error, kind: .error)
                     }
                 }
             }
@@ -152,7 +163,7 @@ struct OpenWithForm: View {
     }
 }
 
-/// Open With….
+/// The Open With sheet.
 struct OpenWithSheet: View {
     static let sheetID = "repository.openWith"
 
@@ -170,7 +181,7 @@ struct OpenWithSheet: View {
     }
 
     static func present(path: String, in context: WindowContext) {
-        let model = OpenWithModel(integrations: context.app.integrations, path: path)
+        let model = OpenWithModel(integrations: context.app.integrations, settings: context.app.preferences.integrations, path: path)
         context.modals.presentSheet(id: sheetID) {
             OpenWithSheet(model: model)
         }

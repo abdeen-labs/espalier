@@ -1,12 +1,13 @@
 // The rail of History's simple list: the branch as one line. Each row draws
-// its part of one 3-point line in the branch's color: the tip a bold ring
-// with a dot, commits not pushed yet hollow rings, pushed ones solid dots.
-// From the commit where the branch started, the line takes the base's color,
-// so where it began shows without a heading. A merge has a stub in the
-// merged branch's color that leaves on a short diagonal and fades out;
-// expanded, the merged commits sit on that stub, 16 to the right, with
-// smaller dots, and it fades out below the last of them. Every color is a
-// branch's (`BranchColors`), so the rail matches the sidebar and the graph.
+// its part of one line in the branch's color, with the graph's nodes: HEAD's
+// commit a bold ring with a dot, other commits rings, merge commits small
+// rings. Whether a commit is pushed shows by its title, as in the graph. From
+// the commit where the branch started, the line takes the base's color, so
+// where it began shows without a heading. A merge has a stub in the merged
+// branch's color that leaves on a short diagonal and fades out; expanded, the
+// merged commits sit on that stub, 16 to the right, with small rings, and it
+// fades out below the last of them. Every color is a branch's
+// (`BranchColors`), so the rail matches the sidebar and the graph.
 
 import AppKit
 import EspalierCore
@@ -14,19 +15,18 @@ import GitKit
 
 /// What one row's rail draws.
 struct SimpleRail: Equatable {
-    /// The row's node.
+    /// The row's node, as the graph draws it.
     enum Node: Equatable {
         /// No node: the row is the status line under a merge's commits.
         case none
-        /// The branch's tip: a bold ring with a dot.
-        case tip
-        /// A commit not pushed yet: a hollow ring.
-        case unpushed
-        /// A pushed commit: a solid dot.
-        case pushed
-        /// A commit a merge brought in, on the merge's stub: a smaller dot,
-        /// or a smaller ring when it isn't pushed.
-        case merged(isUnpushed: Bool)
+        /// HEAD's commit: a bold ring with a dot.
+        case head
+        /// A commit: a ring.
+        case commit
+        /// A merge commit: a small ring.
+        case merge
+        /// A commit a merge brought in, on the merge's stub: a small ring.
+        case merged
     }
 
     /// A line that fades out toward the row's bottom, or runs on.
@@ -53,7 +53,8 @@ struct SimpleRail: Equatable {
 
 /// The colors the rail takes from the repository's branches.
 struct SimpleRailColors: Equatable {
-    /// The branch's line: the current branch's color (the accent).
+    /// The branch's line: the shown branch's color (the current branch's is
+    /// the accent).
     var line: NSColor
     /// The base's color, from the row the branch started at.
     var base: NSColor?
@@ -62,16 +63,20 @@ struct SimpleRailColors: Equatable {
     /// The repository's branches, for merged branches' colors.
     var branchColors: BranchColors?
 
-    init(line: NSColor = .controlAccentColor, base: NSColor? = nil, startRow: Int? = nil, branchColors: BranchColors? = nil) {
+    init(line: NSColor = Palette.accent, base: NSColor? = nil, startRow: Int? = nil, branchColors: BranchColors? = nil) {
         self.line = line
         self.base = base
         self.startRow = startRow
         self.branchColors = branchColors
     }
 
-    /// The colors for `branchColors` and where the branch started.
-    init(branchColors: BranchColors, start: SimpleHistoryStart?) {
-        let line = branchColors.current.flatMap { branchColors.color(forBranch: $0) } ?? .controlAccentColor
+    /// The colors for `branchColors` and where the branch started: for the
+    /// line of `branch` (another branch's place), or of the current branch
+    /// when nil.
+    init(branchColors: BranchColors, start: SimpleHistoryStart?, branch: Branch? = nil) {
+        let line = branch.map { branchColors.color(of: (name: $0.name, isRemote: $0.type == .remote)) }
+            ?? branchColors.current.flatMap { branchColors.color(forBranch: $0) }
+            ?? Palette.accent
         let base = start.map { branchColors.color(of: (name: $0.base.name, isRemote: $0.base.type == .remote)) }
         self.init(line: line, base: base, startRow: start?.row, branchColors: branchColors)
     }
@@ -97,13 +102,14 @@ struct SimpleRailColors: Equatable {
     /// The rail of the commit in `row` of the branch's line.
     ///
     /// - Parameters:
+    ///   - isHead: The commit is HEAD's.
     ///   - isLast: The row ends the line (a root commit, or a shallow
     ///     clone's last).
     ///   - merge: For a merge, the merged branch's color and whether its
     ///     commits show under it.
-    func rail(row: Int, isUnpushed: Bool, isLast: Bool, merge: (color: NSColor, isExpanded: Bool)?, isDimmed: Bool) -> SimpleRail {
+    func rail(row: Int, isHead: Bool, isLast: Bool, merge: (color: NSColor, isExpanded: Bool)?, isDimmed: Bool) -> SimpleRail {
         var rail = SimpleRail()
-        rail.node = row == 0 ? .tip : isUnpushed ? .unpushed : .pushed
+        rail.node = isHead ? .head : merge == nil ? .commit : .merge
         rail.nodeColor = row == 0 ? line : lineColor(atRow: row)
         rail.top = row == 0 ? nil : lineColor(atRow: row - 1)
         rail.bottom = isLast ? nil : lineColor(atRow: row)
@@ -116,9 +122,9 @@ struct SimpleRailColors: Equatable {
     ///
     /// - Parameter isLast: The last line under the merge: its stub fades
     ///   out below it.
-    func mergedRail(mergeRow: Int, color: NSColor, isUnpushed: Bool, isLast: Bool, isDimmed: Bool) -> SimpleRail {
+    func mergedRail(mergeRow: Int, color: NSColor, isLast: Bool, isDimmed: Bool) -> SimpleRail {
         var rail = SimpleRail()
-        rail.node = .merged(isUnpushed: isUnpushed)
+        rail.node = .merged
         rail.nodeColor = color
         rail.top = lineColor(atRow: mergeRow)
         rail.bottom = lineColor(atRow: mergeRow)
@@ -201,10 +207,11 @@ final class SimpleRailView: NSView {
 enum SimpleRailRenderer {
     static func draw(_ rail: SimpleRail, height: CGFloat, isSelected: Bool, increaseContrast: Bool, appearance: NSAppearance, in context: CGContext) {
         let metrics = Metrics.SimpleList.self
+        let graph = Metrics.Graph.self
         let x0 = metrics.lineX
         let x1 = metrics.mergedLineX
         let middle = (height / 2).rounded()
-        let lineWidth = metrics.lineStroke + (increaseContrast ? Metrics.Graph.increaseContrastStroke : 0)
+        let extraStroke = increaseContrast ? graph.increaseContrastStroke : 0
         var colors: [NSColor: CGColor] = [:]
         var background = NSColor.white.cgColor
         appearance.performAsCurrentDrawingAppearance {
@@ -221,7 +228,7 @@ enum SimpleRailRenderer {
 
         context.saveGState()
         defer { context.restoreGState() }
-        context.setLineWidth(lineWidth)
+        context.setLineWidth(graph.trackStroke + extraStroke)
         context.setLineCap(.butt)
         context.setLineJoin(.round)
 
@@ -265,15 +272,24 @@ enum SimpleRailRenderer {
         guard let nodeColor = rail.nodeColor.map(cg) else {
             return
         }
-        var center = CGPoint(x: x0, y: middle)
-        if case .merged = rail.node {
-            center.x = x1
-        }
-        let opacity = rail.isDimmed ? Metrics.Graph.searchDimming : 1
+        let center = CGPoint(x: rail.node == .merged ? x1 : x0, y: middle)
+        let opacity = rail.isDimmed ? graph.searchDimming : 1
         func circle(_ radius: CGFloat) -> CGRect {
             CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
         }
+        let nodeStyle = Theme.current.graph.node
+        let size: GraphNodeSize? = switch rail.node {
+        case .none: nil
+        case .head: .head
+        case .commit: .commit
+        case .merge, .merged: .merge
+        }
+        if let size, let dot = GraphDot(size, style: nodeStyle) {
+            dot.draw(at: center, color: nodeColor, background: background, opacity: opacity, scale: 1, extraStroke: extraStroke, in: context)
+            return
+        }
         func ring(radius: CGFloat, width: CGFloat) {
+            let width = width + extraStroke
             // Filled with the background, so the lines stop at it.
             context.setFillColor(background)
             context.fillEllipse(in: circle(radius + width / 2))
@@ -282,31 +298,17 @@ enum SimpleRailRenderer {
             context.setLineWidth(width)
             context.strokeEllipse(in: circle(radius))
         }
-        func dot(radius: CGFloat) {
-            // A ring of the background around it.
-            context.setFillColor(background)
-            context.fillEllipse(in: circle(radius + metrics.dotRing / 2))
-            context.setAlpha(opacity)
-            context.setFillColor(nodeColor)
-            context.fillEllipse(in: circle(radius - metrics.dotRing / 2))
-        }
         switch rail.node {
         case .none:
             break
-        case .tip:
-            ring(radius: metrics.tipRadius, width: metrics.tipStroke)
+        case .head:
+            ring(radius: graph.headNodeRadius, width: graph.headNodeStroke)
             context.setFillColor(nodeColor)
-            context.fillEllipse(in: circle(metrics.tipDotRadius))
-        case .unpushed:
-            ring(radius: metrics.nodeRadius, width: metrics.nodeStroke)
-        case .pushed:
-            dot(radius: metrics.nodeRadius)
-        case .merged(let isUnpushed):
-            if isUnpushed {
-                ring(radius: metrics.mergedRingRadius, width: metrics.mergedRingStroke)
-            } else {
-                dot(radius: metrics.mergedNodeRadius)
-            }
+            context.fillEllipse(in: circle(graph.headDotRadius))
+        case .commit:
+            ring(radius: graph.nodeRadius, width: graph.nodeStroke)
+        case .merge, .merged:
+            ring(radius: graph.mergeNodeRadius, width: graph.mergeNodeStroke)
         }
     }
 

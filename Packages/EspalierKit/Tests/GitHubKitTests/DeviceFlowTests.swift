@@ -95,16 +95,19 @@ struct DeviceFlowTests {
             #expect(request.form["client_id"] == "Ov23liEnterprise")
         }
 
-        @Test("uses the api. subdomain for ghe.com and signs in on the enterprise's host")
-        func requestsGHEDotComDeviceCode() async throws {
+        @Test("signs in on the enterprise's host and port", arguments: [
+            NamedCase("uses the api. subdomain for ghe.com", (address: "https://octocorp.ghe.com", endpoint: "https://api.octocorp.ghe.com/", deviceCodeURL: "https://octocorp.ghe.com/login/device/code")),
+            NamedCase("keeps an Enterprise Server's port", (address: "https://github.example.com:8443", endpoint: "https://github.example.com:8443/api/v3", deviceCodeURL: "https://github.example.com:8443/login/device/code")),
+        ])
+        func requestsDeviceCodeOnEnterpriseHost(_ testCase: NamedCase<(address: String, endpoint: String, deviceCodeURL: String)>) async throws {
             mock.on("POST", deviceCodePath, respond: .json(deviceCodeResponse))
-            let configuration = try EndpointConfiguration.enterprise(address: "https://octocorp.ghe.com", clientID: "client")
+            let configuration = try EndpointConfiguration.enterprise(address: testCase.value.address, clientID: "client")
             let flow = DeviceFlow(configuration: configuration, runtime: mock.runtime, sleep: clock.sleep, now: clock.now)
 
             _ = try await flow.requestDeviceCode()
 
-            #expect(configuration.endpoint == "https://api.octocorp.ghe.com/")
-            #expect(mock.requests.first?.url.absoluteString == "https://octocorp.ghe.com/login/device/code")
+            #expect(configuration.endpoint == testCase.value.endpoint)
+            #expect(mock.requests.first?.url.absoluteString == testCase.value.deviceCodeURL)
         }
 
         @Test("requires a client ID for enterprise servers")
@@ -118,6 +121,8 @@ struct DeviceFlowTests {
         func treatsDotComAddressAsDotCom() throws {
             #expect(try EndpointConfiguration.enterprise(address: "https://github.com", clientID: "other") == .dotCom)
             #expect(try EndpointConfiguration.enterprise(address: "api.github.com/", clientID: "") == .dotCom)
+            #expect(try EndpointConfiguration.enterprise(address: "GitHub.com", clientID: "") == .dotCom)
+            #expect(try EndpointConfiguration.enterprise(address: " HTTPS://GITHUB.COM ", clientID: "") == .dotCom)
             #expect(try EndpointConfiguration.enterprise(address: "github.company.com", clientID: "c").endpoint == "https://github.company.com/api/v3")
         }
 

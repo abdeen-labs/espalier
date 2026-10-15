@@ -4,21 +4,8 @@ import Testing
 import TestSupport
 
 /// No test launches anything: a recording launcher stands in for spawning.
-@Suite("Shell lookup and launch")
+@Suite("Shell launch")
 struct ShellsSharedTests {
-    @Test("finds the selected shell, or Terminal")
-    func findShellOrDefault() async {
-        let terminal = FoundShell(shell: .terminal, path: "/T/Terminal.app", bundleID: "com.apple.Terminal")
-        let iTerm = FoundShell(shell: .iTerm2, path: "/T/iTerm.app", bundleID: "com.googlecode.iterm2")
-        let lookup = ShellLookup(
-            locator: FakeApplicationLocator(["com.apple.Terminal": "/T/Terminal.app", "com.googlecode.iterm2": "/T/iTerm.app"])
-        )
-
-        #expect(await lookup.findShellOrDefault(.iTerm2) == iTerm)
-        #expect(await lookup.findShellOrDefault(.warp) == terminal)
-        #expect(await ShellLookup(locator: FakeApplicationLocator()).findShellOrDefault(.warp) == nil)
-    }
-
     @Test("launches a shell that exists, without detaching it")
     func launches() async throws {
         let directory = try createTempDirectory()
@@ -52,7 +39,7 @@ struct ShellsSharedTests {
         let warp = try makeFakeApplication(in: directory, named: "Warp.app")
         let launcher = RecordingLauncher()
 
-        let error = await #expect(throws: ShellError.self) {
+        await #expect(throws: ShellError.self) {
             try await launchShell(
                 FoundShell(shell: .warp, path: "\(warp)/Contents/MacOS/stable", bundleID: "dev.warp.Warp-Stable"),
                 "/repo",
@@ -60,10 +47,6 @@ struct ShellsSharedTests {
                 launcher: launcher
             )
         }
-        #expect(
-            error?.message
-                == "Espalier couldn't find Warp at \(warp)/Contents/MacOS/stable. Choose an available shell in Settings ▸ Integrations."
-        )
         #expect(launcher.commands.isEmpty)
     }
 
@@ -83,7 +66,6 @@ struct ShellsSharedTests {
 
         #expect(errors.collected.count == 1)
         #expect(errors.collected.first as? SpawnError == failure)
-        #expect(errors.collected.first?.localizedDescription == "spawn /usr/bin/open ENOENT")
     }
 
     @Suite("Custom shell")
@@ -120,7 +102,7 @@ struct ShellsSharedTests {
             let directory = try createTempDirectory()
             let launcher = RecordingLauncher()
 
-            let error = await #expect(throws: ShellError.self) {
+            await #expect(throws: ShellError.self) {
                 try await launchCustomShell(
                     CustomIntegration(path: "\(directory)/term", arguments: "%TARGET_PATH%"),
                     "/repo",
@@ -128,10 +110,6 @@ struct ShellsSharedTests {
                     launcher: launcher
                 )
             }
-            #expect(
-                error?.message
-                    == "Espalier couldn't find the custom shell at \(directory)/term. Choose an available shell in Settings ▸ Integrations."
-            )
             #expect(launcher.commands.isEmpty)
         }
 

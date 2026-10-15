@@ -8,7 +8,7 @@ import AppKit
 /// The colors of a repository's branches.
 ///
 /// The current branch is the accent; the default branch is the trunk's
-/// teal. Every other local branch takes the palette entry its name hashes
+/// color (Classic's teal). Every other local branch takes the palette entry its name hashes
 /// to, or, when a branch before it (by name) already has that entry, the
 /// next free one; once every entry is taken, the next branch starts over
 /// with its own entry. A remote branch has the color of the local branch
@@ -31,7 +31,7 @@ public struct BranchColors: Equatable {
     ///   - defaultBranch: The default branch (a remote branch's name when
     ///     there's no local one).
     ///   - remoteNames: The remotes, to find a remote branch's local name.
-    public init(branches: [String], current: String?, defaultBranch: String?, remoteNames: [String] = [], accent: NSColor = .controlAccentColor) {
+    public init(branches: [String], current: String?, defaultBranch: String?, remoteNames: [String] = [], accent: NSColor = Palette.accent) {
         let tones = TrackPalette.palette(accent: accent)
         self.tones = tones
         self.current = current
@@ -55,7 +55,7 @@ public struct BranchColors: Equatable {
     }
 
     /// The color of the local branch `name`, or nil when it isn't one.
-    public func color(forBranch name: String, accent: NSColor = .controlAccentColor) -> NSColor? {
+    public func color(forBranch name: String, accent: NSColor = Palette.accent) -> NSColor? {
         if name == current {
             return accent
         }
@@ -67,7 +67,7 @@ public struct BranchColors: Equatable {
 
     /// The color of the remote branch `name` ("origin/main"): its local
     /// branch's, else its name's entry.
-    public func color(forRemoteBranch name: String, accent: NSColor = .controlAccentColor) -> NSColor {
+    public func color(forRemoteBranch name: String, accent: NSColor = Palette.accent) -> NSColor {
         if name == defaultBranch {
             return TrackPalette.trunk
         }
@@ -84,7 +84,7 @@ public struct BranchColors: Equatable {
     /// entry no branch has, by the name (or, when the message names none,
     /// by `merge`, the merge's SHA), so a branch that's gone never looks
     /// like one that exists.
-    public func color(forMergedBranch name: String?, isPullRequest: Bool, merge: String, accent: NSColor = .controlAccentColor) -> NSColor {
+    public func color(forMergedBranch name: String?, isPullRequest: Bool, merge: String, accent: NSColor = Palette.accent) -> NSColor {
         if let name {
             if let color = color(forBranch: name, accent: accent) {
                 return color
@@ -104,7 +104,7 @@ public struct BranchColors: Equatable {
     }
 
     /// The color of the branch `branch` (local or remote).
-    public func color(of branch: (name: String, isRemote: Bool), accent: NSColor = .controlAccentColor) -> NSColor {
+    public func color(of branch: (name: String, isRemote: Bool), accent: NSColor = Palette.accent) -> NSColor {
         if branch.isRemote {
             return color(forRemoteBranch: branch.name, accent: accent)
         }

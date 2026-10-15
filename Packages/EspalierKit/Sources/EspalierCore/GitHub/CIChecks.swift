@@ -112,8 +112,53 @@ public func getCheckRunConclusionAdjective(_ conclusion: APICheckConclusion?) ->
     }
 }
 
+/// The user-facing adjective for a check or step: its conclusion's, or
+/// without one yet, its status's ("Queued", "Waiting", "In progress").
+public func getCheckRunAdjective(_ status: APICheckStatus, _ conclusion: APICheckConclusion?) -> String {
+    if let conclusion {
+        return getCheckRunConclusionAdjective(conclusion)
+    }
+    return PendingCheckState(status).adjective
+}
+
+/// The user-facing adjective for a pull request's checks together: their
+/// combined conclusion's, or while some have none yet, "In progress" if
+/// any of those runs, else "Waiting" if any waits, else "Queued".
+public func getCombinedCheckAdjective(_ check: CombinedRefCheck) -> String {
+    if let conclusion = check.conclusion {
+        return getCheckRunConclusionAdjective(conclusion)
+    }
+    let pending = check.checks.filter { $0.conclusion == nil }.map { PendingCheckState($0.status) }
+    return (pending.max() ?? .inProgress).adjective
+}
+
+/// Where a check without a conclusion is, from the furthest from running.
+private enum PendingCheckState: Comparable {
+    /// Queued, requested, or pending: not started.
+    case queued
+    /// Waiting for a deployment's protection rules.
+    case waiting
+    case inProgress
+
+    init(_ status: APICheckStatus) {
+        switch status {
+        case .queued, .requested, .pending: self = .queued
+        case .waiting: self = .waiting
+        default: self = .inProgress
+        }
+    }
+
+    var adjective: String {
+        switch self {
+        case .queued: "Queued"
+        case .waiting: "Waiting"
+        case .inProgress: "In progress"
+        }
+    }
+}
+
 /// Method to generate a user friendly short check run description such as
-/// "Successful in xs", "In Progress", "Failed after 1m"
+/// "Successful in xs", "Queued", "In progress", "Failed after 1m"
 ///
 /// If the duration is not provided, it will omit the preposition and duration
 /// context. Also, conclusions such as `Skipped`, 'Action required`, `Marked as
@@ -127,7 +172,7 @@ public func getCheckRunConclusionAdjective(_ conclusion: APICheckConclusion?) ->
 ///   - durationMs: The time in milliseconds it took to complete.
 func getCheckRunShortDescription(_ status: APICheckStatus, _ conclusion: APICheckConclusion?, _ durationMs: Double? = nil) -> String {
     guard status == .completed, let conclusion else {
-        return "In progress"
+        return getCheckRunAdjective(status, nil)
     }
 
     let adjective = getCheckRunConclusionAdjective(conclusion)
@@ -177,128 +222,85 @@ public func apiCheckRunToRefCheck(_ checkRun: APIRefCheckRun) -> RefCheck {
     )
 }
 
-/// Combines a list of check runs into a single combined check with global status
-/// and conclusion.
+/// What a check's conclusion means for its pull request.
+public enum CheckResult: Sendable, Hashable {
+    /// Successful, skipped, or neutral.
+    case passed
+    /// Failed, timed out, or waiting on an action.
+    case failed
+    /// Queued or running: no conclusion yet.
+    case running
+    /// Cancelled, stale, or a conclusion GitHub added since: it never
+    /// produced a result to rely on.
+    case unfinished
+
+    public init(_ check: RefCheck) {
+        guard let conclusion = check.conclusion else {
+            self = .running
+            return
+        }
+        switch conclusion {
+        case .success, .skipped, .neutral: self = .passed
+        case .failure, .timedOut, .actionRequired: self = .failed
+        default: self = .unfinished
+        }
+    }
+}
+
+/// What a pull request's checks add up to, nil with none: failed if any
+/// failed; else running if any runs; else unfinished if any never produced
+/// a result; else passed. The combined check, every checks glyph, and the
+/// checks summary's title follow it.
+public func checksResult(_ checks: [RefCheck]) -> CheckResult? {
+    let results = Set(checks.map(CheckResult.init))
+    for result in [CheckResult.failed, .running, .unfinished, .passed] where results.contains(result) {
+        return result
+    }
+    return nil
+}
+
+/// Combines a list of check runs into a single combined check, whose status
+/// and conclusion stand for `checksResult(_:)`; nil without checks.
 public func createCombinedCheckFromChecks(_ checks: [RefCheck]) -> CombinedRefCheck? {
-    if checks.isEmpty {
+    switch checksResult(checks) {
+    case nil:
         // This case is distinct from when we fail to call the API in
         // that this means there are no checks or statuses so we should
         // clear whatever info we've got for this ref.
-        return nil
-    }
-
-    if checks.count == 1 {
-        // If we've got exactly one check then we can mirror its status
-        // and conclusion 1-1 without having to create an aggregate status
-        return CombinedRefCheck(status: checks[0].status, conclusion: checks[0].conclusion, checks: checks)
-    }
-
-    if checks.contains(where: isIncompleteOrFailure) {
-        return CombinedRefCheck(status: .completed, conclusion: .failure, checks: checks)
-    } else if checks.allSatisfy(isSuccess) {
-        return CombinedRefCheck(status: .completed, conclusion: .success, checks: checks)
-    } else {
-        return CombinedRefCheck(status: .inProgress, conclusion: nil, checks: checks)
+        nil
+    case .failed?:
+        CombinedRefCheck(status: .completed, conclusion: .failure, checks: checks)
+    case .running?:
+        CombinedRefCheck(status: .inProgress, conclusion: nil, checks: checks)
+    case .unfinished?:
+        // Stale when every unfinished check went stale; else cancelled.
+        CombinedRefCheck(
+            status: .completed,
+            conclusion: checks.allSatisfy { CheckResult($0) != .unfinished || $0.conclusion == .stale } ? .stale : .canceled,
+            checks: checks
+        )
+    case .passed?:
+        CombinedRefCheck(status: .completed, conclusion: .success, checks: checks)
     }
 }
 
-/// Whether the check is either incomplete or has failed
-public func isIncompleteOrFailure(_ check: RefCheck) -> Bool {
-    isIncomplete(check) || isFailure(check)
-}
-
-/// Whether the check is incomplete (timed out, stale or cancelled).
-///
-/// The terminology here is confusing and deserves explanation. An
-/// incomplete check is a check run that has been started and who's
-/// state is 'completed' but it never got to produce a conclusion
-/// because it was either cancelled, it timed out, or GitHub marked
-/// it as stale.
-public func isIncomplete(_ check: RefCheck) -> Bool {
-    guard check.status == .completed, let conclusion = check.conclusion else {
-        return false
-    }
-    return [APICheckConclusion.timedOut, .stale, .canceled].contains(conclusion)
-}
-
-/// Whether the check has failed (failure or requires action)
+/// Whether the check failed, timed out, or is waiting on an action.
 public func isFailure(_ check: RefCheck) -> Bool {
-    isFailure(status: check.status, conclusion: check.conclusion)
+    CheckResult(check) == .failed
 }
 
-/// Whether the job step has failed (failure or requires action)
-public func isFailure(_ step: APIWorkflowJobStep) -> Bool {
-    isFailure(status: step.status, conclusion: step.conclusion)
-}
-
-private func isFailure(status: APICheckStatus, conclusion: APICheckConclusion?) -> Bool {
-    guard status == .completed, let conclusion else {
-        return false
-    }
-    return conclusion == .failure || conclusion == .actionRequired
-}
-
-/// Whether the check can be considered successful (success, neutral or skipped)
-public func isSuccess(_ check: RefCheck) -> Bool {
-    guard check.status == .completed, let conclusion = check.conclusion else {
-        return false
-    }
-    return [APICheckConclusion.success, .neutral, .skipped].contains(conclusion)
-}
-
-/// In some cases there may be multiple check runs reported for a
-/// reference. In that case GitHub.com will pick only the latest
-/// run for each check name to present in the PR merge footer and
-/// only the latest run counts towards the mergeability of a PR.
-///
-/// We use the check suite id as a proxy for determining what's
-/// the "latest" of two check runs with the same name.
-///
-/// Runs are keyed by the app's and the check's names, so a rerun replaces
-/// the run it reran while two apps' checks of the same name both stay.
+/// Every check run, each once, keyed by its id: GitHub's default `latest`
+/// filter already sends only the newest run of each check in a check suite.
+/// A run listed twice (on two pages, when runs were added between their
+/// requests) keeps its first place.
 public func getLatestCheckRunsById(_ checkRuns: [APIRefCheckRun]) -> [APIRefCheckRun] {
-    struct Key: Hashable {
-        let app: String
-        let name: String
-        let hasPullRequests: Bool
-    }
-    var order: [Key] = []
-    var latestCheckRunsByName: [Key: APIRefCheckRun] = [:]
-
-    for checkRun in checkRuns {
-        // For release branches (maybe other scenarios?), there can be check runs
-        // with the same name, but are "push" events not "pull_request" events. For
-        // the push events, the pull_request array will be empty. For pull_request,
-        // the pull_request array should have the pull_request object in it. We want
-        // these runs treated separately even tho they have same name, they are not
-        // simply a repeat of the same run as they have a different origination. This
-        // feels hacky... but we don't have any other meta data on a check run that
-        // differieates these.
-        let key = Key(app: checkRun.app?.name ?? "", name: checkRun.name, hasPullRequests: !checkRun.pullRequests.isEmpty)
-        guard let current = latestCheckRunsByName[key] else {
-            order.append(key)
-            latestCheckRunsByName[key] = checkRun
-            continue
-        }
-        if (current.checkSuite?.id ?? Int.min) < (checkRun.checkSuite?.id ?? Int.min) {
-            latestCheckRunsByName[key] = checkRun
-        }
-    }
-
-    return order.compactMap { latestCheckRunsByName[$0] }
+    var seen: Set<Int> = []
+    return checkRuns.filter { seen.insert($0.id).inserted }
 }
 
-/// The checks of a ref: its legacy statuses, then the latest of its check
-/// runs.
-func refChecks(statuses: APIRefStatus?, checkRuns: APIRefCheckRuns?) -> [RefCheck] {
-    var checks: [RefCheck] = []
-    if let statuses {
-        checks.append(contentsOf: statuses.statuses.map(apiStatusToRefCheck))
-    }
-    if let checkRuns {
-        checks.append(contentsOf: getLatestCheckRunsById(checkRuns.checkRuns).map(apiCheckRunToRefCheck))
-    }
-    return checks
+/// The checks of a ref: its legacy statuses, then its check runs.
+func refChecks(statuses: APIRefStatus, checkRuns: APIRefCheckRuns) -> [RefCheck] {
+    statuses.statuses.map(apiStatusToRefCheck) + getLatestCheckRunsById(checkRuns.checkRuns).map(apiCheckRunToRefCheck)
 }
 
 /// Retrieve GitHub Actions job and logs for the check runs.
@@ -621,64 +623,48 @@ public func getCheckStatusCountMap(_ checks: [RefCheck]) -> [(key: String, count
     return order.map { (key: $0, count: counts[$0] ?? 0) }
 }
 
-/// An array of check conclusions that are considerd a failure.
-public let failingCheckConclusions: [APICheckConclusion] = [
-    .failure,
-    .canceled,
-    .actionRequired,
-    .timedOut,
-]
-
 // MARK: The checks popover's copy
 
-/// "2 successful, 1 failed, and 1 in progress checks": the conclusions and
-/// how many checks (or steps) have each, in the order they first appear.
-public func getCombinedStatusSummary(_ conclusions: [APICheckConclusion?], description: String = "check") -> String {
-    var order: [APICheckConclusion?] = []
-    var counts: [APICheckConclusion?: Int] = [:]
-    for conclusion in conclusions {
-        if counts[conclusion] == nil {
-            order.append(conclusion)
+/// "2 successful, 1 failed, and 1 queued checks": how many checks (or
+/// steps) have each conclusion, or without one each status
+/// (`getCheckRunAdjective`), in the order they first appear.
+public func getCombinedStatusSummary(
+    _ states: [(status: APICheckStatus, conclusion: APICheckConclusion?)],
+    description: String = "check"
+) -> String {
+    var order: [String] = []
+    var counts: [String: Int] = [:]
+    for state in states {
+        let adjective = JSCompat.toLowerCase(getCheckRunAdjective(state.status, state.conclusion))
+        if counts[adjective] == nil {
+            order.append(adjective)
         }
-        counts[conclusion, default: 0] += 1
+        counts[adjective, default: 0] += 1
     }
-    let parts = order.map { conclusion in
-        "\(counts[conclusion] ?? 0) \(JSCompat.toLowerCase(getCheckRunConclusionAdjective(conclusion)))"
+    let parts = order.map { adjective in
+        "\(counts[adjective] ?? 0) \(adjective)"
     }
-    let pluralize = conclusions.count > 1 ? "\(description)s" : description
+    let pluralize = states.count > 1 ? "\(description)s" : description
     return "\(toSentence(parts)) \(pluralize)"
 }
 
 /// The checks popover's title for `checks`: "Checks Summary" while loading with
-/// nothing to show, "Some checks haven't completed yet", "All checks have
-/// failed", "All checks have passed", or "Some checks were not successful".
+/// nothing to show, "No checks" once loaded with none, else what
+/// `checksResult(_:)` makes of them.
 public func getChecksSummaryTitle(_ checks: [RefCheck], loading: Bool) -> String {
-    // Only show the loading title if there are no cached check runs to display.
-    let isLoading = loading && checks.isEmpty
-    if isLoading {
-        return "Checks Summary"
+    // Cached checks show while newer ones load.
+    switch checksResult(checks) {
+    case nil:
+        loading ? "Checks Summary" : "No checks"
+    case .failed?:
+        checks.allSatisfy { CheckResult($0) == .failed } ? "All checks have failed" : "Some checks were not successful"
+    case .running?:
+        "Some checks haven't completed yet"
+    case .unfinished?:
+        "Some checks were not successful"
+    case .passed?:
+        "All checks have passed"
     }
-
-    let somePendingNoFailures = checks.contains { $0.conclusion == nil }
-        && !checks.contains { check in check.conclusion.map(failingCheckConclusions.contains) ?? false }
-    if somePendingNoFailures {
-        return "Some checks haven't completed yet"
-    }
-
-    let successfulishConclusions: [APICheckConclusion] = [.success, .neutral, .skipped]
-    let allSuccessIsh = !checks.contains { check in
-        check.conclusion.map { !successfulishConclusions.contains($0) } ?? false
-    }
-    let allFailure = !checks.contains { check in
-        check.conclusion.map { !failingCheckConclusions.contains($0) } ?? true
-    }
-    if allFailure {
-        return "All checks have failed"
-    }
-    if allSuccessIsh {
-        return "All checks have passed"
-    }
-    return "Some checks were not successful"
 }
 
 /// Which checks can be rerun: the rerun dialog lists `rerunnable` and warns
@@ -724,11 +710,38 @@ public struct CheckRerunPlan: Sendable, Equatable {
     }
 }
 
+/// What GitHub did with a rerun's requests.
+public struct CheckRerunResult: Sendable, Equatable {
+    /// The checks GitHub reruns.
+    public let accepted: [RefCheck]
+    /// The checks GitHub didn't rerun: it refused, or couldn't be reached.
+    public let refused: [RefCheck]
+    /// Why, each different reason once: GitHub's message, or the
+    /// connection's.
+    public let reasons: [String]
+
+    public init(accepted: [RefCheck], refused: [RefCheck], reasons: [String]) {
+        self.accepted = accepted
+        self.refused = refused
+        self.reasons = reasons
+    }
+
+    /// "Couldn't re-run build. <reason>", "Couldn't re-run 2 checks.
+    /// <reason>"; nil when every check reruns.
+    public var failureMessage: String? {
+        guard !refused.isEmpty else {
+            return nil
+        }
+        let checks = refused.count == 1 ? refused[0].name : "\(refused.count) checks"
+        return (["Couldn't re-run \(checks)."] + reasons).joined(separator: " ")
+    }
+}
+
 /// Splits the checks to consider (failed ones only, with `failedOnly`) by
 /// whether their check suites can be rerun: rerequestable, completed, and
 /// under a month old.
 func rerunPlan(_ checkRuns: [RefCheck], failedOnly: Bool, checkSuites: [APICheckSuite], now: Date) -> CheckRerunPlan {
-    let checkRunsToConsider = failedOnly ? checkRuns.filter { $0.conclusion == .failure } : checkRuns
+    let checkRunsToConsider = failedOnly ? checkRuns.filter(isFailure) : checkRuns
     let monthAgo = now.addingTimeInterval(-30 * 24 * 60 * 60)
 
     var rerequestableCheckSuiteIDs: Set<Int> = []

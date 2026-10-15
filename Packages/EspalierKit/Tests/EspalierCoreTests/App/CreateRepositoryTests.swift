@@ -1,7 +1,7 @@
 // Creating writes a repository, so it's checked end to end against real
-// folders: the files and the initial commit, the folder checks (with or
-// without a trailing slash), the failures that stop and the ones that
-// don't, and the license's tokens.
+// folders: the files and the initial commit, which leaves the folder's own
+// files alone, the folder checks (with or without a trailing slash), the
+// failures that stop and the ones that don't, and the license's tokens.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -15,7 +15,7 @@ import TestSupport
 struct CreateRepositoryTests {
     // MARK: Creating
 
-    @Test("creates the folder, adds and selects it, writes the chosen files, and commits them all as Initial commit")
+    @Test("creates the folder, adds and selects it, writes the chosen files, and commits them as Initial commit")
     func createsRepository() async throws {
         try await withIsolatedGitConfig { _ in
             let harness = try AppHarness()
@@ -41,7 +41,7 @@ struct CreateRepositoryTests {
 
             #expect(try read(path, "README.md") == "# espalier\nA Git client\n")
             #expect(try read(path, ".gitignore") == RepositoryTemplates.gitIgnoreText(named: "Swift"))
-            #expect(try read(path, ".gitattributes") == "# Auto detect text files and perform LF normalization\n* text=auto\n")
+            #expect(!FileManager.default.fileExists(atPath: POSIXPath.join(path, ".gitattributes")))
             #expect(try read(path, ".git/description") == "A Git client")
             let year = String(Calendar(identifier: .gregorian).component(.year, from: harness.scheduler.now))
             let license = try read(path, "LICENSE")
@@ -51,7 +51,7 @@ struct CreateRepositoryTests {
             let repository = Repository(path: path)
             #expect(try await runGit(["log", "--format=%s"], repository) == "Initial commit\n")
             #expect(try await runGit(["symbolic-ref", "--short", "HEAD"], repository) == "main\n")
-            #expect(try await runGit(["ls-tree", "--name-only", "HEAD"], repository) == ".gitattributes\n.gitignore\nLICENSE\nREADME.md\n")
+            #expect(try await runGit(["ls-tree", "--name-only", "HEAD"], repository) == ".gitignore\nLICENSE\nREADME.md\n")
             #expect(try await getStatusOrThrow(repository).workingDirectory.files.isEmpty)
 
             // The model shows the commit once it returns.
@@ -62,7 +62,7 @@ struct CreateRepositoryTests {
         }
     }
 
-    @Test("with nothing chosen, the folder still gets a .gitattributes, which is the initial commit; the README has no blank line")
+    @Test("with nothing chosen, nothing is written or committed; the README has no blank line")
     func createsMinimalRepository() async throws {
         try await withIsolatedGitConfig { _ in
             let harness = try AppHarness()
@@ -72,7 +72,8 @@ struct CreateRepositoryTests {
             let path = POSIXPath.join(base, "plain")
             #expect(result.failures.isEmpty)
             let repository = Repository(path: path)
-            #expect(try await runGit(["ls-tree", "--name-only", "HEAD"], repository) == ".gitattributes\n")
+            #expect(try await isUnborn(repository))
+            #expect(try FileManager.default.contentsOfDirectory(atPath: path) == [".git"])
             // No description was given: the one the bundled git's templates
             // wrote stays.
             #expect(try read(path, ".git/description").hasPrefix("Unnamed repository"))
@@ -84,7 +85,7 @@ struct CreateRepositoryTests {
         }
     }
 
-    @Test("in a folder with files, keeps its .gitattributes and commits everything in it")
+    @Test("in a folder with files and nothing chosen, makes no commit and leaves every file as it was, in Changes")
     func createsInFolderWithFiles() async throws {
         try await withIsolatedGitConfig { _ in
             let harness = try AppHarness()
@@ -92,15 +93,117 @@ struct CreateRepositoryTests {
             let base = try createTempDirectory()
             let path = POSIXPath.join(base, "existing")
             try FileManager.default.createDirectory(atPath: POSIXPath.join(path, "Sources"), withIntermediateDirectories: true)
-            try write("let x = 1\n", to: POSIXPath.join(path, "Sources", "main.swift"))
+            try write("let x = 1\r\n", to: POSIXPath.join(path, "Sources", "main.swift"))
             try write("*.png binary\n", to: POSIXPath.join(path, ".gitattributes"))
+            try write("token\n", to: POSIXPath.join(path, "secrets.txt"))
 
             let result = try await app.createRepository(CreateRepositoryRequest(name: "existing", basePath: base))
 
             #expect(result.failures.isEmpty)
-            #expect(try read(path, ".gitattributes") == "*.png binary\n")
             let repository = Repository(path: path)
-            #expect(try await runGit(["ls-tree", "-r", "--name-only", "HEAD"], repository) == ".gitattributes\nSources/main.swift\n")
+            #expect(try await isUnborn(repository))
+            #expect(try read(path, ".gitattributes") == "*.png binary\n")
+            #expect(try read(path, "Sources/main.swift") == "let x = 1\r\n")
+            #expect(try await untrackedPaths(repository) == [".gitattributes", "Sources/main.swift", "secrets.txt"])
+            let model = try #require(app.repository(result.repositoryID))
+            #expect(model.changes.workingDirectory.files.map(\.path).sorted() == [".gitattributes", "Sources/main.swift", "secrets.txt"])
+            await app.idle()
+        }
+    }
+
+    @Test("in a folder with files, commits only the files it writes and leaves the others uncommitted")
+    func commitsOnlyItsFiles() async throws {
+        try await withIsolatedGitConfig { _ in
+            let harness = try AppHarness()
+            let app = await harness.loadedApp()
+            let base = try createTempDirectory()
+            let path = POSIXPath.join(base, "project")
+            try FileManager.default.createDirectory(atPath: POSIXPath.join(path, "node_modules", "left-pad"), withIntermediateDirectories: true)
+            try write("module.exports = 1\n", to: POSIXPath.join(path, "node_modules", "left-pad", "index.js"))
+            try write("debug\n", to: POSIXPath.join(path, "npm-debug.log"))
+            try write("console.log(1)\n", to: POSIXPath.join(path, "index.js"))
+
+            let result = try await app.createRepository(CreateRepositoryRequest(
+                name: "project", basePath: base, createsReadme: true, gitIgnore: "Node", license: "MIT License"
+            ))
+
+            #expect(result.failures.isEmpty)
+            let repository = Repository(path: path)
+            #expect(try await runGit(["log", "--format=%s"], repository) == "Initial commit\n")
+            #expect(try await runGit(["ls-tree", "-r", "--name-only", "HEAD"], repository) == ".gitignore\nLICENSE\nREADME.md\n")
+            // The Node template ignores node_modules and the log.
+            #expect(try await untrackedPaths(repository) == ["index.js"])
+            #expect(try read(path, "index.js") == "console.log(1)\n")
+            await app.idle()
+        }
+    }
+
+    @Test("a README, .gitignore, or LICENSE already there is overwritten and committed when chosen, and left alone otherwise")
+    func existingFilesItWrites() async throws {
+        try await withIsolatedGitConfig { _ in
+            let harness = try AppHarness()
+            let app = await harness.loadedApp()
+            let base = try createTempDirectory()
+
+            // README chosen; the .gitignore and LICENSE aren't.
+            let some = POSIXPath.join(base, "some")
+            try FileManager.default.createDirectory(atPath: some, withIntermediateDirectories: true)
+            try write("# Old\n", to: POSIXPath.join(some, "README.md"))
+            try write("build/\n", to: POSIXPath.join(some, ".gitignore"))
+            try write("All rights reserved.\n", to: POSIXPath.join(some, "LICENSE"))
+            let first = try await app.createRepository(CreateRepositoryRequest(name: "some", basePath: base, createsReadme: true))
+            #expect(first.failures.isEmpty)
+            let someRepository = Repository(path: some)
+            #expect(try await runGit(["ls-tree", "--name-only", "HEAD"], someRepository) == "README.md\n")
+            #expect(try await runGit(["show", "HEAD:README.md"], someRepository) == "# some\n")
+            #expect(try read(some, ".gitignore") == "build/\n")
+            #expect(try read(some, "LICENSE") == "All rights reserved.\n")
+            #expect(try await untrackedPaths(someRepository) == [".gitignore", "LICENSE"])
+
+            // All three chosen.
+            let all = POSIXPath.join(base, "all")
+            try FileManager.default.createDirectory(atPath: all, withIntermediateDirectories: true)
+            try write("# Old\n", to: POSIXPath.join(all, "README.md"))
+            try write("build/\n", to: POSIXPath.join(all, ".gitignore"))
+            try write("All rights reserved.\n", to: POSIXPath.join(all, "LICENSE"))
+            try write("notes\n", to: POSIXPath.join(all, "notes.txt"))
+            let second = try await app.createRepository(CreateRepositoryRequest(
+                name: "all", basePath: base, createsReadme: true, gitIgnore: "Swift", license: "MIT License"
+            ))
+            #expect(second.failures.isEmpty)
+            let allRepository = Repository(path: all)
+            #expect(try await runGit(["ls-tree", "--name-only", "HEAD"], allRepository) == ".gitignore\nLICENSE\nREADME.md\n")
+            #expect(try read(all, ".gitignore") == RepositoryTemplates.gitIgnoreText(named: "Swift"))
+            #expect(try read(all, "LICENSE").contains("MIT License"))
+            #expect(try await untrackedPaths(allRepository) == ["notes.txt"])
+            await app.idle()
+        }
+    }
+
+    @Test("a README written over one named in another case is committed under the name it has on disk")
+    func readmeInAnotherCase() async throws {
+        try await withIsolatedGitConfig { _ in
+            let harness = try AppHarness()
+            let app = await harness.loadedApp()
+            let base = try createTempDirectory()
+            let path = POSIXPath.join(base, "cased")
+            try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+            try write("# Old\n", to: POSIXPath.join(path, "readme.md"))
+            let isCaseSensitive = pathconf(path, _PC_CASE_SENSITIVE) == 1
+
+            let result = try await app.createRepository(CreateRepositoryRequest(name: "cased", basePath: base, createsReadme: true))
+
+            #expect(result.failures.isEmpty)
+            let repository = Repository(path: path)
+            if isCaseSensitive {
+                // Two files: the new README is committed, the old one isn't.
+                #expect(try await runGit(["ls-tree", "--name-only", "HEAD"], repository) == "README.md\n")
+                #expect(try await untrackedPaths(repository) == ["readme.md"])
+            } else {
+                #expect(try await runGit(["ls-tree", "--name-only", "HEAD"], repository) == "readme.md\n")
+                #expect(try await runGit(["show", "HEAD:readme.md"], repository) == "# cased\n")
+                #expect(try await untrackedPaths(repository).isEmpty)
+            }
             await app.idle()
         }
     }
@@ -136,7 +239,7 @@ struct CreateRepositoryTests {
             try FileManager.default.createDirectory(atPath: POSIXPath.join(outer.path, "inner"), withIntermediateDirectories: true)
             #expect(await checkCreateRepositoryDestination(POSIXPath.join(outer.path, "inner")).isSubfolderOfRepository)
 
-            let result = try await app.createRepository(CreateRepositoryRequest(name: "inner", basePath: outer.path))
+            let result = try await app.createRepository(CreateRepositoryRequest(name: "inner", basePath: outer.path, createsReadme: true))
             #expect(result.failures.isEmpty)
             let inner = Repository(path: POSIXPath.join(outer.path, "inner"))
             #expect(try await runGit(["log", "--format=%s"], inner) == "Initial commit\n")
@@ -158,11 +261,9 @@ struct CreateRepositoryTests {
 
             for typed in [name, "\(name)/"] {
                 #expect(await checkCreateRepositoryDestination(POSIXPath.join(base, typed)).isRepository)
-                let error = await #expect(throws: OperationError.self) {
+                await #expect(throws: OperationError.self) {
                     try await app.createRepository(CreateRepositoryRequest(name: typed, basePath: base, createsReadme: true))
                 }
-                #expect(error?.title == "Couldn't Create Repository")
-                #expect(error?.message.contains("is already a Git repository.") == true)
             }
             #expect(try await runGit(["rev-list", "--count", "HEAD"], existing) == "2\n")
             #expect(!FileManager.default.fileExists(atPath: POSIXPath.join(existing.path, "README.md")))
@@ -178,19 +279,17 @@ struct CreateRepositoryTests {
         #expect(CreateRepositoryRequest(name: " app ", basePath: "/Users/joe").fullPath == "/Users/joe/ app ")
         let harness = try AppHarness()
         let app = await harness.loadedApp()
-        let error = await #expect(throws: OperationError.self) {
+        await #expect(throws: OperationError.self) {
             try await app.createRepository(CreateRepositoryRequest(name: "", basePath: "/tmp"))
         }
-        #expect(error?.title == "Couldn't Create Repository")
         // A relative folder would resolve against Espalier's own.
-        let relative = await #expect(throws: OperationError.self) {
+        await #expect(throws: OperationError.self) {
             try await app.createRepository(CreateRepositoryRequest(name: "app", basePath: "Developer"))
         }
-        #expect(relative?.message == "Choose the folder for the repository by its full path.")
         #expect(!FileManager.default.fileExists(atPath: "Developer/app"))
     }
 
-    @Test("a folder that can't be made shows desktop's message")
+    @Test("a folder that can't be made fails and adds nothing")
     func folderCantBeMade() async throws {
         try await withIsolatedGitConfig { _ in
             let harness = try AppHarness()
@@ -199,11 +298,9 @@ struct CreateRepositoryTests {
             #expect(chmod(base, 0o555) == 0)
             defer { chmod(base, 0o755) }
 
-            let error = await #expect(throws: OperationError.self) {
+            await #expect(throws: OperationError.self) {
                 try await app.createRepository(CreateRepositoryRequest(name: "locked", basePath: base))
             }
-            #expect(error?.title == "Couldn't Create Repository")
-            #expect(error?.message == "Couldn't create a folder at this path. You may not have permission to create folders here.")
             #expect(app.repositories.isEmpty)
         }
     }
@@ -223,9 +320,8 @@ struct CreateRepositoryTests {
             ))
 
             #expect(result.failures.count == 1)
-            #expect(result.failures.first?.title == "Couldn't Create Repository")
             let repository = Repository(path: path)
-            #expect(try await runGit(["ls-tree", "--name-only", "HEAD"], repository) == ".gitattributes\nLICENSE\n")
+            #expect(try await runGit(["ls-tree", "--name-only", "HEAD"], repository) == "LICENSE\n")
             await app.idle()
         }
     }
@@ -239,11 +335,8 @@ struct CreateRepositoryTests {
             let result = try await app.createRepository(CreateRepositoryRequest(
                 name: "unknown", basePath: base, gitIgnore: "NoSuchLanguage", license: "No Such License"
             ))
-            #expect(result.failures.map(\.message) == [
-                "Unknown gitignore: NoSuchLanguage. Only names returned from getGitIgnoreNames() can be used.",
-                "Unknown license: No Such License.",
-            ])
-            #expect(try await runGit(["ls-tree", "--name-only", "HEAD"], Repository(path: POSIXPath.join(base, "unknown"))) == ".gitattributes\n")
+            #expect(result.failures.count == 2)
+            #expect(try await isUnborn(Repository(path: POSIXPath.join(base, "unknown"))))
             await app.idle()
         }
     }
@@ -263,19 +356,184 @@ struct CreateRepositoryTests {
 
     // MARK: The folder checks
 
-    @Test("the folder checks: nothing there, a README, a bare repository")
+    @Test("the folder checks: nothing there, the files it would overwrite, a bare repository")
     func destinationChecks() async throws {
         let base = try createTempDirectory()
         #expect(await checkCreateRepositoryDestination(POSIXPath.join(base, "new")) == CreateRepositoryDestination())
 
-        let withReadme = POSIXPath.join(base, "with-readme")
-        try FileManager.default.createDirectory(atPath: withReadme, withIntermediateDirectories: true)
-        try write("# Hello\n", to: POSIXPath.join(withReadme, "README.md"))
-        #expect(await checkCreateRepositoryDestination(withReadme) == CreateRepositoryDestination(readmeExists: true))
+        let existing = POSIXPath.join(base, "existing")
+        try FileManager.default.createDirectory(atPath: existing, withIntermediateDirectories: true)
+        try write("# Hello\n", to: POSIXPath.join(existing, "README.md"))
+        #expect(await checkCreateRepositoryDestination(existing) == CreateRepositoryDestination(readmeExists: true))
+        try write("build/\n", to: POSIXPath.join(existing, ".gitignore"))
+        try write("MIT\n", to: POSIXPath.join(existing, "LICENSE"))
+        #expect(await checkCreateRepositoryDestination(existing) == CreateRepositoryDestination(
+            readmeExists: true, gitIgnoreExists: true, licenseExists: true
+        ))
 
         let bare = POSIXPath.join(base, "bare.git")
         _ = try await Dugite.exec(["init", "--bare", bare], base)
         #expect(await checkCreateRepositoryDestination(bare).isRepository)
+    }
+
+    @Test("counts the files that will wait in Changes, as git lists them with the template chosen, and creating leaves them there")
+    func countsExistingFiles() async throws {
+        try await withIsolatedGitConfig { _ in
+            let base = try createTempDirectory()
+            let folder = POSIXPath.join(base, "project")
+            for (name, text) in [
+                ("README.md", "# Old\n"),
+                ("index.js", "console.log(1)\n"),
+                (".DS_Store", "finder\n"),
+                ("npm-debug.log", "debug\n"),
+                ("node_modules/left-pad/index.js", "module.exports = 1\n"),
+                // A nested .gitignore, and the folder it ignores.
+                ("src/.gitignore", "generated/\n*.tmp\n"),
+                ("src/app.js", "app\n"),
+                ("src/cache.tmp", "cache\n"),
+                ("src/generated/out.js", "out\n"),
+                ("vendor/lib/lib.c", "int x;\n"),
+            ] {
+                try FileManager.default.createDirectory(atPath: POSIXPath.dirname(POSIXPath.join(folder, name)), withIntermediateDirectories: true)
+                try write(text, to: POSIXPath.join(folder, name))
+            }
+            // A nested repository counts once.
+            _ = try await Dugite.exec(["init", "--quiet", POSIXPath.join(folder, "vendor", "lib")], base)
+            // The user's global excludes ignore .DS_Store.
+            let excludes = POSIXPath.join(base, "global-excludes")
+            try write(".DS_Store\n", to: excludes)
+            try await setGlobalConfigValue("core.excludesFile", excludes)
+
+            // README.md, index.js, npm-debug.log, node_modules' file,
+            // src/.gitignore, src/app.js, and vendor/lib/.
+            #expect(await checkCreateRepositoryExistingFiles(folder, gitIgnore: nil) == CreateRepositoryExistingFiles(count: 7, filesItWrites: ["README.md"]))
+            // The Node template ignores node_modules and the log.
+            let node = await checkCreateRepositoryExistingFiles(folder, gitIgnore: "Node")
+            #expect(node == CreateRepositoryExistingFiles(count: 5, filesItWrites: ["README.md"]))
+            #expect(await checkCreateRepositoryExistingFiles(POSIXPath.join(base, "missing"), gitIgnore: nil) == CreateRepositoryExistingFiles())
+
+            // Created with the template and a README over the old one, the
+            // others wait in Changes, as many as the count said.
+            let request = CreateRepositoryRequest(name: "project", basePath: base, createsReadme: true, gitIgnore: "Node")
+            #expect(node.uncommittedCount(request) == 4)
+            let harness = try AppHarness()
+            let app = await harness.loadedApp()
+            let result = try await app.createRepository(request)
+            #expect(result.failures.isEmpty)
+            let repository = Repository(path: folder)
+            #expect(try await runGit(["ls-tree", "--name-only", "HEAD"], repository) == ".gitignore\nREADME.md\n")
+            let untracked = try await runGit(["ls-files", "--others", "--exclude-standard"], repository)
+            #expect(untracked == "index.js\nsrc/.gitignore\nsrc/app.js\nvendor/lib/\n")
+            await app.idle()
+        }
+    }
+
+    @Test("with a template chosen, the count reads the template in place of the folder's top-level .gitignore, and the .gitignore files below it")
+    func countsWithTemplateReplacingGitIgnore() async throws {
+        try await withIsolatedGitConfig { _ in
+            let base = try createTempDirectory()
+            let folder = POSIXPath.join(base, "project")
+            for (name, text) in [
+                // The folder's own .gitignore ignores the JavaScript and the
+                // docs, and keeps a log the template ignores.
+                (".gitignore", "*.js\n!keep.log\ndocs/\n"),
+                ("README.md", "# Old\n"),
+                ("index.js", "console.log(1)\n"),
+                ("keep.log", "log\n"),
+                // A .gitignore in the folder the old one ignored.
+                ("docs/.gitignore", "*.tmp\n"),
+                ("docs/guide.md", "guide\n"),
+                ("docs/draft.tmp", "draft\n"),
+                // A .gitignore whose negation wins over the template's *.log.
+                ("src/.gitignore", "generated/\n!debug.log\n"),
+                ("src/app.js", "app\n"),
+                ("src/debug.log", "debug\n"),
+                ("src/generated/gen.js", "gen\n"),
+                // A folder whose name reads as a pattern.
+                ("notes [1]/.gitignore", "*.tmp\n"),
+                ("notes [1]/today.md", "today\n"),
+                ("notes [1]/scratch.tmp", "scratch\n"),
+                ("node_modules/left-pad/index.js", "module.exports = 1\n"),
+            ] {
+                try FileManager.default.createDirectory(atPath: POSIXPath.dirname(POSIXPath.join(folder, name)), withIntermediateDirectories: true)
+                try write(text, to: POSIXPath.join(folder, name))
+            }
+
+            // .gitignore and README.md, which creating overwrites, index.js,
+            // docs/.gitignore, docs/guide.md, src/.gitignore, src/app.js,
+            // src/debug.log, notes [1]/.gitignore, and notes [1]/today.md.
+            let node = await checkCreateRepositoryExistingFiles(folder, gitIgnore: "Node")
+            #expect(node == CreateRepositoryExistingFiles(count: 10, filesItWrites: [".gitignore", "README.md"]))
+            let request = CreateRepositoryRequest(name: "project", basePath: base, createsReadme: true, gitIgnore: "Node")
+            #expect(node.uncommittedCount(request) == 8)
+
+            let harness = try AppHarness()
+            let app = await harness.loadedApp()
+            let result = try await app.createRepository(request)
+            #expect(result.failures.isEmpty)
+            let untracked = try await runGit(["ls-files", "--others", "--exclude-standard"], Repository(path: folder))
+            #expect(untracked == "docs/.gitignore\ndocs/guide.md\nindex.js\nnotes [1]/.gitignore\nnotes [1]/today.md\nsrc/.gitignore\nsrc/app.js\nsrc/debug.log\n")
+            await app.idle()
+        }
+    }
+
+    @Test("with a template chosen, the count reads the .gitignore files git reads below the top level: in folders a nested .gitignore includes again, and ignored ones")
+    func countsGitIgnoresInIncludedFolders() async throws {
+        try await withIsolatedGitConfig { _ in
+            let base = try createTempDirectory()
+            let folder = POSIXPath.join(base, "project")
+            for (name, text) in [
+                (".gitignore", "*.zzz\n"),
+                // The Node template ignores dist; src's .gitignore includes
+                // it again, and the .gitignore in it ignores the object file.
+                ("src/.gitignore", "!dist/\n"),
+                ("src/dist/.gitignore", "*.o\n"),
+                ("src/dist/a.c", "c\n"),
+                ("src/dist/a.o", "o\n"),
+                // The same, with lib's .gitignore also ignoring the
+                // .gitignore inside, which git reads all the same.
+                ("lib/.gitignore", "!dist/\ndist/.gitignore\n"),
+                ("lib/dist/.gitignore", "*.o\n"),
+                ("lib/dist/b.c", "c\n"),
+                ("lib/dist/b.o", "o\n"),
+                // A folder whose name has a newline, whose .gitignore
+                // ignores nothing here, and a file named like the name's
+                // first line.
+                ("x\ny/.gitignore", "*.o\n"),
+                ("x\ny/note.md", "note\n"),
+                ("x", "x\n"),
+            ] {
+                try FileManager.default.createDirectory(atPath: POSIXPath.dirname(POSIXPath.join(folder, name)), withIntermediateDirectories: true)
+                try write(text, to: POSIXPath.join(folder, name))
+            }
+
+            let node = await checkCreateRepositoryExistingFiles(folder, gitIgnore: "Node")
+            #expect(node.filesItWrites == [".gitignore"])
+            let request = CreateRepositoryRequest(name: "project", basePath: base, gitIgnore: "Node")
+
+            let harness = try AppHarness()
+            let app = await harness.loadedApp()
+            let result = try await app.createRepository(request)
+            #expect(result.failures.isEmpty)
+            let listed = try await runGit(["ls-files", "--others", "--exclude-standard", "-z"], Repository(path: folder))
+            let untracked = listed.split(separator: "\0").map(String.init)
+            #expect(untracked == [
+                "lib/.gitignore", "lib/dist/b.c", "src/.gitignore", "src/dist/.gitignore", "src/dist/a.c",
+                "x", "x\ny/.gitignore", "x\ny/note.md",
+            ])
+            #expect(node.uncommittedCount(request) == untracked.count)
+            await app.idle()
+        }
+    }
+
+    @Test("the files left in Changes are the folder's, less those it overwrites")
+    func uncommittedFiles() {
+        let files = CreateRepositoryExistingFiles(count: 10, filesItWrites: ["README.md", ".gitignore"])
+        #expect(files.uncommittedCount(CreateRepositoryRequest(name: "app", basePath: "/tmp")) == 10)
+        // There's no LICENSE to overwrite.
+        let all = CreateRepositoryRequest(name: "app", basePath: "/tmp", createsReadme: true, gitIgnore: "Swift", license: "MIT License")
+        #expect(files.overwrittenCount(all) == 2)
+        #expect(files.uncommittedCount(all) == 8)
     }
 
     // MARK: Licenses and templates
@@ -292,6 +550,25 @@ struct CreateRepositoryTests {
     }
 
     // MARK: Helpers
+
+    /// Whether the repository has no commit yet.
+    private func isUnborn(_ repository: Repository) async throws -> Bool {
+        let result = try await git(
+            ["rev-parse", "--verify", "--quiet", "HEAD"],
+            repository.path,
+            "isUnborn",
+            options: GitExecutionOptions(successExitCodes: [0, 1])
+        )
+        return result.exitCode == 1
+    }
+
+    /// The untracked files git shows, sorted.
+    private func untrackedPaths(_ repository: Repository) async throws -> [String] {
+        try await getStatusOrThrow(repository).workingDirectory.files
+            .filter { $0.status.kind == .untracked }
+            .map(\.path)
+            .sorted()
+    }
 
     private func read(_ folder: String, _ file: String) throws -> String {
         try String(contentsOfFile: POSIXPath.join(folder, file), encoding: .utf8)

@@ -1,2 +1,4 @@
 # Fixture repositories are byte-exact copies of desktop/app/test/fixtures.
 /Packages/EspalierKit/Tests/TestSupport/Resources/fixtures/** -text
+# The bundled fonts and their licenses are byte-exact copies of their releases.
+/Packages/EspalierKit/Sources/EspalierUI/Resources/Fonts/** -text

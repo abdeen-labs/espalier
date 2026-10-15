@@ -13,12 +13,12 @@ pass.
      alignment, the toolbar customization palette, sidebar selection with
      focus, and Settings' titlebar (no band or flash; the window buttons
      level with the pane name).
-   - Motion: the sync button's width while it crossfades and its spinner
-     turning into the ring; the branch name fading in; Changes' hover layer,
+   - Motion: the sync button's width while it crossfades and its arc
+     going from turning to filling; the branch name fading in; Changes' row hover,
      rows departing and arriving, the footer's bars moving the list, the
      operation bar (and a fast rebase never showing it); the diff's
      expansion, Unified ↔ Split, the staging crossfade; Simple ↔ Graph, a
-     merge's commits sliding out, the loading line after 300 ms, new
+     merge's commits crossfading in and out, the loading line after 300 ms, new
      commits sliding in; switching repositories with nothing animating; the
      Last Commit row and co-authors field growing in; copy buttons' checks
      (the submodule diff and push protection included), toasts, focus
@@ -39,6 +39,12 @@ pass.
      minimized window brings it back; a fork's pull request link ends on
      `pr/N`; the sample notification's review sheet; the Dock bouncing for a
      failure while inactive.
+   - Popovers: typing in the repository and branch filters as they open,
+     and focus back in the window after; ⌘T and ⌘B and a click on the
+     location control closing them; the repository popover's menus above
+     it; the base branch picker over Preview Pull Request; the checks
+     popover resizing as checks load; the arrival and leaving motion; the
+     toolbar's popovers in full screen; VoiceOver moving in and back.
    - Signing: pinentry-mac's window and its Cancel; a rebase signed with a
      passphrase-protected SSH key asks once; 1Password's `op-ssh-sign`.
    - Accessibility: ⇧F10 in Changes, History, a commit's files, and the

@@ -1,5 +1,6 @@
-// The composer's commit button: its labels, when it's enabled, and its
-// tooltips.
+// The commit form's button: Commit (with the files and the branch), Commit
+// Merge while a merge waits, or Continue while a rebase, cherry-pick, or
+// revert does; its labels, when it's enabled, and its tooltips.
 
 import EspalierCore
 import GitKit
@@ -7,6 +8,19 @@ import SwiftUI
 
 /// What the commit button shows.
 nonisolated public struct CommitButtonContent: Sendable, Equatable {
+    /// What the button does.
+    public enum Kind: Sendable, Equatable {
+        /// Commits the included changes, or amends the last commit.
+        case commit
+        /// Commits the merge waiting on its conflicts, with the message the
+        /// form shows.
+        case merge
+        /// Continues the operation waiting on the user ("Rebase",
+        /// "Cherry-pick", "Revert", "Squash", "Reorder").
+        case continueOperation(name: String)
+    }
+
+    public var kind: Kind
     /// Amending the last commit rather than making a new one.
     public var isAmending: Bool
     /// The files the commit includes (in full or in part).
@@ -14,6 +28,7 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
     /// The branch the commit goes on (an unborn branch's name too); nil on a
     /// detached HEAD.
     public var branch: String?
+    /// The commit, or the merge or continue, runs.
     public var isCommitting: Bool
     /// A commit message is being generated.
     public var isGenerating: Bool
@@ -23,6 +38,7 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
     public var numberFormat: NumberFormat
 
     public init(
+        kind: Kind = .commit,
         isAmending: Bool = false,
         fileCount: Int,
         branch: String?,
@@ -32,6 +48,7 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
         disabledReason: String? = nil,
         numberFormat: NumberFormat = defaultNumberFormat
     ) {
+        self.kind = kind
         self.isAmending = isAmending
         self.fileCount = fileCount
         self.branch = branch
@@ -43,8 +60,17 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
     }
 
     /// The label's parts: the words before the branch, the branch (shown
-    /// bold), and what follows it.
+    /// bold, truncated in the middle when it doesn't fit), and what follows
+    /// it.
     public var titleParts: (lead: String, branch: String?, trail: String) {
+        switch kind {
+        case .merge:
+            return (isCommitting ? "Committing Merge…" : "Commit Merge", nil, "")
+        case .continueOperation(let name):
+            return (isCommitting ? "Continuing \(name)…" : "Continue \(name)", nil, "")
+        case .commit:
+            break
+        }
         if isGenerating {
             return ("Generating Commit Details…", nil, "")
         }
@@ -63,17 +89,6 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
         return (words.joined(separator: " "), branch, trail)
     }
 
-    /// The label the button shows: the title without the branch, which the
-    /// commit message card's footer names ("Commit 2 Files").
-    public var shownTitle: String {
-        let parts = titleParts
-        guard parts.branch != nil else {
-            return parts.lead + parts.trail
-        }
-        let lead = parts.lead.hasSuffix(" to") ? String(parts.lead.dropLast(3)) : parts.lead
-        return lead + parts.trail
-    }
-
     /// The label as one string: "Commit 2 Files to main".
     public var title: String {
         let parts = titleParts
@@ -87,10 +102,17 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
         }
         return disabledReason ?? title
     }
+
+    /// Whether the button shows ⌘↩, the shortcut Commit Changes runs: only
+    /// a commit's.
+    public var showsShortcut: Bool {
+        kind == .commit
+    }
 }
 
 /// The commit button: the full-width prominent capsule, 34 high, with its
-/// shortcut on the right.
+/// shortcut on the right. A long branch name gives way in the middle, so
+/// the button never grows past its column; the count changes at once.
 public struct CommitButton: View {
     private let content: CommitButtonContent
     private let action: () -> Void
@@ -106,7 +128,7 @@ public struct CommitButton: View {
                 // While it works, the capsule stays legible rather than
                 // fading as a disabled button does (as the sync button).
                 HStack(spacing: Metrics.insetSmall) {
-                    ArcProgress(.small, tint: .white)
+                    ArcProgress(.small, tint: Palette.buttonText)
                     label
                 }
                 .frame(maxWidth: .infinity)
@@ -115,32 +137,75 @@ public struct CommitButton: View {
                 .accessibilityAddTraits(.isButton)
             } else {
                 Button(action: action) {
-                    label
-                        .frame(maxWidth: .infinity)
-                        .overlay(alignment: .trailing) {
-                            if let shortcut = ActionKind.commitChanges.shortcut?.symbols {
-                                Text(shortcut)
-                                    .font(Typography.keyCap)
-                                    .foregroundStyle(.white.opacity(0.7))
-                                    .accessibilityHidden(true)
+                    if let symbols = shortcutSymbols {
+                        // The shortcut's hidden twin on the left keeps the
+                        // title centered while the whole title fits; when
+                        // it doesn't, the title takes the twin's room too.
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: Metrics.insetSmall) {
+                                shortcut(symbols)
+                                    .hidden()
+                                label
+                                    .frame(maxWidth: .infinity)
+                                shortcut(symbols)
+                            }
+                            HStack(spacing: Metrics.insetSmall) {
+                                label
+                                    .frame(maxWidth: .infinity)
+                                shortcut(symbols)
                             }
                         }
+                    } else {
+                        label
+                            .frame(maxWidth: .infinity)
+                    }
                 }
                 .buttonStyle(.prominent)
                 .disabled(!content.isEnabled)
             }
         }
         .controlSize(.extraLarge)
-        .help(content.help)
+        .tooltip(content.help)
         .accessibilityLabel(content.title)
     }
 
-    /// The title; its count rolls over 0.2 s as checkboxes change it.
+    /// ⌘↩, for a commit.
+    private var shortcutSymbols: String? {
+        content.showsShortcut ? ActionKind.commitChanges.shortcut?.symbols : nil
+    }
+
+    private func shortcut(_ symbols: String) -> some View {
+        Text(symbols)
+            .font(Typography.keyCap)
+            .foregroundStyle(Color.prominentText.opacity(0.7))
+            .fixedSize()
+            .accessibilityHidden(true)
+    }
+
+    /// The title: the words keep their room and the branch gives way, in
+    /// the middle.
+    @ViewBuilder
     private var label: some View {
-        Text(content.shownTitle)
+        let parts = content.titleParts
+        if let branch = parts.branch {
+            HStack(spacing: 0) {
+                Text(parts.lead)
+                    .layoutPriority(2)
+                // The space leads the branch's text: a trailing one would
+                // be trimmed.
+                Text(verbatim: " " + branch)
+                    .fontWeight(.bold)
+                    .truncationMode(.middle)
+                    .layoutPriority(1)
+                if !parts.trail.isEmpty {
+                    Text(parts.trail)
+                        .layoutPriority(2)
+                }
+            }
             .lineLimit(1)
-            .truncationMode(.middle)
-            .contentTransition(.numericText())
-            .motion(Motion.kindChange, value: content.fileCount)
+        } else {
+            Text(parts.lead + parts.trail)
+                .lineLimit(1)
+        }
     }
 }

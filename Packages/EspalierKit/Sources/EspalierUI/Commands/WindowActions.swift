@@ -80,16 +80,6 @@ public final class WindowActions {
         register(kind, Handler(isEnabled: isEnabled, isChecked: isChecked, title: title, isHidden: isHidden, perform: perform))
     }
 
-    /// Whether a handler is registered for `kind`.
-    public func isRegistered(_ kind: ActionKind) -> Bool {
-        handlers[kind] != nil
-    }
-
-    /// The kinds with handlers.
-    public var registeredKinds: Set<ActionKind> {
-        Set(handlers.keys)
-    }
-
     // MARK: Validating
 
     /// Whether `action` can run now.

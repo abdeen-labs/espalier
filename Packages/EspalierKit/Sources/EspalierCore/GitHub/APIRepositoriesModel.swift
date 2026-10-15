@@ -27,7 +27,8 @@ public struct AccountKey: Hashable, Sendable {
 /// repositories, and only when that isn't all of them, the account's own,
 /// its collaborations, and its organizations' repositories at once. A
 /// refresh keeps the list it had and updates it in place, removing what the
-/// server no longer lists once the whole list has loaded.
+/// server no longer lists once the whole list has loaded. A load that stops
+/// at a failed request is marked failed.
 @MainActor @Observable
 public final class APIRepositoriesModel {
     /// One account's repositories.
@@ -36,10 +37,14 @@ public final class APIRepositoriesModel {
         public var repositories: [APIRepository]
         /// Whether the list is loading or refreshing.
         public var loading: Bool
+        /// Whether the last load stopped at a request that failed, before
+        /// the end of the list.
+        public var failed: Bool
 
-        public init(repositories: [APIRepository] = [], loading: Bool = false) {
+        public init(repositories: [APIRepository] = [], loading: Bool = false, failed: Bool = false) {
             self.repositories = repositories
             self.loading = loading
+            self.failed = failed
         }
     }
 
@@ -78,6 +83,7 @@ public final class APIRepositoriesModel {
 
         var current = state[key] ?? AccountRepositories()
         current.loading = true
+        current.failed = false
         state[key] = current
 
         let api = API.fromAccount(account, runtime: environment.gitHub)
@@ -183,7 +189,10 @@ public final class APIRepositoriesModel {
             logger.info("Loading the repositories of an account on \(key.endpoint, privacy: .public) stopped before the end")
         }
         if !Task.isCancelled {
-            update(key) { $0.loading = false }
+            update(key) { state in
+                state.loading = false
+                state.failed = !isComplete
+            }
         }
     }
 

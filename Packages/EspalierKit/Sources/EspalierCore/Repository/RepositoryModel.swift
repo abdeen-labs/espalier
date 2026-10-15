@@ -50,7 +50,9 @@ public final class RepositoryModel: Identifiable {
     public private(set) var networkOperation: ActiveOperation?
     /// Whether a refresh pass is running.
     public private(set) var isRefreshing = false
-    /// The last failure of background work, never presented as an error.
+    /// The last failure of background work, which the sync button shows
+    /// (never an error alert); cleared when an operation of the same kind
+    /// succeeds, in the background or not.
     public internal(set) var lastBackgroundFailure: BackgroundFailure?
 
     // MARK: Feature models

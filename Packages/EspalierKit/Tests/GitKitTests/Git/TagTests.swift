@@ -59,7 +59,7 @@ struct TagTests {
             let error = await #expect(throws: GitError.self) {
                 try await createTag(repository, "my-new-tag", "HEAD")
             }
-            #expect(error?.message.range(of: "already exists", options: .caseInsensitive) != nil)
+            #expect(error?.result.gitError == .tagAlreadyExists)
         }
     }
 

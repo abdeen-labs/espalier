@@ -43,6 +43,16 @@ public final class RepositoryGitState {
     /// refreshed hasn't loaded its remotes yet.
     public internal(set) var loaded: RefreshScope = []
 
+    /// Whether the current branch is published: its upstream's
+    /// remote-tracking branch exists, the only case status reports how far
+    /// the branch is ahead and behind. A branch whose upstream is gone (a
+    /// merged pull request's, deleted and pruned) isn't: the sync button
+    /// offers to publish it, and the menu's Pull and GitHub branch items are
+    /// off.
+    public var isCurrentBranchPublished: Bool {
+        tip.branch != nil && aheadBehind != nil
+    }
+
     /// Whether the status, remotes, and refs have all loaded since the
     /// last reset. Before then, the remotes and the branch's upstream
     /// aren't known: a repository without them reads as one to publish.
@@ -58,7 +68,9 @@ public struct BranchesSnapshot: Sendable, Equatable {
     /// Local branches and the remote branches no local branch tracks
     /// (`mergeRemoteAndLocalBranches`).
     public var all: [Branch] = []
-    /// The default branch (`findDefaultBranch`).
+    /// The default branch (`findDefaultBranch`): a local branch, or a
+    /// remote branch, which `all` leaves out when a local branch of another
+    /// name tracks it.
     public var defaultBranch: Branch?
     /// The parent's default branch, for forks contributing to it.
     public var upstreamDefaultBranch: Branch?
@@ -100,12 +112,23 @@ public struct RemotesSnapshot: Sendable, Equatable {
     public var currentRemote: Remote?
     /// The remote pointing at a fork's parent (`findUpstreamRemote`).
     public var upstreamRemote: Remote?
+    /// The names of the fork remotes Espalier added, which the repository's
+    /// configuration marks (`getForkRemoteNames`): their branches are hidden
+    /// and they're pruned once unused. Empty when the marks can't be read.
+    public var forkRemoteNames: Set<ExactString>
 
-    public init(all: [Remote] = [], defaultRemote: Remote? = nil, currentRemote: Remote? = nil, upstreamRemote: Remote? = nil) {
+    public init(
+        all: [Remote] = [],
+        defaultRemote: Remote? = nil,
+        currentRemote: Remote? = nil,
+        upstreamRemote: Remote? = nil,
+        forkRemoteNames: Set<ExactString> = []
+    ) {
         self.all = all
         self.defaultRemote = defaultRemote
         self.currentRemote = currentRemote
         self.upstreamRemote = upstreamRemote
+        self.forkRemoteNames = forkRemoteNames
     }
 }
 

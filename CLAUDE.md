@@ -1,8 +1,10 @@
 # Espalier
 
-A native macOS Git client in Swift 6, SwiftUI, and AppKit, ported from GitHub
-Desktop (MIT). Desktop's source is the reference for git behavior and edge
-cases. None of its UI is used, and its copy only where it reads well.
+A macOS Git client in Swift 6, SwiftUI, and AppKit, ported from GitHub
+Desktop (MIT). Desktop's source is the reference for git behavior, edge
+cases, and layout: where things are, what each screen shows together, and
+its flows. Espalier draws its own UI and uses desktop's copy where it reads
+well.
 
 - `docs/PROGRESS.md`: what's left.
 - `docs/DECISIONS.md`: every decision and every deviation from desktop.
@@ -37,7 +39,8 @@ Packages/EspalierKit/        All real code, in one library product named Espalie
   Vendor/Grammars/           Five tree-sitter grammars vendored (see its README).
   Tests/TestSupport/         Test-only helpers and desktop's fixture repositories.
   Tests/<Module>Tests/       Swift Testing suites, many ported from desktop/app/test/unit.
-scripts/                     fetch-git.sh, embed-git.sh, git-version, git-checksums.
+  Tests/EspalierCaptures/    Captures: views drawn to PNGs to look at, never compared.
+scripts/                     fetch-git.sh, embed-git.sh, git-version, git-checksums, capture.sh.
 Vendor/git/                  The bundled git (gitignored, installed by scripts/fetch-git.sh).
 docs/                        What's left, decisions, design.
 ```
@@ -71,6 +74,17 @@ cd Packages/EspalierKit && swift test
 
 `swift test --skip-build` needs every test bundle built first
 (`swift build --build-tests`).
+
+Captures draw Espalier's views offscreen to PNGs, in light and dark, to
+look at with the Read tool. `scripts/capture.sh` writes every capture, or
+those matching a filter, to `.captures/` (gitignored) and prints the
+folder; `--look` draws them in another look (`orchard-ink`,
+`pop-magenta-fixel`, `islands-lagoon-warm`, or `all`). The test suite
+skips them.
+
+```bash
+scripts/capture.sh --look pop-tangerine Gallery
+```
 
 App build, then verify the embedded git and the signature:
 
@@ -125,14 +139,15 @@ My rule: rigor where a mistake hurts users, not everywhere.
 - You work in your own git worktree and commit to its branch with clear
   messages; the lead merges into `main`.
 - When done, run `swift build --build-tests` and only the suites your
-  change touches (`swift test --skip-build --filter "..."`, recording new
-  snapshots in that pass), then look at the snapshots you changed. If
-  anything fails, warns, or looks wrong, fix it and run again. Workers share
+  change touches (`swift test --skip-build --filter "..."`). If anything
+  fails or warns, fix it and run again. Workers share
   one Mac, so a run waits its turn: `lockf -k /tmp/espalier-swift-test.lock
   swift test ...`. The lead runs the full suite once on `main` after
   merging. Report the result honestly, with output for failures; the lead
   takes it as fact and doesn't re-run it. Changes that touch no code
   (comments, docs) get no build or test run.
+- When a change shows in the UI, capture what it changed and look at it;
+  a view or state with no capture gets one (`Tests/EspalierCaptures`).
 - Keep reports to one screen: what you did, what you left out and why, and
   follow-ups.
 
@@ -220,11 +235,9 @@ My rule: rigor where a mistake hurts users, not everywhere.
   (EspalierCoreTestSupport, with `ManualFileWatcher` and recording
   services) and wait with `idle()` and `ManualScheduler`. `AppHarness`
   starts a background service only when given `backgroundServices:`.
-- UI: snapshot every state in light and dark with `assertSnapshot`
-  (references in `Tests/EspalierUITests/__Snapshots__`, recorded with
-  `ESPALIER_RECORD_SNAPSHOTS=1`, or only the missing ones with
-  `ESPALIER_RECORD_MISSING_SNAPSHOTS=1`, then a normal run must pass), and
-  look at the PNGs with the Read tool.
+- Never write screenshot, snapshot, or string tests (tests of strings the
+  UI shows). Captures aren't tests: they compare nothing and keep no
+  reference images.
 - Tests run in parallel in one process, so a test leaves process-wide state
   (`setenv`, `chdir`, `GitRuntime.configure`) alone.
 - Blocking work in a test (a blocking `read`, a semaphore wait,

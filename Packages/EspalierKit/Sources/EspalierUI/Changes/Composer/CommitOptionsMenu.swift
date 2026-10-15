@@ -28,8 +28,9 @@ nonisolated public struct CommitOptionsContent: Sendable, Equatable {
     }
 }
 
-/// The commit options: an ellipsis in a soft circle in the commit message
-/// card's footer, tinted while an option is on, and its menu.
+/// The commit options: an icon button in the commit message card's footer,
+/// its circled ellipsis filling in the accent while an option is on, and
+/// its menu.
 public struct CommitOptionsMenu: View {
     private let content: CommitOptionsContent
     private let onToggleAmend: () -> Void
@@ -45,37 +46,33 @@ public struct CommitOptionsMenu: View {
     }
 
     public var body: some View {
-        Menu {
-            Toggle("Amend Last Commit", isOn: Binding(
-                get: { content.isAmending },
-                set: { _ in onToggleAmend() }
-            ))
-            .disabled(!content.canToggleAmend)
-            Divider()
+        PullDownButton("Commit Options") {
+            MenuToggle("Amend Last Commit", isOn: content.isAmending, action: onToggleAmend)
+                .disabled(!content.canToggleAmend)
+            MenuDivider()
             option("Bypass Commit Hooks", \.skipHooks)
             option("Add Signed-off-by Trailer", \.signOff)
             option("Allow Empty Commit", \.allowEmpty)
         } label: {
-            IconCircle("ellipsis", size: ComposerMetrics.footerButtonSize, tint: content.isDefault ? nil : Color.accentColor)
+            Label {
+                Text("Commit Options")
+            } icon: {
+                Image(systemName: content.isDefault ? "ellipsis.circle" : "ellipsis.circle.fill")
+                    .foregroundStyle(content.isDefault ? AnyShapeStyle(.text2) : AnyShapeStyle(Color.accent))
+            }
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
+        .buttonStyle(.icon)
         .fixedSize()
         .disabled(!content.isEnabled)
-        .opacity(content.isEnabled ? 1 : CheckboxDrawing.disabledOpacity)
-        .help("Commit Options")
-        .accessibilityLabel("Commit Options")
+        .tooltip("Commit Options")
     }
 
-    private func option(_ title: String, _ keyPath: WritableKeyPath<CommitOptions, Bool>) -> some View {
-        Toggle(title, isOn: Binding(
-            get: { content.options[keyPath: keyPath] },
-            set: { isOn in
-                var options = content.options
-                options[keyPath: keyPath] = isOn
-                onChange(options)
-            }
-        ))
+    private func option(_ title: String, _ keyPath: WritableKeyPath<CommitOptions, Bool>) -> MenuToggle {
+        let isOn = content.options[keyPath: keyPath]
+        return MenuToggle(title, isOn: isOn) { [content, onChange] in
+            var options = content.options
+            options[keyPath: keyPath] = !isOn
+            onChange(options)
+        }
     }
 }

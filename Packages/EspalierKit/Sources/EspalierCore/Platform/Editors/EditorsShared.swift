@@ -43,12 +43,20 @@ public let suggestedExternalEditor = SuggestedExternalEditor(
 )
 
 extension ExternalEditorError {
-    /// The error reported when an editor should open but none is installed
-    /// (`findEditorOrDefault` returns nothing).
+    /// The error reported when an editor should open but none is installed.
     public static var noSuitableEditorInstalled: ExternalEditorError {
         ExternalEditorError(
-            "Espalier couldn't find a supported editor. Install \(suggestedExternalEditor.name), then restart Espalier and try again.",
+            "Espalier couldn't find a supported editor. Install \(suggestedExternalEditor.name), then try again.",
             metadata: Metadata(suggestDefaultEditor: true)
+        )
+    }
+
+    /// The error reported when the editor named `name` should open but
+    /// isn't installed.
+    public static func editorNotFound(_ name: String) -> ExternalEditorError {
+        ExternalEditorError(
+            "Espalier couldn't find \(name). Choose an available editor in Settings ▸ Integrations.",
+            metadata: Metadata(openPreferences: true)
         )
     }
 }

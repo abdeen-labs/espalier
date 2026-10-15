@@ -20,13 +20,15 @@ private let logger = Log.logger(category: "integrations")
 /// `setCustomShell(path:arguments:)` validates them first.
 @MainActor @Observable
 public final class IntegrationsModel {
-    /// The installed editors, in `darwinExternalEditors`' order; the first is
-    /// the default. Empty until the launch lookup finishes
-    /// (`hasLoadedIntegrations`).
+    /// The installed editors, in `darwinExternalEditors`' order. Empty until
+    /// the launch lookup finishes (`hasLoadedIntegrations`). Looked up again
+    /// when Espalier becomes active, when Settings opens
+    /// (`lookUpIntegrationsAgain()`), and when opening in an editor.
     public internal(set) var availableEditors: [FoundEditor] = []
 
     /// The installed shells, in order (Terminal, Hyper, iTerm2, PowerShell
-    /// Core, Ghostty, Kitty, Alacritty, Tabby, WezTerm, Warp).
+    /// Core, Ghostty, Kitty, Alacritty, Tabby, WezTerm, Warp). Looked up
+    /// again as the editors are, and when opening in a shell.
     public internal(set) var availableShells: [FoundShell] = []
 
     /// Whether the installed editors and shells have been looked up.
@@ -55,6 +57,12 @@ public final class IntegrationsModel {
     /// time (GlobalGitSettings.swift).
     @ObservationIgnored let globalConfigWriter = GlobalConfigWriter()
     @ObservationIgnored private var launchTask: Task<Void, Never>?
+    /// The latest lookup started by `lookUpIntegrationsAgain()`.
+    @ObservationIgnored private var lookupTask: Task<Void, Never>?
+    /// Counts the editor and shell lookups started, so only the latest one
+    /// shows its result.
+    @ObservationIgnored private var editorLookups = 0
+    @ObservationIgnored private var shellLookups = 0
 
     init(environment: AppEnvironment, preferences: Preferences) {
         self.environment = environment
@@ -68,8 +76,8 @@ public final class IntegrationsModel {
     /// Git LFS filters.
     ///
     /// A selected editor that isn't installed is kept (see `resolvedEditor`),
-    /// and when none is selected nothing is written: the default editor is
-    /// the first one installed, looked up at each launch.
+    /// and when none is selected nothing is written: opening uses the only
+    /// installed editor, or asks which one to use when there are several.
     func applicationDidLaunch() {
         guard launchTask == nil else {
             return
@@ -82,86 +90,123 @@ public final class IntegrationsModel {
         }
     }
 
-    /// Waits for the launch work, and a running re-claim of GitHub
-    /// Desktop's links, to finish (tests).
+    /// Espalier became active: takes GitHub Desktop's links back while the
+    /// setting is on, and looks up the installed editors and shells again,
+    /// as one may have been installed or removed meanwhile.
+    func applicationDidBecomeActive() {
+        reclaimGitHubDesktopLinks()
+        lookUpIntegrationsAgain()
+    }
+
+    /// Waits for the launch work, the latest lookup, and a running re-claim
+    /// of GitHub Desktop's links, to finish (tests).
     func launchIdle() async {
         await launchTask?.value
+        await lookupTask?.value
         await gitHubDesktopLinksReclaimIdle()
     }
 
-    /// Looks up the installed editors and shells again.
-    ///
-    /// The editor list is kept for the life of the app once it has an editor
-    /// (until then each lookup looks again), and the shell list once looked
-    /// up.
+    /// Looks up the installed editors and shells again, in the background:
+    /// when Espalier becomes active, and when Settings opens.
+    public func lookUpIntegrationsAgain() {
+        lookupTask = Task {
+            await refreshAvailableIntegrations()
+        }
+    }
+
+    /// Looks up the installed editors and shells again. A lookup started
+    /// later shows its result instead, whichever ends first.
     public func refreshAvailableIntegrations() async {
-        let editors = environment.editors
-        let shells = environment.shells
-        async let foundEditors = editors.getAvailableEditors()
-        async let foundShells = shells.getAvailableShells()
-        let (editorList, shellList) = await (foundEditors, foundShells)
-        if availableEditors != editorList {
-            availableEditors = editorList
-        }
-        if availableShells != shellList {
-            availableShells = shellList
-        }
+        async let editors = lookUpEditors()
+        async let shells = lookUpShells()
+        _ = await (editors, shells)
         if !hasLoadedIntegrations {
             hasLoadedIntegrations = true
         }
     }
 
+    /// Looks up the installed editors, and shows them unless another lookup
+    /// has started since.
+    private func lookUpEditors() async -> [FoundEditor] {
+        editorLookups += 1
+        let lookup = editorLookups
+        let editors = await environment.editors.getAvailableEditors()
+        if lookup == editorLookups, availableEditors != editors {
+            availableEditors = editors
+        }
+        return editors
+    }
+
+    /// Looks up the installed shells, and shows them unless another lookup
+    /// has started since.
+    private func lookUpShells() async -> [FoundShell] {
+        shellLookups += 1
+        let lookup = shellLookups
+        let shells = await environment.shells.getAvailableShells()
+        if lookup == shellLookups, availableShells != shells {
+            availableShells = shells
+        }
+        return shells
+    }
+
     // MARK: The editor and shell in use
 
-    /// The installed editors behind the editor selection
-    /// (`ExternalEditorLookup.resolveExternalEditor`'s rule over the
-    /// installed editors).
+    /// The selected editor's name; nil when none is selected (an empty name
+    /// included).
+    private var selectedEditorName: String? {
+        preferences.integrations.selectedExternalEditor.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// The installed editors behind the editor selection.
     public var editorResolution: ExternalEditorResolution {
-        let selected = preferences.integrations.selectedExternalEditor
-        return ExternalEditorResolution(
-            selectedEditor: selected.flatMap { name in availableEditors.first { JSCompat.strictEquals($0.editor, name) } },
-            defaultEditor: availableEditors.first
-        )
+        ExternalEditorResolution(selectedEditor: selectedEditorName, installed: availableEditors)
     }
 
     /// The editor "Open in Editor" launches when no custom editor is in use:
-    /// the selected editor, or, when none was selected, the first installed
-    /// one. Nil when no editor is installed, or when the selected one isn't:
+    /// the selected editor, or, when none was selected, the only installed
+    /// one. Nil when no editor is installed, when several are and none was
+    /// selected (opening asks), or when the selected one isn't installed:
     /// the choice is kept, and opening reports it missing.
     public var resolvedEditor: FoundEditor? {
         let resolution = editorResolution
-        return preferences.integrations.selectedExternalEditor == nil ? resolution.defaultEditor : resolution.selectedEditor
+        return selectedEditorName == nil ? resolution.defaultEditor : resolution.selectedEditor
+    }
+
+    /// Whether opening in the editor asks which one to use: no editor is
+    /// selected or custom, and several are installed.
+    public var asksForEditor: Bool {
+        preferences.integrations.activeCustomEditor == nil && selectedEditorName == nil && availableEditors.count > 1
     }
 
     /// Whether "Open in Editor" has an editor to launch: the custom editor
-    /// in use, or `resolvedEditor`.
+    /// in use, or `resolvedEditor`, or one to ask for (`asksForEditor`).
     public var isEditorAvailable: Bool {
-        preferences.integrations.activeCustomEditor != nil || resolvedEditor != nil
+        preferences.integrations.activeCustomEditor != nil || resolvedEditor != nil || asksForEditor
     }
 
     /// Whether the selected editor isn't installed, so opening fails until
     /// another one is chosen (Settings shows the choice as unavailable).
     public var isSelectedEditorMissing: Bool {
         hasLoadedIntegrations
-            && preferences.integrations.selectedExternalEditor != nil
+            && selectedEditorName != nil
             && editorResolution.selectedEditor == nil
     }
 
     /// The editor named in "Open in <Editor>": the selected editor, else the
-    /// default one; nil while the custom editor is in use or no editor is
-    /// known, which reads "Open in External Editor".
+    /// only one installed; nil while the custom editor is in use, or no
+    /// editor is selected and there isn't exactly one, which reads "Open in
+    /// External Editor".
     public var editorLabel: String? {
-        let settings = preferences.integrations
-        guard settings.activeCustomEditor == nil else {
+        guard preferences.integrations.activeCustomEditor == nil else {
             return nil
         }
-        return settings.selectedExternalEditor ?? editorResolution.defaultEditor?.editor
+        return selectedEditorName ?? editorResolution.defaultEditor?.editor
     }
 
     /// The shell named in "Open in <Shell>": the selected shell (Terminal
-    /// by default, even when the selected one isn't installed and Terminal
-    /// opens instead); nil while the custom shell is in use, which reads
-    /// "Open in Shell".
+    /// by default), even when it isn't installed and opening reports it
+    /// missing; nil while the custom shell is in use, which reads "Open in
+    /// Shell".
     public var shellLabel: String? {
         let settings = preferences.integrations
         return settings.activeCustomShell == nil ? settings.selectedShell.rawValue : nil
@@ -239,22 +284,40 @@ public final class IntegrationsModel {
     // MARK: Opening
 
     /// Opens a repository, folder, or file in the editor: the custom editor
-    /// when it is in use, otherwise the selected editor, or the first
-    /// installed one when none is selected.
+    /// when it is in use, otherwise the selected editor, or, when none is
+    /// selected, the only installed one. The installed editors are looked up
+    /// again first.
     ///
-    /// - Throws: `.integration(.editor)`: no editor is installed ("No
-    ///   suitable editors installed for Espalier to launch…", recovery
-    ///   "Download Visual Studio Code"), the selected one isn't ("The editor
-    ///   '<name>' could not be found…", recovery "Open Settings"), or it can't
-    ///   start.
+    /// - Throws: `.decisionRequired(.externalEditor)` when none is selected
+    ///   and several are installed: the answer is saved as the selected
+    ///   editor (`selectEditor(_:)`), and opening runs again.
+    ///   `.integration(.editor)`: no editor is installed ("Espalier couldn't
+    ///   find a supported editor…", recovery "Download Visual Studio Code"),
+    ///   the selected one isn't ("Espalier couldn't find <name>…", recovery
+    ///   "Open Settings"), or it can't start.
     public func openInEditor(_ path: String) async throws(OperationError) {
         let settings = preferences.integrations
-        do {
-            if let customEditor = settings.activeCustomEditor {
+        if let customEditor = settings.activeCustomEditor {
+            do {
                 try await launchCustomExternalEditor(path, customEditor, launcher: environment.launcher)
-                return
+            } catch {
+                throw await classify(error, as: .openInEditor)
             }
-            let editor = try await findEditorOrRefresh(settings.selectedExternalEditor)
+            return
+        }
+        let editors = await lookUpEditors()
+        let selected = selectedEditorName
+        if selected == nil, editors.count > 1 {
+            throw OperationError(.decisionRequired(.externalEditor(editors: editors.map(\.editor))), operation: .openInEditor)
+        }
+        do {
+            let resolution = ExternalEditorResolution(selectedEditor: selected, installed: editors)
+            if let selected, resolution.selectedEditor == nil {
+                throw ExternalEditorError.editorNotFound(selected)
+            }
+            guard let editor = resolution.selectedEditor ?? resolution.defaultEditor else {
+                throw ExternalEditorError.noSuitableEditorInstalled
+            }
             try await launchExternalEditor(path, editor, launcher: environment.launcher)
         } catch {
             throw await classify(error, as: .openInEditor)
@@ -266,8 +329,11 @@ public final class IntegrationsModel {
     ///
     /// - Throws: As `openInEditor(_:)`.
     public func openWith(_ path: String, editor: FoundEditor) async throws(OperationError) {
+        let editors = await lookUpEditors()
         do {
-            let found = try await findEditorOrRefresh(editor.editor)
+            guard let found = editors.first(where: { JSCompat.strictEquals($0.editor, editor.editor) }) else {
+                throw ExternalEditorError.editorNotFound(editor.editor)
+            }
             try await launchExternalEditor(path, found, launcher: environment.launcher)
         } catch {
             throw await classify(error, as: .openInEditor)
@@ -291,12 +357,13 @@ public final class IntegrationsModel {
     }
 
     /// Opens a folder in the shell: the custom shell when it is in use,
-    /// otherwise the selected shell, or Terminal when that one isn't
-    /// installed.
+    /// otherwise the selected shell. The installed shells are looked up again
+    /// first.
     ///
-    /// - Throws: `.integration(.shell)` when the shell's application or
-    ///   executable is missing (recovery "Open Settings"); when it can't
-    ///   start, a generic error (`spawn <path> <code>`).
+    /// - Throws: `.integration(.shell)` when the shell isn't installed or
+    ///   its application or executable is missing (recovery "Open
+    ///   Settings"); when it can't start, a generic error (`spawn <path>
+    ///   <code>`).
     public func openInShell(_ path: String) async throws(OperationError) {
         let settings = preferences.integrations
         let spawnFailures = SpawnFailures()
@@ -304,9 +371,7 @@ public final class IntegrationsModel {
             if let customShell = settings.activeCustomShell {
                 try await launchCustomShell(customShell, path, onError: spawnFailures.record, launcher: environment.launcher)
             } else {
-                // Terminal is part of macOS, but a missing one is still
-                // reported.
-                guard let shell = await environment.shells.findShellOrDefault(settings.selectedShell) else {
+                guard let shell = await lookUpShells().first(where: { $0.shell == settings.selectedShell }) else {
                     throw ShellError(
                         "Espalier couldn't find \(settings.selectedShell.rawValue). Choose an available shell in Settings ▸ Integrations."
                     )
@@ -419,20 +484,6 @@ public final class IntegrationsModel {
     }
 
     // MARK: Helpers
-
-    /// `findEditorOrDefault`, reporting "No suitable editors installed" when
-    /// there's none. A lookup that finds editors after launch found none
-    /// updates `availableEditors`.
-    private func findEditorOrRefresh(_ name: String?) async throws(ExternalEditorError) -> FoundEditor {
-        let found = try await environment.editors.findEditorOrDefault(name)
-        if availableEditors.isEmpty, found != nil {
-            await refreshAvailableIntegrations()
-        }
-        guard let found else {
-            throw ExternalEditorError.noSuitableEditorInstalled
-        }
-        return found
-    }
 
     /// The error an integration intent throws, classified by `ErrorClassifier`
     /// (a `ShellError`, an `ExternalEditorError`, then the default).

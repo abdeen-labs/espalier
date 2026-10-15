@@ -16,7 +16,8 @@ enum ChangesActions {
                 return false
             }
             // ⌘↩ commits from Changes, where the composer is, and not while
-            // an operation's panel takes the composer's place.
+            // an operation runs or waits (the commit form then commits a
+            // merge, or Continue takes its place).
             return context.state.place == .changes
                 && OperationCapsuleContent.make(controller.repository) == nil
                 && controller.canCommit
@@ -90,8 +91,8 @@ enum ChangesActions {
             await controller.undo()
         }
 
-        Benchmarks.runners[.changesApply] = { _ in
-            ChangesApplyBenchmark.run()
+        Benchmarks.runners[.changesApply] = { context in
+            ChangesApplyBenchmark.run(numberFormat: context.app.preferences.numberFormat)
         }
     }
 

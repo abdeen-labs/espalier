@@ -17,6 +17,13 @@ public func makeBareRemote(from repository: Repository) async throws -> Reposito
     return Repository(path: path)
 }
 
+/// An empty bare repository, to add as a remote and push to.
+public func makeEmptyBareRemote() async throws -> Repository {
+    let remote = Repository(path: try createTempDirectory(prefix: "espalier-remote-"))
+    _ = try await runGit(["init", "-q", "--bare"], remote)
+    return remote
+}
+
 /// A bare remote with one commit on `branch`, and a clone of it that tracks
 /// `origin/<branch>`.
 public func setupRepositoryWithRemote(branch: String = "main") async throws -> (local: Repository, remote: Repository) {

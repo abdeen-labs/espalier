@@ -19,6 +19,8 @@ struct SimpleListPresentation: Equatable {
     var hasRemote = true
     /// The search, while there is a query: rows that don't match dim.
     var search: HistorySearch?
+    /// HEAD's commit: its node is the bold ring and its title semibold.
+    var headSHA: String?
     /// The GitHub endpoint avatars load from.
     var avatarEndpoint: String?
     /// Whether commits can be dragged out (to cherry-pick).
@@ -41,7 +43,7 @@ struct SimpleListActions {
     var setExpanded: (_ row: Int, _ expanded: Bool) -> Void = { _, _ in }
     /// The context menu for commits (the selection, or the one clicked)
     /// and the one clicked.
-    var menu: (_ shas: [String], _ clicked: String) -> NSMenu? = { _, _ in nil }
+    var menu: (_ shas: [String], _ clicked: String) -> MenuContent? = { _, _ in nil }
     /// The payload for dragging commits out; nil refuses the drag.
     var dragPayload: (_ shas: [String]) -> CommitDragPayload? = { _ in nil }
     var dragBegan: (_ payload: CommitDragPayload) -> Void = { _ in }
@@ -78,18 +80,11 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     private(set) weak var history: HistoryModel?
     var actions = SimpleListActions()
     var avatarLoader: (any AvatarLoading)?
-    /// The time relative dates are measured from; nil for the clock, with
-    /// visible dates refreshed once a minute.
-    var fixedNow: Date? {
-        didSet {
-            updateMinuteTimer()
-        }
-    }
 
     var dateFormatting = DateTimeFormatting() {
         didSet {
             if dateFormatting != oldValue {
-                dates = DateTextCache(capacity: dates.capacity, abbreviates: true)
+                dates = DateTextCache(capacity: dates.capacity)
             }
         }
     }
@@ -97,7 +92,16 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     var timeZone = TimeZone.current {
         didSet {
             if timeZone != oldValue {
-                dates = DateTextCache(capacity: dates.capacity, abbreviates: true)
+                dates = DateTextCache(capacity: dates.capacity)
+            }
+        }
+    }
+
+    /// How counts show.
+    var numberFormat = defaultNumberFormat {
+        didSet {
+            if numberFormat != oldValue {
+                reconfigureVisibleRows()
             }
         }
     }
@@ -114,10 +118,10 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     private(set) var reorderInsertionRow: Int?
     /// Where commits dragged over the list would go, and what that shows.
     private var currentDrop: Drop?
-    private var dates = DateTextCache(capacity: 2_000, abbreviates: true)
+    private var dates = DateTextCache(capacity: 2_000)
     private let monograms = MonogramCache()
-    /// A commit's row height, measured once.
-    private let rowHeight = Metrics.SimpleList.rowHeight
+    /// A commit's row height, measured again when the look changes.
+    private var rowHeight = Metrics.SimpleList.rowHeight
     private var minuteTimer: Timer?
     private var dragEndTimer: Timer?
     private var isLiveScrolling = false
@@ -135,16 +139,16 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// loading line when its wait ends.
     private var lastPresentation: (presentation: SimpleListPresentation, reorderInsertionRow: Int?)?
 
-    /// The most rows a merge's expanding or collapsing slides; more change
-    /// at once.
-    static let slideLimit = 100
+    /// The most rows a merge's expanding or collapsing crossfades; more
+    /// change at once.
+    static let crossfadeLimit = 100
 
     override init() {
         tableView = SimpleNSTableView(frame: .zero)
-        scrollView = NSScrollView(frame: .zero)
+        scrollView = UnbouncedScrollView()
         super.init()
         configureTable()
-        updateMinuteTimer()
+        startMinuteTimer()
     }
 
     private func configureTable() {
@@ -153,6 +157,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         tableView.addTableColumn(column)
         tableView.headerView = nil
         tableView.style = .plain
+        tableView.focusRingType = .none
         tableView.usesAutomaticRowHeights = false
         tableView.rowHeight = rowHeight
         tableView.intercellSpacing = .zero
@@ -183,6 +188,18 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         NotificationCenter.default.addObserver(self, selector: #selector(boundsDidChange(_:)), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         NotificationCenter.default.addObserver(self, selector: #selector(willStartLiveScroll(_:)), name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
         NotificationCenter.default.addObserver(self, selector: #selector(didEndLiveScroll(_:)), name: NSScrollView.didEndLiveScrollNotification, object: scrollView)
+        NotificationCenter.default.addObserver(self, selector: #selector(lookDidChange(_:)), name: Look.didChange, object: nil)
+    }
+
+    /// The look changed: the rows' height and colors follow it, and the
+    /// rows show again in its fonts.
+    @objc private func lookDidChange(_ notification: Notification) {
+        rowHeight = Metrics.SimpleList.rowHeight
+        tableView.rowHeight = rowHeight
+        tableView.backgroundColor = Palette.background
+        scrollView.backgroundColor = Palette.background
+        tableView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<tableView.numberOfRows))
+        reconfigureVisibleRows()
     }
 
     isolated deinit {
@@ -243,9 +260,8 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     /// Applies a change of the same list: pages appended, or a merge's
     /// commits shown or hidden (the rows between the common start and end).
-    /// A merge's commits slide down from under it over 0.22 s and back up
-    /// over 0.15 s, up to 100 rows; pages and anything larger change at
-    /// once.
+    /// The rows change at once; for a merge's commits, up to 100 rows, the
+    /// list crossfades to them over 0.22 s, and back over 0.15 s.
     private func apply(_ newItems: [SimpleHistoryItem]) {
         let old = items
         var prefix = 0
@@ -260,15 +276,21 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         items = newItems
         let removed = IndexSet(integersIn: prefix..<(old.count - suffix))
         let inserted = IndexSet(integersIn: prefix..<(newItems.count - suffix))
-        let slides = Self.isMergeSlide(removed: removed.map { old[$0] }, inserted: inserted.map { newItems[$0] })
+        let crossfades = Self.isMergeCrossfade(removed: removed.map { old[$0] }, inserted: inserted.map { newItems[$0] })
+        if crossfades, Motion.animates(tableView) {
+            Motion.crossfade(scrollView.layer, duration: inserted.isEmpty ? Motion.leave : Motion.arrive)
+        }
         isApplyingSelection = true
-        Motion.run(inserted.isEmpty ? Motion.leave : Motion.arrive, in: slides ? tableView : nil) { animates in
+        // The rows go in and out in a group of no duration, so the table's
+        // own row motion doesn't run.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
             tableView.beginUpdates()
             if !removed.isEmpty {
-                tableView.removeRows(at: removed, withAnimation: animates ? (inserted.isEmpty ? .slideUp : .effectFade) : [])
+                tableView.removeRows(at: removed, withAnimation: [])
             }
             if !inserted.isEmpty {
-                tableView.insertRows(at: inserted, withAnimation: animates ? .slideDown : [])
+                tableView.insertRows(at: inserted, withAnimation: [])
             }
             tableView.endUpdates()
         }
@@ -277,9 +299,9 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     /// Whether rows coming and going are a merge's commits shown or hidden
     /// (its commits and its status line, no commit of the branch's line),
-    /// few enough to slide.
-    static func isMergeSlide(removed: [SimpleHistoryItem], inserted: [SimpleHistoryItem]) -> Bool {
-        guard !(removed.isEmpty && inserted.isEmpty), removed.count <= slideLimit, inserted.count <= slideLimit else {
+    /// few enough to crossfade.
+    static func isMergeCrossfade(removed: [SimpleHistoryItem], inserted: [SimpleHistoryItem]) -> Bool {
+        guard !(removed.isEmpty && inserted.isEmpty), removed.count <= crossfadeLimit, inserted.count <= crossfadeLimit else {
             return false
         }
         return (removed + inserted).allSatisfy { item in
@@ -488,6 +510,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
         let rowView = tableView.makeView(withIdentifier: SimpleRowView.identifier, owner: self) as? SimpleRowView ?? SimpleRowView(frame: .zero)
         rowView.dropFeedback = feedback(forRow: row)
+        rowView.isContextMenuTarget = self.tableView.contextMenuTarget.isTarget(row)
         return rowView
     }
 
@@ -515,7 +538,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         let simpleRow: SimpleHistoryRow?
         var kind = SimpleRowContent.Kind.commit
         var isDimmed = false
-        var rail: (_ isUnpushed: Bool) -> SimpleRail
+        let rail: SimpleRail
         switch items[row] {
         case .commit(let historyRow):
             simpleRow = history.simpleRow(atRow: historyRow)
@@ -529,18 +552,14 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
                     (color: mergedColor(merge, sha: row.commit.sha), isExpanded: merge.isExpanded)
                 }
             }
-            rail = { [isDimmed] isUnpushed in
-                colors.rail(row: historyRow, isUnpushed: isUnpushed, isLast: isLast, merge: merge, isDimmed: isDimmed)
-            }
+            let isHead = simpleRow.map { $0.commit.sha == presentation.headSHA } ?? false
+            rail = colors.rail(row: historyRow, isHead: isHead, isLast: isLast, merge: merge, isDimmed: isDimmed)
         case .mergedCommit(let mergeRow, let index):
             simpleRow = history.simpleMergedRow(mergeRow: mergeRow, index: index)
             kind = .mergedCommit
             isDimmed = presentation.search != nil
-            let color = mergedColor(ofRow: mergeRow)
             let isLast = !isUnderMerge(mergeRow, tableRow: row + 1)
-            rail = { [isDimmed] isUnpushed in
-                colors.mergedRail(mergeRow: mergeRow, color: color, isUnpushed: isUnpushed, isLast: isLast, isDimmed: isDimmed)
-            }
+            rail = colors.mergedRail(mergeRow: mergeRow, color: mergedColor(ofRow: mergeRow), isLast: isLast, isDimmed: isDimmed)
         case .mergedCommitsStatus:
             return nil
         }
@@ -548,8 +567,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
             return nil
         }
         let commit = simpleRow.commit
-        let date = dates.entry(for: commit.sha, date: commit.author.date, now: fixedNow ?? Date(), formatting: dateFormatting, timeZone: timeZone)
-        let isUnpushed = presentation.hasRemote && simpleRow.isUnpushed
+        let date = dates.entry(for: commit.sha, date: commit.author.date, now: Date(), formatting: dateFormatting, timeZone: timeZone)
         let content = SimpleRowContent(
             kind: kind,
             sha: commit.sha,
@@ -561,11 +579,13 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
             dateTooltip: date.tooltip,
             changedFileCount: simpleRow.changedFileCount,
             tags: simpleRow.tags,
-            isUnpushed: isUnpushed,
+            isUnpushed: presentation.hasRemote && simpleRow.isUnpushed,
+            isCurrentTip: commit.sha == presentation.headSHA,
             isDimmed: isDimmed,
-            avatarEndpoint: presentation.avatarEndpoint
+            avatarEndpoint: presentation.avatarEndpoint,
+            numberFormat: numberFormat
         )
-        return (content, rail(isUnpushed), kind == .mergedCommit)
+        return (content, rail, kind == .mergedCommit)
     }
 
     /// The color of the branch a merge brought in.
@@ -607,7 +627,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         case .failed(let error):
             return ("The merged commits couldn\u{2019}t load.", error.message)
         case .loaded:
-            return ("The first \(formatCount(merged.count)) commits. Graph shows them all.", nil)
+            return ("The first \(formatCount(merged.count, numberFormat)) commits. Graph shows them all.", nil)
         }
     }
 
@@ -927,20 +947,19 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         guard presentation.allowsDragging, sha(atTableRow: row) != nil else {
             return nil
         }
-        let rows = tableView.selectedRowIndexes.contains(row) ? Array(tableView.selectedRowIndexes) : [row]
+        let candidates = tableView.selectedRowIndexes.contains(row) ? Array(tableView.selectedRowIndexes) : [row]
+        let rows = candidates.filter { sha(atTableRow: $0) != nil }
+        // One dragging item, as the graph's (`CommitDragImage`).
+        guard row == rows.first else {
+            return nil
+        }
         return actions.dragPayload(rows.compactMap(sha(atTableRow:)))?.pasteboardItem()
     }
 
     func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint, forRowIndexes rowIndexes: IndexSet) {
-        session.draggingFormation = .stack
-        var index = 0
-        session.enumerateDraggingItems(options: [], for: tableView, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, _, _ in
-            if index >= 3 {
-                item.imageComponentsProvider = { [] }
-            }
-            index += 1
-        }
-        if let payload = CommitDragPayload.read(from: session.draggingPasteboard) {
+        let payload = CommitDragPayload.read(from: session.draggingPasteboard)
+        CommitDragImage.apply(to: session, in: tableView, at: screenPoint, rows: rowIndexes, count: payload?.shas.count ?? rowIndexes.count, numberFormat: numberFormat)
+        if let payload {
             actions.dragBegan(payload)
             watchDragEnd()
         }
@@ -1022,7 +1041,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     /// The context menu for a click on `row`: the selection when the row is
     /// in it, else the row alone.
-    func menu(forClickedRow row: Int) -> NSMenu? {
+    func menu(forClickedRow row: Int) -> MenuContent? {
         guard let clicked = sha(atTableRow: row) else {
             return nil
         }
@@ -1058,12 +1077,8 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     // MARK: Dates
 
-    private func updateMinuteTimer() {
-        minuteTimer?.invalidate()
-        minuteTimer = nil
-        guard fixedNow == nil else {
-            return
-        }
+    /// Shows the visible rows' relative dates again once a minute.
+    private func startMinuteTimer() {
         minuteTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.reconfigureVisibleRows()

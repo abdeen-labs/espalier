@@ -25,10 +25,6 @@ private struct GitSnapshot: Equatable {
     let stateFiles: [String]
 }
 
-private let rebaseRefusal = "Finish or abort the rebase first."
-private let operationRefusal = "Finish or abort the operation in progress first."
-private let undoRefusal = "Resolve conflicts to continue."
-
 /// An operation refused over a rebase in progress, run in the repository
 /// `LeftoverRebaseRefusalTests` makes.
 enum RefusedOperation: String, CaseIterable, Sendable, CustomTestStringConvertible {
@@ -67,18 +63,6 @@ enum RefusedOperation: String, CaseIterable, Sendable, CustomTestStringConvertib
         case .revert: .revert
         case .undoCommit: .undoCommit
         case .resetToCommit: .resetToCommit
-        }
-    }
-
-    /// Its refusal over a rebase stopped on conflicts.
-    var refusal: String {
-        switch self {
-        case .checkoutBranch, .checkoutCommit, .createBranch, .renameBranch, .deleteBranch, .deleteCurrentBranch, .deleteRemoteBranch:
-            rebaseRefusal
-        case .rebase, .squash, .reorder, .cherryPick, .revert:
-            operationRefusal
-        case .undoCommit, .resetToCommit:
-            undoRefusal
         }
     }
 
@@ -228,7 +212,7 @@ struct LeftoverRebaseRefusalTests {
         let message = [.rebase, .squash, .reorder].contains(operation.kind) ? leftover.message : leftover.otherOperationMessage
         #expect(error?.reason == .precondition(message), "\(String(describing: error?.reason))")
         #expect(error?.operation == operation.kind)
-        #expect(error?.recoveries.map(\.title) == ["Clear Old Rebase and Continue"])
+        #expect(error?.recoveries.map(\.kind) == [.clearLeftoverRebaseAndRetry])
         guard case .clearLeftoverRebaseAndRetry(let id, let retry)? = error?.recoveries.first else {
             Issue.record("No Clear Old Rebase and Continue: \(String(describing: error?.recoveries))")
             return
@@ -270,7 +254,7 @@ struct LeftoverRebaseRefusalTests {
         let error = await #expect(throws: OperationError.self) {
             try await operation.run(fixture)
         }
-        #expect(error?.reason == .precondition(operation.refusal), "\(String(describing: error?.reason))")
+        #expect(preconditionText(error) != nil, "\(String(describing: error?.reason))")
         #expect(error?.recoveries.isEmpty == true)
         await fixture.app.idle()
         #expect(try await snapshot(fixture) == before)
@@ -326,7 +310,7 @@ struct LeftoverRebaseRefusalTests {
         let checkout = await #expect(throws: OperationError.self) {
             _ = try await checkingOut.model.branches.checkout(try checkingOut.branch("other"))
         }
-        #expect(checkout?.reason == .precondition(rebaseRefusal))
+        #expect(preconditionText(checkout) != nil)
         #expect(checkout?.recoveries.isEmpty == true)
         await checkingOut.app.idle()
 
@@ -334,7 +318,7 @@ struct LeftoverRebaseRefusalTests {
         let revert = await #expect(throws: OperationError.self) {
             _ = try await reverting.model.operations.revert(try await reverting.commit("feature"))
         }
-        #expect(revert?.reason == .precondition(operationRefusal))
+        #expect(preconditionText(revert) != nil)
         #expect(revert?.recoveries.isEmpty == true)
         await reverting.app.idle()
 

@@ -196,11 +196,13 @@ struct PublishRepositoryForm: View {
     var body: some View {
         SheetScaffold("Publish Repository") {
             if !model.destinations.isEmpty {
+                // The destinations' tabs, centered, as a tab view's.
                 CapsuleSegmentedControl(
                     "Destination",
                     selection: $model.destination,
                     segments: model.destinations.map { CapsuleSegment($0.title, value: $0) }
                 )
+                .frame(maxWidth: .infinity)
             }
 
             if let account = model.account {
@@ -210,7 +212,7 @@ struct PublishRepositoryForm: View {
             }
 
             if let problem = model.problem {
-                SheetMessage(problem, kind: .error)
+                FieldMessage(problem, kind: .error)
             }
         } buttons: {
             if model.account != nil {
@@ -239,43 +241,57 @@ struct PublishRepositoryForm: View {
     @ViewBuilder
     private func fields(for account: Account) -> some View {
         Form {
+            // The labels in the form's column; the fields are capsules, and
+            // the pop-ups as wide as they are.
             let accounts = model.accounts(for: model.destination)
-            Picker("Account", selection: Binding(
-                get: { AccountKey(account) },
-                set: { key in
-                    if model.destination == .enterprise {
-                        model.enterpriseAccount = key
+            LabeledContent("Account") {
+                CapsulePopUp("Account", selection: Binding(
+                    get: { AccountKey(account) },
+                    set: { key in
+                        if model.destination == .enterprise {
+                            model.enterpriseAccount = key
+                        }
+                    }
+                ), title: "@\(account.login) – \(account.friendlyEndpoint)") {
+                    for account in accounts {
+                        MenuChoice("@\(account.login) – \(account.friendlyEndpoint)", value: AccountKey(account))
                     }
                 }
-            )) {
-                ForEach(accounts, id: \.self) { account in
-                    Text("@\(account.login) – \(account.friendlyEndpoint)").tag(AccountKey(account))
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(model.destination != .enterprise || accounts.count < 2)
-            // The labels in the form's column; the fields are capsules.
             LabeledContent("Name") {
                 TextField("Name", text: $model.name)
                     .labelsHidden()
             }
             if !model.name.isEmpty, model.sanitizedName != model.name {
-                SheetMessage("Will be created as \(model.sanitizedName)", kind: .warning)
+                FieldMessage("Will be created as \(model.sanitizedName)", kind: .warning)
             }
             LabeledContent("Description") {
                 TextField("Description", text: $model.description)
                     .labelsHidden()
             }
             Toggle("Keep this code private", isOn: $model.isPrivate)
-            Picker("Organization", selection: $model.organizationID) {
-                Text("None").tag(Int?.none)
-                ForEach(model.organizations, id: \.id) { organization in
-                    Text(organization.login).tag(Optional(organization.id))
+                .toggleStyle(.checkboxMark)
+            LabeledContent("Organization") {
+                CapsulePopUp("Organization", selection: $model.organizationID, title: organizationTitle) {
+                    MenuChoice("None", value: Int?.none)
+                    for organization in model.organizations {
+                        MenuChoice(organization.login, value: Optional(organization.id))
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(model.organizations.isEmpty)
         }
         .formStyle(.columns)
         .textFieldStyle(.capsule)
         .motion(Motion.leave, value: model.destination)
+    }
+
+    /// The organization pop-up's title: the chosen organization's login, or
+    /// None.
+    private var organizationTitle: String {
+        model.organizations.first { $0.id == model.organizationID }?.login ?? "None"
     }
 }

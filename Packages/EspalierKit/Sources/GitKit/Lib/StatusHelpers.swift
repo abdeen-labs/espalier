@@ -17,7 +17,7 @@ public func mapStatus(_ status: AppFileStatus) -> String {
     case .renamed:
         return "Renamed"
     case .conflicted(let conflictedStatus):
-        if case .conflictsWithMarkers(_, let conflictsCount, _) = conflictedStatus {
+        if case .conflictsWithMarkers(_, let conflictsCount, _, _) = conflictedStatus {
             return conflictsCount > 0 ? "Conflicted" : "Resolved"
         }
 
@@ -49,7 +49,7 @@ public func hasUnresolvedConflicts(
         return false
     }
 
-    if case .conflictsWithMarkers(_, let conflictMarkerCount, _) = status {
+    if case .conflictsWithMarkers(_, let conflictMarkerCount, _, _) = status {
         // text file may have conflict markers present
         return conflictMarkerCount > 0
     }

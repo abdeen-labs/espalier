@@ -36,7 +36,8 @@ struct StatusTests {
                 let fooFile = try #require(files.first { $0.path == "foo" })
                 #expect(fooFile.status == .conflicted(.conflictsWithMarkers(
                     entry: UnmergedEntry(action: .bothModified, submoduleStatus: nil),
-                    conflictMarkerCount: 3
+                    conflictMarkerCount: 3,
+                    conflictCount: 1
                 )))
                 #expect(fooFile.status.conflictedEntry?.us == .updatedButUnmerged)
                 #expect(fooFile.status.conflictedEntry?.them == .updatedButUnmerged)
@@ -44,7 +45,8 @@ struct StatusTests {
                 let bazFile = try #require(files.first { $0.path == "baz" })
                 #expect(bazFile.status == .conflicted(.conflictsWithMarkers(
                     entry: UnmergedEntry(action: .bothAdded, submoduleStatus: nil),
-                    conflictMarkerCount: 3
+                    conflictMarkerCount: 3,
+                    conflictCount: 1
                 )))
                 #expect(bazFile.status.conflictedEntry?.us == .added)
                 #expect(bazFile.status.conflictedEntry?.them == .added)
@@ -52,7 +54,8 @@ struct StatusTests {
                 let catFile = try #require(files.first { $0.path == "cat" })
                 #expect(catFile.status == .conflicted(.conflictsWithMarkers(
                     entry: UnmergedEntry(action: .bothAdded, submoduleStatus: nil),
-                    conflictMarkerCount: 3
+                    conflictMarkerCount: 3,
+                    conflictCount: 1
                 )))
             }
 
@@ -303,6 +306,104 @@ struct StatusTests {
         // More of getStatus's behavior.
         @Suite("Espalier")
         struct Espalier {
+            /// A merge's conflict style, the `.gitattributes` and a line
+            /// both sides keep in the base, and the markers git finds.
+            typealias ConflictCountCase = (style: String, attributes: String?, keptLine: String?, markers: Int)
+
+            // `git diff --check` counts every marker; the diff3 styles write
+            // four for a conflict, the default three. Markers are the size
+            // `conflict-marker-size` sets, and a line both sides keep is no
+            // marker, whatever it looks like.
+            @Test("counts a file's conflicts", arguments: [
+                NamedCase("in the merge style", (style: "merge", attributes: nil, keptLine: nil, markers: 6)),
+                NamedCase("in the diff3 style", (style: "diff3", attributes: nil, keptLine: nil, markers: 8)),
+                NamedCase("in the zdiff3 style", (style: "zdiff3", attributes: nil, keptLine: nil, markers: 8)),
+                NamedCase(
+                    "with markers of ten characters",
+                    (style: "diff3", attributes: "* conflict-marker-size=10\n", keptLine: nil, markers: 8)
+                ),
+                NamedCase(
+                    "with a line like a marker that both sides keep",
+                    (style: "merge", attributes: nil, keptLine: "<<<<<<< kept\n", markers: 6)
+                ),
+            ] as [NamedCase<ConflictCountCase>])
+            func conflictCounts(_ testCase: NamedCase<ConflictCountCase>) async throws {
+                let repository = try setupEmptyRepository()
+                var lines = (1...9).map { "line \($0)\n" }
+                if let keptLine = testCase.value.keptLine {
+                    lines[4] = keptLine
+                }
+                var base = [TreeEntry(path: "file.txt", contents: lines.joined())]
+                if let attributes = testCase.value.attributes {
+                    base.append(TreeEntry(path: ".gitattributes", contents: attributes))
+                }
+                try await makeCommit(repository, Tree(entries: base))
+                try await switchTo(repository, "other")
+                var theirs = lines
+                theirs[0] = "theirs 1\n"
+                theirs[8] = "theirs 9\n"
+                try await makeCommit(repository, Tree(entries: [TreeEntry(path: "file.txt", contents: theirs.joined())]))
+                try await switchTo(repository, "master")
+                var ours = lines
+                ours[0] = "ours 1\n"
+                ours[8] = "ours 9\n"
+                try await makeCommit(repository, Tree(entries: [TreeEntry(path: "file.txt", contents: ours.joined())]))
+                _ = try await Dugite.exec(["-c", "merge.conflictStyle=\(testCase.value.style)", "merge", "other"], repository.path)
+
+                let status = try await getStatusOrThrow(repository)
+                #expect(status.workingDirectory.files.map(\.status) == [.conflicted(.conflictsWithMarkers(
+                    entry: UnmergedEntry(action: .bothModified),
+                    conflictMarkerCount: testCase.value.markers,
+                    conflictCount: 2
+                ))])
+            }
+
+            @Test("shows a file staged and then deleted as deleted, and commits its deletion")
+            func stagedThenDeleted() async throws {
+                let repository = try setupEmptyRepository()
+                try await makeCommit(repository, Tree(entries: [
+                    TreeEntry(path: "modified", contents: "one\n"),
+                    TreeEntry(path: "type-changed", contents: "one\n"),
+                ]))
+                let modified = POSIXPath.join(repository.path, "modified")
+                let typeChanged = POSIXPath.join(repository.path, "type-changed")
+                try writeFile(modified, "two\n")
+                try FileManager.default.removeItem(atPath: typeChanged)
+                try FileManager.default.createSymbolicLink(atPath: typeChanged, withDestinationPath: "modified")
+                _ = try await Dugite.exec(["add", "modified", "type-changed"], repository.path)
+                try FileManager.default.removeItem(atPath: modified)
+                try FileManager.default.removeItem(atPath: typeChanged)
+
+                let files = try await getStatusOrThrow(repository).workingDirectory.files
+                #expect(files.map(\.path) == ["modified", "type-changed"])
+                #expect(files.map(\.status) == [.deleted(), .deleted()])
+
+                _ = try await createCommit(repository, "delete", files)
+                let tree = try await git(["ls-tree", "--name-only", "HEAD"], repository.path, "test").stdout
+                #expect(tree == "")
+                #expect(try await getStatusOrThrow(repository).workingDirectory.files.isEmpty)
+            }
+
+            @Test("shows a new file staged and then replaced by a symlink as new, and commits the symlink")
+            func stagedThenTypeChanged() async throws {
+                let repository = try setupEmptyRepository()
+                try await makeCommit(repository, Tree(entries: [TreeEntry(path: "base", contents: "one\n")]))
+                let new = POSIXPath.join(repository.path, "new")
+                try writeFile(new, "two\n")
+                _ = try await Dugite.exec(["add", "new"], repository.path)
+                try FileManager.default.removeItem(atPath: new)
+                try FileManager.default.createSymbolicLink(atPath: new, withDestinationPath: "base")
+
+                let files = try await getStatusOrThrow(repository).workingDirectory.files
+                #expect(files.map(\.path) == ["new"])
+                #expect(files.map(\.status) == [.new()])
+
+                _ = try await createCommit(repository, "add", files)
+                let tree = try await git(["ls-tree", "HEAD", "new"], repository.path, "test").stdout
+                #expect(tree.hasPrefix("120000 blob "))
+                #expect(try await getStatusOrThrow(repository).workingDirectory.files.isEmpty)
+            }
+
             @Test("reads the branch headers")
             func branchHeaders() async throws {
                 let upstream = try await setupTwoCommitRepo()
@@ -482,7 +583,7 @@ struct StatusTests {
                 #expect(status.rebaseInternalState == nil)
                 #expect(status.doConflictedFilesExist)
                 #expect(status.currentBranch == "master")
-                guard case .conflicted(.conflictsWithMarkers(_, let markers, _))? = status.workingDirectory.files.first?.status else {
+                guard case .conflicted(.conflictsWithMarkers(_, let markers, _, _))? = status.workingDirectory.files.first?.status else {
                     Issue.record("Expected a conflicted file with markers, got \(status.workingDirectory.files)")
                     return
                 }

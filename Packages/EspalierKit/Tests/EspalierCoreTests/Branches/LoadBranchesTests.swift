@@ -104,5 +104,18 @@ struct LoadBranchesTests {
                 #expect(branches.upstreamDefaultBranch == nil)
             }
         }
+
+        @Test("the remote's default branch is the default branch when only a branch of another name tracks it")
+        func trackedRemoteDefaultBranch() async throws {
+            try await withIsolatedGitConfig { _ in
+                let repository = try await setupRepositories().repository
+                _ = try await Dugite.exec(["checkout", "-b", "feature", "--track", "origin/master"], repository.path)
+                _ = try await Dugite.exec(["branch", "-D", "master"], repository.path)
+
+                let branches = try await load(repository)
+                #expect(branches.defaultBranch?.name == "origin/master")
+                #expect(branches.defaultBranch?.type == .remote)
+            }
+        }
     }
 }

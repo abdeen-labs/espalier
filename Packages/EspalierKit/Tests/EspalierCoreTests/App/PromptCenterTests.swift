@@ -21,13 +21,13 @@ struct PromptCenterTests {
         try await waitForPending(center, 1)
         let second = Task { await center.promptAddingSSHHost(host: "github.com", ip: "140.82.112.3", keyType: "ED25519", fingerprint: "SHA256:+DiY3wvv") }
         try await waitForPending(center, 2)
-        let third = Task { await center.promptSSHKeyPassphrase(keyPath: "/Users/me/.ssh/id_ed25519") }
+        let third = Task { await center.promptSSHKeyPassphrase(keyPath: "/Users/me/.ssh/id_ed25519", canRemember: true) }
         try await waitForPending(center, 3)
 
         #expect(center.pending.map(\.prompt) == [
             .hookFailed(hookName: "pre-commit", terminalOutput: "lint failed"),
             .addSSHHost(host: "github.com", ip: "140.82.112.3", keyType: "ED25519", fingerprint: "SHA256:+DiY3wvv"),
-            .sshKeyPassphrase(keyPath: "/Users/me/.ssh/id_ed25519"),
+            .sshKeyPassphrase(keyPath: "/Users/me/.ssh/id_ed25519", canRemember: true),
         ])
         #expect(center.current?.prompt == .hookFailed(hookName: "pre-commit", terminalOutput: "lint failed"))
 

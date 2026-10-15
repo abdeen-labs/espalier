@@ -17,6 +17,7 @@ struct MarkdownView: View {
             }
         }
         .textSelection(.enabled)
+        .tint(Color(espalier: Palette.link))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -51,7 +52,7 @@ private struct MarkdownBlockView: View {
                 .accessibilityAddTraits(level == nil ? [] : .isHeader)
 
         case .listItem(let marker, let text):
-            HStack(alignment: .firstTextBaseline, spacing: Metrics.grid + 2) {
+            HStack(alignment: .firstTextBaseline, spacing: Metrics.bulletSpacing) {
                 MarkdownListMarker(marker: marker)
                 Text(text)
                     .fixedSize(horizontal: false, vertical: true)
@@ -79,13 +80,13 @@ private struct MarkdownBlockView: View {
         }
     }
 
-    /// Headings stay below the pull request's title (`.title3`).
+    /// Headings stay below the pull request's title (15, semibold).
     private static func font(headingLevel: Int?) -> Font {
         switch headingLevel {
         case nil: Typography.row
-        case 1?: .title3.weight(.semibold)
-        case 2?: .headline
-        default: .subheadline.weight(.semibold)
+        case 1?: Typography.commitSummary
+        case 2?: Typography.heading
+        default: Typography.meta.weight(.semibold)
         }
     }
 }
@@ -100,7 +101,7 @@ private struct MarkdownListMarker: View {
             case .bullet:
                 Text("•")
             case .number(let number):
-                Text("\(number).")
+                Text(verbatim: "\(number).")
                     .monospacedDigit()
             case .task(let done):
                 Image(systemName: done ? "checkmark.square.fill" : "square")
@@ -125,7 +126,7 @@ private struct MarkdownTable: View {
                         .fontWeight(.semibold)
                 }
             }
-            Divider()
+            Hairline()
                 .gridCellUnsizedAxes(.horizontal)
             ForEach(rows.indices, id: \.self) { row in
                 GridRow {
@@ -164,10 +165,10 @@ struct MarkdownImageView: View {
                     .scaledToFit()
                     .frame(maxWidth: image.width ?? CGFloat(loaded.width), alignment: .leading)
             } else if remote == nil || failed {
-                Link(destination: image.url) {
+                TextLink(destination: image.url) {
                     Label(image.alt.isEmpty ? image.url.lastPathComponent : image.alt, systemImage: "photo")
                 }
-                .help(image.url.absoluteString)
+                .tooltip(image.url.absoluteString)
             } else {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(Color(espalier: Palette.field))
@@ -212,8 +213,8 @@ struct MarkdownImageView: View {
     }
 }
 
-extension EnvironmentValues {
-    /// Parses pull request descriptions on the main actor, so a snapshot
-    /// renders them at once (they're parsed off it otherwise).
-    @Entry var markdownParsesSynchronously = false
+extension Metrics {
+    /// Between a bulleted line's marker and its text: Markdown's lists and
+    /// the GitHub sheets' bullets.
+    public static let bulletSpacing: CGFloat = 6
 }

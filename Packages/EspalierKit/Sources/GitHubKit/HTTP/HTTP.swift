@@ -91,7 +91,7 @@ public struct APIError: Error, LocalizedError, CustomStringConvertible, Sendable
         if let apiError, let apiMessage = apiError.message, !apiMessage.isEmpty {
             var message = apiMessage
 
-            let additionalMessages = apiError.errors?.map { $0.message ?? "" }.joined(separator: ", ") ?? ""
+            let additionalMessages = (apiError.errors ?? []).compactMap(\.message).filter { !$0.isEmpty }.joined(separator: ", ")
             if !additionalMessages.isEmpty {
                 message = "\(message) (\(additionalMessages))"
             }

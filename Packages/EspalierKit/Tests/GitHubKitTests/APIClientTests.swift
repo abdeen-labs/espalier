@@ -16,8 +16,8 @@ struct APIClientTests {
             #expect(getHTMLURL("https://api.github.com") == "https://github.com")
             #expect(getHTMLURL("https://github.mycompany.com/api/v3") == "https://github.mycompany.com")
             #expect(getHTMLURL("http://github.mycompany.com/api/v3") == "http://github.mycompany.com")
-            // Node's legacy URL parsing drops the port.
-            #expect(getHTMLURL("https://github.mycompany.com:8443/api/v3") == "https://github.mycompany.com")
+            #expect(getHTMLURL("https://github.mycompany.com:8443/api/v3") == "https://github.mycompany.com:8443")
+            #expect(getHTMLURL("https://github.mycompany.com:443/api/v3") == "https://github.mycompany.com")
             #expect(getHTMLURL("https://api.octocorp.ghe.com/") == "https://octocorp.ghe.com/")
         }
 
@@ -128,20 +128,18 @@ struct APIClientTests {
             #expect(mock.requests.first?.json == ["name": "new-repo", "description": "A repo", "private": true])
         }
 
-        @Test("maps failures to desktop's messages when creating repositories")
+        @Test("throws a GitHubError when creating a repository fails")
         func createRepositoryErrors() async {
             mock.on("POST", "/orgs/desktop/repos", respond: .json(["message": "Validation Failed"], status: 422))
             mock.on("POST", "/user/repos", respond: .networkError(.notConnectedToInternet))
             let org = APIOrganization(id: 1, url: "", login: "desktop", avatarURL: "")
 
-            await #expect(throws: GitHubError(
-                "Couldn't create the repository in desktop. Check that desktop doesn't already have a repository with this name, and that you can create repositories there."
-            )) {
+            let refused = await #expect(throws: GitHubError.self) {
                 try await api.createRepository(org: org, name: "r", description: "", private: false)
             }
-            await #expect(throws: GitHubError(
-                "Couldn't publish the repository. Check your internet connection and try again."
-            )) {
+            // GitHub's reason comes through (desktop guessed one).
+            #expect(refused?.message.contains("Validation Failed") == true)
+            await #expect(throws: GitHubError.self) {
                 try await api.createRepository(org: nil, name: "r", description: "", private: false)
             }
         }
@@ -164,8 +162,39 @@ struct APIClientTests {
             #expect(mock.requests.map { $0.query["per_page"] } == ["100", "100"])
         }
 
-        @Test("returns the pages loaded so far when a page fails")
-        func suppressesPageErrors() async throws {
+        @Test("a list stops at a next link to a page already fetched", arguments: [
+            NamedCase("a page linking to itself", "?per_page=100&page=2"),
+            NamedCase("a page linking back to the first", "?per_page=100"),
+        ])
+        func pagesLoop(_ testCase: NamedCase<String>) async throws {
+            let served = Mutex(0)
+            mock.on("GET", "/user/orgs") { request in
+                // A loop that would go on forever fails instead.
+                let count = served.withLock { served in
+                    served += 1
+                    return served
+                }
+                if count > 5 {
+                    return .json(["message": "Server Error"], status: 500)
+                }
+                if request.query["page"] == "2" {
+                    return .json(
+                        encoding: [APIOrganization(id: 2, url: "", login: "two", avatarURL: "")],
+                        headers: ["Link": "<https://api.github.com/user/orgs\(testCase.value)>; rel=\"next\""]
+                    )
+                }
+                return .json(
+                    encoding: [APIOrganization(id: 1, url: "", login: "one", avatarURL: "")],
+                    headers: ["Link": #"<https://api.github.com/user/orgs?per_page=100&page=2>; rel="next""#]
+                )
+            }
+
+            #expect(await api.fetchOrgs().map(\.login) == ["one", "two"])
+            #expect(mock.requests.count == 2)
+        }
+
+        @Test("organizations and issues fail when a page fails (desktop kept the pages before it)")
+        func failedPages() async throws {
             mock.on("GET", "/user/orgs") { request in
                 if request.query["page"] == "2" {
                     return .json(["message": "Server Error"], status: 500)
@@ -175,8 +204,136 @@ struct APIClientTests {
                     headers: ["Link": #"<https://api.github.com/user/orgs?page=2>; rel="next""#]
                 )
             }
+            mock.on("GET", "/repos/desktop/desktop/issues") { request in
+                if request.query["page"] == "2" {
+                    return .json(["message": "Server Error"], status: 500)
+                }
+                return .json(
+                    [["number": 1, "title": "Issue", "state": "open", "updated_at": "2019-05-10T16:00:00Z"]],
+                    headers: ["Link": #"<https://api.github.com/repos/desktop/desktop/issues?state=all&page=2>; rel="next""#]
+                )
+            }
 
-            #expect(await api.fetchOrgs().map(\.login) == ["one"])
+            #expect(await api.fetchOrgs().isEmpty)
+            await #expect(throws: APIError.self) {
+                try await api.fetchIssues(owner: "desktop", name: "desktop", state: .all, since: nil)
+            }
+        }
+
+        @Test("a ref's statuses and check runs and a workflow run's jobs load every page; a failed page fails them")
+        func checksPages() async throws {
+            /// Answers `path` with `first`, linking to a second page that
+            /// has `second` or fails.
+            func serve(_ path: String, _ first: some Encodable & Sendable, _ second: some Encodable & Sendable, failing: Bool) {
+                mock.on("GET", path) { request in
+                    if request.query["page"] == "2" {
+                        return failing ? .json(["message": "Server Error"], status: 500) : .json(encoding: second)
+                    }
+                    return .json(encoding: first, headers: ["Link": "<https://api.github.com\(path)?per_page=100&page=2>; rel=\"next\""])
+                }
+            }
+            func status(_ id: Int) -> APIRefStatusItem {
+                APIRefStatusItem(state: .success, targetURL: nil, description: nil, context: "ci/\(id)", id: id)
+            }
+            func checkRun(_ id: Int) -> APIRefCheckRun {
+                APIRefCheckRun(
+                    id: id, url: "", status: .completed, conclusion: .success, name: "check \(id)",
+                    checkSuite: APIRefCheckRunCheckSuite(id: 1), app: nil, completedAt: nil, startedAt: nil, htmlURL: nil, pullRequests: []
+                )
+            }
+            func job(_ id: Int) -> APIWorkflowJob {
+                APIWorkflowJob(id: id, name: "job \(id)", status: .completed, conclusion: .success, completedAt: nil, startedAt: "", steps: nil, htmlURL: nil)
+            }
+            func serveAll(failing: Bool) {
+                serve(
+                    "/repos/desktop/desktop/commits/abc/status",
+                    APIRefStatus(state: .success, totalCount: 2, statuses: [status(1)]),
+                    APIRefStatus(state: .success, totalCount: 2, statuses: [status(2)]),
+                    failing: failing
+                )
+                serve(
+                    "/repos/desktop/desktop/commits/abc/check-runs",
+                    APIRefCheckRuns(totalCount: 2, checkRuns: [checkRun(1)]),
+                    APIRefCheckRuns(totalCount: 2, checkRuns: [checkRun(2)]),
+                    failing: failing
+                )
+                serve(
+                    "/repos/desktop/desktop/actions/runs/7/jobs",
+                    APIWorkflowJobs(totalCount: 2, jobs: [job(1)]),
+                    APIWorkflowJobs(totalCount: 2, jobs: [job(2)]),
+                    failing: failing
+                )
+            }
+
+            serveAll(failing: false)
+            let statuses = try await api.fetchCombinedRefStatus(owner: "desktop", name: "desktop", ref: "abc")
+            #expect(statuses?.statuses.map(\.id) == [1, 2])
+            let checkRuns = try await api.fetchRefCheckRuns(owner: "desktop", name: "desktop", ref: "abc")
+            #expect(checkRuns?.checkRuns.map(\.id) == [1, 2])
+            let jobs = try await api.fetchWorkflowRunJobs(owner: "desktop", name: "desktop", workflowRunId: 7)
+            #expect(jobs?.jobs.map(\.id) == [1, 2])
+            #expect(mock.requests.allSatisfy { $0.query["per_page"] == "100" })
+
+            serveAll(failing: true)
+            #expect(try await api.fetchCombinedRefStatus(owner: "desktop", name: "desktop", ref: "abc") == nil)
+            #expect(try await api.fetchRefCheckRuns(owner: "desktop", name: "desktop", ref: "abc") == nil)
+            #expect(try await api.fetchWorkflowRunJobs(owner: "desktop", name: "desktop", workflowRunId: 7) == nil)
+        }
+
+        @Test("a ref's check runs stop at a next link to a page already fetched", arguments: [
+            NamedCase("a page linking to itself", "?per_page=100&page=2"),
+            NamedCase("a page linking back to the first", "?per_page=100"),
+        ])
+        func checksPagesLoop(_ testCase: NamedCase<String>) async throws {
+            let path = "/repos/desktop/desktop/commits/abc/check-runs"
+            let pages = [1, 2].map { id in
+                APIRefCheckRuns(totalCount: 2, checkRuns: [APIRefCheckRun(
+                    id: id, url: "", status: .completed, conclusion: .success, name: "check \(id)",
+                    checkSuite: APIRefCheckRunCheckSuite(id: 1), app: nil, completedAt: nil, startedAt: nil, htmlURL: nil, pullRequests: []
+                )])
+            }
+            let served = Mutex(0)
+            mock.on("GET", path) { request in
+                // A loop that would go on forever fails instead.
+                let count = served.withLock { served in
+                    served += 1
+                    return served
+                }
+                if count > 5 {
+                    return .json(["message": "Server Error"], status: 500)
+                }
+                if request.query["page"] == "2" {
+                    return .json(
+                        encoding: pages[1],
+                        headers: ["Link": "<https://api.github.com\(path)\(testCase.value)>; rel=\"next\""]
+                    )
+                }
+                return .json(
+                    encoding: pages[0],
+                    headers: ["Link": "<https://api.github.com\(path)?per_page=100&page=2>; rel=\"next\""]
+                )
+            }
+
+            let checkRuns = try await api.fetchRefCheckRuns(owner: "desktop", name: "desktop", ref: "abc")
+            #expect(checkRuns?.checkRuns.map(\.id) == [1, 2])
+            #expect(mock.requests.count == 2)
+        }
+
+        @Test("re-running checks throws when GitHub refuses or can't be reached")
+        func rerunsRefused() async throws {
+            mock.on("POST", "/repos/desktop/desktop/actions/jobs/1/rerun", respond: .status(201))
+            mock.on("POST", "/repos/desktop/desktop/actions/runs/2/rerun-failed-jobs", respond: .json(["message": "Must have admin rights to Repository."], status: 403))
+            mock.on("POST", "/repos/desktop/desktop/check-suites/3/rerequest", respond: .networkError(.notConnectedToInternet))
+
+            try await api.rerunJob(owner: "desktop", name: "desktop", jobId: 1)
+            let refused = await #expect(throws: APIError.self) {
+                try await api.rerunFailedJobs(owner: "desktop", name: "desktop", workflowRunId: 2)
+            }
+            #expect(refused?.responseStatus == 403)
+            #expect(refused?.apiError?.message == "Must have admin rights to Repository.")
+            await #expect(throws: (any Error).self) {
+                try await api.rerequestCheckSuite(owner: "desktop", name: "desktop", checkSuiteId: 3)
+            }
         }
 
         @Test("stops fetching updated pull requests at the since date")

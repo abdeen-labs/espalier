@@ -1,6 +1,11 @@
 // How each of the state layer's 21 confirmations is shown. The copy is the
 // state layer's (`Confirmation`); this file decides alert or compact sheet,
-// button roles, severity, lists, and the suppression toggle.
+// button roles, severity, lists, and the checkbox. Remove Repository and
+// Delete Branch are Espalier's compact sheets: their option is Espalier's
+// checkbox ("Also move the folder to the Trash", "Delete it on the remote
+// too"), and Remove or Delete is the default button. The others are
+// alerts, with "Do not show this message again" where the confirmation can
+// be turned off.
 
 import EspalierCore
 import GitKit
@@ -9,7 +14,8 @@ import SwiftUI
 /// How a confirmation is shown.
 nonisolated public enum ConfirmationPresentation: Sendable, Equatable {
     case alert(AlertContent)
-    /// A sheet for confirmations with a checkbox alerts can't hold.
+    /// Espalier's compact sheet, for a confirmation with an option of its
+    /// own.
     case compactSheet(CompactConfirmation)
 }
 
@@ -36,9 +42,10 @@ nonisolated public struct CompactConfirmation: Sendable, Equatable {
 }
 
 extension Confirmation {
-    /// How the confirmation is shown.
+    /// How the confirmation is shown, the counts in its lists in
+    /// `numberFormat`.
     @MainActor
-    public var presentation: ConfirmationPresentation {
+    public func presentation(_ numberFormat: NumberFormat) -> ConfirmationPresentation {
         switch kind {
         case .removeRepository:
             var path: String?
@@ -51,67 +58,76 @@ extension Confirmation {
                 path: path,
                 optionTitle: "Also move the folder to the Trash",
                 confirmButton: confirmButton,
-                isDestructive: true
+                isDestructive: isDestructive
             ))
 
         case .deleteBranch:
-            let paragraphs = message.components(separatedBy: "\n\n")
             var existsOnRemote = false
             if case .deleteBranch(_, let onRemote) = details {
                 existsOnRemote = onRemote
             }
             return .compactSheet(CompactConfirmation(
                 title: title,
-                paragraphs: paragraphs,
+                paragraphs: message.components(separatedBy: "\n\n"),
                 optionTitle: existsOnRemote ? "Delete it on the remote too" : nil,
                 confirmButton: confirmButton,
-                isDestructive: true
+                isDestructive: isDestructive
             ))
 
         default:
-            return .alert(alertContent)
+            return .alert(alertContent(numberFormat))
         }
     }
 
-    /// The confirmation as an alert.
+    /// The confirmation as an alert: the confirm button first (the default,
+    /// red when destructive), then Cancel.
     @MainActor
-    var alertContent: AlertContent {
+    public func alertContent(_ numberFormat: NumberFormat) -> AlertContent {
         let confirmRole: AlertContent.Role = isDestructive ? .destructive : .primary
         return AlertContent(
             title: title,
-            message: alertMessage,
+            message: alertMessage(numberFormat),
             buttons: [AlertContent.Button(confirmButton, role: confirmRole), AlertContent.Button("Cancel", role: .cancel)],
             suppressionTitle: suppressionSetting == nil ? nil : AlertContent.doNotShowAgain,
             severity: isCritical ? .critical : .standard
         )
     }
 
+    /// The answer for what the user chose in the alert: the checkbox, when
+    /// confirmed, is "Do not show this message again".
+    @MainActor
+    func response(to alert: AlertResponse) -> ConfirmationResponse {
+        let isConfirmed = alert.buttonIndex == 0
+        return ConfirmationResponse(isConfirmed: isConfirmed, suppressesFutureConfirmations: isConfirmed && alert.isSuppressed)
+    }
+
     /// The message with its list (files, authors): listed when there are at
     /// most ten, counted in the question otherwise.
-    private var alertMessage: String {
+    private func alertMessage(_ numberFormat: NumberFormat) -> String {
         switch details {
         case .files(let paths):
             switch kind {
             case .discardChanges, .discardAllChanges:
-                return paths.count > AlertList.maximumItems ? message : AlertList.insert(paths, intoMessage: message)
+                return paths.count > AlertList.maximumItems ? message : AlertList.insert(paths, intoMessage: message, numberFormat: numberFormat)
             case .commitFilteredChanges:
                 return message
             default:
-                return AlertList.insert(paths, intoMessage: message)
+                return AlertList.insert(paths, intoMessage: message, numberFormat: numberFormat)
             }
         case .authors(let usernames):
-            return usernames.count > AlertList.maximumItems ? message : AlertList.insert(usernames, intoMessage: message)
+            return usernames.count > AlertList.maximumItems ? message : AlertList.insert(usernames, intoMessage: message, numberFormat: numberFormat)
         default:
             return message
         }
     }
 
-    /// Discards, deletions, and aborts are destructive.
+    /// Discards, deletions, aborts, and replacing what's at the command line
+    /// tool's path are destructive.
     private var isDestructive: Bool {
         switch kind {
         case .discardChanges, .discardAllChanges, .discardLines, .discardStash, .overwriteCommitMessage,
              .removeWorktree, .abortWithResolvedConflicts, .deleteBranch, .deleteRemoteBranch, .deleteTag,
-             .removeRepository, .leaveCommitsBehind:
+             .removeRepository, .leaveCommitsBehind, .replaceCommandLineTool:
             true
         default:
             false
@@ -130,8 +146,8 @@ extension Confirmation {
     }
 }
 
-/// A compact confirmation: its paragraphs, an optional checkbox, Cancel and
-/// the confirm button.
+/// A compact confirmation: its paragraphs and path, the option's checkbox
+/// when it has one, then Cancel and the confirm button, the default.
 public struct CompactConfirmationSheet: View {
     private let content: CompactConfirmation
     private let onAnswer: (ConfirmationResponse) -> Void
@@ -152,27 +168,21 @@ public struct CompactConfirmationSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let path = content.path {
-                    MonoChip(path)
-                        .textSelection(.enabled)
+                    MonoChip(path, isSelectable: true)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             if let optionTitle = content.optionTitle {
                 Toggle(optionTitle, isOn: $isOptionSelected)
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(.checkboxMark)
             }
         } buttons: {
-            Spacer(minLength: 0)
-            Button("Cancel", role: .cancel) {
-                onAnswer(.cancelled)
-            }
-            .buttonStyle(.secondary)
-            .keyboardShortcut(.cancelAction)
-            Button(content.confirmButton, role: content.isDestructive ? .destructive : nil) {
-                onAnswer(ConfirmationResponse(isConfirmed: true, isOptionSelected: isOptionSelected))
-            }
-            .buttonStyle(.prominent)
-            .keyboardShortcut(.defaultAction)
+            SheetButtons(
+                content.confirmButton,
+                confirmRole: content.isDestructive ? .destructive : nil,
+                cancel: { onAnswer(.cancelled) },
+                confirm: { onAnswer(ConfirmationResponse(isConfirmed: true, isOptionSelected: isOptionSelected)) }
+            )
         }
     }
 }
@@ -185,15 +195,12 @@ enum ConfirmationHost {
     /// Shows `pending` and answers the presenter when the user chooses.
     static func present(_ pending: PendingConfirmation, in context: WindowContext) {
         let presenter = context.presenter
-        switch pending.confirmation.presentation {
+        let confirmation = pending.confirmation
+        switch confirmation.presentation(context.app.preferences.numberFormat) {
         case .alert(let content):
             Task {
                 let response = await context.modals.alert(content)
-                let isConfirmed = response.buttonIndex == 0
-                presenter.respond(to: pending.id, with: ConfirmationResponse(
-                    isConfirmed: isConfirmed,
-                    suppressesFutureConfirmations: isConfirmed && response.isSuppressed
-                ))
+                presenter.respond(to: pending.id, with: confirmation.response(to: response))
             }
         case .compactSheet(let content):
             let modals = context.modals

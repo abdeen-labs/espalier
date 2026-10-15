@@ -283,6 +283,11 @@ struct FormatConflictContextTests {
         #expect(result.contains("export default"))
         // No base section for a two-way conflict.
         #expect(!result.contains("Base (common ancestor)"))
+        // Each side is named by its label: in a rebase, ours is the branch
+        // being rebased onto, not the current branch.
+        #expect(result.contains("Ours (main):\n```ts\nconst x = 1\n```"))
+        #expect(result.contains("Theirs (feature):\n```ts\nconst x = 2\n```"))
+        #expect(!result.contains("current branch"))
     }
 
     @Test("uses language from file extension in code fences")
@@ -703,24 +708,6 @@ struct BuildConflictContextTests {
                 == Array(repeating: "Unmatched conflict markers found", count: unmatched.count) + Array(repeating: nil, count: resolvable.count)
         )
         #expect(built.files.prefix(unmatched.count).allSatisfy { $0.hunks.isEmpty && $0.rawContent == nil })
-    }
-
-    @Test("reads files like desktop: size limit, invalid UTF-8 replaced, unreadable paths")
-    func readsFiles() throws {
-        let directory = try createTempDirectory()
-        let text = directory + "/conflicted.txt"
-        try Data([0x61, 0xFF, 0x62]).write(to: URL(filePath: text))
-        #expect(readConflictedFile(atPath: text) == .text("a\u{FFFD}b"))
-
-        let large = directory + "/large.bin"
-        #expect(FileManager.default.createFile(atPath: large, contents: nil))
-        let handle = try FileHandle(forWritingTo: URL(filePath: large))
-        try handle.truncate(atOffset: UInt64(MaxConflictFileReadSize + 1))
-        try handle.close()
-        #expect(readConflictedFile(atPath: large) == .tooLarge)
-
-        #expect(readConflictedFile(atPath: directory + "/missing") == .unreadable)
-        #expect(readConflictedFile(atPath: directory) == .unreadable)
     }
 
     @Test("restricts a context to some files")

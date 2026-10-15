@@ -1,6 +1,8 @@
-// History, a branch's Compare, and a tag: the graph and its header on the
-// left, the selected commit's detail on the right, in the place's inner
-// split.
+// History, a branch, and a tag: the list and its header on the left, the
+// selected commit's detail on the right, in the place's inner split, whose
+// widths are the simple list's or the graph's. A branch's place shows its
+// history focused on its tip; another branch's place can also compare it with
+// the current branch (Behind and Ahead, desktop's Compare).
 
 import AppKit
 import EspalierCore
@@ -9,16 +11,73 @@ import GitHubKit
 import GitKit
 import SwiftUI
 
+/// What another branch's place shows: the branch's history, or the commits
+/// one side has that the other doesn't.
+nonisolated enum BranchView: Hashable, Sendable {
+    case history
+    case compare(ComparisonDirection)
+}
+
+/// The view a branch's place shows, by the branch's ref.
+nonisolated struct BranchViewChoice: Equatable, Sendable {
+    var ref: String
+    var view: BranchView
+}
+
+/// Why the commit a place focuses on isn't in the list, and what shows it.
+nonisolated struct HistoryPlaceNotice: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        /// The simple list's line doesn't have it (the line's branch, or
+        /// nil on a detached HEAD): Show in Graph.
+        case notOnLine(branch: String?)
+        /// The graph's scope doesn't reach it: Show All Branches.
+        case outsideScope(HistoryScope)
+    }
+
+    /// The place it's about.
+    var place: SidebarPlace
+    /// The tag's or branch's name.
+    var name: String
+    var kind: Kind
+
+    /// "**v1.0** isn't in main's history."
+    @MainActor var message: AttributedString {
+        var name = AttributedString(self.name)
+        name.font = Typography.secondary.weight(.semibold)
+        name.foregroundColor = .text
+        switch kind {
+        case .notOnLine(let branch):
+            return name + AttributedString(" isn\u{2019}t in \(branch ?? "HEAD")\u{2019}s history.")
+        case .outsideScope(let scope):
+            return name + AttributedString(" isn\u{2019}t in the graph, which shows \(scope.title).")
+        }
+    }
+
+    /// The button that shows it; nil when nothing would.
+    var actionTitle: String? {
+        switch kind {
+        case .notOnLine: "Show in Graph"
+        case .outsideScope(let scope): scope == .allBranches ? nil : "Show All Branches"
+        }
+    }
+}
+
 /// History's state in one window: going back and forward, keyboard
-/// reorder, compare's error, and the graph's table.
+/// reorder, the branch places' views, compare's error, and the graph's
+/// table.
 @MainActor @Observable
 final class HistoryWindowState {
     /// Follows stubs, parents, and children, and remembers the jumps.
     let navigator = StubNavigator()
     /// The commits being moved with the keyboard, while reordering.
     var reorder: KeyboardReorderState?
+    /// The view of the last branch place shown (or the one Compare to
+    /// Branch asked for).
+    var branchView: BranchViewChoice?
     /// Why the last comparison couldn't load.
     var compareError: OperationError?
+    /// Why the place's commit isn't in the list, while it shows.
+    var notice: HistoryPlaceNotice?
     /// Asks the commit's file list to take focus (Return in the graph).
     var fileListFocusRequest = 0
 
@@ -30,6 +89,15 @@ final class HistoryWindowState {
     }
 
     init() {}
+
+    /// The view the place of the branch `ref` shows: its history unless a
+    /// comparison was chosen there last.
+    func view(forBranch ref: String) -> BranchView {
+        guard let branchView, branchView.ref == ref else {
+            return .history
+        }
+        return branchView.view
+    }
 }
 
 extension WindowState {
@@ -39,8 +107,7 @@ extension WindowState {
     }
 }
 
-/// History (`.history`), a branch (`.branch`: the current one focused on
-/// HEAD, another as Compare), or a tag (`.tag`).
+/// History (`.history`), a branch (`.branch`), or a tag (`.tag`).
 public struct HistoryScreen: View {
     private let repository: RepositoryModel
     private let place: SidebarPlace
@@ -52,70 +119,129 @@ public struct HistoryScreen: View {
     }
 
     public var body: some View {
-        let kind = place.kind(currentBranchRef: repository.gitState.tip.branch?.ref)
-        SplitView(kind) {
-            HistoryListPane(repository: repository, place: place)
-        } trailing: {
-            HistoryDetailPane(repository: repository)
+        let history = repository.history
+        let kind = place.kind(style: history.style)
+        // Simple ↔ Graph crossfades over 0.15 s: each has its own widths,
+        // so its own split.
+        ZStack {
+            SplitView(kind) {
+                HistoryListPane(repository: repository, place: place)
+            } trailing: {
+                HistoryDetailPane(repository: repository)
+            }
+            .id(kind)
+            .transition(.opacity)
         }
+        .motion(Motion.leave, value: kind)
         .onAppear {
-            repository.history.activate()
+            history.activate()
         }
         .onDisappear {
-            repository.history.setSearchQuery("")
-            repository.history.deactivate()
+            history.setSearchQuery("")
+            history.deactivate()
             context.state.history.reorder = nil
         }
         .onSubmit(of: .search) {
-            repository.history.selectNextSearchMatch()
+            history.selectNextSearchMatch()
         }
-        .task(id: PlaceKey(repository: repository.id, place: place, kind: kind)) {
-            await HistoryPlaces.enter(place, kind: kind, repository: repository, context: context)
+        .task(id: placeKey) {
+            await HistoryPlaces.enter(place, repository: repository, context: context)
         }
         // Choosing another repository shows its History at once.
         .motionScope(AnyHashable(ObjectIdentifier(repository)))
     }
 
+    /// What entering the place depends on.
+    private var placeKey: PlaceKey {
+        let history = repository.history
+        var view = BranchView.history
+        if case .branch(let ref) = place {
+            view = context.state.history.view(forBranch: ref)
+        }
+        return PlaceKey(
+            repository: repository.id,
+            place: place,
+            style: history.style,
+            scope: history.scope,
+            currentBranch: repository.gitState.tip.branch?.ref,
+            branchView: view
+        )
+    }
+
     private struct PlaceKey: Hashable {
         let repository: RepositoryID
         let place: SidebarPlace
-        let kind: PlaceKind
+        let style: HistoryStyle
+        let scope: HistoryScope
+        let currentBranch: String?
+        let branchView: BranchView
     }
 }
 
-/// Entering History's places: the history, focused on a commit for the
-/// current branch and tags, or a comparison for another branch.
+/// Entering History's places: the history focused on HEAD's commit for the
+/// current branch, on a tag's commit, or on another branch's tip in its
+/// history; or another branch's comparison.
 @MainActor
 enum HistoryPlaces {
-    static func enter(_ place: SidebarPlace, kind: PlaceKind, repository: RepositoryModel, context: WindowContext) async {
+    static func enter(_ place: SidebarPlace, repository: RepositoryModel, context: WindowContext) async {
         let history = repository.history
         let state = context.state.history
-        switch (place, kind) {
-        case (.branch(let ref), .compare):
-            guard let branch = repository.gitState.branches.all.first(where: { $0.ref == ref }) else {
+        state.notice = nil
+        switch place {
+        case .branch(let ref):
+            guard let branch = otherBranch(of: place, in: repository) else {
+                // The current branch: HEAD's history.
+                history.showBranch(ref: nil)
+                history.resetToHistoryMode()
+                await waitForHistory(history)
+                if let head = repository.gitState.tip.sha {
+                    await reveal(head, in: history, state: state)
+                }
                 return
             }
-            // Coming back to the comparison shown keeps it (and its
-            // direction); the model compares again when a tip moves.
-            if case .compare(let shown, _) = history.mode, shown.ref == branch.ref, shown.tip.sha == branch.tip.sha {
-                return
+            history.showBranch(ref: ref)
+            switch state.view(forBranch: ref) {
+            case .compare(let direction) where repository.gitState.tip.branch != nil:
+                // Coming back to the comparison shown keeps it; the model
+                // compares again when a tip moves.
+                if case .compare(let shown, let shownDirection) = history.mode, shown.ref == branch.ref,
+                   shown.tip.sha == branch.tip.sha, shownDirection == direction {
+                    return
+                }
+                await compare(branch, direction: direction, repository: repository, state: state)
+            case .history, .compare:
+                history.resetToHistoryMode()
+                await waitForHistory(history)
+                let result = await reveal(branch.tip.sha, in: history, state: state)
+                state.notice = notice(for: result, place: place, name: branch.name, history: history, repository: repository)
             }
-            await compare(branch, direction: .behind, repository: repository, state: state)
-        case (.branch, _):
-            history.resetToHistoryMode()
-            await waitForHistory(history)
-            if let head = repository.gitState.tip.sha {
-                await reveal(head, in: history, state: state)
-            }
-        case (.tag(let name), _):
+        case .tag(let name):
+            history.showBranch(ref: nil)
             history.resetToHistoryMode()
             await waitForHistory(history)
             if let sha = repository.gitState.tags?[name] {
-                await reveal(sha, in: history, state: state)
+                let result = await reveal(sha, in: history, state: state)
+                state.notice = notice(for: result, place: place, name: name, history: history, repository: repository)
             }
-        default:
+        case .changes, .history, .pullRequest, .stash:
+            history.showBranch(ref: nil)
             history.resetToHistoryMode()
         }
+    }
+
+    /// The branch a branch's place shows when it isn't the current one.
+    static func otherBranch(of place: SidebarPlace, in repository: RepositoryModel) -> Branch? {
+        guard case .branch(let ref) = place, ref != repository.gitState.tip.branch?.ref else {
+            return nil
+        }
+        return repository.gitState.branches.all.first { $0.ref == ref }
+    }
+
+    /// Shows `branch`'s place comparing it with the current branch (Behind):
+    /// Compare to Branch.
+    static func showComparison(of branch: Branch, in context: WindowContext) {
+        context.state.history.branchView = BranchViewChoice(ref: branch.ref, view: .compare(.behind))
+        context.select(.branch(ref: branch.ref))
     }
 
     /// Compares the current branch with `branch` in `direction`; a failure
@@ -132,10 +258,32 @@ enum HistoryPlaces {
     }
 
     /// Selects `sha` and brings it into view, loading pages until it's
-    /// loaded.
-    static func reveal(_ sha: String, in history: HistoryModel, state: HistoryWindowState) async {
-        if case .found(let row) = await history.loadUntil(sha: sha) {
+    /// loaded. The simple list scrolls to a selection itself.
+    @discardableResult
+    static func reveal(_ sha: String, in history: HistoryModel, state: HistoryWindowState) async -> GoToCommitResult {
+        let result = await history.loadUntil(sha: sha)
+        if case .found(let row) = result, history.style == .graph || history.mode != .history {
             state.controller?.reveal(row: row, pulse: false)
+        }
+        return result
+    }
+
+    /// What to say when the place's commit isn't in the list.
+    private static func notice(
+        for result: GoToCommitResult,
+        place: SidebarPlace,
+        name: String,
+        history: HistoryModel,
+        repository: RepositoryModel
+    ) -> HistoryPlaceNotice? {
+        guard case .notInHistory = result else {
+            return nil
+        }
+        switch history.style {
+        case .simple:
+            return HistoryPlaceNotice(place: place, name: name, kind: .notOnLine(branch: repository.gitState.tip.branch?.name))
+        case .graph:
+            return HistoryPlaceNotice(place: place, name: name, kind: .outsideScope(history.scope))
         }
     }
 
@@ -149,8 +297,8 @@ enum HistoryPlaces {
 
 // MARK: - The list
 
-/// The graph and its header: History's scope and count, or Compare's
-/// branch, direction, and call to action.
+/// The list and its header: History's style, scope, and count, or a
+/// branch's name and views with the merge call to action.
 struct HistoryListPane: View {
     let repository: RepositoryModel
     let place: SidebarPlace
@@ -159,17 +307,24 @@ struct HistoryListPane: View {
     var body: some View {
         let history = repository.history
         let state = context.state.history
-        let isCompare = place.kind(currentBranchRef: repository.gitState.tip.branch?.ref) == .compare
+        let branch = HistoryPlaces.otherBranch(of: place, in: repository)
         VStack(spacing: 0) {
-            if isCompare {
-                CompareHeaderContainer(repository: repository, place: place)
+            if let branch {
+                BranchHeaderContainer(repository: repository, branch: branch)
             } else {
                 HistoryHeaderContainer(repository: repository)
             }
-            Hairline()
-            // Simple ↔ Graph crossfades over 0.15 s.
-            list(history: history, state: state, isCompare: isCompare)
-                .motion(Motion.leave, value: history.style)
+            if let notice = state.notice, notice.place == place {
+                HistoryNoticeBanner(notice: notice) {
+                    switch notice.kind {
+                    case .notOnLine:
+                        history.setStyle(.graph)
+                    case .outsideScope:
+                        history.setScope(.allBranches)
+                    }
+                }
+            }
+            list(history: history, state: state, branch: branch)
                 .overlay(alignment: .top) {
                     if let reorder = state.reorder {
                         KeyboardReorderHint(count: reorder.shas.count)
@@ -177,60 +332,123 @@ struct HistoryListPane: View {
                     }
                 }
         }
+        .barMotion(state.notice?.place == place)
         .background {
             SearchQueryBridge(history: history)
         }
     }
 
     @ViewBuilder
-    private func list(history: HistoryModel, state: HistoryWindowState, isCompare: Bool) -> some View {
-        if isCompare, let error = state.compareError {
-            CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
-                .fillingSpace()
-        } else if isCompare, !isComparisonShown(history) {
+    private func list(history: HistoryModel, state: HistoryWindowState, branch: Branch?) -> some View {
+        if let branch, case .compare = state.view(forBranch: branch.ref), repository.gitState.tip.branch != nil {
+            comparison(history: history, state: state, branch: branch)
+        } else if case .compare = history.mode {
+            // Leaving a comparison for the history.
             DelayedProgressView()
-        } else if isCompare, history.commitSHAs.isEmpty {
-            PlaceholderNote(history.comparison.emptyListMessage ?? "No commits")
-        } else if !isCompare, let error = history.loadError, history.commitSHAs.isEmpty {
+        } else if let error = history.loadError, history.commitSHAs.isEmpty {
             CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
                 .fillingSpace()
-        } else if !isCompare, history.style == .simple {
-            // History's simple mode: the current branch, one commit after
-            // another (History/Simple/).
+        } else if history.style == .simple {
+            // History's simple mode: one branch's commits one after another
+            // (History/Simple/).
             SimpleHistoryList(repository: repository)
-                .transition(.opacity)
-        } else if !isCompare, history.graph.isEmpty {
+        } else if history.graph.isEmpty {
             PlaceholderRows()
-                .transition(.opacity)
         } else {
-            GraphTableView(
-                source: history,
-                presentation: GraphPresentation(repository: repository, place: place),
-                selection: GraphSelection(shas: history.selection.shas, isWorkingCopy: history.isWorkingCopySelected),
-                reorderInsertionRow: state.reorder?.insertionRow,
-                actions: HistoryTableActions.make(repository: repository, context: context),
-                onController: { controller in
-                    state.controller = controller
+            graph(history: history, state: state)
+                .overlay {
+                    if history.commitSHAs.isEmpty, !history.isLoading {
+                        // An unborn branch: the working copy, and nothing below.
+                        PlaceholderNote("No history")
+                            .padding(.top, Metrics.Graph.rowHeight * 2)
+                    }
                 }
-            )
-            .overlay {
-                if !isCompare, history.commitSHAs.isEmpty, !history.isLoading {
-                    // An unborn branch: the working copy, and nothing below.
-                    PlaceholderNote("No history")
-                        .padding(.top, Metrics.Graph.rowHeight * 2)
-                }
-            }
-            .transition(.opacity)
         }
     }
 
-    /// Whether the list shows the comparison of this place's branch (not
-    /// still the history, or another branch's comparison).
-    private func isComparisonShown(_ history: HistoryModel) -> Bool {
-        guard case .compare(let branch, _) = history.mode, case .branch(let ref) = place else {
+    /// Another branch's Behind or Ahead commits.
+    @ViewBuilder
+    private func comparison(history: HistoryModel, state: HistoryWindowState, branch: Branch) -> some View {
+        if let error = state.compareError {
+            CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
+                .fillingSpace()
+        } else if !isComparisonShown(of: branch, history: history) {
+            DelayedProgressView()
+        } else if history.commitSHAs.isEmpty {
+            PlaceholderNote(history.comparison.emptyListMessage ?? "No commits")
+        } else {
+            graph(history: history, state: state)
+        }
+    }
+
+    private func graph(history: HistoryModel, state: HistoryWindowState) -> some View {
+        GraphTableView(
+            source: history,
+            presentation: GraphPresentation(repository: repository, place: place),
+            selection: GraphSelection(shas: history.selection.shas, isWorkingCopy: history.isWorkingCopySelected),
+            reorderInsertionRow: state.reorder?.insertionRow,
+            actions: HistoryTableActions.make(repository: repository, context: context),
+            onController: { controller in
+                state.controller = controller
+            }
+        )
+    }
+
+    /// Whether the list shows the comparison with `branch` (not still the
+    /// history, or another branch's comparison).
+    private func isComparisonShown(of branch: Branch, history: HistoryModel) -> Bool {
+        guard case .compare(let shown, _) = history.mode else {
             return false
         }
-        return branch.ref == ref
+        return shown.ref == branch.ref
+    }
+}
+
+/// Why the place's commit isn't in the list, with the button that shows
+/// it, above the list.
+struct HistoryNoticeBanner: View {
+    let notice: HistoryPlaceNotice
+    var action: () -> Void = {}
+
+    var body: some View {
+        HistoryBanner(systemImage: "eye.slash", message: notice.message) {
+            if let title = notice.actionTitle {
+                Button(title, action: action)
+            }
+        }
+        .padding(.horizontal, Metrics.CommitRow.selectionInset)
+        .padding(.top, Metrics.insetSmall)
+        .padding(.bottom, Metrics.grid)
+        .barTransition()
+    }
+}
+
+/// A card above History's list: a symbol in a soft circle, a message, and
+/// a quiet button.
+struct HistoryBanner<Action: View>: View {
+    let systemImage: String
+    let message: AttributedString
+    @ViewBuilder var action: () -> Action
+
+    var body: some View {
+        HStack(spacing: Metrics.insetMedium) {
+            IconCircle(systemImage, tint: .accent)
+            Text(message)
+                .font(Typography.secondary)
+                .foregroundStyle(.text2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            action()
+                .buttonStyle(.quiet)
+                .controlSize(.small)
+                // Whole: the message wraps instead.
+                .fixedSize()
+        }
+        .padding(.leading, Metrics.insetSmall)
+        .padding(.trailing, Metrics.insetMedium)
+        .padding(.vertical, Metrics.insetSmall)
+        .cardSurface()
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -269,9 +487,11 @@ extension GraphPresentation {
         switch place {
         case .branch(let ref) where ref == gitState.tip.branch?.ref:
             focusedSHA = gitState.tip.sha
+        case .branch(let ref):
+            focusedSHA = gitState.branches.all.first { $0.ref == ref }?.tip.sha
         case .tag(let name):
             focusedSHA = gitState.tags?[name]
-        default:
+        case .changes, .history, .pullRequest, .stash:
             focusedSHA = nil
         }
         avatarEndpoint = repository.record.gitHubRepository?.endpoint

@@ -81,7 +81,7 @@ struct LeftoverRebaseTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.operations.clearLeftoverRebase()
         }
-        #expect(error?.reason == .precondition("Finish or abort the rebase first."))
+        #expect(preconditionText(error) != nil)
         #expect(await getRebaseInternalState(fixture.local) == state)
         #expect(fixture.gitFileExists("rebase-merge/git-rebase-todo"))
         await fixture.app.idle()

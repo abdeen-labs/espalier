@@ -153,7 +153,35 @@ struct ParseFilesToBeOverwrittenTests {
         ])
     }
 
-    @Test("stops at the end of the list, and ignores other errors")
+    // Git lists changed files and untracked ones separately, each path
+    // after one tab.
+    @Test("parses changed and untracked files that a checkout would overwrite")
+    func changedAndUntrackedFiles() async throws {
+        let repo = try setupEmptyRepository()
+        try write(repo, "a", "1")
+        try await git(["add", "a"], repo.path, "add")
+        try await git(["commit", "-m", "initial"], repo.path, "add")
+        try await git(["checkout", "-b", "with-files"], repo.path, "checkout")
+        try write(repo, "a", "2")
+        try write(repo, " leading space", "tracked here")
+        try await git(["add", "."], repo.path, "add")
+        try await git(["commit", "-m", "change files"], repo.path, "add")
+        try await git(["checkout", "master"], repo.path, "checkout")
+        try write(repo, "a", "3")
+        try write(repo, " leading space", "untracked here")
+
+        let result = try await git(
+            ["checkout", "with-files"],
+            repo.path,
+            "checkout",
+            options: GitExecutionOptions(expectedErrors: [.localChangesOverwritten])
+        )
+
+        #expect(result.gitError == .localChangesOverwritten)
+        #expect(parseFilesToBeOverwritten(result.stderr) == ["a", " leading space"])
+    }
+
+    @Test("stops at the end of each list, and ignores other errors")
     func listBoundaries() {
         let message = """
             error: Your local changes to the following files would be overwritten by checkout:
@@ -161,9 +189,11 @@ struct ParseFilesToBeOverwrittenTests {
             \t  two
             Please commit your changes or stash them before you switch branches.
             \tnot-a-file
+            error: The following untracked working tree files would be overwritten by checkout:
+            \tthree
             Aborting
             """
-        #expect(parseFilesToBeOverwritten(message) == ["one", "two"])
+        #expect(parseFilesToBeOverwritten(message) == ["one", "  two", "three"])
         #expect(parseFilesToBeOverwritten("error: pathspec 'x' did not match any file(s) known to git") == [])
         #expect(parseFilesToBeOverwritten("") == [])
     }

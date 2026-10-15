@@ -2,8 +2,6 @@
 
 import EspalierSupport
 
-public let maximumDiffStringSize = 268_435_441
-
 public enum DiffType: Int, Hashable, Sendable {
     /// Changes to a text file, which may be partially selected for commit
     case text = 0

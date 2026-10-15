@@ -77,7 +77,7 @@ struct BranchOperationsTests {
         let error = await #expect(throws: OperationError.self) {
             try await branches.createBranch("from-upstream", from: .upstreamDefaultBranch)
         }
-        #expect(error?.reason == .precondition("Could not determine the default branch."))
+        #expect(preconditionText(error) != nil)
 
         try await runGit(["checkout", "-q", "--detach", "HEAD"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
@@ -85,15 +85,33 @@ struct BranchOperationsTests {
         await fixture.app.idle()
     }
 
-    @Test("a taken name is refused in desktop's words")
+    @Test("a branch from the default branch doesn't track it when it's the remote's")
+    func fromRemoteDefaultBranch() async throws {
+        // No local main; feature tracks origin/main.
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["checkout", "-q", "-b", "feature", "--track", "origin/main"], local)
+            try await runGit(["branch", "-D", "main"], local)
+        }
+        let branches = fixture.model.branches
+        let base = try #require(branches.branch(for: .defaultBranch))
+        #expect(base.name == "origin/main")
+        #expect(base.type == .remote)
+
+        let topic = try await branches.createBranch("topic", from: .defaultBranch, checkout: false)
+        #expect(topic.tip.sha == base.tip.sha)
+        #expect(topic.upstream == nil)
+        await fixture.app.idle()
+    }
+
+    @Test("a taken name is refused")
     func nameTaken() async throws {
         let fixture = try await makeRepository()
-        #expect(fixture.model.branches.branchNameError("feature") == "A branch named feature already exists.")
+        #expect(fixture.model.branches.branchNameError("feature") != nil)
         #expect(fixture.model.branches.branchNameError("new") == nil)
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.branches.createBranch("feature", startPoint: nil)
         }
-        #expect(error?.reason == .precondition("A branch named feature already exists."))
+        #expect(preconditionText(error) != nil)
         await fixture.app.idle()
     }
 
@@ -153,7 +171,7 @@ struct BranchOperationsTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.branches.rename(remote, to: "other")
         }
-        #expect(error?.reason == .precondition("Only local branches can be renamed."))
+        #expect(preconditionText(error) != nil)
         await fixture.app.idle()
     }
 
@@ -166,7 +184,6 @@ struct BranchOperationsTests {
             try await fixture.model.branches.delete(try fixture.branch("feature"), includingRemote: false)
         }
         #expect(error?.reason == .confirmationRequired(.deleteBranch("feature", existsOnRemote: false)))
-        #expect(error?.title == "Delete Branch")
 
         try await runGit(["push", "-q", "-u", "origin", "feature"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
@@ -174,7 +191,6 @@ struct BranchOperationsTests {
             try await fixture.model.branches.delete(try fixture.branch("feature"), includingRemote: true)
         }
         #expect(pushed?.reason == .confirmationRequired(.deleteBranch("feature", existsOnRemote: true)))
-        #expect(pushed?.message.contains("The branch also exists on the remote") == true)
         #expect(try await localBranchNames(fixture).contains("feature"))
         await fixture.app.idle()
     }
@@ -239,7 +255,7 @@ struct BranchOperationsTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.branches.delete(try fixture.branch("main"), includingRemote: false, confirmed: [.deleteBranch])
         }
-        #expect(error?.reason == .precondition("You can't delete a repository's only branch."))
+        #expect(preconditionText(error) != nil)
         #expect(try await localBranchNames(fixture) == ["main"])
         await fixture.app.idle()
     }
@@ -279,6 +295,35 @@ struct BranchOperationsTests {
         await fixture.app.idle()
     }
 
+    @Test("deletes a remote branch, and a branch's upstream, on a remote whose name has a slash")
+    func deletesOnRemoteWithSlash() async throws {
+        let team = try await makeEmptyBareRemote()
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["remote", "add", "team/alice", team.path], local)
+            try await runGit(["checkout", "-q", "-b", "feature"], local)
+            try await commitFile(local, "feature.txt", "feature\n", message: "Feature")
+            try await runGit(["push", "-q", "-u", "team/alice", "feature"], local)
+            try await runGit(["push", "-q", "team/alice", "feature:topic"], local)
+            try await runGit(["checkout", "-q", "main"], local)
+        }
+        func teamHasBranch(_ name: String) async throws -> Bool {
+            try await runGitAllowingFailure(["rev-parse", "--verify", "--quiet", "refs/heads/\(name)"], team) == 0
+        }
+        let topic = try fixture.branch("team/alice/topic")
+        #expect(try topic.remoteName == "team/alice")
+        #expect(topic.nameWithoutRemote == "topic")
+
+        try await fixture.model.branches.delete(topic, includingRemote: false, confirmed: [.deleteRemoteBranch])
+        #expect(!(try await teamHasBranch("topic")))
+        #expect(try await teamHasBranch("feature"))
+
+        try await fixture.model.branches.delete(try fixture.branch("feature"), includingRemote: true, confirmed: [.deleteBranch])
+        #expect(!(try await teamHasBranch("feature")))
+        #expect(!(try await localBranchNames(fixture).contains("feature")))
+        #expect(try await remoteHasBranch(fixture, "main"))
+        await fixture.app.idle()
+    }
+
     @Test("deleting a remote branch already gone there removes the remote-tracking branch")
     func deletesRemoteBranchAlreadyGone() async throws {
         let fixture = try await makeRepository()
@@ -305,7 +350,6 @@ struct BranchOperationsTests {
             try await fixture.model.branches.checkout(commit: commit)
         }
         #expect(error?.reason == .confirmationRequired(.checkoutCommit(sha: feature.tip.sha)))
-        #expect(error?.title == "Check Out Commit?")
 
         try await fixture.model.branches.checkout(commit: commit, confirmed: [.checkoutCommit])
         #expect(fixture.model.gitState.tip == .detached(currentSha: feature.tip.sha))

@@ -1,7 +1,7 @@
 // The working copy's detail in History: a read-only summary of the
-// uncommitted changes (the files as chips, or rows for many, and the
-// selected file's diff, with nothing to stage), and Review Changes (⌘1),
-// which goes to Changes with the composer focused.
+// uncommitted changes (the files beside the selected file's diff, with
+// nothing to stage), and Review Changes (⌘1), which goes to Changes with the
+// composer focused.
 
 import EspalierCore
 import EspalierSupport
@@ -17,6 +17,7 @@ nonisolated struct WorkingCopyHeaderContent: Sendable, Equatable {
 struct WorkingCopyHeader: View {
     let content: WorkingCopyHeaderContent
     var reviewChanges: () -> Void = {}
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         HStack(alignment: .top, spacing: Metrics.insetSmall) {
@@ -24,7 +25,7 @@ struct WorkingCopyHeader: View {
                 Text(content.summary.title)
                     .font(Typography.commitSummary)
                     .foregroundStyle(content.summary.isDirty ? .text : .text3)
-                if let detail = content.summary.detail {
+                if let detail = content.summary.detail(numberFormat) {
                     Label {
                         Text(detail)
                     } icon: {
@@ -42,7 +43,7 @@ struct WorkingCopyHeader: View {
             }
             .buttonStyle(.quiet)
             .controlSize(.small)
-            .help("Review Changes (⌘1)")
+            .tooltip("Review Changes (⌘1)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -52,21 +53,14 @@ struct WorkingCopyHeader: View {
 struct WorkingCopyDetail: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
-    @Environment(\.historySplitAutosavePrefix) private var autosavePrefix
 
     var body: some View {
         let changes = repository.changes
         let files = changes.workingDirectory.files
         let summary = GraphPresentation(repository: repository, place: .history).workingCopy
-        let style = HistoryFilesStyle.style(forFileCount: files.count)
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: Metrics.CommitDetail.filesSpacing) {
-                WorkingCopyHeader(content: WorkingCopyHeaderContent(summary: summary)) {
-                    context.actions.perform(.reviewChanges)
-                }
-                if !files.isEmpty, style == .chips {
-                    WorkingCopyFiles(repository: repository, style: .chips)
-                }
+            WorkingCopyHeader(content: WorkingCopyHeaderContent(summary: summary)) {
+                context.actions.perform(.reviewChanges)
             }
             .padding(.horizontal, Metrics.CommitDetail.horizontalPadding)
             .padding(.top, Metrics.CommitDetail.topPadding)
@@ -80,11 +74,9 @@ struct WorkingCopyDetail: View {
                     tint: Color(espalier: Palette.success)
                 )
                 .fillingSpace()
-            } else if style == .chips {
-                WorkingCopyDiff(repository: repository)
             } else {
-                SplitView(autosaveName: "\(autosavePrefix).workingCopyFiles", leadingColumn: Metrics.Column.commitFileList) {
-                    WorkingCopyFiles(repository: repository, style: .rows)
+                SplitView(autosaveName: "Espalier.Split.workingCopyFiles", leadingColumn: Metrics.Column.commitFileList) {
+                    WorkingCopyFiles(repository: repository)
                 } trailing: {
                     WorkingCopyDiff(repository: repository)
                 }
@@ -93,32 +85,30 @@ struct WorkingCopyDetail: View {
     }
 }
 
-/// The changed files, selectable to see their diff.
+/// The changed files beside the diff, selectable to see their diff.
 private struct WorkingCopyFiles: View {
     let repository: RepositoryModel
-    let style: HistoryFilesStyle
     @Environment(WindowContext.self) private var context
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         let files = repository.changes.workingDirectory.files
-        VStack(alignment: .leading, spacing: style == .chips ? Metrics.insetSmall : 0) {
-            SectionLabel("Changed Files", count: files.count)
-                .padding(.horizontal, style == .rows ? Metrics.HistoryHeader.horizontalPadding : 0)
-                .frame(height: style == .rows ? Metrics.HistoryHeader.height : nil, alignment: .leading)
-            if style == .rows {
-                Hairline()
-            }
-            HistoryFiles(
+        VStack(spacing: 0) {
+            CommitFilesHeader(summary: CommitFilesSummary(fileCount: files.count, linesAdded: 0, linesDeleted: 0))
+            Hairline()
+            HistoryFileList(
                 files: files.map { file in
-                    HistoryFileContent(file: CommittedFileRowContent(
-                        id: file.id,
-                        path: file.path,
-                        oldPath: file.status.oldPath,
-                        status: FileStatusKind(file.status)
-                    ))
+                    HistoryFileContent(
+                        file: CommittedFileRowContent(
+                            id: file.id,
+                            path: file.path,
+                            oldPath: file.status.oldPath,
+                            status: FileStatusKind(file.status)
+                        ),
+                        numberFormat: numberFormat
+                    )
                 },
                 selection: selectedFileID,
-                style: style,
                 actions: HistoryFilesActions(select: { id in
                     repository.changes.select(fileIDs: id.map { [$0] } ?? [])
                 }),

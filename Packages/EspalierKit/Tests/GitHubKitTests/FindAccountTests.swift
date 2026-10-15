@@ -115,6 +115,34 @@ struct FindAccountTests {
         #expect(account == nil)
     }
 
+    @Test("finds the account on the URL's server", arguments: [
+        NamedCase("a host in another case", (url: "https://GitHub.com/desktop/repo-fixture", login: "joan")),
+        NamedCase("an Enterprise server on its port", (url: "https://ghe.example.com:8443/owner/repo.git", login: "jane")),
+        NamedCase("an Enterprise server on another port", (url: "https://ghe.example.com/owner/repo.git", login: nil)),
+        NamedCase("an SSH remote of an Enterprise server on another port", (url: "ssh://git@ghe.example.com:2222/owner/repo.git", login: "jane")),
+        NamedCase("GitHub's SSH over HTTPS", (url: "ssh://git@ssh.github.com:443/desktop/repo-fixture.git", login: "joan")),
+        NamedCase("an @ in the path", (url: "https://evil.example/x@github.com/desktop/repo-fixture.git", login: nil)),
+        NamedCase("owner/name with .git", (url: "desktop/repo-fixture.git", login: "joan")),
+    ] as [NamedCase<(url: String, login: String?)>])
+    func findsAccountOnServer(_ testCase: NamedCase<(url: String, login: String?)>) async {
+        let onPort = Account(
+            login: "jane",
+            endpoint: getEnterpriseAPIURL("https://ghe.example.com:8443"),
+            token: "deadbeef",
+            emails: [],
+            avatarURL: "",
+            id: 3,
+            name: "Port",
+            plan: "free"
+        )
+        let account = await findAccountForRemoteURL(
+            testCase.value.url,
+            accounts + [onPort],
+            canAccessRepository: mockCanAccessRepository
+        )
+        #expect(account?.login == testCase.value.login)
+    }
+
     @Test("asks the API whether an account can access the repository")
     func asksTheAPI() async {
         // The default lookup fetches the repository.

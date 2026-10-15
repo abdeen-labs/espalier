@@ -1,6 +1,5 @@
-// Fixed values for the UI's tests and snapshots: a fixed clock, one value
-// per confirmation, decision, prompt, and error kind, and the leaf views'
-// content values.
+// Fixed values for the UI's tests: files, confirmations, and one value per
+// error kind.
 
 import EspalierCore
 import Foundation
@@ -19,18 +18,8 @@ struct FixtureRetry: RetryableOperation {
     }
 }
 
-/// Fixed values for tests and snapshots.
+/// Fixed values for tests.
 enum UIFixtures {
-    // MARK: Time
-
-    /// The fixed "now": 6 October 2026, 10:00 UTC.
-    static let now = Date(timeIntervalSince1970: 1_791_280_800)
-    static let timeZone = TimeZone(identifier: "UTC")!
-
-    static func minutesAgo(_ minutes: Double) -> Date {
-        now.addingTimeInterval(-minutes * 60)
-    }
-
     // MARK: Identity
 
     static let repositoryID = RepositoryID(rawValue: UUID(uuidString: "2F1D2A6E-6C1B-4C6B-9C4E-7B0B5F1A9E01")!)
@@ -73,25 +62,8 @@ enum UIFixtures {
         ("deleteBranch-remote", .deleteBranch("feature/login", existsOnRemote: true)),
         ("deleteRemoteBranch", .deleteRemoteBranch("origin/feature/login")),
         ("deleteTag", .deleteTag("v1.2.0")),
-    ]
-
-    // MARK: Decisions
-
-    static let decisions: [(name: String, decision: Decision)] = [
-        ("uncommittedChanges", .uncommittedChanges(currentBranch: "main", targetBranch: "feature/login", currentBranchHasStash: false)),
-        ("uncommittedChanges-stash", .uncommittedChanges(currentBranch: "main", targetBranch: "feature/login", currentBranchHasStash: true)),
-    ]
-
-    // MARK: Prompts
-
-    static let prompts: [(name: String, prompt: Prompt)] = [
-        ("addSSHHost", .addSSHHost(host: "github.com", ip: "140.82.112.3", keyType: "ED25519", fingerprint: "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU")),
-        ("sshKeyPassphrase", .sshKeyPassphrase(keyPath: "/Users/joe/.ssh/id_ed25519")),
-        ("sshUserPassword", .sshUserPassword(username: "joe@git.example.com")),
-        ("genericGitAuthentication", .genericGitAuthentication(endpoint: "https://git.example.com/joe/espalier.git", username: nil)),
-        ("genericGitAuthentication-user", .genericGitAuthentication(endpoint: "https://git.example.com/joe/espalier.git", username: "joe")),
-        ("gitHubSignIn", .gitHubSignIn(endpoint: "https://github.com/joe/espalier.git")),
-        ("hookFailed", .hookFailed(hookName: "pre-commit", terminalOutput: "Running swiftlint…\nSources/App/RepositoryLoader.swift:12:5: error: Force Unwrapping Violation\nDone linting! Found 1 violation, 1 serious in 42 files.\n")),
+        ("replaceCommandLineTool", .replaceCommandLineTool(path: "/usr/local/bin/espalier", existing: .link("/opt/homebrew/bin/espalier"))),
+        ("replaceCommandLineTool-file", .replaceCommandLineTool(path: "/usr/local/bin/espalier", existing: .file)),
     ]
 
     // MARK: Errors, every reason
@@ -205,7 +177,7 @@ enum UIFixtures {
                 operation: .publishRepository, repositoryID: id
             )),
             ("integration-editor", OperationError(
-                .integration(.editor(message: "Espalier couldn't find a supported editor. Install Visual Studio Code, then restart Espalier and try again.", suggestDefaultEditor: true, openPreferences: false)),
+                .integration(.editor(message: "Espalier couldn't find a supported editor. Install Visual Studio Code, then try again.", suggestDefaultEditor: true, openPreferences: false)),
                 operation: .openInEditor, recoveries: [.downloadSuggestedEditor, .openSettings(.integrations)]
             )),
             ("integration-shell", OperationError(
@@ -216,84 +188,4 @@ enum UIFixtures {
             ("other", OperationError(.other("Something went wrong."), operation: .fetch, repositoryID: id)),
         ]
     }
-
-    // MARK: Sync button, the nine states
-
-    static var syncStates: [(name: String, state: SyncButtonState)] {
-        let lastFetched = minutesAgo(5)
-        return [
-            // A push on its blue capsule, the arc filling in the arrow's place.
-            ("1-progress", SyncButtonState(
-                kind: .progress(
-                    title: "Pushing to origin",
-                    description: "Writing objects: 64% (58/90)",
-                    value: 0.42,
-                    shown: .push(remote: "origin", aheadBehind: AheadBehind(ahead: 2, behind: 0), tagsToPush: 0)
-                ),
-                lastFetched: lastFetched
-            )),
-            // A fetch before git reports how far it has got: the arc turning.
-            ("1-progress-starting", SyncButtonState(
-                kind: .progress(title: "Fetching origin", description: "Hang on…", value: 0, shown: .fetch(remote: "origin")),
-                lastFetched: lastFetched
-            )),
-            ("2-publishRepository", SyncButtonState(kind: .publishRepository)),
-            ("3-fetchUnborn", SyncButtonState(kind: .fetchUnborn(remote: "origin"), lastFetched: nil)),
-            ("4-detachedHead", SyncButtonState(kind: .detachedHead(rebaseInProgress: false), lastFetched: lastFetched)),
-            ("4-detachedHead-rebase", SyncButtonState(kind: .detachedHead(rebaseInProgress: true), lastFetched: lastFetched)),
-            ("5-publishBranch", SyncButtonState(kind: .publishBranch(isGitHubRepository: true, remote: "origin"), lastFetched: lastFetched)),
-            ("6-forcePush", SyncButtonState(kind: .forcePush(remote: "origin", aheadBehind: AheadBehind(ahead: 2, behind: 3), tagsToPush: 0), lastFetched: lastFetched)),
-            ("7-pull", SyncButtonState(kind: .pull(remote: "origin", withRebase: false, aheadBehind: AheadBehind(ahead: 0, behind: 3), tagsToPush: 0, canForcePush: false), lastFetched: lastFetched)),
-            ("7-pull-diverged", SyncButtonState(kind: .pull(remote: "origin", withRebase: true, aheadBehind: AheadBehind(ahead: 2, behind: 3), tagsToPush: 0, canForcePush: true), lastFetched: lastFetched)),
-            ("8-push", SyncButtonState(kind: .push(remote: "origin", aheadBehind: AheadBehind(ahead: 2, behind: 0), tagsToPush: 1), lastFetched: lastFetched)),
-            ("9-fetch", SyncButtonState(kind: .fetch(remote: "origin"), lastFetched: lastFetched)),
-            ("9-fetch-failure", SyncButtonState(
-                kind: .fetch(remote: "origin"),
-                lastFetched: lastFetched,
-                backgroundFailure: BackgroundFailureSummary(title: "Error", message: "Could not resolve host: github.com", recoveryTitles: ["Retry"])
-            )),
-        ]
-    }
-
-    // MARK: Toasts and the capsule
-
-    static let toasts: [(name: String, content: ToastContent)] = [
-        ("merged", ToastContent(message: "Merged feature/login into main")),
-        ("cherryPick-undo", ToastContent(message: "Copied 2 commits to feature/login.", undoTitle: "Undo", undoShortcut: "⌘Z")),
-        ("busy", ToastContent(message: "Another operation is in progress", systemImage: "hourglass")),
-    ]
-
-    static let capsules: [(name: String, content: OperationCapsuleContent)] = [
-        ("rebase-running", .running(title: "Rebase in progress", detail: "Commit 2 of 5 · Wire device flow", progress: 0.4)),
-        ("merge-running", .running(title: "Merge in progress", detail: nil, progress: nil)),
-        ("rebase-conflicted", .conflicted(message: "Resolve conflicts to continue rebasing main.")),
-        ("rebase-interrupted", .interrupted(message: "Rebasing main was interrupted. Continue or abort the rebase.")),
-        ("applyingPatches", .unsupported(message: GitOperationInProgress.applyingPatches.unsupportedSummary ?? "")),
-        ("bisect", .unsupported(message: GitOperationInProgress.bisect.unsupportedSummary ?? "")),
-    ]
-
-    // MARK: The location control
-
-    static let locationStates: [(name: String, state: LocationControlState)] = [
-        ("noRepositories", LocationControlState(repository: .noRepositories, branch: .hidden)),
-        ("selectRepository", LocationControlState(repository: .selectRepository, branch: .hidden)),
-        ("branch", LocationControlState(repository: .repository(name: "espalier", path: "/Users/joe/Developer/espalier"), branch: .branch(name: "main"))),
-        ("unborn", LocationControlState(repository: .repository(name: "espalier", path: "/Users/joe/Developer/espalier"), branch: .unborn(ref: "main"))),
-        ("detached", LocationControlState(repository: .repository(name: "espalier", path: "/Users/joe/Developer/espalier"), branch: .detached(sha: "a1b2c3d4e5f6"))),
-        ("checkingOut", LocationControlState(
-            repository: .repository(name: "espalier", path: "/Users/joe/Developer/espalier"),
-            branch: .checkingOut(target: "feature/login", description: "Switching to Branch", progress: 0.4)
-        )),
-        // Before git reports how far it has got: a spinner.
-        ("checkingOut-starting", LocationControlState(
-            repository: .repository(name: "espalier", path: "/Users/joe/Developer/espalier"),
-            branch: .checkingOut(target: "feature/login", description: "Switching to Branch", progress: 0)
-        )),
-        ("rebasing", LocationControlState(repository: .repository(name: "espalier", path: "/Users/joe/Developer/espalier"), branch: .rebasing(target: "main"))),
-        ("blocked", LocationControlState(
-            repository: .repository(name: "espalier", path: "/Users/joe/Developer/espalier"),
-            branch: .branch(name: "main"),
-            branchBlockedReason: "Finish or abort the merge first."
-        )),
-    ]
 }

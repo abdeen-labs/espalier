@@ -253,8 +253,7 @@ public struct SignInSheet: View {
         if let signIn = context?.app.accounts.signIn {
             sheet(signIn)
         } else {
-            // No window to sign in from (a snapshot of git's prompt): the
-            // first step, and Cancel.
+            // No window to sign in from: the first step, and Cancel.
             SignInView(content: SignInContent(state: nil, request: request), actions: SignInActions(
                 cancel: { finish(nil) },
                 continueSignIn: {},
@@ -381,8 +380,6 @@ struct SignInActions {
     var submitAddress: (_ address: String, _ clientID: String) -> Void
     var copyCode: (String) -> Void
     var openVerificationPage: (String) -> Void
-
-    static let none = SignInActions(cancel: {}, continueSignIn: {}, submitAddress: { _, _ in }, copyCode: { _ in }, openVerificationPage: { _ in })
 }
 
 /// The sheet's content for a step.
@@ -443,8 +440,7 @@ struct SignInView: View {
             Text("Git is requesting permission to sign in to this server:")
                 .foregroundStyle(.text2)
                 .fixedSize(horizontal: false, vertical: true)
-            MonoChip(address)
-                .textSelection(.enabled)
+            MonoChip(address, isSelectable: true)
             Label {
                 Text("**Only continue if you recognize and trust this server.** Confirm this address appears in your browser. Otherwise, cancel and contact your repository administrator.")
                     .foregroundStyle(.text2)
@@ -518,7 +514,6 @@ struct SignInView: View {
 private struct SignInCodeStep: View {
     let code: SignInCodeContent
     let actions: SignInActions
-    @Environment(\.fixedNow) private var fixedNow
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetMedium) {
@@ -556,13 +551,9 @@ private struct SignInCodeStep: View {
             .buttonStyle(.prominent)
             .controlSize(.extraLarge)
             .keyboardShortcut(.defaultAction)
-            .help("Copies the code and opens the page in your browser")
-            if let fixedNow {
-                status(now: fixedNow)
-            } else {
-                TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                    status(now: timeline.date)
-                }
+            .tooltip("Copies the code and opens the page in your browser")
+            TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                status(now: timeline.date)
             }
         }
     }

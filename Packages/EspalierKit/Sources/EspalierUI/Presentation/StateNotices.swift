@@ -96,7 +96,7 @@ enum StateNoticesHost {
         let integrations = context.app.integrations
         guard let error = integrations.lfsFiltersError,
               context.state.shownNotices.insert("lfs.filters").inserted,
-              case .alert(let content, let recoveries) = error.presentation else {
+              case .alert(let content, let recoveries) = error.presentation(context.app.preferences.numberFormat) else {
             return
         }
         Task {

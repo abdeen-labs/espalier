@@ -2,10 +2,10 @@
 // line about the system's permission with Open Notifications Settings….
 // Turning the setting on asks the system for permission.
 //
-// The system's permission is behind `NotificationPermissions`, injected
-// through the environment: `UNUserNotificationCenter.current()` raises an
-// exception in a process without an app bundle (the test runner), so tests
-// give the pane fixed states.
+// The system's permission is behind `NotificationPermissions`:
+// `UNUserNotificationCenter.current()` raises an exception in a process
+// without an app bundle (the test runner), so the live permissions report
+// it unavailable there, and tests give `NotificationSettings` their own.
 
 import AppKit
 import EspalierCore
@@ -70,16 +70,6 @@ nonisolated public struct NotificationPermissions: Sendable {
         }
     )
 
-    /// A permission that never changes (tests and snapshots); requesting
-    /// grants it unless it was denied.
-    public static func fixed(_ permission: NotificationPermission) -> NotificationPermissions {
-        NotificationPermissions(
-            status: { permission },
-            request: { permission == .notDetermined ? .authorized : permission },
-            settingsURL: URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=dev.abdeen.espalier")
-        )
-    }
-
     /// Only an app bundle has a notification center.
     private static var isAppBundle: Bool {
         Bundle.main.bundleIdentifier != nil && Bundle.main.bundleURL.pathExtension == "app"
@@ -97,15 +87,9 @@ nonisolated extension NotificationPermission {
     }
 }
 
-extension EnvironmentValues {
-    /// The system's notification permission (fixed in tests).
-    @Entry public var notificationPermissions: NotificationPermissions = .live
-}
-
 /// Settings ▸ Notifications.
 public struct NotificationsPane: View {
     private let model: AppModel?
-    @Environment(\.notificationPermissions) private var permissions
 
     public init(model: AppModel?) {
         self.model = model
@@ -115,7 +99,7 @@ public struct NotificationsPane: View {
         if let model {
             NotificationsPaneContent(settings: NotificationSettings(
                 preferences: model.preferences,
-                permissions: permissions,
+                permissions: .live,
                 open: { url in model.integrations.openInBrowser(url) }
             ))
         } else {
@@ -134,7 +118,7 @@ nonisolated struct NotificationStatusLine: Equatable {
     }
 
     let message: String
-    let kind: InlineMessage.Kind
+    let kind: FieldMessage.Kind
     let action: Action
 
     /// The line for `permission`, or nil when there's nothing to say: the
@@ -179,25 +163,15 @@ final class NotificationSettings {
     /// The permission once read.
     private(set) var permission: NotificationPermission?
 
-    init(preferences: Preferences, permissions: NotificationPermissions, permission: NotificationPermission? = nil, open: @escaping (URL) -> Void) {
+    init(preferences: Preferences, permissions: NotificationPermissions, open: @escaping (URL) -> Void) {
         self.preferences = preferences
         self.permissions = permissions
-        self.permission = permission
         self.open = open
     }
 
     /// The status line under the setting, if any.
     var statusLine: NotificationStatusLine? {
         NotificationStatusLine(permission, isEnabled: preferences.highSignalNotificationsEnabled)
-    }
-
-    /// Writes the setting; turning it on asks for permission when the user
-    /// hasn't been asked yet.
-    func setEnabled(_ enabled: Bool) async {
-        preferences.highSignalNotificationsEnabled = enabled
-        if enabled {
-            await requestIfNotDetermined()
-        }
     }
 
     /// Asks for permission when the user hasn't been asked yet.
@@ -228,12 +202,9 @@ final class NotificationSettings {
 /// The Notifications pane: the switch, and the system's permission.
 struct NotificationsPaneContent: View {
     @State private var settings: NotificationSettings
-    /// Whether to read the permission on appearing (snapshots set it).
-    private let readsPermission: Bool
 
-    init(settings: NotificationSettings, readsPermission: Bool = true) {
+    init(settings: NotificationSettings) {
         _settings = State(initialValue: settings)
-        self.readsPermission = readsPermission
     }
 
     var body: some View {
@@ -246,7 +217,7 @@ struct NotificationsPaneContent: View {
                 )
                 if let line = settings.statusLine {
                     SettingsMessageRow {
-                        InlineMessage(line.message, kind: line.kind)
+                        FieldMessage(line.message, kind: line.kind)
                     } trailing: {
                         Button(line.buttonTitle) {
                             Task { await settings.perform(line.action) }
@@ -260,9 +231,7 @@ struct NotificationsPaneContent: View {
         // The status line grows in over 0.22 s and leaves over 0.15 s.
         .barMotion(settings.statusLine != nil)
         .task {
-            if readsPermission {
-                await settings.refresh()
-            }
+            await settings.refresh()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await settings.refresh() }

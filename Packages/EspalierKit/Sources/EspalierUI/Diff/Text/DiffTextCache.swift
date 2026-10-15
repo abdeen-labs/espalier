@@ -1,8 +1,8 @@
 // Text prepared for drawing, kept between draws. Rows redraw often (the
 // pointer over a block, the selection, the cursor), so each line's Core Text
 // lines are built once per width, color, and token generation, as are line
-// numbers. The cache empties when the document, tokens, font, wrap width, or
-// appearance change.
+// numbers and hunk headers. The cache empties when the document, tokens,
+// font, wrap width, or appearance change.
 
 import AppKit
 import GitKit
@@ -38,7 +38,6 @@ final class DiffTextCache {
     private struct NumberKey: Hashable {
         let number: Int
         let color: ObjectIdentifier
-        let isSemibold: Bool
     }
 
     private struct MarkerKey: Hashable {
@@ -49,7 +48,11 @@ final class DiffTextCache {
     private var texts: [Key: PreparedText] = [:]
     private var numbers: [NumberKey: CTLine] = [:]
     private var markers: [MarkerKey: CTLine] = [:]
+    /// Hunk headers' lines, by the document line they show.
+    private var headers: [Int: CTLine] = [:]
     private var appearance: AppearanceVariant?
+    /// The look the colors and fonts are in.
+    private var look: Look?
     private static let limit = 2_000
 
     /// Forgets everything (new document, tokens, font, or width).
@@ -57,12 +60,15 @@ final class DiffTextCache {
         texts.removeAll(keepingCapacity: true)
         numbers.removeAll(keepingCapacity: true)
         markers.removeAll(keepingCapacity: true)
+        headers.removeAll(keepingCapacity: true)
     }
 
-    /// Forgets everything when the appearance changed (colors are baked).
+    /// Forgets everything when the appearance or the look changed (colors
+    /// and fonts are baked).
     func use(_ appearance: AppearanceVariant) {
-        if self.appearance != appearance {
+        if self.appearance != appearance || look != Look.current {
             self.appearance = appearance
+            look = Look.current
             reset()
         }
     }
@@ -130,21 +136,37 @@ final class DiffTextCache {
         return line
     }
 
-    /// A line number in `color`, semibold on an included line.
-    func number(_ number: Int, color: NSColor, font: NSFont, isSemibold: Bool = false) -> CTLine {
-        let key = NumberKey(number: number, color: ObjectIdentifier(color), isSemibold: isSemibold)
+    /// A line number in `color`.
+    func number(_ number: Int, color: NSColor, font: NSFont) -> CTLine {
+        let key = NumberKey(number: number, color: ObjectIdentifier(color))
         if let line = numbers[key] {
             return line
         }
-        let numberFont = isSemibold ? AppKitTypography.code(size: font.pointSize, weight: .semibold) : font
         let line = CTLineCreateWithAttributedString(NSAttributedString(
             string: String(number),
-            attributes: [.font: numberFont, DiffRowRenderer.foregroundKey: color.cgColor]
+            attributes: [.font: font, DiffRowRenderer.foregroundKey: color.cgColor]
         ))
         if numbers.count >= Self.limit {
             numbers.removeAll(keepingCapacity: true)
         }
         numbers[key] = line
+        return line
+    }
+
+    /// A hunk header's line as git wrote it ("@@ -24,9 +24,13 @@ final
+    /// class ForecastService {"), in `color`.
+    func header(line index: Int, text: String, color: NSColor, font: NSFont) -> CTLine {
+        if let line = headers[index] {
+            return line
+        }
+        let line = CTLineCreateWithAttributedString(NSAttributedString(
+            string: text,
+            attributes: [.font: font, DiffRowRenderer.foregroundKey: color.cgColor]
+        ))
+        if headers.count >= Self.limit {
+            headers.removeAll(keepingCapacity: true)
+        }
+        headers[index] = line
         return line
     }
 }

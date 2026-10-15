@@ -102,7 +102,7 @@ public func formatCompactNumber(_ value: Double, _ fmt: CompactFormatOptions? = 
     let units = fmt?.units ?? defaultDecimalUnits
     let unitSeparator = fmt?.unitSeparator ?? ""
 
-    if abs < base {
+    if abs < base || units.isEmpty {
         let result = formatNumber(value, fmt?.numberFormat)
         // For byte formatting, always show units even for small values
         if let unit = units.first, !unit.isEmpty {
@@ -111,17 +111,26 @@ public func formatCompactNumber(_ value: Double, _ fmt: CompactFormatOptions? = 
         return result
     }
 
-    let unitIx = min(units.count - 1, Int(floor(log(abs) / log(base))))
+    /// The value in the unit at `unitIx`, rounded.
+    func rounded(inUnit unitIx: Int) -> Double {
+        let scaled = value / pow(base, Double(unitIx))
 
-    let scaled = value / pow(base, Double(unitIx))
+        // If the user didn't provide an explicit number of decimals to use, we'll
+        // default to 1 decimal for numbers less than 10 and no decimals for numbers
+        // 10 or greater. This is a common convention for compact number formatting
+        // that balances precision with brevity.
+        let decimals = fmt?.decimals ?? (Swift.abs(scaled) < 10 ? 1 : 0)
 
-    // If the user didn't provide an explicit number of decimals to use, we'll
-    // default to 1 decimal for numbers less than 10 and no decimals for numbers
-    // 10 or greater. This is a common convention for compact number formatting
-    // that balances precision with brevity.
-    let decimals = fmt?.decimals ?? (Swift.abs(scaled) < 10 ? 1 : 0)
+        return round(scaled, decimals)
+    }
 
-    let result = round(scaled, decimals)
-    let unit = units.indices.contains(unitIx) ? units[unitIx] : "undefined"
-    return "\(formatNumber(result, fmt?.numberFormat))\(unitSeparator)\(unit)"
+    var unitIx = min(units.count - 1, Int(floor(log(abs) / log(base))))
+    var result = rounded(inUnit: unitIx)
+    // A value that rounds up to the next unit (1023.999 KiB to 1,024 KiB) is
+    // shown in that unit.
+    if Swift.abs(result) >= base, unitIx < units.count - 1 {
+        unitIx += 1
+        result = rounded(inUnit: unitIx)
+    }
+    return "\(formatNumber(result, fmt?.numberFormat))\(unitSeparator)\(units[unitIx])"
 }

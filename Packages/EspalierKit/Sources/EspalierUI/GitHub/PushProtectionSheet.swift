@@ -107,8 +107,6 @@ struct PushProtectionActions {
     var open: (URL) -> Void
     var copy: (String) -> Void
     var close: () -> Void
-
-    static let none = PushProtectionActions(bypass: { _ in }, open: { _ in }, copy: { _ in }, close: {})
 }
 
 /// The sheet's content.
@@ -133,7 +131,7 @@ struct PushProtectionView: View {
                 Text("Exposing this secret can allow someone to:")
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Self.risks, id: \.self) { risk in
-                        HStack(alignment: .firstTextBaseline, spacing: Metrics.grid + 2) {
+                        HStack(alignment: .firstTextBaseline, spacing: Metrics.bulletSpacing) {
                             Text("•")
                                 .foregroundStyle(.text3)
                             Text(risk)
@@ -188,7 +186,7 @@ private struct DetectedSecretRow: View {
     @State private var showsMoreLocations = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.grid + 2) {
+        VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
             HStack(spacing: Metrics.insetSmall) {
                 Image(systemName: "key.fill")
                     .foregroundStyle(.text2)
@@ -210,7 +208,7 @@ private struct DetectedSecretRow: View {
                             Label(showsMoreLocations ? "Show Fewer Locations" : "Show More Locations", systemImage: "ellipsis.circle")
                         }
                         .buttonStyle(.icon)
-                        .help(showsMoreLocations ? "Show Fewer Locations" : "Show More Locations")
+                        .tooltip(showsMoreLocations ? "Show Fewer Locations" : "Show More Locations")
                         .accessibilityLabel(showsMoreLocations ? "Show Fewer Locations" : "Show More Locations")
                     }
                 }
@@ -236,7 +234,7 @@ private struct DetectedSecretRow: View {
             }
             .buttonStyle(.quiet)
             .controlSize(.small)
-            .help("Ask for a bypass on GitHub")
+            .tooltip("Ask for a bypass on GitHub")
             .accessibilityLabel("Bypass \(secret.title)")
         } else {
             Button("Bypass…") {
@@ -274,16 +272,16 @@ private struct SecretLocationView: View {
                 }
                 .foregroundStyle(.text3)
             }
-            .buttonStyle(.plain)
-            .help("Copy the full SHA")
+            .buttonStyle(.bare)
+            .tooltip("Copy the full SHA")
             .accessibilityLabel("Copy the full SHA")
-            Text("\(location.path) at line \(location.lineNumber)")
+            Text(verbatim: "\(location.path) at line \(location.lineNumber)")
                 .font(Typography.secondary)
                 .foregroundStyle(.text3)
                 .lineLimit(1)
                 .truncationMode(.head)
                 .textSelection(.enabled)
-                .help(location.path)
+                .tooltip(location.path)
         }
     }
 }

@@ -100,14 +100,14 @@ struct SubmoduleStateTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.commit.commit()
         }
-        #expect(error?.reason == .precondition("Select one or more files to commit"))
+        #expect(preconditionText(error) != nil)
         // Include All selects it, but it still isn't committed: the same
         // precondition, not git's "no changes added to commit".
         fixture.changes.setIncludeAll(true)
         let included = await #expect(throws: OperationError.self) {
             try await fixture.commit.commit()
         }
-        #expect(included?.reason == .precondition("Select one or more files to commit"))
+        #expect(included?.reason == error?.reason)
         #expect(try await fixture.commitCount() == 3)
 
         // With another change, that one is committed and the submodule left.

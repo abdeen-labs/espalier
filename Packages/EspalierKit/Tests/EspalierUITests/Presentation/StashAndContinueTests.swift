@@ -34,7 +34,7 @@ struct StashAndContinueTests {
     /// Runs `start`, which ends on local changes in the way; recovers with
     /// Stash Changes and Continue; confirms the force push warning; and
     /// checks that nothing else was asked and nothing failed.
-    private func stashAndContinue(_ fixture: OperationsFixture, operation: String, _ start: @escaping @MainActor () async -> Void) async throws {
+    private func stashAndContinue(_ fixture: OperationsFixture, _ start: @escaping @MainActor () async -> Void) async throws {
         await start()
         let presented = try #require(fixture.presenter.error)
         guard case .localChangesOverwritten = presented.error.reason else {
@@ -42,7 +42,10 @@ struct StashAndContinueTests {
             return
         }
         let recovery = try #require(presented.error.recoveries.first)
-        #expect(recovery.title == "Stash Changes and Continue")
+        guard case .stashChangesAndRetry = recovery else {
+            Issue.record("Unexpected recovery \(recovery.title)")
+            return
+        }
 
         let done = Flag()
         let recover = Task {
@@ -51,7 +54,6 @@ struct StashAndContinueTests {
         }
         let warning = await fixture.confirmation()
         #expect(warning.confirmation.kind == .rewritePublishedCommits)
-        #expect(warning.confirmation.details == .operation(operation))
         fixture.presenter.respond(to: warning.id, with: ConfirmationResponse(isConfirmed: true))
 
         // Nothing else is asked (not "Overwrite Stash?").
@@ -75,14 +77,13 @@ struct StashAndContinueTests {
             let fixture = try await publishedFixture()
             let b = try await fixture.sha("main~1"), c = try await fixture.sha("main")
             let plan = try #require(SquashPlan.make(shas: [b, c], into: nil, in: fixture.repository))
-            try await stashAndContinue(fixture, operation: "Squash") {
+            try await stashAndContinue(fixture) {
                 await MultiCommitActions.squash(plan, message: CommitContext(summary: "B and C", description: nil), in: fixture.context)
             }
             #expect(try await fixture.summaries("main").prefix(2) == ["B and C", "A"])
 
             // The squash's toast, with its Undo, which undoes it.
             let toast = try #require(fixture.presenter.toasts.last)
-            #expect(toast.message == "Squashed 2 commits.")
             let undo = try #require(fixture.presenter.takeToastUndo(toast.id))
             await undo.perform()
             await fixture.settle()
@@ -98,13 +99,12 @@ struct StashAndContinueTests {
             let a = try await fixture.sha("main~2"), c = try await fixture.sha("main")
             let history = fixture.repository.history
             let rewrite = try #require(history.currentBranchRewrite(moving: [c], relativeTo: a))
-            try await stashAndContinue(fixture, operation: "Reorder") {
+            try await stashAndContinue(fixture) {
                 await KeyboardReorder.perform(rewrite, below: history.commit(a), repository: fixture.repository, context: fixture.context)
             }
             #expect(try await fixture.summaries("main").prefix(3) == ["B", "A", "C"])
             // The reorder's toast, with Undo.
             let toast = try #require(fixture.presenter.toasts.last)
-            #expect(toast.message.hasPrefix("Reordered"))
             #expect(toast.undo != nil)
         }
     }
@@ -123,12 +123,11 @@ struct StashAndContinueTests {
             try fixture.harness.write("A.txt", "changed\n", in: fixture.local)
             await fixture.refresh()
             let upstream = try fixture.branch("upstream")
-            try await stashAndContinue(fixture, operation: "Rebase") {
+            try await stashAndContinue(fixture) {
                 await BranchActions.integrate(.rebase, branch: upstream, in: fixture.context)
             }
             #expect(try await fixture.summaries("main").prefix(2) == ["A", "Upstream"])
             let toast = try #require(fixture.presenter.toasts.last)
-            #expect(toast.message == "Rebased main onto upstream")
             #expect(toast.undo == nil)
         }
     }
@@ -149,14 +148,17 @@ struct StashAndContinueTests {
             await BranchActions.integrate(.merge, branch: feature, in: fixture.context)
             let presented = try #require(fixture.presenter.error)
             let recovery = try #require(presented.error.recoveries.first)
-            #expect(recovery.title == "Stash Changes and Continue")
+            guard case .stashChangesAndRetry = recovery else {
+                Issue.record("Unexpected recovery \(recovery.title)")
+                return
+            }
             #expect(fixture.presenter.toasts.isEmpty)
 
             await fixture.presenter.recover(presented.id, with: recovery)
             await fixture.settle()
             #expect(fixture.presenter.error == nil)
             #expect(try await fixture.summaries("main").first == "Feature A")
-            #expect(fixture.presenter.toasts.map(\.message) == ["Merged feature into main"])
+            #expect(fixture.presenter.toasts.count == 1)
         }
     }
 

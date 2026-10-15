@@ -4,7 +4,9 @@
 // loaded. Its simple style (the default) shows the current branch's
 // first-parent line, one commit after another, instead of the graph
 // (HistoryModel+SimpleMode.swift); rows, selection, search, and Go to Commit
-// work on whichever list shows.
+// work on whichever list shows. Another branch's place shows that branch's
+// line in the simple style (`showBranch(ref:)`), where nothing rewrites
+// history (`showsCurrentBranchHistory`).
 
 import EspalierSupport
 import Foundation
@@ -82,6 +84,9 @@ public final class HistoryModel: RepositoryFeature {
     /// Whether a view showing history is visible; history loads only then.
     public private(set) var isActive = false
     public private(set) var mode: HistoryMode = .history
+    /// The branch whose history shows instead of HEAD's (another branch's
+    /// place), by its full ref; nil for HEAD's (`showBranch(ref:)`).
+    public private(set) var shownBranchRef: String?
     /// How history mode shows commits: the current branch simply (the
     /// default) or the scope's branches as a graph; the app-wide
     /// `history-style` preference (`setStyle(_:)`). Compare mode always
@@ -251,6 +256,7 @@ public final class HistoryModel: RepositoryFeature {
             checkShownHistory()
         case .compare:
             refreshComparison()
+            comparison.resumeLoads()
         }
         // Loads stopped when the repository was deselected.
         selectionLoader.resumeLoads()
@@ -388,6 +394,69 @@ public final class HistoryModel: RepositoryFeature {
     /// upstream (or on any remote, without one): an unpushed commit.
     public func isLocalCommit(_ sha: String) -> Bool {
         localCommitSHASet.contains(sha)
+    }
+
+    // MARK: The branch shown
+
+    /// The branch whose history shows instead of HEAD's: `shownBranchRef`'s
+    /// branch, unless it's the current branch or is gone.
+    public var shownBranch: Branch? {
+        guard let ref = shownBranchRef, let repository else {
+            return nil
+        }
+        if let current = repository.gitState.tip.branch, sameRef(current.ref, ref) {
+            return nil
+        }
+        return repository.gitState.branches.all.first { sameRef($0.ref, ref) }
+    }
+
+    /// Whether the list is the current branch's history: history mode, and
+    /// not another branch's. Only there do commits rewrite (squash,
+    /// reorder, Reset to Commit, Undo Commit, amend); cherry-picking works
+    /// anywhere.
+    public var showsCurrentBranchHistory: Bool {
+        mode == .history && shownBranch == nil
+    }
+
+    /// Shows the history of the branch `ref` names instead of HEAD's (nil:
+    /// HEAD's). The simple style lists that branch's first-parent line,
+    /// loaded again from its tip; the graph shows its scope either way.
+    public func showBranch(ref: String?) {
+        guard ref != shownBranchRef else {
+            return
+        }
+        let before = simpleSource()
+        shownBranchRef = ref
+        let after = simpleSource()
+        if before?.head != after?.head {
+            // Another line: none of the list's commits may be on it.
+            forgetSimpleList()
+        }
+        if isActive, isSimpleListShown {
+            checkSimpleHistory()
+        }
+    }
+
+    /// Forgets the simple list and stops its loads, publishing the empty
+    /// list while it shows.
+    private func forgetSimpleList() {
+        simpleCheckSlot.cancel()
+        simpleFrameSlot.cancel()
+        pendingSimpleSource = nil
+        pendingFrameSource = nil
+        if let pageLoad, pageLoad.listID == simpleList?.commits.id {
+            pageLoad.task.cancel()
+        }
+        cancelMergeLoads()
+        mergeExpansions = [:]
+        simpleList = nil
+        simpleFrame = nil
+        setSimpleLoading(false)
+        guard isSimpleListShown else {
+            return
+        }
+        publishActiveList(searchRows: nil)
+        updateTotalCommitCount()
     }
 
     // MARK: Paging
@@ -626,15 +695,16 @@ public final class HistoryModel: RepositoryFeature {
     }
 
     /// The branches the current branch can be compared with: every branch
-    /// except the current one and the branches of fork remotes
-    /// (`isDesktopForkRemoteBranch`).
+    /// except the current one and the branches of Espalier's fork remotes
+    /// (`isForkRemoteBranch`).
     public var comparableBranches: [Branch] {
         guard let repository else {
             return []
         }
         let current = repository.gitState.tip.branch?.name
+        let forkRemoteNames = repository.gitState.remotes.forkRemoteNames
         return repository.gitState.branches.all.filter { branch in
-            branch.name != current && !branch.isDesktopForkRemoteBranch
+            branch.name != current && !branch.isForkRemoteBranch(forkRemoteNames)
         }
     }
 
@@ -770,6 +840,7 @@ public final class HistoryModel: RepositoryFeature {
         simpleStart = nil
         compareList = nil
         mode = .history
+        shownBranchRef = nil
         comparison.reset()
         pullRequestPreview.close()
         pullRequestChanges.close()

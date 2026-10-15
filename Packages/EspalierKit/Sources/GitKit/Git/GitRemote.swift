@@ -104,12 +104,39 @@ public func getRemotes(_ repository: Repository) async throws -> [Remote] {
     return remotes
 }
 
+/// The names of the repository's remotes (`git remote`), in git's order;
+/// none outside a repository.
+public func getRemoteNames(_ repository: Repository) async throws -> [String] {
+    let result = try await git(
+        ["remote"],
+        repository.path,
+        "getRemoteNames",
+        options: GitExecutionOptions(expectedErrors: [.notAGitRepository])
+    )
+
+    if result.gitError == .notAGitRepository {
+        return []
+    }
+
+    // A remote's name can't contain a line feed.
+    return JSCompat.split(result.stdout, "\n").filter { !$0.isEmpty }
+}
+
 /// Add a new remote with the given URL.
 @discardableResult
 public func addRemote(_ repository: Repository, _ name: String, _ url: String) async throws -> Remote {
     try await git(["remote", "add", "--", name, url], repository.path, "addRemote")
 
     return Remote(name: name, url: url)
+}
+
+/// Renames the remote `name` to `newName` (`git remote rename`). Git moves
+/// the remote's configuration, its remote-tracking branches, and the
+/// branches' tracking configuration with it.
+///
+/// - Throws: When there's no such remote, or `newName` is taken.
+public func renameRemote(_ repository: Repository, _ name: String, _ newName: String) async throws {
+    try await git(["remote", "rename", "--", name, newName], repository.path, "renameRemote")
 }
 
 /// Removes an existing remote, or silently errors if it doesn't exist

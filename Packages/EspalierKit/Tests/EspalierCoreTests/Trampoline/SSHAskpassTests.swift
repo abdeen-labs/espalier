@@ -32,11 +32,13 @@ struct SSHAskpassTests {
         """
     }
 
-    static func sshAuthFailure(_ path: String) -> GitError {
+    /// GitHub's answer for a repository that isn't there, which dugite's
+    /// patterns read as permission denied.
+    static func repositoryNotFound(_ path: String) -> GitError {
         GitError(
             result: GitResult(
                 stdoutData: Data(),
-                stderrData: Data("git@example.com: Permission denied (publickey).\nfatal: Could not read from remote repository.\n".utf8),
+                stderrData: Data("ERROR: Repository not found.\nfatal: Could not read from remote repository.\n".utf8),
                 exitCode: 128,
                 gitError: .sshPermissionDenied,
                 gitErrorDescription: nil,
@@ -59,6 +61,58 @@ struct SSHAskpassTests {
 
     func passphrasePrompt(_ keyPath: String) -> String {
         "Enter passphrase for key '\(keyPath)': "
+    }
+
+    /// The secrets Espalier stores for ssh, and ssh-keygen's signing key
+    /// passphrase (the same keychain item as the key's passphrase).
+    enum SecretKind: Sendable {
+        case keyPassphrase, userPassword, signingKeyPassphrase
+    }
+
+    static let sshSecrets = [NamedCase("a key's passphrase", SecretKind.keyPassphrase), NamedCase("a user's password", .userPassword)]
+
+    /// A stored secret's keychain item, the prompt that asks for it, and
+    /// the prompter's call when the user is asked.
+    struct StoredSecret {
+        let prompt: String
+        let service: String
+        let account: String
+        let call: TestPrompter.Call
+    }
+
+    func storedSecret(_ kind: SecretKind) throws -> StoredSecret {
+        switch kind {
+        case .keyPassphrase, .signingKeyPassphrase:
+            let keyPath = try makeKey()
+            return StoredSecret(
+                prompt: kind == .keyPassphrase ? passphrasePrompt(keyPath) : "Enter passphrase for \"\(keyPath)\": ",
+                service: "Espalier - SSH key passphrases",
+                account: try getHashForSSHKey(keyPath),
+                call: .sshKeyPassphrase(keyPath: keyPath)
+            )
+        case .userPassword:
+            return StoredSecret(
+                prompt: "git@example.com's password: ",
+                service: "Espalier - SSH user password",
+                account: "git@example.com",
+                call: .sshUserPassword(username: "git@example.com")
+            )
+        }
+    }
+
+    /// A prompter whose user enters `secret` and asks to remember it.
+    func remembering(_ secret: String) -> TestPrompter {
+        TestPrompter(
+            sshKeyPassphrase: { _ in PromptSSHSecretResponse(secret: secret, storeSecret: true) },
+            sshUserPassword: { _ in PromptSSHSecretResponse(secret: secret, storeSecret: true) }
+        )
+    }
+
+    /// Runs the helper as the child of a shell of its own, as another ssh
+    /// in the same git command (a submodule's fetch, Git LFS) runs it.
+    func runHelperFromAnotherProcess(_ arguments: [String], environment: [String: String?]) async throws -> ProcessOutput {
+        // `exit` after the helper keeps the shell from becoming it.
+        try await runHelper(["-c", #""$0" "$@"; exit $?"#, askpassHelperPath] + arguments, environment: environment, executable: "/bin/sh")
     }
 
     /// Runs `body` with the environment git would pass to ssh, as in a git
@@ -168,6 +222,44 @@ struct SSHAskpassTests {
         }
     }
 
+    @Test("doesn't offer to remember the passphrase of a key whose path ssh cut short")
+    func passphraseOfTruncatedKeyPath() async throws {
+        let keyPath = POSIXPath.join(try createTempDirectory(), String(repeating: "k", count: 120))
+        try Data("not really a key".utf8).write(to: URL(filePath: keyPath))
+        // ssh's prompt shows at most 100 bytes of the path.
+        let shownPath = String(decoding: keyPath.utf8.prefix(100), as: UTF8.self)
+        let prompter = TestPrompter(sshKeyPassphrase: { _ in
+            PromptSSHSecretResponse(secret: "correct horse", storeSecret: false)
+        })
+
+        try await withTrampoline(prompter: prompter) { (context) async throws in
+            try await withSSHEnvironment(context) { (env) async throws in
+                let output = try await runHelper([passphrasePrompt(shownPath)], environment: env)
+                #expect(output.stdout == "correct horse")
+            }
+            #expect(prompter.calls == [.sshKeyPassphrase(keyPath: shownPath, canRemember: false)])
+        }
+    }
+
+    @Test("offers to remember a signing key's passphrase only when its key file can be read", arguments: [
+        NamedCase("a key file that can be read", true),
+        NamedCase("a key file that can't be read", false),
+    ])
+    func signingKeyPassphraseRemember(_ testCase: NamedCase<Bool>) async throws {
+        let keyPath = testCase.value ? try makeKey() : POSIXPath.join(try createTempDirectory(), "id_ed25519")
+        let prompter = TestPrompter(sshKeyPassphrase: { _ in
+            PromptSSHSecretResponse(secret: "correct horse", storeSecret: false)
+        })
+
+        try await withTrampoline(prompter: prompter) { (context) async throws in
+            try await withSSHEnvironment(context) { (env) async throws in
+                let output = try await runHelper(["Enter passphrase for \"\(keyPath)\": "], environment: env)
+                #expect(output.stdout == "correct horse")
+            }
+            #expect(prompter.calls == [.sshKeyPassphrase(keyPath: keyPath, canRemember: testCase.value)])
+        }
+    }
+
     @Test("doesn't store the passphrase when git fails")
     func passphraseNotStoredOnFailure() async throws {
         let keyPath = try makeKey()
@@ -224,45 +316,87 @@ struct SSHAskpassTests {
         }
     }
 
-    @Test("uses a stored passphrase, and deletes it when SSH authentication fails")
-    func storedPassphrase() async throws {
-        let keyPath = try makeKey()
-        let keyHash = try getHashForSSHKey(keyPath)
+    @Test("keeps a stored secret when git fails without ssh asking for it again", arguments: sshSecrets + [
+        NamedCase("ssh-keygen's signing key passphrase", SecretKind.signingKeyPassphrase),
+    ])
+    func storedSecretKept(_ kind: NamedCase<SecretKind>) async throws {
+        let secret = try storedSecret(kind.value)
         let prompter = TestPrompter()
 
         try await withTrampoline(prompter: prompter) { (context) async throws in
-            try context.secrets.setSecret("stale", service: "Espalier - SSH key passphrases", account: keyHash)
+            try context.secrets.setSecret("correct horse", service: secret.service, account: secret.account)
 
-            try await withSSHEnvironment(context) { (env) async throws in
-                #expect(try await runHelper([passphrasePrompt(keyPath)], environment: env).stdout == "stale")
-            }
-            #expect(try context.secrets.secret(service: "Espalier - SSH key passphrases", account: keyHash) == "stale")
-
-            let directory = try createTempDirectory()
-            await #expect(throws: GitError.self) {
-                try await withSSHEnvironment(context, failure: Self.sshAuthFailure(directory)) { (env) async throws in
-                    #expect(try await runHelper([passphrasePrompt(keyPath)], environment: env).stdout == "stale")
+            for background in [false, true] where !(background && kind.value == .signingKeyPassphrase) {
+                let directory = try createTempDirectory()
+                await #expect(throws: GitError.self) {
+                    try await withSSHEnvironment(context, background: background, failure: Self.repositoryNotFound(directory)) { (env) async throws in
+                        #expect(try await runHelper([secret.prompt], environment: env).stdout == "correct horse")
+                    }
                 }
+                #expect(try context.secrets.secret(service: secret.service, account: secret.account) == "correct horse")
             }
-            #expect(try context.secrets.secret(service: "Espalier - SSH key passphrases", account: keyHash) == nil)
             #expect(prompter.calls == [])
         }
     }
 
-    @Test("keeps a stored passphrase when a background task fails to authenticate")
-    func storedPassphraseBackground() async throws {
-        let keyPath = try makeKey()
-        let keyHash = try getHashForSSHKey(keyPath)
+    @Test("deletes a stored secret ssh asks for again, and asks the user", arguments: sshSecrets)
+    func storedSecretRejected(_ kind: NamedCase<SecretKind>) async throws {
+        let secret = try storedSecret(kind.value)
+        let prompter = remembering("correct horse")
+        let deleted = Mutex(false)
 
-        try await withTrampoline { context in
-            try context.secrets.setSecret("stale", service: "Espalier - SSH key passphrases", account: keyHash)
-            let directory = try createTempDirectory()
-            await #expect(throws: GitError.self) {
-                try await withSSHEnvironment(context, background: true, failure: Self.sshAuthFailure(directory)) { (env) async throws in
-                    _ = try await runHelper([passphrasePrompt(keyPath)], environment: env)
+        try await withTrampoline(prompter: prompter) { (context) async throws in
+            let secrets = context.secrets
+            try secrets.setSecret("stale", service: secret.service, account: secret.account)
+
+            try await withSSHEnvironment(context) { (env) async throws in
+                #expect(try await runHelper([secret.prompt], environment: env).stdout == "stale")
+                // The same ssh asks again: it rejected the stored secret.
+                #expect(try await runHelper([secret.prompt], environment: env).stdout == "correct horse")
+                deleted.withLock { $0 = (try? secrets.secret(service: secret.service, account: secret.account)) == nil }
+            }
+
+            #expect(deleted.withLock { $0 })
+            #expect(prompter.calls == [secret.call])
+            // The user's, stored once git succeeded.
+            #expect(try secrets.secret(service: secret.service, account: secret.account) == "correct horse")
+        }
+    }
+
+    @Test("in a background task, deletes a stored secret ssh asks for again without asking", arguments: sshSecrets)
+    func storedSecretRejectedInBackground(_ kind: NamedCase<SecretKind>) async throws {
+        let secret = try storedSecret(kind.value)
+        let prompter = remembering("correct horse")
+
+        try await withTrampoline(prompter: prompter) { (context) async throws in
+            try context.secrets.setSecret("stale", service: secret.service, account: secret.account)
+
+            try await withSSHEnvironment(context, background: true) { (env) async throws in
+                #expect(try await runHelper([secret.prompt], environment: env).stdout == "stale")
+                #expect(try await runHelper([secret.prompt], environment: env).stdout == "")
+            }
+
+            #expect(prompter.calls == [])
+            #expect(try context.secrets.secret(service: secret.service, account: secret.account) == nil)
+        }
+    }
+
+    @Test("gives a stored secret to each ssh one git command runs", arguments: sshSecrets)
+    func storedSecretForEachSSH(_ kind: NamedCase<SecretKind>) async throws {
+        let secret = try storedSecret(kind.value)
+        let prompter = remembering("other")
+
+        try await withTrampoline(prompter: prompter) { (context) async throws in
+            try context.secrets.setSecret("correct horse", service: secret.service, account: secret.account)
+
+            try await withSSHEnvironment(context) { (env) async throws in
+                for _ in 0..<2 {
+                    #expect(try await runHelperFromAnotherProcess([secret.prompt], environment: env).stdout == "correct horse")
                 }
             }
-            #expect(try context.secrets.secret(service: "Espalier - SSH key passphrases", account: keyHash) == "stale")
+
+            #expect(prompter.calls == [])
+            #expect(try context.secrets.secret(service: secret.service, account: secret.account) == "correct horse")
         }
     }
 

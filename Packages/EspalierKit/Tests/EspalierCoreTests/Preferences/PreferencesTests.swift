@@ -15,7 +15,7 @@ private func storedKeys(_ temporary: TemporaryDefaults) -> Set<String> {
 }
 
 /// Whether `value` is a Core Foundation Boolean rather than a number.
-private func isNativeBoolean(_ value: Any?) -> Bool {
+private func isPropertyListBoolean(_ value: Any?) -> Bool {
     guard let value else { return false }
     return CFGetTypeID(value as CFTypeRef) == CFBooleanGetTypeID()
 }
@@ -89,7 +89,6 @@ struct PreferencesTests {
         preferences.lastCloneLocation = "/Users/someone/Developer"
         preferences.tabSize = 4
         preferences.imageDiffType = .twoUp
-        preferences.numberFormat = defaultNumberFormat
         preferences.dateFormat = nil
         preferences.timeFormat = nil
         preferences.integrations = IntegrationSettings()
@@ -136,30 +135,107 @@ struct PreferencesTests {
 
     @Test("reads and writes the number, date, and time formats in the store it was given")
     func formats() throws {
-        let other = try #require(numberFormats.first { $0 != defaultNumberFormat })
+        let german = Locale(identifier: "de_DE")
+        let other = try #require(numberFormats.first { $0 != nearestNumberFormat(to: german) })
         let temporary = try TemporaryDefaults()
         defer { temporary.remove() }
         temporary.defaults.set(numberFormatToKey(other), forKey: "numberFormat")
         temporary.defaults.set("yyyy-MM-dd", forKey: "dateFormat")
         temporary.defaults.set("HH:mm", forKey: "timeFormat")
 
-        let preferences = Preferences(store: PreferenceStore(temporary.defaults))
+        let preferences = Preferences(store: PreferenceStore(temporary.defaults), locale: german)
         #expect(preferences.numberFormat == other)
         #expect(preferences.dateFormat == "yyyy-MM-dd")
         #expect(preferences.timeFormat == "HH:mm")
 
-        preferences.numberFormat = defaultNumberFormat
+        preferences.numberFormat = nearestNumberFormat(to: german)
         preferences.dateFormat = "d MMM yyyy"
         preferences.timeFormat = nil
-        #expect(temporary.defaults.object(forKey: "numberFormat") as? String == numberFormatToKey(defaultNumberFormat))
+        #expect(temporary.defaults.object(forKey: "numberFormat") as? String == numberFormatToKey(nearestNumberFormat(to: german)))
         #expect(temporary.defaults.object(forKey: "dateFormat") as? String == "d MMM yyyy")
         #expect(temporary.defaults.object(forKey: "timeFormat") == nil)
 
-        // An empty or unknown number format is the locale's.
+        // An empty or unknown number format is the region's.
         for stored in ["", "x|y"] {
             temporary.defaults.set(stored, forKey: "numberFormat")
-            #expect(Preferences(store: PreferenceStore(temporary.defaults)).numberFormat == defaultNumberFormat)
+            #expect(Preferences(store: PreferenceStore(temporary.defaults), locale: german).numberFormat == nearestNumberFormat(to: german))
         }
+    }
+
+    @Test("the number format follows the region until one is picked, and a pick stays, even the region's own")
+    func numberFormatFollowsRegion() throws {
+        let temporary = try TemporaryDefaults()
+        defer { temporary.remove() }
+        let periodComma = NumberFormat(thousandsSeparator: .period, decimalSeparator: .comma)
+        let spacePeriod = NumberFormat(thousandsSeparator: .space, decimalSeparator: .period)
+
+        let german = Preferences(store: PreferenceStore(temporary.defaults), locale: Locale(identifier: "de_DE"))
+        #expect(german.numberFormat == periodComma)
+        #expect(Preferences(store: PreferenceStore(temporary.defaults), locale: Locale(identifier: "de_CH")).numberFormat == spacePeriod)
+        #expect(temporary.defaults.object(forKey: "numberFormat") == nil)
+
+        // Picking the format already shown keeps it when the region changes.
+        german.numberFormat = periodComma
+        #expect(temporary.defaults.object(forKey: "numberFormat") as? String == numberFormatToKey(periodComma))
+        #expect(Preferences(store: PreferenceStore(temporary.defaults), locale: Locale(identifier: "de_CH")).numberFormat == periodComma)
+    }
+
+    @Test("keeps the design theme, each theme's color and background tint, the app font, and the code font, and reads unknown ones as the defaults")
+    func designTheme() throws {
+        let temporary = try TemporaryDefaults()
+        defer { temporary.remove() }
+        let preferences = Preferences(store: PreferenceStore(temporary.defaults))
+        #expect(preferences.designTheme == .classic)
+        #expect(preferences.designThemeColor == nil)
+        #expect(preferences.designThemeBackground == .own)
+        #expect(preferences.appFont == .sf)
+        #expect(preferences.codeFont == .sfMono)
+
+        preferences.designTheme = .orchard
+        #expect(preferences.designThemeColor == .ink)
+        preferences.designThemeColor = .clay
+        // A color of another theme isn't the theme's.
+        preferences.designThemeColor = .berry
+        preferences.designThemeBackground = .warm
+        preferences.designTheme = .pop
+        #expect(preferences.designThemeBackground == .own)
+        preferences.designThemeColor = .magenta
+        preferences.designThemeBackground = .lavender
+        preferences.appFont = .atkinson
+        preferences.codeFont = .geistMono
+        #expect(storedKeys(temporary) == [
+            "design-theme", "design-theme-color-orchard", "design-theme-color-pop",
+            "design-theme-background-orchard", "design-theme-background-pop", "app-font", "code-font",
+        ])
+
+        // Switching back restores the theme's own color.
+        let reloaded = Preferences(store: PreferenceStore(temporary.defaults))
+        #expect(reloaded.designTheme == .pop)
+        #expect(reloaded.designThemeColor == .magenta)
+        #expect(reloaded.designThemeBackground == .lavender)
+        reloaded.designTheme = .orchard
+        #expect(reloaded.designThemeColor == .clay)
+        #expect(reloaded.designThemeBackground == .warm)
+        reloaded.designTheme = .islands
+        #expect(reloaded.designThemeColor == .lagoon)
+        #expect(reloaded.designThemeBackground == .own)
+        #expect(reloaded.appFont == .atkinson)
+        #expect(reloaded.codeFont == .geistMono)
+
+        // Unknown values, and a color of another theme, are the defaults.
+        temporary.defaults.set("neon", forKey: "design-theme")
+        temporary.defaults.set("berry", forKey: "design-theme-color-orchard")
+        temporary.defaults.set("chartreuse", forKey: "design-theme-color-pop")
+        temporary.defaults.set("plaid", forKey: "design-theme-background-orchard")
+        temporary.defaults.set("comic", forKey: "app-font")
+        // A font of the other kind isn't one of these.
+        temporary.defaults.set("atkinson", forKey: "code-font")
+        let unknown = Preferences(store: PreferenceStore(temporary.defaults))
+        #expect(unknown.designTheme == .classic)
+        #expect(unknown.designThemeColors == [.orchard: .ink, .islands: .lagoon, .pop: .tangerine])
+        #expect(unknown.designThemeBackgrounds == [.classic: .own, .orchard: .own, .islands: .own, .pop: .lavender])
+        #expect(unknown.appFont == .sf)
+        #expect(unknown.codeFont == .sfMono)
     }
 
     @Test("changes the hooks and credential helper settings that GitKit and the trampoline read")
@@ -209,7 +285,7 @@ struct PreferencesTests {
             #expect(CodeTextSize(factor: 0.8) < .actual)
         }
 
-        @Test("grows, shrinks, and resets the stored size, as a native number under Espalier's key")
+        @Test("grows, shrinks, and resets the stored size, as a property-list number under Espalier's key")
         func preference() throws {
             let temporary = try TemporaryDefaults()
             defer { temporary.remove() }
@@ -220,7 +296,7 @@ struct PreferencesTests {
             #expect(preferences.codeTextSize.factor == 1.25)
             let stored = temporary.defaults.object(forKey: "diff-code-text-size")
             #expect(stored as? Double == 1.25)
-            #expect(!isNativeBoolean(stored))
+            #expect(!isPropertyListBoolean(stored))
             #expect(Preferences(store: PreferenceStore(temporary.defaults)).codeTextSize.factor == 1.25)
 
             preferences.decreaseCodeTextSize()
@@ -319,7 +395,7 @@ struct PreferencesTests {
             preferences.integrations.useCustomEditor = true
             preferences.integrations.selectedExternalEditor = "Zed"
             #expect(storedKeys(temporary) == ["shell", "custom-editor", "use-custom-editor", "externalEditor"])
-            #expect(isNativeBoolean(temporary.defaults.object(forKey: "use-custom-editor")))
+            #expect(isPropertyListBoolean(temporary.defaults.object(forKey: "use-custom-editor")))
             #expect(temporary.defaults.object(forKey: "externalEditor") as? String == "Zed")
             let stored = try #require(temporary.defaults.object(forKey: "custom-editor") as? String)
             #expect(try JSONDecoder().decode(CustomIntegration.self, from: Data(stored.utf8)) == editor)

@@ -4,7 +4,6 @@ import EspalierSupport
 import Foundation
 import GitKit
 import os
-import Synchronization
 
 private let logger = Log.logger(category: "integrations")
 
@@ -26,40 +25,19 @@ public struct FoundShell: Sendable, Hashable {
 }
 
 /// Finds the installed shells.
-///
-/// The installed shells are cached, even when none are found; the app
-/// keeps one `ShellLookup` for its life.
 public final class ShellLookup: Sendable {
     private let locator: any ApplicationLocator
-    private let shellCache = Mutex<[FoundShell]?>(nil)
 
     /// - Parameter locator: Finds applications. By default, Launch Services.
     public init(locator: any ApplicationLocator = LaunchServicesApplicationLocator()) {
         self.locator = locator
     }
 
-    /// Get the shells available for the user.
+    /// Get the shells available for the user. Each call looks again, so a
+    /// shell installed or removed since is found or left out.
     @concurrent
     public func getAvailableShells() async -> [FoundShell] {
-        if let cached = shellCache.withLock({ $0 }) {
-            return cached
-        }
-
-        let shells = await getAvailableShellsDarwin(locator: locator)
-        shellCache.withLock { $0 = shells }
-        return shells
-    }
-
-    /// Find the given shell or the default if the given shell can't be found.
-    ///
-    /// Returns `nil` only when neither is installed.
-    @concurrent
-    public func findShellOrDefault(_ shell: Shell) async -> FoundShell? {
-        let available = await getAvailableShells()
-        if let found = available.first(where: { $0.shell == shell }) {
-            return found
-        }
-        return available.first { $0.shell == Shell.default }
+        await getAvailableShellsDarwin(locator: locator)
     }
 }
 
@@ -140,7 +118,7 @@ private func addErrorTracing(
             case let .exit(code):
                 logger.debug("[\(shell, privacy: .public)] exit code: \(code)")
             case let .signal(signal):
-                logger.debug("[\(shell, privacy: .public)] exit code: null (signal \(signal))")
+                logger.debug("[\(shell, privacy: .public)] killed by signal \(signal)")
             }
         }
     )

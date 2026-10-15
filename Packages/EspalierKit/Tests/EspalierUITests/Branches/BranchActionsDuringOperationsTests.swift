@@ -57,7 +57,9 @@ struct BranchActionsDuringOperationsTests {
             await BranchActions.create("topic", startPoint: .currentBranch, mode: .create, in: fixture.context)
             await fixture.settle()
             let error = try #require(fixture.presenter.error)
-            #expect(error.error.reason == .precondition("Finish or abort the merge first."))
+            if case .precondition = error.error.reason {} else {
+                Issue.record("Not a precondition: \(error.error.reason)")
+            }
             #expect(try await fixture.git(["branch", "--list", "topic"]).isEmpty)
             #expect(FileManager.default.fileExists(atPath: POSIXPath.join(fixture.local.path, ".git", "MERGE_HEAD")))
             fixture.presenter.dismissError(error.id)

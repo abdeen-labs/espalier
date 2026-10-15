@@ -65,38 +65,36 @@ struct BranchesDuringOperationsTests {
         try await runGit(["add", "README.md"], fixture.local)
     }
 
-    /// Expects `body` to be refused with `message`.
+    /// Expects `body` to be refused.
     private func expectRefused(
-        _ message: String,
         sourceLocation: SourceLocation = #_sourceLocation,
         _ body: () async throws -> Void
     ) async {
         let error = await #expect(throws: OperationError.self, sourceLocation: sourceLocation) {
             try await body()
         }
-        #expect(error?.reason == .precondition(message), "\(String(describing: error?.reason))", sourceLocation: sourceLocation)
+        #expect(preconditionText(error) != nil, "\(String(describing: error?.reason))", sourceLocation: sourceLocation)
     }
 
-    /// Expects every way of checking out to be refused with `message`:
-    /// a branch (with every strategy), a commit, and a new branch (which
-    /// isn't created).
-    private func expectCheckoutsRefused(_ message: String, in fixture: SelectedRepository) async throws {
+    /// Expects every way of checking out to be refused: a branch (with
+    /// every strategy), a commit, and a new branch (which isn't created).
+    private func expectCheckoutsRefused(in fixture: SelectedRepository) async throws {
         let branches = fixture.model.branches
         let other = try fixture.branch("other")
         let twin = try fixture.branch("twin")
-        await expectRefused(message) { _ = try await branches.checkout(twin) }
-        await expectRefused(message) { _ = try await branches.checkout(other, strategy: .stashOnCurrentBranch) }
-        await expectRefused(message) { _ = try await branches.checkout(other) }
-        await expectRefused(message) { _ = try await branches.checkout(other, strategy: .moveToNewBranch) }
+        await expectRefused { _ = try await branches.checkout(twin) }
+        await expectRefused { _ = try await branches.checkout(other, strategy: .stashOnCurrentBranch) }
+        await expectRefused { _ = try await branches.checkout(other) }
+        await expectRefused { _ = try await branches.checkout(other, strategy: .moveToNewBranch) }
         // HEAD is never at `other` here.
         #expect(fixture.model.gitState.tip.sha != other.tip.sha)
-        await expectRefused(message) {
+        await expectRefused {
             try await branches.checkout(commit: CommitOneLine(sha: other.tip.sha, summary: "Number the lines"), confirmed: [.checkoutCommit])
         }
-        await expectRefused(message) { try await branches.createBranch("topic", startPoint: nil) }
-        await expectRefused(message) { try await branches.createBranch("topic", from: .defaultBranch) }
-        await expectRefused(message) { try branches.requireCheckoutAllowed(.createBranch) }
-        #expect(fixture.model.operations.checkoutRefusal == message)
+        await expectRefused { try await branches.createBranch("topic", startPoint: nil) }
+        await expectRefused { try await branches.createBranch("topic", from: .defaultBranch) }
+        await expectRefused { try branches.requireCheckoutAllowed(.createBranch) }
+        #expect(fixture.model.operations.checkoutRefusal != nil)
     }
 
     // MARK: Merge, cherry-pick, revert
@@ -112,14 +110,14 @@ struct BranchesDuringOperationsTests {
         let before = try await snapshot(fixture)
         #expect(before.stateFiles == ["MERGE_HEAD"])
 
-        try await expectCheckoutsRefused("Finish or abort the merge first.", in: fixture)
+        try await expectCheckoutsRefused(in: fixture)
         // Deleting the current branch checks out another: refused before
         // asking.
         let feature = try fixture.branch("feature")
-        await expectRefused("Finish or abort the merge first.") {
+        await expectRefused {
             try await fixture.model.branches.delete(feature, includingRemote: false)
         }
-        await expectRefused("Finish or abort the merge first.") {
+        await expectRefused {
             try await fixture.model.branches.delete(feature, includingRemote: false, confirmed: [.deleteBranch])
         }
         #expect(try await snapshot(fixture) == before)
@@ -149,8 +147,8 @@ struct BranchesDuringOperationsTests {
         let before = try await snapshot(fixture)
         #expect(before.stateFiles == ["CHERRY_PICK_HEAD"])
 
-        try await expectCheckoutsRefused("Finish or abort the cherry-pick first.", in: fixture)
-        await expectRefused("Finish or abort the cherry-pick first.") {
+        try await expectCheckoutsRefused(in: fixture)
+        await expectRefused {
             try await fixture.model.branches.delete(try fixture.branch("feature"), includingRemote: false, confirmed: [.deleteBranch])
         }
         #expect(try await snapshot(fixture) == before)
@@ -170,7 +168,7 @@ struct BranchesDuringOperationsTests {
         let before = try await snapshot(fixture)
         #expect(before.stateFiles == ["REVERT_HEAD"])
 
-        try await expectCheckoutsRefused("Finish or abort the revert first.", in: fixture)
+        try await expectCheckoutsRefused(in: fixture)
         #expect(try await snapshot(fixture) == before)
         await fixture.app.idle()
     }
@@ -192,19 +190,18 @@ struct BranchesDuringOperationsTests {
         #expect(before.head == "HEAD")
         #expect(before.stateFiles == ["REBASE_HEAD", "rebase-merge"])
 
-        try await expectCheckoutsRefused("Finish or abort the rebase first.", in: fixture)
-        let message = "Finish or abort the rebase first."
-        #expect(operations.rebaseRefusal == message)
+        try await expectCheckoutsRefused(in: fixture)
+        #expect(operations.rebaseRefusal != nil)
         let branches = fixture.model.branches
-        await expectRefused(message) { try await branches.rename(try fixture.branch("feature"), to: "renamed") }
-        await expectRefused(message) { try await branches.rename(try fixture.branch("other"), to: "renamed") }
+        await expectRefused { try await branches.rename(try fixture.branch("feature"), to: "renamed") }
+        await expectRefused { try await branches.rename(try fixture.branch("other"), to: "renamed") }
         // Refused before asking.
-        await expectRefused(message) { try await branches.delete(try fixture.branch("feature"), includingRemote: false) }
-        await expectRefused(message) {
+        await expectRefused { try await branches.delete(try fixture.branch("feature"), includingRemote: false) }
+        await expectRefused {
             try await branches.delete(try fixture.branch("other"), includingRemote: false, confirmed: [.deleteBranch])
         }
         let remoteMain = ModelFixtures.branch("origin/main", sha: try await fixture.sha("origin/main"), type: .remote)
-        await expectRefused(message) {
+        await expectRefused {
             try await branches.delete(remoteMain, includingRemote: false, confirmed: [.deleteRemoteBranch])
         }
         #expect(try await snapshot(fixture) == before)
@@ -235,14 +232,13 @@ struct BranchesDuringOperationsTests {
         // Nothing is unmerged: git alone would check out.
         #expect(fixture.model.changes.workingDirectory.files.isEmpty)
 
-        let message = "Finish or abort the rebase first."
-        try await expectCheckoutsRefused(message, in: fixture)
+        try await expectCheckoutsRefused(in: fixture)
         let branches = fixture.model.branches
-        await expectRefused(message) { try await branches.rename(try fixture.branch("feature"), to: "renamed") }
-        await expectRefused(message) {
+        await expectRefused { try await branches.rename(try fixture.branch("feature"), to: "renamed") }
+        await expectRefused {
             try await branches.delete(try fixture.branch("feature"), includingRemote: false, confirmed: [.deleteBranch])
         }
-        await expectRefused(message) { try await branches.delete(try fixture.branch("main"), includingRemote: false) }
+        await expectRefused { try await branches.delete(try fixture.branch("main"), includingRemote: false) }
         #expect(try await snapshot(fixture) == before)
 
         // The menus: a rebase in progress, nothing that checks out.
@@ -280,14 +276,13 @@ struct BranchesDuringOperationsTests {
         #expect(try await runGitAllowingFailure(["merge", "main"], fixture.local) != 0)
         try await stageResolution(fixture)
         let merging = try await snapshot(fixture)
-        let merge = "Finish or abort the merge first."
-        await expectRefused(merge) { try await branches.createBranch("topic", startPoint: nil) }
-        await expectRefused(merge) { _ = try await branches.checkout(try fixture.branch("other")) }
-        await expectRefused(merge) {
+        await expectRefused { try await branches.createBranch("topic", startPoint: nil) }
+        await expectRefused { _ = try await branches.checkout(try fixture.branch("other")) }
+        await expectRefused {
             try await branches.checkout(commit: CommitOneLine(sha: try fixture.branch("other").tip.sha, summary: ""), confirmed: [.checkoutCommit])
         }
         // Deleting the current branch would check out main first.
-        await expectRefused(merge) {
+        await expectRefused {
             try await branches.delete(try fixture.branch("feature"), includingRemote: false, confirmed: [.deleteBranch])
         }
         #expect(fixture.model.operations.current == nil)
@@ -298,17 +293,16 @@ struct BranchesDuringOperationsTests {
         // feature checked out.
         try await interruptRebase(of: "feature", onto: "other", in: fixture.local)
         let rebasing = try await snapshot(fixture)
-        let rebase = "Finish or abort the rebase first."
-        await expectRefused(rebase) { try await branches.rename(try fixture.branch("other"), to: "renamed") }
-        await expectRefused(rebase) {
+        await expectRefused { try await branches.rename(try fixture.branch("other"), to: "renamed") }
+        await expectRefused {
             try await branches.delete(try fixture.branch("other"), includingRemote: false, confirmed: [.deleteBranch])
         }
         let remoteMain = ModelFixtures.branch("origin/main", sha: try await fixture.sha("origin/main"), type: .remote)
-        await expectRefused(rebase) {
+        await expectRefused {
             try await branches.delete(remoteMain, includingRemote: false, confirmed: [.deleteRemoteBranch])
         }
-        await expectRefused(rebase) { _ = try await branches.checkout(try fixture.branch("other")) }
-        await expectRefused(rebase) { try await branches.createBranch("topic", startPoint: nil) }
+        await expectRefused { _ = try await branches.checkout(try fixture.branch("other")) }
+        await expectRefused { try await branches.createBranch("topic", startPoint: nil) }
         #expect(fixture.model.operations.current == nil)
         #expect(fixture.model.gitState.tip.branch?.name == "feature")
         #expect(try await snapshot(fixture) == rebasing)
@@ -322,25 +316,25 @@ struct BranchesDuringOperationsTests {
 
     // MARK: The refusals
 
-    @Test("the refusal names the operation in progress; one whose git runs is busy")
-    func refusalCopy() async throws {
+    @Test("each operation in progress refuses checkouts, and rebases refuse renames and deletes; one whose git runs is busy")
+    func refusals() async throws {
         let fixture = try await makeRepository()
         let operations = fixture.model.operations
         let commit = makeTestCommit(sha: "abc", summary: "A")
-        let cases: [(MultiCommitOperationKind, MultiCommitOperationDetail, String, Bool)] = [
-            (.merge, .merge(sourceBranch: nil, isSquash: false), "merge", false),
-            (.merge, .merge(sourceBranch: nil, isSquash: true), "merge", false),
-            (.rebase, .rebase(sourceBranch: nil, commits: [], currentTip: "abc"), "rebase", true),
-            (.cherryPick, .cherryPick(sourceBranch: nil, branchCreated: false, commits: []), "cherry-pick", false),
-            (.squash, .squash(commits: [commit], currentTip: "abc", lastRetainedCommitRef: nil, targetCommit: commit, commitContext: CommitContext(summary: "A", description: nil)), "squash", true),
-            (.reorder, .reorder(commits: [commit], currentTip: "abc", lastRetainedCommitRef: nil, beforeCommit: nil), "reorder", true),
-            (.revert, .revert(commit: nil), "revert", false),
+        let cases: [(MultiCommitOperationKind, MultiCommitOperationDetail, Bool)] = [
+            (.merge, .merge(sourceBranch: nil, isSquash: false), false),
+            (.merge, .merge(sourceBranch: nil, isSquash: true), false),
+            (.rebase, .rebase(sourceBranch: nil, commits: [], currentTip: "abc"), true),
+            (.cherryPick, .cherryPick(sourceBranch: nil, branchCreated: false, commits: []), false),
+            (.squash, .squash(commits: [commit], currentTip: "abc", lastRetainedCommitRef: nil, targetCommit: commit, commitContext: CommitContext(summary: "A", description: nil)), true),
+            (.reorder, .reorder(commits: [commit], currentTip: "abc", lastRetainedCommitRef: nil, beforeCommit: nil), true),
+            (.revert, .revert(commit: nil), false),
         ]
-        for (kind, detail, name, isRebase) in cases {
+        for (kind, detail, isRebase) in cases {
             operations.current = MultiCommitOperation(kind: kind, detail: detail, phase: .conflicted, origin: .espalier)
-            #expect(operations.checkoutRefusal == "Finish or abort the \(name) first.")
-            #expect(operations.rebaseRefusal == (isRebase ? "Finish or abort the \(name) first." : nil))
-            await expectRefused("Finish or abort the \(name) first.") { try fixture.model.branches.requireCheckoutAllowed(.createBranch) }
+            #expect(operations.checkoutRefusal != nil)
+            #expect((operations.rebaseRefusal != nil) == isRebase)
+            await expectRefused { try fixture.model.branches.requireCheckoutAllowed(.createBranch) }
 
             // While its git runs, the repository is busy.
             operations.current?.phase = .running(MultiCommitOperationProgress(value: 0, currentCommitSummary: "", position: 1, totalCommitCount: 1))

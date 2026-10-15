@@ -28,14 +28,15 @@ public struct BranchGroup: Sendable, Equatable, Identifiable {
 /// Groups the branches for the branch list: the default branch, if any; the
 /// recent branches other than the default, if any; and every other branch
 /// (always, possibly empty), without the remote branches of Espalier's fork
-/// remotes.
+/// remotes (`forkRemoteNames`).
 ///
 /// - Parameter currentBranch: Unused.
 public func groupBranches(
     _ defaultBranch: Branch?,
     _ currentBranch: Branch?,
     _ allBranches: [Branch],
-    _ recentBranches: [Branch]
+    _ recentBranches: [Branch],
+    forkRemoteNames: Set<ExactString>
 ) -> [BranchGroup] {
     var groups: [BranchGroup] = []
 
@@ -58,7 +59,7 @@ public func groupBranches(
     let remainingBranches = allBranches.filter { branch in
         (defaultBranchName.map { !JSCompat.strictEquals(branch.name, $0) } ?? true)
             && !recentBranchNames.contains(ExactString(branch.name))
-            && !branch.isDesktopForkRemoteBranch
+            && !branch.isForkRemoteBranch(forkRemoteNames)
     }
     groups.append(BranchGroup(identifier: .other, branches: remainingBranches))
 

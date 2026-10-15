@@ -322,20 +322,8 @@ public func popStashEntry(_ repository: Repository, _ stashSha: String) async th
         // A file the entry adds (an untracked file it stashed, staged first)
         // is untracked in the working directory again. Git refused before
         // changing anything; `DugiteError` has no case for it.
-        throw StashFilesInTheWayError(files: filesThatWouldBeOverwritten(error.result.stderr))
+        throw StashFilesInTheWayError(files: parseFilesToBeOverwritten(error.result.stderr))
     }
-}
-
-/// The files of every "would be overwritten" list in git's output: git
-/// lists changed files and untracked ones separately
-/// (`parseFilesToBeOverwritten` reads the first list).
-private func filesThatWouldBeOverwritten(_ stderr: String) -> [String] {
-    let lines = JSCompat.split(stderr, "\n")
-    var files: [String] = []
-    for index in lines.indices where JSCompat.includes(lines[index], "files would be overwritten") {
-        files += parseFilesToBeOverwritten(lines[index...].joined(separator: "\n"))
-    }
-    return files
 }
 
 /// The files of a stash entry's untracked-files commit (`stash^3`, made by

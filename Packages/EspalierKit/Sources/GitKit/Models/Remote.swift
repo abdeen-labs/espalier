@@ -2,24 +2,15 @@
 
 import EspalierSupport
 
-/// The other magic remote name prefix for remotes added on behalf of the
-/// user. Recognized, so such remotes are hidden from branch lists and
-/// pruned, but never written (see `espalierForkedRemotePrefix`).
-public let forkedRemotePrefix = "github-desktop-"
-
 /// The prefix of the fork remotes Espalier adds for pull requests from forks.
+/// The name alone doesn't make a remote Espalier's: the mark does
+/// (`markForkRemote`).
 public let espalierForkedRemotePrefix = "espalier-"
 
 /// The name of the remote Espalier adds for a pull request from the fork
 /// `remoteName` (its owner's login): `espalier-<remoteName>`.
 public func forkPullRequestRemoteName(_ remoteName: String) -> String {
     "\(espalierForkedRemotePrefix)\(remoteName)"
-}
-
-/// Whether `name` is the name of a fork remote added on the user's behalf
-/// (`espalier-` or `github-desktop-`).
-public func isForkedRemoteName(_ name: String) -> Bool {
-    JSCompat.startsWith(name, espalierForkedRemotePrefix) || JSCompat.startsWith(name, forkedRemotePrefix)
 }
 
 /// A remote as defined in Git.

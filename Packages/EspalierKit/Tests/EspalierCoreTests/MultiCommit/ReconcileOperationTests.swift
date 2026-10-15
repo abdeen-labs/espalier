@@ -129,7 +129,6 @@ struct ReconcileOperationTests {
             targetBranch: Branch(name: "topic", upstream: nil, tip: BranchTip(sha: "original"), type: .local, ref: "refs/heads/topic"),
             origin: .rebuilt
         ))
-        #expect(rebuilt?.interruptedMessage == "Rebasing topic was interrupted. Continue or abort the rebase.")
         // Nothing to load for it.
         #expect(enrichmentNeeded(for: rebuilt, conflictState: nil) == nil)
 

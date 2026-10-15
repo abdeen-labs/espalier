@@ -37,8 +37,8 @@ import os
 
 nonisolated private let logger = Log.logger(category: "avatars")
 
-/// Loads avatars. Views get the loader from the environment, so snapshots
-/// use monograms and each window can have a loader that knows its accounts.
+/// Loads avatars. Views get the loader from the environment, so each window
+/// can have a loader that knows its accounts.
 nonisolated public protocol AvatarLoading: Sendable {
     /// The image, if it's already loaded (for table cells, without waiting).
     func cachedImage(for identity: AvatarUser, pointSize: CGFloat, scale: CGFloat) -> CGImage?
@@ -47,8 +47,8 @@ nonisolated public protocol AvatarLoading: Sendable {
     func image(for identity: AvatarUser, pointSize: CGFloat, scale: CGFloat) async -> CGImage?
 }
 
-/// Never loads anything: every avatar is a monogram. Snapshots and tests
-/// use it.
+/// Never loads anything: every avatar is a monogram. The environment's
+/// loader outside a window.
 nonisolated public struct MonogramAvatarLoader: AvatarLoading {
     public init() {}
 

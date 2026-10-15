@@ -39,9 +39,8 @@ struct AboutView: View {
             Text("Espalier")
                 .font(Typography.welcomeTitle)
                 .foregroundStyle(.text)
-            MonoChip(content.versionLine)
-                .textSelection(.enabled)
-            Text("Espalier is a native macOS app based on GitHub Desktop.")
+            MonoChip(content.versionLine, isSelectable: true)
+            Text("Espalier is a Mac app based on GitHub Desktop.")
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)
                 .multilineTextAlignment(.center)
@@ -70,5 +69,6 @@ public struct AboutWindow: View {
         AboutView(content: content) {
             openWindow(id: EspalierScenes.acknowledgementsWindowID)
         }
+        .lookFont()
     }
 }

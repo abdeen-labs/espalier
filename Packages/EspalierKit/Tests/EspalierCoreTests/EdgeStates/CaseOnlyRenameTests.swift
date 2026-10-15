@@ -120,7 +120,7 @@ struct CaseOnlyRenameTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.branches.createBranch("Feature", startPoint: nil, checkout: false)
         }
-        #expect(error?.message == "A branch with that name already exists.")
+        #expect(error?.gitFailure?.gitError == .branchAlreadyExists)
         await fixture.settle()
         #expect(fixture.gitState.branches.all.filter { $0.type == .local }.map(\.name).sorted() == ["feature", "main"])
 

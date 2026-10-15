@@ -29,11 +29,11 @@ public struct MatchedGitHubRepository: Sendable, Hashable {
 public func matchGitHubRepository(_ accounts: [Account], _ remote: String) -> MatchedGitHubRepository? {
     for account in accounts {
         let htmlURL = getHTMLURL(account.endpoint)
-        let hostname = hostname(of: htmlURL)
+        let server = RemoteServer(htmlURL: htmlURL)
         let parsedRemote = parseRemote(remote)
 
-        if let parsedRemote, let hostname {
-            if parsedRemote.hostname.lowercased() == hostname.lowercased() {
+        if let parsedRemote, let server {
+            if RemoteServer(parsedRemote).matches(server) {
                 return MatchedGitHubRepository(name: parsedRemote.name, owner: parsedRemote.owner, account: account)
             }
         }
@@ -78,7 +78,7 @@ public func urlMatchesRemote(_ url: String?, remoteURL: String) -> Bool {
         return false
     }
 
-    if !caseInsensitiveEquals(remoteUrl.hostname, cloneUrl.hostname) {
+    if !RemoteServer(remoteUrl).matches(RemoteServer(cloneUrl)) {
         return false
     }
 
@@ -99,18 +99,99 @@ public func urlMatchesCloneURL(_ url: String, _ gitHubRepository: GitHubReposito
     return urlsMatch(cloneURL, url)
 }
 
+/// Whether two URLs, or `owner/name` shortcuts, name the same repository:
+/// on the same server (`RemoteServer`), or both shortcuts, with the same
+/// owner and name, ignoring case.
 public func urlsMatch(_ url1: String, _ url2: String) -> Bool {
     guard let firstIdentifier = parseRepositoryIdentifier(url1),
           let secondIdentifier = parseRepositoryIdentifier(url2)
     else { return false }
 
-    return firstIdentifier.hostname == secondIdentifier.hostname
-        && firstIdentifier.owner == secondIdentifier.owner
-        && firstIdentifier.name == secondIdentifier.name
+    // An identifier has a host when its URL parses as a remote.
+    let serversMatch = switch (parseRemote(url1), parseRemote(url2)) {
+    case (nil, nil): true
+    case (let first?, let second?): RemoteServer(first).matches(RemoteServer(second))
+    default: false
+    }
+
+    return serversMatch
+        && caseInsensitiveEquals(firstIdentifier.owner, secondIdentifier.owner)
+        && caseInsensitiveEquals(firstIdentifier.name, secondIdentifier.name)
 }
 
 /// Compares the two strings in a case-insensitive manner and returns a value
 /// indicating whether these are equal.
 func caseInsensitiveEquals(_ x: String, _ y: String) -> Bool {
     x.lowercased() == y.lowercased()
+}
+
+// MARK: Servers
+
+/// Whether `remote` is on the server `account` signed in to.
+func isRemote(_ remote: GitRemoteURL, onServerOf account: Account) -> Bool {
+    guard let server = RemoteServer(htmlURL: getHTMLURL(account.endpoint)) else {
+        return false
+    }
+    return RemoteServer(remote).matches(server)
+}
+
+/// The server a remote, or an account's web site, is on, as remotes and
+/// accounts are matched.
+///
+/// Host names compare ignoring case. An HTTPS remote's port is its web
+/// server's, so another port is another server; a remote's scheme isn't
+/// compared, so 443 and 80 are both the default. An SSH remote's port is its
+/// SSH server's, which says nothing of the web server's, so a server from an
+/// SSH remote matches by host name alone, and GitHub's SSH over HTTPS host,
+/// `ssh.github.com`, is `github.com`.
+struct RemoteServer: Sendable, Hashable {
+    /// The host name, lowercased, without the port.
+    let hostname: String
+
+    /// The web server's port, unless it's the default. Nil for SSH.
+    let port: Int?
+
+    /// From an SSH remote: matches a server on any port.
+    let isSSH: Bool
+
+    init(_ remote: GitRemoteURL) {
+        let (hostname, port) = splitPort(remote.hostname.lowercased())
+        switch remote.protocol {
+        case .https:
+            self.hostname = hostname
+            self.port = port == 443 || port == 80 ? nil : port
+            isSSH = false
+        case .ssh:
+            self.hostname = hostname == "ssh.github.com" ? "github.com" : hostname
+            self.port = nil
+            isSSH = true
+        }
+    }
+
+    /// The server of a web site (`getHTMLURL`); nil when the URL has no host.
+    init?(htmlURL: String) {
+        let parsed = ParsedURL(htmlURL)
+        guard let hostname = parsed.hostname else {
+            return nil
+        }
+        self.hostname = hostname
+        port = parsed.port
+        isSSH = false
+    }
+
+    func matches(_ other: RemoteServer) -> Bool {
+        hostname == other.hostname && (isSSH || other.isSSH || port == other.port)
+    }
+}
+
+/// `host:port` split at its port, when it ends in one.
+private func splitPort(_ host: String) -> (hostname: String, port: Int?) {
+    guard let colon = host.lastIndex(of: ":") else {
+        return (host, nil)
+    }
+    let digits = host[host.index(after: colon)...]
+    guard digits.allSatisfy({ $0.isASCII && $0.isNumber }) else {
+        return (host, nil)
+    }
+    return (String(host[..<colon]), Int(digits))
 }

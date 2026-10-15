@@ -84,6 +84,25 @@ struct StashModelTests {
         await fixture.settle()
     }
 
+    @Test("selecting no stashed file drops its diff and keeps the stash shown; showing it again selects the first file")
+    func deselectFile() async throws {
+        let fixture = try await makeStashed()
+        fixture.stash.show(file: nil)
+        await fixture.settle()
+        #expect(fixture.stash.diff.value != nil)
+
+        fixture.stash.deselectFile()
+        #expect(fixture.stash.selectedFile == nil)
+        #expect(fixture.stash.diff == .idle)
+        #expect(fixture.stash.isShowing)
+        #expect(fixture.changes.selection == .stash(fileID: nil))
+
+        fixture.stash.show(file: nil)
+        await fixture.settle()
+        #expect(fixture.stash.selectedFile?.path == "README.md")
+        #expect(fixture.stash.diff.value != nil)
+    }
+
     @Test("follows the branch's newest stash, keeping the selected file, and leaves when it's gone")
     func followsEntry() async throws {
         let fixture = try await makeStashed()
@@ -128,7 +147,7 @@ struct StashModelTests {
         #expect(fixture.stash.files.value?.count == 2)
 
         let error = await #expect(throws: OperationError.self) { try await fixture.stash.restore(mainEntry) }
-        #expect(error?.reason == .precondition("Switch to main to restore these changes."))
+        #expect(preconditionText(error) != nil)
         #expect(try await fixture.stashList().count == 1)
         await fixture.settle()
     }
@@ -161,7 +180,6 @@ struct StashModelTests {
 
         let error = await #expect(throws: OperationError.self) { try await fixture.stash.restore(entry) }
         #expect(error?.reason == .localChangesOverwritten(files: ["README.md"]))
-        #expect(error?.message == "Can't restore stashed changes while your branch has uncommitted changes. These files would be overwritten:")
         #expect(error?.retry?.kind == .restoreStash)
         #expect(error?.recoveries.isEmpty == true)
         await fixture.settle()
@@ -178,7 +196,6 @@ struct StashModelTests {
 
         let error = await #expect(throws: OperationError.self) { try await fixture.stash.restore(entry) }
         #expect(error?.reason == .localChangesOverwritten(files: ["notes.txt"]))
-        #expect(error?.message == "Can't restore stashed changes while your branch has uncommitted changes. These files would be overwritten:")
         #expect(error?.recoveries.isEmpty == true)
         #expect(error?.gitFailure == nil)
         await fixture.settle()
@@ -225,9 +242,6 @@ struct StashModelTests {
         let error = await #expect(throws: OperationError.self) { try await fixture.stash.discard(entry) }
         let asked = try #require(confirmation(of: error))
         #expect(asked.kind == .discardStash)
-        #expect(asked.title == "Discard Stash?")
-        #expect(asked.message == "Are you sure you want to discard these stashed changes?")
-        #expect(asked.confirmButton == "Discard")
 
         fixture.app.preferences.confirmDiscardStash = false
         try await fixture.stash.discard(entry)
@@ -334,7 +348,7 @@ struct StashModelTests {
 
         // Another restore waits for the conflicts.
         let blocked = await #expect(throws: OperationError.self) { try await fixture.stash.restore(entry) }
-        #expect(blocked?.reason == .precondition("Resolve the conflicts in your changes before restoring stashed changes."))
+        #expect(preconditionText(blocked) != nil)
 
         // Markers removed: still conflicted in the index, so still kept.
         try fixture.write("README.md", "# Resolved\n")

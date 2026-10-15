@@ -64,7 +64,7 @@ struct CloneTests {
         func rejectsUnsupportedURLs(_ proto: String) async throws {
             let destination = POSIXPath.join(try createTempDirectory(), "cloned")
 
-            await #expect(throws: CloneError(message: "The \"\(proto)\" transport is not supported for cloning in Espalier.")) {
+            await #expect(throws: CloneError.self) {
                 try await clone("\(proto)::", destination, CloneOptions())
             }
             #expect(!FileManager.default.fileExists(atPath: destination))
@@ -237,7 +237,35 @@ struct CloneTests {
 
         let events = progressEvents.withLock { $0 }
         #expect(!events.isEmpty, "Expected at least one progress event")
-        #expect(events.first == CloneProgress(value: 0, title: "Cloning into \(clonePath)"))
+        #expect(events.first?.value == 0)
+    }
+
+    // Git clones the submodule after the repository, and the submodule's
+    // clone reports the same steps from the start.
+    @Test("reports progress that never moves back while cloning a submodule")
+    func submoduleProgress() async throws {
+        let submodule = try setupEmptyRepository()
+        try await makeCommit(submodule, Tree(entries: (1...5).map { TreeEntry(path: "file\($0).txt", contents: "submodule \($0)\n") }))
+        let source = try setupEmptyRepository()
+        try await git(
+            ["-c", "protocol.file.allow=always", "submodule", "add", "--", fileURL(submodule.path), "module"],
+            source.path,
+            "addSubmodule"
+        )
+        try await makeCommit(source, Tree(entries: [TreeEntry(path: "README.md", contents: "hello")]))
+
+        let clonePath = POSIXPath.join(try createTempDirectory(), "cloned")
+        let values = Mutex<[Double]>([])
+        try await withGitEnvironment(["GIT_ALLOW_PROTOCOL": "file"]) {
+            try await clone(fileURL(source.path), clonePath, CloneOptions()) { progress in
+                values.withLock { $0.append(progress.value) }
+            }
+        }
+
+        #expect(FileManager.default.fileExists(atPath: POSIXPath.join(clonePath, "module", "file1.txt")))
+        let reported = values.withLock { $0 }
+        #expect(reported.count > 1)
+        #expect(zip(reported, reported.dropFirst()).allSatisfy { $0 <= $1 }, "\(reported)")
     }
 
     @Test("clones with a custom default branch name")
@@ -330,7 +358,7 @@ struct CloneTests {
             #expect(await gate.waitUntilGone(held))
             #expect(!gate.release())
             #expect(!FileManager.default.fileExists(atPath: destination))
-            #expect(progress.withLock { $0.first } == CloneProgress(value: 0, title: "Cloning into \(destination)"))
+            #expect(progress.withLock { $0.first }?.value == 0)
         }
     }
 }

@@ -1,7 +1,8 @@
 // Ported from desktop/app/src/ui/diff/image-diffs/swipe.tsx
 //
-// The two images overlaid, with a slider that reveals the old image from
-// the left. It starts at 0, showing the new image.
+// The two images overlaid from the same top-left corner, each at its own
+// size, with a slider that reveals the old image from the left. It starts
+// at 0, showing the new image.
 
 import GitKit
 import SwiftUI
@@ -10,10 +11,13 @@ import SwiftUI
 struct SwipeView: View {
     let previousShown: ShownImage
     let currentShown: ShownImage
+    @Environment(\.numberFormat) private var numberFormat
 
-    init(previous: ShownImage, current: ShownImage) {
+    /// - Parameter fraction: How much of the old image shows at first.
+    init(previous: ShownImage, current: ShownImage, fraction: Double = 0) {
         previousShown = previous
         currentShown = current
+        _fraction = State(initialValue: fraction)
     }
 
     private var previous: DiffImage {
@@ -30,29 +34,31 @@ struct SwipeView: View {
         let previousImage = previousShown.decoded
         let currentImage = currentShown.decoded
         GeometryReader { proxy in
-            let size = getMaxFitSize(
-                previousImage?.pixelSize ?? CGSize(width: 64, height: 64),
-                currentImage?.pixelSize ?? CGSize(width: 64, height: 64),
-                CGSize(width: max(proxy.size.width, 1), height: max(proxy.size.height - 40, 1))
+            let sizes = OverlaidImageSizes(
+                previous: previousImage,
+                current: currentImage,
+                available: CGSize(width: proxy.size.width, height: proxy.size.height - 40)
             )
+            let box = sizes.box
             VStack(spacing: Metrics.insetMedium) {
-                Slider(value: $fraction, in: 0...1)
-                    .frame(width: max(size.width, 160))
-                    .accessibilityLabel("Swipe between the images")
+                CapsuleSlider("Swipe between the images", value: $fraction)
+                    .frame(width: max(box.width, 160))
                 ZStack(alignment: .topLeading) {
-                    CheckeredImage(image: previousImage, size: size)
+                    CheckeredImage(image: previousImage, size: sizes.previous)
+                        .frame(width: box.width, height: box.height, alignment: .topLeading)
                         .mask(alignment: .leading) {
-                            Rectangle().frame(width: size.width * fraction)
+                            Rectangle().frame(width: box.width * fraction)
                         }
-                    CheckeredImage(image: currentImage, size: size)
+                    CheckeredImage(image: currentImage, size: sizes.current)
+                        .frame(width: box.width, height: box.height, alignment: .topLeading)
                         .mask(alignment: .trailing) {
-                            Rectangle().frame(width: size.width * (1 - fraction))
+                            Rectangle().frame(width: box.width * (1 - fraction))
                         }
                 }
-                .frame(width: size.width, height: size.height)
+                .frame(width: box.width, height: box.height)
                 .accessibilityElement()
-                .accessibilityLabel(imageAccessibilityLabel("Deleted", image: previousImage, bytes: previous.bytes)
-                    + "; " + imageAccessibilityLabel("Added", image: currentImage, bytes: current.bytes))
+                .accessibilityLabel(imageAccessibilityLabel("Deleted", image: previousImage, bytes: previous.bytes, numberFormat: numberFormat)
+                    + "; " + imageAccessibilityLabel("Added", image: currentImage, bytes: current.bytes, numberFormat: numberFormat))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

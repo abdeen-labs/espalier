@@ -160,3 +160,16 @@ Full text: https://creativecommons.org/publicdomain/zero/1.0/legalcode
 The five grammars in Packages/EspalierKit/Vendor/Grammars are copied from
 their releases. Each folder keeps its own LICENSE file, and
 Packages/EspalierKit/Vendor/Grammars/README.md lists their sources.
+
+
+7. Text fonts — SIL Open Font License 1.1
+-----------------------------------------
+
+The fonts in Packages/EspalierKit/Sources/EspalierUI/Resources/Fonts are
+copied unmodified from their releases: Fixel Text (MacPaw), Geist Mono
+(The Geist Project Authors), Atkinson Hyperlegible Next and Atkinson
+Hyperlegible Mono (their Project Authors; Reserved Font Names "Atkinson" and
+"Hyperlegible"), and Martian Grotesk (The Martian Grotesk Project Authors).
+Each folder keeps its own OFL.txt with its copyright, and
+Packages/EspalierKit/Sources/EspalierUI/Resources/Fonts/SOURCES.md lists
+their sources and versions.

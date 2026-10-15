@@ -5,10 +5,15 @@ import AppKit
 import SwiftUI
 
 extension Typography {
-    /// The device code to enter when signing in (SF Mono, 22, semibold).
-    public static let deviceCode: Font = .system(.title, design: .monospaced).weight(.semibold)
+    /// The device code to enter when signing in (the mono, 22, semibold).
+    public static var deviceCode: Font {
+        guard Look.current.codeFont.face != nil else {
+            return .system(.title, design: .monospaced).weight(.semibold)
+        }
+        return mono(size: 22, weight: .semibold)
+    }
     /// The welcome flow's paragraphs (15).
-    public static let welcomeBody: Font = .title3
+    public static var welcomeBody: Font { sans(.title3) }
 }
 
 extension Metrics.Welcome {
@@ -18,12 +23,6 @@ extension Metrics.Welcome {
 }
 
 extension Metrics {
-    /// A conflicted file's row in the conflicts section.
-    public enum ConflictRow {
-        public static let horizontalPadding: CGFloat = 8
-        public static let verticalPadding: CGFloat = 5
-    }
-
     /// The branch popover and the pickers inside sheets.
     public enum BranchPicker {
         /// The popover's width.
@@ -32,15 +31,10 @@ extension Metrics {
         public static let popoverListHeight: CGFloat = 340
         /// A picker's list height inside a sheet.
         public static let sheetListHeight: CGFloat = 300
-        /// The current branch's tag ("current").
-        public static let currentTagHeight: CGFloat = 16
-        public static let currentTagPadding: CGFloat = 6
     }
 
     /// Get Started, the window with no repositories.
     public enum GetStarted {
-        /// The actions' column.
-        public static let actionsWidth: CGFloat = 420
         /// The account's repositories.
         public static let listWidth: CGFloat = 400
     }
@@ -51,10 +45,12 @@ extension Metrics {
         public static let codeKerning: CGFloat = 4
     }
 
-    /// A symbol in a soft circle heading a centered state (cloning, a
-    /// welcome step).
+    /// A symbol in a soft circle heading a centered state (cloning, push
+    /// protection), and a sheet's call to action.
     public enum StateIcon {
         public static let size: CGFloat = 44
+        /// A call to action's (signing in, publishing).
+        public static let callToActionSize: CGFloat = 36
     }
 
     /// Small popovers (a failure's details, the checks, a gate).
@@ -64,16 +60,16 @@ extension Metrics {
         public static let padding: CGFloat = 16
     }
 
-    /// The repository popover.
+    /// The repository popover: as tall as its rows, up to the window's
+    /// height.
     public enum RepositoryPopover {
         public static let width: CGFloat = 360
-        public static let height: CGFloat = 440
     }
 
     /// A list inside a sheet (repositories to clone, a branch picker's
-    /// list): the `field` fill, radius 14.
+    /// list, the keyboard shortcuts): `sheetListCard()`.
     public enum SheetList {
-        public static let cornerRadius: CGFloat = 14
+        /// Between the card's top and bottom edges and its rows.
         public static let inset: CGFloat = 6
     }
 }

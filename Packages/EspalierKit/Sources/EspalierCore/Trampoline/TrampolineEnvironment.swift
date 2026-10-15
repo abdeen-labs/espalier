@@ -25,9 +25,24 @@ final class TrampolineInvocation: Sendable {
 
     private struct State {
         var rejectedCredentialEndpoints: Set<String> = []
+        var unreadableAccountMessage: String?
         var mostRecentSSHCredential: SSHCredentialEntry?
         var genericPassword: (endpoint: String, login: String, password: String?)?
         var signingKeyPassphrases: [String: String] = [:]
+        var storedSSHSecretsGiven: Set<StoredSSHSecretGiven> = []
+    }
+
+    /// A stored SSH secret, and the process it was given to.
+    private struct StoredSSHSecretGiven: Hashable {
+        let store: String
+        let key: String
+        let process: pid_t?
+    }
+
+    /// Records that `process` was given the stored secret `key` in `store`.
+    /// Returns false if it was given it before during this git command.
+    func recordStoredSSHSecret(store: String, key: String, givenTo process: pid_t?) -> Bool {
+        state.withLock { $0.storedSSHSecretsGiven.insert(StoredSSHSecretGiven(store: store, key: key, process: process)).inserted }
     }
 
     /// The passphrase the user entered for the signing key at `keyPath`
@@ -55,6 +70,16 @@ final class TrampolineInvocation: Sendable {
     /// Whether credentials were rejected for any endpoint.
     var hasRejectedCredentials: Bool {
         state.withLock { !$0.rejectedCredentialEndpoints.isEmpty }
+    }
+
+    /// What to tell the user about an account git needed whose token the
+    /// keychain wouldn't give, if there was one.
+    var unreadableAccountMessage: String? {
+        state.withLock { $0.unreadableAccountMessage }
+    }
+
+    func setUnreadableAccountMessage(_ message: String) {
+        state.withLock { $0.unreadableAccountMessage = message }
     }
 
     var mostRecentSSHCredential: SSHCredentialEntry? {
@@ -152,7 +177,8 @@ public final class TrampolineEnvironment: GitTrampoline {
     /// when invoking a Git subcommand that needs to use the trampoline
     /// (mainly git operations requiring an askpass script) and with a token
     /// to use in the trampoline server. It will handle saving SSH key
-    /// passphrases when needed if the git operation succeeds.
+    /// passphrases when needed if the git operation succeeds, and deleting a
+    /// stored signing key passphrase ssh-keygen rejected.
     ///
     /// - Parameters:
     ///   - path: The path git runs in.
@@ -211,26 +237,22 @@ public final class TrampolineEnvironment: GitTrampoline {
                 storePendingSSHCredential(invocation, secrets)
                 return result
             } catch {
-                if !isBackgroundTask {
-                    // If the operation fails with an SSHAuthenticationFailed
-                    // error, we assume that it's because the last credential
-                    // we provided via the askpass handler was rejected.
-                    // That's not necessarily the case but for practical
-                    // purposes, it's as good as we can get with the
-                    // information we have. We're limited by the ASKPASS flow
-                    // here.
-                    //
-                    // ssh-keygen, signing a commit, says so when it rejects
-                    // a stored passphrase.
-                    if isSSHAuthFailure(error) || isSigningKeyPassphraseRejected(error) {
-                        deleteMostRecentSSHCredential(invocation, secrets)
-                    }
+                // ssh-keygen, signing a commit or tag, says so when it
+                // rejects a stored passphrase. (A stored secret ssh rejects
+                // is deleted when ssh asks for it again, in
+                // `TrampolineAskpassHandler`.)
+                if isSigningKeyPassphraseRejected(error) {
+                    deleteMostRecentSSHCredential(invocation, secrets)
                 }
 
                 // We catch the error git gives when the credential helper
                 // provided nothing and throw the user-friendly authentication
-                // failed error instead.
+                // failed error instead, or the message about an account whose
+                // token the keychain wouldn't give.
                 if invocation.hasRejectedCredentials, let fakeAuthError = userCancelledAuthenticationError(error) {
+                    if let message = invocation.unreadableAccountMessage {
+                        throw replacingDescription(of: fakeAuthError, with: message)
+                    }
                     throw fakeAuthError
                 }
 
@@ -243,6 +265,19 @@ public final class TrampolineEnvironment: GitTrampoline {
     var usesExternalCredentialHelper: Bool {
         useExternalCredentialHelper(defaults: defaults)
     }
+}
+
+/// `error` with `message` as its description.
+private func replacingDescription(of error: GitError, with message: String) -> GitError {
+    let result = GitResult(
+        stdoutData: error.result.stdoutData,
+        stderrData: error.result.stderrData,
+        exitCode: error.result.exitCode,
+        gitError: error.result.gitError,
+        gitErrorDescription: message,
+        path: error.result.path
+    )
+    return GitError(result: result, args: error.args, terminalOutput: message)
 }
 
 /// Serves the askpass and credential helper commands of one git invocation.

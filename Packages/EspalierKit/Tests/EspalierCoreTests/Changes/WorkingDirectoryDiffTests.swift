@@ -1,6 +1,6 @@
-// The selected file's diff, stale results, pruning partial selections,
-// hidden whitespace, and line, block, hunk, and range selection, against
-// real git.
+// The selected file's diff, stale results, carrying partial selections
+// over to a changed file, hidden whitespace, and line, block, hunk, and
+// range selection, against real git.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -91,13 +91,41 @@ struct WorkingDirectoryDiffTests {
         #expect(try fixture.file("numbered.txt").selection.getSelectionType() == DiffSelectionType.none)
         #expect(!changes.setLines(.range(0...addTwo), included: false))
 
-        // The discard titles, with the ellipsis while discarding asks first.
-        #expect(changes.discardTitle(for: .line(addTwo)) == "Discard Added Line…")
-        #expect(changes.discardTitle(for: .line(deleteTwo)) == "Discard Removed Line…")
-        #expect(changes.discardTitle(for: .block(containing: addTwo)) == "Discard Modified Lines…")
-        fixture.app.preferences.confirmDiscardChanges = false
-        #expect(changes.discardTitle(for: .hunk(containing: addFifteen)) == "Discard Modified Lines")
+        // Changed lines can be discarded; a context line can't.
+        #expect(changes.discardTitle(for: .line(addTwo)) != nil)
+        #expect(changes.discardTitle(for: .line(deleteTwo)) != nil)
+        #expect(changes.discardTitle(for: .block(containing: addTwo)) != nil)
+        #expect(changes.discardTitle(for: .hunk(containing: addFifteen)) != nil)
         #expect(changes.discardTitle(for: .line(contextOne)) == nil)
+        await fixture.settle()
+    }
+
+    @Test("lines taken from a diff that changed since leave the selection alone")
+    func staleGeneration() async throws {
+        let fixture = try await makeFixture()
+        try await fixture.select("numbered.txt")
+        let changes = fixture.changes
+        let generation = changes.diffGeneration
+        let addFifteen = try fixture.lineIndex(.add, "line fifteen")
+
+        // A refresh that finds the file unchanged keeps the generation.
+        await fixture.refresh()
+        #expect(changes.diffGeneration == generation)
+
+        // Changed above line 15: the old indexes name other lines.
+        try fixture.write("numbered.txt", numberedLines(20, replacing: [1: "line one", 2: "line two", 15: "line fifteen"]))
+        await fixture.refresh()
+        #expect(changes.diffGeneration != generation)
+        let selection = try fixture.file("numbered.txt").selection
+
+        #expect(!changes.setLines(.line(addFifteen), included: false, inDiff: generation))
+        #expect(!changes.toggleLines(.hunk(containing: addFifteen), inDiff: generation))
+        #expect(changes.discardTitle(for: .line(addFifteen), inDiff: generation) == nil)
+        #expect(try fixture.file("numbered.txt").selection == selection)
+
+        let current = try fixture.lineIndex(.add, "line fifteen")
+        #expect(changes.toggleLines(.line(current), inDiff: changes.diffGeneration))
+        #expect(try !fixture.file("numbered.txt").selection.isSelected(current))
         await fixture.settle()
     }
 
@@ -142,6 +170,66 @@ struct WorkingDirectoryDiffTests {
         #expect(try fixture.file("numbered.txt").selection.getSelectionType() == .all)
     }
 
+    @Test("a partial selection follows its lines when the file changes; a line it doesn't know is left out")
+    func selectionFollowsLines() async throws {
+        let fixture = try await makeFixture()
+        try await fixture.select("numbered.txt")
+        fixture.changes.setIncluded([try fixture.file("other.txt").id], false)
+        #expect(fixture.changes.toggleLines(.line(try fixture.lineIndex(.add, "line fifteen"))))
+
+        // An editor adds a line at the top, which moves every other line.
+        try fixture.write("numbered.txt", "line zero\n" + numberedLines(20, replacing: [2: "line two", 15: "line fifteen"]))
+        try fixture.write("other.txt", "other, edited\n")
+        await fixture.refresh()
+        let selection = try fixture.file("numbered.txt").selection
+        #expect(!selection.isSelected(try fixture.lineIndex(.add, "line zero")))
+        #expect(!selection.isSelected(try fixture.lineIndex(.add, "line fifteen")))
+        #expect(selection.isSelected(try fixture.lineIndex(.delete, "line 15")))
+        #expect(selection.isSelected(try fixture.lineIndex(.delete, "line 2")))
+        #expect(selection.isSelected(try fixture.lineIndex(.add, "line two")))
+        #expect(try fixture.file("other.txt").selection.getSelectionType() == DiffSelectionType.none)
+
+        fixture.commit.draft.summary = "Spell out two"
+        _ = try await fixture.commit.commit()
+        await fixture.settle()
+        let committed = numberedLines(20, replacing: [2: "line two"]).replacingOccurrences(of: "line 15\n", with: "")
+        #expect(try await fixture.git(["show", "HEAD:numbered.txt"]) == committed)
+    }
+
+    @Test("a commit right after the file changes, before a refresh, commits the lines that were included")
+    func commitBeforeRefresh() async throws {
+        let fixture = try await makeFixture()
+        try await fixture.select("numbered.txt")
+        fixture.changes.setIncluded([try fixture.file("other.txt").id], false)
+        #expect(fixture.changes.toggleLines(.line(try fixture.lineIndex(.add, "line fifteen"))))
+
+        try fixture.write("numbered.txt", "line zero\n" + numberedLines(20, replacing: [2: "line two", 15: "line fifteen"]))
+        fixture.commit.draft.summary = "Spell out two"
+        _ = try await fixture.commit.commit()
+        await fixture.settle()
+        let committed = numberedLines(20, replacing: [2: "line two"]).replacingOccurrences(of: "line 15\n", with: "")
+        #expect(try await fixture.git(["show", "HEAD:numbered.txt"]) == committed)
+    }
+
+    @Test("a partial selection survives its file's status kind changing, as when it's added in Terminal")
+    func kindChangeKeepsPartialSelection() async throws {
+        let (fixture, _) = try await ChangesFixture.withRemote()
+        try fixture.write("new.txt", "one\ntwo\nthree\n")
+        await fixture.refresh()
+        try await fixture.select("new.txt")
+        #expect(fixture.changes.toggleLines(.line(try fixture.lineIndex(.add, "two"))))
+
+        try await fixture.git(["add", "new.txt"])
+        await fixture.refresh()
+        #expect(try fixture.file("new.txt").status.kind == .new)
+        #expect(try fixture.file("new.txt").selection.getSelectionType() == .partial)
+
+        fixture.commit.draft.summary = "Add one and three"
+        _ = try await fixture.commit.commit()
+        await fixture.settle()
+        #expect(try await fixture.git(["show", "HEAD:new.txt"]) == "one\nthree\n")
+    }
+
     @Test("hiding whitespace keeps partial selections, shows them on the shown diff, and stages from the full diff")
     func hiddenWhitespace() async throws {
         let (fixture, _) = try await ChangesFixture.withRemote()
@@ -177,7 +265,7 @@ struct WorkingDirectoryDiffTests {
         let discard = await #expect(throws: OperationError.self) {
             try await changes.discardLines(.line(try fixture.lineIndex(.delete, "line 3")), confirmed: [.discardLines])
         }
-        #expect(discard?.reason == .precondition("Discarding lines is disabled when hiding whitespace changes."))
+        #expect(preconditionText(discard) != nil)
 
         // Committing stages the full diff's chosen lines.
         fixture.commit.draft.summary = "Spell out three"

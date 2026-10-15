@@ -1,7 +1,6 @@
 // A stepper drawn as a capsule field: minus, the value in SF Mono, and plus
-// on the `field` fill, in place of the system's stepper arrows. It's one
-// stop in the key view loop; the up and down arrows step it, and VoiceOver
-// sees a native stepper.
+// on the `field` fill. It's one stop in the key view loop, with a field's
+// focus ring; the up and down arrows step it, and VoiceOver sees a stepper.
 
 import SwiftUI
 
@@ -14,6 +13,7 @@ public struct CapsuleStepper: View {
     private let decrement: () -> Void
     private let increment: () -> Void
     @Environment(\.isEnabled) private var isEnabled
+    @FocusState private var isFocused: Bool
 
     /// - Parameters:
     ///   - label: What VoiceOver calls the stepper ("Text Size").
@@ -38,7 +38,7 @@ public struct CapsuleStepper: View {
 
     public var body: some View {
         HStack(spacing: 0) {
-            StepperHalf(systemImage: "minus", isEnabled: isEnabled && canDecrement, action: decrement)
+            StepperHalf(systemImage: "minus", canStep: canDecrement, action: decrement)
             // The value rolls as the user steps it (0.2 s).
             Text(value)
                 .font(Typography.count)
@@ -48,14 +48,18 @@ public struct CapsuleStepper: View {
                 .contentTransition(.numericText())
                 .motion(Motion.kindChange, value: value)
                 .frame(minWidth: Metrics.CapsuleStepper.valueWidth)
-            StepperHalf(systemImage: "plus", isEnabled: isEnabled && canIncrement, action: increment)
+            StepperHalf(systemImage: "plus", canStep: canIncrement, action: increment)
         }
         .frame(height: Metrics.ControlHeight.regular)
         .background(Capsule(style: .circular).fill(.field))
-        .contentShape(.focusEffect, Capsule(style: .circular))
-        .opacity(isEnabled ? 1 : 0.45)
-        // Focus only with keyboard navigation on, as the native stepper.
+        .overlay {
+            CapsuleFocusRing(isFocused: isFocused)
+        }
+        .opacity(isEnabled ? 1 : Palette.disabledOpacity)
+        // Focus only with keyboard navigation on.
         .focusable(interactions: .activate)
+        .focused($isFocused)
+        .focusEffectDisabled()
         .onKeyPress(.upArrow) {
             step(canIncrement, increment)
         }
@@ -79,12 +83,14 @@ public struct CapsuleStepper: View {
     }
 }
 
-/// Minus or plus: a symbol in secondary text with a hover wash, faded when
-/// it can't step.
+/// Minus or plus: a symbol in secondary text with a hover wash, faded as a
+/// disabled control is when it can't step. A disabled stepper fades whole,
+/// its halves with it, not twice.
 private struct StepperHalf: View {
     let systemImage: String
-    let isEnabled: Bool
+    let canStep: Bool
     let action: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
 
     var body: some View {
@@ -94,10 +100,10 @@ private struct StepperHalf: View {
             .frame(width: Metrics.CapsuleStepper.buttonWidth, height: Metrics.ControlHeight.regular)
             .background(Capsule(style: .circular).fill(wash).hoverMotion(isHovered))
             .contentShape(Capsule(style: .circular))
-            .opacity(isEnabled ? 1 : 0.35)
+            .opacity(canStep || !isEnabled ? 1 : Palette.disabledOpacity)
             .onHover { isHovered = $0 }
             .onTapGesture {
-                if isEnabled {
+                if isEnabled && canStep {
                     action()
                 }
             }
@@ -105,7 +111,7 @@ private struct StepperHalf: View {
     }
 
     private var wash: Color {
-        isEnabled && isHovered ? Color(nsColor: Palette.hover) : .clear
+        isEnabled && canStep && isHovered ? Color(nsColor: Palette.hover) : .clear
     }
 }
 

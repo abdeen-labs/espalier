@@ -251,17 +251,13 @@ enum BranchActions {
     }
 
     /// The `startPoint` and `noTrack` arguments for a sheet's choice: the
-    /// (upstream) default branch's name, untracked for an upstream; HEAD
-    /// otherwise.
+    /// (upstream) default branch's name, untracked when it's a remote
+    /// branch; HEAD otherwise.
     static func startPointArguments(_ startPoint: StartPoint, in repository: RepositoryModel) -> (startPoint: String?, noTrack: Bool) {
-        switch startPoint {
-        case .defaultBranch:
-            (repository.gitState.branches.defaultBranch?.name, false)
-        case .upstreamDefaultBranch:
-            (repository.gitState.branches.upstreamDefaultBranch?.name, true)
-        case .currentBranch, .head:
-            (nil, false)
+        guard let base = repository.branches.branch(for: startPoint) else {
+            return (nil, false)
         }
+        return (base.name, base.type == .remote)
     }
 
     // MARK: Merge, squash and merge, rebase, update

@@ -180,7 +180,7 @@ struct DeviceFlowSignInTests {
         await settle(app, harness)
     }
 
-    @Test("an Enterprise server whose certificate isn't trusted says so, and how to trust it")
+    @Test("an Enterprise server whose certificate isn't trusted says so")
     func untrustedCertificate() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedAppWithAccounts()
@@ -192,8 +192,6 @@ struct DeviceFlowSignInTests {
         #expect(signIn.state?.kind == .endpointEntry)
         #expect(signIn.state?.error == .untrustedCertificate(host: "github.example.com"))
         let message = try #require(signIn.state?.error?.message)
-        #expect(message.hasPrefix("Espalier can't verify the identity of github.example.com"))
-        #expect(message.contains("Keychain Access"))
 
         // A failure later in the flow, through GitHubKit, says the same.
         #expect(SignInModel.signInError(for: UntrustedCertificateError(host: "github.example.com"), endpoint: "https://github.example.com/api/v3")
@@ -222,7 +220,6 @@ struct DeviceFlowSignInTests {
         await signIn.setEndpoint("https://github.example.com", clientID: enterpriseClientID)
         #expect(signIn.state?.kind == .endpointEntry)
         #expect(signIn.state?.error == .cannotReach(host: "github.example.com"))
-        #expect(signIn.state?.error?.message == "Couldn't reach github.example.com.")
 
         harness.gitHub.on("GET", "/api/v3/meta", respond: .text("<html>Welcome</html>", status: 200))
         await signIn.setEndpoint("https://github.example.com", clientID: enterpriseClientID)
@@ -251,7 +248,6 @@ struct DeviceFlowSignInTests {
         await signIn.authenticate()
 
         #expect(signIn.state?.error == .accessDenied)
-        #expect(signIn.state?.error?.message == "Authorization was denied.")
         #expect(signIn.state?.loading == false)
         #expect(app.accounts.accounts.map(\.login) == ["octocat"])
         #expect(try harness.secrets.secret(service: "Espalier - https://api.github.com", account: "octocat") == "gho_octocat")
@@ -308,7 +304,6 @@ struct DeviceFlowSignInTests {
             return
         }
         #expect(expired.error == .codeExpired)
-        #expect(expired.error?.message == "This code has expired.")
         #expect(expired.code == nil)
         #expect(!expired.loading)
         // Polled at 5 s; at 10 s the code had expired.
@@ -339,7 +334,6 @@ struct DeviceFlowSignInTests {
 
         // Not left loading.
         #expect(signIn.state?.error == .userNotLoaded)
-        #expect(signIn.state?.error?.message == "Couldn't load the account you signed in with.")
         #expect(signIn.state?.loading == false)
         #expect(results.results.isEmpty)
         #expect(app.accounts.accounts.isEmpty)

@@ -45,8 +45,8 @@ func setSSHKeyPassphrase(_ invocation: TrampolineInvocation, _ keyPath: String, 
     }
 }
 
-/// Keeps the SSH credential details in memory to be deleted later if the
-/// ongoing git operation fails to authenticate.
+/// Keeps the details of the stored passphrase just given for the key, to be
+/// deleted if ssh-keygen rejects it.
 ///
 /// - Parameters:
 ///   - invocation: The ongoing git operation.

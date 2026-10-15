@@ -15,6 +15,7 @@ public struct CenteredMessage<Actions: View>: View {
     private let description: AttributedString?
     private let tint: Color?
     private let isLarge: Bool
+    private let maximumWidth: CGFloat
     private let actions: Actions
 
     /// - Parameters:
@@ -23,12 +24,15 @@ public struct CenteredMessage<Actions: View>: View {
     ///     secondary text.
     ///   - isLarge: A place's own message (the larger circle and title)
     ///     rather than a pane's.
+    ///   - maximumWidth: The widest the title, the description, and the
+    ///     actions get.
     public init(
         _ title: String,
         systemImage: String,
         description: String? = nil,
         tint: Color? = nil,
         isLarge: Bool = false,
+        maximumWidth: CGFloat = CenteredMessageMetrics.maximumWidth,
         @ViewBuilder actions: () -> Actions
     ) {
         self.init(
@@ -37,6 +41,7 @@ public struct CenteredMessage<Actions: View>: View {
             attributedDescription: description.map { AttributedString($0) },
             tint: tint,
             isLarge: isLarge,
+            maximumWidth: maximumWidth,
             actions: actions
         )
     }
@@ -49,6 +54,7 @@ public struct CenteredMessage<Actions: View>: View {
         attributedDescription: AttributedString?,
         tint: Color? = nil,
         isLarge: Bool = false,
+        maximumWidth: CGFloat = CenteredMessageMetrics.maximumWidth,
         @ViewBuilder actions: () -> Actions
     ) {
         self.title = title
@@ -56,6 +62,7 @@ public struct CenteredMessage<Actions: View>: View {
         self.description = attributedDescription
         self.tint = tint
         self.isLarge = isLarge
+        self.maximumWidth = maximumWidth
         self.actions = actions()
     }
 
@@ -63,7 +70,7 @@ public struct CenteredMessage<Actions: View>: View {
         let circle = isLarge ? CenteredMessageMetrics.largeCircle : CenteredMessageMetrics.circle
         VStack(spacing: 0) {
             Image(systemName: systemImage)
-                .font(.system(size: circle * 0.4, weight: .semibold))
+                .font(.system(size: circle * CenteredMessageMetrics.symbolScale, weight: .semibold))
                 .foregroundStyle(tint ?? .text2)
                 .frame(width: circle, height: circle)
                 .background(Circle().fill(.field))
@@ -76,27 +83,32 @@ public struct CenteredMessage<Actions: View>: View {
                 .padding(.top, Metrics.insetLarge)
                 .accessibilityAddTraits(.isHeader)
             if let description {
-                Text(description)
+                LinkedText(description)
                     .font(isLarge ? Typography.row : Typography.secondary)
                     .foregroundStyle(.text2)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, Metrics.grid + 2)
+                    .padding(.top, Metrics.grid)
             }
             actions
                 .padding(.top, Metrics.insetLarge)
         }
-        .frame(maxWidth: Metrics.Composer.suggestionsMaximumWidth)
+        .frame(maxWidth: maximumWidth)
         .padding(Metrics.insetLarge)
         .accessibilityElement(children: .contain)
     }
 }
 
-/// A centered message's sizes.
-enum CenteredMessageMetrics {
+/// A centered message's sizes. The cloning view, centered too, shares its
+/// widest width.
+public enum CenteredMessageMetrics {
     /// The soft circle's diameter: a place's message, and a pane's.
     static let largeCircle: CGFloat = 56
     static let circle: CGFloat = 44
+    /// The symbol's size, as a fraction of the circle's.
+    static let symbolScale: CGFloat = 0.4
+    /// The widest a centered message gets.
+    public static let maximumWidth: CGFloat = 620
 }
 
 extension CenteredMessage where Actions == EmptyView {

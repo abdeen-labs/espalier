@@ -255,12 +255,12 @@ struct GetShellEnvTests {
         func cancellation() async throws {
             // Like an interactive shell, the stand-in ignores SIGTERM, and it
             // never ends on its own: the task ends only if the shell is
-            // killed. It opens a FIFO, and the test cancels once it has.
+            // killed. It writes to a FIFO, and the test cancels once it has.
             let ready = POSIXPath.join(try createTempDirectory(), "ready")
             try #require(mkfifo(ready, 0o600) == 0)
             let shell = try makeStandInShell("""
                 trap '' TERM
-                : > '\(ready)'
+                printf x > '\(ready)'
                 while :; do sleep 0.1; done
                 """)
             let task = Task {

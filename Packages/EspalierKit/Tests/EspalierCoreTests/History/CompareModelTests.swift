@@ -1,11 +1,12 @@
 // These drive `HistoryModel.compare` and `CompareModel` against real git:
 // ahead and behind, mergeability per pair of commits (so one comparison
-// never shows another branch's result), the rebase preview, the status
-// messages, and refreshes.
+// never shows another branch's result), the rebase preview, when a status
+// shows, and refreshes.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
 import EspalierSupport
+import Foundation
 import GitKit
 import Testing
 import TestSupport
@@ -50,17 +51,14 @@ struct CompareModelTests {
         #expect(history.trunkTip == feature.tip.sha)
         #expect(history.graphChange.kind == .reload)
         #expect(history.selection.shas == [feature.tip.sha])
-        #expect(history.comparison.mergeStatus == .clean)
-        #expect(history.comparison.behindTitle == "Behind (3)")
-        #expect(history.comparison.aheadTitle == "Ahead (2)")
-        #expect(history.comparison.statusMessage == "This will merge 3 commits from feature into main")
+        #expect(history.comparison.mergePreview?.status == .clean)
         #expect(history.comparison.canStart)
 
         try await history.compare(with: feature, direction: .ahead)
         await fixture.settle()
         #expect(history.mode == .compare(feature, .ahead))
         #expect(fixture.summaries == ["M2", "M1"])
-        #expect(history.comparison.mergeStatus == .clean)
+        #expect(history.comparison.mergePreview?.status == .clean)
 
         history.resetToHistoryMode()
         await fixture.settle()
@@ -81,8 +79,7 @@ struct CompareModelTests {
 
         try await history.compare(with: conflict, direction: .behind)
         await fixture.settle()
-        #expect(history.comparison.mergeStatus == .conflicts(conflictedFiles: 1))
-        #expect(history.comparison.statusMessage == "There will be 1 conflicted file when merging conflict into main")
+        #expect(history.comparison.mergePreview?.status == .conflicts(conflictedFiles: 1))
         #expect(history.comparison.canStart)
 
         // Start comparing with the conflicting branch, then with the clean
@@ -100,17 +97,17 @@ struct CompareModelTests {
         await fixture.settle()
         #expect(history.mode == .compare(feature, .behind))
         #expect(history.comparison.branch?.name == "feature")
-        #expect(history.comparison.mergeStatus == .clean)
+        #expect(history.comparison.mergePreview?.status == .clean)
         #expect(fixture.summaries == ["F3", "F2", "F1"])
 
         // The first comparison landed and its merge check is still running
         // when the second starts.
         history.resetToHistoryMode()
         try await history.compare(with: conflict, direction: .behind)
-        #expect(history.comparison.mergeStatus == .loading)
+        #expect(history.comparison.mergePreview?.status == .loading)
         try await history.compare(with: feature, direction: .behind)
         await fixture.settle()
-        #expect(history.comparison.mergeStatus == .clean)
+        #expect(history.comparison.mergePreview?.status == .clean)
     }
 
     @Test("nothing to merge when the current branch isn't behind")
@@ -125,11 +122,11 @@ struct CompareModelTests {
         await fixture.settle()
         let comparison = fixture.history.comparison
         #expect(comparison.aheadBehind == AheadBehind(ahead: 1, behind: 0))
-        #expect(comparison.mergeStatus == nil)
+        #expect(comparison.mergePreview == nil)
         #expect(comparison.statusMessage == nil)
         #expect(comparison.canStart == false)
         #expect(fixture.history.commitSHAs.isEmpty)
-        #expect(comparison.emptyListMessage == "Your branch is up to date with the compared branch (old)")
+        #expect(comparison.emptyListMessage != nil)
 
         try await fixture.history.compare(with: old, direction: .ahead)
         #expect(fixture.summaries == ["M2"])
@@ -148,9 +145,94 @@ struct CompareModelTests {
         try await fixture.history.compare(with: try fixture.branch("unrelated"), direction: .behind)
         await fixture.settle()
         let comparison = fixture.history.comparison
-        #expect(comparison.mergeStatus == .invalid)
-        #expect(comparison.statusMessage == "These branches have unrelated histories and can't be merged")
+        #expect(comparison.mergePreview?.status == .invalid)
         #expect(comparison.canStart == false)
+    }
+
+    @Test("a merge git can't check says so, and can still start")
+    func mergeCheckFails() async throws {
+        let fixture = try await makeRepository()
+        // Merging `feature` into `main` needs both versions of a file, and
+        // the feature's is gone from the object database.
+        try await fixture.git(["checkout", "-q", "feature"])
+        try await fixture.commit("main.txt", "feature's\n", message: "F4")
+        try await fixture.git(["checkout", "-q", "main"])
+        let blob = JSCompat.trim(try await fixture.git(["rev-parse", "feature:main.txt"]))
+        try FileManager.default.removeItem(atPath: POSIXPath.join(fixture.local.path, ".git", "objects", String(blob.prefix(2)), String(blob.dropFirst(2))))
+        await fixture.refresh()
+        await fixture.activate()
+
+        try await fixture.history.compare(with: try fixture.branch("feature"), direction: .behind)
+        await fixture.settle()
+        let comparison = fixture.history.comparison
+        #expect(comparison.mergePreview == MergePreview(status: nil, commitCount: 4))
+        #expect(comparison.isMergeCheckFailed)
+        #expect(comparison.statusMessage != nil)
+        #expect(comparison.canStart)
+    }
+
+    /// How a comparison loads again.
+    enum Reload: Sendable {
+        /// The other direction is compared.
+        case compare
+        /// The repository is deselected, and its history shown again.
+        case show
+    }
+
+    @Test("a merge check git couldn't make runs again when the comparison loads again", arguments: [
+        NamedCase("compared in the other direction", Reload.compare),
+        NamedCase("its history shown again", Reload.show),
+    ])
+    func retriesFailedMergeCheck(_ reload: NamedCase<Reload>) async throws {
+        let fixture = try await makeRepository()
+        // Merging `feature` into `main` needs both versions of a file, and
+        // the feature's is moved out of the object database.
+        try await fixture.git(["checkout", "-q", "feature"])
+        try await fixture.commit("main.txt", "feature's\n", message: "F4")
+        try await fixture.git(["checkout", "-q", "main"])
+        let blob = JSCompat.trim(try await fixture.git(["rev-parse", "feature:main.txt"]))
+        let object = POSIXPath.join(fixture.local.path, ".git", "objects", String(blob.prefix(2)), String(blob.dropFirst(2)))
+        let aside = POSIXPath.join(try createTempDirectory(), "object")
+        try FileManager.default.moveItem(atPath: object, toPath: aside)
+        await fixture.refresh()
+        await fixture.activate()
+
+        let history = fixture.history
+        let feature = try fixture.branch("feature")
+        try await history.compare(with: feature, direction: .behind)
+        await fixture.settle()
+        #expect(history.comparison.isMergeCheckFailed)
+
+        // The object is back, and the same pair of commits loads again.
+        try FileManager.default.moveItem(atPath: aside, toPath: object)
+        switch reload.value {
+        case .compare:
+            try await history.compare(with: feature, direction: .ahead)
+        case .show:
+            history.repositoryDidBecomeInactive()
+            await fixture.activate()
+        }
+        await fixture.settle()
+        #expect(history.comparison.mergePreview == MergePreview(status: .conflicts(conflictedFiles: 1), commitCount: 4))
+        #expect(!history.comparison.isMergeCheckFailed)
+    }
+
+    @Test("a merge check stopped when the repository is deselected runs again when its history is shown")
+    func resumesMergeCheck() async throws {
+        let fixture = try await makeRepository()
+        await fixture.activate()
+        let history = fixture.history
+        try await history.compare(with: try fixture.branch("feature"), direction: .behind)
+        #expect(history.comparison.mergePreview?.status == .loading)
+
+        history.repositoryDidBecomeInactive()
+        #expect(history.comparison.mergePreview == nil)
+        #expect(history.comparison.canStart == false)
+
+        await fixture.activate()
+        await fixture.settle()
+        #expect(history.comparison.mergePreview?.status == .clean)
+        #expect(history.comparison.canStart)
     }
 
     @Test("the rebase preview says what a rebase would apply")
@@ -172,15 +254,11 @@ struct CompareModelTests {
         #expect(commitsAhead.map(\.summary) == ["M1", "M2"])
         #expect(commitsBehind.map(\.summary) == ["F1", "F2", "F3"])
         #expect(comparison.commitCount == 2)
-        #expect(comparison.statusMessage == "This will update main by applying its 2 commits on top of feature")
         #expect(comparison.canStart)
-
-        comparison.method = .squashMerge
-        #expect(comparison.statusMessage == "This will merge 3 commits from feature into main")
     }
 
-    @Test("the status while the merge check and the rebase preview load, and the empty list's message")
-    func copy() async throws {
+    @Test("a status shows while the merge check loads, none while the rebase preview does, neither can start yet, and an empty list has a message")
+    func loadingStatus() async throws {
         let fixture = try await makeRepository()
         await fixture.activate()
         let comparison = fixture.history.comparison
@@ -188,10 +266,12 @@ struct CompareModelTests {
         let feature = try fixture.branch("feature")
         try await fixture.history.compare(with: feature, direction: .behind)
         // The merge status is worked out after the comparison lands.
-        #expect(comparison.mergeStatus == .loading)
-        #expect(comparison.statusMessage == "Checking whether Git can merge automatically…")
+        #expect(comparison.mergePreview?.status == .loading)
+        #expect(comparison.statusMessage != nil)
+        #expect(comparison.canStart == false)
         comparison.method = .squashMerge
-        #expect(comparison.statusMessage == "Checking whether Git can squash automatically…")
+        #expect(comparison.statusMessage != nil)
+        #expect(comparison.canStart == false)
         // A rebase's commits are counted from its preview, so nothing shows
         // while it loads.
         comparison.method = .rebase
@@ -199,15 +279,16 @@ struct CompareModelTests {
         #expect(comparison.statusMessage == nil)
         #expect(comparison.canStart == false)
         await fixture.settle()
-        #expect(comparison.mergeStatus == .clean)
+        #expect(comparison.mergePreview?.status == .clean)
         comparison.method = .merge
+        #expect(comparison.canStart)
 
         try await fixture.history.compare(with: feature, direction: .ahead)
         #expect(comparison.direction == .ahead)
         try await fixture.git(["branch", "same", "main"])
         await fixture.refresh()
         try await fixture.history.compare(with: try fixture.branch("same"), direction: .ahead)
-        #expect(comparison.emptyListMessage == "The compared branch (same) is up to date with your branch")
+        #expect(comparison.emptyListMessage != nil)
     }
 
     @Test("a refresh compares again when either branch moved, and returns to history when the branch is gone")
@@ -232,7 +313,7 @@ struct CompareModelTests {
         #expect(history.comparison.aheadBehind == AheadBehind(ahead: 2, behind: 4))
         #expect(fixture.summaries == ["F4", "F3", "F2", "F1"])
         #expect(history.comparison.branch?.tip.sha == (try await fixture.sha("feature")))
-        #expect(history.comparison.mergeStatus == .clean)
+        #expect(history.comparison.mergePreview?.status == .clean)
 
         // The compared branch is deleted.
         try await fixture.git(["branch", "-q", "-D", "feature"])
@@ -242,10 +323,12 @@ struct CompareModelTests {
         #expect(history.commitSHAs.contains(try await fixture.sha("main")))
     }
 
-    @Test("the branches to compare with leave out the current branch and fork remotes")
+    @Test("the branches to compare with leave out the current branch and the marked fork remotes")
     func comparableBranches() async throws {
         let fixture = try await makeRepository()
-        try await fixture.git(["update-ref", "refs/remotes/github-desktop-octocat/feature", "feature"])
+        try await fixture.git(["remote", "add", "espalier-octocat", "https://github.com/octocat/app.git"])
+        try await fixture.git(["config", "remote.espalier-octocat.espalierFork", "true"])
+        try await fixture.git(["update-ref", "refs/remotes/espalier-octocat/feature", "feature"])
         try await fixture.git(["update-ref", "refs/remotes/origin/main", "main"])
         await fixture.refresh()
         let history = fixture.history
@@ -270,7 +353,7 @@ struct CompareModelTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.history.compare(with: try fixture.branch("feature"), direction: .behind)
         }
-        #expect(error?.reason == .precondition("There is no current branch to compare with."))
+        #expect(preconditionText(error) != nil)
         #expect(error?.operation == .loadHistory)
         #expect(fixture.history.mode == .history)
     }

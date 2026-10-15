@@ -1,6 +1,8 @@
-// Presents alerts and sheets on the main window. Each modal attaches to the
-// topmost sheet of the window, so a confirmation or a prompt git is waiting
-// on can appear over a feature's sheet.
+// Presents alerts and sheets on a window, as Espalier's cards on the
+// window's modal layer (`ModalStack`). Each modal stacks above the ones
+// already showing, so a confirmation or a prompt git is waiting on can
+// appear over a feature's sheet; each blocks the ones below. With no window,
+// an alert shows on its own, app-modally (`AppModalAlert`).
 
 import AppKit
 import EspalierSupport
@@ -41,8 +43,7 @@ public final class ModalSheet: Identifiable {
 }
 
 /// How a modal asks for the user's attention when Espalier isn't the active
-/// app: a beep and a critical Dock bounce, as macOS does for an inactive
-/// app's modal panel.
+/// app: a beep and a critical Dock bounce.
 @MainActor
 struct ModalAttention {
     var isAppActive: @MainActor () -> Bool
@@ -59,27 +60,39 @@ struct ModalAttention {
     )
 }
 
-/// Shows alerts and sheets attached to the main window, on top of any sheet
-/// already showing.
+/// Shows alerts and sheets on a window, each above the ones already
+/// showing.
 @MainActor @Observable
 public final class ModalPresenter {
-    /// The window modals attach to; the window observer sets it.
-    @ObservationIgnored public weak var window: NSWindow?
-    /// Applies the window's environment to a sheet's content.
+    /// The window modals cover; the window observer sets it.
+    @ObservationIgnored public weak var window: NSWindow? {
+        didSet {
+            stack.attach(to: window)
+        }
+    }
+    /// Applies the window's environment to a modal's content.
     @ObservationIgnored var environment: ((AnyView) -> AnyView)?
     /// Asks for attention when a modal appears while Espalier is inactive.
     @ObservationIgnored var attention = ModalAttention.live
+    /// The window's modal layers.
+    @ObservationIgnored let stack = ModalStack()
 
     private var sheets: [String: ModalSheet] = [:]
     private var alertCount = 0
-    @ObservationIgnored private var alerts: [String: NSAlert] = [:]
+    /// Every alert showing, and those shown with an id by it.
+    @ObservationIgnored private var shownAlerts: [AlertCardModel] = []
+    @ObservationIgnored private var alerts: [String: AlertCardModel] = [:]
 
     /// Whether an alert or a sheet is showing (menus disable themselves).
     public var isPresenting: Bool {
         !sheets.isEmpty || alertCount > 0
     }
 
-    public init() {}
+    public init() {
+        stack.onWindowClose = { [weak self] in
+            self?.dismissAll()
+        }
+    }
 
     /// Whether a sheet with `id` is showing.
     public func isPresentingSheet(id: String) -> Bool {
@@ -87,45 +100,53 @@ public final class ModalPresenter {
     }
 
     /// Shows `content` and waits for the user's answer. Without a window it
-    /// runs as an app-modal alert. An alert with an `id` can be closed with
-    /// `dismissAlert(id:)`, which answers with its cancel button.
+    /// shows on its own, app-modally. An alert with an `id` can be closed
+    /// with `dismissAlert(id:)`, which answers with its cancel button.
     public func alert(_ content: AlertContent, id: String? = nil) async -> AlertResponse {
-        let alert = content.makeAlert()
         requestAttentionIfInactive()
-        guard let window = topmostWindow() else {
-            let modalResponse = alert.runModal()
-            return content.response(modalResponse, alert: alert)
+        guard window != nil else {
+            return AppModalAlert.run(content)
         }
-        if let id {
-            alerts[id] = alert
-        }
+        let model = AlertCardModel(content)
+        let layer = ModalLayer(content: decorate(AnyView(AlertCard(model: model))), alert: model)
         alertCount += 1
-        let modalResponse = await alert.beginSheetModal(for: window)
-        alertCount -= 1
-        if let id, alerts[id] === alert {
-            alerts[id] = nil
+        shownAlerts.append(model)
+        if let id {
+            alerts[id] = model
         }
-        return content.response(modalResponse, alert: alert)
+        return await withCheckedContinuation { continuation in
+            model.onAnswer = { [weak self, weak layer] response in
+                if let self {
+                    self.alertCount -= 1
+                    self.shownAlerts.removeAll { $0 === model }
+                    if let id, self.alerts[id] === model {
+                        self.alerts[id] = nil
+                    }
+                    if let layer {
+                        self.stack.remove(layer)
+                    }
+                }
+                continuation.resume(returning: response)
+            }
+            stack.push(layer)
+        }
     }
 
-    /// Closes the alert shown with `id`, if it's showing.
+    /// Closes the alert shown with `id`, if it's showing, answering with its
+    /// cancel button.
     public func dismissAlert(id: String) {
-        guard let alert = alerts.removeValue(forKey: id), let parent = alert.window.sheetParent else {
-            return
-        }
-        parent.endSheet(alert.window, returnCode: .abort)
+        alerts[id]?.answer(nil)
     }
 
-    /// Shows a SwiftUI sheet on the topmost sheet of the window. A sheet
-    /// with the same id that's already showing is replaced.
+    /// Shows a SwiftUI sheet above the modals already showing. A sheet with
+    /// the same id that's already showing is replaced.
     ///
-    /// The content gets the window's environment, a `dismissModal` action,
-    /// and the sheet's presentation (`sheetPresentation()`); `onDismiss`
-    /// runs when the sheet closes, however it closes.
+    /// The content gets the window's environment and a `dismissModal`
+    /// action; `onDismiss` runs when the sheet closes, however it closes.
     @discardableResult
     public func presentSheet<Content: View>(id: String, onDismiss: (() -> Void)? = nil, @ViewBuilder content: () -> Content) -> ModalSheet? {
         dismissSheet(id: id)
-        guard let window = topmostWindow() else {
+        guard window != nil else {
             logger.error("No window to show the sheet \(id, privacy: .public) on")
             onDismiss?()
             return nil
@@ -135,15 +156,14 @@ public final class ModalPresenter {
         let dismiss = DismissModalAction { [weak self] in
             self?.dismissSheet(id: id)
         }
-        let body = AnyView(content().sheetPresentation().environment(\.dismissModal, dismiss))
-        let decorated = environment?(body) ?? body
-        let representation = window.beginSheet(content: { decorated }, completionHandler: { [weak self] in
-            self?.sheetDidEnd(id: id, sheet: sheet)
-        })
-        requestAttentionIfInactive()
-        sheet.end = { [weak window] in
-            window?.endSheet(representation)
+        let layer = ModalLayer(content: decorate(AnyView(content().environment(\.dismissModal, dismiss))))
+        sheet.end = { [weak self, weak layer] in
+            if let self, let layer {
+                self.stack.remove(layer)
+            }
         }
+        stack.push(layer)
+        requestAttentionIfInactive()
         return sheet
     }
 
@@ -152,21 +172,33 @@ public final class ModalPresenter {
         guard let sheet = sheets[id] else {
             return
         }
-        if let end = sheet.end {
-            sheet.end = nil
-            end()
-        } else {
-            sheetDidEnd(id: id, sheet: sheet)
+        sheets[id] = nil
+        let end = sheet.end
+        sheet.end = nil
+        end?()
+        sheet.onDismiss?()
+    }
+
+    /// The window a new modal goes on: the top modal's, or the window.
+    /// Panels that show as sheets attach to it.
+    func topmostWindow() -> NSWindow? {
+        stack.topWindow
+    }
+
+    /// The window closed: every modal on it closes, sheets as when
+    /// dismissed and alerts with their cancel button.
+    private func dismissAll() {
+        for id in Array(sheets.keys) {
+            dismissSheet(id: id)
+        }
+        for model in shownAlerts.reversed() {
+            model.answer(nil)
         }
     }
 
-    private func sheetDidEnd(id: String, sheet: ModalSheet) {
-        guard sheets[id] === sheet else {
-            return
-        }
-        sheets[id] = nil
-        sheet.end = nil
-        sheet.onDismiss?()
+    /// `content` with the window's environment.
+    private func decorate(_ content: AnyView) -> AnyView {
+        environment?(content) ?? content
     }
 
     /// A modal appeared: while Espalier is inactive it beeps and bounces the
@@ -176,17 +208,5 @@ public final class ModalPresenter {
         if !attention.isAppActive() {
             attention.request()
         }
-    }
-
-    /// The window to attach a new modal to: the main window's topmost
-    /// sheet.
-    private func topmostWindow() -> NSWindow? {
-        guard var host = window else {
-            return nil
-        }
-        while let sheet = host.attachedSheet {
-            host = sheet
-        }
-        return host
     }
 }

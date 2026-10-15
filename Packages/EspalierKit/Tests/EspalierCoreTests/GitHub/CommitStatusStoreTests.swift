@@ -1,7 +1,7 @@
 // Subscriptions loading a pull request's checks against a mock GitHub, the
 // 3-minute refresh while active (with a `ManualScheduler`), the 60-second
-// eligibility, GitHub Actions' workflows and steps, failed loads, reruns,
-// and the rerun plan.
+// eligibility, GitHub Actions' workflows and steps, paged and failed loads,
+// reruns and the ones GitHub refuses, and the rerun plan.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -238,7 +238,7 @@ struct CommitStatusStoreTests {
             gitHub.on("POST", "/repos/octocat/hello/actions/jobs/11/rerun", respond: .status(201))
             gitHub.on("POST", "/repos/octocat/hello/actions/runs/900/rerun-failed-jobs", respond: .status(201))
             gitHub.on("POST", "/repos/octocat/hello/check-suites/200/rerequest", respond: .status(201))
-            gitHub.on("POST", "/repos/octocat/hello/check-suites/100/rerequest", respond: .status(403))
+            gitHub.on("POST", "/repos/octocat/hello/check-suites/100/rerequest", respond: .json(["message": "Must have admin rights to Repository."], status: 403))
             gitHub.on("GET", "/repos/octocat/hello/check-suites/100", respond: .json(encoding: APICheckSuite(
                 id: 100, rerequestable: true, runsRerequestable: true, status: .completed, createdAt: "2026-10-01T10:00:00Z"
             )))
@@ -260,15 +260,121 @@ struct CommitStatusStoreTests {
         #expect(plan.rerunnable.map(\.id) == [11])
         #expect(plan.nonRerunnable.map(\.id) == [12])
 
-        #expect(await gitHub.rerunChecks(CheckRerunPlan(rerunnable: [build], nonRerunnable: [], failedOnly: false), for: pr) == [true])
-        #expect(fixture.gitHub.requests("POST", "/repos/octocat/hello/actions/jobs/11/rerun").count == 1)
-        #expect(gitHub.checks(for: pr)?.checks.first?.status == .inProgress)
+        // GitHub refuses suite 100: the check stays as it was, with GitHub's
+        // reason.
+        let refused = await gitHub.rerunChecks(CheckRerunPlan(rerunnable: [loaded[0]], nonRerunnable: [], failedOnly: false), for: pr)
+        #expect(refused.accepted.isEmpty)
+        #expect(refused.refused.map(\.id) == [11])
+        #expect(refused.reasons == ["Must have admin rights to Repository."])
+        #expect(refused.failureMessage != nil)
+        #expect(gitHub.checks(for: pr)?.checks.map(\.conclusion) == [.failure, .failure])
 
-        #expect(await gitHub.rerunChecks(CheckRerunPlan(rerunnable: [build, lint], nonRerunnable: [], failedOnly: true), for: pr) == [true, true])
+        let job = await gitHub.rerunChecks(CheckRerunPlan(rerunnable: [build], nonRerunnable: [], failedOnly: false), for: pr)
+        #expect(job == CheckRerunResult(accepted: [build], refused: [], reasons: []))
+        #expect(job.failureMessage == nil)
+        #expect(fixture.gitHub.requests("POST", "/repos/octocat/hello/actions/jobs/11/rerun").count == 1)
+        #expect(gitHub.checks(for: pr)?.checks.map(\.status) == [.inProgress, .completed])
+
+        let failed = await gitHub.rerunChecks(CheckRerunPlan(rerunnable: [build, lint], nonRerunnable: [], failedOnly: true), for: pr)
+        #expect(failed.accepted.map(\.id) == [11, 12])
         #expect(fixture.gitHub.requests("POST", "/repos/octocat/hello/actions/runs/900/rerun-failed-jobs").count == 1)
         #expect(fixture.gitHub.requests("POST", "/repos/octocat/hello/check-suites/200/rerequest").count == 1)
+        subscription.cancel()
+        await fixture.settle()
+    }
 
-        #expect(await gitHub.rerunChecks(CheckRerunPlan(rerunnable: [loaded[0]], nonRerunnable: [], failedOnly: false), for: pr) == [false])
+    @Test("of a rerun's requests, only the checks of those GitHub accepts show in progress; the others keep their state")
+    func partlyRefusedRerun() async throws {
+        let workflow = APIWorkflowRun(id: 900, workflowID: 1, cancelURL: "", createdAt: "", logsURL: "", name: "CI", rerunURL: "", checkSuiteID: 100, event: "pull_request")
+        let fixture = try await fixture(runs: [
+            apiCheckRun(id: 11, name: "build", conclusion: .failure, checkSuite: 100),
+            apiCheckRun(id: 12, name: "lint", conclusion: .timedOut, app: "Lint App", checkSuite: 200),
+        ]) { gitHub in
+            gitHub.on("POST", "/repos/octocat/hello/actions/runs/900/rerun-failed-jobs", respond: .status(201))
+            gitHub.on("POST", "/repos/octocat/hello/check-suites/200/rerequest", respond: .networkError(.notConnectedToInternet))
+        }
+        let pr = try await pullRequest(fixture)
+        let gitHub = fixture.model.gitHub
+        let subscription = gitHub.commitStatuses.subscribe(CheckRunsKey(pr))
+        await gitHub.idle()
+        let loaded = try #require(gitHub.checks(for: pr)).checks
+        var build = loaded[0]
+        build.actionsWorkflow = workflow
+
+        let result = await gitHub.rerunChecks(CheckRerunPlan(rerunnable: [build, loaded[1]], nonRerunnable: [], failedOnly: true), for: pr)
+        #expect(result.accepted.map(\.id) == [11])
+        #expect(result.refused.map(\.id) == [12])
+        #expect(result.reasons.count == 1)
+        let checks = try #require(gitHub.checks(for: pr)).checks
+        #expect(checks.map(\.status) == [.inProgress, .completed])
+        #expect(checks[1].conclusion == .timedOut)
+        subscription.cancel()
+        await fixture.settle()
+    }
+
+    @Test("Re-run Failed offers checks that timed out or need an action")
+    func rerunPlanCountsTimedOut() async throws {
+        let fixture = try await fixture(runs: [
+            apiCheckRun(id: 11, name: "build", conclusion: .timedOut, checkSuite: 100),
+            apiCheckRun(id: 12, name: "deploy", conclusion: .actionRequired, checkSuite: 100),
+            apiCheckRun(id: 13, name: "lint", checkSuite: 100),
+        ]) { gitHub in
+            gitHub.on("GET", "/repos/octocat/hello/check-suites/100", respond: .json(encoding: APICheckSuite(
+                id: 100, rerequestable: true, runsRerequestable: true, status: .completed, createdAt: "2026-10-01T10:00:00Z"
+            )))
+        }
+        let pr = try await pullRequest(fixture)
+        let gitHub = fixture.model.gitHub
+        let subscription = gitHub.commitStatuses.subscribe(CheckRunsKey(pr))
+        await gitHub.idle()
+        let checks = try #require(gitHub.checks(for: pr)).checks
+
+        let plan = await gitHub.rerunPlan(for: pr, checks: checks, failedOnly: true)
+        #expect(plan.rerunnable.map(\.id) == [11, 12])
+        subscription.cancel()
+        await fixture.settle()
+    }
+
+    @Test("checks come from every page; a load where a page or either request fails keeps the last checks")
+    func pagedAndHalfFailedLoads() async throws {
+        let next = "<https://api.github.com\(checkRunsPath)?per_page=100&page=2>; rel=\"next\""
+        let fixture = try await fixture { gitHub in
+            gitHub.on("GET", checkRunsPath) { request in
+                if request.query["page"] == "2" {
+                    return .json(encoding: APIRefCheckRuns(totalCount: 2, checkRuns: [apiCheckRun(id: 12, name: "test", conclusion: .failure)]))
+                }
+                return .json(encoding: APIRefCheckRuns(totalCount: 2, checkRuns: [apiCheckRun(id: 11, name: "build")]), headers: ["Link": next])
+            }
+        }
+        let pr = try await pullRequest(fixture)
+        let store = fixture.model.gitHub.commitStatuses
+        let subscription = store.subscribe(CheckRunsKey(pr))
+        await fixture.model.gitHub.idle()
+        // The failure on the second page counts.
+        let loaded = try #require(store.check(for: CheckRunsKey(pr)))
+        #expect(loaded.checks.map(\.id) == [11, 12])
+        #expect(loaded.conclusion == .failure)
+
+        // The statuses fail; the check runs alone would read as passed.
+        fixture.gitHub.on("GET", statusPath, respond: .status(500))
+        fixture.gitHub.on("GET", checkRunsPath, respond: .json(encoding: APIRefCheckRuns(totalCount: 1, checkRuns: [apiCheckRun(id: 11, name: "build")])))
+        await fixture.scheduler.advance(by: .seconds(3 * 60))
+        await fixture.model.gitHub.idle()
+        #expect(fixture.gitHub.requests("GET", statusPath).count == 2)
+        #expect(store.check(for: CheckRunsKey(pr)) == loaded)
+
+        // The second page of check runs fails.
+        fixture.gitHub.on("GET", statusPath, respond: .json(encoding: Self.status([])))
+        fixture.gitHub.on("GET", checkRunsPath) { request in
+            if request.query["page"] == "2" {
+                return .status(500)
+            }
+            return .json(encoding: APIRefCheckRuns(totalCount: 2, checkRuns: [apiCheckRun(id: 11, name: "build")]), headers: ["Link": next])
+        }
+        await fixture.scheduler.advance(by: .seconds(3 * 60))
+        await fixture.model.gitHub.idle()
+        #expect(fixture.gitHub.requests("GET", checkRunsPath).last?.query["page"] == "2")
+        #expect(store.check(for: CheckRunsKey(pr)) == loaded)
         subscription.cancel()
         await fixture.settle()
     }

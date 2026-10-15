@@ -29,7 +29,7 @@ struct PushOperationTests {
         try await runGit(["commit", "-q", "--amend", "-m", "Add a (amended)"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         let branch = try #require(fixture.model.gitState.tip.branch)
-        fixture.model.operations.recordRewrite(of: branch, previousTip: pushed)
+        await fixture.model.operations.recordRewrite(of: branch, previousTip: pushed, upstreamTip: pushed)
         return (fixture, try await fixture.head())
     }
 
@@ -64,6 +64,25 @@ struct PushOperationTests {
         #expect(try await fixture.remoteTip("main") == (try await fixture.head()))
         #expect(fixture.model.gitState.aheadBehind == AheadBehind(ahead: 0, behind: 0))
         #expect(fixture.model.sync.action == .fetch(remote: "origin"))
+        await fixture.app.idle()
+    }
+
+    @Test("pushes to the remote a branch tracks when the remote's name has a slash")
+    func remoteNameWithSlash() async throws {
+        let team = try await makeEmptyBareRemote()
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["remote", "add", "team/alice", team.path], local)
+            try await runGit(["checkout", "-q", "-b", "feature"], local)
+            try await runGit(["push", "-q", "-u", "team/alice", "feature"], local)
+            try await commitFile(local, "feature.txt", "feature\n")
+        }
+        #expect(fixture.model.gitState.tip.branch?.upstreamRemoteName == "team/alice")
+        #expect(fixture.model.gitState.remotes.currentRemote?.name == "team/alice")
+        #expect(fixture.model.sync.action == .push(remote: "team/alice", aheadBehind: AheadBehind(ahead: 1, behind: 0), tagsToPush: 0))
+
+        #expect(try await fixture.model.sync.push() == .pushed(branch: "feature", remote: "team/alice", tags: [], fetchFailure: nil))
+        #expect(try await resolveRef("refs/heads/feature", in: team) == (try await fixture.head()))
+        #expect(try await fixture.remoteTip("feature") == nil)
         await fixture.app.idle()
     }
 
@@ -122,9 +141,6 @@ struct PushOperationTests {
         }
         #expect(confirmation.kind == .forcePush)
         #expect(confirmation.details == .branch("origin/main"))
-        #expect(confirmation.title == "Force Push?")
-        #expect(confirmation.message == "Force pushing rewrites the history of origin/main. Anyone working on this branch will need to reset their local branch to match it.")
-        #expect(confirmation.confirmButton == "Force Push")
         #expect(try await fixture.remoteTip("main") != amended)
 
         let outcome = try await fixture.model.sync.push(PushRequest(forceWithLease: true), confirmed: [.forcePush])
@@ -154,14 +170,33 @@ struct PushOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.sync.push(PushRequest(forceWithLease: true), confirmed: [.forcePush])
         }
-        #expect(error?.title == "Push Failed")
         #expect(error?.gitFailure?.stderr.contains("stale info") == true)
         let retry = try #require(error?.retry as? PushRetry)
         #expect(retry.request == PushRequest(forceWithLease: true))
         #expect(retry.confirmed == [.forcePush])
         #expect(try await fixture.remoteTip("main") == theirs)
         #expect(try await fixture.head() == amended)
-        #expect(fixture.model.operations.rewrittenBranches["main"] == amended)
+        #expect(fixture.model.operations.rewrittenBranches["main"] == (try await fixture.localSHA("main@{upstream}")))
+        #expect(fixture.model.operations.forcePushState == .recommended)
+        await fixture.app.idle()
+    }
+
+    @Test("a collaborator's push fetched after the rewrite, before the refresh: the force push's lease refuses, and the remote keeps the commit")
+    func leaseUsesRecordedTip() async throws {
+        let (fixture, amended) = try await makeRewrittenRepository()
+        let theirs = try await pushCommitFromAnotherClone(fixture.remote, path: "theirs.txt", contents: "theirs\n")
+        // Fetched, but not yet refreshed: the toolbar still says Force Push,
+        // and git's own lease (the remote-tracking branch) would pass.
+        try await runGit(["fetch", "-q"], fixture.local)
+        #expect(fixture.model.operations.forcePushState == .recommended)
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.model.sync.push(PushRequest(forceWithLease: true), confirmed: [.forcePush])
+        }
+        #expect(error?.reason == .pushRejectedNonFastForward)
+        #expect(error?.gitFailure?.stderr.contains("stale info") == true)
+        #expect(try await fixture.remoteTip("main") == theirs)
+        #expect(try await fixture.head() == amended)
         await fixture.app.idle()
     }
 
@@ -175,7 +210,7 @@ struct PushOperationTests {
             try await fixture.model.sync.push(PushRequest(forceWithLease: true), confirmed: [.forcePush])
         }
         #expect(error?.gitFailure?.stderr.contains("pre-receive hook declined") == true)
-        #expect(fixture.model.operations.rewrittenBranches["main"] == amended)
+        #expect(fixture.model.operations.rewrittenBranches["main"] == (try await fixture.localSHA("main@{upstream}")))
         let retry = try #require(error?.retry)
 
         try FileManager.default.removeItem(atPath: preReceive)
@@ -199,11 +234,9 @@ struct PushOperationTests {
             try await fixture.model.sync.push()
         }
         #expect(error?.reason == .pushRejectedNonFastForward)
-        #expect(error?.title == "Newer Commits on Remote")
-        #expect(error?.message == "The remote branch has commits that your local branch doesn't, so Espalier can't push yet. Fetch them first, then combine them with your commits.")
         #expect((error?.retry as? PushRetry)?.request == PushRequest())
         let recovery = try #require(error?.recoveries.first)
-        #expect(recovery.title == "Fetch")
+        #expect(recovery.kind == .fetch)
         #expect(error?.recoveries.count == 1)
 
         try await recovery.perform(in: fixture.app)
@@ -234,14 +267,13 @@ struct PushOperationTests {
             try await fixture.model.sync.push()
         }
         #expect(error?.reason == .insufficientPermissions(repositoryFullName: "octocat/app"))
-        #expect(error?.title == "Do you want to fork this repository?")
         #expect(error?.recoveries.isEmpty == true)
 
         try await fixture.harness.signIn([testAccount], to: fixture.app)
         error = await #expect(throws: OperationError.self) {
             try await fixture.model.sync.push()
         }
-        #expect(error?.recoveries.map(\.title) == ["Fork This Repository…"])
+        #expect(error?.recoveries.map(\.kind) == [.createFork])
         await fixture.app.idle()
     }
 
@@ -279,30 +311,30 @@ struct PushOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("needs a branch, in desktop's words; force pushing needs an upstream")
+    @Test("needs a branch; force pushing needs an upstream")
     func preconditions() async throws {
         let fixture = try await makeSelectedRepository()
 
         try await runGit(["checkout", "-q", "--detach", "HEAD"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         var error = await #expect(throws: OperationError.self) { try await fixture.model.sync.push() }
-        #expect(preconditionMessage(error) == "You're on a detached HEAD, not a branch.")
+        #expect(preconditionMessage(error) != nil)
         error = await #expect(throws: OperationError.self) {
             try await fixture.model.sync.push(PushRequest(forceWithLease: true), confirmed: [.forcePush])
         }
-        #expect(preconditionMessage(error) == "You're on a detached HEAD, not a branch.")
+        #expect(preconditionMessage(error) != nil)
 
         try await runGit(["checkout", "-q", "--orphan", "fresh"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         error = await #expect(throws: OperationError.self) { try await fixture.model.sync.push() }
-        #expect(preconditionMessage(error) == "The current branch has no commits yet.")
+        #expect(preconditionMessage(error) != nil)
 
         try await runGit(["checkout", "-q", "-b", "local-only", "main"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         error = await #expect(throws: OperationError.self) {
             try await fixture.model.sync.push(PushRequest(forceWithLease: true))
         }
-        #expect(preconditionMessage(error) == "The current branch has no upstream branch to force push to.")
+        #expect(preconditionMessage(error) != nil)
         await fixture.app.idle()
     }
 

@@ -11,47 +11,21 @@ import EspalierSupport
 import GitKit
 import SwiftUI
 
-/// How a branch comes into the current one.
-nonisolated public enum IntegrateMethod: String, Sendable, CaseIterable, Identifiable {
-    case merge
-    case squashMerge
-    case rebase
+/// How a branch comes into the current one: Compare's methods, with their
+/// labels and descriptions, which the sheet and Compare's call to action
+/// pick with the same button (`IntegrateMethodButton`).
+public typealias IntegrateMethod = CompareMethod
 
-    public var id: String {
-        rawValue
-    }
-
-    /// The split button's label.
-    public var label: String {
-        switch self {
-        case .merge: "Create a merge commit"
-        case .squashMerge: "Squash and merge"
-        case .rebase: "Rebase"
-        }
-    }
-
-    /// The option's description in the split button's menu.
-    public var description: String {
-        switch self {
-        case .merge: "Adds the selected branch's commits to the current branch with a merge commit."
-        case .squashMerge: "Combines the selected branch's commits into one commit on the current branch."
-        case .rebase: "Replays the current branch's commits on top of the selected branch."
-        }
-    }
-
+extension CompareMethod {
     /// "Merge into main", "Squash and Merge into main", "Rebase main".
-    public func title(currentBranch: String) -> String {
-        let name = truncate(currentBranch)
+    nonisolated public func title(currentBranch: String) -> String {
+        // Cut to 40 characters with an ellipsis.
+        let name = currentBranch.count <= 40 ? currentBranch : "\(currentBranch.prefix(39))…"
         switch self {
         case .merge: return "Merge into \(name)"
         case .squashMerge: return "Squash and Merge into \(name)"
         case .rebase: return "Rebase \(name)"
         }
-    }
-
-    /// `name`, cut to 40 characters with an ellipsis.
-    private func truncate(_ name: String) -> String {
-        name.count <= 40 ? name : "\(name.prefix(39))…"
     }
 }
 
@@ -60,6 +34,8 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
     /// The line's symbol.
     public enum Icon: Sendable, Equatable {
         case loading, clean, conflicts, invalid
+        /// Git couldn't check: a question mark.
+        case unknown
     }
 
     public var icon: Icon?
@@ -75,42 +51,46 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
         self.buttonHelp = buttonHelp
     }
 
-    /// What merging or squash merging `branch` into `current` would do.
-    /// `preview` nil means it's loading.
-    public static func merge(current: String, branch: String?, preview: MergePreview?) -> IntegrateStatus {
+    /// What merging or squash merging `branch` into `current` would do,
+    /// counts in `numberFormat`, and whether it can start
+    /// (`MergePreview.canStart`). `preview` nil means it's loading.
+    public static func merge(current: String, branch: String?, preview: MergePreview?, numberFormat: NumberFormat) -> IntegrateStatus {
         guard let branch, !JSCompat.strictEquals(branch, current) else {
             return IntegrateStatus()
         }
         guard let preview else {
             return IntegrateStatus(icon: .loading, message: "Checking whether Git can merge automatically…")
         }
-        switch preview.status {
-        case .loading:
+        let canStart = preview.canStart
+        switch (preview.status, preview.commitCount) {
+        case (.loading?, _):
             return IntegrateStatus(icon: .loading, message: "Checking whether Git can merge automatically…")
-        case .clean where preview.commitCount == 0:
-            return IntegrateStatus(icon: .clean, message: "\(current) is already up to date with \(branch)")
-        case .clean:
-            let commits = preview.commitCount == 1 ? "commit" : "commits"
-            return IntegrateStatus(
-                icon: .clean,
-                message: "This will merge \(preview.commitCount) \(commits) from \(branch) into \(current)",
-                canStart: true
-            )
-        case .invalid:
+        case (.invalid?, _):
             return IntegrateStatus(icon: .invalid, message: "These branches have unrelated histories and can't be merged")
-        case .conflicts(let count):
+        case (_, 0?):
+            return IntegrateStatus(icon: .clean, message: "\(current) is already up to date with \(branch)")
+        case (.conflicts(let count)?, _):
             let files = count == 1 ? "file" : "files"
             return IntegrateStatus(
                 icon: .conflicts,
-                message: "There will be \(count) conflicted \(files) when merging \(branch) into \(current)",
-                canStart: true
+                message: "There will be \(formatCount(count, numberFormat)) conflicted \(files) when merging \(branch) into \(current)",
+                canStart: canStart
+            )
+        case (nil, _), (_, nil):
+            return IntegrateStatus(icon: .unknown, message: "Couldn't check whether this merges cleanly", canStart: canStart)
+        case (.clean?, let count?):
+            let commits = count == 1 ? "commit" : "commits"
+            return IntegrateStatus(
+                icon: .clean,
+                message: "This will merge \(formatCount(count, numberFormat)) \(commits) from \(branch) into \(current)",
+                canStart: canStart
             )
         }
     }
 
-    /// What rebasing `current` onto `base` would do. `preview` nil means
-    /// it's loading.
-    public static func rebase(current: String, base: String?, preview: RebasePreview?) -> IntegrateStatus {
+    /// What rebasing `current` onto `base` would do, counts in
+    /// `numberFormat`. `preview` nil means it's loading.
+    public static func rebase(current: String, base: String?, preview: RebasePreview?, numberFormat: NumberFormat) -> IntegrateStatus {
         guard let base else {
             return IntegrateStatus()
         }
@@ -134,7 +114,7 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
                 let commits = behind == 1 ? "commit" : "commits"
                 return IntegrateStatus(
                     icon: .clean,
-                    message: "This will fast-forward \(current) by \(behind) \(commits) to match \(base)",
+                    message: "This will fast-forward \(current) by \(formatCount(behind, numberFormat)) \(commits) to match \(base)",
                     canStart: true
                 )
             }
@@ -142,7 +122,7 @@ nonisolated public struct IntegrateStatus: Sendable, Equatable {
                 let commits = ahead == 1 ? "commit" : "commits"
                 return IntegrateStatus(
                     icon: .clean,
-                    message: "This will update \(current) by applying its \(ahead) \(commits) on top of \(base)",
+                    message: "This will update \(current) by applying its \(formatCount(ahead, numberFormat)) \(commits) on top of \(base)",
                     canStart: true
                 )
             }
@@ -163,6 +143,7 @@ public struct IntegrateBranchSheet: View {
     @State private var mergePreview: MergePreview?
     @State private var rebasePreview: RebasePreview?
     @Environment(\.dismissModal) private var dismissModal
+    @Environment(\.numberFormat) private var numberFormat
 
     /// The list's height.
     private static let listHeight = Metrics.BranchPicker.sheetListHeight
@@ -221,9 +202,9 @@ public struct IntegrateBranchSheet: View {
     private func status(current: String) -> IntegrateStatus {
         switch method {
         case .merge, .squashMerge:
-            IntegrateStatus.merge(current: current, branch: selection?.name, preview: mergePreview)
+            IntegrateStatus.merge(current: current, branch: selection?.name, preview: mergePreview, numberFormat: numberFormat)
         case .rebase:
-            IntegrateStatus.rebase(current: current, base: selection?.name, preview: rebasePreview)
+            IntegrateStatus.rebase(current: current, base: selection?.name, preview: rebasePreview, numberFormat: numberFormat)
         }
     }
 
@@ -287,7 +268,8 @@ private struct PreviewKey: Equatable {
     }
 }
 
-/// The status line: its symbol and message.
+/// The status line: its symbol and message. The sheet and Compare's call
+/// to action show it alike.
 struct IntegrateStatusLine: View {
     let status: IntegrateStatus
 
@@ -295,6 +277,7 @@ struct IntegrateStatusLine: View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
             if let icon = status.icon {
                 IntegrateStatusIcon(icon: icon)
+                    .frame(width: Metrics.symbolWidth)
             }
             Text(status.message ?? " ")
                 .font(Typography.secondary)
@@ -306,81 +289,82 @@ struct IntegrateStatusLine: View {
     }
 }
 
-/// The status line's symbol: a dot while checking, then a check, a
-/// warning, or a cross.
+/// The status line's symbol: the arc while checking, then a check, a
+/// warning, a cross, or a question mark.
 struct IntegrateStatusIcon: View {
     let icon: IntegrateStatus.Icon
 
     var body: some View {
         switch icon {
         case .loading:
-            Image(systemName: "circle.fill")
-                .imageScale(.small)
-                .foregroundStyle(.text3)
+            // The arc's center on the middle of the line's cap height,
+            // where the symbols' centers sit.
+            let offset = AppKitTypography.secondary.capHeight / 2
+            ArcProgress(.mini)
+                .alignmentGuide(.firstTextBaseline) { dimensions in
+                    dimensions[VerticalAlignment.center] + offset
+                }
                 .accessibilityLabel("Checking")
         case .clean:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(Color(espalier: Palette.success))
-                .accessibilityLabel("Clean")
+                .accessibilityLabel("Ready")
         case .conflicts:
             WarningGlyph()
         case .invalid:
             Image(systemName: "xmark.circle.fill")
                 .foregroundStyle(Color(espalier: Palette.error))
-                .accessibilityLabel("Unable")
+                .accessibilityLabel("Unavailable")
+        case .unknown:
+            Image(systemName: "questionmark.circle.fill")
+                .foregroundStyle(.text3)
+                .accessibilityLabel("Unknown")
         }
     }
 }
 
-/// The split button: its main part starts the method; its menu switches
-/// the method, each with its description. While the method can't start,
-/// the whole button opens the menu, so the method can still be switched.
+/// The method's split button, in the sheet and Compare's call to action:
+/// its main part starts the method; its menu switches the method, each
+/// with its description, the current one checked. While the method can't
+/// start, the whole button opens the menu, so the method can still be
+/// switched.
 struct IntegrateMethodButton: View {
     @Binding var method: IntegrateMethod
     let canStart: Bool
+    /// The tooltip; the method's description when nil.
     let help: String?
+    /// The main part's shortcut: Return in the sheet, whose default button
+    /// it is.
+    var shortcut: KeyboardShortcut? = .defaultAction
     let start: () -> Void
 
     var body: some View {
         if canStart {
-            // Return starts the method, as the sheet's default button.
-            SplitCapsuleButton(.prominent, menuLabel: "Merge Options", shortcut: .defaultAction, action: start) {
+            SplitCapsuleButton(.prominent, menuLabel: "Merge Options", shortcut: shortcut, action: start) {
                 Text(method.label)
             } menu: {
                 options
             }
             .fixedSize()
-            .help(help ?? method.description)
+            .tooltip(help ?? method.description)
         } else {
-            Menu {
+            PullDownButton("Merge Options", value: method.label) {
                 options
             } label: {
                 MenuCapsuleLabel(method.label)
             }
-            .menuStyle(.button)
             .buttonStyle(.quiet)
-            .menuIndicator(.hidden)
             .fixedSize()
-            .help(help ?? method.description)
+            .tooltip(help ?? method.description)
         }
     }
 
-    @ViewBuilder
-    private var options: some View {
-        ForEach(IntegrateMethod.allCases) { option in
-            Button {
-                method = option
-            } label: {
-                if option == method {
-                    Label {
-                        Text(option.label)
-                        Text(option.description)
-                    } icon: {
-                        Image(systemName: "checkmark")
-                    }
-                } else {
-                    Text(option.label)
-                    Text(option.description)
+    /// The methods, each with its description, the current one checked.
+    private var options: MenuContent {
+        MenuContent {
+            MenuPicker(selection: $method) {
+                for option in IntegrateMethod.allCases {
+                    MenuChoice(option.label, value: option, subtitle: option.description)
                 }
             }
         }

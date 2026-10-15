@@ -32,10 +32,6 @@ public final class MultiCommitOperationsModel: RepositoryFeature {
     /// branch is checked out at the operation's result with no changes at
     /// all, which status passes check.
     public internal(set) var undo: MultiCommitUndo?
-    /// Branches whose history Espalier rewrote (amend, rebase, squash,
-    /// reorder), by name without the remote, to their new tip: the next push
-    /// needs force.
-    public internal(set) var rewrittenBranches: [String: String] = [:]
     /// The message a merge waiting on its conflicts will be committed with
     /// (`continueOperation()`), which the user may edit: git's message
     /// (`defaultMergeMessage`) once it's loaded, nil until then and when no
@@ -539,6 +535,12 @@ public final class MultiCommitOperationsModel: RepositoryFeature {
     func enrichmentIdle() async {
         await enrichment.idle()
         await mergeMessageLoads.idle()
+    }
+
+    func repositoryDidRefresh(_ update: RefreshUpdate) {
+        if update.applied.contains(.refs) {
+            forgetMovedRewrites()
+        }
     }
 
     func repositoryPathDidChange(keepingSharedState: Bool) {

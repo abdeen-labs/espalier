@@ -10,6 +10,7 @@ import SwiftUI
 struct TwoUpView: View {
     let previousShown: ShownImage
     let currentShown: ShownImage
+    @Environment(\.numberFormat) private var numberFormat
 
     init(previous: ShownImage, current: ShownImage) {
         previousShown = previous
@@ -52,23 +53,22 @@ struct TwoUpView: View {
                 .font(Typography.heading)
             CheckeredImage(image: decoded, size: size)
                 .accessibilityElement()
-                .accessibilityLabel(imageAccessibilityLabel(title, image: decoded, bytes: image.bytes))
+                .accessibilityLabel(imageAccessibilityLabel(title, image: decoded, bytes: image.bytes, numberFormat: numberFormat))
                 .accessibilityAddTraits(.isImage)
-            Text(imageFooter(image: decoded, bytes: image.bytes))
+            Text(imageFooter(image: decoded, bytes: image.bytes, numberFormat: numberFormat))
                 .font(Typography.secondary.monospacedDigit())
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
     }
 
-    /// "Diff: +2.5 KiB (120%)" or "No size difference" (the percentage is
-    /// the new size relative to the old).
+    /// "Diff: +2.5 KiB (+20%)" or "No size difference".
     private var summary: some View {
         let diffBytes = current.bytes - previous.bytes
-        return HStack(spacing: 4) {
+        return HStack(spacing: Metrics.grid) {
             Text("Diff:")
             if diffBytes != 0 {
-                Text(sizeDifference)
+                Text(sizeDifference(numberFormat))
                     .foregroundStyle(Color(nsColor: diffBytes > 0 ? DiffColors.addedMarker : DiffColors.deletedMarker))
             } else {
                 Text("No size difference")
@@ -77,19 +77,24 @@ struct TwoUpView: View {
         .font(Typography.secondary.monospacedDigit())
     }
 
-    /// "+2.5 KiB (120%)".
-    var sizeDifference: String {
+    /// "+2.5 KiB (+20%)", "−1 KiB (−50%)", the size in `numberFormat`;
+    /// without the percentage when the old image was empty.
+    func sizeDifference(_ numberFormat: NumberFormat) -> String {
         let diffBytes = current.bytes - previous.bytes
-        let sign = diffBytes >= 0 ? "+" : ""
-        return "\(sign)\(formatBytes(Double(diffBytes), 2)) (\(percentDiff(previous.bytes, current.bytes)))"
+        let sign = diffBytes >= 0 ? "+" : "\u{2212}"
+        let size = "\(sign)\(formatBytes(Double(abs(diffBytes)), 2, numberFormat: numberFormat))"
+        guard let percent = percentChange(previous.bytes, current.bytes) else {
+            return size
+        }
+        return "\(size) (\(sign)\(abs(percent))%)"
     }
 }
 
-/// The new size as a percentage of the old one.
-nonisolated func percentDiff(_ previous: Int, _ current: Int) -> String {
+/// The change in size as a percentage of the old size, rounded: 20 from
+/// 100 to 120 bytes, -50 from 100 to 50. Nil when the old size is 0.
+nonisolated func percentChange(_ previous: Int, _ current: Int) -> Int? {
     guard previous != 0 else {
-        return "∞%"
+        return nil
     }
-    let ratio = (Double(current) / Double(previous) * 100).rounded(.toNearestOrAwayFromZero)
-    return "\(Int(abs(ratio)))%"
+    return Int((Double(current - previous) / Double(previous) * 100).rounded(.toNearestOrAwayFromZero))
 }

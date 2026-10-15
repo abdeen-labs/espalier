@@ -10,7 +10,8 @@ import GitKit
 
 /// What the classifier needs to know beyond the error and the operation.
 struct ClassificationContext: Sendable {
-    /// The operation is a background task: its error is never presented.
+    /// The operation is a background task: its error is never presented as
+    /// an error.
     var isBackgroundTask = false
 
     /// An account matches the repository's GitHub endpoint: only then is a
@@ -169,8 +170,10 @@ enum ErrorClassifier {
             )
         }
 
-        // 9. A push that needs a pull first.
-        if dugiteError == .pushNotFastForward, let record {
+        // 9. A push that needs a pull first, or a force push whose lease
+        // found the remote branch moved ("stale info", which dugite's
+        // patterns don't name).
+        if dugiteError == .pushNotFastForward || (gitError != nil && isStaleLeaseRejection(stderr)), let record {
             return make(.pushRejectedNonFastForward, [.fetch(record.id)])
         }
 
@@ -235,6 +238,12 @@ enum ErrorClassifier {
             return make(.fileSystem(error.localizedDescription))
         }
         return make(.other(error.localizedDescription))
+    }
+
+    /// Whether git refused to push a ref because its `--force-with-lease`
+    /// lease didn't hold: ` ! [rejected] main -> main (stale info)`.
+    private static func isStaleLeaseRejection(_ stderr: String) -> Bool {
+        stderr.contains("[rejected]") && stderr.contains(" (stale info)") && stderr.contains("error: failed to push some refs")
     }
 
     /// An error from the system, with a code such as `ENOENT`.

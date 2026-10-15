@@ -97,9 +97,16 @@ public enum AppFileStatus: Hashable, Sendable {
 public enum ConflictedFileStatus: Hashable, Sendable {
     /// Details about a file marked as conflicted in the index which may have
     /// conflict markers to inspect.
+    ///
+    /// `conflictMarkerCount` counts the markers `git diff --check` finds,
+    /// which can't tell conflicts apart: one has three markers in git's
+    /// default style and four in the diff3 style. `conflictCount` counts
+    /// the markers that open a conflict, read from the file when there are
+    /// markers.
     case conflictsWithMarkers(
         entry: TextConflictEntry,
         conflictMarkerCount: Int,
+        conflictCount: Int = 0,
         submoduleStatus: SubmoduleStatus? = nil
     )
 
@@ -109,14 +116,14 @@ public enum ConflictedFileStatus: Hashable, Sendable {
 
     public var entry: UnmergedEntry {
         switch self {
-        case .conflictsWithMarkers(let entry, _, _), .manualConflict(let entry, _):
+        case .conflictsWithMarkers(let entry, _, _, _), .manualConflict(let entry, _):
             entry
         }
     }
 
     public var submoduleStatus: SubmoduleStatus? {
         switch self {
-        case .conflictsWithMarkers(_, _, let submoduleStatus), .manualConflict(_, let submoduleStatus):
+        case .conflictsWithMarkers(_, _, _, let submoduleStatus), .manualConflict(_, let submoduleStatus):
             submoduleStatus
         }
     }

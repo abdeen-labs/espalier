@@ -53,8 +53,9 @@ public enum CurrentBranchRewriteCheck: Sendable, Equatable {
     /// merge, or came in with one (`mergeCommitReplayedError`).
     case mergeCommitReplayed
     /// They can't, and there's nothing to explain: HEAD isn't on a branch,
-    /// History shows a comparison, a commit isn't loaded, or one isn't in
-    /// the current branch's history (cherry-pick it instead).
+    /// History shows a comparison or another branch's history, a commit
+    /// isn't loaded, or one isn't in the current branch's history
+    /// (cherry-pick it instead).
     case unavailable
 
     /// The rewrite, when it's allowed.
@@ -77,9 +78,12 @@ extension HistoryModel {
     /// Whether `shas` can be squashed into `target`, or moved below it (nil
     /// for the top): allowed when every commit is on the current branch's
     /// first-parent line with no merge commit from HEAD down to the oldest
-    /// of them. Only the history (not a comparison) rewrites.
+    /// of them. Only the current branch's history rewrites: not a
+    /// comparison, and not another branch's history
+    /// (`showsCurrentBranchHistory`), even where it shares commits with the
+    /// current branch.
     public func checkCurrentBranchRewrite(moving shas: [String], relativeTo target: String?) -> CurrentBranchRewriteCheck {
-        guard mode == .history, !shas.isEmpty, let head = repository?.gitState.tip.branch?.tip.sha else {
+        guard showsCurrentBranchHistory, !shas.isEmpty, let head = repository?.gitState.tip.branch?.tip.sha else {
             return .unavailable
         }
         var involved = Set(shas)

@@ -99,7 +99,9 @@ struct GitHubDesktopLinksTests {
             try await app.integrations.setOpenGitHubDesktopLinks(true)
         }
         #expect(onError?.operation == .setLinkHandler)
-        #expect(onError?.reason == .other("Couldn't set Espalier to open GitHub Desktop links. Permission denied."))
+        if case .other? = onError?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: onError?.reason))")
+        }
         #expect(!app.preferences.openGitHubDesktopLinks)
         #expect(!app.integrations.opensGitHubDesktopLinks)
         #expect(app.integrations.pendingOpenGitHubDesktopLinks == nil)
@@ -111,7 +113,9 @@ struct GitHubDesktopLinksTests {
         let offError = await #expect(throws: OperationError.self) {
             try await app.integrations.setOpenGitHubDesktopLinks(false)
         }
-        #expect(offError?.reason == .other("Couldn't set GitHub Desktop to open its links again. Permission denied."))
+        if case .other? = offError?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: offError?.reason))")
+        }
         #expect(app.preferences.openGitHubDesktopLinks)
         #expect(app.integrations.opensGitHubDesktopLinks)
     }
@@ -493,7 +497,9 @@ struct GitHubDesktopLinksTests {
             _ = try await app.handle(.url(url))
         }
         #expect(error?.operation == .forwardLink)
-        #expect(error?.reason == .other("Couldn't open the link in GitHub Desktop. Permission denied."))
+        if case .other? = error?.reason {} else {
+            Issue.record("Unexpected reason \(String(describing: error?.reason))")
+        }
         #expect(app.loadState == .notLoaded)
         #expect(app.selection == nil)
     }

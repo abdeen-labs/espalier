@@ -1,6 +1,7 @@
 // Ported from desktop/app/test/unit/remote-parsing-test.ts
 
 @testable import GitHubKit
+import TestSupport
 import Testing
 
 private func expectRemote(
@@ -124,5 +125,34 @@ struct RemoteParsingTests {
     @Test("does not parse invalid git URLs when missing repo owner")
     func invalidGitWithoutOwner() {
         #expect(parseRemote("git:github.com//somerepo") == nil)
+    }
+
+    @Test("drops .git/ from SSH and git URLs", arguments: [
+        ("git@github.com:hubot/repo.git/", "github.com"),
+        ("niik@niik.ghe.com:hubot/repo.git/", "niik.ghe.com"),
+        ("ssh://git@github.com/hubot/repo.git/", "github.com"),
+        ("git:github.com/hubot/repo.git/", "github.com"),
+    ])
+    func sshWithGitSuffixAndSlash(url: String, hostname: String) {
+        expectRemote(url, hostname: hostname, owner: "hubot", name: "repo")
+    }
+
+    @Test("ends an HTTPS URL's user info before its path", arguments: [
+        NamedCase("an @ in the path stays in the host", (url: "https://evil.example/x@github.com/hubot/repo.git", hostname: "evil.example/x@github.com")),
+        NamedCase("user info ends at its last @", (url: "https://me@example.com@github.com/hubot/repo.git", hostname: "github.com")),
+        NamedCase("user info with a password", (url: "https://me:secret@github.com:8443/hubot/repo.git", hostname: "github.com:8443")),
+    ])
+    func httpsUserInfo(_ testCase: NamedCase<(url: String, hostname: String)>) {
+        expectRemote(testCase.value.url, hostname: testCase.value.hostname, owner: "hubot", name: "repo")
+    }
+}
+
+@Suite("repository identifier parsing")
+struct RepositoryIdentifierParsingTests {
+    @Test("drops .git from an owner/name shortcut")
+    func shortcutWithGitSuffix() throws {
+        let identifier = try #require(parseRepositoryIdentifier("hubot/repo.git"))
+        #expect(identifier == RepositoryIdentifier(hostname: nil, owner: "hubot", name: "repo"))
+        #expect(parseRepositoryIdentifier("hubot/.git") == nil)
     }
 }

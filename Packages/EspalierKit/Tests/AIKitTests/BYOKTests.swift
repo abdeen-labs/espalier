@@ -50,6 +50,27 @@ struct BYOKStorageTests {
         #expect(load(#"[\#(sampleProviderJSON), {"id":"x","name":"Bad","type":"openai"}]"#) == [sampleProvider])
     }
 
+    // Desktop drops them, and its next save deletes them for good, leaving
+    // their keys in the keychain.
+    @Test("keeps entries that don't load and writes them back after the providers")
+    func keepsUnloadableEntries() throws {
+        let newer = #"{"authKind":"apiKey","baseUrl":"https://example.com","id":"p9","models":[],"name":"Newer","type":"gemini"}"#
+        let stored = loadStoredBYOKProviders(from: Data("[\(newer),\(sampleProviderJSON)]".utf8))
+        #expect(stored.providers == [sampleProvider])
+        #expect(stored.unloadable.count == 1)
+
+        var other = sampleProvider
+        other.id = "p2"
+        let saved = try #require(try saveBYOKProviders([sampleProvider, other], keeping: stored.unloadable))
+        #expect(try JSONValue.parse(saved).arrayValue?.last == JSONValue.parse(newer))
+        let reloaded = loadStoredBYOKProviders(from: saved)
+        #expect(reloaded.providers == [sampleProvider, other])
+        #expect(reloaded.unloadable == stored.unloadable)
+
+        // With every provider removed, the entry stays.
+        #expect(try JSONValue.parse(try #require(try saveBYOKProviders([], keeping: stored.unloadable))) == JSONValue.parse("[\(newer)]"))
+    }
+
     // What the app reads back from the stored format.
 
     @Test("rejects present-but-null optional fields and non-positive timeouts, as desktop does")

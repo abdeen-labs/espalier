@@ -42,6 +42,9 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
     /// Keeps the app's appearance on the theme chosen in Settings, once
     /// launched.
     @ObservationIgnored private var themeApplier: ThemeApplier?
+    /// Keeps the look on the design theme, color, app font, and code font
+    /// chosen in Settings, once launched.
+    @ObservationIgnored private var lookApplier: LookApplier?
 
     override public init() {
         super.init()
@@ -50,7 +53,8 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Launching
 
     /// Starts the rolling log file first, so it has the whole run, then
-    /// applies the stored theme before the first window opens.
+    /// applies the stored theme, look, and Espalier's text input before the
+    /// first window opens.
     public func applicationWillFinishLaunching(_ notification: Notification) {
         Log.startFileLog()
         let info = Bundle.main.infoDictionary
@@ -58,10 +62,15 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
         let build = info?["CFBundleVersion"] as? String ?? "?"
         logger.info("Espalier \(version, privacy: .public) (\(build, privacy: .public)) started, process \(ProcessInfo.processInfo.processIdentifier)")
         ThemeApplier.apply(Preferences.storedTheme(in: PreferenceStore(.standard)), to: NSApplication.shared)
+        BundledFonts.register()
+        LookApplier.apply(Look.stored(in: PreferenceStore(.standard)))
+        TextInputStyling.install()
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         installExternalEventHandlers()
+        // Context clicks in every window open Espalier's menus.
+        MenuEventRouter.shared.install()
         // Before launch finishes, so a notification click that launched
         // Espalier reaches it.
         NotificationRouter.shared.install()
@@ -70,6 +79,7 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
             do {
                 let launched = try await AppBootstrap.launch()
                 themeApplier = ThemeApplier(preferences: launched.model.preferences, target: NSApplication.shared)
+                lookApplier = LookApplier(preferences: launched.model.preferences)
                 self.launched = launched
             } catch {
                 logger.error("Launch failed: \(error.localizedDescription, privacy: .public)")
@@ -138,7 +148,7 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
         guard let launched else {
             return .terminateNow
         }
-        let alert = isTerminating ? nil : QuitGuard.reasons(launched.model).alert
+        let alert = isTerminating ? nil : QuitGuard.reasons(launched.model).alert(launched.model.preferences.numberFormat)
         Task {
             if let alert {
                 let response = await presentQuitAlert(alert)
@@ -160,14 +170,13 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The quit guard's alert: on the main window when it's showing, else
-    /// on its own.
+    /// on its own, app-modally.
     private func presentQuitAlert(_ content: AlertContent) async -> AlertResponse {
         if let context = mainWindowContext, let window = context.modals.window, window.isVisible {
             NSApp.activate()
             return await context.modals.alert(content)
         }
-        let alert = content.makeAlert()
         NSApp.activate()
-        return content.response(alert.runModal(), alert: alert)
+        return AppModalAlert.run(content)
     }
 }

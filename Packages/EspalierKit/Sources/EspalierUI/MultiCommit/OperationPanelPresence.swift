@@ -29,14 +29,13 @@ final class OperationPanelPresence {
     @ObservationIgnored private var delay: Task<Void, Never>?
 
     /// Whether the panel shows for `demand`: at once for what waits on the
-    /// user, after the delay for what runs (or at once when delayed
-    /// content shows immediately, in snapshots), and stays while an
-    /// operation shown waiting runs again (Continue).
-    func isShown(for demand: Demand, immediately: Bool = false) -> Bool {
+    /// user, after the delay for what runs, and stays while an operation
+    /// shown waiting runs again (Continue).
+    func isShown(for demand: Demand) -> Bool {
         switch demand {
         case .none: false
         case .now: true
-        case .afterDelay: immediately || hasWaited
+        case .afterDelay: hasWaited
         }
     }
 

@@ -309,8 +309,18 @@ public func mapStatus(
         return .copied(RenamedOrCopiedEntry(index: .unchanged, workingTree: .copied, submoduleStatus: submoduleStatus))
     case "AD":
         return .ordinary(OrdinaryEntry(type: .added, index: .added, workingTree: .deleted, submoduleStatus: submoduleStatus))
+    // A change or a type change staged, then the file deleted from the
+    // working tree.
+    case "MD":
+        return .ordinary(OrdinaryEntry(type: .deleted, index: .modified, workingTree: .deleted, submoduleStatus: submoduleStatus))
+    case "TD":
+        return .ordinary(OrdinaryEntry(type: .deleted, workingTree: .deleted, submoduleStatus: submoduleStatus))
     case "AM":
         return .ordinary(OrdinaryEntry(type: .added, index: .added, workingTree: .modified, submoduleStatus: submoduleStatus))
+    // A new file staged, then its type changed in the working tree (a file
+    // replaced by a symlink).
+    case "AT":
+        return .ordinary(OrdinaryEntry(type: .added, index: .added, submoduleStatus: submoduleStatus))
     case "RM":
         return .renamed(RenamedOrCopiedEntry(
             index: .renamed,

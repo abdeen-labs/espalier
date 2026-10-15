@@ -85,6 +85,7 @@ struct PullRequestStoreTests {
             pulls.open = [apiPullRequest(1, updatedAt: "2026-10-01T10:00:00Z")]
         }, prepare: { local in
             try await runGit(["remote", "add", "espalier-unused", "https://github.com/unused/hello.git"], local)
+            try await runGit(["config", "remote.espalier-unused.espalierFork", "true"], local)
         })
         let gitHub = fixture.model.gitHub
         await gitHub.refreshPullRequests()
@@ -93,6 +94,7 @@ struct PullRequestStoreTests {
         #expect(try await remoteURLs(fixture.local)["espalier-unused"] == nil)
 
         try await runGit(["remote", "add", "espalier-unused", "https://github.com/unused/hello.git"], fixture.local)
+        try await runGit(["config", "remote.espalier-unused.espalierFork", "true"], fixture.local)
         fixture.pulls.updated = [apiPullRequest(1, updatedAt: "2026-10-01T10:00:00Z")]
         await gitHub.refreshPullRequests()
         await fixture.settle()

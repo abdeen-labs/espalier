@@ -1,6 +1,7 @@
 // Ported from desktop/app/test/unit/group-branches-test.ts
 
 @testable import EspalierCore
+import EspalierSupport
 import GitKit
 import Testing
 
@@ -30,7 +31,7 @@ struct BranchGroupingTests {
 
     @Test("should group branches")
     func groups() {
-        let groups = groupBranches(defaultBranch, currentBranch, allBranches, recentBranches)
+        let groups = groupBranches(defaultBranch, currentBranch, allBranches, recentBranches, forkRemoteNames: [])
         #expect(groups.count == 3)
 
         #expect(groups[0].identifier == .defaultBranch)
@@ -48,23 +49,28 @@ struct BranchGroupingTests {
 
     @Test("without a default branch or recent branches there's only the rest")
     func onlyOthers() {
-        let groups = groupBranches(nil, nil, allBranches, [])
+        let groups = groupBranches(nil, nil, allBranches, [], forkRemoteNames: [])
         #expect(groups.map(\.identifier) == [.other])
         #expect(groups[0].branches == allBranches)
     }
 
-    @Test("the default branch isn't recent, and fork remotes' branches are left out")
+    @Test("the default branch isn't recent, and the marked fork remotes' branches are left out")
     func filtering() {
-        let forkRemoteBranch = Branch(
-            name: "\(forkedRemotePrefix)octocat/topic",
-            upstream: nil,
-            tip: branchTip,
-            type: .remote,
-            ref: "refs/remotes/\(forkedRemotePrefix)octocat/topic"
+        func remoteBranch(_ name: String) -> Branch {
+            Branch(name: name, upstream: nil, tip: branchTip, type: .remote, ref: "refs/remotes/\(name)")
+        }
+        let forkRemoteBranch = remoteBranch("espalier-octocat/topic")
+        // Named like one, but not marked: the user's.
+        let userRemoteBranch = remoteBranch("espalier-mirror/topic")
+        let groups = groupBranches(
+            defaultBranch,
+            currentBranch,
+            allBranches + [forkRemoteBranch, userRemoteBranch],
+            [defaultBranch] + recentBranches,
+            forkRemoteNames: ["espalier-octocat"].exactSet
         )
-        let groups = groupBranches(defaultBranch, currentBranch, allBranches + [forkRemoteBranch], [defaultBranch] + recentBranches)
         #expect(groups.map(\.identifier) == [.defaultBranch, .recent, .other])
         #expect(groups[1].branches == recentBranches)
-        #expect(groups[2].branches == [otherBranch])
+        #expect(groups[2].branches == [otherBranch, userRemoteBranch])
     }
 }

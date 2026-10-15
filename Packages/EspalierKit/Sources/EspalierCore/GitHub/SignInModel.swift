@@ -362,7 +362,7 @@ public final class SignInModel {
     ///   assumed when it is the host git asked about).
     public func setEndpoint(_ address: String, clientID: String, isEndpointFromGit: Bool = false) async {
         guard let current = state, current.kind == .endpointEntry || current.kind == .existingAccountWarning else {
-            logger.error("Sign in step '\(self.state?.kind.rawValue ?? "null", privacy: .public)' not compatible with endpoint entry")
+            logger.error("Sign in step \(self.state.map { "'\($0.kind.rawValue)'" } ?? "(none)", privacy: .public) not compatible with endpoint entry")
             return
         }
         // The address is being checked already (the UI disables the step
@@ -373,7 +373,7 @@ public final class SignInModel {
 
         // If the user enters a github.com url in the GitHub Enterprise
         // sign-in flow we'll redirect them to the GitHub.com sign-in flow.
-        if address.contains(/^(?:https:\/\/)?(?:api\.)?github\.com($|\/)/) {
+        if isDotComAddress(address) {
             showDotComSignIn()
             return
         }
@@ -449,7 +449,7 @@ public final class SignInModel {
             configuration = current.configuration
             isUnrecognizedEnterpriseServer = false
         default:
-            logger.error("Sign in step '\(self.state?.kind.rawValue ?? "null", privacy: .public)' not compatible with authentication")
+            logger.error("Sign in step \(self.state.map { "'\($0.kind.rawValue)'" } ?? "(none)", privacy: .public) not compatible with authentication")
             return
         }
         guard let accounts, let environment = accounts.environment else {
@@ -758,9 +758,9 @@ public final class SignInModel {
     }
 
     /// The client ID of the OAuth app the endpoint's account signs in with,
-    /// signed in or signed out.
+    /// signed in, signed out, or with a token the keychain won't give.
     private func knownClientID(for endpoint: String) -> String? {
-        let candidates = (accounts?.accounts ?? []) + (accounts?.invalidatedAccounts ?? [])
+        let candidates = (accounts?.accounts ?? []) + (accounts?.unreadableAccounts ?? []) + (accounts?.invalidatedAccounts ?? [])
         return candidates.first { $0.endpoint == endpoint }?.endpointConfiguration?.clientID
     }
 

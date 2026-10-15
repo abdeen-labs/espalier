@@ -1,6 +1,6 @@
 // Settings ▸ Appearance's theme, applied to the app. Windows, sheets,
 // popovers, menus, and alerts take the application's appearance unless they
-// set their own (snapshot windows set theirs), so they all follow the theme;
+// set their own, so they all follow the theme;
 // System leaves the application's appearance unset, so they follow the
 // Mac's.
 
@@ -38,8 +38,7 @@ final class ThemeApplier {
     @ObservationIgnored private let preferences: Preferences
     @ObservationIgnored private let target: any NSAppearanceCustomization
 
-    /// - Parameter target: What takes the appearance: the application, or a
-    ///   test's own window or view.
+    /// - Parameter target: What takes the appearance: the application.
     init(preferences: Preferences, target: any NSAppearanceCustomization) {
         self.preferences = preferences
         self.target = target

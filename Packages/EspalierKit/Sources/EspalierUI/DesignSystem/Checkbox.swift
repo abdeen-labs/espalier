@@ -1,9 +1,13 @@
 // Espalier's checkbox, 15 with radius 5. Off, it's an empty box with a
 // `line2` border on the content background; on or mixed, it's filled with
-// the accent with a white check or dash. One drawing, three renderers: Core
+// the accent with a check or dash in the theme's marks color (`onAccent`,
+// white but on a near-white accent). One drawing, three renderers: Core
 // Graphics for tables that draw their rows (the diff's hunk headers), an
 // `NSButton` for AppKit rows and headers (a checkbox to VoiceOver, mixed
-// state included), and a SwiftUI view.
+// state included), and a SwiftUI view, which a `Toggle` takes with the
+// `.checkboxMark` style. Every checkbox in Espalier is one of them. With
+// keyboard focus, the SwiftUI one shows Espalier's focus ring around the
+// box.
 
 import AppKit
 import SwiftUI
@@ -48,38 +52,28 @@ public enum CheckboxDrawing {
         Metrics.Checkbox.size
     }
 
-    /// A disabled checkbox fades, as disabled capsules do.
-    static let disabledOpacity: CGFloat = 0.45
-
     /// Draws a checkbox filling `rect` (a square, `size` on a side) in the
     /// current context, in the current drawing appearance's colors.
     ///
     /// - Parameters:
     ///   - flipped: Whether y grows downward in the context.
     ///   - isPressed: Darkens the box while the mouse is down on it.
-    ///   - alpha: The whole checkbox's opacity (a crossfade between two
-    ///     states draws both).
-    ///   - markScale: The check's or dash's size, about the box's center,
-    ///     as it scales in.
     public static func draw(
         _ state: CheckboxState,
         in rect: CGRect,
         isEnabled: Bool = true,
         isPressed: Bool = false,
-        flipped: Bool,
-        alpha: CGFloat = 1,
-        markScale: CGFloat = 1
+        flipped: Bool
     ) {
         guard let context = NSGraphicsContext.current?.cgContext else {
             return
         }
         context.saveGState()
         defer { context.restoreGState() }
-        let opacity = (isEnabled ? 1 : disabledOpacity) * alpha
-        if opacity < 1 {
-            context.setAlpha(opacity)
+        if !isEnabled {
+            context.setAlpha(Palette.disabledOpacity)
         }
-        let radius = Metrics.Radius.checkbox * rect.width / size
+        let radius = Metrics.Radius.small * rect.width / size
         switch state {
         case .off:
             let box = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: radius - 0.5, yRadius: radius - 0.5)
@@ -92,13 +86,12 @@ public enum CheckboxDrawing {
             let box = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
             Palette.accent.setFill()
             box.fill()
-            NSColor.white.setStroke()
+            Theme.current.onAccent.setStroke()
             let mark = NSBezierPath()
             mark.lineWidth = 1.75 * rect.width / size
             mark.lineCapStyle = .round
             mark.lineJoinStyle = .round
-            for (index, unscaled) in markPoints(state).enumerated() {
-                let point = markScale == 1 ? unscaled : CGPoint(x: 0.5 + (unscaled.x - 0.5) * markScale, y: 0.5 + (unscaled.y - 0.5) * markScale)
+            for (index, point) in markPoints(state).enumerated() {
                 let location = CGPoint(
                     x: rect.minX + point.x * rect.width,
                     y: flipped ? rect.minY + point.y * rect.height : rect.maxY - point.y * rect.height
@@ -112,7 +105,7 @@ public enum CheckboxDrawing {
             mark.stroke()
         }
         if isPressed {
-            NSColor.black.withAlphaComponent(0.12).setFill()
+            NSColor.black.withAlphaComponent(Metrics.Checkbox.pressedOpacity).setFill()
             NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
         }
     }
@@ -130,10 +123,11 @@ public enum CheckboxDrawing {
 
 /// A checkbox as an AppKit button: Espalier's box, then its title. It
 /// stays an `NSButton` of the switch type, so it's a checkbox to VoiceOver
-/// (mixed included) and keeps the target, action, and state of one.
+/// (mixed included) and keeps the target, action, and state of one. Its
+/// owners keep it out of the key view loop (the list handles Space).
 public final class CheckboxButton: NSButton {
     /// Space between the box and the title.
-    static let titleSpacing: CGFloat = 8
+    static let titleSpacing = Metrics.Checkbox.titleSpacing
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -141,6 +135,8 @@ public final class CheckboxButton: NSButton {
         title = ""
         allowsMixedState = true
         isBordered = false
+        focusRingType = .none
+        wantsLayer = true
     }
 
     /// A checkbox titled `title` that sends `action` to `target`.
@@ -225,80 +221,22 @@ public final class CheckboxButton: NSButton {
         return CGRect(x: 0, y: ((bounds.height - box) / 2).rounded(), width: box, height: box)
     }
 
-    // MARK: The mark's motion
-
-    /// The state the box is changing from, and when the change began,
-    /// while it animates.
-    private var change: (from: CheckboxState, start: CFTimeInterval)?
-    private var changeLink: CADisplayLink?
-
-    /// Sets the state; when `animated` and motion runs here, the box
-    /// crossfades and the new mark fades and scales in over 0.15 s. Owners
-    /// animate only a change of the same item's state, never a row reused
-    /// for another.
+    /// Sets the state; when `animated` and motion runs here, the old box
+    /// crossfades into the new one over 0.15 s. Owners animate only a change
+    /// of the same item's state, never a row reused for another.
     public func setState(_ newState: NSControl.StateValue, animated: Bool) {
         let old = CheckboxState(state)
         state = newState
         guard animated, old != CheckboxState(newState), Motion.animates(self) else {
-            endChange()
             return
         }
-        change = (old, CACurrentMediaTime())
-        if changeLink == nil {
-            let link = displayLink(target: self, selector: #selector(changeStep(_:)))
-            link.add(to: .main, forMode: .common)
-            changeLink = link
-        }
-        // The last frame, should the display link not fire (a window
-        // offscreen).
-        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.leave + 0.05) { [weak self] in
-            self?.changeStep(nil)
-        }
-    }
-
-    /// How far the change has gone, on the motion curve: 1 when none runs.
-    var changeProgress: CGFloat {
-        guard let change else {
-            return 1
-        }
-        return CGFloat(Motion.curveProgress((CACurrentMediaTime() - change.start) / Motion.leave))
-    }
-
-    @objc private func changeStep(_ link: CADisplayLink?) {
-        needsDisplay = true
-        if changeProgress >= 1 {
-            endChange()
-        }
-    }
-
-    private func endChange() {
-        guard change != nil || changeLink != nil else {
-            return
-        }
-        change = nil
-        changeLink?.invalidate()
-        changeLink = nil
-        needsDisplay = true
-    }
-
-    public override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window == nil {
-            endChange()
-        }
+        Motion.crossfade(layer, duration: Motion.leave)
+        // Drawn now, so the crossfade takes this change of contents.
+        displayIfNeeded()
     }
 
     public override func draw(_ dirtyRect: NSRect) {
-        let current = CheckboxState(state)
-        let progress = changeProgress
-        if let change, progress < 1 {
-            // The old box fades out under the new one, whose mark scales
-            // in from 60%.
-            CheckboxDrawing.draw(change.from, in: boxRect, isEnabled: isEnabled, isPressed: isHighlighted, flipped: true, alpha: 1 - progress)
-            CheckboxDrawing.draw(current, in: boxRect, isEnabled: isEnabled, isPressed: isHighlighted, flipped: true, alpha: progress, markScale: 0.6 + 0.4 * progress)
-        } else {
-            CheckboxDrawing.draw(current, in: boxRect, isEnabled: isEnabled, isPressed: isHighlighted, flipped: true)
-        }
+        CheckboxDrawing.draw(CheckboxState(state), in: boxRect, isEnabled: isEnabled, isPressed: isHighlighted, flipped: true)
         guard let title = drawnTitle else {
             return
         }
@@ -310,18 +248,9 @@ public final class CheckboxButton: NSButton {
         paragraph.lineBreakMode = .byTruncatingTail
         shown.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: shown.length))
         if !isEnabled {
-            NSGraphicsContext.current?.cgContext.setAlpha(CheckboxDrawing.disabledOpacity)
+            NSGraphicsContext.current?.cgContext.setAlpha(Palette.disabledOpacity)
         }
         shown.draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-    }
-
-    public override var focusRingMaskBounds: NSRect {
-        boxRect
-    }
-
-    public override func drawFocusRingMask() {
-        let radius = Metrics.Radius.checkbox
-        NSBezierPath(roundedRect: boxRect, xRadius: radius, yRadius: radius).fill()
     }
 
     public override func viewDidChangeEffectiveAppearance() {
@@ -342,11 +271,11 @@ public struct CheckboxMark: View {
 
     public var body: some View {
         let size = Metrics.Checkbox.size
-        let shape = RoundedRectangle(cornerRadius: Metrics.Radius.checkbox, style: .circular)
+        let shape = RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .circular)
         ZStack {
             // The fill crossfades, and the mark fades and scales in, over
             // 0.15 s.
-            shape.fill(state == .off ? Color(espalier: Palette.background) : Color.accentColor)
+            shape.fill(state == .off ? Color(espalier: Palette.background) : Color.accent)
             if state == .off {
                 shape.strokeBorder(.line2, lineWidth: 1)
                     .transition(.opacity)
@@ -355,14 +284,117 @@ public struct CheckboxMark: View {
                     let points = CheckboxDrawing.markPoints(state).map { CGPoint(x: $0.x * size, y: $0.y * size) }
                     path.addLines(points)
                 }
-                .stroke(.white, style: StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round))
+                .stroke(Color(nsColor: Theme.current.onAccent), style: StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round))
                 .id(state)
                 .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
         }
         .motion(Motion.leave, value: state)
         .frame(width: size, height: size)
-        .opacity(isEnabled ? 1 : CheckboxDrawing.disabledOpacity)
+        .opacity(isEnabled ? 1 : Palette.disabledOpacity)
         .accessibilityHidden(true)
     }
+}
+
+// MARK: - Toggles
+
+/// Espalier's checkbox for a SwiftUI `Toggle`: the box, then the label
+/// beside its first line. The two are one button, so a click on either
+/// toggles it, it joins the key view loop with keyboard navigation on (the
+/// focus ring around the box), and Space toggles it; VoiceOver sees a
+/// checkbox.
+public struct CheckboxMarkToggleStyle: ToggleStyle {
+    public init() {}
+
+    public func makeBody(configuration: Configuration) -> some View {
+        CheckboxToggleBody(configuration: configuration)
+    }
+}
+
+extension ToggleStyle where Self == CheckboxMarkToggleStyle {
+    /// Espalier's checkbox: the box, then the label.
+    public static var checkboxMark: CheckboxMarkToggleStyle { CheckboxMarkToggleStyle() }
+}
+
+/// The toggle as a button, and what VoiceOver sees of it.
+private struct CheckboxToggleBody: View {
+    let configuration: ToggleStyleConfiguration
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
+            configuration.label
+        }
+        .buttonStyle(CheckboxToggleButtonStyle(state: state, isFocused: isFocused))
+        .focusEffectDisabled()
+        .focused($isFocused)
+        .accessibilityRepresentation {
+            Toggle(isOn: configuration.$isOn) {
+                configuration.label
+            }
+            .toggleStyle(.checkbox)
+        }
+    }
+
+    private var state: CheckboxState {
+        if configuration.isMixed {
+            return .mixed
+        }
+        return configuration.isOn ? .on : .off
+    }
+}
+
+/// Draws the box for its state, darker while pressed and ringed while
+/// focused, then the label.
+private struct CheckboxToggleButtonStyle: ButtonStyle {
+    let state: CheckboxState
+    let isFocused: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        CheckboxToggleButtonBody(state: state, label: configuration.label, isPressed: configuration.isPressed, isFocused: isFocused)
+    }
+}
+
+private struct CheckboxToggleButtonBody<Label: View>: View {
+    let state: CheckboxState
+    let label: Label
+    let isPressed: Bool
+    let isFocused: Bool
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.labelsVisibility) private var labelsVisibility
+
+    var body: some View {
+        let markOffset = Metrics.RadioList.markBaselineOffset
+        HStack(alignment: .firstTextBaseline, spacing: Metrics.Checkbox.titleSpacing) {
+            CheckboxMark(state)
+                .overlay {
+                    if isPressed {
+                        RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .circular)
+                            .fill(.black.opacity(Metrics.Checkbox.pressedOpacity))
+                    }
+                }
+                .focusRing(isFocused, in: RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .circular))
+                .alignmentGuide(.firstTextBaseline) { dimensions in
+                    // The box's center on the label's first line's middle.
+                    dimensions[VerticalAlignment.center] + markOffset
+                }
+            if labelsVisibility != .hidden {
+                label
+                    .foregroundStyle(.text)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .opacity(isEnabled ? 1 : Palette.disabledOpacity)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+extension Metrics.Checkbox {
+    /// Between the box and its title.
+    public static let titleSpacing: CGFloat = 8
+    /// Darkens the box while the mouse is down on it.
+    public static let pressedOpacity: Double = 0.12
 }

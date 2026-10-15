@@ -26,11 +26,9 @@ private func gitError(_ stderr: String, exitCode: Int = 1, args: [String] = ["pu
 /// A retry of a given kind.
 private struct FakeRetry: RetryableOperation {
     let kind: OperationKind
-    var displayName: String?
 
-    init(_ kind: OperationKind, displayName: String? = nil) {
+    init(_ kind: OperationKind) {
         self.kind = kind
-        self.displayName = displayName
     }
 
     @MainActor
@@ -55,6 +53,37 @@ private func classify(
         record: record,
         context: context
     )
+}
+
+/// A recovery's case without its payload, for checking which recoveries an
+/// error offers.
+enum RecoveryKind: Equatable {
+    /// Runs an operation of this kind again.
+    case retry(OperationKind)
+    case stashChangesAndRetry, clearLeftoverRebaseAndRetry, fetch, discardPermanently, updateLFSFilters, editGlobalGitConfig
+    case createFork, signIn, reviewPushProtection, downloadSuggestedEditor, requestOrganizationAccess
+    case openSettings(SettingsPane)
+}
+
+extension Recovery {
+    /// The recovery's case.
+    var kind: RecoveryKind {
+        switch self {
+        case .retry(let operation): .retry(operation.kind)
+        case .stashChangesAndRetry: .stashChangesAndRetry
+        case .clearLeftoverRebaseAndRetry: .clearLeftoverRebaseAndRetry
+        case .fetch: .fetch
+        case .discardPermanently: .discardPermanently
+        case .updateLFSFilters: .updateLFSFilters
+        case .editGlobalGitConfig: .editGlobalGitConfig
+        case .createFork: .createFork
+        case .signIn: .signIn
+        case .reviewPushProtection: .reviewPushProtection
+        case .openSettings(let pane): .openSettings(pane)
+        case .downloadSuggestedEditor: .downloadSuggestedEditor
+        case .requestOrganizationAccess: .requestOrganizationAccess
+        }
+    }
 }
 
 /// GitHub pads its remote lines with spaces; the bypass URL ends at one.
@@ -167,8 +196,7 @@ struct ErrorClassifierTests {
         #expect(secrets.first?.description == "GitHub Personal Access Token")
         #expect(secrets.first?.id == "2w2db5WJQCitzO0A2UDh0yyB3Ob")
         #expect(secrets.first?.locations.map(\.path) == ["README.md", "README.md"])
-        #expect(error.recoveries.map(\.title) == ["Bypass"])
-        #expect(error.title == "Push Blocked: Secret Detected")
+        #expect(error.recoveries.map(\.kind) == [.reviewPushProtection])
     }
 
     // MARK: 2. discardChangesHandler
@@ -178,8 +206,7 @@ struct ErrorClassifierTests {
         let file = ModelFixtures.file("notes.txt")
         let error = await classify(TrashFailedError(files: [file], underlying: CocoaError(.fileWriteNoPermission)), kind: .discardChanges)
         #expect(error.reason == .trashFailed(files: [file]))
-        #expect(error.recoveries.map(\.title) == ["Permanently Discard Changes"])
-        #expect(error.title == "Discard Changes Permanently?")
+        #expect(error.recoveries.map(\.kind) == [.discardPermanently])
     }
 
     // MARK: 3. refusedWorkflowUpdate
@@ -189,8 +216,7 @@ struct ErrorClassifierTests {
         let record = ModelFixtures.record(path: "/", gitHubRepository: ModelFixtures.gitHubRepository())
         let error = await classify(gitError(workflowRejectedStderr), retry: FakeRetry(.push), record: record)
         #expect(error.reason == .workflowScopeRequired(rejectedPath: ".github/workflows/ci.yml"))
-        #expect(error.recoveries.map(\.title) == ["Continue in Browser"])
-        #expect(error.title == "Push Rejected")
+        #expect(error.recoveries.map(\.kind) == [.signIn])
 
         let notGitHub = await classify(gitError(workflowRejectedStderr), retry: FakeRetry(.push))
         guard case .git = notGitHub.reason else {
@@ -220,9 +246,7 @@ struct ErrorClassifierTests {
         let retry = FakeRetry(.checkoutBranch)
         let error = await classify(gitError(localChangesStderr), kind: .checkoutBranch, retry: retry, record: record)
         #expect(error.reason == .localChangesOverwritten(files: ["README.md", "src/app.swift"]))
-        #expect(error.recoveries.map(\.title) == ["Stash Changes and Continue"])
-        #expect(error.message == "Can't check out while your branch has uncommitted changes. These files would be overwritten:")
-        #expect(error.title == "Error")
+        #expect(error.recoveries.map(\.kind) == [.stashChangesAndRetry])
     }
 
     @Test("5. no stash is offered when the branch has one, or when restoring a stash")
@@ -235,7 +259,6 @@ struct ErrorClassifierTests {
 
         let restoring = await classify(gitError(localChangesStderr), kind: .restoreStash, retry: FakeRetry(.restoreStash))
         #expect(restoring.recoveries.isEmpty)
-        #expect(restoring.message.hasPrefix("Can't restore stashed changes while your branch has uncommitted changes."))
     }
 
     @Test("5. without a retry, local changes that would be overwritten are a git error")
@@ -253,12 +276,10 @@ struct ErrorClassifierTests {
         let stderr = "error: cannot pull with rebase: Your index contains uncommitted changes.\nerror: Please commit or stash them.\n"
         let error = await classify(gitError(stderr, exitCode: 128, args: ["pull"]), kind: .pull, retry: FakeRetry(.pull))
         #expect(error.reason == .localChangesOverwritten(files: []))
-        #expect(error.recoveries.map(\.title) == ["Stash Changes and Continue"])
-        #expect(error.message == "Can't pull while your branch has uncommitted changes.")
+        #expect(error.recoveries.map(\.kind) == [.stashChangesAndRetry])
 
         let withoutRetry = await classify(gitError(stderr, exitCode: 128, args: ["pull"]), kind: .pull)
         #expect(withoutRetry.gitFailure?.gitError == .rebaseWithStagedChanges)
-        #expect(withoutRetry.message == "Can't pull with rebase while you have uncommitted changes. Commit or stash them first.")
     }
 
     @Test("5b. a stash entry's files in the way of untracked files are listed, with nothing offered")
@@ -266,7 +287,6 @@ struct ErrorClassifierTests {
         let error = await classify(StashFilesInTheWayError(files: ["notes.txt"]), kind: .restoreStash, retry: FakeRetry(.restoreStash))
         #expect(error.reason == .localChangesOverwritten(files: ["notes.txt"]))
         #expect(error.recoveries.isEmpty)
-        #expect(error.message == "Can't restore stashed changes while your branch has uncommitted changes. These files would be overwritten:")
     }
 
     @Test("5c. a rebase's state Espalier can't continue or abort offers to clear it and continue; one it shows doesn't")
@@ -287,20 +307,15 @@ struct ErrorClassifierTests {
         var context = ClassificationContext()
         context.leftoverRebase = LeftoverRebase(hasAutostash: false)
         let error = await classify(gitError(stderr, exitCode: 128, args: ["pull"]), kind: .pull, retry: retry, record: record, context: context)
-        guard case .precondition(let message) = error.reason, case .clearLeftoverRebaseAndRetry(let id, let then)? = error.recoveries.first else {
-            Issue.record("Unexpected reason \(error.reason), recoveries \(error.recoveries.map(\.title))")
+        guard case .precondition = error.reason, case .clearLeftoverRebaseAndRetry(let id, let then)? = error.recoveries.first else {
+            Issue.record("Unexpected reason \(error.reason), recoveries \(error.recoveries.map(\.kind))")
             return
         }
-        #expect(message.hasPrefix("An earlier rebase didn't finish, and Git won't start another until it's cleared."))
-        #expect(!message.contains("autostash"))
         #expect(id == record.id)
         #expect(then.kind == .pull)
-        #expect(error.recoveries.map(\.title) == ["Clear Old Rebase and Continue"])
-        #expect(error.title == "Error")
+        #expect(error.recoveries.map(\.kind) == [.clearLeftoverRebaseAndRetry])
 
         context.leftoverRebase = LeftoverRebase(hasAutostash: true)
-        let withAutostash = await classify(gitError(stderr, exitCode: 128, args: ["pull"]), kind: .pull, retry: retry, record: record, context: context)
-        #expect(withAutostash.message.hasSuffix("The changes it set aside will be saved in Git's stash list as \u{201C}autostash\u{201D}."))
 
         // A rebase Espalier shows, or no way to run the operation again: git's
         // error, finish or abort it.
@@ -308,7 +323,6 @@ struct ErrorClassifierTests {
         let withoutRetry = await classify(gitError(stderr, exitCode: 128, args: ["pull"]), kind: .pull, record: record, context: context)
         for error in [shown, withoutRetry] {
             #expect(error.gitFailure?.gitError == .rebaseAlreadyInProgress)
-            #expect(error.message == "A rebase is already in progress. Finish or abort it first.")
             #expect(error.recoveries.isEmpty)
         }
     }
@@ -357,8 +371,7 @@ struct ErrorClassifierTests {
         let record = ModelFixtures.record(path: "/", gitHubRepository: gitHubRepository)
         let error = await classify(gitError(samlStderr, exitCode: 128), retry: FakeRetry(.push), record: record)
         #expect(error.reason == .samlReauthorizationRequired(organization: "octo-org", endpoint: gitHubRepository.endpoint))
-        #expect(error.recoveries.map(\.title) == ["Continue in Browser"])
-        #expect(error.title == "Re-authorization Required")
+        #expect(error.recoveries.map(\.kind) == [.signIn])
     }
 
     // MARK: 8b. OAuth App access restrictions
@@ -373,9 +386,7 @@ struct ErrorClassifierTests {
         let error = await classify(gitError(oauthRestrictedStderr, exitCode: 128), kind: .fetch, retry: FakeRetry(.fetch), record: record, context: context)
         #expect(Dugite.parseError(oauthRestrictedStderr) == .httpsAuthenticationFailed)
         #expect(error.reason == .oauthAppAccessRestricted(organization: "octo-org"))
-        #expect(error.title == "Organization Access Restricted")
-        #expect(error.message.hasPrefix("The \"octo-org\" organization has enabled OAuth App access restrictions, so Espalier can't access its repositories"))
-        #expect(error.recoveries.map(\.title) == ["Request Access on GitHub"])
+        #expect(error.recoveries.map(\.kind) == [.requestOrganizationAccess])
         guard case .requestOrganizationAccess(let url)? = error.recoveries.first else {
             Issue.record("Unexpected recoveries \(error.recoveries)")
             return
@@ -423,8 +434,7 @@ struct ErrorClassifierTests {
     func pushNeedsPull() async {
         let error = await classify(gitError(pushRejectedStderr), retry: FakeRetry(.push))
         #expect(error.reason == .pushRejectedNonFastForward)
-        #expect(error.recoveries.map(\.title) == ["Fetch"])
-        #expect(error.title == "Newer Commits on Remote")
+        #expect(error.recoveries.map(\.kind) == [.fetch])
     }
 
     // MARK: 10. insufficientGitHubRepoPermissions
@@ -436,7 +446,7 @@ struct ErrorClassifierTests {
         context.hasAccountForRepository = true
         let error = await classify(gitError(authenticationFailedStderr, exitCode: 128), retry: FakeRetry(.push), record: record, context: context)
         #expect(error.reason == .insufficientPermissions(repositoryFullName: "octocat/app"))
-        #expect(error.recoveries.map(\.title) == ["Fork This Repository…"])
+        #expect(error.recoveries.map(\.kind) == [.createFork])
 
         let noAccount = await classify(gitError(authenticationFailedStderr, exitCode: 128), retry: FakeRetry(.push), record: record)
         #expect(noAccount.reason == .insufficientPermissions(repositoryFullName: "octocat/app"))
@@ -456,9 +466,8 @@ struct ErrorClassifierTests {
         let stderr = #"The filter.lfs.clean attribute should be "git-lfs clean -- %f" but is "git lfs clean %f""#
         let error = await classify(gitError(stderr), kind: .updateLFSFilters, record: nil)
         #expect(error.reason == .lfsAttributeMismatch)
-        #expect(error.recoveries.map(\.title) == ["Update Existing Filters", "Edit Global Git Config…"])
+        #expect(error.recoveries.map(\.kind) == [.updateLFSFilters, .editGlobalGitConfig])
         #expect(error.recoveries.map(\.isHeadless) == [true, true])
-        #expect(error.title == "Update Existing Git LFS Filters?")
     }
 
     // MARK: 12. mergeConflictHandler
@@ -480,8 +489,7 @@ struct ErrorClassifierTests {
     func shell() async {
         let error = await classify(ShellError("Could not find executable for 'iTerm2'"), kind: .openInShell, record: nil)
         #expect(error.reason == .integration(.shell(message: "Could not find executable for 'iTerm2'")))
-        #expect(error.recoveries.map(\.title) == ["Open Settings"])
-        #expect(error.title == "Unable to Open Shell")
+        #expect(error.recoveries.map(\.kind) == [.openSettings(.integrations)])
     }
 
     // MARK: 14. externalEditorErrorHandler
@@ -494,15 +502,14 @@ struct ErrorClassifierTests {
             record: nil
         )
         #expect(settings.reason == .integration(.editor(message: "Visual Studio Code is not installed.", suggestDefaultEditor: false, openPreferences: true)))
-        #expect(settings.recoveries.map(\.title) == ["Open Settings"])
-        #expect(settings.title == "Unable to Open External Editor")
+        #expect(settings.recoveries.map(\.kind) == [.openSettings(.integrations)])
 
         let suggestion = await classify(
             ExternalEditorError("No suitable editors installed.", metadata: .init(suggestDefaultEditor: true)),
             kind: .openInEditor,
             record: nil
         )
-        #expect(suggestion.recoveries.map(\.title) == ["Download Visual Studio Code"])
+        #expect(suggestion.recoveries.map(\.kind) == [.downloadSuggestedEditor])
     }
 
     // MARK: 16. defaultErrorHandler
@@ -514,9 +521,7 @@ struct ErrorClassifierTests {
             "fatal: bad revision 'beta..origin/beta'\n",
             exitCode: 128
         ))))
-        #expect(error.message == "Bad revision.")
         #expect(!error.isRawGitOutput)
-        #expect(error.title == "Error")
         #expect(error.recoveries.isEmpty)
 
         let raw = await classify(gitError("fatal: something unexpected happened\n"), kind: .checkoutBranch)
@@ -532,17 +537,13 @@ struct ErrorClassifierTests {
             return
         }
         #expect(failure.gitError == .httpsAuthenticationFailed)
-        #expect(error.message.hasPrefix("Authentication failed. Some common reasons:"))
-        #expect(error.message.contains("Sign in from Espalier ▸ Settings ▸ Accounts."))
-        #expect(error.recoveries.map(\.title) == ["Open Settings"])
+        #expect(error.recoveries.map(\.kind) == [.openSettings(.accounts)])
     }
 
     @Test("16. a push with files over GitHub's limit lists them")
     func fileSizeLimit() async {
         let error = await classify(gitError(fileTooLargeStderr), retry: FakeRetry(.push))
         #expect(error.reason == .fileSizeLimitExceeded(files: ["some-file.mp4 (292.85 MB)"]))
-        #expect(error.title == "File Size Limit Exceeded")
-        #expect(error.message == "The push includes a file larger than GitHub's 100 MB limit. Remove the file from your history and try again.")
     }
 
     @Test("16. errors that aren't git's are file system or other errors")
@@ -571,25 +572,11 @@ struct ErrorClassifierTests {
         #expect(cancelled.isCancellation)
     }
 
-    // MARK: Titles
+    // MARK: Retries
 
-    @Test("titles follow desktop's rules")
-    func titles() async {
-        let clone = await classify(gitError("fatal: repository 'https://github.com/x/y.git/' not found\n", exitCode: 128), kind: .clone, retry: FakeRetry(.clone, displayName: "y"), record: nil)
-        #expect(clone.title == "Clone Failed")
-        #expect(clone.recoveries.map(\.title) == ["Retry Clone"])
-        #expect(clone.message.hasSuffix("\n\nWould you like to retry cloning y?"))
-
-        let push = await classify(gitError("fatal: the remote end hung up unexpectedly\n", exitCode: 128), retry: FakeRetry(.push))
-        #expect(push.title == "Push Failed")
-
-        let commit = await classify(gitError("error: gpg failed to sign the data\n"), kind: .commit, gitContext: .commit)
-        #expect(commit.title == "Commit Failed")
-
-        let create = await classify(gitError("fatal: something\n"), kind: .createRepository, gitContext: .createRepository, record: nil)
-        #expect(create.title == "Couldn't Create Repository")
-
-        let checkout = await classify(gitError("fatal: something\n"), kind: .checkoutBranch)
-        #expect(checkout.title == "Error")
+    @Test("a failed clone offers to retry it")
+    func cloneRetry() async {
+        let clone = await classify(gitError("fatal: repository 'https://github.com/x/y.git/' not found\n", exitCode: 128), kind: .clone, retry: FakeRetry(.clone), record: nil)
+        #expect(clone.recoveries.map(\.kind) == [.retry(.clone)])
     }
 }

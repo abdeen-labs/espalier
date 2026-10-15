@@ -94,7 +94,7 @@ public struct HookActivityView: View {
                 }
                 .buttonStyle(.quiet)
                 .controlSize(.small)
-                .popover(isPresented: $isShowingOutput, arrowEdge: .top) {
+                .popoverCard(isPresented: $isShowingOutput, edge: .top, title: "Hook Output") {
                     LiveHookOutput(listener: output)
                 }
             }
@@ -102,7 +102,7 @@ public struct HookActivityView: View {
                 .buttonStyle(.quiet)
                 .controlSize(.small)
                 .disabled(!content.canStop)
-                .help("Stop the \(content.hookName) hook")
+                .tooltip("Stop the \(content.hookName) hook")
         }
         .fixedSize()
     }

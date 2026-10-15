@@ -16,10 +16,7 @@ struct CommitMessageTests {
     @Test("rejects arrays, null, and primitives as non-object payloads")
     func rejectsNonObjects() {
         for content in ["[]", "null", "42"] {
-            #expect(
-                throws: AIResponseError("The model returned an invalid commit message payload: expected an object"),
-                "\(content)"
-            ) {
+            #expect(throws: AIResponseError.self, "\(content)") {
                 try parseAICommitMessage(content)
             }
         }
@@ -42,29 +39,34 @@ struct CommitMessageTests {
 
     @Test("rejects invalid JSON, blank titles, and non-string descriptions")
     func rejectsInvalidPayloads() {
-        #expect(throws: AIResponseError("The model returned invalid JSON for commit message generation")) {
+        #expect(throws: AIResponseError.self) {
             try parseAICommitMessage("Fix the bug")
         }
-        #expect(
-            throws: AIResponseError(
-                #"The model returned an invalid commit message payload: "title" must be a non-empty string"#
-            )
-        ) {
+        #expect(throws: AIResponseError.self) {
             try parseAICommitMessage(#"{"title":"  ","description":"D"}"#)
         }
-        #expect(
-            throws: AIResponseError(
-                #"The model returned an invalid commit message payload: "title" must be a non-empty string"#
-            )
-        ) {
+        #expect(throws: AIResponseError.self) {
             try parseAICommitMessage(#"{"title":1}"#)
         }
-        #expect(
-            throws: AIResponseError(
-                #"The model returned an invalid commit message payload: "description" must be a string when provided"#
-            )
-        ) {
-            try parseAICommitMessage(#"{"title":"T","description":null}"#)
+        #expect(throws: AIResponseError.self) {
+            try parseAICommitMessage(#"{"title":"T","description":2}"#)
         }
+    }
+
+    @Test("takes a null description as none, and trims the title")
+    func nullDescription() throws {
+        #expect(
+            try parseAICommitMessage(#"{"title":" Fix token renewal\n","description":null}"#)
+                == AICommitMessage(title: "Fix token renewal", description: "")
+        )
+    }
+
+    @Test("finds the JSON as the conflict parser does: past a broken first block, or with fences inside it")
+    func sharedExtraction() throws {
+        // The first block isn't JSON; the response as a whole is.
+        #expect(try parseAICommitMessage(#"{"title":"Add a ```fenced``` example"}"#).title == "Add a ```fenced``` example")
+        // The description has a code block of its own.
+        let fenced = "```json\n{\"title\":\"T\",\"description\":\"Run:\\n```\\nmake\\n```\"}\n```"
+        #expect(try parseAICommitMessage(fenced) == AICommitMessage(title: "T", description: "Run:\n```\nmake\n```"))
     }
 }

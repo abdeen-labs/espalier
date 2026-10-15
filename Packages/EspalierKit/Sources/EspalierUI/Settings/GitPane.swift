@@ -44,16 +44,6 @@ final class GitSettingsModel {
         case failed(String)
     }
 
-    /// The email pop-up's choice.
-    enum EmailChoice: Hashable {
-        /// No email is configured (shown only then).
-        case none
-        /// One of the accounts' addresses.
-        case account(String)
-        /// Another address, typed in the field below.
-        case other
-    }
-
     /// The default branch choice.
     enum BranchChoice: Hashable, CaseIterable {
         case main, master, other
@@ -94,7 +84,8 @@ final class GitSettingsModel {
     private(set) var configured = GlobalGitSettings(name: nil, email: nil, defaultBranch: "main")
     /// The name field.
     var name = ""
-    var emailChoice: EmailChoice = .none
+    /// The email pop-up's choice.
+    var emailChoice: GitAuthorEmailSelection = .none
     /// The email field: shown for "Other", or alone without account emails.
     var otherEmail = ""
     var branchChoice: BranchChoice = .main
@@ -197,15 +188,7 @@ final class GitSettingsModel {
         name = settings.name ?? ""
         let email = settings.email ?? ""
         otherEmail = email
-        if !showsEmailPopUp {
-            emailChoice = .other
-        } else if email.isEmpty {
-            emailChoice = .none
-        } else if let choice = emailChoices.first(where: { $0.email.lowercased() == email.lowercased() }) {
-            emailChoice = .account(choice.email)
-        } else {
-            emailChoice = .other
-        }
+        emailChoice = showsEmailPopUp ? .showing(email, choices: emailChoices) : .other
         switch settings.defaultBranch {
         case "main":
             branchChoice = .main
@@ -244,7 +227,7 @@ final class GitSettingsModel {
 
     /// Picks an email: an account's is written at once; "Other" shows the
     /// field, starting from the current address.
-    func selectEmail(_ choice: EmailChoice) async {
+    func selectEmail(_ choice: GitAuthorEmailSelection) async {
         emailChoice = choice
         switch choice {
         case .none:
@@ -411,30 +394,20 @@ final class GitSettingsModel {
     }
 }
 
-extension GitAuthorEmailChoice {
-    /// The pop-up's item: the address, with the account's kind when the
-    /// user has both kinds of account.
-    var title: String {
-        accountSuffix.map { "\(email) \($0)" } ?? email
-    }
-}
-
 /// The Git pane: the author, the default branch, hooks, credentials, and
 /// the global configuration.
 struct GitPaneContent: View {
     @State private var settings: GitSettingsModel
-    private let loadsOnAppear: Bool
+    /// The branch name field's focus (the author's fields keep their own).
     @FocusState private var focus: Field?
 
+    /// A field the user commits.
     enum Field: Hashable {
         case name, email, branch
     }
 
-    /// - Parameter loadsOnAppear: Whether to read the configuration when
-    ///   the pane appears (snapshots apply fixed values instead).
-    init(settings: GitSettingsModel, loadsOnAppear: Bool = true) {
+    init(settings: GitSettingsModel) {
         _settings = State(initialValue: settings)
-        self.loadsOnAppear = loadsOnAppear
     }
 
     var body: some View {
@@ -444,7 +417,7 @@ struct GitPaneContent: View {
             if let lockFile = settings.lockFile {
                 SettingsSection {
                     SettingsMessageRow {
-                        InlineMessage(lockFile.message, kind: .warning)
+                        FieldMessage(lockFile.message, kind: .warning)
                     } trailing: {
                         Button("Delete Lock File and Try Again") {
                             Task { await settings.deleteLockFileAndRetry() }
@@ -463,7 +436,7 @@ struct GitPaneContent: View {
                     }
                 case .failed(let message):
                     SettingsMessageRow {
-                        InlineMessage(message, kind: .error)
+                        FieldMessage(message, kind: .error)
                     } trailing: {
                         Button("Try Again") {
                             Task { await settings.load() }
@@ -471,7 +444,21 @@ struct GitPaneContent: View {
                         .settingsButton()
                     }
                 case .loaded:
-                    authorRows(settings)
+                    GitAuthorForm(
+                        name: $settings.name,
+                        namePrompt: settings.suggestedName ?? "Your Name",
+                        nameProblem: settings.nameProblem,
+                        emailSelection: emailChoice,
+                        otherEmail: $settings.otherEmail,
+                        emailChoices: settings.emailChoices,
+                        attribution: settings.attribution,
+                        layout: .settings
+                    ) { field in
+                        switch field {
+                        case .name: commit(.name)
+                        case .email: commit(.email)
+                        }
+                    }
                 }
             }
 
@@ -487,7 +474,7 @@ struct GitPaneContent: View {
                 .disabled(settings.loadState != .loaded)
                 if settings.branchChoice == .other {
                     SettingsRow("Branch name", labelsControl: true) {
-                        TextField("Branch name", text: $settings.otherBranch, prompt: Text("Branch name"))
+                        TextField("Branch name", text: $settings.otherBranch, prompt: Text("Branch name").fieldPrompt())
                             .labelsHidden()
                             .textFieldStyle(.capsule)
                             .settingsControlWidth()
@@ -495,7 +482,7 @@ struct GitPaneContent: View {
                             .onSubmit { commit(.branch) }
                     } footer: {
                         if let message = settings.branchNameMessage {
-                            InlineMessage(message.text, kind: message.isError ? .error : .warning)
+                            FieldMessage(message.text, kind: message.isError ? .error : .warning)
                         }
                     }
                     .barTransition()
@@ -542,9 +529,7 @@ struct GitPaneContent: View {
         .barMotion(preferences.hooksEnvEnabled)
         .barMotion(settings.showsEmailField)
         .task {
-            if loadsOnAppear {
-                await settings.load()
-            }
+            await settings.load()
         }
         .onChange(of: focus) { previous, _ in
             if let previous {
@@ -557,73 +542,7 @@ struct GitPaneContent: View {
         }
     }
 
-    @ViewBuilder
-    private func authorRows(_ settings: GitSettingsModel) -> some View {
-        @Bindable var settings = settings
-        SettingsRow("Name", labelsControl: true) {
-            TextField("Name", text: $settings.name, prompt: settings.suggestedName.map { Text(verbatim: $0) })
-                .labelsHidden()
-                .textFieldStyle(.capsule)
-                .settingsControlWidth()
-                .focused($focus, equals: .name)
-                .onSubmit { commit(.name) }
-        } footer: {
-            if let problem = settings.nameProblem {
-                InlineMessage(problem, kind: .error)
-            }
-        }
-        SettingsRow("Email", description: emailDescription(settings), labelsControl: true) {
-            VStack(alignment: .trailing, spacing: Metrics.SettingsWindow.messageSpacing) {
-                if settings.showsEmailPopUp {
-                    CapsulePopUp("Email", selection: emailChoice, title: emailTitle(settings)) {
-                        if settings.emailChoice == .none {
-                            Text("None").tag(GitSettingsModel.EmailChoice.none)
-                        }
-                        ForEach(settings.emailChoices, id: \.email) { choice in
-                            Text(choice.title).tag(GitSettingsModel.EmailChoice.account(choice.email))
-                        }
-                        Text("Other").tag(GitSettingsModel.EmailChoice.other)
-                    }
-                    .settingsControlWidth()
-                }
-                if settings.showsEmailField {
-                    TextField(settings.showsEmailPopUp ? "Other Email" : "Email", text: $settings.otherEmail, prompt: Text(verbatim: "name@example.com"))
-                        .labelsHidden()
-                        .textFieldStyle(.capsule)
-                        .settingsControlWidth()
-                        .focused($focus, equals: .email)
-                        .onSubmit { commit(.email) }
-                        .barTransition()
-                }
-            }
-        } footer: {
-            if let attribution = settings.attribution {
-                InlineMessage(attribution.message, kind: attribution.isAttributable ? .success : .warning)
-            }
-        }
-    }
-
-    /// The email row's line: what the address is for, and where the
-    /// pop-up's addresses come from.
-    private func emailDescription(_ settings: GitSettingsModel) -> String {
-        settings.showsEmailPopUp
-            ? "Used for your commits. Your GitHub accounts' addresses are offered."
-            : "Used for your commits."
-    }
-
-    /// The email pop-up's title: the chosen item's.
-    private func emailTitle(_ settings: GitSettingsModel) -> String {
-        switch settings.emailChoice {
-        case .none:
-            "None"
-        case .other:
-            "Other"
-        case .account(let email):
-            settings.emailChoices.first { $0.email == email }?.title ?? email
-        }
-    }
-
-    private var emailChoice: Binding<GitSettingsModel.EmailChoice> {
+    private var emailChoice: Binding<GitAuthorEmailSelection> {
         Binding {
             settings.emailChoice
         } set: { choice in

@@ -182,39 +182,69 @@ extension KeyedDecodingContainer {
 
 // MARK: Storage
 
-/// Loads the list of providers from their stored JSON. Returns an empty list
-/// if nothing has been stored or the stored value is malformed, and drops
-/// entries that fail validation.
+/// The providers read from their stored JSON.
+public struct StoredBYOKProviders: Sendable, Hashable {
+    /// The valid providers, in order.
+    public var providers: [BYOKProvider]
+    /// The stored entries that aren't valid providers (one written by a
+    /// newer version, say), each as JSON. `saveBYOKProviders(_:keeping:)`
+    /// writes them back, so an entry isn't lost for good and its secret
+    /// isn't left without it.
+    public var unloadable: [Data]
+
+    public init(providers: [BYOKProvider], unloadable: [Data] = []) {
+        self.providers = providers
+        self.unloadable = unloadable
+    }
+}
+
+/// Reads the providers from their stored JSON: the valid ones, and the
+/// entries that fail validation, kept aside. Nothing has been stored, or the
+/// stored value is malformed, gives neither.
 ///
-/// The app persists the data this returns.
 /// The JSON is read the way `JSON.parse` reads it (see `JSONValue.parse`), so
 /// a value with a trailing comma is malformed, a repeated key takes its last
-/// value, and one provider with an out-of-range number (`1e999`) is dropped
+/// value, and one provider with an out-of-range number (`1e999`) is set aside
 /// on its own instead of failing the whole list, as it would with
 /// `JSONDecoder`.
-public func loadBYOKProviders(from data: Data?) -> [BYOKProvider] {
+public func loadStoredBYOKProviders(from data: Data?) -> StoredBYOKProviders {
     guard let data, let elements = (try? JSONValue.parse(data))?.arrayValue else {
-        return []
+        return StoredBYOKProviders(providers: [])
     }
     // Each element is checked by `BYOKProvider.init(from:)`. Re-serializing
     // writes an infinity as `null`, which that check rejects.
     let decoder = JSONDecoder()
-    return elements.compactMap { try? decoder.decode(BYOKProvider.self, from: $0.serialized()) }
+    var stored = StoredBYOKProviders(providers: [])
+    for element in elements {
+        let json = element.serialized()
+        if let provider = try? decoder.decode(BYOKProvider.self, from: json) {
+            stored.providers.append(provider)
+        } else {
+            stored.unloadable.append(json)
+        }
+    }
+    return stored
 }
 
-/// Encodes the given list of providers for storage.
+/// The valid providers in their stored JSON (`loadStoredBYOKProviders`).
+public func loadBYOKProviders(from data: Data?) -> [BYOKProvider] {
+    loadStoredBYOKProviders(from: data).providers
+}
+
+/// Encodes the given list of providers for storage, followed by the stored
+/// entries that didn't load (`StoredBYOKProviders.unloadable`), unchanged.
 ///
 /// A request timeout that isn't a positive finite number (NaN, an infinity,
 /// zero, or a negative number, which only code can set; the settings form
 /// rejects them) is left out, so the provider loads back with the default
 /// timeout.
 ///
-/// - Returns: The JSON to store, or `nil` for an empty list, meaning the
-///   stored value should be removed.
+/// - Returns: The JSON to store, or `nil` when there's nothing to store,
+///   meaning the stored value should be removed.
 /// - Throws: When the providers can't be encoded. A failure never returns
 ///   `nil`, so it can't be mistaken for "remove every provider".
-public func saveBYOKProviders(_ providers: [BYOKProvider]) throws -> Data? {
-    guard !providers.isEmpty else {
+public func saveBYOKProviders(_ providers: [BYOKProvider], keeping unloadable: [Data] = []) throws -> Data? {
+    guard !providers.isEmpty || !unloadable.isEmpty else {
         return nil
     }
     let storable = providers.map { provider in
@@ -226,7 +256,21 @@ public func saveBYOKProviders(_ providers: [BYOKProvider]) throws -> Data? {
     }
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-    return try encoder.encode(storable)
+    var data = try encoder.encode(storable)
+    guard !unloadable.isEmpty else {
+        return data
+    }
+    // The encoder writes a compact array: `[`, the elements separated by
+    // commas, `]`.
+    data.removeLast()
+    for entry in unloadable {
+        if data.count > 1 {
+            data.append(UInt8(ascii: ","))
+        }
+        data.append(entry)
+    }
+    data.append(UInt8(ascii: "]"))
+    return data
 }
 
 // MARK: Secrets

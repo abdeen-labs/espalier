@@ -4,6 +4,7 @@
 // table cells.
 
 import AppKit
+import GitKit
 import SwiftUI
 
 /// One ref on a commit.
@@ -80,9 +81,10 @@ nonisolated public struct RefCapsuleContent: Sendable, Hashable, Identifiable {
     }
 }
 
-/// How a capsule is painted, from its kind and track color: the current
-/// branch filled in the accent; other local branches tinted in their track
-/// color; remote branches outlined, with a cloud; tags neutral, with a tag.
+/// How a capsule is painted, from its kind, track color, and the theme's
+/// tags: the current branch filled in the accent (or the theme's prominent
+/// fill); other local branches tinted in their track color (or filled with
+/// it); remote branches outlined, with a cloud; tags neutral, with a tag.
 struct RefCapsuleStyle {
     var fill: NSColor?
     var stroke: NSColor?
@@ -96,20 +98,34 @@ struct RefCapsuleStyle {
     static let outlineAlpha: CGFloat = 0.45
 
     init(_ content: RefCapsuleContent, palette: TrackPalette.Resolved, variant: AppearanceVariant) {
+        let theme = Theme.current
         let track = palette.color(forRef: content).resolved(in: variant)
-        let solidText = NSColor.white
         switch content.kind {
         case .currentBranch, .currentBranchWithUpstream, .detachedHead:
-            fill = palette.current.resolved(in: variant)
+            let solidText = theme.refTag.currentUsesProminent ? theme.prominentText.resolved(in: variant) : NSColor.white
+            fill = (theme.refTag.currentUsesProminent ? theme.prominent : palette.current).resolved(in: variant)
             stroke = nil
             text = solidText
             secondaryText = solidText.withAlphaComponent(0.75)
             symbol = nil
         case .localBranch, .localBranchWithUpstream:
-            fill = track.withAlphaComponent(Self.tintAlpha)
+            switch theme.refTag.fill {
+            case .tinted(let alpha, let textMix, let ink):
+                fill = track.withAlphaComponent(variant.isDark ? alpha.dark : alpha.light)
+                if let textMix {
+                    let fraction = variant.isDark ? textMix.dark : textMix.light
+                    text = track.blended(withFraction: fraction, of: variant.isDark ? .white : .hex(ink)) ?? track
+                } else {
+                    text = track
+                }
+                secondaryText = text.withAlphaComponent(0.7)
+            case .solid(let darken):
+                let solid = variant.isDark ? track : (track.blended(withFraction: darken, of: .black) ?? track)
+                fill = solid
+                text = variant.isDark ? .hex(0x111116) : .white
+                secondaryText = text.withAlphaComponent(0.75)
+            }
             stroke = nil
-            text = track
-            secondaryText = track.withAlphaComponent(0.7)
             symbol = nil
         case .remoteBranch:
             fill = nil
@@ -133,6 +149,36 @@ struct RefCapsuleStyle {
 }
 
 // MARK: - SwiftUI
+
+/// A ref tag's shape: a capsule, or the theme's rounded rectangle.
+nonisolated struct RefTagShape: InsettableShape {
+    /// The theme's corner radius; nil for a capsule.
+    var cornerRadius: CGFloat?
+    var inset: CGFloat = 0
+
+    init() {
+        cornerRadius = Theme.current.radii.tag
+    }
+
+    /// The corner radius of a tag `height` high in the current theme.
+    static func radius(height: CGFloat) -> CGFloat {
+        min(Theme.current.radii.tag ?? height / 2, height / 2)
+    }
+
+    func path(in rect: CGRect) -> Path {
+        guard let cornerRadius else {
+            return Capsule(style: .circular).inset(by: inset).path(in: rect)
+        }
+        let radius = max(min(cornerRadius, rect.height / 2) - inset, 0)
+        return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect.insetBy(dx: inset, dy: inset))
+    }
+
+    func inset(by amount: CGFloat) -> RefTagShape {
+        var shape = self
+        shape.inset += amount
+        return shape
+    }
+}
 
 /// One ref capsule.
 public struct RefCapsule: View {
@@ -171,12 +217,12 @@ public struct RefCapsule: View {
         .frame(height: Metrics.RefCapsule.height)
         .background {
             if let fill = style.fill {
-                Capsule(style: .circular).fill(Color(nsColor: fill))
+                RefTagShape().fill(Color(nsColor: fill))
             }
         }
         .overlay {
             if let stroke = style.stroke {
-                Capsule(style: .circular).strokeBorder(Color(nsColor: stroke), lineWidth: 1)
+                RefTagShape().strokeBorder(Color(nsColor: stroke), lineWidth: 1)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -194,12 +240,14 @@ public struct RefCapsule: View {
 }
 
 /// A commit's refs: at most three capsules, then "+N", whose popover lists
-/// the rest.
+/// the rest. Beside text, the text gives way first: the capsules truncate
+/// only when nothing else can.
 public struct RefCapsuleList: View {
     private let refs: [RefCapsuleContent]
     private let maximumVisible: Int
     private let palette: TrackPalette.Resolved
     @State private var isShowingOverflow = false
+    @Environment(\.numberFormat) private var numberFormat
 
     public init(_ refs: [RefCapsuleContent], maximumVisible: Int = Metrics.RefCapsule.maximumVisible, palette: TrackPalette.Resolved = TrackPalette.Resolved()) {
         self.refs = refs
@@ -216,16 +264,16 @@ public struct RefCapsuleList: View {
                 Button {
                     isShowingOverflow = true
                 } label: {
-                    Text("+\(refs.count - maximumVisible)")
+                    Text(verbatim: "+\(formatCount(refs.count - maximumVisible, numberFormat))")
                         .font(Typography.tinyCount)
                         .foregroundStyle(.text2)
                         .padding(.horizontal, Metrics.RefCapsule.horizontalPadding)
                         .frame(height: Metrics.RefCapsule.height)
-                        .background(Capsule(style: .circular).fill(.field))
+                        .background(RefTagShape().fill(.field))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(refs.count - maximumVisible) more refs")
-                .popover(isPresented: $isShowingOverflow) {
+                .buttonStyle(.bare(.capsule))
+                .accessibilityLabel(Text(verbatim: "\(formatCount(refs.count - maximumVisible, numberFormat)) more refs"))
+                .popoverCard(isPresented: $isShowingOverflow, title: "More Refs") {
                     VStack(alignment: .leading, spacing: Metrics.RefCapsule.spacing) {
                         ForEach(refs.dropFirst(maximumVisible)) { ref in
                             RefCapsule(ref, palette: palette)
@@ -235,6 +283,7 @@ public struct RefCapsuleList: View {
                 }
             }
         }
+        .layoutPriority(1)
     }
 }
 
@@ -247,16 +296,23 @@ public enum RefCapsuleRenderer {
     public struct Item: Equatable {
         public let content: RefCapsuleContent?
         public let overflowCount: Int
+        /// The overflow capsule's text: "+N".
+        public let overflowText: String
         public let frame: CGRect
     }
 
     /// Lays out `refs` from x = 0: at most `maximumVisible` capsules, then
-    /// "+N". Capsules that don't fit in `maximumWidth` move into the overflow.
+    /// "+N" in `numberFormat`. Capsules that don't fit in `maximumWidth`
+    /// move into the overflow.
     public static func layout(
         _ refs: [RefCapsuleContent],
         maximumWidth: CGFloat = .greatestFiniteMagnitude,
-        maximumVisible: Int = Metrics.RefCapsule.maximumVisible
+        maximumVisible: Int = Metrics.RefCapsule.maximumVisible,
+        numberFormat: NumberFormat
     ) -> [Item] {
+        func overflowText(_ count: Int) -> String {
+            "+\(formatCount(count, numberFormat))"
+        }
         var items: [Item] = []
         var x: CGFloat = 0
         let height = Metrics.RefCapsule.height
@@ -267,17 +323,18 @@ public enum RefCapsuleRenderer {
             }
             let width = capsuleWidth(ref)
             let remaining = refs.count - shown - 1
-            let reserve = remaining > 0 ? overflowWidth(remaining) + Metrics.RefCapsule.spacing : 0
+            let reserve = remaining > 0 ? overflowWidth(overflowText(remaining)) + Metrics.RefCapsule.spacing : 0
             if x + width + reserve > maximumWidth, shown > 0 {
                 break
             }
-            items.append(Item(content: ref, overflowCount: 0, frame: CGRect(x: x, y: 0, width: width, height: height)))
+            items.append(Item(content: ref, overflowCount: 0, overflowText: "", frame: CGRect(x: x, y: 0, width: width, height: height)))
             x += width + Metrics.RefCapsule.spacing
             shown += 1
         }
         if shown < refs.count {
             let count = refs.count - shown
-            items.append(Item(content: nil, overflowCount: count, frame: CGRect(x: x, y: 0, width: overflowWidth(count), height: height)))
+            let text = overflowText(count)
+            items.append(Item(content: nil, overflowCount: count, overflowText: text, frame: CGRect(x: x, y: 0, width: overflowWidth(text), height: height)))
         }
         return items
     }
@@ -301,7 +358,7 @@ public enum RefCapsuleRenderer {
             if let content = item.content {
                 drawCapsule(content, in: frame, palette: palette, variant: variant)
             } else {
-                drawOverflow(item.overflowCount, in: frame, variant: variant)
+                drawOverflow(item.overflowText, in: frame, variant: variant)
             }
         }
     }
@@ -310,7 +367,7 @@ public enum RefCapsuleRenderer {
 
     private static func drawCapsule(_ content: RefCapsuleContent, in frame: CGRect, palette: TrackPalette.Resolved, variant: AppearanceVariant) {
         let style = RefCapsuleStyle(content, palette: palette, variant: variant)
-        let radius = frame.height / 2
+        let radius = RefTagShape.radius(height: frame.height)
         if let fill = style.fill {
             fill.setFill()
             NSBezierPath(roundedRect: frame, xRadius: radius, yRadius: radius).fill()
@@ -330,18 +387,23 @@ public enum RefCapsuleRenderer {
         }
         let title = NSAttributedString(string: content.title, attributes: attributes(style.text))
         drawText(title, x: x, in: frame)
-        x += ceil(title.size().width)
+        x += title.size().width
         if let remote = content.remoteSuffix {
-            let suffix = NSAttributedString(string: "│\(remote)", attributes: attributes(style.secondaryText))
-            drawText(suffix, x: x + Metrics.RefCapsule.glyphSpacing, in: frame)
+            // The divider and the remote, spaced as the SwiftUI capsule
+            // spaces its parts.
+            let divider = NSAttributedString(string: dividerText, attributes: attributes(style.secondaryText))
+            x += Metrics.RefCapsule.glyphSpacing
+            drawText(divider, x: x, in: frame)
+            x += divider.size().width + Metrics.RefCapsule.glyphSpacing
+            drawText(NSAttributedString(string: remote, attributes: attributes(style.secondaryText)), x: x, in: frame)
         }
     }
 
-    private static func drawOverflow(_ count: Int, in frame: CGRect, variant: AppearanceVariant) {
-        let radius = frame.height / 2
+    private static func drawOverflow(_ string: String, in frame: CGRect, variant: AppearanceVariant) {
+        let radius = RefTagShape.radius(height: frame.height)
         Palette.field.resolved(in: variant).setFill()
         NSBezierPath(roundedRect: frame, xRadius: radius, yRadius: radius).fill()
-        let text = NSAttributedString(string: "+\(count)", attributes: [
+        let text = NSAttributedString(string: string, attributes: [
             .font: AppKitTypography.tinyCount,
             .foregroundColor: Palette.text2.resolved(in: variant),
         ])
@@ -357,19 +419,25 @@ public enum RefCapsuleRenderer {
 
     private static func capsuleWidth(_ content: RefCapsuleContent) -> CGFloat {
         var width = Metrics.RefCapsule.horizontalPadding * 2
-        width += ceil(NSAttributedString(string: content.title, attributes: attributes(.labelColor)).size().width)
         if let symbol = symbol(for: content.kind), let glyph = symbolImage(symbol, color: .labelColor) {
             width += glyph.size.width + Metrics.RefCapsule.glyphSpacing
         }
+        // The text's parts, rounded up once, as they're drawn one after
+        // another.
+        var text = NSAttributedString(string: content.title, attributes: attributes(.labelColor)).size().width
         if let remote = content.remoteSuffix {
-            width += Metrics.RefCapsule.glyphSpacing
-            width += ceil(NSAttributedString(string: "│\(remote)", attributes: attributes(.labelColor)).size().width)
+            text += Metrics.RefCapsule.glyphSpacing * 2
+            text += NSAttributedString(string: dividerText, attributes: attributes(.labelColor)).size().width
+            text += NSAttributedString(string: remote, attributes: attributes(.labelColor)).size().width
         }
-        return width
+        return width + ceil(text)
     }
 
-    private static func overflowWidth(_ count: Int) -> CGFloat {
-        let text = NSAttributedString(string: "+\(count)", attributes: [.font: AppKitTypography.tinyCount])
+    /// Between a branch and its upstream's remote: "main│origin".
+    private static let dividerText = "│"
+
+    private static func overflowWidth(_ string: String) -> CGFloat {
+        let text = NSAttributedString(string: string, attributes: [.font: AppKitTypography.tinyCount])
         return ceil(text.size().width) + Metrics.RefCapsule.horizontalPadding * 2
     }
 

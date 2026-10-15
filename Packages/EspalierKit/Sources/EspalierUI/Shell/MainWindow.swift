@@ -2,7 +2,8 @@
 // and a detail area with its own inner split), the inspector, the toolbar
 // with its search field, and the floating capsule and toasts. The window is
 // flat (`FlatWindowChrome`): the sidebar is opaque and the columns draw the
-// toolbar's band.
+// toolbar's band. In the floating layout the panes are cards on the
+// backdrop (FloatingPanes.swift).
 
 import EspalierCore
 import GitKit
@@ -12,6 +13,8 @@ import UniformTypeIdentifiers
 /// The main window's content once the app has loaded.
 struct MainWindow: View {
     @Environment(WindowContext.self) private var context
+    /// Whether the sidebar was last hidden, for the next window.
+    @AppStorage(WindowState.sidebarHiddenKey) private var isSidebarHidden = false
 
     var body: some View {
         @Bindable var state = context.state
@@ -23,24 +26,31 @@ struct MainWindow: View {
                     max: Metrics.Column.sidebar.max ?? Metrics.Column.sidebar.ideal
                 )
         } detail: {
+            let inspector = inspectorBinding
             DetailRouter()
                 .overlay(alignment: .bottom) {
                     FloatingStatus()
                 }
+                // With the sidebar hidden, the cards keep the window's edge
+                // margin; the inspector's card keeps the gap after them.
+                .paneMargins(
+                    leading: state.columnVisibility == .detailOnly ? PaneCards.windowEdgeMargin : PaneCards.frameMargins.leading,
+                    trailing: inspector.wrappedValue ? 0 : PaneCards.frameMargins.trailing
+                )
                 .toolbarBand()
-                .inspector(isPresented: inspectorBinding) {
-                    InspectorRouter()
-                        .toolbarBand()
-                        .overlay(alignment: .leading) {
-                            Hairline(.vertical)
-                                .ignoresSafeArea()
-                        }
+                .inspector(isPresented: inspector) {
+                    InspectorColumn()
                         .inspectorColumnWidth(
                             min: Metrics.Column.inspector.min,
                             ideal: Metrics.Column.inspector.ideal,
                             max: Metrics.Column.inspector.max ?? Metrics.Column.inspector.ideal
                         )
                 }
+        }
+        .background {
+            WindowDividerStyler()
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
         }
         .navigationTitle(context.repository?.record.displayName ?? "Espalier")
         .toolbar(removing: .title)
@@ -50,6 +60,9 @@ struct MainWindow: View {
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .onChange(of: context.app.selection, initial: true) {
             restorePlace()
+        }
+        .onChange(of: state.columnVisibility) {
+            isSidebarHidden = state.columnVisibility == .detailOnly
         }
         .dropDestination(for: URL.self) { urls, _ in
             let folders = urls.filter(\.hasDirectoryPath).map { $0.path(percentEncoded: false) }
@@ -78,6 +91,27 @@ struct MainWindow: View {
     }
 }
 
+/// The inspector's column: Commit Info under the toolbar's band, with a
+/// hairline on its leading edge; a card on the backdrop in the floating
+/// layout.
+struct InspectorColumn: View {
+    var body: some View {
+        InspectorRouter()
+            .paneCard(margins: EdgeInsets(
+                top: PaneCards.frameMargins.top,
+                leading: PaneCards.frameGap,
+                bottom: PaneCards.frameMargins.bottom,
+                trailing: PaneCards.frameMargins.trailing
+            ))
+            .toolbarBand()
+            // Below the toolbar, which spans the inspector too.
+            .overlay(alignment: .leading) {
+                Hairline(.vertical)
+                    .opacity(PaneCards.floats ? 0 : 1)
+            }
+    }
+}
+
 /// The capsule and toasts, bottom-centered over the detail area. Toasts
 /// stack above the capsule; the capsule shows outside Changes, where the
 /// operation panel takes its place. The capsule rises in and sinks out as
@@ -99,6 +133,7 @@ struct FloatingStatus: View {
 private struct FloatingStatusStack: View {
     @Environment(WindowContext.self) private var context
     @Environment(\.motion) private var motion
+    @Environment(\.numberFormat) private var numberFormat
     @Environment(\.undoManager) private var undoManager
 
     var body: some View {
@@ -136,6 +171,6 @@ private struct FloatingStatusStack: View {
         guard let repository = context.repository, repository.isUsable, context.state.place != .changes else {
             return nil
         }
-        return OperationCapsuleContent.make(repository)
+        return OperationCapsuleContent.make(repository, numberFormat: numberFormat)
     }
 }

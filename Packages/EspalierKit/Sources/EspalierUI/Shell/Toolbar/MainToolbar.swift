@@ -81,7 +81,7 @@ struct MainToolbar: CustomizableToolbarContent {
         .defaultCustomization(.hidden)
         .sharedBackgroundVisibility(.hidden)
         ToolbarItem(id: "espalier.createPullRequest", placement: .primaryAction) {
-            ActionToolbarButton(.createPullRequest, systemImage: "arrow.trianglehead.pull")
+            ActionToolbarButton(.createPullRequest, systemImage: PullRequestGlyph.systemImage)
         }
         .defaultCustomization(.hidden)
         .sharedBackgroundVisibility(.hidden)
@@ -114,7 +114,7 @@ struct MainToolbar: CustomizableToolbarContent {
                     Label("Commit Info", systemImage: "info.circle")
                 }
                 .buttonStyle(.icon)
-                .help(context.actions.title(for: .toggleInspector))
+                .tooltip(context.actions.title(for: .toggleInspector))
             }
         }
         .sharedBackgroundVisibility(.hidden)
@@ -149,6 +149,7 @@ struct ToolbarSearchField: View {
         )
         .controlSize(.large)
         .frame(width: Metrics.Toolbar.searchWidth)
+        .environment(\.searchFieldIsRaised, PaneCards.floats)
         .announcesFilterResults(state.searchText) { [context] in
             Self.resultCount(in: context)
         }
@@ -188,23 +189,21 @@ struct OverflowMenu: View {
     @Environment(WindowContext.self) private var context
 
     var body: some View {
-        Menu {
-            ActionButton(.openInEditor(path: nil))
-            ActionButton(.openInTerminal(path: nil))
-            ActionButton(.showInFinder(path: nil))
-            Divider()
-            ActionButton(.viewOnGitHub)
-            ActionButton(.createPullRequest)
-            Divider()
-            ActionButton(.repositorySettings)
+        PullDownButton("More") { [actions = context.actions] in
+            actions.menuAction(.openInEditor(path: nil))
+            actions.menuAction(.openInTerminal(path: nil))
+            actions.menuAction(.showInFinder(path: nil))
+            MenuDivider()
+            actions.menuAction(.viewOnGitHub)
+            actions.menuAction(.createPullRequest)
+            MenuDivider()
+            actions.menuAction(.repositorySettings)
         } label: {
             Label("More", systemImage: "ellipsis.circle")
         }
-        .menuStyle(.button)
         .buttonStyle(.icon)
-        .menuIndicator(.hidden)
         .fixedSize()
-        .help("More")
+        .tooltip("More")
     }
 }
 
@@ -229,6 +228,6 @@ struct ActionToolbarButton: View {
         }
         .buttonStyle(.icon)
         .disabled(!context.actions.canPerform(action))
-        .help(title)
+        .tooltip(title)
     }
 }

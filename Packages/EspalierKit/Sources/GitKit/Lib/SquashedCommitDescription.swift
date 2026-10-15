@@ -8,11 +8,13 @@ import EspalierSupport
 /// empty parts.
 public func getSquashedCommitDescription(_ commits: [Commit], _ squashOnto: Commit) -> String {
     let commitMessages = commits.map { c in
-        "\(JSCompat.trim(c.summary))\n\n\(JSCompat.trim(c.bodyNoCoAuthors))"
+        [JSCompat.trim(c.summary), JSCompat.trim(c.bodyNoCoAuthors)]
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
     }
 
     let descriptions = ([JSCompat.trim(squashOnto.bodyNoCoAuthors)] + commitMessages)
-        .filter { !JSCompat.trim($0).isEmpty }
+        .filter { !$0.isEmpty }
 
     return descriptions.joined(separator: "\n\n")
 }

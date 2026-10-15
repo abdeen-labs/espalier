@@ -26,20 +26,12 @@ public struct AIResponseError: Error, LocalizedError, Sendable, Hashable {
     public var errorDescription: String? { message }
 }
 
-private let jsonFence = JSCompat.regex("```json" + JSCompat.whitespace + #"*([\s\S]*?)```"#)
-private let anyFence = JSCompat.regex("```" + JSCompat.whitespace + #"*([\s\S]*?)```"#)
-
 /// Parses the model's commit message response: a JSON object with a
 /// non-empty `title` and an optional string `description`, optionally wrapped
-/// in a markdown code fence.
+/// in a markdown code fence (found as `parseModelResponseJSON` finds it). The
+/// title is trimmed; a `null` description is no description.
 public func parseAICommitMessage(_ content: String) throws -> AICommitMessage {
-    let jsonMatch = JSCompat.match(content, jsonFence) ?? JSCompat.match(content, anyFence)
-    let jsonString = jsonMatch.map { JSCompat.trim($0[1] ?? "") } ?? JSCompat.trim(content)
-
-    let parsed: JSONValue
-    do {
-        parsed = try JSONValue.parse(jsonString)
-    } catch {
+    guard let parsed = parseModelResponseJSON(content) else {
         throw AIResponseError("The model returned invalid JSON for commit message generation")
     }
 
@@ -47,13 +39,13 @@ public func parseAICommitMessage(_ content: String) throws -> AICommitMessage {
         throw AIResponseError("The model returned an invalid commit message payload: expected an object")
     }
 
-    guard let title = parsed["title"]?.stringValue, !JSCompat.trim(title).isEmpty else {
+    guard let title = parsed["title"]?.stringValue.map(JSCompat.trim), !title.isEmpty else {
         throw AIResponseError(
             #"The model returned an invalid commit message payload: "title" must be a non-empty string"#
         )
     }
 
-    guard let description = parsed["description"] else {
+    guard let description = parsed["description"], description != .null else {
         return AICommitMessage(title: title, description: "")
     }
 

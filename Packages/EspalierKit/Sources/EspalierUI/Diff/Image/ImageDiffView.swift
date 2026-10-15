@@ -1,8 +1,9 @@
 // Ported in part from desktop/app/src/ui/diff/image-diffs/
 //
-// Image diffs. A modified image shows in the mode chosen in the header
-// (2-Up, Swipe, Onion Skin, Difference; the `image-diff-type` preference),
-// an added or deleted one in a single pane. Images sit on a checkerboard so
+// Image diffs. A modified image shows in the mode chosen above it (2-Up,
+// Swipe, Onion Skin, Difference; the `image-diff-type` preference, also in
+// the View menu), an added or deleted one in a single pane, a conflicted one
+// as a message (`ConflictedFileMessage`). Images sit on a checkerboard so
 // transparency shows.
 
 import AppKit
@@ -33,34 +34,62 @@ struct ImageDiffContent {
     }
 }
 
-/// An image diff: one of the four modes, or one pane.
+/// An image diff: the mode picker above one of the four modes, one pane,
+/// or a conflicted image's message.
 struct ImageDiffView: View {
     let content: ImageDiffContent
     let status: FileStatusKind
+    /// A conflicted file's row in Changes: whether a side can be picked, or
+    /// was.
+    let conflict: ConflictFileRowContent?
     let mode: ImageDiffType
+    let setMode: @MainActor (ImageDiffType) -> Void
 
-    init(content: ImageDiffContent, status: FileStatusKind, mode: ImageDiffType) {
+    init(
+        content: ImageDiffContent,
+        status: FileStatusKind,
+        conflict: ConflictFileRowContent? = nil,
+        mode: ImageDiffType,
+        setMode: @escaping @MainActor (ImageDiffType) -> Void = { _ in }
+    ) {
         self.content = content
         self.status = status
+        self.conflict = conflict
         self.mode = mode
+        self.setMode = setMode
     }
 
-    init(diff: ImageDiff, status: FileStatusKind, mode: ImageDiffType) {
-        self.init(content: ImageDiffContent(diff), status: status, mode: mode)
+    init(
+        diff: ImageDiff,
+        status: FileStatusKind,
+        conflict: ConflictFileRowContent? = nil,
+        mode: ImageDiffType,
+        setMode: @escaping @MainActor (ImageDiffType) -> Void = { _ in }
+    ) {
+        self.init(content: ImageDiffContent(diff), status: status, conflict: conflict, mode: mode, setMode: setMode)
     }
 
     var body: some View {
         Group {
             if let previous = content.previous, let current = content.current {
-                switch mode {
-                case .twoUp:
-                    TwoUpView(previous: previous, current: current)
-                case .swipe:
-                    SwipeView(previous: previous, current: current)
-                case .onionSkin:
-                    OnionSkinView(previous: previous, current: current)
-                case .difference:
-                    DifferenceView(previous: previous, current: current)
+                VStack(spacing: 0) {
+                    CapsuleSegmentedControl(
+                        "Image Diff",
+                        selection: Binding(get: { mode }, set: setMode),
+                        segments: ImageDiffType.allModes.map { CapsuleSegment($0.title, value: $0) }
+                    )
+                    .fixedSize()
+                    .padding(.top, Metrics.insetLarge)
+                    switch mode {
+                    case .twoUp:
+                        TwoUpView(previous: previous, current: current)
+                    case .swipe:
+                        SwipeView(previous: previous, current: current)
+                    case .onionSkin:
+                        OnionSkinView(previous: previous, current: current)
+                    case .difference:
+                        DifferenceView(previous: previous, current: current)
+                    }
                 }
             } else if let current = content.current, status == .new || status == .untracked {
                 SingleImagePane(title: "Added", image: current)
@@ -70,6 +99,9 @@ struct ImageDiffView: View {
                 // Other statuses show their image in one pane too: it says
                 // more than a blank diff.
                 SingleImagePane(title: content.current != nil ? "Added" : "Deleted", image: image)
+            } else if status == .conflicted {
+                // A conflicted image's diff carries neither version.
+                ConflictedFileMessage("This image has a conflict", conflict: conflict)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -77,7 +109,7 @@ struct ImageDiffView: View {
     }
 }
 
-/// The modes, in the order the header shows them (their titles are the
+/// The modes, in the order the picker shows them (their titles are the
 /// View menu's).
 nonisolated extension ImageDiffType {
     static let allModes: [ImageDiffType] = [.twoUp, .swipe, .onionSkin, .difference]
@@ -118,12 +150,35 @@ nonisolated func getAspectFitSize(_ imageSize: CGSize, _ containerSize: CGSize) 
     return CGSize(width: imageSize.width / ratio, height: imageSize.height / ratio)
 }
 
-/// Get the size which will fit the bigger of the two images while maintaining
-/// aspect ratio.
-nonisolated func getMaxFitSize(_ previousImageSize: CGSize, _ currentImageSize: CGSize, _ containerSize: CGSize) -> CGSize {
-    let previousSize = getAspectFitSize(previousImageSize, containerSize)
-    let currentSize = getAspectFitSize(currentImageSize, containerSize)
-    return CGSize(width: max(previousSize.width, currentSize.width), height: max(previousSize.height, currentSize.height))
+/// Two images overlaid from the same top-left corner (Swipe, Onion Skin,
+/// Difference): each at its own size, in a box as wide and as tall as the
+/// larger of them, all scaled down by one factor when the box doesn't fit.
+nonisolated struct OverlaidImageSizes: Equatable {
+    let box: CGSize
+    let previous: CGSize
+    let current: CGSize
+
+    /// - Parameters:
+    ///   - previous: The old image's size.
+    ///   - current: The new image's size.
+    ///   - available: The space for the box.
+    init(previous: CGSize, current: CGSize, available: CGSize) {
+        let box = CGSize(width: max(previous.width, current.width), height: max(previous.height, current.height))
+        let scale = min(1, available.width / max(box.width, 1), available.height / max(box.height, 1))
+        self.box = CGSize(width: box.width * scale, height: box.height * scale)
+        self.previous = CGSize(width: previous.width * scale, height: previous.height * scale)
+        self.current = CGSize(width: current.width * scale, height: current.height * scale)
+    }
+
+    /// The sizes of decoded images, or of the placeholder for one that
+    /// couldn't be decoded.
+    init(previous: DecodedImage?, current: DecodedImage?, available: CGSize) {
+        self.init(
+            previous: previous?.pixelSize ?? CGSize(width: 64, height: 64),
+            current: current?.pixelSize ?? CGSize(width: 64, height: 64),
+            available: CGSize(width: max(available.width, 1), height: max(available.height, 1))
+        )
+    }
 }
 
 // MARK: - Shared pieces
@@ -170,26 +225,31 @@ struct CheckeredImage: View {
     }
 }
 
-/// "Deleted image, 640 by 480 pixels, 24 KiB".
-func imageAccessibilityLabel(_ title: String, image: DecodedImage?, bytes: Int) -> String {
+/// "Deleted image, 640 by 480 pixels, 24 KiB", the size in `numberFormat`.
+func imageAccessibilityLabel(_ title: String, image: DecodedImage?, bytes: Int, numberFormat: NumberFormat) -> String {
     let kind = title == "Deleted" ? "Deleted image" : "Added image"
+    let size = formatBytes(Double(bytes), 2, numberFormat: numberFormat)
     guard let image else {
-        return "\(kind), \(formatBytes(Double(bytes), 2))"
+        return "\(kind), \(size)"
     }
-    return "\(kind), \(Int(image.pixelSize.width)) by \(Int(image.pixelSize.height)) pixels, \(formatBytes(Double(bytes), 2))"
+    return "\(kind), \(Int(image.pixelSize.width)) by \(Int(image.pixelSize.height)) pixels, \(size)"
 }
 
-/// "W: 640px | H: 480px | Size: 24 KiB".
-func imageFooter(image: DecodedImage?, bytes: Int) -> String {
-    let width = Int(image?.pixelSize.width ?? 0)
-    let height = Int(image?.pixelSize.height ?? 0)
-    return "W: \(width)px | H: \(height)px | Size: \(formatBytes(Double(bytes), 2))"
+/// "W: 640px | H: 480px | Size: 24 KiB", or "Size: 24 KiB" for an image
+/// that couldn't be decoded; the size in `numberFormat`.
+func imageFooter(image: DecodedImage?, bytes: Int, numberFormat: NumberFormat) -> String {
+    let size = "Size: \(formatBytes(Double(bytes), 2, numberFormat: numberFormat))"
+    guard let image else {
+        return size
+    }
+    return "W: \(Int(image.pixelSize.width))px | H: \(Int(image.pixelSize.height))px | \(size)"
 }
 
 /// One image with a header (an added or deleted file).
 struct SingleImagePane: View {
     let title: String
     let shown: ShownImage
+    @Environment(\.numberFormat) private var numberFormat
 
     init(title: String, image: ShownImage) {
         self.title = title
@@ -207,9 +267,9 @@ struct SingleImagePane: View {
                     .font(Typography.heading)
                 CheckeredImage(image: decoded, size: size)
                     .accessibilityElement()
-                    .accessibilityLabel(imageAccessibilityLabel(title, image: decoded, bytes: image.bytes))
+                    .accessibilityLabel(imageAccessibilityLabel(title, image: decoded, bytes: image.bytes, numberFormat: numberFormat))
                     .accessibilityAddTraits(.isImage)
-                Text(imageFooter(image: decoded, bytes: image.bytes))
+                Text(imageFooter(image: decoded, bytes: image.bytes, numberFormat: numberFormat))
                     .font(Typography.secondary.monospacedDigit())
                     .foregroundStyle(.secondary)
             }

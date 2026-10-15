@@ -72,11 +72,11 @@ struct ModelSheet: View {
         SheetScaffold(editor.title) {
             Form {
                 LabeledContent("Display Name") {
-                    TextField("Display Name", text: $editor.form.name, prompt: Text(verbatim: "GPT-4o"))
+                    TextField("Display Name", text: $editor.form.name, prompt: Text(verbatim: "GPT-4o").fieldPrompt())
                         .labelsHidden()
                 }
                 LabeledContent("Model Identifier") {
-                    TextField("Model Identifier", text: $editor.form.id, prompt: Text(verbatim: "gpt-4o"))
+                    TextField("Model Identifier", text: $editor.form.id, prompt: Text(verbatim: "gpt-4o").fieldPrompt())
                         .labelsHidden()
                 }
                 LabeledContent {
@@ -86,11 +86,12 @@ struct ModelSheet: View {
                 }
                 LabeledContent("Reasoning Effort") {
                     CapsulePopUp("Reasoning Effort", selection: $editor.form.reasoningEffort, title: reasoningTitle(editor.form.reasoningEffort)) {
-                        Text("Default (provider's choice)").tag(ReasoningEffort?.none)
-                        ForEach(ReasoningEffortOrder, id: \.self) { effort in
-                            Text(formatReasoningEffort(effort)).tag(Optional(effort))
+                        MenuChoice("Default (provider's choice)", value: ReasoningEffort?.none)
+                        for effort in ReasoningEffortOrder {
+                            MenuChoice(formatReasoningEffort(effort), value: Optional(effort))
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 LabeledContent {
                     SettingsNote("Reasoning models, such as o3 or GPT-5, think before they answer. Higher levels are slower but do better on complex tasks. Leave it on Default for other models, or to let the provider choose.")
@@ -102,7 +103,7 @@ struct ModelSheet: View {
             .textFieldStyle(.capsule)
 
             if let problem = editor.problem {
-                InlineMessage(problem, kind: .error)
+                FieldMessage(problem, kind: .error)
             }
         } buttons: {
             SheetButtons(editor.saveTitle, cancel: { dismiss() }) {

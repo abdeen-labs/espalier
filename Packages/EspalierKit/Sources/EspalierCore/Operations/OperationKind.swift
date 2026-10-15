@@ -50,6 +50,8 @@ public enum OperationKind: String, Sendable, Hashable, CaseIterable {
     case setLinkHandler
     /// Passing a GitHub Desktop link on to GitHub Desktop.
     case forwardLink
+    /// Installing the command line tool at `/usr/local/bin/espalier`.
+    case installCommandLineTool
 
     /// Checking out a pull request: finding its branch, adding its fork's
     /// remote. The checkout itself is `checkoutBranch`.
@@ -75,7 +77,7 @@ public enum OperationKind: String, Sendable, Hashable, CaseIterable {
         case .fetch, .fetchRefspec, .push, .publishRepository, .deleteRemoteBranch, .clone,
              .addRepository, .removeRepository, .relocateRepository, .createRepository,
              .openInEditor, .openInShell, .openFile, .updateLFSFilters, .setGlobalGitConfig, .generateCommitMessage, .resolveConflicts,
-             .updateAIProviders, .signOut, .createPullRequest, .setLinkHandler, .forwardLink:
+             .updateAIProviders, .signOut, .createPullRequest, .setLinkHandler, .forwardLink, .installCommandLineTool:
             false
         case .loadChangesDiff, .loadStashedChanges, .loadHistory, .loadDiff:
             false
