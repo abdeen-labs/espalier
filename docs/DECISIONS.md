@@ -675,8 +675,8 @@ immediately; importing desktop's repository list and settings (my call).
 - **An empty branch list reads "No Branches"** with nothing typed in the
   filter (desktop's said it couldn't find that branch).
 - **The branch popover is desktop's branch switcher:** a click or Return
-  checks a branch out, and "Choose a branch to merge into <current>" sits
-  beside New Branch…. The sidebar's branches use its groups (Default,
+  checks a branch out, a right-click opens the sidebar's branch menu, and
+  "Choose a branch to merge into <current>" sits beside New Branch…. The sidebar's branches use its groups (Default,
   Recent, Other, Remote), Other open at first.
 - **The current branch, worktree, repository, or pull request has a
   semibold title,** and nothing else marks it; a checked-out pull request

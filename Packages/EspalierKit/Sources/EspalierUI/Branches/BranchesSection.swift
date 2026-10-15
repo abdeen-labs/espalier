@@ -1071,7 +1071,8 @@ enum RestorePrunedBranchMenu {
 
 // MARK: - Context menu
 
-/// A branch row's context menu.
+/// A branch row's context menu, in the sidebar and the branch popover.
+/// Every item but Copy Branch Name closes the popover first.
 enum BranchContextMenu {
     @MenuBuilder
     static func content(ref: String, context: WindowContext) -> MenuContent {
@@ -1081,24 +1082,24 @@ enum BranchContextMenu {
             let actions = context.actions
             let current = repository.gitState.tip.branch
             let isCurrent = current?.ref == branch.ref
-            actions.menuAction(.checkoutBranch(name: branch.name))
-            actions.menuAction(.newWorktree(branch: branch.name), title: "Check Out in New Worktree…")
+            actions.menuAction(.checkoutBranch(name: branch.name)).closesPopover()
+            actions.menuAction(.newWorktree(branch: branch.name), title: "Check Out in New Worktree…").closesPopover()
             if let current, !isCurrent {
                 MenuDivider()
-                actions.menuAction(.mergeIntoCurrentBranch(branch: branch.name), title: "Merge into \(current.name)…")
-                actions.menuAction(.rebaseCurrentBranch(onto: branch.name), title: "Rebase \(current.name) onto \(branch.name)…")
-                actions.menuAction(.compareToBranch(name: branch.name), title: "Compare with \(current.name)")
+                actions.menuAction(.mergeIntoCurrentBranch(branch: branch.name), title: "Merge into \(current.name)…").closesPopover()
+                actions.menuAction(.rebaseCurrentBranch(onto: branch.name), title: "Rebase \(current.name) onto \(branch.name)…").closesPopover()
+                actions.menuAction(.compareToBranch(name: branch.name), title: "Compare with \(current.name)").closesPopover()
             }
             MenuDivider()
             if branch.type == .local {
-                actions.menuAction(.viewBranchOnGitHub(name: branch.name))
+                actions.menuAction(.viewBranchOnGitHub(name: branch.name)).closesPopover()
             }
             actions.menuAction(.copyBranchName(name: branch.name))
             MenuDivider()
             if branch.type == .local {
-                actions.menuAction(.renameBranch(name: branch.name))
+                actions.menuAction(.renameBranch(name: branch.name)).closesPopover()
             }
-            actions.menuAction(.deleteBranch(name: branch.name))
+            actions.menuAction(.deleteBranch(name: branch.name)).closesPopover()
         }
     }
 }

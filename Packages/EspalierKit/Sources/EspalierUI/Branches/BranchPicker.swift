@@ -185,6 +185,7 @@ public struct BranchPicker: View {
     private let comparesWithCurrentBranch: Bool
     private let style: BranchPickerStyle
     private let filterAccessory: AnyView?
+    private let branchMenu: ((Branch) -> MenuContent)?
     @State private var filter = ""
     @State private var dates: [String: Date] = [:]
 
@@ -207,6 +208,8 @@ public struct BranchPicker: View {
     ///     bordered list (inside sheets).
     ///   - filterAccessory: What sits beside the filter (the popover's New
     ///     Branch…).
+    ///   - branchMenu: A branch's context menu, in the popover; nil gives
+    ///     the rows none.
     public init(
         repository: RepositoryModel,
         selection: Binding<Branch?>,
@@ -217,10 +220,12 @@ public struct BranchPicker: View {
         candidates: [Branch]? = nil,
         comparesWithCurrentBranch: Bool = false,
         style: BranchPickerStyle = .embedded,
-        filterAccessory: AnyView? = nil
+        filterAccessory: AnyView? = nil,
+        branchMenu: ((Branch) -> MenuContent)? = nil
     ) {
         self.style = style
         self.filterAccessory = filterAccessory
+        self.branchMenu = branchMenu
         self.comparesWithCurrentBranch = comparesWithCurrentBranch
         self.repository = repository
         _selection = selection
@@ -258,7 +263,8 @@ public struct BranchPicker: View {
             dotColor: { [repository] branch in
                 BranchPicker.dotColor(of: branch, in: repository)
             },
-            filterAccessory: filterAccessory
+            filterAccessory: filterAccessory,
+            branchMenu: branchMenu
         )
         .task(id: listed.map(\.tip.sha)) {
             dates = await repository.branches.tipDates(for: listed)
@@ -318,6 +324,8 @@ struct BranchPickerList: View {
     var dotColor: ((Branch) -> NSColor)?
     /// What sits beside the filter.
     var filterAccessory: AnyView?
+    /// A branch's context menu, in the popover.
+    var branchMenu: ((Branch) -> MenuContent)?
     @FocusState private var isFilterFocused: Bool
     /// The branch the pointer highlighted last in the popover, which the
     /// list doesn't scroll to.
@@ -334,7 +342,8 @@ struct BranchPickerList: View {
         comparison: BranchComparison? = nil,
         style: BranchPickerStyle = .embedded,
         dotColor: ((Branch) -> NSColor)? = nil,
-        filterAccessory: AnyView? = nil
+        filterAccessory: AnyView? = nil,
+        branchMenu: ((Branch) -> MenuContent)? = nil
     ) {
         self.content = content
         self.currentBranch = currentBranch
@@ -347,6 +356,7 @@ struct BranchPickerList: View {
         self.style = style
         self.dotColor = dotColor
         self.filterAccessory = filterAccessory
+        self.branchMenu = branchMenu
     }
 
     var body: some View {
@@ -419,9 +429,10 @@ struct BranchPickerList: View {
         }
     }
 
-    /// The popover's rows, as a menu's: a click activates a branch, and the
-    /// pointer highlights the row it's on. A list that fits doesn't scroll,
-    /// and the highlight scrolls into view unless the pointer put it there.
+    /// The popover's rows, as a menu's: a click activates a branch, the
+    /// pointer highlights the row it's on, and a right-click opens the
+    /// branch's context menu. A list that fits doesn't scroll, and the
+    /// highlight scrolls into view unless the pointer put it there.
     private var popoverList: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -462,6 +473,11 @@ struct BranchPickerList: View {
                 .selectableRow(isSelected: isHighlighted)
         }
         .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
+        .contextMenuCard { [branchMenu] in
+            if let branchMenu {
+                branchMenu(branch)
+            }
+        }
         .padding(.horizontal, Metrics.ListRow.inset)
         .padding(.vertical, 1)
         .id(branch.ref)

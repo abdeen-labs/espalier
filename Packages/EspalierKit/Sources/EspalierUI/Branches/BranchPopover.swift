@@ -4,8 +4,9 @@
 // out as desktop's: the filter with New Branch… (⇧⌘N) beside it, then the
 // branches, whose click or Return checks the highlighted branch out
 // through the Switch Branch decision (the current branch, highlighted as
-// the popover opens, only closes it); a filter that matches nothing offers
-// Create New Branch. Along the bottom, "Choose a branch to merge into
+// the popover opens, only closes it), and whose right-click opens the
+// sidebar's branch menu; a filter that matches nothing offers Create New
+// Branch. Along the bottom, "Choose a branch to merge into
 // <current>" opens Merge into Current Branch.
 
 import EspalierCore
@@ -40,7 +41,10 @@ public struct BranchPopover: View {
                     NewBranchSheet.present(.create(initialName: name), in: context)
                 } : nil,
                 style: .popover,
-                filterAccessory: AnyView(newBranchButton)
+                filterAccessory: AnyView(newBranchButton),
+                branchMenu: { [context] branch in
+                    BranchContextMenu.content(ref: branch.ref, context: context)
+                }
             )
             .frame(height: Metrics.BranchPicker.popoverListHeight)
             if repository.gitState.tip.branch != nil {

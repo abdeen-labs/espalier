@@ -1,9 +1,10 @@
-// The Branches section and its rows, the branch picker and popover, and the
-// New, Rename, and Delete Branch sheets, one capture per layout. Rows, the
-// section's rows, the picker's list, and the sheets take values; the
-// section's header and the popover use a repository with a remote. Dots
-// take the colors the app gives the branches listed (`BranchColors`): the
-// section's repository has its local branches, on feature/login.
+// The Branches section and its rows, the branch picker and popover with a
+// row's context menu, and the New, Rename, and Delete Branch sheets, one
+// capture per layout. Rows, the section's rows, the picker's list, and the
+// sheets take values; the section's header, the popover, and its menu use
+// a repository with a remote. Dots take the colors the app gives the
+// branches listed (`BranchColors`): the section's repository has its local
+// branches, on feature/login.
 
 import AppKit
 @testable import EspalierCore
@@ -272,6 +273,18 @@ struct BranchesCaptures {
             await LoadedCapture.capture(card, named: "popover", area: area) { _ in
                 await fixture.settle()
             }
+        }
+    }
+
+    @Test("the branch popover's context menu, for a branch other than the current one")
+    func popoverMenu() async throws {
+        try await withIsolatedGitConfig { _ in
+            let fixture = try await OperationsCaptureRepository.make { local in
+                try await runGit(["branch", "feature/login"], local)
+            }
+            await fixture.settle()
+            let menu = MenuCard(level: MenuLevel(content: BranchContextMenu.content(ref: "refs/heads/feature/login", context: fixture.context)))
+            capture(menu, named: "popover-menu", area: area)
         }
     }
 
