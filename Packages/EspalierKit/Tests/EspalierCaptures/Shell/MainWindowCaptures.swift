@@ -1,9 +1,9 @@
 // The whole main window, its toolbar, sidebar, and detail area, as a
 // titled window draws it offscreen: History with HEAD's commit and its
-// diff, History with Commit Info, and a merge's conflicts in Changes. The
-// window stays up while its split view, toolbar, and diff finish, so it's
-// drawn in the run's look: `--look islands-lagoon` shows the panes as cards
-// on the backdrop.
+// diff, History with Commit Info, History with the sidebar hidden, and a
+// merge's conflicts in Changes. The window stays up while its split view,
+// toolbar, and diff finish, so it's drawn in the run's look: `--look
+// islands-lagoon` shows the panes as cards on the backdrop.
 
 import AppKit
 @testable import EspalierCore
@@ -63,6 +63,17 @@ struct MainWindowCaptures {
             await fixture.show(.history)
             fixture.context.state.isInspectorPresented = true
             await captureWindow(fixture.context, named: "history-inspector", showsDiff: true)
+            await fixture.settle()
+        }
+    }
+
+    @Test("History with the sidebar hidden")
+    func historySidebarHidden() async throws {
+        try await withIsolatedGitConfig { _ in
+            let fixture = try await MainWindowFixture.history()
+            await fixture.show(.history)
+            fixture.context.state.columnVisibility = .detailOnly
+            await captureWindow(fixture.context, named: "history-sidebar-hidden", showsDiff: true)
             await fixture.settle()
         }
     }
@@ -150,7 +161,8 @@ private final class MainWindowStage {
     var image: NSBitmapImageRep {
         let frame = frame
         frame.layoutSubtreeIfNeeded()
-        let glasses = frame.captureDescendants(NSGlassEffectView.self)
+        // A collapsed column's glass stays, hidden.
+        let glasses = frame.captureDescendants(NSGlassEffectView.self).filter { !$0.isHiddenOrHasHiddenAncestor }
         // A column is its split item's view, the glass's superview.
         let image = Self.withLayersHidden(glasses.compactMap { $0.superview?.layer }) {
             Capture.image(of: frame)

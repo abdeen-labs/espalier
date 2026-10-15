@@ -4,7 +4,8 @@
 // fill in a rounded rectangle (the card radius) with the raised ring and
 // soft shadow, everything inside clipped to it. Cards are 8 apart, with no
 // margin above them (the toolbar's band ends where they start), 2 after the
-// sidebar, and 10 at the window's edges.
+// sidebar, and 10 at the window's edges; as the sidebar shows and hides,
+// they follow its edge and stop 10 from the window's.
 //
 // A card is drawn `inset` inside its frame, the room its ring and shadow
 // draw in, so frames are laid out with that much less space around them
@@ -125,6 +126,14 @@ extension View {
     ) -> some View {
         modifier(PaneMarginsModifier(leading: leading, trailing: trailing))
     }
+
+    /// The detail area's margins beside the sidebar in the floating layout:
+    /// the leading one follows the sidebar's edge as it shows and hides, so
+    /// the cards move with the sidebar and stop at the window's edge
+    /// margin. `trailing` replaces the trailing one.
+    func paneMarginsBesideSidebar(trailing: CGFloat = PaneCards.frameMargins.trailing) -> some View {
+        modifier(SidebarPaneMarginsModifier(trailing: trailing))
+    }
 }
 
 /// The detail area's margins in the floating layout.
@@ -137,6 +146,24 @@ private struct PaneMarginsModifier: ViewModifier {
         margins.leading = leading
         margins.trailing = trailing
         return content.padding(PaneCards.floats ? margins : EdgeInsets())
+    }
+}
+
+/// The detail area's margins beside the sidebar, the leading one read from
+/// where the detail is in the window on every layout: the frame margin
+/// after the sidebar, growing to the window's edge margin as the sidebar's
+/// edge comes within it. It changes with the sidebar's own animation and
+/// has none of its own.
+private struct SidebarPaneMarginsModifier: ViewModifier {
+    let trailing: CGFloat
+
+    func body(content: Content) -> some View {
+        GeometryReader { proxy in
+            content.paneMargins(
+                leading: max(PaneCards.frameMargins.leading, PaneCards.windowEdgeMargin - proxy.frame(in: .global).minX),
+                trailing: trailing
+            )
+        }
     }
 }
 
