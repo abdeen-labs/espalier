@@ -137,7 +137,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     private(set) var increasesContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
     private(set) var geometry: DiffRowGeometry
     private(set) var rowHeights: [CGFloat] = []
-    /// The width rows are wrapped for (lags during live resize).
+    /// The width rows are wrapped for (lags while a large document's
+    /// relayout is coalesced).
     private var layoutWidth: CGFloat = 0
     private var relayoutTask: Task<Void, Never>?
     private var lineLayouts: [LayoutKey: LineLayout] = [:]
@@ -541,13 +542,10 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     }
 
     /// Recomputes heights for the new width: at once for small documents,
-    /// after live resize, and coalesced for large ones.
+    /// during live resize too, and coalesced for large ones.
     func scheduleRelayout() {
         let width = scrollView.contentView.bounds.width
         guard width != layoutWidth else {
-            return
-        }
-        if scrollView.inLiveResize {
             return
         }
         if document.rowCount > 20_000 {
@@ -564,7 +562,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         relayout(force: false)
     }
 
-    /// Live resize ended: wrap for the final width.
+    /// Live resize ended: wrap for the final width at once, without waiting
+    /// for a large document's coalesced relayout.
     func liveResizeDidEnd() {
         relayout(force: false)
     }
