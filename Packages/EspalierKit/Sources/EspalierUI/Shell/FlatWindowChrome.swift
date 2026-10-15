@@ -17,6 +17,9 @@
 //   (`sharedBackgroundVisibility(.hidden)`), and the items SwiftUI adds on
 //   its own (the sidebar toggle) are made borderless as the toolbar adds
 //   them (`NSToolbarItem.isBordered`, which is what hides the platter).
+// - The window's own background is what the columns paint (the backdrop
+//   in the floating layout), following the look, so what a moving column
+//   uncovers (the floating panes' nudge) matches it.
 
 import AppKit
 import SwiftUI
@@ -25,6 +28,9 @@ import SwiftUI
 @MainActor
 enum FlatWindowChrome {
     private static var observer: (any NSObjectProtocol)?
+    private static var lookObserver: (any NSObjectProtocol)?
+    /// The windows made flat, whose background follows the look.
+    private static let windows = NSHashTable<NSWindow>.weakObjects()
 
     /// Makes every item the main window's toolbar adds borderless, so none
     /// sits on a glass platter. Installed once, at launch, before the
@@ -48,10 +54,29 @@ enum FlatWindowChrome {
     }
 
     /// Makes `window`'s titlebar transparent, so the content draws the
-    /// toolbar's band; the hairline below it is the content's too.
+    /// toolbar's band; the hairline below it is the content's too. Its
+    /// background follows the look from then on.
     static func apply(to window: NSWindow) {
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
+        windows.add(window)
+        applyBackground(to: window)
+        if lookObserver == nil {
+            lookObserver = NotificationCenter.default.addObserver(forName: Look.didChange, object: nil, queue: nil) { _ in
+                // Posted on the main thread, synchronously.
+                MainActor.assumeIsolated {
+                    for window in windows.allObjects {
+                        applyBackground(to: window)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The window's background: the backdrop in the floating layout, else
+    /// `background`, as the columns paint.
+    private static func applyBackground(to window: NSWindow) {
+        window.backgroundColor = PaneCards.floats ? Theme.current.backdrop : Palette.background
     }
 }
 
