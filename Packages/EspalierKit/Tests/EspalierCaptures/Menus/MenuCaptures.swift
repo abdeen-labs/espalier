@@ -39,7 +39,7 @@ struct MenuCaptures {
         capture(card(MenuContent {
             MenuSection("Fetched 5 minutes ago") {
                 MenuAction("Fetch origin", systemImage: "arrow.triangle.2.circlepath", subtitle: "Fetch the latest changes from origin") {}
-                MenuAction("Force push origin…", systemImage: "exclamationmark.arrow.triangle.2.circlepath", subtitle: "Overwrite any changes on origin with your local changes") {}
+                MenuAction("Force Push origin…", systemImage: "exclamationmark.arrow.triangle.2.circlepath", subtitle: "Overwrite any changes on origin with your local changes") {}
             }
             MenuSection {
                 MenuAction("Fetch failed — Show Details…") {}

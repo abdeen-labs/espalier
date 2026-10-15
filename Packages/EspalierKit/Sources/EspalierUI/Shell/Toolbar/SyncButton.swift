@@ -83,11 +83,11 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
         switch kind {
         case .progress(let title, _, _, let shown): shown.map { SyncButtonState(kind: $0).title } ?? title
         case .loading: ""
-        case .publishRepository: "Publish repository"
+        case .publishRepository: "Publish Repository"
         case .fetchUnborn(let remote), .fetch(let remote): "Fetch \(remote)"
-        case .detachedHead, .publishBranch: "Publish branch"
-        case .forcePush(let remote, _, _): "Force push \(remote)"
-        case .pull(let remote, let withRebase, _, _, _): withRebase ? "Pull \(remote) with rebase" : "Pull \(remote)"
+        case .detachedHead, .publishBranch: "Publish Branch"
+        case .forcePush(let remote, _, _): "Force Push \(remote)"
+        case .pull(let remote, let withRebase, _, _, _): withRebase ? "Pull \(remote) with Rebase" : "Pull \(remote)"
         case .push(let remote, _, _): "Push \(remote)"
         }
     }

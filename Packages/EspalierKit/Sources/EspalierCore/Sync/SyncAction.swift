@@ -15,15 +15,15 @@ public enum SyncAction: Sendable, Equatable {
     /// A repository just selected may have only what its sidebar indicator
     /// loaded, without its remotes, which would read as one to publish.
     case loading
-    /// 2. The repository has no remote: "Publish repository".
+    /// 2. The repository has no remote: "Publish Repository".
     case publishRepository
     /// 3. and 6. "Fetch <remote>": the branch is unborn, or there's nothing
     /// to push or pull.
     case fetch(remote: String)
-    /// 4. HEAD is detached: "Publish branch", disabled.
+    /// 4. HEAD is detached: "Publish Branch", disabled.
     case detachedHead(rebaseInProgress: Bool)
     /// 5. The branch isn't published (it has no upstream, or its upstream is
-    /// gone): "Publish branch".
+    /// gone): "Publish Branch".
     case publishBranch(remote: String, isGitHubRepository: Bool)
     /// 7. Espalier rewrote the branch (rebase, squash, reorder, amend), its
     /// remote branch hasn't moved since, and it has diverged from its
@@ -42,15 +42,15 @@ public enum SyncAction: Sendable, Equatable {
         case .inProgress, .loading:
             nil
         case .publishRepository:
-            "Publish repository"
+            "Publish Repository"
         case .fetch(let remote):
             "Fetch \(remote)"
         case .detachedHead, .publishBranch:
-            "Publish branch"
+            "Publish Branch"
         case .forcePush(let remote, _, _):
-            "Force push \(remote)"
+            "Force Push \(remote)"
         case .pull(let remote, _, _, let withRebase, _):
-            withRebase ? "Pull \(remote) with rebase" : "Pull \(remote)"
+            withRebase ? "Pull \(remote) with Rebase" : "Pull \(remote)"
         case .push(let remote, _, _):
             "Push \(remote)"
         }
@@ -132,7 +132,7 @@ public enum SyncAlternative: Sendable, Equatable {
     public var title: String {
         switch self {
         case .fetch(let remote): "Fetch \(remote)"
-        case .forcePush(let remote): "Force push \(remote)"
+        case .forcePush(let remote): "Force Push \(remote)"
         }
     }
 

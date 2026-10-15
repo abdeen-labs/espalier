@@ -595,7 +595,8 @@ struct AIConflictLoadingView: View {
     }
 }
 
-/// The sheet's header: the title, the model, and the AI settings.
+/// The sheet's header: the title, which names the sheet for VoiceOver, the
+/// model, and the AI settings.
 struct AIConflictSheetHeader: View {
     let title: String
     let modelLabel: String
@@ -618,6 +619,7 @@ struct AIConflictSheetHeader: View {
                 .accessibilityLabel("AI Settings")
             }
         }
+        .modalTitle(title)
     }
 }
 

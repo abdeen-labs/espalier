@@ -105,6 +105,7 @@ struct PreviewPullRequestSheet: View {
             maxHeight: .infinity
         )
         .background(Color(espalier: Palette.background))
+        .modalTitle("Preview Pull Request")
         .modalCardFillsWindow()
         .task {
             await repository.history.previewPullRequest()

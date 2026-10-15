@@ -117,13 +117,14 @@ extension Confirmation {
         return "\(question)\n\nYou can get them back from the Trash."
     }
 
-    /// Discarding selected lines of a file.
+    /// Discarding selected lines of a file, which keeps no copy (discarding
+    /// files moves them to the Trash).
     public static func discardLines(path: String) -> Confirmation {
         Confirmation(
             kind: .discardLines,
             details: .files([path]),
             title: "Discard Changes?",
-            message: "The selected changes to this file will be discarded:",
+            message: "The selected changes to this file will be discarded:\n\nThis can't be undone.",
             confirmButton: "Discard Changes"
         )
     }

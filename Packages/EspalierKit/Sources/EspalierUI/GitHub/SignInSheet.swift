@@ -415,6 +415,7 @@ struct SignInView: View {
         .padding(Metrics.Sheet.padding)
         .frame(width: Metrics.Sheet.standardWidth, alignment: .leading)
         .background(Color(espalier: Palette.background))
+        .modalTitle(content.title)
     }
 
     @ViewBuilder

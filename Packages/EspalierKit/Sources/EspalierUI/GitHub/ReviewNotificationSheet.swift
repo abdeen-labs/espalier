@@ -232,13 +232,15 @@ struct ReviewNotificationView: View {
                     .buttonStyle(.quiet)
                 }
                 Spacer()
-                Button("Close", action: actions.close)
-                    .buttonStyle(content.canCheckOut ? .secondary : .prominent)
-                    .keyboardShortcut(content.canCheckOut ? .cancelAction : .defaultAction)
                 if content.canCheckOut {
+                    Button("Close", action: actions.close)
+                        .buttonStyle(.secondary)
+                        .keyboardShortcut(.cancelAction)
                     Button("Check Out", action: actions.checkOut)
                         .buttonStyle(.prominent)
                         .keyboardShortcut(.defaultAction)
+                } else {
+                    SheetDismissButton("Close", action: actions.close)
                 }
             }
             .padding(.top, Metrics.grid)
@@ -246,5 +248,6 @@ struct ReviewNotificationView: View {
         .padding(Metrics.Sheet.padding)
         .frame(width: Metrics.Sheet.standardWidth, alignment: .leading)
         .background(Color(espalier: Palette.background))
+        .modalTitle(content.pullRequestTitle)
     }
 }

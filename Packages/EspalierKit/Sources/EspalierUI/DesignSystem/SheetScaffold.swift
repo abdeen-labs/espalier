@@ -141,6 +141,35 @@ public struct SheetButtons: View {
     }
 }
 
+/// The button that ends a sheet without acting (Done, Close, Abort): the
+/// prominent default button, which Escape and ⌘. press too, as they press
+/// an alert's only button.
+public struct SheetDismissButton: View {
+    private let title: String
+    private let action: () -> Void
+
+    public init(_ title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(title, action: action)
+            .buttonStyle(.prominent)
+            .keyboardShortcut(.defaultAction)
+            .background {
+                // A button has one shortcut: an unseen twin, which neither
+                // clicks nor focus reach, takes Escape.
+                Button(title, action: action)
+                    .keyboardShortcut(.cancelAction)
+                    .opacity(0)
+                    .allowsHitTesting(false)
+                    .focusable(false)
+                    .accessibilityHidden(true)
+            }
+    }
+}
+
 /// A label above a field or a group in a sheet: 12, medium, in secondary
 /// text.
 public struct FieldLabel: View {

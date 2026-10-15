@@ -184,7 +184,7 @@ public struct GenericAuthPrompt: View {
 }
 
 /// "<hook> Failed": the hook's output, as tall as it is up to the terminal
-/// height, Abort, and Ignore and Continue.
+/// height, Ignore and Continue, and Abort, the default (Return and Escape).
 public struct HookFailedPrompt: View {
     /// What to do about the failed hook.
     public enum Answer: Equatable {
@@ -205,8 +205,12 @@ public struct HookFailedPrompt: View {
         SheetScaffold("\(hookName) Failed", message: "The \(hookName) hook failed. What would you like to do?", width: Metrics.Sheet.terminalWidth) {
             TerminalOutputView(terminalOutput)
         } buttons: {
-            SheetButtons("Ignore and Continue", confirmRole: .destructive, cancelTitle: "Abort", cancel: { onAnswer(.abort) }) {
+            Button("Ignore and Continue") {
                 onAnswer(.ignore)
+            }
+            .buttonStyle(.quiet)
+            SheetDismissButton("Abort") {
+                onAnswer(.abort)
             }
         }
     }

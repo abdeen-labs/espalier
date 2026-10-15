@@ -76,11 +76,9 @@ public struct KeyboardShortcutsSheet: View {
             .sheetListCard()
             .frame(height: 420)
         } buttons: {
-            Button("Done") {
+            SheetDismissButton("Done") {
                 dismissModal()
             }
-            .buttonStyle(.prominent)
-            .keyboardShortcut(.defaultAction)
         }
     }
 

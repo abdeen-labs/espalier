@@ -7,6 +7,13 @@
 
 import SwiftUI
 
+extension Typography {
+    /// A centered message's title (15, semibold).
+    static var messageTitle: Font { sans(.title3, weight: .semibold) }
+    /// A large centered message's title (17, semibold).
+    static var largeMessageTitle: Font { sans(.title2, weight: .semibold) }
+}
+
 /// A centered message: a symbol in a soft circle, a title, a description,
 /// and actions below.
 public struct CenteredMessage<Actions: View>: View {
@@ -76,7 +83,7 @@ public struct CenteredMessage<Actions: View>: View {
                 .background(Circle().fill(.field))
                 .accessibilityHidden(true)
             Text(title)
-                .font(isLarge ? .title2.weight(.semibold) : .title3.weight(.semibold))
+                .font(isLarge ? Typography.largeMessageTitle : Typography.messageTitle)
                 .foregroundStyle(.text)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)

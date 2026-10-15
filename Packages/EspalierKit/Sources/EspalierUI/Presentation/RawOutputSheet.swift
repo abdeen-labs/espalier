@@ -128,10 +128,15 @@ public struct RawOutputSheet: View {
             .buttonStyle(.quiet)
             Spacer()
             // Close is the default button until there's a recovery, which
-            // takes its place (the first one, rightmost).
-            Button(content.dismissTitle, action: onClose)
-                .buttonStyle(content.recoveryTitles.isEmpty ? .prominent : .secondary)
-                .keyboardShortcut(content.recoveryTitles.isEmpty ? .defaultAction : .cancelAction)
+            // takes its place (the first one, rightmost); Escape presses
+            // Close either way.
+            if content.recoveryTitles.isEmpty {
+                SheetDismissButton(content.dismissTitle, action: onClose)
+            } else {
+                Button(content.dismissTitle, action: onClose)
+                    .buttonStyle(.secondary)
+                    .keyboardShortcut(.cancelAction)
+            }
             ForEach(Array(content.recoveryTitles.enumerated().reversed()), id: \.offset) { index, title in
                 if index == 0 {
                     Button(title) {

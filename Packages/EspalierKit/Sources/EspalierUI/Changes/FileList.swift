@@ -961,21 +961,19 @@ struct ChangesController {
 
     // MARK: Including
 
-    /// Space: each file is included unless it's included in full, then
-    /// excluded. Not while committing or in a rebase's conflicts.
+    /// Space: includes the files in full, unless every one already is, then
+    /// excludes them all, as a click on a file's checkbox does. Not while
+    /// committing or in a rebase's conflicts.
     func toggleInclusion(of ids: [String]) {
         guard !isCommitting, !isRebaseConflicts else {
             return
         }
         let files = files(ids)
-        let include = files.filter { $0.selection.getSelectionType() == .none }.map(\.id)
-        let exclude = files.filter { $0.selection.getSelectionType() != .none }.map(\.id)
-        if !include.isEmpty {
-            changes.setIncluded(include, true)
+        guard !files.isEmpty else {
+            return
         }
-        if !exclude.isEmpty {
-            changes.setIncluded(exclude, false)
-        }
+        let include = files.contains { $0.selection.getSelectionType() != .all }
+        changes.setIncluded(files.map(\.id), include)
     }
 
     // MARK: The context menu

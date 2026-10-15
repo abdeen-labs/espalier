@@ -126,9 +126,7 @@ struct BypassReasonView: View {
             Button("Allow Me to Expose This Secret", role: .destructive, action: bypass)
                 .buttonStyle(.quiet)
                 .disabled(isBypassing)
-            Button("Cancel", role: .cancel, action: cancel)
-                .buttonStyle(.prominent)
-                .keyboardShortcut(.defaultAction)
+            SheetDismissButton("Cancel", action: cancel)
         }
     }
 }

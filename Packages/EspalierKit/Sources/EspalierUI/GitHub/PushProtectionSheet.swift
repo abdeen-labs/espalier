@@ -159,15 +159,14 @@ struct PushProtectionView: View {
             .accessibilityLabel("Secrets")
             HStack {
                 Spacer()
-                Button("Close", action: actions.close)
-                    .buttonStyle(.prominent)
-                    .keyboardShortcut(.defaultAction)
+                SheetDismissButton("Close", action: actions.close)
             }
             .padding(.top, Metrics.grid)
         }
         .padding(Metrics.Sheet.padding)
         .frame(width: Metrics.Sheet.terminalWidth, alignment: .leading)
         .background(Color(espalier: Palette.background))
+        .modalTitle(title)
     }
 
     /// What exposing a secret allows.

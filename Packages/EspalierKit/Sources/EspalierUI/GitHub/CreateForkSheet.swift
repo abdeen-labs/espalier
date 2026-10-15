@@ -173,7 +173,7 @@ struct CreateForkView: View {
         VStack(alignment: .leading, spacing: Metrics.insetMedium) {
             switch step {
             case .question(let message, let forkName):
-                title("Do you want to fork this repository?")
+                title(stepTitle)
                 Text(message)
                     .foregroundStyle(.text2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -192,7 +192,7 @@ struct CreateForkView: View {
                 }
 
             case .forking(let forkName):
-                title("Do you want to fork this repository?")
+                title(stepTitle)
                 HStack(spacing: Metrics.insetSmall) {
                     ArcProgress(.small)
                     Text(forkName.map { "Creating your fork \($0)…" } ?? "Creating your fork…")
@@ -208,7 +208,7 @@ struct CreateForkView: View {
                 }
 
             case .failed(let message, let repositoryURL):
-                title("Do you want to fork this repository?")
+                title(stepTitle)
                 SignInInlineError(message: message)
                 if let repositoryURL {
                     Button("Create the Fork on GitHub") {
@@ -217,13 +217,11 @@ struct CreateForkView: View {
                     .buttonStyle(.textLink)
                 }
                 buttons {
-                    Button("Close", action: cancel)
-                        .buttonStyle(.prominent)
-                        .keyboardShortcut(.defaultAction)
+                    SheetDismissButton("Close", action: cancel)
                 }
 
             case .settings(let parent, let fork, let selected):
-                title("How are you planning to use this fork?")
+                title(stepTitle)
                 Text("This repository is a fork. How do you plan to use it?")
                     .foregroundStyle(.text2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -244,6 +242,15 @@ struct CreateForkView: View {
         .padding(Metrics.Sheet.padding)
         .frame(width: Metrics.Sheet.standardWidth, alignment: .leading)
         .background(Color(espalier: Palette.background))
+        .modalTitle(stepTitle)
+    }
+
+    /// The step's title, which also names the sheet for VoiceOver.
+    private var stepTitle: String {
+        switch step {
+        case .question, .forking, .failed: "Do you want to fork this repository?"
+        case .settings: "How are you planning to use this fork?"
+        }
     }
 
     private func title(_ text: String) -> some View {
