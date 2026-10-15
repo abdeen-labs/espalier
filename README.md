@@ -38,10 +38,9 @@ cd Packages/EspalierKit && swift test
 
 ## Credits
 
-Espalier is a port of [GitHub Desktop](https://github.com/desktop/desktop),
-which is released under the MIT license, copyright GitHub, Inc. Desktop's
-behavior, flows, and wording are the specification Espalier follows, and its
-test suite and fixture repositories are the basis of Espalier's tests. The
+Espalier began as a port of [GitHub Desktop](https://github.com/desktop/desktop),
+which is released under the MIT license, copyright GitHub, Inc. Desktop's test
+suite and fixture repositories are the basis of many of Espalier's tests. The
 bundled Git comes from [dugite-native](https://github.com/desktop/dugite-native).
 
 Espalier is an independent project. It is not affiliated with, endorsed by, or

@@ -1,9 +1,6 @@
 # Progress
 
-What's left. Finished work is in git history and `docs/DECISIONS.md`.
-
-Every feature is built, along with the visual redesign, motion, and the copy
-pass.
+What's left. Every feature is built.
 
 ## Left
 

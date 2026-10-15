@@ -1,17 +1,12 @@
 # Espalier
 
-A macOS Git client in Swift 6, SwiftUI, and AppKit, ported from GitHub
-Desktop (MIT). Desktop's source is the reference for git behavior, edge
-cases, and layout: where things are, what each screen shows together, and
-its flows. Espalier draws its own UI and uses desktop's copy where it reads
-well.
+A macOS Git client in Swift 6, SwiftUI, and AppKit. It began as a port of
+GitHub Desktop (MIT) and is its own app now: desktop's source is there for
+knowledge (how git behaves, edge cases, bugs fixed over its history), and
+Espalier differing from it is fine.
 
 - `docs/PROGRESS.md`: what's left.
-- `docs/DECISIONS.md`: every decision and every deviation from desktop.
 - `docs/DESIGN.md`: how Espalier looks.
-
-I allow deviations from desktop when they produce a better result. Each one
-is recorded in `docs/DECISIONS.md`, and I'm told about it.
 
 Apply my feedback as stated; ask before extending it. Write down what I
 asked for and nothing more: when I ask for one thing, the rule is that
@@ -39,10 +34,10 @@ Packages/EspalierKit/        All real code, in one library product named Espalie
   Vendor/Grammars/           Five tree-sitter grammars vendored (see its README).
   Tests/TestSupport/         Test-only helpers and desktop's fixture repositories.
   Tests/<Module>Tests/       Swift Testing suites, many ported from desktop/app/test/unit.
-  Tests/EspalierCaptures/    Captures: views drawn to PNGs to look at, never compared.
+  Tests/EspalierCaptures/    Captures: views drawn to PNGs to look at.
 scripts/                     fetch-git.sh, embed-git.sh, git-version, git-checksums, capture.sh.
 Vendor/git/                  The bundled git (gitignored, installed by scripts/fetch-git.sh).
-docs/                        What's left, decisions, design.
+docs/                        What's left, design.
 ```
 
 Desktop's fixture repositories store nested `.git` folders as `_git`, renamed
@@ -113,14 +108,7 @@ sessions: ask before taking control.
 
 ## Rules
 
-- GitKit's ports of desktop's `lib/git` stay faithful: same arguments,
-  environment, parsing, exit-code handling, and error mapping. A ported file
-  starts with `// Ported from desktop/<path>` (or `dugite/<path>`) and keeps
-  desktop's names and argument order, adapted to Swift.
-- Comments describe the code and what it does. Decisions, their reasons, and
-  how the code differs from desktop go in `docs/DECISIONS.md`.
-- Desktop has bugs. Don't replicate them: fix them, test the fix, and record
-  the deviation.
+- Comments describe the code and what it does.
 - No GitHub logos (desktop's `app/static/logos`) or Octocat imagery:
   desktop's MIT grant excludes GitHub's trademarks.
 
@@ -155,9 +143,9 @@ My rule: rigor where a mistake hurts users, not everywhere.
 
 - `GitResult`'s `stdout` and `stderr` decode UTF-8 on every access, so bind
   them once; `stdoutData` has the bytes.
-- `Dugite.exec` and `Dugite.spawn` bypass hooks and the trampoline. Use them
-  only where desktop calls dugite's `exec` directly; everything else runs
-  `git(...)`.
+- `Dugite.exec` and `Dugite.spawn` run git without hooks or the trampoline,
+  for the few calls that need that (credential fill, hook lookup, object
+  reads); everything else runs `git(...)`.
 - Pass a user's path to git as a pathspec through `literalPathspec(_:)` or
   `literalPathspecs(_:)`: as is, `*`, `?`, `[`, and a leading `:` would
   match other files. Not for arguments git reads as plain paths
@@ -168,9 +156,8 @@ My rule: rigor where a mistake hurts users, not everywhere.
 - Processes go through `ChildProcess`; detached launches use
   `ChildProcess.spawnDetached`. `URL(filePath:)` decomposes non-ASCII names:
   file URLs use `URL(exactFilePath:)`.
-- Parsing that matches desktop's output uses `JSCompat` and `ExactString`.
-  JavaScript's `$` without the `m` flag is `\z`: ICU's `$` also matches
-  before a final newline.
+- Swift's `String` compares under canonical equivalence and git doesn't:
+  paths and refs are compared and keyed with `ExactString` and `JSCompat`.
 - Invisible and non-ASCII characters in a regex or string are written as
   escapes (`\u{2028}`).
 
@@ -209,9 +196,11 @@ My rule: rigor where a mistake hurts users, not everywhere.
 - Colors, metrics, type, and motion come from `DesignSystem` tokens
   (`Palette`, `Metrics`, `Typography`, `Motion`); `docs/DESIGN.md` is the
   look.
-- Copy: clear macOS wording in Apple's style (title-case buttons and menu
-  items, sentence-case messages, short and plain); the voice is in
-  `docs/DECISIONS.md` under Copy.
+- Copy: clear macOS wording in Apple's style: title-case buttons and menu
+  items, sentence-case messages, short and plain, with contractions.
+  Confirmation titles ask the question ("Discard Changes?") and buttons name
+  the action; commands that open a sheet end in an ellipsis; Settings is
+  named by pane ("Settings ▸ Integrations").
 - Long lists use `NSTableView` or `List`.
 
 ## Tests
@@ -236,8 +225,7 @@ My rule: rigor where a mistake hurts users, not everywhere.
   services) and wait with `idle()` and `ManualScheduler`. `AppHarness`
   starts a background service only when given `backgroundServices:`.
 - Never write screenshot, snapshot, or string tests (tests of strings the
-  UI shows). Captures aren't tests: they compare nothing and keep no
-  reference images.
+  UI shows).
 - Tests run in parallel in one process, so a test leaves process-wide state
   (`setenv`, `chdir`, `GitRuntime.configure`) alone.
 - Blocking work in a test (a blocking `read`, a semaphore wait,
