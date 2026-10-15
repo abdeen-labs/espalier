@@ -148,7 +148,8 @@ token, `Motion`.
 - **Sheets and alerts arrive:** the scrim fades in over 0.22 s while the card
   fades in and settles from 97%; both fade out over 0.15 s.
 - **What the user changes moves:** the sync button's counts roll, and the
-  branch name fades in after a switch. Bars and banners grow in while
+  branch name fades in after a switch. In the floating layout, the panes
+  lean against the sidebar's travel as it shows or hides and spring back. Bars and banners grow in while
   what's below moves, and leave quicker. Simple ↔ Graph and Unified ↔
   Split crossfade, and the shimmer crossfades into a generated message. A
   diff crossfades to its expanded lines, and a sidebar section's rows

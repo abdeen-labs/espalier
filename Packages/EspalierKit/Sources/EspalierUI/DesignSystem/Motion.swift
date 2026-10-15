@@ -3,7 +3,8 @@
 // leaves or swaps, 0.25 s ease-in-out for scrolls; hover fades in over
 // 0.08 s and out over 0.15 s; a press shows at once and eases back over
 // 0.15 s; a spinner's arc turns once every 0.9 s, and an indeterminate bar
-// sweeps every 1.4 s.
+// sweeps every 1.4 s; the floating panes lean 6 points against the
+// sidebar's travel over 0.08 s and spring back, bouncing a little.
 // One answer to "animate?": never with Reduce Motion on (hover and
 // press included), never in a window that isn't on screen (tests draw
 // offscreen), and never where motion is turned off (menus and popovers
@@ -53,6 +54,15 @@ public enum Motion {
     /// One sweep of an indeterminate progress bar's segment, eased in and
     /// out.
     nonisolated public static let sweep: TimeInterval = 1.4
+    /// How far the floating panes lean against the sidebar's travel as it
+    /// shows or hides.
+    nonisolated public static let sidebarNudge: CGFloat = 6
+    /// How long the panes take to lean, on the curve.
+    nonisolated public static let sidebarNudgeOut: TimeInterval = 0.08
+    /// The spring the panes come back on: its perceptual duration and its
+    /// bounce.
+    nonisolated public static let sidebarNudgeBack: TimeInterval = 0.35
+    nonisolated public static let sidebarNudgeBounce: CGFloat = 0.3
 
     // MARK: The curve
 

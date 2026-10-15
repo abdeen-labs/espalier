@@ -31,6 +31,7 @@ struct MainWindow: View {
                 .overlay(alignment: .bottom) {
                     FloatingStatus()
                 }
+                .sidebarNudge(isSidebarHidden: state.columnVisibility == .detailOnly)
                 // The cards follow the sidebar as it shows and hides and keep
                 // the window's edge margin once it's hidden; the inspector's
                 // card keeps the gap after them.

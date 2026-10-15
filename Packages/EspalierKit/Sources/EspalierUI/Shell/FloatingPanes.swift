@@ -134,6 +134,16 @@ extension View {
     func paneMarginsBesideSidebar(trailing: CGFloat = PaneCards.frameMargins.trailing) -> some View {
         modifier(SidebarPaneMarginsModifier(trailing: trailing))
     }
+
+    /// Nudges the detail's column as the sidebar shows or hides in the
+    /// floating layout: it leans against the sidebar's travel and springs
+    /// back.
+    func sidebarNudge(isSidebarHidden: Bool) -> some View {
+        background {
+            SidebarNudge(isSidebarHidden: isSidebarHidden)
+                .accessibilityHidden(true)
+        }
+    }
 }
 
 /// The detail area's margins in the floating layout.
@@ -146,6 +156,74 @@ private struct PaneMarginsModifier: ViewModifier {
         margins.leading = leading
         margins.trailing = trailing
         return content.padding(PaneCards.floats ? margins : EdgeInsets())
+    }
+}
+
+/// The nudge: a Core Animation shift of the column's layer, which the
+/// render server draws, so nothing is laid out for it while the sidebar
+/// slides (a SwiftUI animation in the column stalls the slide). Hiding, the
+/// sidebar travels left and the column leans right first; showing, the
+/// reverse.
+private struct SidebarNudge: NSViewRepresentable {
+    let isSidebarHidden: Bool
+
+    func makeNSView(context: Context) -> NudgeView {
+        NudgeView()
+    }
+
+    func updateNSView(_ view: NudgeView, context: Context) {
+        if let wasHidden = view.isSidebarHidden, wasHidden != isSidebarHidden, PaneCards.floats, Motion.animates(view) {
+            view.nudge(by: isSidebarHidden ? Motion.sidebarNudge : -Motion.sidebarNudge)
+        }
+        view.isSidebarHidden = isSidebarHidden
+    }
+
+    final class NudgeView: NSView {
+        /// Whether the sidebar was hidden at the last update.
+        var isSidebarHidden: Bool?
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            nil
+        }
+
+        /// Leans the column `lean` points over `sidebarNudgeOut`, then
+        /// springs it back.
+        func nudge(by lean: CGFloat) {
+            guard let layer = column?.layer else {
+                return
+            }
+            let keyPath = "transform.translation.x"
+            let out = CABasicAnimation(keyPath: keyPath)
+            out.fromValue = 0
+            out.toValue = lean
+            out.duration = Motion.sidebarNudgeOut
+            out.timingFunction = Motion.timingFunction
+            out.isAdditive = true
+            let back = CASpringAnimation(perceptualDuration: Motion.sidebarNudgeBack, bounce: Motion.sidebarNudgeBounce)
+            back.keyPath = keyPath
+            back.fromValue = lean
+            back.toValue = 0
+            back.beginTime = Motion.sidebarNudgeOut
+            back.duration = back.settlingDuration
+            back.isAdditive = true
+            let nudge = CAAnimationGroup()
+            nudge.animations = [out, back]
+            nudge.duration = Motion.sidebarNudgeOut + back.settlingDuration
+            layer.add(nudge, forKey: "sidebarNudge")
+        }
+
+        /// The detail's column: the view that the window's split (or the
+        /// inspector's) holds this view in.
+        private var column: NSView? {
+            var view: NSView = self
+            while let superview = view.superview {
+                if superview is NSSplitView, !(superview is PaneSplitView) {
+                    return view
+                }
+                view = superview
+            }
+            return nil
+        }
     }
 }
 
