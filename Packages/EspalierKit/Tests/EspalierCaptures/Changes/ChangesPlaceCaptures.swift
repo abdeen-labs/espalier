@@ -2,12 +2,14 @@
 // with README.md's diff (light and dark), README.md partly included (also
 // under Included in Commit), the search typed hiding the selected file,
 // filtered to nothing, no changes with Suggestions and a stash on the
-// branch, and a merge's conflicts with the operation panel and the merge's
-// commit form (light and dark).
+// branch, a merge's conflicts with the operation panel and the merge's
+// commit form, and a rebase's conflicts with the panel and the conflicted
+// file's band (light and dark).
 
 import AppKit
 @testable import EspalierCore
 import EspalierCoreTestSupport
+import EspalierSupport
 import Foundation
 import GitKit
 import SwiftUI
@@ -75,11 +77,36 @@ struct ChangesPlaceCaptures {
         }
     }
 
-    @Test("a merge's conflicts in the list, its panel, and the merge's commit form")
+    @Test("a merge's conflicts in the list, its panel, the conflicted file's band, and the merge's commit form")
     func conflicts() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await ChangesCaptureRepository.make(try await setupConflictedRepo())
+            fixture.repository.changes.select(fileIDs: [try fixture.file("foo").id])
+            await fixture.settle()
             await capturePlace(fixture, named: "place-conflicts")
+            await fixture.app.idle()
+        }
+    }
+
+    @Test("a rebase's conflicts: the panel, and the conflicted file's band")
+    func rebaseConflicts() async throws {
+        try await withIsolatedGitConfig { _ in
+            let local = try setupEmptyRepositoryDefaultMain()
+            let loader = URL(exactFilePath: POSIXPath.join(local.path, "Loader.swift"))
+            try Data("let retries = 1\n".utf8).write(to: loader)
+            try await runGit(["add", "Loader.swift"], local)
+            try await runGit(["commit", "-m", "Add the loader"], local)
+            try await runGit(["branch", "feature/login"], local)
+            try Data("let retries = 3\n".utf8).write(to: loader)
+            try await runGit(["commit", "-am", "Retry three times"], local)
+            try await runGit(["checkout", "feature/login"], local)
+            try Data("let retries = 5\n".utf8).write(to: loader)
+            try await runGit(["commit", "-am", "Retry five times"], local)
+            _ = try await Dugite.exec(["rebase", "main"], local.path)
+            let fixture = try await ChangesCaptureRepository.make(local)
+            fixture.repository.changes.select(fileIDs: [try fixture.file("Loader.swift").id])
+            await fixture.settle()
+            await capturePlace(fixture, named: "place-conflicts-rebase")
             await fixture.app.idle()
         }
     }

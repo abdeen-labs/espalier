@@ -3,7 +3,8 @@
 // The operation panel: a bar across the top of Changes while an operation
 // runs, waits on conflicts, or a stash restore conflicted, with the
 // operation, the commit it stopped at and the resolved count (or its
-// progress), Resolve with AI, and Abort (quiet). What finishes the
+// progress), how to resolve while conflicts wait, Resolve with AI, and
+// Abort (quiet). What finishes the
 // operation is in the commit form's place (OperationSlot.swift): Commit
 // Merge under the merge's message, or Continue.
 
@@ -55,6 +56,8 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
     /// Which commit a rebase or cherry-pick stopped at: "Stopped at commit
     /// 2 of 4", first on the line under the title.
     public var stoppedAt: String?
+    /// How to resolve, on a line of its own while conflicts wait.
+    public var howTo: String?
 
     public init(
         title: String,
@@ -68,7 +71,8 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         canResolveWithAI: Bool = false,
         isResolved: Bool = false,
         opensTerminal: Bool = false,
-        stoppedAt: String? = nil
+        stoppedAt: String? = nil,
+        howTo: String? = nil
     ) {
         self.title = title
         self.state = state
@@ -82,11 +86,16 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         self.isResolved = isResolved
         self.opensTerminal = opensTerminal
         self.stoppedAt = stoppedAt
+        self.howTo = howTo
     }
 
-    /// What a conflicted file still needing the user says about resolving
-    /// it, as its tooltip.
-    public static let hint = "Resolve in your editor or in Terminal; Espalier picks up your changes as you save."
+    /// How to resolve an operation's conflicts: in the files, or by taking
+    /// one side's version.
+    public static let howToResolve = "Open each file in your editor or Terminal, or use one side's version. Espalier picks up changes as you save."
+
+    /// How to resolve a stash restore's conflicts, which have no sides to
+    /// take.
+    public static let howToResolveStash = "Open each file in your editor or Terminal. Espalier picks up changes as you save."
 
     /// Continue's tooltip while files need the user.
     public static let continueDisabledHelp = "Resolve all conflicts before continuing"
@@ -178,7 +187,8 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
             showsResolveWithAI: showsResolveWithAI && unresolved > 0,
             canResolveWithAI: canResolveWithAI,
             isResolved: unresolved == 0,
-            stoppedAt: stoppedAt
+            stoppedAt: stoppedAt,
+            howTo: unresolved > 0 ? howToResolve : nil
         )
     }
 
@@ -255,9 +265,13 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
             }
         }
         if let restore = repository.stash.conflictedRestore {
+            let waits = unmerged.contains { file in
+                if case .conflicted(let status) = file.status { hasUnresolvedConflicts(status) } else { false }
+            }
             return OperationPanelContent(
                 title: "Resolve conflicts",
-                state: .stashConflicts(message: "Restoring the stash on \(restore.entry.branchName) caused conflicts. Resolve them to finish; the stash is kept until you do.")
+                state: .stashConflicts(message: "Restoring the stash on \(restore.entry.branchName) caused conflicts. Resolve them to finish; the stash is kept until you do."),
+                howTo: waits ? howToResolveStash : nil
             )
         }
         if let inProgress = repository.gitState.inProgress, let title = inProgress.unsupportedTitle,
@@ -348,7 +362,7 @@ public struct OperationPanel: View {
     }
 }
 
-/// The bar's look, value-driven: the state's glyph, the title and the line
+/// The bar's look, value-driven: the state's glyph, the title and the lines
 /// under it, a running operation's progress, and the buttons.
 struct OperationPanelView: View {
     let content: OperationPanelContent
@@ -359,7 +373,7 @@ struct OperationPanelView: View {
     @Environment(\.motion) private var motion
 
     var body: some View {
-        StatusBar(tone: tone, title: content.title, subtitle: subtitle, help: subtitleHelp) {
+        StatusBar(tone: tone, title: content.title, subtitle: subtitle, help: subtitleHelp, detail: content.howTo) {
             glyph
         } trailing: {
             progress

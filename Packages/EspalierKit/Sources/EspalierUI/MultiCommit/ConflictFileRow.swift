@@ -5,7 +5,8 @@
 // "Using the modified file from <branch>"), its buttons at the end of its
 // row (Open in <Editor>, disabled without an editor, and the file's menu;
 // the manual resolution menu; Undo), and their copy. The row is the
-// Changes table's (FileRow.swift).
+// Changes table's (FileRow.swift); the band above the file's diff has the
+// same buttons (ConflictBand.swift).
 
 import EspalierCore
 import EspalierSupport
@@ -34,13 +35,27 @@ nonisolated public struct ConflictFileRowContent: Sendable, Equatable, Identifia
     /// resolved, and for a stash restore, which has no sides to pick).
     public var oursLabel: String?
     public var theirsLabel: String?
+    /// The band's buttons for the same sides: "Use main's Version", "Use
+    /// feature's Version" (nil when the menu has no items).
+    public var oursVersionTitle: String?
+    public var theirsVersionTitle: String?
 
-    public init(path: String, state: State, status: String, oursLabel: String? = nil, theirsLabel: String? = nil) {
+    public init(
+        path: String,
+        state: State,
+        status: String,
+        oursLabel: String? = nil,
+        theirsLabel: String? = nil,
+        oursVersionTitle: String? = nil,
+        theirsVersionTitle: String? = nil
+    ) {
         self.path = path
         self.state = state
         self.status = status
         self.oursLabel = oursLabel
         self.theirsLabel = theirsLabel
+        self.oursVersionTitle = oursVersionTitle
+        self.theirsVersionTitle = theirsVersionTitle
     }
 
     public var id: String {
@@ -66,16 +81,6 @@ nonisolated public struct ConflictFileRowContent: Sendable, Equatable, Identifia
         }
     }
 
-    /// The state's tooltip: what's left, and while anything is, how to
-    /// resolve it.
-    public var help: String {
-        guard isUnresolved else {
-            return status
-        }
-        let sentence = status.hasSuffix(".") ? status : "\(status)."
-        return "\(sentence) \(OperationPanelContent.hint)"
-    }
-
     /// The row for a conflicted file; nil for a file that isn't conflicted.
     ///
     /// - Parameters:
@@ -98,6 +103,8 @@ nonisolated public struct ConflictFileRowContent: Sendable, Equatable, Identifia
         let entry = status.entry
         let oursLabel = offersSides ? getLabelForManualResolutionOption(entry.us, ours) : nil
         let theirsLabel = offersSides ? getLabelForManualResolutionOption(entry.them, theirs) : nil
+        let oursVersionTitle = offersSides ? versionTitle(ours, unnamed: "Current") : nil
+        let theirsVersionTitle = offersSides ? versionTitle(theirs, unnamed: "Incoming") : nil
 
         if hasUnresolvedConflicts(status, manualResolution) {
             if case .conflictsWithMarkers(_, _, let conflictCount, _) = status {
@@ -109,7 +116,9 @@ nonisolated public struct ConflictFileRowContent: Sendable, Equatable, Identifia
                     state: .markers(conflicts: conflicts),
                     status: conflicts == 1 ? "1 conflict" : "\(formatCount(conflicts, numberFormat)) conflicts",
                     oursLabel: oursLabel,
-                    theirsLabel: theirsLabel
+                    theirsLabel: theirsLabel,
+                    oursVersionTitle: oursVersionTitle,
+                    theirsVersionTitle: theirsVersionTitle
                 )
             }
             var description = "Manual conflict"
@@ -128,7 +137,9 @@ nonisolated public struct ConflictFileRowContent: Sendable, Equatable, Identifia
                 state: .manual,
                 status: description,
                 oursLabel: oursLabel,
-                theirsLabel: theirsLabel
+                theirsLabel: theirsLabel,
+                oursVersionTitle: oursVersionTitle,
+                theirsVersionTitle: theirsVersionTitle
             )
         }
 
@@ -150,6 +161,15 @@ nonisolated public struct ConflictFileRowContent: Sendable, Equatable, Identifia
             status: summary
         )
     }
+
+    /// "Use main's Version" for a side named by its branch, "Use Current
+    /// Version" or "Use Incoming Version" for one whose branch isn't known.
+    private static func versionTitle(_ branch: String?, unnamed: String) -> String {
+        guard let branch, !branch.isEmpty else {
+            return "Use \(unnamed) Version"
+        }
+        return "Use \(branch)'s Version"
+    }
 }
 
 /// What a conflict row's buttons do.
@@ -166,8 +186,36 @@ struct ConflictFileRowActions {
     var choose: (ManualConflictResolution?) -> Void = { _ in }
 }
 
-/// One of a conflicted file's actions, as VoiceOver offers it.
+extension ConflictFileRowActions {
+    /// What a conflicted file's buttons do in `repository`, in its row and
+    /// in the band above its diff: open it, show it, pick a side (or clear
+    /// the side picked).
+    @MainActor
+    static func make(for row: ConflictFileRowContent, repository: RepositoryModel, context: WindowContext) -> ConflictFileRowActions {
+        let integrations = context.app.integrations
+        let path = POSIXPath.join(repository.record.path, row.path)
+        let actions = context.actions
+        let operations = repository.operations
+        return ConflictFileRowActions(
+            editorName: integrations.editorLabel,
+            isEditorAvailable: integrations.isEditorAvailable,
+            openInEditor: { actions.perform(.openInEditor(path: path)) },
+            openWithDefaultProgram: { actions.perform(.openWithDefaultProgram(path: path)) },
+            showInFinder: { actions.perform(.showInFinder(path: path)) },
+            choose: { resolution in operations.setManualResolution(resolution, forPath: row.path) }
+        )
+    }
+}
+
+/// One of a conflicted file's actions, as VoiceOver offers it or the band
+/// above its diff shows it.
 struct ConflictFileAction {
+    /// Which action it is.
+    enum Kind: Equatable {
+        case openInEditor, ours, theirs, undo
+    }
+
+    let kind: Kind
     let name: String
     let perform: () -> Void
 }
@@ -178,17 +226,35 @@ extension ConflictFileRowContent {
     func accessibilityActions(_ actions: ConflictFileRowActions) -> [ConflictFileAction] {
         var items: [ConflictFileAction] = []
         if case .markers = state, actions.isEditorAvailable {
-            items.append(ConflictFileAction(name: actions.editorTitle, perform: actions.openInEditor))
+            items.append(ConflictFileAction(kind: .openInEditor, name: actions.editorTitle, perform: actions.openInEditor))
         }
+        return items + sideActions(actions, ours: oursLabel, theirs: theirsLabel)
+    }
+
+    /// The buttons of the band above the file's diff: the sides to pick
+    /// while it needs the user, then Open in <Editor> with an editor while
+    /// it has markers; Undo once a side was picked.
+    func bandActions(_ actions: ConflictFileRowActions) -> [ConflictFileAction] {
+        var items = sideActions(actions, ours: oursVersionTitle, theirs: theirsVersionTitle)
+        if case .markers = state, actions.isEditorAvailable {
+            items.append(ConflictFileAction(kind: .openInEditor, name: actions.editorTitle, perform: actions.openInEditor))
+        }
+        return items
+    }
+
+    /// The sides to pick, named `ours` and `theirs`, while the file needs
+    /// the user; Undo once a side was picked.
+    private func sideActions(_ actions: ConflictFileRowActions, ours: String?, theirs: String?) -> [ConflictFileAction] {
+        var items: [ConflictFileAction] = []
         if isUnresolved {
-            if let oursLabel {
-                items.append(ConflictFileAction(name: oursLabel) { actions.choose(.ours) })
+            if let ours {
+                items.append(ConflictFileAction(kind: .ours, name: ours) { actions.choose(.ours) })
             }
-            if let theirsLabel {
-                items.append(ConflictFileAction(name: theirsLabel) { actions.choose(.theirs) })
+            if let theirs {
+                items.append(ConflictFileAction(kind: .theirs, name: theirs) { actions.choose(.theirs) })
             }
         } else if case .resolved(isUndoable: true) = state {
-            items.append(ConflictFileAction(name: "Undo") { actions.choose(nil) })
+            items.append(ConflictFileAction(kind: .undo, name: "Undo") { actions.choose(nil) })
         }
         return items
     }

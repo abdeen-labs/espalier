@@ -1046,18 +1046,7 @@ struct ChangesController {
 
     /// What a conflicted file's buttons do: open it, show it, pick a side.
     func conflictActions(for row: ConflictFileRowContent) -> ConflictFileRowActions {
-        let integrations = context.app.integrations
-        let path = POSIXPath.join(repository.record.path, row.path)
-        let actions = context.actions
-        let operations = repository.operations
-        return ConflictFileRowActions(
-            editorName: integrations.editorLabel,
-            isEditorAvailable: integrations.isEditorAvailable,
-            openInEditor: { actions.perform(.openInEditor(path: path)) },
-            openWithDefaultProgram: { actions.perform(.openWithDefaultProgram(path: path)) },
-            showInFinder: { actions.perform(.showInFinder(path: path)) },
-            choose: { resolution in operations.setManualResolution(resolution, forPath: row.path) }
-        )
+        ConflictFileRowActions.make(for: row, repository: repository, context: context)
     }
 
     // MARK: Discarding

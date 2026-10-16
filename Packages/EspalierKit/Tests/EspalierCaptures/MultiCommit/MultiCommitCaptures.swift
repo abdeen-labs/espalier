@@ -1,5 +1,6 @@
-// The operations' sheets, the conflicted files' rows, the operation panel,
-// and the AI conflict sheet, one capture per layout. Leaf views take
+// The operations' sheets, the conflicted files' rows, the band above a
+// conflicted file's diff, the operation panel, and the AI conflict sheet,
+// one capture per layout. Leaf views take
 // values; the Integrate and Cherry-pick sheets and the AI gate popover use
 // a repository with a remote, the AI sheet's Changes tab a merge's
 // conflict.
@@ -187,9 +188,58 @@ struct MultiCommitCaptures {
         capture(table, named: "conflicts", area: area, size: CGSize(width: changesWidth, height: 240))
     }
 
+    // MARK: The band above a conflicted file's diff
+
+    /// The band's states: a merge's markers, with an editor and without, a
+    /// rebase's whose base isn't a branch, a binary file, a file deleted on
+    /// one side, a stash restore's (no sides), a side chosen, and resolved.
+    private static let bandRows: [(name: String, row: ConflictFileRowContent, hasEditor: Bool)] = [
+        ("markers", ConflictFileRowContent(
+            path: "Sources/App/RepositoryLoader.swift", state: .markers(conflicts: 3), status: "3 conflicts",
+            oursLabel: "Use the modified file from main", theirsLabel: "Use the modified file from feature/login",
+            oursVersionTitle: "Use main's Version", theirsVersionTitle: "Use feature/login's Version"
+        ), true),
+        ("markers-noEditor", ConflictFileRowContent(
+            path: "Sources/App/RepositoryLoader.swift", state: .markers(conflicts: 1), status: "1 conflict",
+            oursLabel: "Use the modified file from main", theirsLabel: "Use the modified file from feature/login",
+            oursVersionTitle: "Use main's Version", theirsVersionTitle: "Use feature/login's Version"
+        ), false),
+        ("markers-unnamed", ConflictFileRowContent(
+            path: "Sources/App/RepositoryLoader.swift", state: .markers(conflicts: 2), status: "2 conflicts",
+            oursLabel: "Use the modified file", theirsLabel: "Use the modified file from feature/login",
+            oursVersionTitle: "Use Current Version", theirsVersionTitle: "Use feature/login's Version"
+        ), true),
+        ("binary", ConflictFileRowContent(
+            path: "Assets/logo.png", state: .manual, status: "Manual conflict",
+            oursLabel: "Use the modified file from main", theirsLabel: "Use the modified file from feature/login",
+            oursVersionTitle: "Use main's Version", theirsVersionTitle: "Use feature/login's Version"
+        ), true),
+        ("deleted", ConflictFileRowContent(
+            path: "Sources/Legacy/Loader.swift", state: .manual, status: "File does not exist on feature/login.",
+            oursLabel: "Use the modified file from main", theirsLabel: "Do not include this file on feature/login",
+            oursVersionTitle: "Use main's Version", theirsVersionTitle: "Use feature/login's Version"
+        ), true),
+        ("restore", ConflictFileRowContent(path: "README.md", state: .markers(conflicts: 1), status: "1 conflict"), true),
+        ("chosen", ConflictFileRowContent(path: "Assets/icon.png", state: .resolved(isUndoable: true), status: "Using the modified file from main"), true),
+        ("resolved", ConflictFileRowContent(path: "README.md", state: .resolved(isUndoable: false), status: "No conflicts remaining"), true),
+    ]
+
+    @Test("the band above a conflicted file's diff: each state, at the diff's default width and its narrowest")
+    func band() {
+        for band in Self.bandRows {
+            let actions = ConflictFileRowActions(editorName: "Visual Studio Code", isEditorAvailable: band.hasEditor)
+            for (suffix, width) in [("", CGFloat(640)), ("-narrow", Metrics.Column.diffMinimum)] {
+                capture(
+                    ConflictBand(content: band.row, actions: actions).frame(width: width),
+                    named: "band-\(band.name)\(suffix)", area: area
+                )
+            }
+        }
+    }
+
     // MARK: The operation panel
 
-    @Test("the operation panel: running, conflicts stopped at a commit and resolved, no conflicted files, AI's error, and interrupted")
+    @Test("the operation panel: running, a rebase's conflicts stopped at a commit and resolved, a merge's, no conflicted files, AI's error, a stash restore's, and interrupted")
     func panel() {
         let panels: [(name: String, content: OperationPanelContent, aiError: String?)] = [
             ("running", OperationPanelContent(
@@ -211,11 +261,21 @@ struct MultiCommitCaptures {
                 hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: true, canResolveWithAI: true,
                 numberFormat: Capture.numberFormat
             ), nil),
+            ("conflicts-merge", .conflicts(
+                operation: "Merge", isMerge: true, resolved: 0, total: 2, unresolved: 2, isContinuing: false,
+                hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: false, canResolveWithAI: false,
+                numberFormat: Capture.numberFormat
+            ), nil),
             ("conflicts-aiError", .conflicts(
                 operation: "Merge", isMerge: true, resolved: 0, total: 2, unresolved: 2, isContinuing: false,
                 hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: true, canResolveWithAI: true,
                 numberFormat: Capture.numberFormat
             ), "The provider rejected the API key. Check it in Settings ▸ AI."),
+            ("stashConflicts", OperationPanelContent(
+                title: "Resolve conflicts",
+                state: .stashConflicts(message: "Restoring the stash on main caused conflicts. Resolve them to finish; the stash is kept until you do."),
+                howTo: OperationPanelContent.howToResolveStash
+            ), nil),
             // A stash restore's conflicts and an operation Espalier can't
             // finish (applying patches, a bisect) draw the same panel with
             // other words and buttons.

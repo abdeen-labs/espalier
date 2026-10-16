@@ -358,7 +358,7 @@ final class FileRowView: NSTableCellView {
         conflictGlyph.contentTintColor = conflict.isUnresolved ? Palette.warningMark : Palette.success
         Self.set(conflictLabel, conflict.status)
         conflictLabel.textColor = conflict.isUnresolved ? Palette.warning : Palette.text3
-        conflictLabel.setTooltip(conflict.help)
+        conflictLabel.setTooltip(conflict.status)
         let actions = conflictActions ?? ConflictFileRowActions(isEditorAvailable: false)
         let buttons = ConflictFileButtons(content: conflict, actions: actions)
         if let conflictButtons {

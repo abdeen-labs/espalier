@@ -1,7 +1,8 @@
 // Ported in part from desktop/app/src/ui/diff/index.tsx
 //
-// The diff's container: the header, then the text table, an image diff, or
-// the binary, submodule, large, unrenderable, empty, or conflicted state.
+// The diff's container: the header, a conflicted file's band in Changes
+// (ConflictBand.swift), then the text table, an image diff, or the binary,
+// submodule, large, unrenderable, empty, or conflicted state.
 // The previous diff stays while the next loads, with a spinner after
 // 150 ms; the header's counts and the file's actions wait for the file's
 // own diff. A text diff has the find bar over its top trailing corner while
@@ -124,6 +125,7 @@ public struct DiffContainer: View {
                 header(file, settings: settings)
                 Hairline()
             }
+            conflictBand
             content(settings: settings)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay {
@@ -233,6 +235,17 @@ public struct DiffContainer: View {
             expandWholeFile: { session.expandWholeFile() },
             collapseExpandedLines: { session.collapseExpandedLines() }
         )
+    }
+
+    // MARK: A conflicted file
+
+    /// A conflicted file's band in Changes: its state, and its sides to
+    /// pick.
+    @ViewBuilder
+    private var conflictBand: some View {
+        if context == .conflict, let window, let repository = window.repository, let row = shownFile.flatMap(conflictRow) {
+            ConflictBand(content: row, actions: .make(for: row, repository: repository, context: window))
+        }
     }
 
     // MARK: Content
@@ -665,15 +678,16 @@ struct ConflictedFileMessage: View {
         )
     }
 
-    /// Resolve while a side can be picked (the row's menu), the side once
-    /// one was; nothing when the row offers neither (a stash restore).
+    /// To choose a side while one can be picked (the band's buttons, the
+    /// row's menu), the side once one was; nothing when the row offers
+    /// neither (a stash restore).
     private var description: String? {
         guard let conflict else {
             return nil
         }
         switch conflict.state {
         case .manual where conflict.oursLabel != nil:
-            return "Choose the version to keep from Resolve in the file list."
+            return "Choose the version to keep."
         case .resolved(isUndoable: true):
             return "\(conflict.status)."
         default:

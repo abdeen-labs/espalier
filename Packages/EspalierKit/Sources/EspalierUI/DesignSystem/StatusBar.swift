@@ -1,7 +1,8 @@
 // A bar across the top of a place that says what state the repository is in
-// (56 high, tinted with the modified color at 7%). The operation panel uses
-// it; its tone follows the state: modified for conflicts and anything
-// waiting on the user, add once they're resolved, neutral while work runs.
+// (56 high, taller for a third line; tinted with the modified color at 7%).
+// The operation panel uses it; its tone follows the state: modified for
+// conflicts and anything waiting on the user, add once they're resolved,
+// neutral while work runs.
 
 import AppKit
 import SwiftUI
@@ -28,25 +29,29 @@ nonisolated public enum StatusBarTone: Sendable, Equatable {
     static let tintAlpha: CGFloat = 0.07
 }
 
-/// A bar across a place: a glyph, the title and a line under it, and
-/// trailing controls, with a hairline under it (none in the floating
+/// A bar across a place: a glyph, the title and up to two lines under it,
+/// and trailing controls, with a hairline under it (none in the floating
 /// layout, where the bar is a card).
 public struct StatusBar<Glyph: View, Trailing: View>: View {
     private let tone: StatusBarTone
     private let title: String
     private let subtitle: Text?
     private let help: String?
+    private let detail: String?
     private let glyph: Glyph
     private let trailing: Trailing
 
     /// - Parameters:
     ///   - subtitle: The line under the title, one line, truncated.
     ///   - help: The whole subtitle, as its tooltip.
+    ///   - detail: A line under the subtitle (how to go on), one line,
+    ///     truncated, the whole of it as its tooltip.
     public init(
         tone: StatusBarTone,
         title: String,
         subtitle: Text? = nil,
         help: String? = nil,
+        detail: String? = nil,
         @ViewBuilder glyph: () -> Glyph,
         @ViewBuilder trailing: () -> Trailing
     ) {
@@ -54,6 +59,7 @@ public struct StatusBar<Glyph: View, Trailing: View>: View {
         self.title = title
         self.subtitle = subtitle
         self.help = help
+        self.detail = detail
         self.glyph = glyph()
         self.trailing = trailing()
     }
@@ -77,7 +83,16 @@ public struct StatusBar<Glyph: View, Trailing: View>: View {
                             .truncationMode(.tail)
                             .tooltip(help)
                     }
+                    if let detail {
+                        Text(detail)
+                            .font(Typography.meta)
+                            .foregroundStyle(.text2)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .tooltip(detail)
+                    }
                 }
+                .padding(.vertical, Metrics.insetSmall)
                 .layoutPriority(1)
                 Spacer(minLength: Metrics.insetSmall)
                 HStack(spacing: Metrics.insetSmall) {
