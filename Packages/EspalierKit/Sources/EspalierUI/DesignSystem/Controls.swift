@@ -214,11 +214,21 @@ public struct CapsuleSegment<Value: Hashable>: Identifiable {
     public let value: Value
     public let title: String
     public let systemImage: String?
+    /// What follows the title (Changes' count).
+    let accessory: AnyView?
 
     public init(_ title: String, systemImage: String? = nil, value: Value) {
         self.title = title
         self.systemImage = systemImage
         self.value = value
+        accessory = nil
+    }
+
+    public init(_ title: String, systemImage: String? = nil, value: Value, @ViewBuilder accessory: () -> some View) {
+        self.title = title
+        self.systemImage = systemImage
+        self.value = value
+        self.accessory = AnyView(accessory())
     }
 
     public var id: Value { value }
@@ -257,6 +267,7 @@ public struct CapsuleSegmentedControl<Value: Hashable>: View {
                             .font(.system(size: 11))
                     }
                     Text(segment.title)
+                    segment.accessory
                 }
                 .font(Typography.smallButton)
                 .foregroundStyle(isSelected ? Color.text : .text2)

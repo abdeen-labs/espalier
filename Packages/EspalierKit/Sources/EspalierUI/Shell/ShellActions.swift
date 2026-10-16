@@ -89,19 +89,41 @@ enum ShellActions {
             context?.select(.changes)
             context?.state.requestCommitMessageFocus()
         }
+        // The sidebar's column, or the icons style's rail.
         actions.register(.toggleSidebar) { [weak context] _ in
-            guard let state = context?.state else {
+            guard let context else {
                 return
             }
-            let visibility: NavigationSplitViewVisibility = state.isSidebarHidden ? .all : .detailOnly
+            let state = context.state
+            let isHidden = context.isSidebarHidden
             let animates = Motion.allows(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, isSuppressed: false)
             withAnimation(animates ? Motion.animation(Motion.arrive) : nil) {
-                state.columnVisibility = visibility
+                switch context.sidebarStyle {
+                case .hidden:
+                    state.columnVisibility = isHidden ? .all : .detailOnly
+                case .icons:
+                    state.railPopover = nil
+                    state.isRailHidden = !isHidden
+                }
             }
         }
+        // The icons style filters in the rail's first popover.
         actions.register(.filterSidebar) { [weak context] _ in
-            context?.state.columnVisibility = .all
-            context?.state.isSidebarFilterFocused = true
+            guard let context else {
+                return
+            }
+            switch context.sidebarStyle {
+            case .hidden:
+                context.state.columnVisibility = .all
+            case .icons:
+                guard let repository = context.repository, repository.isUsable,
+                      let section = RailSection.shown(in: repository, accounts: context.app.accounts).first else {
+                    return
+                }
+                context.state.isRailHidden = false
+                context.state.railPopover = section
+            }
+            context.state.isSidebarFilterFocused = true
         }
         actions.register(.search) { [weak context] _ in
             context?.state.isSearchFocused = true

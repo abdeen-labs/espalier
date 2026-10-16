@@ -1,9 +1,11 @@
 // The whole main window, its toolbar, sidebar, and detail area, as a
 // titled window draws it offscreen: History with HEAD's commit and its
-// diff, History with Commit Info, History with the sidebar hidden, and a
-// merge's conflicts in Changes. The window stays up while its split view,
-// toolbar, and diff finish, so it's drawn in the run's look: `--look
-// islands-lagoon` shows the panes as cards on the backdrop.
+// diff, History with Commit Info, History with the sidebar hidden (Changes
+// | History in the toolbar), History beside the icons style's rail, and a
+// merge's conflicts in Changes; and the rail's Branches and Tags popovers.
+// The window stays up while its split view, toolbar, and diff finish, so
+// it's drawn in the run's look: `--look islands-lagoon` shows the panes as
+// cards on the backdrop.
 
 import AppKit
 @testable import EspalierCore
@@ -51,6 +53,7 @@ struct MainWindowCaptures {
         try await withIsolatedGitConfig { _ in
             let fixture = try await MainWindowFixture.history()
             await fixture.show(.history)
+            fixture.context.state.columnVisibility = .all
             await captureWindow(fixture.context, named: "history", showsDiff: true)
             await fixture.settle()
         }
@@ -61,19 +64,49 @@ struct MainWindowCaptures {
         try await withIsolatedGitConfig { _ in
             let fixture = try await MainWindowFixture.history()
             await fixture.show(.history)
+            fixture.context.state.columnVisibility = .all
             fixture.context.state.isInspectorPresented = true
             await captureWindow(fixture.context, named: "history-inspector", showsDiff: true)
             await fixture.settle()
         }
     }
 
-    @Test("History with the sidebar hidden")
+    @Test("History with the sidebar hidden, Changes | History in the toolbar")
     func historySidebarHidden() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await MainWindowFixture.history()
             await fixture.show(.history)
-            fixture.context.state.columnVisibility = .detailOnly
             await captureWindow(fixture.context, named: "history-sidebar-hidden", showsDiff: true)
+            await fixture.settle()
+        }
+    }
+
+    @Test("History beside the icons style's rail")
+    func historyRail() async throws {
+        try await withIsolatedGitConfig { _ in
+            let fixture = try await MainWindowFixture.history()
+            fixture.app.preferences.sidebarStyle = .icons
+            await fixture.show(.history)
+            await captureWindow(fixture.context, named: "history-rail", showsDiff: true)
+            await fixture.settle()
+        }
+    }
+
+    @Test("the rail's Branches and Tags popovers, a branch selected", arguments: [RailSection.branches, .tags])
+    func railPopover(_ section: RailSection) async throws {
+        try await withIsolatedGitConfig { _ in
+            let fixture = try await MainWindowFixture.history()
+            fixture.app.preferences.sidebarStyle = .icons
+            await fixture.show(.branch(ref: "refs/heads/fix/crash"))
+            let context = fixture.context
+            let repository = fixture.repository
+            await captureSettled({
+                PopoverCardView(model: PopoverCardModel {
+                    AnyView(RailSectionPopover(section: section, repository: repository).windowEnvironment(context))
+                })
+                .fixedSize()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }, named: "rail-\(section.rawValue)", area: area, size: CGSize(width: 340, height: 360), untilStill: true)
             await fixture.settle()
         }
     }

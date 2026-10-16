@@ -59,9 +59,7 @@ public final class WindowContext {
         self.actions = actions
         presenter = WindowPresenter(app: app, actions: actions)
         modals = ModalPresenter()
-        if uiDefaults.bool(forKey: WindowState.sidebarHiddenKey) {
-            state.columnVisibility = .detailOnly
-        }
+        state.isRailHidden = uiDefaults.bool(forKey: WindowState.sidebarHiddenKey)
 
         actions.availability = { [weak self] kind in
             guard let self else {
@@ -144,6 +142,22 @@ public final class WindowContext {
     /// Shows `place` in the selected repository.
     public func select(_ place: SidebarPlace) {
         state.select(place, in: repository?.id)
+    }
+
+    // MARK: Sidebar
+
+    /// The sidebar's form (Settings ▸ Appearance ▸ Sidebar).
+    var sidebarStyle: SidebarStyle {
+        app.preferences.sidebarStyle
+    }
+
+    /// Whether the sidebar is hidden: its column, or the icons style's
+    /// rail. Changes and History are in the toolbar while it is.
+    var isSidebarHidden: Bool {
+        switch sidebarStyle {
+        case .hidden: state.columnVisibility == .detailOnly
+        case .icons: state.isRailHidden
+        }
     }
 
     /// Brings the window back: out of the Dock if it's minimized, then to

@@ -1,7 +1,8 @@
-// The sidebar. It shows the current repository's places you select
-// (Changes, History, branches, pull requests, tags, stashes), and a filter
-// field at the bottom, as in Xcode's navigators; the repository popover
-// switches repositories and worktrees. Each section after the first is a
+// The sidebar's column, in the hidden style (Settings ▸ Appearance ▸
+// Sidebar; the icons style's rail is SidebarRail.swift). It shows the
+// current repository's places you select (Changes, History, branches, pull
+// requests, tags, stashes), and a filter field at the bottom, as in Xcode's
+// navigators; the repository popover switches repositories and worktrees. Each section after the first is a
 // feature's view. After a switch, the repository's sections keep showing
 // the previous repository until the selected one has loaded
 // (`SidebarSectionsHold`).
@@ -86,9 +87,13 @@ struct SidebarContainer: View {
         isHolding ? places.filter { $0 == .changes || $0 == .history } : places
     }
 
+    private func primaryAction(_ places: Set<SidebarPlace>) {
+        Self.primaryAction(places, context: context)
+    }
+
     /// Double-click or Return on a place: check out a branch or pull
     /// request, restore a stash.
-    private func primaryAction(_ places: Set<SidebarPlace>) {
+    static func primaryAction(_ places: Set<SidebarPlace>, context: WindowContext) {
         guard places.count == 1, let place = places.first, let repository = context.repository else {
             return
         }
@@ -238,7 +243,7 @@ enum SidebarContextMenu {
 }
 
 /// What the Changes row shows.
-nonisolated struct ChangesPlaceRowContent: Sendable, Equatable {
+nonisolated struct ChangesPlaceRowContent: Sendable, Hashable {
     /// The changed files, or nil for none.
     var changedFileCount: Int
     /// Whether conflicts exist: a warning replaces the count.
@@ -394,10 +399,10 @@ extension View {
         modifier(SidebarRowModifier(place: place, id: id ?? place.map(AnyHashable.init), isDropTarget: isDropTarget))
     }
 
-    /// The sidebar's list: the sidebar style, opaque on the `sidebar`
-    /// color, small rows, and the list's own selection drawing off (the
-    /// rows draw theirs).
-    func sidebarListStyle() -> some View {
+    /// The sidebar's list: the sidebar style, opaque on `surface` (the
+    /// `sidebar` color; a rail popover's `background`), small rows, and the
+    /// list's own selection drawing off (the rows draw theirs).
+    func sidebarListStyle(surface: NSColor = Palette.sidebar) -> some View {
         self
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
@@ -407,7 +412,7 @@ extension View {
                     .frame(width: 0, height: 0)
                     .accessibilityHidden(true)
             }
-            .background(Color(espalier: Palette.sidebar))
+            .background(Color(espalier: surface))
             .modifier(SidebarHoverProvider())
     }
 }
@@ -535,6 +540,10 @@ struct SidebarRowBackground: View {
 /// lays out, which comes before drawing. A run loop turn later is a frame
 /// too late: the list's highlight can flash.
 struct SidebarListStyler: NSViewRepresentable {
+    /// Posted with a list's table as a row joins or leaves it: a row's
+    /// styler goes in and out of the window with the row.
+    static let rowsDidChange = Notification.Name("EspalierSidebarListRowsDidChange")
+
     /// Whether it looks beside itself for the table (beside the list), or
     /// only around itself (in a row: a row's search would cover every other
     /// row).
@@ -566,11 +575,19 @@ struct SidebarListStyler: NSViewRepresentable {
             apply()
         }
 
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            super.viewWillMove(toWindow: newWindow)
+            if newWindow == nil {
+                postRowsDidChange()
+            }
+        }
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             guard window != nil else {
                 return
             }
+            postRowsDidChange()
             if !apply() {
                 // The table isn't there yet: the layout pass that makes it
                 // runs before the first draw, and lays this view out too
@@ -585,6 +602,15 @@ struct SidebarListStyler: NSViewRepresentable {
         override func layout() {
             super.layout()
             apply()
+        }
+
+        /// A row's styler tells its table's height reader
+        /// (`SidebarListHeight`) that a row came or went.
+        private func postRowsDidChange() {
+            guard !searchesBeside, let table = enclosingTable() else {
+                return
+            }
+            NotificationCenter.default.post(name: SidebarListStyler.rowsDidChange, object: table)
         }
 
         /// Finds the list's table, the one this view is in or else the
@@ -647,7 +673,8 @@ struct SidebarListStyler: NSViewRepresentable {
 // MARK: - Sections
 
 /// A sidebar section whose expansion is remembered (UI state, not a
-/// setting). Its header's chevron expands and collapses it
+/// setting), or always expanded where sections don't collapse
+/// (`sidebarSectionsCollapse`). Its header's chevron expands and collapses it
 /// (`SidebarSectionHeader`), not the list's: on hover, the list's takes the
 /// header's trailing edge, where the header's buttons are, and narrows the
 /// header, which moves them.
@@ -663,6 +690,7 @@ public struct SidebarSection<Content: View, Header: View>: View {
     @AppStorage private var rememberedExpansion: Bool
     /// The expansion the chevron set, or nil before it sets one.
     @State private var chosenExpansion: Bool?
+    @Environment(\.sidebarSectionsCollapse) private var collapses
 
     /// - Parameters:
     ///   - id: Names the remembered expansion (`sidebar.expanded.<id>`).
@@ -674,6 +702,19 @@ public struct SidebarSection<Content: View, Header: View>: View {
     }
 
     public var body: some View {
+        if collapses {
+            collapsibleSection
+        } else {
+            Section {
+                content
+            } header: {
+                header
+            }
+            .collapsible(false)
+        }
+    }
+
+    private var collapsibleSection: some View {
         Section {
             if chosenExpansion ?? rememberedExpansion {
                 content
@@ -705,6 +746,9 @@ public struct SidebarSection<Content: View, Header: View>: View {
 }
 
 extension EnvironmentValues {
+    /// Whether `SidebarSection`s collapse: in a rail's popover, which holds
+    /// one section, they're always expanded, with no chevron.
+    @Entry var sidebarSectionsCollapse = true
     /// The expansion of the `SidebarSection` whose header this is, which
     /// the header's chevron toggles.
     @Entry var sidebarSectionExpansion: Binding<Bool>?
@@ -820,9 +864,12 @@ private struct SidebarHeaderButtonBody<Label: View>: View {
     }
 }
 
-/// The filter at the bottom of the sidebar (⌥⌘J): narrows every section
-/// but the first.
+/// The filter at the bottom of the sidebar (⌥⌘J), and at the top of a rail
+/// popover: narrows every section but the first.
 struct SidebarFilterField: View {
+    /// What it's on: the `sidebar` color, or a rail popover's
+    /// `background`.
+    var surface: NSColor = Palette.sidebar
     @Environment(WindowContext.self) private var context
 
     var body: some View {
@@ -837,7 +884,7 @@ struct SidebarFilterField: View {
         .environment(\.searchFieldIsRaised, PaneCards.floats)
         .padding(.horizontal, Metrics.Sidebar.rowInset)
         .padding(.vertical, Metrics.insetSmall)
-        .background(Color(espalier: Palette.sidebar))
+        .background(Color(espalier: surface))
         .announcesFilterResults(state.sidebarFilter) { [context] in
             Self.resultCount(in: context)
         }

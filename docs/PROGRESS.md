@@ -42,6 +42,12 @@ What's left. Every feature is built.
      it; the base branch picker over Preview Pull Request; the checks
      popover resizing as checks load; the arrival and leaving motion; the
      toolbar's popovers in full screen; VoiceOver moving in and back.
+   - The sidebar's styles: Changes | History coming and going in the
+     toolbar as the sidebar shows and hides, never cut off; the rail
+     sliding in and out; its popovers fitting their rows as groups open
+     and close and the filter narrows them; the column staying collapsed
+     in the icons style (a drag at the window's edge); switching styles
+     in Settings with a window open.
    - Signing: pinentry-mac's window and its Cancel; a rebase signed with a
      passphrase-protected SSH key asks once; 1Password's `op-ssh-sign`.
    - Accessibility: ⇧F10 in Changes, History, a commit's files, and the

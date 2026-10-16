@@ -57,6 +57,8 @@ public enum PreferenceKey {
     public static let numberFormat = "numberFormat"
     public static let dateFormat = "dateFormat"
     public static let timeFormat = "timeFormat"
+    /// The sidebar's form (`SidebarStyle`), Espalier's own.
+    public static let sidebarStyle = "sidebar-style"
 
     // Diffs.
     public static let imageDiffType = "image-diff-type"
@@ -183,6 +185,16 @@ public enum CodeFont: String, Sendable, Hashable, CaseIterable {
     case atkinsonMono = "atkinsonmono"
 }
 
+/// The sidebar's form. The raw values are the ones stored.
+public enum SidebarStyle: String, Sendable, Hashable, CaseIterable {
+    /// The full sidebar, hidden as each window opens: Changes and History
+    /// are in the toolbar while it's hidden.
+    case hidden
+    /// A narrow rail of icons: Changes and History, and the repository's
+    /// sections, whose lists open in popovers.
+    case icons
+}
+
 /// The app's settings.
 ///
 /// Each property loads from its key when the model is made and writes its
@@ -248,6 +260,7 @@ public final class Preferences {
         }
         dateFormat = store.getString(PreferenceKey.dateFormat)
         timeFormat = store.getString(PreferenceKey.timeFormat)
+        sidebarStyle = store.getEnum(PreferenceKey.sidebarStyle, SidebarStyle.self) ?? .hidden
 
         imageDiffType = store.getNumber(PreferenceKey.imageDiffType).flatMap(ImageDiffType.init(rawValue:)) ?? .twoUp
         hideWhitespaceInChangesDiff = store.getBoolean(PreferenceKey.hideWhitespaceInChangesDiff, false)
@@ -599,6 +612,14 @@ public final class Preferences {
         didSet {
             guard timeFormat != oldValue else { return }
             store.setString(PreferenceKey.timeFormat, timeFormat)
+        }
+    }
+
+    /// The sidebar's form (`sidebar-style`; hidden by default).
+    public var sidebarStyle: SidebarStyle {
+        didSet {
+            guard sidebarStyle != oldValue else { return }
+            store.setEnum(PreferenceKey.sidebarStyle, sidebarStyle)
         }
     }
 

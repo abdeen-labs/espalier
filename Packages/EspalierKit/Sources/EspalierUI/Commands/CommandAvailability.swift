@@ -95,7 +95,7 @@ struct CommandAvailability {
             let count = shas?.count ?? context.repository?.history.selection.shas.count ?? 0
             return count > 1 ? "Squash \(formatCount(count, context.app.preferences.numberFormat)) Commits…" : "Squash Commits…"
         case .toggleSidebar:
-            return context.state.isSidebarHidden ? "Show Sidebar" : "Hide Sidebar"
+            return context.isSidebarHidden ? "Show Sidebar" : "Hide Sidebar"
         case .toggleInspector:
             return context.state.isInspectorPresented ? "Hide Inspector" : "Show Inspector"
         default:

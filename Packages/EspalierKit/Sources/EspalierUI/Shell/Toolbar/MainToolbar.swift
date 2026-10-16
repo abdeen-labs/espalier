@@ -1,6 +1,7 @@
 // The main window's toolbar: flat, 52 high, with a hairline below. The
-// location control (one quiet capsule) and the pull request chip lead; on
-// the right, the search field, "Fetched 2 minutes ago", the sync button, and
+// location control (one quiet capsule) and the pull request chip lead;
+// Changes | History is in the middle while the sidebar is hidden; on the
+// right, the search field, "Fetched 2 minutes ago", the sync button, and
 // the overflow menu. Customizable extras are off by default. No item sits on
 // a glass platter (`FlatWindowChrome`).
 
@@ -33,11 +34,16 @@ struct MainToolbar: CustomizableToolbarContent {
         // The window has no title in its toolbar (no page titles), and a
         // title is what pushes the trailing items to the window's edge;
         // SwiftUI puts flexible space on both sides of a principal item,
-        // which does the same. It draws nothing.
+        // which does the same. It's Changes | History while the sidebar is
+        // hidden, and draws nothing otherwise.
         ToolbarItem(id: "espalier.flexibleSpace", placement: .principal) {
-            Color.clear
-                .frame(width: 1, height: 1)
-                .accessibilityHidden(true)
+            if let repository = usableRepository, context.isSidebarHidden {
+                PlaceSwitcher(repository: repository)
+            } else {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .accessibilityHidden(true)
+            }
         }
         .customizationBehavior(.disabled)
         .sharedBackgroundVisibility(.hidden)

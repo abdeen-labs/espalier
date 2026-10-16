@@ -2,7 +2,7 @@
 // color (Classic's is the Mac's accent color), its background tint, the
 // appearance (System, Light, Dark), and the app font; code (the code font,
 // its text size, the diff's tab size), dates and numbers, accessibility, and
-// the sidebar. Each font's name in its pop-up is drawn in that font. The
+// the sidebar (its style, hidden or icons, and the worktree list). Each font's name in its pop-up is drawn in that font. The
 // code text size steps through the same sizes as View ▸ Bigger (⌘=) and
 // Smaller (⌘−).
 
@@ -36,6 +36,22 @@ enum AppearanceSettings {
 
     /// The theme's choices, in order.
     static let themes = ApplicationTheme.allCases.map { CapsuleSegment($0.title, value: $0) }
+
+    /// The sidebar's styles, in order.
+    static let sidebarStyles = [
+        CapsuleSegment("Hidden", value: SidebarStyle.hidden),
+        CapsuleSegment("Icons", value: SidebarStyle.icons),
+    ]
+
+    /// What a sidebar style does.
+    static func sidebarStyleDescription(_ style: SidebarStyle) -> String {
+        switch style {
+        case .hidden:
+            "Windows open without the sidebar, with Changes and History in the toolbar. View ▸ Show Sidebar shows it."
+        case .icons:
+            "A narrow bar of icons. Branches, pull requests, tags, and stashes open beside it."
+        }
+    }
 
     /// The diff tab sizes; 4 is the default.
     static let tabSizes = [1, 2, 3, 4, 5, 6, 8, 10, 12]
@@ -197,6 +213,10 @@ struct AppearanceForm: View {
             }
 
             SettingsSection("Sidebar") {
+                SettingsRow("Style", description: AppearanceSettings.sidebarStyleDescription(preferences.sidebarStyle), labelsControl: true) {
+                    CapsuleSegmentedControl("Style", selection: $preferences.sidebarStyle, segments: AppearanceSettings.sidebarStyles)
+                        .fixedSize()
+                }
                 SettingsToggleRow(
                     "Always show worktree list",
                     description: "Shows Worktrees in the sidebar even when a repository has just one.",
