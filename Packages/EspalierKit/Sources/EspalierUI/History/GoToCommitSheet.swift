@@ -121,7 +121,7 @@ struct GoToCommitSheet: View {
 }
 
 /// Branch ▸ Compare to Branch…: picks the branch whose place shows its
-/// comparison (Behind), from every branch but the current one and fork
+/// comparison (Ahead), from every branch but the current one and fork
 /// remotes', each with how far the current branch is behind and ahead of
 /// it.
 struct CompareToBranchSheet: View {

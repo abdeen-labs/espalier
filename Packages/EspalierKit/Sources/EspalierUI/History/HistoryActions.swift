@@ -75,8 +75,8 @@ enum HistoryActions {
             }
         }
 
-        // Revert Changes in Commit: in the history, or Compare's Ahead
-        // list.
+        // Revert Changes in Commit: in the history, or the comparison's
+        // Behind list (the current branch's own commits).
         actions.register(.revertCommit, isEnabled: { [weak context] action in
             guard case .revertCommit(let sha) = action, let context, case let (repository, _)? = target(sha, context) else {
                 return false

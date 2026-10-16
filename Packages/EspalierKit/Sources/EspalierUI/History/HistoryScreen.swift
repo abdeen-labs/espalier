@@ -2,7 +2,7 @@
 // selected commit's detail on the right, in the place's inner split, whose
 // widths are the simple list's or the graph's. A branch's place shows its
 // history focused on its tip; another branch's place can also compare it with
-// the current branch (Behind and Ahead, desktop's Compare).
+// the current branch (Ahead and Behind, counted from the branch's side).
 
 import AppKit
 import EspalierCore
@@ -237,7 +237,7 @@ enum HistoryPlaces {
         return repository.gitState.branches.all.first { $0.ref == ref }
     }
 
-    /// Shows `branch`'s place comparing it with the current branch (Behind):
+    /// Shows `branch`'s place comparing it with the current branch (Ahead):
     /// Compare to Branch.
     static func showComparison(of branch: Branch, in context: WindowContext) {
         context.state.history.branchView = BranchViewChoice(ref: branch.ref, view: .compare(.behind))
@@ -366,7 +366,7 @@ struct HistoryListPane: View {
         }
     }
 
-    /// Another branch's Behind or Ahead commits.
+    /// Another branch's Ahead or Behind commits.
     @ViewBuilder
     private func comparison(history: HistoryModel, state: HistoryWindowState, branch: Branch) -> some View {
         if let error = state.compareError {

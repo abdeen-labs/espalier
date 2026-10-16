@@ -635,7 +635,7 @@ struct BranchPickerRow: View {
 // MARK: - Comparing with the current branch
 
 /// How far the current branch is behind and ahead of a branch: "↓3 ↑2", as
-/// Compare's Behind and Ahead.
+/// the comparison's Ahead and Behind count them.
 nonisolated struct BranchComparisonCounts: Sendable, Equatable {
     /// The commits only the listed branch has.
     var behind: Int

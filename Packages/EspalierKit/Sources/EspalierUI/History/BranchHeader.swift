@@ -1,9 +1,9 @@
 // The header of another branch's place: the branch's name and what the list
-// shows, History | Behind | Ahead. History is the branch's own history; Behind
-// lists the commits the branch has that the current branch doesn't (with the
-// merge call to action), Ahead the current branch's own, as desktop's Compare
-// does. On a detached HEAD there's nothing to compare with, so only the name
-// shows.
+// shows, History | Ahead | Behind, counted from the branch's side, beside its
+// name. History is the branch's own history; Ahead lists the commits the
+// branch has that the current branch doesn't (with the merge call to
+// action), Behind the current branch's own. On a detached HEAD there's
+// nothing to compare with, so only the name shows.
 
 import EspalierCore
 import GitKit
@@ -19,19 +19,21 @@ nonisolated struct BranchHeaderContent: Sendable, Equatable {
     var ahead: Int?
     /// Whether HEAD is on a branch to compare with.
     var canCompare: Bool
-    /// The merge call to action, on Behind.
+    /// The merge call to action, on Ahead.
     var callToAction: MergeCallToActionContent?
     /// The format the counts show in.
     var numberFormat: NumberFormat
 
-    /// "Behind (3)", or "Behind" until it's counted.
-    var behindTitle: String {
-        behind.map { "Behind (\(formatCount($0, numberFormat)))" } ?? "Behind"
+    /// The branch's own commits (the current branch is `behind` it):
+    /// "Ahead (3)", or "Ahead" until it's counted.
+    var branchAheadTitle: String {
+        behind.map { "Ahead (\(formatCount($0, numberFormat)))" } ?? "Ahead"
     }
 
-    /// "Ahead (2)", or "Ahead" until it's counted.
-    var aheadTitle: String {
-        ahead.map { "Ahead (\(formatCount($0, numberFormat)))" } ?? "Ahead"
+    /// The current branch's own commits (it's `ahead` of the branch):
+    /// "Behind (2)", or "Behind" until it's counted.
+    var branchBehindTitle: String {
+        ahead.map { "Behind (\(formatCount($0, numberFormat)))" } ?? "Behind"
     }
 }
 
@@ -74,8 +76,8 @@ struct BranchHeader: View {
                 selection: Binding(get: { content.view }, set: { setView($0) }),
                 segments: [
                     CapsuleSegment("History", value: BranchView.history),
-                    CapsuleSegment(content.behindTitle, value: BranchView.compare(.behind)),
-                    CapsuleSegment(content.aheadTitle, value: BranchView.compare(.ahead)),
+                    CapsuleSegment(content.branchAheadTitle, value: BranchView.compare(.behind)),
+                    CapsuleSegment(content.branchBehindTitle, value: BranchView.compare(.ahead)),
                 ]
             )
             .fixedSize()
