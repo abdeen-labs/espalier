@@ -8,7 +8,7 @@ import GitKit
 import SwiftUI
 
 /// A decision's sheet: the question, one radio row per choice (the first is
-/// the default), the selected choice's warning, and the footnote.
+/// the default), and the footnote.
 public struct DecisionSheet: View {
     private let decision: Decision
     private let onAnswer: (UncommittedChangesStrategy?) -> Void
@@ -27,16 +27,6 @@ public struct DecisionSheet: View {
                 selection: $selection,
                 choices: decision.choices.map { ChoiceListItem($0.title, description: $0.description, value: $0.strategy) }
             )
-            if let warning = selectedChoice?.warning {
-                Label {
-                    Text(warning)
-                        .foregroundStyle(.text2)
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    WarningGlyph()
-                }
-                .font(Typography.secondary)
-            }
         } buttons: {
             Text("You can change this in Settings ▸ Prompts.")
                 .font(Typography.meta)
@@ -47,10 +37,6 @@ public struct DecisionSheet: View {
                 onAnswer(selection)
             }
         }
-    }
-
-    private var selectedChoice: DecisionChoice? {
-        decision.choices.first { $0.strategy == selection }
     }
 }
 

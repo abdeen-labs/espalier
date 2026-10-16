@@ -1,8 +1,10 @@
 // The Stashes section's rows and the stash's place, one capture per layout:
-// the place's column (the current branch's stash, failed, no matches), the
-// section's rows, and the place on a real stash with the selected file's
-// diff, with the search typed hiding the selected file, and with a search
-// matching no file.
+// the place's column (a branch's stash, at the widest with the header's
+// title, one made outside Espalier, failed, no matches), the section's rows (several per branch, both markers, and
+// others by git's message), the place on a real stash with the selected
+// file's diff, with the search typed hiding the selected file, and with a
+// search matching no file, and the Changes list's "Stashed Changes" row with
+// one stash and with several.
 
 import AppKit
 @testable import EspalierCore
@@ -25,13 +27,21 @@ struct StashCaptures {
         CommittedFileChange(path: "README.md", status: .modified(), commitish: "a1b2c3d", parentCommitish: "a1b2c3d^"),
     ]
 
-    private func content(files: StashColumnContent.Files? = nil, filter: String = "", selected: Int? = 0) -> StashColumnContent {
+    private func content(
+        files: StashColumnContent.Files? = nil,
+        branch: String? = "main",
+        message: String = "On main: !!Espalier<main>",
+        filter: String = "",
+        selected: Int? = 0
+    ) -> StashColumnContent {
         let rows = StashColumnContent.files(Self.files, filter: filter)
         return StashColumnContent(
-            branch: "main",
+            sha: "a1b2c3d",
+            branch: branch,
+            message: message,
             files: files ?? .loaded(rows, total: Self.files.count),
-            isCurrentBranch: true,
             canRestore: true,
+            canApply: true,
             canDiscard: true,
             isBusy: false,
             filter: filter,
@@ -44,26 +54,33 @@ struct StashCaptures {
             .frame(width: Metrics.Column.stashColumn.ideal, height: 340)
     }
 
-    @Test("the place's column: the current branch's stash, failed, and no matches")
+    @Test("the place's column: a branch's stash, at the widest, one made outside Espalier, failed, and no matches")
     func columns() {
         capture(column(content()), named: "column", area: area)
+        capture(column(content(branch: nil, message: "On main: fix the login redirect loop")), named: "column-outside", area: area)
+        capture(
+            StashColumn(content: content()).frame(width: Metrics.Column.stashColumn.max, height: 340),
+            named: "column-widest",
+            area: area
+        )
         capture(column(content(files: .failed(title: "Error", message: "fatal: bad object a1b2c3d"))), named: "column-failed", area: area)
         capture(column(content(filter: "nothing", selected: nil)), named: "column-noMatches", area: area)
     }
 
-    @Test("the section's rows: the current branch's stash first, with counts, and one selected")
+    @Test("the section's rows: every entry newest first, with counts, and one selected")
     func rows() {
-        let rows = StashRowContent.rows(
-            branches: ["main", "feature/sign-in", "fix/crash"],
-            currentBranch: "main",
-            fileCount: { ["main": 4, "feature/sign-in": 12][$0] },
-            filter: ""
-        )
+        let rows = [
+            StashRowContent(sha: "1", branch: "main", message: "On main: !!Espalier<main>", fileCount: 4),
+            StashRowContent(sha: "2", branch: nil, message: "WIP on main: 9fceb02 Cache forecasts for 10 minutes", fileCount: 2),
+            StashRowContent(sha: "3", branch: "feature/sign-in", message: "On feature/sign-in: !!GitHub_Desktop<feature/sign-in>", fileCount: 12),
+            StashRowContent(sha: "4", branch: nil, message: "On main: fix the login redirect loop", fileCount: 1),
+            StashRowContent(sha: "5", branch: "main", message: "On main: !!Espalier<main>", fileCount: nil),
+        ]
         let list = List {
             Section {
                 ForEach(rows) { row in
                     StashRow(content: row)
-                        .sidebarRow(.stash(branch: row.branch))
+                        .sidebarRow(.stash(sha: row.sha))
                 }
             } header: {
                 SidebarSectionHeader("Stashes")
@@ -72,35 +89,48 @@ struct StashCaptures {
         .sidebarListStyle()
         // A selected stash: the neutral wash, its name medium, its symbol in
         // the accent.
-        .environment(\.sidebarSelection, .stash(branch: "feature/sign-in"))
-        .frame(width: Metrics.Column.sidebar.ideal, height: 130)
+        .environment(\.sidebarSelection, .stash(sha: "3"))
+        .frame(width: Metrics.Column.sidebar.ideal, height: 190)
         capture(list, named: "rows", area: area)
+    }
+
+    @Test("the Changes list's Stashed Changes row: one stash, and several")
+    func stashedChangesRow() {
+        let rows = VStack(spacing: 0) {
+            StashedChangesRow(count: 1) {}
+            Hairline()
+            StashedChangesRow(count: 3) {}
+        }
+        .frame(width: Metrics.Column.changesFileList.ideal)
+        .background(Color(espalier: Palette.background))
+        capture(rows, named: "stashedChangesRow", area: area)
     }
 
     @Test("the place on a real stash: its files and the selected file's diff, searched, and matching nothing")
     func place() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await StashCaptureRepository.make()
-            fixture.repository.stash.show(try fixture.entry("master"))
+            let entry = try fixture.entry("master")
+            fixture.repository.stash.show(entry)
             await fixture.settle()
-            await capturePlace(fixture, named: "place")
+            await capturePlace(fixture, entry, named: "place")
             // The search, typed while good-file is selected, hides it:
             // notes.txt is selected, with its diff.
-            await capturePlace(fixture, named: "place-searched", typing: "notes")
+            await capturePlace(fixture, entry, named: "place-searched", typing: "notes")
             // No file matches: none is selected, and no diff shows.
             fixture.context.state.searchText = "zzz"
-            await capturePlace(fixture, named: "place-noMatches")
+            await capturePlace(fixture, entry, named: "place-noMatches")
             await fixture.settle()
         }
     }
 
-    /// Captures master's stash in the window's environment, once its files
-    /// and the selected file's diff have loaded; with `typing`, once that's
-    /// typed in the toolbar's search after the place shows, and what follows
-    /// has loaded.
-    private func capturePlace(_ fixture: StashCaptureRepository, named name: String, typing: String? = nil) async {
+    /// Captures `entry` in the window's environment, once its files and the
+    /// selected file's diff have loaded; with `typing`, once that's typed in
+    /// the toolbar's search after the place shows, and what follows has
+    /// loaded.
+    private func capturePlace(_ fixture: StashCaptureRepository, _ entry: StashEntry, named name: String, typing: String? = nil) async {
         await LoadedCapture.capture(
-            StashScreen(repository: fixture.repository, branch: "master").windowEnvironment(fixture.context),
+            StashScreen(repository: fixture.repository, sha: entry.stashSha).windowEnvironment(fixture.context),
             named: name,
             area: area,
             size: CGSize(width: 900, height: 360)
@@ -168,7 +198,8 @@ struct StashCaptureRepository {
         await app.idle()
     }
 
+    /// The branch's newest stash.
     func entry(_ branch: String) throws -> StashEntry {
-        try #require(repository.gitState.stashes.entriesByBranch[branch])
+        try #require(repository.gitState.stashes.entries(onBranch: branch).first)
     }
 }

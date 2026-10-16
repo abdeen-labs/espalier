@@ -1,5 +1,5 @@
 // How many files each listed stash entry changes, for the sidebar's
-// Stashes section, which lists every branch's entry with its count.
+// Stashes section, which lists every entry with its count.
 
 import EspalierSupport
 import Foundation
@@ -15,10 +15,10 @@ extension StashModel {
         fileCounts[entry.stashSha]
     }
 
-    /// Counts the files of the listed entries (each branch's newest automatic
-    /// stash) that aren't counted yet, and forgets the counts of entries no
-    /// longer listed. Does nothing once every entry is counted, so the sidebar
-    /// can call it whenever the list changes.
+    /// Counts the files of the listed entries that aren't counted yet, and
+    /// forgets the counts of entries no longer listed. Does nothing once
+    /// every entry is counted, so the sidebar can call it whenever the list
+    /// changes.
     ///
     /// The count is the length of `getStashedFiles`, the list the stash's
     /// place shows. An entry whose files can't be listed stays uncounted.
@@ -26,7 +26,7 @@ extension StashModel {
         guard let repository else {
             return
         }
-        let listed = Set(repository.gitState.stashes.entriesByBranch.values.map(\.stashSha))
+        let listed = Set(repository.gitState.stashes.entries.map(\.stashSha))
         let kept = fileCounts.filter { listed.contains($0.key) }
         if kept.count != fileCounts.count {
             fileCounts = kept
@@ -60,7 +60,7 @@ extension StashModel {
     /// listed.
     func recordFileCount(_ count: Int, of stashSha: String) {
         guard fileCounts[stashSha] != count,
-              repository?.gitState.stashes.entriesByBranch.values.contains(where: { $0.stashSha == stashSha }) == true
+              repository?.gitState.stashes.entry(stashSha) != nil
         else {
             return
         }

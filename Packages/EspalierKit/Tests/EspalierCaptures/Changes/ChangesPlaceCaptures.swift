@@ -1,7 +1,7 @@
 // The Changes place at the window's size, on real repositories: the files
 // with README.md's diff (light and dark), README.md partly included (also
 // under Included in Commit), the search typed hiding the selected file,
-// filtered to nothing, no changes with Suggestions and a stash on the
+// filtered to nothing, no changes with Suggestions and stashes on the
 // branch, a merge's conflicts with the operation panel and the merge's
 // commit form, and a rebase's conflicts with the panel and the conflicted
 // file's band (light and dark).
@@ -69,7 +69,12 @@ struct ChangesPlaceCaptures {
             await capturePlace(fixture, named: "place-no-matches")
             changes.filter = FileListFilter()
 
-            // Nothing left: Suggestions, with a stash on the branch.
+            // Nothing left: Suggestions, with stashes on the branch (the
+            // Stashed Changes row with their count).
+            try await fixture.repository.stash.stashAllChanges()
+            try fixture.harness.write("notes.txt", "notes\n", in: fixture.local)
+            await fixture.repository.refresh(.status, reason: .user)
+            await fixture.settle()
             try await fixture.repository.stash.stashAllChanges()
             await fixture.settle()
             await capturePlace(fixture, named: "place-no-changes")

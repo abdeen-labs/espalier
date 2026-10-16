@@ -1,11 +1,11 @@
-// A stash's place: a header as high as the diff's with the title, Restore,
-// and Discard…; the stash's files in the Changes table's rows, without
-// checkboxes; under them the branch, the count, and what Restore does; and
-// the selected file's read-only diff. Any branch's stash shows; another
-// branch's can be discarded but not restored ("Switch to <branch> to
-// restore these changes.", `StashModel`'s precondition). The toolbar search
-// filters the files; when it hides the selected file, the first file it
-// lists is selected, or none when it lists none (`filteredSelection`).
+// A stash entry's place: a header as high as the diff's with the title,
+// Restore, Apply, and Discard…; the stash's files in the Changes table's
+// rows, without checkboxes; under them the branch (or git's message), the
+// count, and what Restore and Apply do; and the selected file's read-only
+// diff. Any entry shows, and restores or applies onto the current working
+// directory. The toolbar search filters the files; when it hides the
+// selected file, the first file it lists is selected, or none when it lists
+// none (`filteredSelection`).
 //
 // The stash shows through `StashModel` (`stash.show`, which also takes the
 // Changes list's selection to the stash), and leaving the place goes back
@@ -35,35 +35,36 @@ nonisolated struct StashColumnContent: Sendable, Equatable {
         case failed(title: String, message: String)
     }
 
-    /// The branch the changes were stashed on.
-    var branch: String
+    /// The SHA of the entry's commit.
+    var sha: String
+    /// The branch in the entry's marker, or nil for an entry made outside
+    /// Espalier and GitHub Desktop.
+    var branch: String?
+    /// Git's message for the entry ("On main: fix login").
+    var message: String
     var files: Files
-    /// Whether the stash is the current branch's, so it can be restored.
-    var isCurrentBranch: Bool
     var canRestore: Bool
+    var canApply: Bool
     var canDiscard: Bool
-    /// Restoring or discarding it.
+    /// Restoring, applying, or discarding it.
     var isBusy: Bool
     /// The toolbar search's text.
     var filter: String
     /// The selected file.
     var selectedFileID: String?
 
-    /// "On main · 4 files" ("On main" until the files load), the count in
-    /// `numberFormat`.
+    /// "On main · 4 files" ("On main" until the files load), or git's
+    /// message for an entry without a branch, the count in `numberFormat`.
     func subtitle(_ numberFormat: NumberFormat) -> String {
+        let origin = branch.map { "On \($0)" } ?? message
         if case .loaded(_, let total) = files {
-            return "On \(branch) · \(StashFilesSummary.files(total, numberFormat))"
+            return "\(origin) · \(StashFilesSummary.files(total, numberFormat))"
         }
-        return "On \(branch)"
+        return origin
     }
 
-    /// What Restore does, or why it can't (another branch's stash).
-    var explanation: String {
-        isCurrentBranch
-            ? "Restore will move your stashed files to the Changes list."
-            : StashActions.restoreUnavailableReason(branch: branch)
-    }
+    /// What Restore and Apply do.
+    static let explanation = "Restore will move your stashed files to the Changes list. Apply will copy them there and keep the stash."
 
     /// The stash's files matching `filter` (its path, ignoring case).
     static func files(_ files: [CommittedFileChange], filter: String) -> [CommittedFileChange] {
@@ -71,22 +72,29 @@ nonisolated struct StashColumnContent: Sendable, Equatable {
     }
 }
 
-/// The stash's header, as high as the diff's: the title, then Restore and
-/// Discard….
+/// The stash's header, as high as the diff's: the title, when there's room
+/// for it, then Restore, Apply, and Discard….
 struct StashHeader: View {
     let content: StashColumnContent
     var restore: @MainActor () -> Void = {}
+    var apply: @MainActor () -> Void = {}
     var discard: @MainActor () -> Void = {}
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
-            Text("Stashed Changes")
-                .font(Typography.row.weight(.semibold))
-                .foregroundStyle(.text)
-                .lineLimit(1)
-                .layoutPriority(1)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 0)
+            // Shown whole or not at all: a narrow column leaves the room to
+            // the buttons.
+            ViewThatFits(in: .horizontal) {
+                Text("Stashed Changes")
+                    .font(Typography.row.weight(.semibold))
+                    .foregroundStyle(.text)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .accessibilityAddTraits(.isHeader)
+                Color.clear
+                    .frame(width: 0, height: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             if content.isBusy {
                 ArcProgress(.small)
                     .accessibilityLabel("Working")
@@ -94,7 +102,12 @@ struct StashHeader: View {
             Button("Restore", action: restore)
                 .buttonStyle(.prominent)
                 .disabled(!content.canRestore)
-                .tooltip(content.explanation)
+                .tooltip("Move your stashed files to the Changes list")
+                .fixedSize()
+            Button("Apply", action: apply)
+                .buttonStyle(.quiet)
+                .disabled(!content.canApply)
+                .tooltip("Copy your stashed files to the Changes list and keep the stash")
                 .fixedSize()
             Button("Discard…", action: discard)
                 .buttonStyle(.quiet)
@@ -107,8 +120,8 @@ struct StashHeader: View {
     }
 }
 
-/// Under the stash's files: the branch and the count, and what Restore
-/// does or why it can't.
+/// Under the stash's files: the branch (or git's message) and the count,
+/// and what Restore and Apply do.
 struct StashFooter: View {
     let content: StashColumnContent
     @Environment(\.numberFormat) private var numberFormat
@@ -120,7 +133,7 @@ struct StashFooter: View {
                 .foregroundStyle(.text2)
                 .lineLimit(1)
                 .truncationMode(.middle)
-            Text(content.explanation)
+            Text(StashColumnContent.explanation)
                 .font(Typography.meta)
                 .foregroundStyle(.text3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -136,13 +149,14 @@ struct StashFooter: View {
 struct StashColumn: View {
     let content: StashColumnContent
     var restore: @MainActor () -> Void = {}
+    var apply: @MainActor () -> Void = {}
     var discard: @MainActor () -> Void = {}
     var select: @MainActor (String?) -> Void = { _ in }
     var open: @MainActor (String) -> Void = { _ in }
 
     var body: some View {
         VStack(spacing: 0) {
-            StashHeader(content: content, restore: restore, discard: discard)
+            StashHeader(content: content, restore: restore, apply: apply, discard: discard)
             Hairline()
             files
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -170,7 +184,7 @@ struct StashColumn: View {
                 selectedIDs: content.selectedFileID.map { [$0] } ?? [],
                 allowsMultipleSelection: false,
                 tableLabel: "Stashed files",
-                scope: FileTableScope(filter: FileListFilter(text: content.filter), source: content.branch),
+                scope: FileTableScope(filter: FileListFilter(text: content.filter), source: content.sha),
                 actions: FileTableActions(
                     select: { ids in select(ids.first) },
                     open: { ids in
@@ -192,15 +206,15 @@ struct StashColumn: View {
     }
 }
 
-/// A branch's stash.
+/// A stash entry, by its commit's SHA.
 public struct StashScreen: View {
     private let repository: RepositoryModel
-    private let branch: String
+    private let sha: String
     @Environment(WindowContext.self) private var context
 
-    public init(repository: RepositoryModel, branch: String) {
+    public init(repository: RepositoryModel, sha: String) {
         self.repository = repository
-        self.branch = branch
+        self.sha = sha
     }
 
     public var body: some View {
@@ -209,8 +223,9 @@ public struct StashScreen: View {
                 SplitView(.stash) {
                     StashColumn(
                         content: content,
-                        restore: { context.actions.perform(.restoreStash(branch: branch)) },
-                        discard: { context.actions.perform(.discardStash(branch: branch)) },
+                        restore: { context.actions.perform(.restoreStash(sha: sha)) },
+                        apply: { context.actions.perform(.applyStash(sha: sha)) },
+                        discard: { context.actions.perform(.discardStash(sha: sha)) },
                         select: selectFile,
                         open: { path in context.actions.perform(.openInEditor(path: POSIXPath.join(repository.record.path, path))) }
                     )
@@ -224,7 +239,7 @@ public struct StashScreen: View {
             } else {
                 // Restored or discarded elsewhere (or still loading after a
                 // worktree switch): it shows again if it comes back.
-                CenteredMessage("No Stashed Changes", systemImage: "tray", description: "There are no stashed changes on \(branch).")
+                CenteredMessage("No Stashed Changes", systemImage: "tray", description: "These stashed changes are no longer in the stash list.")
                     .fillingSpace()
                     .paneCard()
             }
@@ -248,12 +263,12 @@ public struct StashScreen: View {
         }
     }
 
-    /// The branch's stash entry.
+    /// The entry, while it's listed.
     private var entry: StashEntry? {
-        repository.gitState.stashes.entriesByBranch[branch]
+        repository.gitState.stashes.entry(sha)
     }
 
-    /// Whether the model shows this branch's entry.
+    /// Whether the model shows this entry.
     private var isShowingThisStash: Bool {
         guard let entry, let shown = repository.stash.shownEntry else {
             return false
@@ -279,11 +294,13 @@ public struct StashScreen: View {
         }
         let actions = context.actions
         return StashColumnContent(
-            branch: branch,
+            sha: sha,
+            branch: entry?.branchName,
+            message: entry?.message ?? "",
             files: files,
-            isCurrentBranch: repository.gitState.tip.branch?.name == branch,
-            canRestore: actions.canPerform(.restoreStash(branch: branch)),
-            canDiscard: actions.canPerform(.discardStash(branch: branch)),
+            canRestore: actions.canPerform(.restoreStash(sha: sha)),
+            canApply: actions.canPerform(.applyStash(sha: sha)),
+            canDiscard: actions.canPerform(.discardStash(sha: sha)),
             isBusy: StashActions.isBusy(repository),
             filter: filter,
             selectedFileID: isShowingThisStash ? stash.selectedFile?.id : nil
@@ -316,7 +333,7 @@ public struct StashScreen: View {
         }
     }
 
-    /// Shows the branch's stash, unless it shows already.
+    /// Shows the entry, unless it shows already.
     private func showStash() {
         guard let entry, !isShowingThisStash else {
             return

@@ -55,8 +55,7 @@ struct EndToEndTests {
             }
             #expect(decision?.reason == .decisionRequired(.uncommittedChanges(
                 currentBranch: "main",
-                targetBranch: "feature",
-                currentBranchHasStash: false
+                targetBranch: "feature"
             )))
             await repository.idle()
             let created = try #require(repository.gitState.branches.all.first { $0.name == "feature" })

@@ -270,7 +270,7 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
             }
             return OperationPanelContent(
                 title: "Resolve conflicts",
-                state: .stashConflicts(message: "Restoring the stash on \(restore.entry.branchName) caused conflicts. Resolve them to finish; the stash is kept until you do."),
+                state: .stashConflicts(message: stashConflictsMessage(restore)),
                 howTo: waits ? howToResolveStash : nil
             )
         }
@@ -279,6 +279,18 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
             return OperationPanelContent(title: title, state: .unsupported(message: message), opensTerminal: true)
         }
         return nil
+    }
+
+    /// "Restoring the stash on main caused conflicts. …", the stash named
+    /// by its branch when it has one.
+    private static func stashConflictsMessage(_ restore: ConflictedStashRestore) -> String {
+        let stash = restore.entry.branchName.map { "the stash on \($0)" } ?? "the stash"
+        switch restore.action {
+        case .restore:
+            return "Restoring \(stash) caused conflicts. Resolve them to finish; the stash is kept until you do."
+        case .apply:
+            return "Applying \(stash) caused conflicts. Resolve them to finish."
+        }
     }
 
     private static func running(name: String, progress: MultiCommitOperationProgress, numberFormat: NumberFormat) -> OperationPanelContent {

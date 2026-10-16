@@ -309,8 +309,8 @@ struct ComponentCaptures {
                 SidebarSectionHeader("Tags")
             }
             Section {
-                StashRow(content: StashRowContent(branch: "main", fileCount: 3, isCurrentBranch: false))
-                    .sidebarRow(.stash(branch: "main"))
+                StashRow(content: StashRowContent(sha: "a1b2c3d", branch: "main", message: "On main: !!Espalier<main>", fileCount: 3))
+                    .sidebarRow(.stash(sha: "a1b2c3d"))
             } header: {
                 SidebarSectionHeader("Stashes")
             }

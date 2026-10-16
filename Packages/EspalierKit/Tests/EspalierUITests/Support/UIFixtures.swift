@@ -51,7 +51,6 @@ enum UIFixtures {
         ("undoCommitWithChanges-merge", .undoCommitWithChanges(sha: "a1b2c3d", isMergeCommit: true, isWorkingDirectoryClean: true)),
         ("resetToCommit", .resetToCommit(sha: "a1b2c3d", branch: "main", hasChanges: false)),
         ("resetWithChanges", .resetToCommit(sha: "a1b2c3d", branch: "main", hasChanges: true)),
-        ("overwriteStash", .overwriteStash(checkingOut: nil)),
         ("commitFilteredChanges", .commitFilteredChanges(hiddenPaths: files)),
         ("commitWithUnknownCoAuthors", .commitWithUnknownCoAuthors(["octocat", "hubot"])),
         ("commitOversizedFiles", .commitOversizedFiles(["Assets/movie.mov"])),

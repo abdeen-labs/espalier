@@ -153,8 +153,7 @@ struct ExternalActionsTests {
         }
         #expect(error?.reason == .decisionRequired(.uncommittedChanges(
             currentBranch: "main",
-            targetBranch: "other",
-            currentBranchHasStash: false
+            targetBranch: "other"
         )))
         #expect(error?.repositoryID == model.id)
         guard case .checkout(let branch)? = error?.gitContext else {

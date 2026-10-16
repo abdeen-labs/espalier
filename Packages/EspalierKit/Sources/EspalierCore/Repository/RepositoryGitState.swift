@@ -132,17 +132,25 @@ public struct RemotesSnapshot: Sendable, Equatable {
     }
 }
 
-/// The stash entries with an automatic stash marker.
+/// The stash entries.
 public struct StashSnapshot: Sendable, Equatable {
-    /// The newest entry with an automatic stash marker (`!!Espalier<branch>`
-    /// or `!!GitHub_Desktop<branch>`) per branch name.
-    public var entriesByBranch: [String: StashEntry] = [:]
-    /// How many stash entries there are, made by anything.
-    public var totalCount = 0
+    /// Every stash entry, newest first, made by anything. An entry with an
+    /// automatic stash marker (`!!Espalier<branch>` or
+    /// `!!GitHub_Desktop<branch>`) has its branch.
+    public var entries: [StashEntry] = []
 
-    public init(entriesByBranch: [String: StashEntry] = [:], totalCount: Int = 0) {
-        self.entriesByBranch = entriesByBranch
-        self.totalCount = totalCount
+    public init(entries: [StashEntry] = []) {
+        self.entries = entries
+    }
+
+    /// The listed entry whose commit is `stashSha`.
+    public func entry(_ stashSha: String) -> StashEntry? {
+        entries.first { JSCompat.strictEquals($0.stashSha, stashSha) }
+    }
+
+    /// The entries with `branch`'s marker, newest first.
+    public func entries(onBranch branch: String) -> [StashEntry] {
+        entries.filter { $0.branchName.map { JSCompat.strictEquals($0, branch) } == true }
     }
 }
 

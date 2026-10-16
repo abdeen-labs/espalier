@@ -23,7 +23,7 @@ public struct PopStashRetry: RetryableOperation {
     }
 
     public var displayName: String? {
-        entry.branchName
+        entry.title
     }
 
     @discardableResult
@@ -34,12 +34,57 @@ public struct PopStashRetry: RetryableOperation {
     }
 }
 
+/// Applies a stash entry again.
+public struct ApplyStashRetry: RetryableOperation {
+    public let repositoryID: RepositoryID
+    public let entry: StashEntry
+
+    public init(repositoryID: RepositoryID, entry: StashEntry) {
+        self.repositoryID = repositoryID
+        self.entry = entry
+    }
+
+    public var kind: OperationKind {
+        .applyStash
+    }
+
+    public var displayName: String? {
+        entry.title
+    }
+
+    @discardableResult
+    @MainActor
+    public func perform(in app: AppModel) async throws(OperationError) -> OperationOutcome {
+        try await app.requireRepository(repositoryID, for: kind).stash.apply(entry)
+        return .nothing
+    }
+}
+
+extension StashEntry {
+    /// What the entry is called: its branch when Espalier or GitHub Desktop
+    /// made it, else git's message ("On main: fix login").
+    public var title: String {
+        branchName ?? message
+    }
+}
+
 /// A stash entry whose changes came back with conflicts. Git kept the
-/// entry; it's dropped once the conflicts are resolved with the changes
-/// kept, so discarding the conflicted changes doesn't lose them.
+/// entry; a restored one is dropped once the conflicts are resolved with
+/// the changes kept, so discarding the conflicted changes doesn't lose
+/// them. An applied one stays.
 public struct ConflictedStashRestore: Sendable, Equatable {
+    /// How the entry's changes came back.
+    public enum Action: Sendable, Equatable {
+        /// Restored: the entry is dropped once the conflicts are resolved
+        /// with its changes kept.
+        case restore
+        /// Applied: the entry stays.
+        case apply
+    }
+
     /// The entry, still in the stash list.
     public let entry: StashEntry
+    public let action: Action
     /// The files that conflicted.
     public let paths: [String]
     /// HEAD when the entry was restored: a file the resolution left as HEAD
@@ -86,12 +131,19 @@ public final class StashModel: RepositoryFeature {
         self.repository = repository
     }
 
-    /// The current branch's stash entry: none unless HEAD is on a branch.
+    /// The current branch's newest stash entry (with its marker): none
+    /// unless HEAD is on a branch.
     public var current: StashEntry? {
+        currentEntries.first
+    }
+
+    /// The current branch's stash entries (with its marker), newest first:
+    /// none unless HEAD is on a branch.
+    public var currentEntries: [StashEntry] {
         guard let repository, let branch = repository.gitState.tip.branch else {
-            return nil
+            return []
         }
-        return repository.gitState.stashes.entriesByBranch[branch.name]
+        return repository.gitState.stashes.entries(onBranch: branch.name)
     }
 
     /// Whether a stash entry is shown instead of the working directory.
@@ -101,27 +153,18 @@ public final class StashModel: RepositoryFeature {
 
     // MARK: Stashing
 
-    /// Stashes every change as the current branch's stash, replacing its
-    /// previous one.
+    /// Stashes every change as a new entry for the current branch; the
+    /// branch's other entries stay.
     ///
     /// - Returns: Whether a stash was made: false without a branch (detached
     ///   or unborn) or without changes.
-    /// - Throws: `.confirmationRequired(.overwriteStash)` when the branch
-    ///   has a stash and it isn't confirmed.
     @discardableResult
-    public func stashAllChanges(confirmed: Set<ConfirmationKind> = []) async throws(OperationError) -> Bool {
+    public func stashAllChanges() async throws(OperationError) -> Bool {
         guard let repository, let branch = repository.gitState.tip.branch else {
             return false
         }
-        if current != nil, !confirmed.contains(.overwriteStash) {
-            throw OperationError(
-                .confirmationRequired(.overwriteStash(checkingOut: nil)),
-                operation: .stash,
-                repositoryID: repository.id
-            )
-        }
         let created = try await repository.perform(OperationDescriptor(kind: .stash)) { ctx in
-            try await self.createStashAndDropPreviousEntry(for: branch, in: ctx)
+            try await self.createStashEntry(taggedWith: branch.name, in: ctx) != nil
         }
         // Returns after the refresh, so a retry that follows (the "Stash
         // Changes and Continue" recovery) sees the clean tree.
@@ -131,40 +174,22 @@ public final class StashModel: RepositoryFeature {
         return created
     }
 
-    // MARK: Restoring and dropping
+    // MARK: Restoring, applying, and dropping
 
-    /// Restores (pops) `entry`, the current branch's stash, into the working
-    /// directory. Returns after the refresh.
+    /// Restores (pops) `entry`, any branch's or one made outside Espalier,
+    /// into the working directory. Returns after the refresh.
     ///
     /// When the changes conflict, git keeps the entry: `conflictedRestore`
     /// records it, and it's dropped once the conflicts are resolved with the
     /// changes kept.
     ///
-    /// - Throws: `.precondition` for another branch's entry ("Switch to
-    ///   <branch> to restore these changes."), while an operation or the
-    ///   working directory has conflicts; `.localChangesOverwritten` (with no
-    ///   "Stash Changes and Continue") when changes are in the way; the
-    ///   classified git error otherwise. The entry is kept.
+    /// - Throws: `.precondition` while an operation or the working directory
+    ///   has conflicts, and when the entry is gone (restored or dropped
+    ///   since it was listed); `.localChangesOverwritten` (with no "Stash
+    ///   Changes and Continue") when changes are in the way; the classified
+    ///   git error otherwise. The entry is kept.
     public func restore(_ entry: StashEntry) async throws(OperationError) {
-        guard let repository else {
-            throw OperationError(.precondition("The repository is no longer in the list."), operation: .restoreStash)
-        }
-        guard let branch = repository.gitState.tip.branch, JSCompat.strictEquals(branch.name, entry.branchName) else {
-            throw OperationError(
-                .precondition("Switch to \(entry.branchName) to restore these changes."),
-                operation: .restoreStash,
-                repositoryID: repository.id
-            )
-        }
-        try repository.operations.requireNoOperationInProgress(.restoreStash)
-        if repository.changes.workingDirectory.files.contains(where: { $0.status.kind == .conflicted }) {
-            throw OperationError(
-                .precondition("Resolve the conflicts in your changes before restoring stashed changes."),
-                operation: .restoreStash,
-                repositoryID: repository.id
-            )
-        }
-
+        let repository = try requireCanApply(.restoreStash, verb: "restoring")
         let descriptor = OperationDescriptor(kind: .restoreStash, retry: PopStashRetry(repositoryID: repository.id, entry: entry))
         try await repository.perform(descriptor) { ctx in
             try await self.popStashPrimitive(entry, in: ctx)
@@ -173,10 +198,45 @@ public final class StashModel: RepositoryFeature {
         await repository.awaitOperationRefresh(covering: .full)
     }
 
+    /// Applies `entry`, any branch's or one made outside Espalier, to the
+    /// working directory, and keeps it. Returns after the refresh.
+    ///
+    /// When the changes conflict, `conflictedRestore` records it until the
+    /// conflicts are resolved; the entry stays either way.
+    ///
+    /// - Throws: As `restore(_:)`.
+    public func apply(_ entry: StashEntry) async throws(OperationError) {
+        let repository = try requireCanApply(.applyStash, verb: "applying")
+        let descriptor = OperationDescriptor(kind: .applyStash, retry: ApplyStashRetry(repositoryID: repository.id, entry: entry))
+        try await repository.perform(descriptor) { ctx in
+            try await self.applyStashPrimitive(entry, in: ctx)
+            logger.info("Applied stash with commit id \(entry.stashSha, privacy: .public)")
+        }
+        await repository.awaitOperationRefresh(covering: .full)
+    }
+
+    /// The repository, when stashed changes can come back into its working
+    /// directory: no operation is in progress, and no file is conflicted.
+    private func requireCanApply(_ kind: OperationKind, verb: String) throws(OperationError) -> RepositoryModel {
+        guard let repository else {
+            throw OperationError(.precondition("The repository is no longer in the list."), operation: kind)
+        }
+        try repository.operations.requireNoOperationInProgress(kind)
+        if repository.changes.workingDirectory.files.contains(where: { $0.status.kind == .conflicted }) {
+            throw OperationError(
+                .precondition("Resolve the conflicts in your changes before \(verb) stashed changes."),
+                operation: kind,
+                repositoryID: repository.id
+            )
+        }
+        return repository
+    }
+
     /// Drops `entry`, permanently. Returns after the stash list reloads.
     ///
     /// - Throws: `.confirmationRequired(.discardStash)` when
-    ///   `confirmDiscardStash` is on ("Discard Stash?").
+    ///   `confirmDiscardStash` is on ("Discard Stash?"); `.precondition`
+    ///   when the entry is gone (restored or dropped since it was listed).
     public func discard(_ entry: StashEntry, confirmed: Set<ConfirmationKind> = []) async throws(OperationError) {
         guard let repository, let app = repository.app else {
             throw OperationError(.precondition("The repository is no longer in the list."), operation: .dropStash)
@@ -185,7 +245,7 @@ public final class StashModel: RepositoryFeature {
             throw OperationError(.confirmationRequired(.discardStash()), operation: .dropStash, repositoryID: repository.id)
         }
         try await repository.perform(OperationDescriptor(kind: .dropStash, refreshAfter: .refs)) { ctx in
-            try await dropDesktopStashEntry(ctx.repository, entry.stashSha)
+            try await dropStashEntry(ctx.repository, entry.stashSha)
             logger.info("Dropped stash with commit id \(entry.stashSha, privacy: .public)")
         }
         if let pending = conflictedRestore, JSCompat.strictEquals(pending.entry.stashSha, entry.stashSha) {
@@ -196,9 +256,9 @@ public final class StashModel: RepositoryFeature {
 
     // MARK: Showing
 
-    /// Shows the current branch's stash instead of the working directory,
-    /// selecting `file`, or when nil the file already selected, or else the
-    /// first. Does nothing without a stash.
+    /// Shows the current branch's newest stash instead of the working
+    /// directory, selecting `file`, or when nil the file already selected,
+    /// or else the first. Does nothing without a stash.
     public func show(file: CommittedFileChange?) {
         guard let current else {
             return
@@ -206,8 +266,7 @@ public final class StashModel: RepositoryFeature {
         show(current, file: file)
     }
 
-    /// Shows `entry` (the current branch's or another branch's) instead of
-    /// the working directory, selecting `file`, or when nil the file
+    /// Shows `entry` (any listed one) instead of the working directory, selecting `file`, or when nil the file
     /// already selected, or else the first. Its files load once; its diffs
     /// load as files are selected.
     public func show(_ entry: StashEntry, file: CommittedFileChange? = nil) {
@@ -398,17 +457,17 @@ public final class StashModel: RepositoryFeature {
     }
 
     /// When the shown entry is gone, the working directory shows; when its
-    /// branch has a new one, that one shows, keeping the selected file.
+    /// files didn't load, they load again, keeping the selected file.
     private func followShownEntry() {
         guard let shown = shownEntry, let repository, repository.changes.isShowingStash else {
             return
         }
-        guard let latest = repository.gitState.stashes.entriesByBranch[shown.branchName] else {
+        guard repository.gitState.stashes.entry(shown.stashSha) != nil else {
             hide()
             return
         }
-        if !JSCompat.strictEquals(latest.stashSha, shown.stashSha) || !(files.value != nil || files.isLoading) {
-            show(latest, selectedFile.map { .keep($0.id) } ?? .first)
+        if !(files.value != nil || files.isLoading) {
+            show(shown, selectedFile.map { .keep($0.id) } ?? .first)
         }
     }
 
@@ -452,10 +511,11 @@ public final class StashModel: RepositoryFeature {
     }
 
     /// Once no file of the conflicted restore is conflicted any more,
-    /// settles it with the lane held: drops the entry when every file still
-    /// differs from what HEAD had when it was restored (the resolution kept
-    /// the stash's changes, in the working directory or committed since),
-    /// and otherwise keeps it and stops tracking it (some changes were
+    /// settles it. An applied entry stays: it stops being tracked. A
+    /// restored one is settled with the lane held: dropped when every file
+    /// still differs from what HEAD had when it was restored (the resolution
+    /// kept the stash's changes, in the working directory or committed
+    /// since), and otherwise kept and no longer tracked (some changes were
     /// discarded or resolved away; the entry still has them). Skipped while
     /// another operation runs; the refresh after it tries again.
     private func settleConflictedRestoreIfResolved(_ status: StatusResult) {
@@ -464,6 +524,10 @@ public final class StashModel: RepositoryFeature {
         }
         let conflicted = status.workingDirectory.files.filter { $0.status.kind == .conflicted }.map(\.path).exactSet
         guard !pending.paths.contains(where: { conflicted.contains(ExactString($0)) }) else {
+            return
+        }
+        if pending.action == .apply {
+            clearConflictedRestore(pending)
             return
         }
         restoreSettlement = Task { [weak self] in
@@ -492,6 +556,9 @@ public final class StashModel: RepositoryFeature {
             case .kept:
                 logger.info("Keeping stash '\(pending.entry.stashSha, privacy: .public)': resolving its conflicts dropped some of its changes")
                 clearConflictedRestore(pending)
+            case .gone:
+                logger.info("Stash '\(pending.entry.stashSha, privacy: .public)' was dropped before its conflicts were resolved")
+                clearConflictedRestore(pending)
             }
         } catch {
             logger.error("Could not settle a conflicted stash restore; keeping the entry: \(error.message, privacy: .public)")
@@ -519,7 +586,14 @@ struct StashDiffKey: Hashable, Sendable {
 
 /// What settling a conflicted restore did.
 enum ConflictedRestoreOutcome: Sendable, Equatable {
-    case stillConflicted, dropped, kept
+    /// Some of its files are still conflicted.
+    case stillConflicted
+    /// Its entry was dropped.
+    case dropped
+    /// Its entry was kept.
+    case kept
+    /// Its entry was already gone.
+    case gone
 }
 
 /// Settles a conflicted restore with the lane held (see
@@ -549,6 +623,10 @@ func settleConflictedRestore(_ pending: ConflictedStashRestore, in repository: R
     guard pending.paths.allSatisfy({ changed.contains(ExactString($0)) }) else {
         return .kept
     }
-    try await dropDesktopStashEntry(repository, pending.entry.stashSha)
+    do {
+        try await dropStashEntry(repository, pending.entry.stashSha)
+    } catch is StashEntryNotFoundError {
+        return .gone
+    }
     return .dropped
 }

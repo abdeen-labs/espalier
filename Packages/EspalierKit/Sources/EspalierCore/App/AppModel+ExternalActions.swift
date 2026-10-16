@@ -133,11 +133,11 @@ extension AppModel {
     ///   else existing, else unsafe repository is selected.
     ///
     /// - Throws: Checking out the branch: its decisions and confirmations
-    ///   (uncommitted changes, overwriting a stash), with the branch in the
-    ///   error's `gitContext`, and its failures; the file is shown first.
-    ///   A pull request that can't be loaded: no account is signed in to
-    ///   its server, or GitHub's error. A link GitHub Desktop couldn't be
-    ///   asked to open.
+    ///   (uncommitted changes), with the branch in the error's
+    ///   `gitContext`, and its failures; the file is shown first. A pull
+    ///   request that can't be loaded: no account is signed in to its
+    ///   server, or GitHub's error. A link GitHub Desktop couldn't be asked
+    ///   to open.
     public func handle(_ action: ExternalAction) async throws(OperationError) -> ExternalActionResult {
         if case .url(let url) = action, try await forwardToGitHubDesktop(url) {
             return .forwarded

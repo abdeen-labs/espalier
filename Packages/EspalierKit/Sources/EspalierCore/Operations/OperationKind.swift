@@ -5,7 +5,7 @@
 /// refresh reason an operation's own refresh carries.
 public enum OperationKind: String, Sendable, Hashable, CaseIterable {
     // Changes, commits, and stashes.
-    case commit, undoCommit, resetToCommit, discardChanges, discardLines, stash, restoreStash, dropStash
+    case commit, undoCommit, resetToCommit, discardChanges, discardLines, stash, restoreStash, applyStash, dropStash
 
     // Branches and tags.
     case checkoutBranch, checkoutCommit, createBranch, renameBranch, deleteBranch, deleteRemoteBranch, createTag, deleteTag

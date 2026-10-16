@@ -125,7 +125,7 @@ struct WindowPresenterTests {
     @Test("a decision is asked, then the intent runs with the strategy")
     func decides() async {
         let presenter = WindowPresenter()
-        let decision = Decision.uncommittedChanges(currentBranch: "main", targetBranch: "feature", currentBranchHasStash: false)
+        let decision = Decision.uncommittedChanges(currentBranch: "main", targetBranch: "feature")
         let intent = ScriptedIntent([OperationError(.decisionRequired(decision), operation: .checkoutBranch)])
         let task = Task { await presenter.perform { answers throws(OperationError) in try intent.run(answers) } }
         let pending = await self.decision(of: presenter)

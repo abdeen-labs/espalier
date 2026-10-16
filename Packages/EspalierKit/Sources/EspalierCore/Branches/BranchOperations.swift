@@ -294,10 +294,11 @@ extension BranchesModel {
 
     // MARK: Renaming
 
-    /// Renames a local branch and moves its stash entry along. Its upstream on
-    /// the remote keeps its name. A case-only rename works on a
-    /// case-insensitive file system (GitKit's `renameBranch`). Refused while a
-    /// rebase, squash, or reorder is in progress (`operations.rebaseRefusal`).
+    /// Renames a local branch and moves its stash entries along. Its
+    /// upstream on the remote keeps its name. A case-only rename works on a
+    /// case-insensitive file system (GitKit's `renameBranch`). Refused while
+    /// a rebase, squash, or reorder is in progress
+    /// (`operations.rebaseRefusal`).
     /// Returns after the repository's refresh.
     public func rename(_ branch: Branch, to name: String) async throws(OperationError) {
         guard let repository else {
@@ -319,9 +320,13 @@ extension BranchesModel {
             try await self.requireNoOperationOnDisk(.renameBranch, rebaseOnly: true, retry: retry, in: ctx)
             try await renameBranch(ctx.repository, branch, name)
 
-            // The stash as it is now, not as the last refresh saw it.
-            if let stashEntry = try await getLastDesktopStashEntryForBranch(ctx.repository, branch.name) {
-                try await moveStashEntry(ctx.repository, stashEntry, name)
+            // The stash as it is now, not as the last refresh saw it. Oldest
+            // first, so they keep their order, the newest on top.
+            let entries = try await getStashes(ctx.repository).desktopEntries.filter { entry in
+                entry.branchName.map { JSCompat.strictEquals($0, branch.name) } == true
+            }
+            for entry in entries.reversed() {
+                try await moveStashEntry(ctx.repository, entry, name)
             }
         }
 

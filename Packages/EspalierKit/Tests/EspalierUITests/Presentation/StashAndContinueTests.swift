@@ -56,7 +56,7 @@ struct StashAndContinueTests {
         #expect(warning.confirmation.kind == .rewritePublishedCommits)
         fixture.presenter.respond(to: warning.id, with: ConfirmationResponse(isConfirmed: true))
 
-        // Nothing else is asked (not "Overwrite Stash?").
+        // Nothing else is asked.
         await waitUntil { done.isSet || fixture.presenter.confirmation != nil }
         if let asked = fixture.presenter.confirmation {
             Issue.record("Asked again: \(asked.confirmation.kind)")
@@ -162,41 +162,44 @@ struct StashAndContinueTests {
         }
     }
 
-    @Test("a stash made meanwhile is asked about once, replaced, and the operation runs")
-    func stashMadeMeanwhile() async throws {
+    @Test("with a stash on the branch already, it's offered, stashes the changes as another entry without asking, and the operation runs")
+    func branchHasStash() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await publishedFixture()
             fixture.app.preferences.confirmForcePush = false
+            // The change to A.txt is the branch's stash; then another change.
+            #expect(try await fixture.repository.stash.stashAllChanges())
+            try fixture.harness.write("B.txt", "changed\n", in: fixture.local)
+            await fixture.refresh()
+
             let b = try await fixture.sha("main~1"), c = try await fixture.sha("main")
             let plan = try #require(SquashPlan.make(shas: [b, c], into: nil, in: fixture.repository))
             await MultiCommitActions.squash(plan, message: CommitContext(summary: "B and C", description: nil), in: fixture.context)
             let presented = try #require(fixture.presenter.error)
             let recovery = try #require(presented.error.recoveries.first)
-
-            // Meanwhile: the change is stashed, and another made.
-            #expect(try await fixture.repository.stash.stashAllChanges())
-            try fixture.harness.write("B.txt", "changed\n", in: fixture.local)
-            await fixture.refresh()
+            guard case .stashChangesAndRetry = recovery else {
+                Issue.record("Unexpected recovery \(recovery.title)")
+                return
+            }
 
             let done = Flag()
             let recover = Task {
                 await fixture.presenter.recover(presented.id, with: recovery)
                 done.isSet = true
             }
-            let overwrite = await fixture.confirmation()
-            #expect(overwrite.confirmation.kind == .overwriteStash)
-            fixture.presenter.respond(to: overwrite.id, with: ConfirmationResponse(isConfirmed: true))
             await waitUntil { done.isSet || fixture.presenter.confirmation != nil }
             if let asked = fixture.presenter.confirmation {
-                Issue.record("Asked again: \(asked.confirmation.kind)")
+                Issue.record("Asked: \(asked.confirmation.kind)")
                 fixture.presenter.respond(to: asked.id, with: .cancelled)
             }
             await recover.value
             await fixture.settle()
             #expect(fixture.presenter.error == nil)
             #expect(try await fixture.summaries("main").prefix(2) == ["B and C", "A"])
-            #expect(try await fixture.git(["stash", "list", "--format=%gs"]) == "On main: !!Espalier<main>\n")
+            // Both entries are the branch's, the new one on top.
+            #expect(try await fixture.git(["stash", "list", "--format=%gs"]) == "On main: !!Espalier<main>\nOn main: !!Espalier<main>\n")
             #expect(try await fixture.git(["stash", "show", "--name-only", "stash@{0}"]) == "B.txt\n")
+            #expect(try await fixture.git(["stash", "show", "--name-only", "stash@{1}"]) == "A.txt\n")
         }
     }
 }

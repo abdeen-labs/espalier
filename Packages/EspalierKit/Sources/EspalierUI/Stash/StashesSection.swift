@@ -1,7 +1,7 @@
-// The sidebar's Stashes section: every branch's newest Espalier or GitHub
-// Desktop stash, the current branch's first, each with its file count
-// (only the current branch's can be restored). Selecting a row shows the
-// stash's place; Return or a double-click restores the current branch's.
+// The sidebar's Stashes section: every stash entry, newest first, each with
+// its file count. Entries Espalier or GitHub Desktop made are named by their
+// branch; others by git's message. Selecting a row shows the stash's place;
+// Return or a double-click restores it.
 
 import EspalierCore
 import GitKit
@@ -9,16 +9,23 @@ import SwiftUI
 
 /// A stash's row in the sidebar.
 nonisolated struct StashRowContent: Sendable, Equatable, Identifiable {
-    /// The branch the changes were stashed on.
-    var branch: String
+    /// The SHA of the entry's commit.
+    var sha: String
+    /// The branch in the entry's marker, or nil for an entry made outside
+    /// Espalier and GitHub Desktop.
+    var branch: String?
+    /// Git's message for the entry ("On main: fix login").
+    var message: String
     /// The files the stash changes, once counted.
     var fileCount: Int?
-    /// Whether it's the current branch's stash (the one that can be
-    /// restored).
-    var isCurrentBranch: Bool
 
     var id: String {
-        branch
+        sha
+    }
+
+    /// The row's name: the branch, else git's message.
+    var title: String {
+        branch ?? message
     }
 
     /// The badge: the file count, once counted, in `numberFormat`.
@@ -29,39 +36,28 @@ nonisolated struct StashRowContent: Sendable, Equatable, Identifiable {
     /// What VoiceOver reads: "main, 4 files", the count in `numberFormat`.
     func accessibilityLabel(_ numberFormat: NumberFormat) -> String {
         guard let fileCount else {
-            return branch
+            return title
         }
-        return "\(branch), \(StashFilesSummary.files(fileCount, numberFormat))"
+        return "\(title), \(StashFilesSummary.files(fileCount, numberFormat))"
     }
 
-    /// The rows for the branches with stashes: the current branch's first,
-    /// then the others by name, those whose branch contains `filter`.
-    static func rows(
-        branches: [String],
-        currentBranch: String?,
-        fileCount: (String) -> Int?,
-        filter: String
-    ) -> [StashRowContent] {
-        branches
-            .filter { filter.isEmpty || $0.localizedCaseInsensitiveContains(filter) }
-            .sorted { first, second in
-                if first == currentBranch { return true }
-                if second == currentBranch { return false }
-                return first.localizedStandardCompare(second) == .orderedAscending
-            }
-            .map { StashRowContent(branch: $0, fileCount: fileCount($0), isCurrentBranch: $0 == currentBranch) }
+    /// The row's tooltip: "Stashed changes on main", or git's message.
+    var tooltip: String {
+        branch.map { "Stashed changes on \($0)" } ?? message
+    }
+
+    /// The rows for `entries` (newest first), in their order, those whose
+    /// title contains `filter`.
+    static func rows(entries: [StashEntry], fileCount: (StashEntry) -> Int?, filter: String) -> [StashRowContent] {
+        entries
+            .filter { filter.isEmpty || $0.title.localizedCaseInsensitiveContains(filter) }
+            .map { StashRowContent(sha: $0.stashSha, branch: $0.branchName, message: $0.message, fileCount: fileCount($0)) }
     }
 
     /// The rows for `repository`'s stashes.
     @MainActor
     static func rows(_ repository: RepositoryModel, filter: String) -> [StashRowContent] {
-        let entries = repository.gitState.stashes.entriesByBranch
-        return rows(
-            branches: Array(entries.keys),
-            currentBranch: repository.gitState.tip.branch?.name,
-            fileCount: { entries[$0].flatMap(repository.stash.fileCount(of:)) },
-            filter: filter
-        )
+        rows(entries: repository.gitState.stashes.entries, fileCount: { repository.stash.fileCount(of: $0) }, filter: filter)
     }
 }
 
@@ -72,7 +68,8 @@ struct StashRow: View {
     @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
-        SidebarRowLabel(content.branch, systemImage: "tray.full") {
+        // Git's message reads from its start; a branch keeps the middle cut.
+        SidebarRowLabel(content.title, systemImage: "tray.full", truncationMode: content.branch == nil ? .tail : .middle) {
             if let badge = content.badge(numberFormat) {
                 Text(badge)
                     .font(Typography.count)
@@ -85,17 +82,7 @@ struct StashRow: View {
     }
 }
 
-extension StashRowContent {
-    /// The row's tooltip; another branch's says how to restore it.
-    var tooltip: String {
-        if isCurrentBranch {
-            return "Stashed changes on \(branch)"
-        }
-        return "Stashed changes on \(branch). \(StashActions.restoreUnavailableReason(branch: branch))"
-    }
-}
-
-/// Stashes, shown when a branch has one.
+/// Stashes, shown when there's a stash.
 public struct StashesSection: View {
     private let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
@@ -105,21 +92,21 @@ public struct StashesSection: View {
     }
 
     public var body: some View {
-        let entries = repository.gitState.stashes.entriesByBranch
+        let entries = repository.gitState.stashes.entries
         if !entries.isEmpty {
             let rows = StashRowContent.rows(repository, filter: context.state.sidebarFilter)
             SidebarSection(id: "stashes") {
                 ForEach(rows) { row in
                     StashRow(content: row)
-                        .sidebarRow(.stash(branch: row.branch))
-                        .tag(SidebarPlace.stash(branch: row.branch))
+                        .sidebarRow(.stash(sha: row.sha))
+                        .tag(SidebarPlace.stash(sha: row.sha))
                 }
             } header: {
                 SidebarSectionHeader("Stashes")
                     // Counts the entries not counted yet whenever the list
                     // changes (on the header: it's there once, expanded or
                     // not).
-                    .task(id: entries.values.map(\.stashSha).sorted()) {
+                    .task(id: entries.map(\.stashSha)) {
                         repository.stash.countFiles()
                     }
             }
@@ -127,16 +114,12 @@ public struct StashesSection: View {
     }
 }
 
-/// A stash row's context menu: Restore, which only the current branch's
-/// stash offers (another branch's says why under it), and Discard….
+/// A stash row's context menu: Restore, Apply, and Discard….
 enum StashContextMenu {
     @MenuBuilder
-    static func content(branch: String, context: WindowContext) -> MenuContent {
-        let isCurrentBranch = context.repository?.gitState.tip.branch?.name == branch
-        context.actions.menuAction(
-            .restoreStash(branch: branch),
-            subtitle: isCurrentBranch ? nil : StashActions.restoreUnavailableReason(branch: branch)
-        )
-        context.actions.menuAction(.discardStash(branch: branch))
+    static func content(sha: String, context: WindowContext) -> MenuContent {
+        context.actions.menuAction(.restoreStash(sha: sha))
+        context.actions.menuAction(.applyStash(sha: sha))
+        context.actions.menuAction(.discardStash(sha: sha))
     }
 }

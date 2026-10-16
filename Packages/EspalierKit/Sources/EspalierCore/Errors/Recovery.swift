@@ -16,8 +16,7 @@ public enum Recovery: Sendable {
     /// Run the operation again ("Retry Clone" for clones).
     case retry(any RetryableOperation)
     /// Stash the current branch's changes, then run the operation again
-    /// ("Stash Changes and Continue"); offered only when the branch has no
-    /// stash.
+    /// ("Stash Changes and Continue").
     case stashChangesAndRetry(RepositoryID, any RetryableOperation)
     /// Clear a rebase's state that Espalier can't continue or abort
     /// (`LeftoverRebase`), then run the operation git or Espalier refused
@@ -96,7 +95,7 @@ public enum Recovery: Sendable {
     /// Runs a headless recovery.
     ///
     /// - Parameter confirmed: Confirmations the user gave for what it runs
-    ///   (the retried operation's, the stash's).
+    ///   (the retried operation's).
     /// - Returns: What the operation it ran again returned, for the window
     ///   to report as it reports the first run; `.nothing` for the others.
     /// - Throws: The `OperationError` of what it ran; a precondition error
@@ -104,7 +103,7 @@ public enum Recovery: Sendable {
     ///
     /// "Stash Changes and Continue" stashes, then runs the operation: a
     /// caller that answers the operation's questions and runs it again
-    /// runs the two steps itself (`stashChanges(in:confirmed:)`, then the
+    /// runs the two steps itself (`stashChanges(in:)`, then the
     /// operation), so the changes are stashed once. "Clear Old Rebase and
     /// Continue" likewise (`clearLeftoverRebase(in:)`).
     @discardableResult
@@ -115,7 +114,7 @@ public enum Recovery: Sendable {
             return try await operation.perform(in: app, confirmed: confirmed)
 
         case .stashChangesAndRetry(_, let operation):
-            guard try await stashChanges(in: app, confirmed: confirmed) else {
+            guard try await stashChanges(in: app) else {
                 return .nothing
             }
             return try await operation.perform(in: app, confirmed: confirmed)
@@ -156,19 +155,18 @@ public enum Recovery: Sendable {
 }
 
 extension Recovery {
-    /// "Stash Changes and Continue"'s first step: stashes the changes as the
-    /// current branch's stash, without asking: the recovery is offered only
-    /// when the branch has no stash. A stash made meanwhile still asks
-    /// (`.overwriteStash`). Nothing for other recoveries.
+    /// "Stash Changes and Continue"'s first step: stashes the changes as a
+    /// new entry for the current branch, without asking. Nothing for other
+    /// recoveries.
     ///
     /// - Returns: Whether the changes were stashed, so the operation runs.
     @MainActor
-    public func stashChanges(in app: AppModel, confirmed: Set<ConfirmationKind> = []) async throws(OperationError) -> Bool {
+    public func stashChanges(in app: AppModel) async throws(OperationError) -> Bool {
         guard case .stashChangesAndRetry(let id, let operation) = self else {
             return false
         }
         let repository = try app.requireRepository(id, for: operation.kind)
-        return try await repository.stash.stashAllChanges(confirmed: confirmed)
+        return try await repository.stash.stashAllChanges()
     }
 
     /// "Clear Old Rebase and Continue"'s first step: clears the rebase's

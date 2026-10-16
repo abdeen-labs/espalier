@@ -196,8 +196,6 @@ public final class WindowPresenter {
                         return nil
                     case .strategy(let strategy):
                         answers.strategy = strategy
-                        // A choice that warned confirms what it warned about.
-                        answers.confirmed.formUnion(decision.confirmations(answeredBy: strategy))
                     case .editor(let name):
                         // The editor chosen is saved; the intent finds it.
                         hasChosenEditor = true
@@ -335,8 +333,8 @@ public final class WindowPresenter {
             // Two steps, each asking its own questions: the changes are
             // stashed once, and the operation runs again with the answers
             // it asks for (a force push warning), not stashing again.
-            let stashed = await perform { answers throws(OperationError) in
-                try await recovery.stashChanges(in: app, confirmed: answers.confirmed)
+            let stashed = await perform { _ throws(OperationError) in
+                try await recovery.stashChanges(in: app)
             }
             guard stashed == true else {
                 return

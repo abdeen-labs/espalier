@@ -7,7 +7,7 @@ import GitKit
 /// asks the user, then calls the intent again with the kind added.
 public enum ConfirmationKind: String, Sendable, Hashable, CaseIterable {
     case removeRepository, discardChanges, discardAllChanges, discardLines, discardStash, checkoutCommit, leaveCommitsBehind
-    case forcePush, rewritePublishedCommits, undoCommitWithChanges, resetToCommit, resetWithChanges, overwriteStash
+    case forcePush, rewritePublishedCommits, undoCommitWithChanges, resetToCommit, resetWithChanges
     case commitFilteredChanges, commitWithUnknownCoAuthors, commitOversizedFiles, commitConflictMarkers
     case overwriteCommitMessage, removeWorktree, abortWithResolvedConflicts, deleteBranch, deleteRemoteBranch, deleteTag
     case replaceCommandLineTool
@@ -65,9 +65,6 @@ public struct Confirmation: Sendable, Equatable {
         case worktree(name: String, path: String)
         /// The operation's display name ("Rebase", "Squash", "Amend", ...).
         case operation(String)
-        /// The branch a checkout goes to after stashing, or nil when only
-        /// stashing.
-        case overwriteStash(checkingOut: Branch?)
         /// The commit to undo.
         case commit(sha: String, isMergeCommit: Bool)
     }
@@ -232,20 +229,6 @@ extension Confirmation {
         )
     }
 
-    /// Replacing the current branch's stash with the current changes.
-    ///
-    /// - Parameter branch: The branch checked out after stashing, or nil when
-    ///   only stashing.
-    public static func overwriteStash(checkingOut branch: Branch?) -> Confirmation {
-        Confirmation(
-            kind: .overwriteStash,
-            details: .overwriteStash(checkingOut: branch),
-            title: "Overwrite Stash?",
-            message: "Your current changes will replace the stash already on this branch.",
-            confirmButton: "Overwrite"
-        )
-    }
-
     /// Committing while the file filter hides included files.
     public static func commitFilteredChanges(hiddenPaths: [String]) -> Confirmation {
         Confirmation(
@@ -401,10 +384,7 @@ public enum Decision: Sendable, Equatable {
     /// Switching branches with uncommitted changes and the "ask" strategy:
     /// leave the changes on the current branch (stash them there) or bring
     /// them along.
-    ///
-    /// - Parameter currentBranchHasStash: Whether leaving the changes would
-    ///   replace the current branch's stash (the choice's warning).
-    case uncommittedChanges(currentBranch: String, targetBranch: String, currentBranchHasStash: Bool)
+    case uncommittedChanges(currentBranch: String, targetBranch: String)
 
     /// Opening in the external editor with no editor chosen and several
     /// installed: which one to use, from now on.
@@ -436,19 +416,17 @@ public enum Decision: Sendable, Equatable {
         switch self {
         case .externalEditor:
             []
-        case .uncommittedChanges(let currentBranch, let targetBranch, let hasStash):
+        case .uncommittedChanges(let currentBranch, let targetBranch):
             [
                 DecisionChoice(
                     strategy: .stashOnCurrentBranch,
                     title: "Leave my changes on \(currentBranch)",
-                    description: "Your changes are stashed on this branch, ready for when you come back.",
-                    warning: hasStash ? "This replaces the stash already on this branch." : nil
+                    description: "Your changes are stashed on this branch, ready for when you come back."
                 ),
                 DecisionChoice(
                     strategy: .moveToNewBranch,
                     title: "Bring my changes to \(targetBranch)",
-                    description: "Your changes come with you to the other branch.",
-                    warning: nil
+                    description: "Your changes come with you to the other branch."
                 ),
             ]
         }
@@ -459,19 +437,6 @@ public enum Decision: Sendable, Equatable {
         switch self {
         case .uncommittedChanges: "Switch Branch"
         case .externalEditor: "Open"
-        }
-    }
-
-    /// The confirmations answering with `strategy` gives, for the intent's
-    /// next call: leaving the changes on a branch that has a stash, which
-    /// the choice warns will be overwritten, confirms `.overwriteStash`, so
-    /// checking out asks once.
-    public func confirmations(answeredBy strategy: UncommittedChangesStrategy) -> Set<ConfirmationKind> {
-        switch self {
-        case .uncommittedChanges(_, _, let hasStash):
-            hasStash && strategy == .stashOnCurrentBranch ? [.overwriteStash] : []
-        case .externalEditor:
-            []
         }
     }
 }
@@ -489,6 +454,4 @@ public struct DecisionChoice: Sendable, Equatable {
     public let strategy: UncommittedChangesStrategy
     public let title: String
     public let description: String
-    /// A warning to show while this choice is selected.
-    public let warning: String?
 }

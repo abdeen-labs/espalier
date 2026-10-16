@@ -93,6 +93,7 @@ extension OperationKind {
         .discardLines: "discarding changes",
         .stash: "a stash",
         .restoreStash: "restoring a stash",
+        .applyStash: "applying a stash",
         .dropStash: "discarding a stash",
         .checkoutBranch: "a checkout",
         .checkoutCommit: "a checkout",

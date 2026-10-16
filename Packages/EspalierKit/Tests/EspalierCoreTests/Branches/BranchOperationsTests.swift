@@ -125,7 +125,7 @@ struct BranchOperationsTests {
             try await fixture.model.branches.createBranch("topic", startPoint: nil)
         }
         #expect(error?.operation == .checkoutBranch)
-        #expect(error?.reason == .decisionRequired(.uncommittedChanges(currentBranch: "main", targetBranch: "topic", currentBranchHasStash: false)))
+        #expect(error?.reason == .decisionRequired(.uncommittedChanges(currentBranch: "main", targetBranch: "topic")))
         let topic = try fixture.branch("topic")
         #expect(fixture.model.gitState.tip.branch?.name == "main")
 
@@ -136,25 +136,32 @@ struct BranchOperationsTests {
 
     // MARK: Renaming
 
-    @Test("renaming a branch moves its stash along")
+    @Test("renaming a branch moves its stashes along, in their order, and leaves others alone")
     func renameMovesStash() async throws {
         let fixture = try await makeRepository()
         try fixture.write("notes.txt", "notes\n")
         await fixture.model.refresh(.status, reason: .user)
         #expect(try await fixture.model.stash.stashAllChanges())
+        // One made outside Espalier, then another of main's.
+        try fixture.write("mine.txt", "mine\n")
+        try await runGit(["stash", "push", "-q", "--include-untracked", "-m", "my own"], fixture.local)
+        try fixture.write("later.txt", "later\n")
         await fixture.model.refresh(.full, reason: .user)
-        #expect(fixture.model.stash.current?.branchName == "main")
+        #expect(try await fixture.model.stash.stashAllChanges())
+        await fixture.model.refresh(.full, reason: .user)
+        #expect(fixture.model.stash.currentEntries.count == 2)
 
         try await fixture.model.branches.rename(try fixture.branch("main"), to: "trunk")
 
         #expect(fixture.model.gitState.tip.branch?.name == "trunk")
-        #expect(try await fixture.stashList() == ["On trunk: !!Espalier<trunk>"])
-        #expect(fixture.model.gitState.stashes.entriesByBranch["trunk"] != nil)
-        #expect(fixture.model.gitState.stashes.entriesByBranch["main"] == nil)
+        #expect(try await fixture.stashList() == ["On trunk: !!Espalier<trunk>", "On trunk: !!Espalier<trunk>", "On main: my own"])
+        #expect(fixture.model.gitState.stashes.entries(onBranch: "trunk").count == 2)
+        #expect(fixture.model.gitState.stashes.entries(onBranch: "main").isEmpty)
         #expect(fixture.model.stash.current?.branchName == "trunk")
-        // The stash still holds the changes.
-        let files = try await runGit(["stash", "show", "--include-untracked", "--name-only", "stash@{0}"], fixture.local)
-        #expect(files.contains("notes.txt"))
+        // The stashes still hold the changes, the newest on top.
+        #expect(try await runGit(["stash", "show", "--name-only", "stash@{0}"], fixture.local) == "later.txt\n")
+        #expect(try await runGit(["stash", "show", "--name-only", "stash@{1}"], fixture.local) == "notes.txt\n")
+        #expect(try await runGit(["stash", "show", "--include-untracked", "--name-only", "stash@{2}"], fixture.local) == "mine.txt\n")
         // The upstream keeps its name.
         #expect(fixture.model.gitState.tip.branch?.upstream == "origin/main")
         await fixture.app.idle()

@@ -22,18 +22,24 @@ public let DesktopStashEntryMarker = "!!GitHub_Desktop"
 /// format: `!!Espalier<branch>` or `!!GitHub_Desktop<branch>`.
 private let desktopStashEntryMessageRe = JSCompat.regex("!!(?:Espalier|GitHub_Desktop)<(\(JSCompat.dot)+)>\\z")
 
-/// The stash entries created by the app, and how many there are in all.
+/// Every stash entry, and those the app created.
 public struct StashResult: Hashable, Sendable {
-    /// The stash entries created by the app
-    public let desktopEntries: [StashEntry]
+    /// Every stash entry, newest first, as `git stash list` lists them.
+    public let entries: [StashEntry]
+
+    /// The stash entries created by the app: those with a marker.
+    public var desktopEntries: [StashEntry] {
+        entries.filter { $0.branchName != nil }
+    }
 
     /// The total amount of stash entries,
     /// i.e. stash entries created both by the app and outside of it
-    public let stashEntryCount: Int
+    public var stashEntryCount: Int {
+        entries.count
+    }
 
-    public init(desktopEntries: [StashEntry], stashEntryCount: Int) {
-        self.desktopEntries = desktopEntries
-        self.stashEntryCount = stashEntryCount
+    public init(entries: [StashEntry]) {
+        self.entries = entries
     }
 }
 
@@ -41,9 +47,9 @@ private enum StashField: Hashable, Sendable {
     case name, stashSha, message, tree, parents
 }
 
-/// Get the list of stash entries created by the app in the
-/// current repository using the default ordering of refs (which is LIFO
-/// ordering), as well as the total amount of stash entries.
+/// Get the list of stash entries in the current repository using the
+/// default ordering of refs (which is LIFO ordering), each with the branch
+/// in its marker when the app created it.
 public func getStashes(_ repository: Repository) async throws -> StashResult {
     let parser = createLogParser([
         StashField.name: "%gD",
@@ -63,35 +69,66 @@ public func getStashes(_ repository: Repository) async throws -> StashResult {
     // There's no refs/stashes reflog in the repository or it's not
     // even a repository. In either case we don't care
     if result.exitCode == 128 {
-        return StashResult(desktopEntries: [], stashEntryCount: 0)
+        return StashResult(entries: [])
     }
 
-    var desktopEntries: [StashEntry] = []
-    let entries = parser.parse(result.stdout)
+    // The parser already drops the empty piece after the final NUL, so these
+    // are the entries `git stash list` shows.
+    let entries = parser.parse(result.stdout).map { entry in
+        let parents = entry[.parents]
+        return StashEntry(
+            name: entry[.name],
+            branchName: extractBranchFromMessage(entry[.message]),
+            message: entry[.message],
+            stashSha: entry[.stashSha],
+            files: .notLoaded,
+            tree: entry[.tree],
+            parents: parents.isEmpty ? [] : JSCompat.split(parents, " ")
+        )
+    }
+    return StashResult(entries: entries)
+}
 
-    for entry in entries {
-        if let branchName = extractBranchFromMessage(entry[.message]) {
-            let parents = entry[.parents]
-            desktopEntries.append(StashEntry(
-                name: entry[.name],
-                branchName: branchName,
-                stashSha: entry[.stashSha],
-                files: .notLoaded,
-                tree: entry[.tree],
-                parents: parents.isEmpty ? [] : JSCompat.split(parents, " ")
-            ))
-        }
+/// The stash entry whose commit is `stashSha`, as the stash list is now,
+/// or nil when no entry has it.
+public func getStashEntry(_ repository: Repository, _ stashSha: String) async throws -> StashEntry? {
+    try await getStashes(repository).entries.first { JSCompat.strictEquals($0.stashSha, stashSha) }
+}
+
+/// No stash entry has the SHA any more: it was restored or dropped since
+/// it was listed. Nothing was done.
+public struct StashEntryNotFoundError: Error, Hashable, Sendable, LocalizedError {
+    /// The SHA of the entry's commit.
+    public let stashSha: String
+
+    public init(stashSha: String) {
+        self.stashSha = stashSha
     }
 
-    // The parser already drops the empty piece after the final NUL, so this
-    // is the count `git stash list` shows.
-    return StashResult(desktopEntries: desktopEntries, stashEntryCount: entries.count)
+    public var errorDescription: String? {
+        "These stashed changes are no longer in the stash list."
+    }
+}
+
+/// The stash entry whose commit is `stashSha`, as the stash list is now.
+///
+/// - Throws: `StashEntryNotFoundError` when no entry has it.
+private func requireStashEntry(_ repository: Repository, _ stashSha: String) async throws -> StashEntry {
+    guard let entry = try await getStashEntry(repository, stashSha) else {
+        throw StashEntryNotFoundError(stashSha: stashSha)
+    }
+    return entry
 }
 
 /// Moves a stash entry to a different branch by means of creating
 /// a new stash entry associated with the new branch and dropping the old
-/// stash entry.
+/// stash entry. The new entry is the newest.
+///
+/// - Throws: `StashEntryNotFoundError` when the entry is gone; nothing is
+///   created.
 public func moveStashEntry(_ repository: Repository, _ entry: StashEntry, _ branchName: String) async throws {
+    _ = try await requireStashEntry(repository, entry.stashSha)
+
     let message = "On \(branchName): \(createDesktopStashMessage(branchName))"
     let parentArgs = entry.parents.flatMap { ["-p", $0] }
 
@@ -107,7 +144,7 @@ public func moveStashEntry(_ repository: Repository, _ entry: StashEntry, _ bran
         "moveStashEntryToBranch"
     )
 
-    try await dropDesktopStashEntry(repository, entry.stashSha)
+    try await dropStashEntry(repository, entry.stashSha)
 }
 
 /// Returns the last stash entry the app created for the given
@@ -117,7 +154,7 @@ public func getLastDesktopStashEntryForBranch(_ repository: Repository, _ branch
 
     // Since stash objects are returned in a LIFO manner, the first
     // entry found is guaranteed to be the last entry created
-    return stash.desktopEntries.first { JSCompat.strictEquals($0.branchName, branchName) }
+    return stash.desktopEntries.first { $0.branchName.map { JSCompat.strictEquals($0, branchName) } == true }
 }
 
 /// Returns the last stash entry the app created for the given
@@ -223,19 +260,24 @@ private func resolveStashRef(_ repository: Repository) async throws -> String? {
     return result.exitCode == 0 && !sha.isEmpty ? sha : nil
 }
 
-private func getStashEntryMatchingSha(_ repository: Repository, _ sha: String) async throws -> StashEntry? {
-    let stash = try await getStashes(repository)
-    return stash.desktopEntries.first { JSCompat.strictEquals($0.stashSha, sha) }
+/// Removes the stash entry whose commit is `stashSha`, wherever it is in
+/// the list now.
+///
+/// - Throws: `StashEntryNotFoundError` when no entry has it.
+public func dropStashEntry(_ repository: Repository, _ stashSha: String) async throws {
+    let entryToDelete = try await requireStashEntry(repository, stashSha)
+    let args = ["stash", "drop", entryToDelete.name]
+    try await git(args, repository.path, "dropStashEntry")
 }
 
-/// Removes the given stash entry if it exists
-///
-/// - Parameter stashSha: the SHA that identifies the stash entry
-public func dropDesktopStashEntry(_ repository: Repository, _ stashSha: String) async throws {
-    if let entryToDelete = try await getStashEntryMatchingSha(repository, stashSha) {
-        let args = ["stash", "drop", entryToDelete.name]
-        try await git(args, repository.path, "dropStashEntry")
-    }
+/// What `applyStashEntry` did.
+public enum ApplyStashEntryResult: Hashable, Sendable {
+    /// The changes are in the working directory, and the entry is kept.
+    case applied
+
+    /// The changes are in the working directory with conflicts, and the
+    /// entry is kept.
+    case conflicted
 }
 
 /// What `popStashEntry` did.
@@ -244,12 +286,10 @@ public enum PopStashEntryResult: Hashable, Sendable {
     case popped
 
     /// The changes are back in the working directory with conflicts, and
-    /// git kept the entry so nothing is lost if the user starts over. Drop
-    /// it with `dropDesktopStashEntry` once the conflicts are resolved.
+    /// the entry is kept, as git does, so nothing is lost if the user
+    /// starts over. Drop it with `dropStashEntry` once the conflicts are
+    /// resolved.
     case conflicted
-
-    /// No stash entry created by the app has the SHA.
-    case notFound
 }
 
 /// Files in the working directory are where a stash entry would put files
@@ -267,55 +307,80 @@ public struct StashFilesInTheWayError: Error, Hashable, Sendable, LocalizedError
     }
 }
 
-/// Pops the stash entry identified by matching `stashSha` to its commit hash.
+/// Applies the stash entry whose commit is `stashSha` to the working
+/// directory and keeps it (`git stash apply`, given the commit, so no
+/// other entry is applied if indices shift meanwhile).
 ///
 /// To see the commit hash of stash entry, run
 /// `git log -g refs/stash --pretty="%nentry: %gd%nsubject: %gs%nhash: %H%n"`
 /// in a repo with some stash entries.
 ///
 /// When the changes conflict with the working directory, git applies them
-/// with conflict markers and keeps the entry, and this returns
-/// `.conflicted`.
+/// with conflict markers, and this returns `.conflicted`.
 ///
-/// - Throws: `StashFilesInTheWayError` when untracked files are where the
-///   entry's files go; nothing is restored. `GitError` when git
-///   can't apply the entry at all otherwise, for example because local
-///   changes would be overwritten. The entry is kept.
+/// - Throws: `StashEntryNotFoundError` when no entry has the SHA.
+///   `StashFilesInTheWayError` when untracked files are where the entry's
+///   files go; nothing is applied. `GitError` when git can't apply the
+///   entry at all otherwise, for example because local changes would be
+///   overwritten.
+@discardableResult
+public func applyStashEntry(_ repository: Repository, _ stashSha: String) async throws -> ApplyStashEntryResult {
+    let entry = try await requireStashEntry(repository, stashSha)
+    return try await applyStashCommit(repository, entry, "applyStashEntry") ? .applied : .conflicted
+}
+
+/// Pops the stash entry whose commit is `stashSha`: applies it as
+/// `applyStashEntry` does, then drops it unless its changes conflicted.
+///
+/// - Throws: As `applyStashEntry`. The entry is kept.
 @discardableResult
 public func popStashEntry(_ repository: Repository, _ stashSha: String) async throws -> PopStashEntryResult {
-    // A pop with conflicts returns `.conflicted`.
-    let expectedErrors: Set<DugiteError> = [.mergeConflicts]
-    guard let stashToPop = try await getStashEntryMatchingSha(repository, stashSha) else {
-        return .notFound
+    let entry = try await requireStashEntry(repository, stashSha)
+    guard try await applyStashCommit(repository, entry, "popStashEntry") else {
+        // As `git stash pop` does, an entry whose changes conflict is kept,
+        // so discarding the conflicted changes doesn't lose them for good.
+        return .conflicted
     }
+    // The entry is found again, as its index may have changed since. Gone
+    // already, it was dropped as popping would have.
+    if let applied = try await getStashEntry(repository, stashSha) {
+        try await git(["stash", "drop", "--quiet", applied.name], repository.path, "popStashEntry")
+    }
+    return .popped
+}
+
+/// Applies `entry`'s commit (`git stash apply`).
+///
+/// - Returns: true when it applied cleanly, false when its changes conflict.
+private func applyStashCommit(_ repository: Repository, _ entry: StashEntry, _ name: String) async throws -> Bool {
+    // An apply with conflicts returns false.
+    let expectedErrors: Set<DugiteError> = [.mergeConflicts]
 
     // An entry made with `--include-untracked` restores its untracked files
     // after its other changes, and stops at one that's in the way ("already
-    // exists, no checkout"), with the other changes restored and the entry
-    // kept, so restoring it again later would apply them twice. Checking
-    // first restores nothing instead.
-    let inTheWay = try await untrackedStashFilesInTheWay(repository, stashToPop)
+    // exists, no checkout"), with the other changes restored, so restoring
+    // it again later would apply them twice. Checking first restores
+    // nothing instead.
+    let inTheWay = try await untrackedStashFilesInTheWay(repository, entry)
     if !inTheWay.isEmpty {
         throw StashFilesInTheWayError(files: inTheWay)
     }
 
-    let args = ["stash", "pop", "--quiet", stashToPop.name]
+    let args = ["stash", "apply", "--quiet", entry.stashSha]
     do {
         let result = try await git(
             args,
             repository.path,
-            "popStashEntry",
+            name,
             options: GitExecutionOptions(expectedErrors: expectedErrors)
         )
-        return result.gitError == .mergeConflicts ? .conflicted : .popped
+        return result.gitError != .mergeConflicts
     } catch let error as GitError where error.result.exitCode == 1 && error.result.stderrData.isEmpty {
-        // popping a stashes that create conflicts in the working directory
-        // report an exit code of `1` and are not dropped after being applied
-        // (anything in stderr would mean git couldn't apply it at all).
-        // The entry is kept, so discarding the conflicted changes doesn't
-        // lose them for good.
-        logger.info("[popStashEntry] a stash was popped with conflicts (exit code \(error.result.exitCode)); keeping the entry.")
-        return .conflicted
+        // Applying a stash whose changes conflict in the working directory
+        // reports an exit code of `1` (anything in stderr would mean git
+        // couldn't apply it at all).
+        logger.info("[\(name, privacy: .public)] a stash was applied with conflicts (exit code \(error.result.exitCode))")
+        return false
     } catch let error as GitError where error.result.exitCode == 1
         && JSCompat.includes(error.result.stderr, "untracked working tree files would be overwritten by merge")
     {
@@ -336,7 +401,7 @@ private func untrackedStashFilesInTheWay(_ repository: Repository, _ entry: Stas
     let result = try await git(
         ["ls-tree", "-r", "-z", "--name-only", "--full-tree", entry.parents[2]],
         repository.path,
-        "popStashEntry"
+        "applyStashEntry"
     )
     return JSCompat.split(result.stdout, "\0").filter { path in
         var info = stat()

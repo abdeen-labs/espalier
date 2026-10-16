@@ -104,11 +104,8 @@ extension BranchesModel {
     /// - With the "ask" strategy and changes: `decisionRequired`, answered
     ///   by calling again with `.stashOnCurrentBranch` or
     ///   `.moveToNewBranch`.
-    /// - Leaving changes on a branch that has a stash replaces it:
-    ///   `confirmationRequired(.overwriteStash)`, whether the strategy came
-    ///   from the preference or the caller. The decision's choice warns
-    ///   about it, so answering it confirms
-    ///   (`Decision.confirmations(answeredBy:)`): asked once.
+    /// - Leaving changes on the current branch stashes them as a new entry;
+    ///   the branch's other stashes stay.
     /// - A remote branch is checked out as a new local branch that tracks it.
     /// - Leaving a detached HEAD whose commits no branch, tag, or remote
     ///   branch has asks first (`confirmationRequired(.leaveCommitsBehind)`):
@@ -162,24 +159,11 @@ extension BranchesModel {
             strategy = .moveToNewBranch
         }
 
-        // Even if the user has chosen to "always stash on current branch" we
-        // still want to let them know changes might be lost.
-        let hasStash = repository.stash.current != nil
-        if strategy == .stashOnCurrentBranch, hasChanges, hasStash, !confirmed.contains(.overwriteStash) {
-            throw OperationError(
-                .confirmationRequired(.overwriteStash(checkingOut: branch)),
-                operation: .checkoutBranch,
-                repositoryID: repository.id,
-                gitContext: .checkout(branch)
-            )
-        }
-
         if strategy == .askForConfirmation, hasChanges, let current = state.tip.branch {
             throw OperationError(
                 .decisionRequired(.uncommittedChanges(
                     currentBranch: current.name,
-                    targetBranch: branch.name,
-                    currentBranchHasStash: hasStash
+                    targetBranch: branch.name
                 )),
                 operation: .checkoutBranch,
                 repositoryID: repository.id,
@@ -329,8 +313,8 @@ extension BranchesModel {
         )
     }
 
-    /// Stashes the changes on the current branch, replacing its stash, then
-    /// checks out.
+    /// Stashes the changes on the current branch as a new entry, then checks
+    /// out.
     ///
     /// If the stash can't be made the checkout doesn't run: it would bring the
     /// changes along against the user's choice.
@@ -342,7 +326,7 @@ extension BranchesModel {
         in ctx: OperationContext
     ) async throws {
         if let current = currentTip.branch, hasChanges, let repository {
-            _ = try await repository.stash.createStashAndDropPreviousEntry(for: current, in: ctx)
+            _ = try await repository.stash.createStashEntry(taggedWith: current.name, in: ctx)
         }
         try await checkoutIgnoringChanges(branch, currentRemote: currentRemote, in: ctx)
     }

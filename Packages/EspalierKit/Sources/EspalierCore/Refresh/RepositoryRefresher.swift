@@ -659,17 +659,10 @@ func fetchHeadDate(_ gitDir: String) async -> Date?? {
     return .some(attributes[.modificationDate] as? Date)
 }
 
-/// The newest automatic stash entry per branch (`desktopEntries`), and the
-/// total.
+/// Every stash entry, newest first.
 @concurrent
 func stashSnapshot(_ repository: Repository) async throws -> StashSnapshot {
-    let result = try await getStashes(repository)
-    var entries: [String: StashEntry] = [:]
-    // Stash entries come newest first; the first per branch is its newest.
-    for entry in result.desktopEntries where entries[entry.branchName] == nil {
-        entries[entry.branchName] = entry
-    }
-    return StashSnapshot(entriesByBranch: entries, totalCount: result.stashEntryCount)
+    StashSnapshot(entries: try await getStashes(repository).entries)
 }
 
 /// The current branch's commits that aren't on its upstream, newest first.

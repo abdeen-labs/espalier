@@ -18,10 +18,6 @@ struct ClassificationContext: Sendable {
     /// fork offered.
     var hasAccountForRepository = false
 
-    /// The current branch has a stash entry: "Stash Changes and Continue"
-    /// isn't offered then.
-    var currentBranchHasStash = false
-
     /// The page in the user's GitHub settings for Espalier's OAuth app, for
     /// the repository's account, where an organization's access is
     /// requested.
@@ -114,18 +110,24 @@ enum ErrorClassifier {
         if let dugiteError, [.localChangesOverwritten, .mergeWithLocalChanges, .rebaseWithLocalChanges, .rebaseWithStagedChanges].contains(dugiteError),
            let retry = descriptor.retry, let record {
             let files = parseFilesToBeOverwritten(stderr)
-            let canStash = !context.currentBranchHasStash && retry.kind != .restoreStash && !context.isUnbornBranch
+            let canStash = retry.kind != .restoreStash && retry.kind != .applyStash && !context.isUnbornBranch
             return make(.localChangesOverwritten(files: files), canStash ? [.stashChangesAndRetry(record.id, retry)] : [])
         }
 
         // 5b. Untracked files are where a stash entry's files go, so nothing
-        // was restored. Stashing them can't help: the entry would replace the
-        // one being restored.
+        // was restored. Stashing them isn't offered, as for changes in a
+        // stash's way above.
         if let inTheWay = error as? StashFilesInTheWayError {
             return make(.localChangesOverwritten(files: inTheWay.files))
         }
 
-        // 5c. A rebase's state Espalier can't continue or abort, which git
+        // 5c. The stash entry was restored or dropped since it was listed, so
+        // nothing was done.
+        if let gone = error as? StashEntryNotFoundError {
+            return make(.precondition(gone.localizedDescription))
+        }
+
+        // 5d. A rebase's state Espalier can't continue or abort, which git
         // won't start a rebase over: "Clear Old Rebase and Continue" clears
         // it and runs the operation again. A rebase Espalier shows is the
         // default's: finish or abort it.

@@ -256,7 +256,7 @@ extension SuggestionsContent {
         )
     }
 
-    /// The primary suggestion: the branch's stash, else what the remote
+    /// The primary suggestion: the branch's stashes, else what the remote
     /// calls for. None until the repository's status, remotes, and refs
     /// have loaded: a repository just selected may have only what its
     /// sidebar indicator loaded, without its remotes, which would read as

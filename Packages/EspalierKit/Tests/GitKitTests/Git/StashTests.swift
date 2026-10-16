@@ -143,14 +143,17 @@ struct StashTests {
         }
     }
 
-    @Suite("dropDesktopStashEntry")
-    struct DropDesktopStashEntry {
-        @Test("does not fail when attempting to delete stash entry that doesn't exist")
+    // "does not fail when attempting to delete stash entry that doesn't
+    // exist": Espalier refuses, so the caller knows nothing was dropped.
+    @Suite("dropStashEntry")
+    struct DropStashEntry {
+        @Test("refuses to drop an entry that doesn't exist, and drops nothing")
         func missingEntry() async throws {
             let repository = try await setupRepositoryWithReadme()
             let doesNotExist = StashEntry(
                 name: "refs/stash@{4}",
                 branchName: "master",
+                message: "On master: !!Espalier<master>",
                 stashSha: "xyz",
                 files: .notLoaded,
                 tree: "xyz",
@@ -160,7 +163,10 @@ struct StashTests {
             try await generateTestStashEntry(repository, "master", true)
             try await generateTestStashEntry(repository, "master", true)
 
-            try await dropDesktopStashEntry(repository, doesNotExist.stashSha)
+            let error = await #expect(throws: StashEntryNotFoundError.self) {
+                try await dropStashEntry(repository, doesNotExist.stashSha)
+            }
+            #expect(error?.stashSha == "xyz")
             #expect(try await getStashes(repository).desktopEntries.count == 3)
         }
     }
@@ -226,7 +232,7 @@ struct StashTests {
                 #expect(stashAfter.desktopEntries.map(\.stashSha) == [entryToApply.stashSha])
 
                 // Once the conflict is dealt with, the caller drops it.
-                try await dropDesktopStashEntry(repository, entryToApply.stashSha)
+                try await dropStashEntry(repository, entryToApply.stashSha)
                 #expect(try await getStashes(repository).desktopEntries.isEmpty)
             }
         }
@@ -329,6 +335,166 @@ struct StashTests {
 
     // MARK: - Espalier
 
+    @Suite("every entry")
+    struct EveryEntry {
+        @Test("lists every entry, newest first, with git's message, and a branch for those with a marker")
+        func listsEveryEntry() async throws {
+            let repository = try await setupRepositoryWithReadme()
+            try await generateTestStashEntry(repository, "from-espalier", true)
+            try appendFile(POSIXPath.join(repository.path, "README.md"), generateString())
+            _ = try await git(["stash", "push", "-q"], repository.path, "test")
+            try appendFile(POSIXPath.join(repository.path, "README.md"), generateString())
+            try await stash(repository, "master", "!!GitHub_Desktop<from-desktop>")
+            try await generateTestStashEntry(repository, "master", false)
+
+            let stash = try await getStashes(repository)
+
+            #expect(stash.entries.map(\.name) == (0..<4).map { "refs/stash@{\($0)}" })
+            #expect(stash.entries.map(\.branchName) == [nil, "from-desktop", nil, "from-espalier"])
+            #expect(stash.entries[0].message == "On master: Should get filtered")
+            #expect(stash.entries[1].message == "On master: !!GitHub_Desktop<from-desktop>")
+            #expect(stash.entries[2].message.hasPrefix("WIP on master: "))
+            #expect(stash.entries[3].message == "On master: !!Espalier<from-espalier>")
+            #expect(stash.desktopEntries.map(\.stashSha) == [stash.entries[1].stashSha, stash.entries[3].stashSha])
+            let listed = try await git(["stash", "list", "--format=%H"], repository.path, "test").stdout
+            #expect(stash.entries.map(\.stashSha) == JSCompat.split(listed, "\n").filter { !$0.isEmpty })
+            #expect(try await getStashEntry(repository, stash.entries[2].stashSha) == stash.entries[2])
+            #expect(try await getStashEntry(repository, "0123456789abcdef0123456789abcdef01234567") == nil)
+        }
+    }
+
+    @Suite("applyStashEntry")
+    struct ApplyStashEntry {
+        @Test("applies an entry and keeps it, one made outside the app too", arguments: [true, false])
+        func appliesAndKeeps(madeByTheApp: Bool) async throws {
+            let repository = try await setupRepositoryWithReadme()
+            try await generateTestStashEntry(repository, "master", madeByTheApp)
+            let entry = try #require(try await getStashes(repository).entries.first)
+            #expect(entry.branchName == (madeByTheApp ? "master" : nil))
+            #expect(try await getStatusOrThrow(repository).workingDirectory.files.isEmpty)
+
+            #expect(try await applyStashEntry(repository, entry.stashSha) == .applied)
+
+            #expect(try await getStatusOrThrow(repository).workingDirectory.files.map(\.path) == ["README.md"])
+            #expect(try await getStashes(repository).entries == [entry])
+        }
+
+        @Test("applies an entry with conflicts and keeps it")
+        func conflicted() async throws {
+            let repository = try await setupRepositoryWithReadme()
+            try await generateTestStashEntry(repository, "master", false)
+            let entry = try #require(try await getStashes(repository).entries.first)
+            try appendFile(POSIXPath.join(repository.path, "README.md"), generateString())
+            _ = try await Dugite.exec(["commit", "-am", "later commit"], repository.path)
+
+            #expect(try await applyStashEntry(repository, entry.stashSha) == .conflicted)
+
+            let files = try await getStatusOrThrow(repository).workingDirectory.files
+            #expect(files.map(\.path) == ["README.md"])
+            #expect(files.first?.status.kind == .conflicted)
+            #expect(try await getStashes(repository).entries == [entry])
+        }
+
+        @Test("with local changes in the way, applies nothing and keeps the entry")
+        func changesInTheWay() async throws {
+            let repository = try await setupRepositoryWithReadme()
+            try await generateTestStashEntry(repository, "master", false)
+            let entry = try #require(try await getStashes(repository).entries.first)
+            let readme = POSIXPath.join(repository.path, "README.md")
+            try write(readme, "mine")
+
+            let error = await #expect(throws: GitError.self) {
+                try await applyStashEntry(repository, entry.stashSha)
+            }
+
+            #expect(error?.result.gitError == .mergeWithLocalChanges)
+            #expect(try read(readme) == "mine")
+            #expect(try await getStashes(repository).entries == [entry])
+        }
+
+        @Test("refuses an entry that's gone, though its commit is still there, and applies nothing")
+        func gone() async throws {
+            let repository = try await setupRepositoryWithReadme()
+            try await generateTestStashEntry(repository, "master", true)
+            let entry = try #require(try await getStashes(repository).entries.first)
+            _ = try await git(["stash", "drop", "-q"], repository.path, "test")
+
+            await #expect(throws: StashEntryNotFoundError.self) {
+                try await applyStashEntry(repository, entry.stashSha)
+            }
+            await #expect(throws: StashEntryNotFoundError.self) {
+                try await popStashEntry(repository, entry.stashSha)
+            }
+            #expect(try await getStatusOrThrow(repository).workingDirectory.files.isEmpty)
+        }
+    }
+
+    @Suite("acting on an entry after the list changed")
+    struct ShiftedEntries {
+        /// A repository with two entries, `first` (README.md with "first")
+        /// below `second` (notes.txt), and those entries as listed then.
+        private func makeTwoEntries() async throws -> (Repository, first: StashEntry, second: StashEntry) {
+            let repository = try await setupRepositoryWithReadme()
+            try write(POSIXPath.join(repository.path, "README.md"), "first\n")
+            try await stash(repository, "master", "first")
+            try write(POSIXPath.join(repository.path, "notes.txt"), "second\n")
+            _ = try await git(["add", "notes.txt"], repository.path, "test")
+            try await stash(repository, "master", "second")
+            let entries = try await getStashes(repository).entries
+            #expect(entries.map(\.message) == ["On master: second", "On master: first"])
+            return (repository, entries[1], entries[0])
+        }
+
+        /// The stash list's messages, newest first.
+        private func messages(_ repository: Repository) async throws -> [String] {
+            try await getStashes(repository).entries.map(\.message)
+        }
+
+        @Test("pops, applies, and drops the entry given after another was pushed on top")
+        func afterPush() async throws {
+            let (repository, first, _) = try await makeTwoEntries()
+            #expect(first.name == "refs/stash@{1}")
+            try write(POSIXPath.join(repository.path, "README.md"), "third\n")
+            try await stash(repository, "master", "third")
+
+            #expect(try await applyStashEntry(repository, first.stashSha) == .applied)
+            #expect(try read(POSIXPath.join(repository.path, "README.md")) == "first\n")
+            #expect(!FileManager.default.fileExists(atPath: POSIXPath.join(repository.path, "notes.txt")))
+            #expect(try await messages(repository) == ["On master: third", "On master: second", "On master: first"])
+            _ = try await git(["reset", "-q", "--hard"], repository.path, "test")
+
+            #expect(try await popStashEntry(repository, first.stashSha) == .popped)
+            #expect(try read(POSIXPath.join(repository.path, "README.md")) == "first\n")
+            #expect(try await messages(repository) == ["On master: third", "On master: second"])
+        }
+
+        @Test("pops, applies, and drops the entry given after the one above it was dropped")
+        func afterDrop() async throws {
+            let (repository, first, second) = try await makeTwoEntries()
+            #expect(first.name == "refs/stash@{1}")
+            try await dropStashEntry(repository, second.stashSha)
+            #expect(try await messages(repository) == ["On master: first"])
+
+            #expect(try await applyStashEntry(repository, first.stashSha) == .applied)
+            #expect(try read(POSIXPath.join(repository.path, "README.md")) == "first\n")
+            _ = try await git(["reset", "-q", "--hard"], repository.path, "test")
+            #expect(try await popStashEntry(repository, first.stashSha) == .popped)
+            #expect(try await messages(repository).isEmpty)
+        }
+
+        @Test("drops the entry given, not the one now at its old index")
+        func dropsItsOwn() async throws {
+            let (repository, first, second) = try await makeTwoEntries()
+            try write(POSIXPath.join(repository.path, "README.md"), "third\n")
+            try await stash(repository, "master", "third")
+
+            try await dropStashEntry(repository, second.stashSha)
+            #expect(try await messages(repository) == ["On master: third", "On master: first"])
+            try await dropStashEntry(repository, first.stashSha)
+            #expect(try await messages(repository) == ["On master: third"])
+        }
+    }
+
     @Suite("markers")
     struct Markers {
         @Test("recognizes the entries desktop created")
@@ -374,7 +540,7 @@ struct StashTests {
             #expect(try await createDesktopStashEntry(repository, branchName, []))
 
             let entry = try #require(try await getLastDesktopStashEntryForBranch(repository, branchName))
-            #expect(Array(entry.branchName.utf8) == Array(branchName.utf8))
+            #expect(entry.branchName.map { Array($0.utf8) } == Array(branchName.utf8))
             #expect(try await stashList(repository) == ["stash@{0}: On \(branchName): !!Espalier<\(branchName)>"])
             // The other normalization is another branch.
             #expect(try await getLastDesktopStashEntryForBranch(repository, branchName.decomposedStringWithCanonicalMapping) == nil)
@@ -506,7 +672,7 @@ struct StashTests {
             let second = try #require(entries.first { $0.branchName == "second" })
             #expect(second.name == "refs/stash@{2}")
 
-            try await dropDesktopStashEntry(repository, second.stashSha)
+            try await dropStashEntry(repository, second.stashSha)
 
             let after = try await getStashes(repository)
             #expect(after.desktopEntries.map(\.branchName) == ["third", "first"])
@@ -557,13 +723,18 @@ struct StashTests {
             #expect(try read(untracked) == "untracked contents")
         }
 
-        @Test("returns notFound when popping an entry that doesn't exist")
-        func popMissing() async throws {
+        @Test("refuses to move an entry that's gone, and creates nothing")
+        func moveMissing() async throws {
             let repository = try await setupRepositoryWithReadme()
-            try await generateTestStashEntry(repository, "master", false)
+            try appendFile(POSIXPath.join(repository.path, "README.md"), "tracked change")
+            try await createDesktopStashEntry(repository, "old-name", [])
+            let entry = try #require(try await getLastDesktopStashEntryForBranch(repository, "old-name"))
+            _ = try await git(["stash", "drop", "-q"], repository.path, "test")
 
-            #expect(try await popStashEntry(repository, "0123456789abcdef0123456789abcdef01234567") == .notFound)
-            #expect(try await getStashes(repository).stashEntryCount == 1)
+            await #expect(throws: StashEntryNotFoundError.self) {
+                try await moveStashEntry(repository, entry, "new-name")
+            }
+            #expect(try await getStashes(repository).stashEntryCount == 0)
         }
     }
 }

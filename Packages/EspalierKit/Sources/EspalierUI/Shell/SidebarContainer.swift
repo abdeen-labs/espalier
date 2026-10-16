@@ -87,7 +87,7 @@ struct SidebarContainer: View {
     }
 
     /// Double-click or Return on a place: check out a branch or pull
-    /// request, restore the current branch's stash.
+    /// request, restore a stash.
     private func primaryAction(_ places: Set<SidebarPlace>) {
         guard places.count == 1, let place = places.first, let repository = context.repository else {
             return
@@ -101,10 +101,8 @@ struct SidebarContainer: View {
             context.actions.perform(.checkoutBranch(name: match.name))
         case .pullRequest(let number):
             context.actions.perform(.checkoutPullRequest(number: number))
-        case .stash(let stashBranch):
-            if stashBranch == repository.gitState.tip.branch?.name {
-                context.actions.perform(.restoreStash(branch: stashBranch))
-            }
+        case .stash(let sha):
+            context.actions.perform(.restoreStash(sha: sha))
         case .changes, .history, .tag:
             break
         }
@@ -232,8 +230,8 @@ enum SidebarContextMenu {
                 PullRequestContextMenu.content(number: number, context: context)
             case .tag(let name):
                 TagContextMenu.content(name: name, context: context)
-            case .stash(let stashBranch):
-                StashContextMenu.content(branch: stashBranch, context: context)
+            case .stash(let sha):
+                StashContextMenu.content(sha: sha, context: context)
             }
         }
     }
@@ -300,6 +298,7 @@ struct SidebarRowLabel<Trailing: View>: View {
     private let systemImage: String
     private let isSelected: Bool
     private let isEmphasized: Bool
+    private let truncationMode: Text.TruncationMode
     private let trailing: Trailing
     @Environment(\.isSidebarRowSelected) private var isRowSelected
 
@@ -307,11 +306,22 @@ struct SidebarRowLabel<Trailing: View>: View {
     ///   - isSelected: Draws the row as selected; a row that selects a
     ///     place (`sidebarRow(_:)`) is also selected while its place is.
     ///   - isEmphasized: Semibold, as the current branch is.
-    init(_ title: String, systemImage: String, isSelected: Bool = false, isEmphasized: Bool = false, @ViewBuilder trailing: () -> Trailing = { EmptyView() }) {
+    ///   - truncationMode: Where a long title is cut: the middle for names
+    ///     (a branch's start and end both tell), the tail for text read
+    ///     from its start.
+    init(
+        _ title: String,
+        systemImage: String,
+        isSelected: Bool = false,
+        isEmphasized: Bool = false,
+        truncationMode: Text.TruncationMode = .middle,
+        @ViewBuilder trailing: () -> Trailing = { EmptyView() }
+    ) {
         self.title = title
         self.systemImage = systemImage
         self.isSelected = isSelected
         self.isEmphasized = isEmphasized
+        self.truncationMode = truncationMode
         self.trailing = trailing()
     }
 
@@ -327,7 +337,7 @@ struct SidebarRowLabel<Trailing: View>: View {
                 .font(SidebarRowFont.title(isSelected: isSelected, isEmphasized: isEmphasized))
                 .foregroundStyle(.sidebarRowText(isSelected: isSelected))
                 .lineLimit(1)
-                .truncationMode(.middle)
+                .truncationMode(truncationMode)
             Spacer(minLength: Metrics.grid)
             trailing
         }

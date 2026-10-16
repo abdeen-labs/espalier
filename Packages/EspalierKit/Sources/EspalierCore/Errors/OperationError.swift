@@ -432,6 +432,7 @@ extension OperationError {
         case .reorder: "reorder"
         case .discardChanges: "discard changes"
         case .restoreStash: "restore stashed changes"
+        case .applyStash: "apply stashed changes"
         default: "continue"
         }
     }

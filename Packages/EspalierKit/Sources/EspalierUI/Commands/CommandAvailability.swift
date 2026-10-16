@@ -85,7 +85,6 @@ struct CommandAvailability {
         case .changeAlias: return "\(capabilities.aliasTitle)…"
         case .openInTerminal: return capabilities.openInShellTitle
         case .openInEditor: return capabilities.openInEditorTitle
-        case .stashAllChanges: return capabilities.stashAllChangesTitle
         case .updateFromDefaultBranch: return capabilities.updateFromContributionTargetTitle
         case .toggleStashedChanges: return capabilities.toggleStashedChangesTitle
         case .createPullRequest: return capabilities.createPullRequestTitle

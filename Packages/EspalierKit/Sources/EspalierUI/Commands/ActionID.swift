@@ -151,8 +151,10 @@ nonisolated public enum ActionID: Sendable {
     case viewCommitOnGitHub(sha: String?)
 
     // MARK: Stashes
-    case restoreStash(branch: String?)
-    case discardStash(branch: String?)
+    /// A stash entry, by its commit's SHA.
+    case restoreStash(sha: String)
+    case applyStash(sha: String)
+    case discardStash(sha: String)
 
     // MARK: GitHub, accounts, and recoveries
     /// Signs in (device flow) to an endpoint (nil: GitHub.com), then runs
@@ -274,6 +276,7 @@ nonisolated public enum ActionID: Sendable {
         case .copySHA: .copySHA
         case .viewCommitOnGitHub: .viewCommitOnGitHub
         case .restoreStash: .restoreStash
+        case .applyStash: .applyStash
         case .discardStash: .discardStash
         case .signIn: .signIn
         case .createFork: .createFork
@@ -336,7 +339,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
     case commitChanges, generateCommitMessage, goToCommitMessage, toggleAmendLastCommit
     case undoCommit, resetToCommit, revertCommit, checkoutCommit, createBranchFromCommit, createTag, deleteTag
     case cherryPick, squash, reorder, copySHA, viewCommitOnGitHub
-    case restoreStash, discardStash
+    case restoreStash, applyStash, discardStash
     case signIn, createFork, reviewPushProtection, checkoutPullRequest, viewPullRequestOnGitHub
     case showConflicts, reviewChanges
     case runBenchmark, checkMenuShortcuts, postSampleNotification
@@ -438,6 +441,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .copySHA: "Copy SHA"
         case .viewCommitOnGitHub: "View on GitHub"
         case .restoreStash: "Restore"
+        case .applyStash: "Apply"
         case .discardStash: "Discard…"
         case .signIn: "Sign In…"
         case .createFork: "Fork This Repository…"

@@ -1,6 +1,6 @@
 // What Espalier draws as sheets, through the same mappings the hosts use:
 // the compact confirmations (with and without the extra choice), the
-// decision with the stash warning, the editor question, the prompts (a secret, a username and
+// decision, the editor question, the prompts (a secret, a username and
 // password, a failed hook's output), git's raw output (one line and a few,
 // with a note and a recovery) and output longer than the terminal, the
 // toast with Undo and without, the operation capsule running and waiting on
@@ -24,9 +24,9 @@ struct PresentationCaptures {
         capture(CompactConfirmationSheet(compact) { _ in }, named: name, area: "Confirmations")
     }
 
-    @Test("the decision sheet, with the stash warning")
+    @Test("the decision sheet")
     func decision() throws {
-        let name = "uncommittedChanges-stash"
+        let name = "uncommittedChanges"
         let decision = try #require(UIFixtures.decisions.first { $0.name == name }?.decision)
         capture(DecisionSheet(decision) { _ in }, named: name, area: "Decisions")
     }

@@ -22,8 +22,9 @@ nonisolated public enum SidebarPlace: Hashable, Sendable {
     case pullRequest(number: Int)
     /// A tag: History focused on its commit.
     case tag(name: String)
-    /// A branch's stash, by the branch's name.
-    case stash(branch: String)
+    /// A stash entry, by its commit's SHA: `stash@{n}` indices shift as
+    /// entries come and go.
+    case stash(sha: String)
 
     /// The kind of place, which names the inner split's autosave and sets
     /// its widths. History's places take History's `style`: the simple list

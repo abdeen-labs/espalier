@@ -82,12 +82,11 @@ struct CheckoutOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await repository.branches.checkout(try branch("feature", in: repository))
         }
-        #expect(error?.reason == .decisionRequired(.uncommittedChanges(currentBranch: "main", targetBranch: "feature", currentBranchHasStash: false)))
+        #expect(error?.reason == .decisionRequired(.uncommittedChanges(currentBranch: "main", targetBranch: "feature")))
         guard case .decisionRequired(let decision)? = error?.reason else {
             return
         }
         #expect(decision.choices.map(\.strategy) == [.stashOnCurrentBranch, .moveToNewBranch])
-        #expect(decision.choices.allSatisfy { $0.warning == nil })
         #expect(repository.gitState.tip.branch?.name == "main")
         await app.idle()
     }
@@ -105,7 +104,7 @@ struct CheckoutOperationTests {
         #expect(repository.changes.workingDirectory.files.isEmpty)
         #expect(try read("README.md", in: local) == featureReadme)
         #expect(try await stashList(local) == ["On main: !!Espalier<main>"])
-        #expect(repository.gitState.stashes.entriesByBranch["main"] != nil)
+        #expect(repository.gitState.stashes.entries(onBranch: "main").count == 1)
         #expect(repository.stash.current == nil)
 
         // Back on main, the stash is the branch's.
@@ -114,44 +113,29 @@ struct CheckoutOperationTests {
         await app.idle()
     }
 
-    @Test("replacing the current branch's stash asks first, then replaces it")
-    func overwriteStash() async throws {
+    @Test("leaving changes on a branch that has a stash adds another entry, asking nothing")
+    func leaveChangesBesideStash() async throws {
         let (harness, app, repository, local) = try await makeRepository()
         try harness.write("first.txt", "first\n", in: local)
         await repository.refresh(.status, reason: .user)
         #expect(try await repository.stash.stashAllChanges())
         await repository.refresh(.full, reason: .user)
-        #expect(repository.stash.current != nil)
+        let first = try #require(repository.stash.current)
 
         try harness.write("second.txt", "second\n", in: local)
         await repository.refresh(.status, reason: .user)
         let feature = try branch("feature", in: repository)
-        let error = await #expect(throws: OperationError.self) {
-            try await repository.branches.checkout(feature, strategy: .stashOnCurrentBranch)
-        }
-        #expect(error?.reason == .confirmationRequired(.overwriteStash(checkingOut: feature)))
+        #expect(try await repository.branches.checkout(feature, strategy: .stashOnCurrentBranch) == .checkedOut(feature))
+        #expect(try await stashList(local) == ["On main: !!Espalier<main>", "On main: !!Espalier<main>"])
+        #expect(try await runGit(["stash", "show", "--name-only", "stash@{0}"], local) == "second.txt\n")
+        #expect(try await runGit(["stash", "show", "--name-only", "stash@{1}"], local) == "first.txt\n")
 
-        // The ask strategy's decision warns about it.
-        let decision = await #expect(throws: OperationError.self) {
-            try await repository.branches.checkout(feature)
-        }
-        guard case .decisionRequired(let choice)? = decision?.reason else {
-            Issue.record("Unexpected error \(String(describing: decision))")
-            return
-        }
-        #expect(choice.choices.first?.warning != nil)
-        // Choosing to leave the changes, so warned, confirms replacing the
-        // stash: the checkout asks once.
-        #expect(choice.confirmations(answeredBy: .stashOnCurrentBranch) == [.overwriteStash])
-        #expect(choice.confirmations(answeredBy: .moveToNewBranch).isEmpty)
-        let unwarned = Decision.uncommittedChanges(currentBranch: "main", targetBranch: "feature", currentBranchHasStash: false)
-        #expect(unwarned.choices.first?.warning == nil)
-        #expect(unwarned.confirmations(answeredBy: .stashOnCurrentBranch).isEmpty)
-
-        #expect(try await repository.branches.checkout(feature, strategy: .stashOnCurrentBranch, confirmed: [.overwriteStash]) == .checkedOut(feature))
-        #expect(try await stashList(local) == ["On main: !!Espalier<main>"])
-        let stashedFiles = try await runGit(["stash", "show", "--name-only", "stash@{0}"], local)
-        #expect(stashedFiles == "second.txt\n")
+        // Back on main, the newest is the branch's current one.
+        let main = try branch("main", in: repository)
+        #expect(try await repository.branches.checkout(main) == .checkedOut(main))
+        #expect(repository.stash.currentEntries.count == 2)
+        #expect(repository.stash.currentEntries.last?.stashSha == first.stashSha)
+        #expect(repository.stash.current?.stashSha != first.stashSha)
         await app.idle()
     }
 

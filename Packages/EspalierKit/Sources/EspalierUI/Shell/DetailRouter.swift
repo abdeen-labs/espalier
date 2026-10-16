@@ -24,7 +24,7 @@ nonisolated public enum DetailDestination: Sendable, Equatable {
     /// History, a branch (the current one, or Compare), or a tag.
     case history(RepositoryID, SidebarPlace)
     case pullRequest(RepositoryID, number: Int)
-    case stash(RepositoryID, branch: String)
+    case stash(RepositoryID, sha: String)
 }
 
 extension DetailDestination {
@@ -57,7 +57,7 @@ extension DetailDestination {
             case .branch(let ref): return .history(id, .branch(ref: ref))
             case .tag(let name): return .history(id, .tag(name: name))
             case .pullRequest(let number): return .pullRequest(id, number: number)
-            case .stash(let branch): return .stash(id, branch: branch)
+            case .stash(let sha): return .stash(id, sha: sha)
             }
         }
     }
@@ -107,9 +107,9 @@ struct DetailRouter: View {
             if let repository = app.repository(id) {
                 PullRequestScreen(repository: repository, number: number)
             }
-        case .stash(let id, let branch):
+        case .stash(let id, let sha):
             if let repository = app.repository(id) {
-                StashScreen(repository: repository, branch: branch)
+                StashScreen(repository: repository, sha: sha)
             }
         }
     }

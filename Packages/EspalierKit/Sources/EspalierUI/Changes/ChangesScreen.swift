@@ -105,7 +105,7 @@ struct ChangesColumn: View {
             ChangesFooter(repository: repository, layout: footer)
         }
         .barMotion(footer.showsHiddenNote)
-        .barMotion(footer.showsStash)
+        .barMotion(footer.stashCount > 0)
         .barMotion(footer.isAmending)
         .motion(footer.bottom == .none ? Motion.leave : Motion.arrive, value: footer.bottom)
         // The Last Commit row grows in after a commit, unless that commit
@@ -132,7 +132,9 @@ struct ChangesFooterLayout: Equatable {
     }
 
     var showsHiddenNote: Bool
-    var showsStash: Bool
+    /// How many stashes the current branch has: the "Stashed Changes" row
+    /// shows when it has any.
+    var stashCount: Int
     var bottom: Bottom
     var isAmending: Bool
     /// The composer's Last Commit row (Undo), after a commit.
@@ -159,7 +161,7 @@ struct ChangesFooterLayout: Equatable {
         let hasLastCommit = commit.mostRecentLocalCommit.map { $0.sha == commit.undoableCommitSHA } ?? false
         return ChangesFooterLayout(
             showsHiddenNote: !repository.changes.includedFilesHiddenByFilter.isEmpty,
-            showsStash: repository.stash.current != nil,
+            stashCount: repository.stash.currentEntries.count,
             bottom: bottom,
             isAmending: bottom == .composer && commit.amending != nil,
             showsLastCommit: bottom == .composer && hasLastCommit
@@ -167,9 +169,9 @@ struct ChangesFooterLayout: Equatable {
     }
 }
 
-/// The header's context menu: Discard All Changes… and Stash All
-/// Changes(…), as the Repository menu has them; none while a commit runs
-/// or a rebase waits on conflicts.
+/// The header's context menu: Discard All Changes… and Stash All Changes,
+/// as the Repository menu has them; none while a commit runs or a rebase
+/// waits on conflicts.
 enum ChangesHeaderMenu {
     @MenuBuilder
     static func content(repository: RepositoryModel, context: WindowContext) -> MenuContent {
@@ -209,10 +211,10 @@ struct ChangesFooter: View {
                 }
                 .barTransition()
             }
-            if layout.showsStash {
+            if layout.stashCount > 0 {
                 VStack(spacing: 0) {
                     Hairline()
-                    StashedChangesRow {
+                    StashedChangesRow(count: layout.stashCount) {
                         context.actions.perform(.toggleStashedChanges)
                     }
                 }

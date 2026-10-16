@@ -269,7 +269,6 @@ extension RepositoryModel {
         let account = app?.accounts.account(for: record)
         context.hasAccountForRepository = account != nil
         context.applicationSettingsURL = account.flatMap(GitHubWebURLs.applicationSettings(for:))
-        context.currentBranchHasStash = stash.current != nil
         if case .unborn = gitState.tip {
             context.isUnbornBranch = true
         }

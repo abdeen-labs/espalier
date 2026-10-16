@@ -165,8 +165,8 @@ nonisolated public enum FileContextMenuContent {
         return FileMenuItem(ignoreItem.title, isEnabled: ignoreItem.isEnabled, submenu: ignoreItem.submenu.map(item(for:)))
     }
 
-    /// The header's items: Discard All Changes… and Stash All Changes(…),
-    /// as the Repository menu labels and enables them.
+    /// The header's items: Discard All Changes… and Stash All Changes, as
+    /// the Repository menu labels and enables them.
     @MainActor
     public static func headerItems(actions: WindowActions) -> [ChangesHeaderMenuItem] {
         [ActionID.discardAllChanges, .stashAllChanges].map { action in

@@ -145,9 +145,6 @@ public struct RepositoryCapabilities: Sendable, Equatable {
     /// "Open in <Editor>", or "Open in External Editor" with a custom
     /// editor or none known.
     public let openInEditorTitle: String
-    /// "Stash All Changes…" when the current branch's stash would be
-    /// replaced (asked first), else "Stash All Changes".
-    public let stashAllChangesTitle: String
     /// "Update from <target>", the target truncated to 25 characters
     /// ("Update from Default Branch" when unknown).
     public let updateFromContributionTargetTitle: String
@@ -412,8 +409,6 @@ extension RepositoryCapabilities {
         aliasTitle = state.alias == nil ? "Create Alias" : "Change Alias"
         openInShellTitle = "Open in \(state.shellLabel ?? "Shell")"
         openInEditorTitle = "Open in \(state.editorLabel ?? "External Editor")"
-        let askForConfirmationWhenStashingAllChanges = repositoryState.map { $0.tip.isValidBranch && $0.hasStash } ?? true
-        stashAllChangesTitle = askForConfirmationWhenStashingAllChanges ? "Stash All Changes…" : "Stash All Changes"
         contributionTargetDefaultBranch = repositoryState?.contributionTargetDefaultBranch
         let targetName = contributionTargetDefaultBranch?.name ?? "Default Branch"
         updateFromContributionTargetTitle = "Update from \(truncateWithEllipsis(targetName, 25))"

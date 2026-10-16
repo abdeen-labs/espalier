@@ -249,16 +249,11 @@ struct ErrorClassifierTests {
         #expect(error.recoveries.map(\.kind) == [.stashChangesAndRetry])
     }
 
-    @Test("5. no stash is offered when the branch has one, or when restoring a stash")
-    func localChangesOverwrittenWithoutStash() async {
-        var context = ClassificationContext()
-        context.currentBranchHasStash = true
-        let withStash = await classify(gitError(localChangesStderr), kind: .checkoutBranch, retry: FakeRetry(.checkoutBranch), context: context)
-        #expect(withStash.reason == .localChangesOverwritten(files: ["README.md", "src/app.swift"]))
-        #expect(withStash.recoveries.isEmpty)
-
-        let restoring = await classify(gitError(localChangesStderr), kind: .restoreStash, retry: FakeRetry(.restoreStash))
-        #expect(restoring.recoveries.isEmpty)
+    @Test("5. no stash is offered when restoring or applying a stash", arguments: [OperationKind.restoreStash, .applyStash])
+    func localChangesOverwrittenWithoutStash(kind: OperationKind) async {
+        let error = await classify(gitError(localChangesStderr), kind: kind, retry: FakeRetry(kind))
+        #expect(error.reason == .localChangesOverwritten(files: ["README.md", "src/app.swift"]))
+        #expect(error.recoveries.isEmpty)
     }
 
     @Test("5. without a retry, local changes that would be overwritten are a git error")
@@ -289,7 +284,17 @@ struct ErrorClassifierTests {
         #expect(error.recoveries.isEmpty)
     }
 
-    @Test("5c. a rebase's state Espalier can't continue or abort offers to clear it and continue; one it shows doesn't")
+    @Test("5c. a stash entry gone since it was listed is refused, with nothing offered")
+    func stashEntryGone() async {
+        let error = await classify(StashEntryNotFoundError(stashSha: "abc"), kind: .applyStash, retry: FakeRetry(.applyStash))
+        guard case .precondition = error.reason else {
+            Issue.record("Unexpected reason \(error.reason)")
+            return
+        }
+        #expect(error.recoveries.isEmpty)
+    }
+
+    @Test("5d. a rebase's state Espalier can't continue or abort offers to clear it and continue; one it shows doesn't")
     func leftoverRebase() async {
         let stderr = """
             fatal: It seems that there is already a rebase-merge directory, and
