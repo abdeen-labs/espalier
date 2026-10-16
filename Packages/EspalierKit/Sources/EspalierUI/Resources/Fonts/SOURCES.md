@@ -9,5 +9,3 @@ Unmodified files, as downloaded on 2026-10-11. All SIL OFL 1.1.
 | atkinson-hyperlegible-next | AtkinsonHyperlegibleNext[wght].ttf, -Italic[wght].ttf | 2.001 | github.com/google/fonts, ofl/atkinsonhyperlegiblenext | ATKINSON, HYPERLEGIBLE |
 | atkinson-hyperlegible-mono | AtkinsonHyperlegibleMono[wght].ttf | 2.001 | github.com/google/fonts, ofl/atkinsonhyperlegiblemono | ATKINSON, HYPERLEGIBLE |
 | martian-grotesk | MartianGrotesk[wdth,wght].ttf | 1.100 | github.com/evilmartians/grotesk, fonts/variable | none |
-
-Note: the Atkinson Hyperlegible Mono variable font's default instance is ExtraLight (wght 200); set the weight explicitly.

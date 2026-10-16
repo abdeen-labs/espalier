@@ -60,7 +60,6 @@ extension SyncModel {
         await refreshGitHubRepositoryIfNeeded()
         let descriptor = OperationDescriptor(kind: .fetchRefspec, lanes: [.network], refreshAfter: .full)
         try await repository.perform(descriptor) { ctx in
-            // TODO: we should favour origin here
             let remotes = try await getRemotes(ctx.repository)
             var firstError: (any Error)?
             for remote in remotes {

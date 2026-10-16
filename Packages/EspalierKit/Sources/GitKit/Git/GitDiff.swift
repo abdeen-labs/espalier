@@ -622,8 +622,6 @@ private func getImageDiff(
 
         // File status can't be conflicted for a file in a commit
         if file.status.kind != .new, file.status.kind != .untracked, file.status.kind != .deleted {
-            // TODO: commitish^ won't work for the first commit
-            //
             // If we have file.oldPath that means it's a rename so we'll
             // look for that file.
             //

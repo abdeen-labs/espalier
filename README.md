@@ -7,8 +7,6 @@ branches, merges and rebases, pull requests, and GitHub sign-in. It also
 supports AI commit messages and merge conflict resolution through AI providers
 you configure with your own keys.
 
-Espalier is in early development. See [docs/PROGRESS.md](docs/PROGRESS.md).
-
 ## Requirements
 
 - macOS 27 or later on Apple silicon
@@ -18,7 +16,7 @@ Espalier is in early development. See [docs/PROGRESS.md](docs/PROGRESS.md).
 
 Espalier bundles its own copy of Git (with Git LFS and Git Credential Manager)
 from desktop's [dugite-native](https://github.com/desktop/dugite-native)
-releases. It never uses the system's Git. Install the pinned build once:
+releases. Install the pinned build once:
 
 ```bash
 scripts/fetch-git.sh

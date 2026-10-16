@@ -40,9 +40,6 @@ Vendor/git/                  The bundled git (gitignored, installed by scripts/f
 docs/                        What's left, design.
 ```
 
-Desktop's fixture repositories store nested `.git` folders as `_git`, renamed
-during setup.
-
 Reference source, shared by every session and worktree:
 
 - `/tmp/espalier-ref/desktop`: desktop at release-3.6.7-beta2.
@@ -53,22 +50,18 @@ and `git clone https://github.com/desktop/dugite.git /tmp/espalier-ref/dugite`.
 
 ## Commands
 
-Run `scripts/fetch-git.sh` once in every new checkout or worktree. It installs
-`Vendor/git` from a local cache, so after the first download it is instant.
+Run `scripts/fetch-git.sh` once in every new checkout or worktree.
 
 ```bash
 scripts/fetch-git.sh
 ```
 
-Package build and tests (all real code lives here):
+Package build and tests:
 
 ```bash
 cd Packages/EspalierKit && swift build
 cd Packages/EspalierKit && swift test
 ```
-
-`swift test --skip-build` needs every test bundle built first
-(`swift build --build-tests`).
 
 Captures draw Espalier's views offscreen to PNGs, in light and dark, to
 look at with the Read tool. `scripts/capture.sh` writes every capture, or
@@ -81,16 +74,11 @@ skips them.
 scripts/capture.sh --look pop-tangerine Gallery
 ```
 
-App build, then verify the embedded git and the signature:
+App build:
 
 ```bash
 xcodebuild -project Espalier.xcodeproj -scheme Espalier -configuration Debug -derivedDataPath DerivedData build
-DerivedData/Build/Products/Debug/Espalier.app/Contents/Resources/git/bin/git --version
-codesign --verify --deep --strict DerivedData/Build/Products/Debug/Espalier.app
 ```
-
-Tests find git through `ESPALIER_GIT_DIR`, else the nearest `Vendor/git` in a
-parent directory of the package. The app uses `Contents/Resources/git`.
 
 Performance tests are opt-in and need a large clone: clone microsoft/vscode
 into `/tmp/espalier-ref/vscode`, run `ESPALIER_PERF_REPO=/tmp/espalier-ref/vscode
@@ -254,6 +242,5 @@ My rule: rigor where a mistake hurts users, not everywhere.
   - EspalierCore and EspalierUI enable `NonisolatedNonsendingByDefault`.
     EspalierUI also defaults to main-actor isolation.
 - Values crossing module boundaries are `Sendable` structs and enums.
-- File names must be unique within a module.
 - Log with `Log.logger(category:)` from EspalierSupport. Never log tokens,
   keys, passwords, or file contents.
