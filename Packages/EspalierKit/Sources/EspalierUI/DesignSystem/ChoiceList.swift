@@ -1,5 +1,5 @@
 // A choice between a few options, each with a line about it: rows with
-// radius 9, the chosen one in `accent soft` with a filled radio mark.
+// the row radius, the chosen one in `accent soft` with a filled radio mark.
 // Sheets use it where a radio group would list choices with descriptions
 // (Switch Branch's decision, New Branch's base). It's one stop in the key
 // view loop, with the focus ring around the chosen row; the up and down

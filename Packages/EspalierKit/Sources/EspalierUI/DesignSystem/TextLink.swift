@@ -1,11 +1,11 @@
-// Espalier's links: the accent (`Palette.link`, deepened just enough to read
-// as text) in the text's own font and weight, underlined while the pointer
-// is over them, dimmed while pressed, with the pointing hand. Three forms
-// share the look: `.textLink`, a button style for actions that read as links
-// ("Skip This Step"); `TextLink`, a link to a URL, which opens it through the
-// environment's `openURL` as every link in Espalier does; and `LinkedText`,
-// text with links in it (Markdown, `AttributedString` links), whose links
-// take the color and underline while the pointer is over the text. With the
+// Espalier's links: the link color (`Palette.link`) in the text's own font
+// and weight, underlined while the pointer is over them, dimmed while
+// pressed, with the pointing hand. Three forms share the look: `.textLink`,
+// a button style for actions that read as links ("Skip This Step");
+// `TextLink`, a link to a URL, which opens it through the environment's
+// `openURL` as every link in Espalier does; and `LinkedText`, text with
+// links in it (Markdown, `AttributedString` links), whose links take the
+// color and underline while the pointer is over the text. With the
 // Underline links setting, text that underlines its links keeps them
 // underlined.
 

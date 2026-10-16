@@ -1,6 +1,5 @@
 // Monograms, Espalier's avatar everywhere a real one isn't loaded: the
-// person's initials on their own color, a hue from their email, never the
-// system's gray gradient.
+// person's initials on their own color, a hue from their email.
 
 import AppKit
 import SwiftUI
@@ -57,20 +56,18 @@ nonisolated public enum Monogram {
         shade(hue(name: name, email: email), tone: Theme.current.monogramTone, isDark: variant.isDark)
     }
 
-    /// `hue` at Classic's saturation and lightness, or at `tone`'s,
-    /// deepened until white initials reach 3:1.
+    /// `hue` at Classic's saturation and lightness, or at `tone`'s.
     static func shade(_ hue: CGFloat, tone: MonogramTone?, isDark: Bool) -> NSColor {
         guard let tone else {
             return isDark
                 ? hsl(hue, saturation: 0.35, lightness: 0.42)
                 : hsl(hue, saturation: 0.45, lightness: 0.55)
         }
-        let color = hsl(
+        return hsl(
             hue,
             saturation: isDark ? tone.saturation.dark : tone.saturation.light,
             lightness: isDark ? tone.lightness.dark : tone.lightness.light
         )
-        return ColorContrast.adjust(color, toReach: 3, against: .white)
     }
 
     /// An sRGB color from hue, saturation, and lightness, each 0 to 1.

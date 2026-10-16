@@ -32,9 +32,7 @@ nonisolated extension ThemeDefinition {
             raisedRing: .espalierDynamic(light: NSColor.hex(0x142D1E, alpha: 0.05), dark: NSColor.white.withAlphaComponent(0.05)),
             text: ThemeColor.text(0x16201B, 0xE8EEEA),
             text2: ThemeColor.text2(0x55625B, 0xA2AFA7),
-            // Tertiary text reaches 3:1 on the backdrop (the sidebar's
-            // section labels and counts).
-            text3: ThemeColor.text3(0x7A8880, 0x6D7A73, text2: (0x55625B, 0xA2AFA7)),
+            text3: ThemeColor.text3(0x909E96, 0x6D7A73, text2: (0x55625B, 0xA2AFA7)),
             accent: palette.accent,
             linkBase: palette.ink,
             accentSoftAlpha: palette.selectionAlpha,
@@ -74,8 +72,7 @@ nonisolated private struct IslandsColor {
     let ink: NSColor
     let prominent: NSColor
     let selectionAlpha: (light: CGFloat, dark: CGFloat)
-    /// Selected text's wash, light enough that secondary text on it in a
-    /// field keeps 4.5:1.
+    /// Selected text's wash.
     let textSelectionAlpha: (light: CGFloat, dark: CGFloat)
     let sidebarSelection: NSColor
     let sidebarSelectionText: NSColor
@@ -109,7 +106,6 @@ nonisolated private struct IslandsColor {
             textSelectionAlpha = (0.14, 0.20)
             sidebarSelection = ThemeColor.wash(.hex(0xB8255F), 0.12, .hex(0xF07AA8), 0.16)
             sidebarSelectionText = ThemeColor.fixed(0x8E1C4C, 0xF7AECB)
-            // Deletions turn vermilion, so they don't read as the accent.
             delete = ThemeColor.fixed(0xBF4513, 0xF2966A)
             trunk = Self.mint
             tones = [.orange, .indigo, .violet]

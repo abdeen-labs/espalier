@@ -145,8 +145,9 @@ struct SettingsHeader: View {
 }
 
 /// The sidebar: the eight panes as the main window's sidebar draws its
-/// places, rows 28 high with radius 9, the selected one in the neutral wash
-/// with its symbol in the accent. It's one stop in the key view loop: the
+/// places, rows 28 high with the row radius, the selected one in the
+/// sidebar's selection with its symbol in the theme's selection symbol
+/// color. It's one stop in the key view loop: the
 /// up and down arrows choose a pane. Like the main window's sidebar, it
 /// draws no ring while it has focus. VoiceOver reads each row as a button,
 /// the chosen one selected.

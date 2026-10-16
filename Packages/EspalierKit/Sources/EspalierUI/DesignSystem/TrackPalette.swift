@@ -1,5 +1,4 @@
-// The colors of branches. Branch colors appear only where branches do:
-// sidebar dots, the graph, and ref tags.
+// The colors of branches: sidebar dots, the graph, and ref tags.
 
 import AppKit
 import SwiftUI
@@ -7,16 +6,14 @@ import SwiftUI
 /// The colors of the history graph's tracks, in the current theme.
 ///
 /// The current branch's track takes the accent color; the trunk (track 0,
-/// the default branch's line) is the theme's default-branch color, Classic's
-/// teal. Other tracks take the theme's tones (Classic's are pink, violet,
-/// orange, green, indigo, and cyan, without the entry nearest the accent's
-/// hue, so no branch is mistaken for the current one). Red and yellow are
-/// left out: they read as errors and warnings. A
-/// track a local branch starts takes that branch's color (`BranchColors`),
-/// so a line, its branch's tag, and its sidebar dot agree; other tracks
-/// take entry `(t − 1) mod count` of the entries no branch has. Colors
-/// follow the engine's tracks, so a line of development keeps its color as
-/// lanes are reused.
+/// the default branch's line) is the theme's default-branch color,
+/// Classic's teal. Other tracks take the theme's tones (Classic's are pink,
+/// violet, orange, green, indigo, and cyan, without the entry nearest the
+/// accent's hue). A track a local branch starts takes that branch's color
+/// (`BranchColors`), so a line, its branch's tag, and its sidebar dot
+/// agree; other tracks take entry `(t − 1) mod count` of the entries no
+/// branch has. Colors follow the engine's tracks, so a line of development
+/// keeps its color as lanes are reused.
 public enum TrackPalette {
     /// A branch color: a hue each theme gives its own shade
     /// (`Theme.toneColors`).
@@ -46,7 +43,7 @@ public enum TrackPalette {
     /// skipped.
     nonisolated public static let tones: [Tone] = [.pink, .violet, .orange, .green, .indigo, .cyan]
 
-    /// The default branch's color: Classic's teal.
+    /// The default branch's color: the current theme's trunk.
     nonisolated public static var trunk: NSColor {
         Theme.current.trunk
     }
@@ -100,8 +97,7 @@ public enum TrackPalette {
         return color(of: palette[BranchColors.index(of: name, count: palette.count)])
     }
 
-    /// A tone as lines, dots, and tags draw it in the current theme: 3:1
-    /// against the content background (4.5:1 under Increase Contrast).
+    /// A tone as lines, dots, and tags draw it in the current theme.
     public static func color(of tone: Tone) -> NSColor {
         Theme.current.color(of: tone)
     }

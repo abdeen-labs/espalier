@@ -5,7 +5,7 @@
 // defined in its own file (ClassicTheme.swift, OrchardTheme.swift,
 // IslandsTheme.swift, PopTheme.swift) from a `ThemeDefinition`, which a
 // background tint re-hues (BackgroundTints.swift); the colors and marks
-// derived from it (readable status colors, diff tints, branch colors) are
+// derived from it (status colors, diff tints, branch colors) are
 // worked out once per theme, color, and tint.
 
 import AppKit
@@ -90,7 +90,7 @@ nonisolated public final class Theme: Sendable {
 
     // MARK: Link and status
 
-    /// Links: deepened just enough to read as text.
+    /// Links: the theme's link color, else the accent.
     public let link: NSColor
     /// Additions and new files.
     public let add: NSColor
@@ -115,13 +115,13 @@ nonisolated public final class Theme: Sendable {
 
     /// The diff's line and change tints, markers, and find match.
     public let diff: DiffTints
-    /// What syntax tokens start from, by style, before they're made to
-    /// read; a style missing here starts from its system tone.
+    /// Syntax tokens' colors, by style; a style missing here is its system
+    /// tone.
     public let syntaxColors: [TokenStyle: NSColor]
 
     // MARK: Branches
 
-    /// The default branch's color (the graph's trunk), readable as a mark.
+    /// The default branch's color (the graph's trunk).
     public let trunk: NSColor
     /// The other branches' colors, in the order they're handed out.
     public let tones: [TrackPalette.Tone]
@@ -226,22 +226,16 @@ nonisolated public final class Theme: Sendable {
             // White, but on a near-white accent, where it wouldn't show.
             ColorContrast.ratio(.white, accent.resolved(in: variant)) >= Theme.onAccentWhiteMinimum ? .white : background.resolved(in: variant)
         }
-        let linkBase = definition.linkBase ?? accent
-        link = NSColor.espalierDynamic { variant in
-            ColorContrast.adjust(linkBase.resolved(in: variant), toReach: variant.isHighContrast ? 6 : 4.5, against: background.resolved(in: variant))
-        }
+        link = definition.linkBase ?? accent
 
         add = definition.add
         delete = definition.delete
         modified = definition.modified
         renamed = definition.renamed
-        func readable(_ color: NSColor, _ contrast: Double, tint: (light: CGFloat, dark: CGFloat)? = nil) -> NSColor {
-            Palette.readable(color, minimumContrast: contrast, tint: tint, background: background)
-        }
-        warning = readable(definition.modified, 4.5)
-        error = readable(definition.delete, 4.5)
-        success = readable(definition.add, 3)
-        warningMark = readable(definition.modified, 3)
+        warning = definition.modified
+        error = definition.delete
+        success = definition.add
+        warningMark = definition.modified
 
         let statusColors: [FileStatusKind: NSColor] = Dictionary(uniqueKeysWithValues: FileStatusKind.allCases.map { kind in
             let color: NSColor = switch kind {
@@ -254,7 +248,7 @@ nonisolated public final class Theme: Sendable {
         })
         switch definition.statusBadge.fill {
         case .tinted:
-            statusForegrounds = statusColors.mapValues { readable($0, 4.5, tint: Palette.statusTint) }
+            statusForegrounds = statusColors
             statusBackgrounds = statusColors.mapValues { Palette.tint($0, light: Palette.statusTint.light, dark: Palette.statusTint.dark) }
         case .solid:
             statusBackgrounds = statusColors.mapValues { color in
@@ -267,19 +261,19 @@ nonisolated public final class Theme: Sendable {
             }
         }
         checksColors = [
-            .success: readable(definition.add, 3),
-            .failure: readable(definition.delete, 3),
-            .pending: readable(definition.modified, 3),
+            .success: definition.add,
+            .failure: definition.delete,
+            .pending: definition.modified,
             .neutral: definition.text2,
         ]
 
-        diff = DiffTints(add: definition.add, delete: definition.delete, modified: definition.modified, accent: accent, background: background)
+        diff = DiffTints(add: definition.add, delete: definition.delete, modified: definition.modified, accent: accent)
         syntaxColors = definition.syntaxColors
 
-        trunk = readable(definition.trunk, 3)
+        trunk = definition.trunk
         tones = definition.tones
         toneColors = Dictionary(uniqueKeysWithValues: definition.tones.map { tone in
-            (tone, readable(definition.toneColors[tone] ?? tone.color, 3))
+            (tone, definition.toneColors[tone] ?? tone.color)
         })
         skipsToneNearestAccent = definition.skipsToneNearestAccent
 
@@ -309,7 +303,7 @@ nonisolated public final class Theme: Sendable {
 
     /// A tone's color as lines, dots, and tags draw it in this theme.
     func color(of tone: TrackPalette.Tone) -> NSColor {
-        toneColors[tone] ?? Palette.readable(tone.color, minimumContrast: 3, background: background)
+        toneColors[tone] ?? tone.color
     }
 
     /// White or `dark` on `fill`, whichever reads better.
@@ -444,7 +438,7 @@ nonisolated public struct RefTagStyle: Sendable, Equatable {
     public enum Fill: Sendable, Equatable {
         /// The branch's color at an alpha, the text in it, mixed toward
         /// `ink` (light) or white (dark) by the fraction given; nil keeps
-        /// the branch's color, readable (Classic).
+        /// the branch's color (Classic).
         case tinted(alpha: (light: CGFloat, dark: CGFloat), textMix: (light: CGFloat, dark: CGFloat)?, ink: UInt32)
         /// The branch's color, solid: deepened by `darken` with white text
         /// in light, as it is with dark text in dark.
@@ -516,7 +510,7 @@ nonisolated public struct ButtonWeights: Sendable, Equatable {
 }
 
 /// Monograms' colors: the person's hue at a saturation and lightness, in
-/// light and dark, then deepened until white initials reach 3:1.
+/// light and dark.
 nonisolated public struct MonogramTone: Sendable, Equatable {
     public var saturation: (light: CGFloat, dark: CGFloat)
     public var lightness: (light: CGFloat, dark: CGFloat)
@@ -577,8 +571,7 @@ nonisolated struct ThemeDefinition: Sendable {
     var delete: NSColor
     var modified: NSColor
     var renamed: NSColor
-    /// Syntax tokens' starting colors; a style missing here is the system
-    /// tone's.
+    /// Syntax tokens' colors; a style missing here is its system tone.
     var syntaxColors: [TokenStyle: NSColor] = [:]
 
     var trunk: NSColor

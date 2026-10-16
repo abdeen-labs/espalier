@@ -33,7 +33,6 @@ nonisolated extension ThemeDefinition {
             accent: palette.accent,
             linkBase: palette.ink,
             accentSoftAlpha: palette.selectionAlpha,
-            // Secondary text keeps 4.5:1 on it, in a field too.
             textSelectionAlpha: (0.15, 0.18),
             prominent: palette.prominent,
             prominentText: palette.prominentText,
@@ -137,7 +136,6 @@ nonisolated private struct PopColor {
             sidebarSelection = ThemeColor.wash(.hex(0xC2247E), 0.13, .hex(0xF062B0), 0.17)
             sidebarSelectionText = ThemeColor.fixed(0x941A60, 0xF8A6D2)
             sidebarSelectionIcon = ThemeColor.fixed(0xC2247E, 0xF062B0)
-            // Deletions turn vermilion, so they don't read as the accent.
             delete = ThemeColor.fixed(0xC2410C, 0xFF9A6E)
             toneColors[.indigo] = Self.blue
             tones = [.orange, .indigo, .cyan]
@@ -158,8 +156,6 @@ nonisolated private struct PopColor {
                 highContrastLight: .hex(0x8F3305), highContrastDark: .hex(0xFFB386)
             )
             sidebarSelectionIcon = ThemeColor.fixed(0xE5560D, 0xFF8A47)
-            // Deletions move to a raspberry red, so they don't read as the
-            // accent.
             delete = ThemeColor.fixed(0xC8264E, 0xFF8AA5)
             tones = [.indigo, .pink, .cyan, .violet]
         }

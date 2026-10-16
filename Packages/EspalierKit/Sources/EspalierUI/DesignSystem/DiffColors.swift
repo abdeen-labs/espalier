@@ -1,7 +1,5 @@
 // The diff's colors. Line and word tints are the theme's add and delete
-// colors with alpha; Increase Contrast multiplies them by 1.6. Color never
-// stands alone: the gutter always shows "+" and "−", and a line left out of
-// the commit fades.
+// colors with alpha; Increase Contrast multiplies them by 1.6.
 
 import AppKit
 import SwiftUI
@@ -23,9 +21,9 @@ nonisolated public struct DiffTints: Sendable {
     /// A deleted line left out of the commit: a faint delete, 2.5% (4% in
     /// dark).
     public let excludedDeletedLine: NSColor
-    /// The "+" marker: add, 4.5:1 on an added line.
+    /// The "+" marker: add.
     public let addedMarker: NSColor
-    /// The "−" marker: delete, 4.5:1 on a deleted line.
+    /// The "−" marker: delete.
     public let deletedMarker: NSColor
     /// The current find match: the accent at 32% (45% in dark), as the text
     /// selection it becomes when find closes.
@@ -33,15 +31,15 @@ nonisolated public struct DiffTints: Sendable {
     /// Conflict marker rows (`<<<<<<<`, `=======`, `>>>>>>>`).
     public let conflictMarker: NSColor
 
-    init(add: NSColor, delete: NSColor, modified: NSColor, accent: NSColor, background: NSColor) {
+    init(add: NSColor, delete: NSColor, modified: NSColor, accent: NSColor) {
         addedLine = Palette.tint(add, light: 0.075, dark: 0.08)
         addedChange = Palette.tint(add, light: 0.20, dark: 0.20)
         deletedLine = Palette.tint(delete, light: 0.065, dark: 0.08)
         deletedChange = Palette.tint(delete, light: 0.18, dark: 0.18)
         excludedAddedLine = Palette.tint(add, light: 0.03, dark: 0.04)
         excludedDeletedLine = Palette.tint(delete, light: 0.025, dark: 0.04)
-        addedMarker = Palette.readable(add, minimumContrast: 4.5, tint: (0.075, 0.08), background: background)
-        deletedMarker = Palette.readable(delete, minimumContrast: 4.5, tint: (0.065, 0.08), background: background)
+        addedMarker = add
+        deletedMarker = delete
         currentFindMatch = NSColor.espalierDynamic { variant in
             let resolved = accent.resolved(in: variant)
             let alpha: CGFloat = variant.isDark ? 0.45 : 0.32
@@ -68,9 +66,9 @@ public enum DiffColors {
     /// A deleted line left out of the commit.
     public static var excludedDeletedLine: NSColor { Theme.current.diff.excludedDeletedLine }
 
-    /// The "+" marker: add, 4.5:1 on an added line.
+    /// The "+" marker: add.
     public static var addedMarker: NSColor { Theme.current.diff.addedMarker }
-    /// The "−" marker: delete, 4.5:1 on a deleted line.
+    /// The "−" marker: delete.
     public static var deletedMarker: NSColor { Theme.current.diff.deletedMarker }
 
     /// Hunk header rows, and git's header line in them.
@@ -91,7 +89,7 @@ public enum DiffColors {
     public static var quietMark: NSColor { Palette.text3 }
 
     /// An included changed line's number cells: the accent at 16% (24% in
-    /// dark), so included lines read as one band.
+    /// dark).
     public static var includedNumberCell: NSColor { Palette.accentMid }
     /// The handle beside a changed line the commit includes: the accent.
     public static var includedHandle: NSColor { Palette.accent }
@@ -108,8 +106,7 @@ public enum DiffColors {
     public static var cursor: NSColor { Palette.accentSoft }
 
     /// Find's matches, over a line's tint and changed range: a neutral
-    /// wash, black 12% (white 16% in dark), which reads on added, deleted,
-    /// and context lines alike.
+    /// wash, black 12% (white 16% in dark).
     public static let findMatch = NSColor.espalierDynamic(
         light: NSColor.black.withAlphaComponent(0.12), dark: NSColor.white.withAlphaComponent(0.16),
         highContrastLight: NSColor.black.withAlphaComponent(0.2), highContrastDark: NSColor.white.withAlphaComponent(0.26)
@@ -122,12 +119,11 @@ public enum DiffColors {
 
     /// Conflict marker rows (`<<<<<<<`, `=======`, `>>>>>>>`).
     public static var conflictMarker: NSColor { Theme.current.diff.conflictMarker }
-    /// Our side of a conflict: mint, clear of the accent's blue (selection)
-    /// and the renamed violet.
+    /// Our side of a conflict: mint.
     public static let ours = SystemTone.mint.tint(light: 0.09, dark: 0.11)
     /// The common ancestor's lines, between ours and theirs: neutral.
     public static let base = SystemTone.gray.tint(light: 0.09, dark: 0.12)
-    /// Their side of a conflict: orange, clear of the delete red.
+    /// Their side of a conflict: orange.
     public static let theirs = SystemTone.orange.tint(light: 0.08, dark: 0.10)
 
     /// The checkerboard behind transparent images.

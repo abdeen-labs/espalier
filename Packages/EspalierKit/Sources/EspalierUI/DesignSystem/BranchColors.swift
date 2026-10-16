@@ -14,7 +14,7 @@ import AppKit
 /// with its own entry. A remote branch has the color of the local branch
 /// with its name ("origin/main" is main's), else its name's entry. The
 /// graph draws the lines no local branch starts in the entries no branch
-/// has (`otherTones`), so they never look like a branch's line.
+/// has (`otherTones`).
 public struct BranchColors: Equatable {
     /// The palette, without the entry nearest the accent.
     public let tones: [TrackPalette.Tone]
@@ -82,8 +82,7 @@ public struct BranchColors: Equatable {
     /// a local branch's own; a remote branch's ("origin/x"), or a pull
     /// request's ("jonas/x", `isPullRequest`), its local branch's; else an
     /// entry no branch has, by the name (or, when the message names none,
-    /// by `merge`, the merge's SHA), so a branch that's gone never looks
-    /// like one that exists.
+    /// by `merge`, the merge's SHA).
     public func color(forMergedBranch name: String?, isPullRequest: Bool, merge: String, accent: NSColor = Palette.accent) -> NSColor {
         if let name {
             if let color = color(forBranch: name, accent: accent) {

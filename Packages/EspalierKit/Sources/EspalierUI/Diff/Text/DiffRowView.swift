@@ -1,16 +1,15 @@
 // Drawing one row of the diff table. A row view draws its whole row: the
 // tints (added and deleted lines, faint for a line left out, conflict
 // regions), the line numbers (while lines can be staged, an included
-// changed line's number cells are tinted with the accent, so included lines
-// read as one band), the handle beside changed lines (the accent for a line
-// the commit includes, `line2` for one left out), the "+" and "−" markers
-// (color never stands alone), intra-line ranges, find's matches, the text
-// selection, and the text with syntax colors, faded on a line left out.
-// Hunk headers are `hunk` rows: the expansion buttons in the numbers'
-// gutter, the checkbox, and git's header line in the code font. Text is
-// drawn with Core Text at monospace columns: runs of printable ASCII as one
-// line, other characters glyph by glyph at their columns, so wide and
-// fallback glyphs never shift the columns hit-testing assumes.
+// changed line's number cells are tinted with the accent), the handle
+// beside changed lines (the accent for a line the commit includes, `line2`
+// for one left out), the "+" and "−" markers, intra-line ranges, find's
+// matches, the text selection, and the text with syntax colors, faded on a
+// line left out. Hunk headers are `hunk` rows: the expansion buttons in the
+// numbers' gutter, the checkbox, and git's header line in the code font.
+// Text is drawn with Core Text at monospace columns: runs of printable
+// ASCII as one line, other characters glyph by glyph at their columns, so
+// wide and fallback glyphs never shift the columns hit-testing assumes.
 
 import AppKit
 import EspalierCore

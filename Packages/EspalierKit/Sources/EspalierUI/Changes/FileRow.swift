@@ -180,7 +180,7 @@ extension FileRowContent {
 }
 
 /// The Changes list's row metrics: file rows 30 high, inset 6 from the
-/// column's edges, radius 9.
+/// column's edges, the row radius.
 enum FileRowMetrics {
     /// The row's inset from the column's edges (its selection's too).
     static let inset: CGFloat = 6
@@ -455,8 +455,7 @@ final class FileRowView: NSTableCellView {
 
     override var backgroundStyle: NSView.BackgroundStyle {
         didSet {
-            // A selected row is the accent's soft wash, never solid, so the
-            // labels keep their colors.
+            // The labels keep their colors on the selection's soft wash.
             nameLabel.textColor = Palette.text
             sourceLabel.textColor = Palette.text3
             directoryLabel.textColor = Palette.text3

@@ -1,6 +1,6 @@
 // How History's rows draw beneath their content, in the graph, the simple
 // list, and a commit's files alike: the selection, a soft accent tint in the
-// row's rounded shape inset from the list's sides (never solid blue), a run of
+// row's rounded shape inset from the list's sides, a run of
 // selected rows one shape; the accent ring of the row a context menu acts
 // on; and the feedback for commits dragged onto a row
 // (squash: a dashed accent outline in the row's shape and "Squash into

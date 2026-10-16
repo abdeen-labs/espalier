@@ -108,7 +108,8 @@ nonisolated public struct BranchRowContent: Sendable, Equatable, Identifiable {
     public var pullRequest: BranchPullRequestBadge?
     /// The branch's commit, for its color in the graph.
     public var tipSHA: String?
-    /// Whether it's the default branch (the trunk's teal outside the graph).
+    /// Whether it's the default branch (the trunk's color outside the
+    /// graph).
     public var isDefault: Bool
 
     public init(
@@ -134,7 +135,8 @@ nonisolated public struct BranchRowContent: Sendable, Equatable, Identifiable {
     }
 
     /// The dot's color outside the graph: the accent for the current
-    /// branch, teal for the default one, else a palette entry by name.
+    /// branch, the trunk's color for the default one, else a palette entry
+    /// by name.
     @MainActor
     public var fallbackColor: NSColor {
         TrackPalette.color(forBranch: name, isCurrent: isCurrent, isDefault: isDefault)

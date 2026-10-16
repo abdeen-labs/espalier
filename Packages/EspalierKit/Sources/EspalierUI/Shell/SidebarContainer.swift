@@ -8,12 +8,13 @@
 // (`SidebarSectionsHold`).
 //
 // The sidebar is flat: the `sidebar` color with a hairline on its trailing
-// edge, uppercase section labels (no counts), rows 28 high with radius 9,
-// and the selected item in a neutral wash (`Palette.sidebarSelection`) in
-// medium weight with its symbol in the accent, which keeps the sidebar
-// neutral (the list's own selection drawing is off before it first draws:
+// edge, the theme's section labels (no counts), rows 28 high with the row
+// radius, and the selected item in the theme's sidebar selection
+// (`Palette.sidebarSelection`), its title in the selected weight
+// (`SidebarRowFont`) and its symbol in the theme's selection symbol color
+// (the list's own selection drawing is off before it first draws:
 // `SidebarListStyler`). Selected branch, tag, stash, and pull request rows
-// are medium too (`isSidebarRowSelected`).
+// take the selected weight too (`isSidebarRowSelected`).
 
 import AppKit
 import EspalierCore
@@ -352,8 +353,8 @@ struct SidebarRowLabel<Trailing: View>: View {
 
 /// A sidebar row title's weight: bold while the row is selected in a theme
 /// whose selection is bold (`Theme.sidebarSelectionIsBold`); semibold for
-/// the current branch and its pull request (the one way the sidebar marks
-/// what's current); medium while the row is selected; regular otherwise.
+/// the current branch and its pull request; medium while the row is
+/// selected; regular otherwise.
 enum SidebarRowFont {
     static func title(isSelected: Bool, isEmphasized: Bool = false) -> Font {
         if isSelected, Theme.current.sidebarSelectionIsBold {
@@ -367,11 +368,12 @@ enum SidebarRowFont {
 }
 
 extension EnvironmentValues {
-    /// The sidebar's selected place, which its row draws in the neutral wash.
+    /// The sidebar's selected place, which its row draws in the sidebar's
+    /// selection.
     @Entry var sidebarSelection: SidebarPlace?
     /// Whether the row this is in selects the sidebar's selected place
-    /// (`sidebarRow(_:)` sets it): its title is medium and its symbol in
-    /// the accent.
+    /// (`sidebarRow(_:)` sets it): its title is in the selected weight and
+    /// its symbol in the theme's selection symbol color.
     @Entry var isSidebarRowSelected = false
 }
 
@@ -387,8 +389,8 @@ extension Metrics.Sidebar {
 }
 
 extension View {
-    /// A sidebar row: 28 high, its background the selection's neutral wash
-    /// or the hover wash, inset 10 from the sidebar's edges with radius 9.
+    /// A sidebar row: 28 high, its background the sidebar's selection or
+    /// the hover wash, inset 10 from the sidebar's edges with the row radius.
     ///
     /// - Parameters:
     ///   - place: The place the row selects, if any.
@@ -473,7 +475,7 @@ private struct SidebarRowModifier: ViewModifier {
 }
 
 /// A row's background: the soft accent under dragged commits it takes, the
-/// selection's neutral wash (`Palette.sidebarSelection`), the hover wash,
+/// sidebar's selection (`Palette.sidebarSelection`), the hover wash,
 /// or nothing; and the ring while the row is the open context menu's
 /// target.
 struct SidebarRowBackground: View {

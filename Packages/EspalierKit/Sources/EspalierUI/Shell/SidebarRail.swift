@@ -15,7 +15,7 @@
 //
 // The rail is flat: the `sidebar` color with a hairline on its trailing
 // edge (on the backdrop with none in the floating layout), its icons 36
-// square with radius 9, the hover wash under the pointer, and the selected
+// square with the row radius, the hover wash under the pointer, and the selected
 // one in the sidebar's selection with its symbol in the selection's color.
 
 import AppKit

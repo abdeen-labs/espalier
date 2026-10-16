@@ -1,10 +1,7 @@
 // Espalier's colors. Every color is a dynamic NSColor with light, dark, and
 // Increase Contrast variants, resolved where they're drawn, and comes from
 // the current design theme (Themes/). Classic's surfaces, lines, and text
-// are fixed values and its accent is the system's accent color. Status
-// colors used as text are the status hues, darkened (light) or lightened
-// (dark) just enough to read: text 4.5:1, marks 3:1, and 1.5 more under
-// Increase Contrast.
+// are fixed values and its accent is the system's accent color.
 
 import AppKit
 import SwiftUI
@@ -101,7 +98,7 @@ extension NSColor {
     }
 }
 
-/// WCAG 2 contrast between colors.
+/// Contrast between colors, for white or dark text on a fill.
 nonisolated public enum ColorContrast {
     /// The contrast ratio of two opaque sRGB colors, 1 to 21.
     public static func ratio(_ first: NSColor, _ second: NSColor) -> Double {
@@ -120,17 +117,6 @@ nonisolated public enum ColorContrast {
         return 0.2126 * linear(srgb.redComponent) + 0.7152 * linear(srgb.greenComponent) + 0.0722 * linear(srgb.blueComponent)
     }
 
-    /// `color`, darkened (on a light background) or lightened (on a dark
-    /// one) in small steps until it reaches `target` against `background`.
-    public static func adjust(_ color: NSColor, toReach target: Double, against background: NSColor) -> NSColor {
-        let towards: NSColor = luminance(background) > 0.5 ? .black : .white
-        var adjusted = color.usingColorSpace(.sRGB) ?? color
-        for _ in 0..<50 where ratio(adjusted, background) < target {
-            adjusted = adjusted.blended(withFraction: 0.04, of: towards)?.usingColorSpace(.sRGB) ?? adjusted
-        }
-        return adjusted
-    }
-
     /// `color` over `background`: a translucent color as it reads on an
     /// opaque one.
     public static func composite(_ color: NSColor, over background: NSColor) -> NSColor {
@@ -140,8 +126,7 @@ nonisolated public enum ColorContrast {
     }
 }
 
-/// System colors, adapted for Espalier's contrast targets. Syntax tokens
-/// and a few marks still start from them.
+/// System colors, which syntax tokens and a few fills use.
 nonisolated public enum SystemTone: String, CaseIterable, Sendable {
     case red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple, pink, brown, gray
 
@@ -162,14 +147,6 @@ nonisolated public enum SystemTone: String, CaseIterable, Sendable {
         case .brown: .systemBrown
         case .gray: .systemGray
         }
-    }
-
-    /// The tone for text or marks: the system shade, adjusted until it
-    /// reaches `minimumContrast` against the content background (or that
-    /// background under this tone's `tint`, for text on a tinted fill), and
-    /// 1.5 more under Increase Contrast.
-    public func foreground(minimumContrast: Double, tint: (light: CGFloat, dark: CGFloat)? = nil) -> NSColor {
-        Palette.readable(base, minimumContrast: minimumContrast, tint: tint)
     }
 
     /// A translucent fill of the tone; Increase Contrast multiplies the
@@ -200,8 +177,7 @@ nonisolated public enum Palette {
     /// A hovered row.
     public static var hover: NSColor { Theme.current.hover }
     /// The sidebar's selected item: Classic's is a neutral wash, black 6.5%
-    /// (white 5% in dark), so the sidebar stays neutral; `accentSoft` is
-    /// the selection everywhere else.
+    /// (white 5% in dark); `accentSoft` is the selection everywhere else.
     public static var sidebarSelection: NSColor { Theme.current.sidebarSelection }
     /// Dividers and hairlines.
     public static var line: NSColor { Theme.current.line }
@@ -225,9 +201,8 @@ nonisolated public enum Palette {
 
     // MARK: Text input
 
-    /// Selected text where the text has focus: the accent at 16% (24% in
-    /// dark), behind text that keeps 4.5:1 on it, secondary text in a field
-    /// included.
+    /// Selected text where the text has focus: a wash of the accent
+    /// (Classic's 16%, 24% in dark).
     public static var textSelection: NSColor { Theme.current.textSelection }
     /// Selected text where the text doesn't have focus, or its window isn't
     /// key: a neutral wash, black 8% (white 8% in dark).
@@ -246,9 +221,7 @@ nonisolated public enum Palette {
     /// accent.
     public static var accent: NSColor { Theme.current.accent }
 
-    /// Links: the accent, deepened (lightened in dark) only as far as it
-    /// takes to read as text on the content background, 4.5:1 (6:1 under
-    /// Increase Contrast).
+    /// Links: the theme's link color, else the accent.
     public static var link: NSColor { Theme.current.link }
 
     /// Selected rows and chips: the accent at 9% (14% in dark).
@@ -325,30 +298,6 @@ nonisolated public enum Palette {
     }
 
     // MARK: Deriving colors
-
-    /// `color` adjusted until it reaches `minimumContrast` against
-    /// `background` (the current content background; under `color`'s own
-    /// `tint`, for text on a tinted fill), and 1.5 more under Increase
-    /// Contrast.
-    nonisolated static func readable(
-        _ color: NSColor,
-        minimumContrast: Double,
-        tint: (light: CGFloat, dark: CGFloat)? = nil,
-        background: NSColor? = nil
-    ) -> NSColor {
-        let backgroundColor = background ?? Palette.background
-        let colors = AppearanceVariant.allCases.map { variant in
-            let base = color.resolved(in: variant)
-            var background = backgroundColor.resolved(in: variant)
-            if let tint {
-                let alpha = variant.isDark ? tint.dark : tint.light
-                background = background.blended(withFraction: variant.isHighContrast ? min(1, alpha * 1.6) : alpha, of: base) ?? background
-            }
-            let target = variant.isHighContrast ? minimumContrast + 1.5 : minimumContrast
-            return ColorContrast.adjust(base, toReach: target, against: background)
-        }
-        return .espalierDynamic(light: colors[0], dark: colors[1], highContrastLight: colors[2], highContrastDark: colors[3])
-    }
 
     /// A translucent fill of `color`; Increase Contrast multiplies the alpha
     /// by 1.6.

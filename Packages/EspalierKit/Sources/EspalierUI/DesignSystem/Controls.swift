@@ -440,7 +440,7 @@ public struct RepositoryBadge: View {
     }
 
     /// The badges' hues, in degrees: blue, teal, pink, orange, violet,
-    /// green, indigo, cyan, rose, and amber (no muddy yellows).
+    /// green, indigo, cyan, rose, and amber.
     nonisolated static let hues: [Double] = [212, 168, 330, 26, 268, 142, 238, 192, 350, 40]
 
     /// A color by the title: one of `hues`, chosen by a stable hash, at 55%

@@ -3,7 +3,7 @@
 // groups, a check expanding to its steps (the first failed one already
 // open) with its own Re-run and View on GitHub, steps a click opens on
 // GitHub, and "There are no steps to display for this check.". Shapes
-// differ per state, so color never stands alone.
+// differ per state.
 
 import EspalierCore
 import GitHubKit

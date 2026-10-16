@@ -60,8 +60,7 @@ nonisolated extension ThemeDefinition {
         trunk: .espalierDynamic(light: .hex(0x0F766E), dark: .hex(0x2DD4BF)),
         tones: TrackPalette.tones,
         skipsToneNearestAccent: true,
-        // A neutral wash, black 6.5% (white 5% in dark), so the sidebar
-        // stays neutral.
+        // A neutral wash, black 6.5% (white 5% in dark).
         sidebarSelection: .espalierDynamic(
             light: NSColor.black.withAlphaComponent(0.065), dark: NSColor.white.withAlphaComponent(0.05),
             highContrastLight: NSColor.black.withAlphaComponent(0.11), highContrastDark: NSColor.white.withAlphaComponent(0.09)
@@ -84,12 +83,11 @@ nonisolated extension ThemeDefinition {
         if Palette.isDefaultBlue(accent) {
             return .hex(0x0064E1)
         }
-        let deeper = NSColor(
+        return NSColor(
             hue: accent.hueComponent,
             saturation: accent.saturationComponent,
             brightness: accent.brightnessComponent * 0.88,
             alpha: 1
         )
-        return ColorContrast.adjust(deeper, toReach: 4.5, against: .white)
     }
 }

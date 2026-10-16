@@ -32,7 +32,6 @@ nonisolated extension ThemeDefinition {
             raisedShadow: .espalierDynamic(light: NSColor.hex(0x50371E, alpha: 0.10), dark: .clear),
             raisedRing: .espalierDynamic(light: NSColor.hex(0x50371E, alpha: 0.05), dark: NSColor.hex(0xFFF0DC, alpha: 0.06)),
             text: ThemeColor.text(0x27221C, 0xF2ECE3),
-            // Secondary text keeps 4.5:1 on a text selection in a field.
             text2: ThemeColor.text2(0x5E574C, 0xC0B6A7),
             text3: ThemeColor.text3(0xA1988A, 0x7D7467, text2: (0x5E574C, 0xC0B6A7)),
             accent: palette.accent,
@@ -115,8 +114,6 @@ nonisolated private struct OrchardColor {
             prominent = ThemeColor.fixed(0xA84825, 0xB9532E)
             prominentText = .white
             selectionAlpha = (0.10, 0.15)
-            // Deletions move to a rose red, so they don't read as the
-            // accent.
             delete = ThemeColor.fixed(0xA63049, 0xF2899C)
             trunk = Self.leaf
             tones = [.indigo, .violet, .cyan]
@@ -140,8 +137,6 @@ nonisolated private struct OrchardColor {
             prominentText = .white
             selectionAlpha = (0.10, 0.14)
             delete = Self.brick
-            // The default branch turns orange, so it doesn't sit next to
-            // green.
             trunk = ThemeColor.fixed(0xD27A2C, 0xEFA05C)
             tones = [.pink, .indigo, .green, .violet]
             var colors = toneColors
@@ -152,13 +147,12 @@ nonisolated private struct OrchardColor {
             // current branch.
             self.color = .espresso
             accent = ThemeColor.fixed(0x2B251F, 0xF2ECE3)
-            // Links are coffee brown, so they don't read as text.
+            // Links are coffee brown.
             ink = ThemeColor.fixed(0x8A5A2B, 0xD7AE84)
             prominent = ThemeColor.fixed(0x2B251F, 0xF2ECE3)
             prominentText = ThemeColor.fixed(0xFBF9F5, 0x1D1A16)
             selectionAlpha = (0.08, 0.10)
-            // Selected text is fainter: warm black and cream are far from
-            // the background.
+            // Selected text is fainter.
             textSelectionAlpha = (0.12, 0.14)
             delete = Self.brick
             trunk = Self.leaf

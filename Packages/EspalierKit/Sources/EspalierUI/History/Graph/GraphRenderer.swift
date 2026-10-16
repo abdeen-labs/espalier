@@ -266,7 +266,7 @@ final class GraphColors {
 
     /// The color of track `track`, as `TrackPalette.Resolved` gives it: the
     /// current branch's in the accent, a local branch's in its own color,
-    /// the trunk's teal, the others the entries no branch has.
+    /// the trunk's color, the others the entries no branch has.
     func color(forTrack track: Int) -> CGColor {
         if track == palette.currentTrack {
             return current

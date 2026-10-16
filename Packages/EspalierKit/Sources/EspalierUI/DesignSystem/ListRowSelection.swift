@@ -19,9 +19,9 @@ extension View {
         }
     }
 
-    /// A list row that draws its selection: padded, radius 9, `accent soft`
-    /// while selected, and never the list's highlight; while it's a context
-    /// menu's target (`contextMenuRow(_:)`), the target's ring. Put
+    /// A list row that draws its selection: padded, the row radius,
+    /// `accent soft` while selected, not the list's highlight; while it's
+    /// a context menu's target (`contextMenuRow(_:)`), the target's ring. Put
     /// `.listRowBackground(Color.clear)` and the row insets on it as the
     /// list needs.
     ///

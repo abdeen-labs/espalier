@@ -1,5 +1,5 @@
 // The file status badge and the checks glyphs. A file's status is a letter
-// (A, M, D, R, C, U), never color alone; checks use distinct shapes.
+// (A, M, D, R, C, U); checks use distinct shapes.
 
 import AppKit
 import GitKit
@@ -89,9 +89,8 @@ public struct StatusGlyph: View {
 nonisolated public enum ChecksState: String, CaseIterable, Sendable {
     case success, failure, pending, neutral
 
-    /// A distinct shape per state, so color never stands alone: the checks
-    /// list's shapes, a minus for checks that ended neither passed nor
-    /// failed.
+    /// A distinct shape per state: the checks list's shapes, a minus for
+    /// checks that ended neither passed nor failed.
     public var systemImage: String {
         switch self {
         case .success: "checkmark.circle.fill"

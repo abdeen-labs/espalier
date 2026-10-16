@@ -32,26 +32,14 @@ other themes change what their tokens say (Themes, below).
   down while open.
 - **Text to copy** is `Text` that can be selected; multi-line text to edit
   is a `TextEditor` on the `field` fill or a card.
-- **Personality comes from:** the capsule controls, the transit-map graph,
-  the diff's tinted gutter, monospaced IDs and counts, visible key caps, the
-  colored repository badges, and branch colors.
-- **Color has rules.** The accent (the Mac's, blue by default) is
-  selection, the user's own changes, and the one prominent action in an
-  area (a deeper shade of the accent, so white text reads on it). Branch
-  colors appear only where branches do (sidebar dots, the graph, ref
-  tags). Status colors appear only for status. Everything else is neutral.
 - **Branch colors:** the current branch is the accent, the default branch
   teal; the others cycle through pink, violet, orange, green, indigo, and
-  cyan, skipping the one nearest the accent. Red and yellow stay out (they
-  read as errors and warnings). A track keeps its color for its line of
-  development.
+  cyan, skipping the one nearest the accent. A track keeps its color for
+  its line of development.
 - **Buttons come in three styles:** quiet, prominent (one per area), and
   secondary (Cancel in sheets, Undo).
-- **Progress is the arc and the bar,** neutral gray (white on a prominent
-  capsule).
 - **SF Symbols** for every icon; the app font for text (SF Pro by
-  default), but key caps, which stay SF Pro; the code font (SF Mono by
-  default) for what's monospaced.
+  default); the code font (SF Mono by default) for what's monospaced.
 
 ## Themes, colors, and fonts
 

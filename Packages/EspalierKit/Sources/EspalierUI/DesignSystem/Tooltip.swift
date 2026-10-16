@@ -5,8 +5,8 @@
 // (`TooltipAreas.swift`); `TooltipCenter` decides when a card shows.
 //
 // The card: the text in secondary type and color on the `quiet` fill, with
-// the floating ring and a smaller shadow than a menu's, radius 9, padded 6
-// by 8, wrapping at 280 points.
+// the floating ring and a smaller shadow than a menu's, the row radius,
+// padded 6 by 8, wrapping at 280 points.
 
 import AppKit
 import SwiftUI

@@ -15,8 +15,8 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
         /// 1. A push, pull, or fetch runs: what it is ("Fetching origin"),
         /// git's step (or "Hang on…"), and how far it has got. The button
-        /// shows `shown`, the state whose action runs, quiet or blue as it
-        /// is, with the arc in its symbol's place; for an operation that
+        /// shows `shown`, the state whose action runs, quiet or prominent as
+        /// it is, with the arc in its symbol's place; for an operation that
         /// isn't one of the button's (nil), the arc and `title`.
         indirect case progress(title: String, description: String, value: Double?, shown: Kind?)
         /// Then, until the repository's status, remotes, and refs have
@@ -405,7 +405,7 @@ public struct SyncButtonView: View {
     }
 
     /// Which capsule the button is, without its words: a change of it (quiet
-    /// ↔ blue, the split chevron coming or going, progress starting or
+    /// ↔ prominent, the split chevron coming or going, progress starting or
     /// ending) crossfades the fill, label, and symbol over 0.2 s.
     private struct Look: Hashable {
         var kind: CapsuleButtonKind

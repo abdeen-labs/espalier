@@ -1,6 +1,6 @@
 // Espalier's menu card: a floating card on the `quiet` fill with the
 // floating ring and shadow, radius 14, its rows inside a 5-point inset
-// with radius 9, concentric with it. Rows are 24 high: a check column
+// with the row radius. Rows are 24 high: a check column
 // (only in a menu with checkable items), a leading symbol in secondary
 // text, the title (the error color for a destructive item) with an
 // optional subtitle under it, and a chevron for a submenu. The highlighted
@@ -344,8 +344,7 @@ extension EdgeInsets {
 extension Metrics {
     /// Menus: the card, its rows, and where it opens.
     public enum Menu {
-        /// The card's padding around its rows: rows' radius 9 sits
-        /// concentric in the card's 14.
+        /// The card's padding around its rows.
         public static let inset: CGFloat = 5
         /// An item row's height (one line).
         public static let rowHeight: CGFloat = 24

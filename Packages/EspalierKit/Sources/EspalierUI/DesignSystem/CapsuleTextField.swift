@@ -129,9 +129,9 @@ extension Text {
 
 extension View {
     /// A multi-line field's look (a description, ignored files): the
-    /// `field` fill in a rounded rectangle (radius 9), the text inset from
-    /// its edges. For a `TextEditor`, hide its own background first
-    /// (`scrollContentBackground(.hidden)`).
+    /// `field` fill in a rounded rectangle with the row radius, the text
+    /// inset from its edges. For a `TextEditor`, hide its own background
+    /// first (`scrollContentBackground(.hidden)`).
     public func textAreaSurface() -> some View {
         padding(.horizontal, Metrics.TextArea.horizontalInset)
             .padding(.vertical, Metrics.TextArea.verticalInset)

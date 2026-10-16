@@ -543,14 +543,14 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
     }
 }
 
-/// A row of the Changes table. A selected row is the accent's soft wash
-/// in a rectangle inset 6 from the column's edges with radius 9, never
-/// solid blue, so its text keeps its colors; selected neighbors join into
-/// one shape. Overriding `drawBackground(in:)` makes AppKit draw the row,
-/// selection included, through `draw(_:)`. The row draws no background of
-/// its own: the table's shows through. Its hover is a wash of its own, in the selection's shape,
-/// that fades in and out where the pointer is. While its context menu is
-/// open it shows the accent ring in that shape.
+/// A row of the Changes table. A selected row is the accent's soft wash in
+/// a rectangle inset 6 from the column's edges with the row radius;
+/// selected neighbors join into one shape. Overriding `drawBackground(in:)`
+/// makes AppKit draw the row, selection included, through `draw(_:)`. The
+/// row draws no background of its own: the table's shows through. Its hover
+/// is a wash of its own, in the selection's shape, that fades in and out
+/// where the pointer is. While its context menu is open it shows the accent
+/// ring in that shape.
 final class FileTableRowView: NSTableRowView, ContextMenuTargetRowView {
     static let identifier = NSUserInterfaceItemIdentifier("Espalier.FileTableRow")
 
