@@ -1,8 +1,9 @@
 // Success outcomes as toasts. Their copy is the state layer's; they last 5 s,
 // or 15 s with Undo, counted once the pointer leaves the toast, and the
-// close button dismisses one at once. While a toast with Undo shows, Edit ▸
-// Undo (⌘Z) runs it too, and its button shows the key (the window's undo
-// manager; WindowPresenter).
+// close button dismisses one at once. Edit ▸ Undo (⌘Z) runs a toast's Undo
+// too, and its button shows the key (the window's undo manager;
+// WindowPresenter): while the toast shows, or while the Undo is valid when
+// it says how long that is, after the toast closes too.
 
 import AppKit
 import SwiftUI
@@ -40,10 +41,25 @@ public struct Toast: Identifiable {
 /// A toast's button.
 public struct ToastAction {
     public var title: String
+    /// What Edit ▸ Undo names it: "Squash" makes "Undo Squash". Nil leaves
+    /// the menu's plain "Undo".
+    public var actionName: String?
+    /// Whether it can still run, read again whenever what it reads changes.
+    /// With it, the toast's button and Edit ▸ Undo offer it while it's
+    /// true, Edit ▸ Undo also after the toast closes, and both stop once
+    /// it's false. Without it, Undo is offered only while the toast shows.
+    public var isValid: (@MainActor () -> Bool)?
     public var perform: @MainActor () async -> Void
 
-    public init(title: String = "Undo", perform: @escaping @MainActor () async -> Void) {
+    public init(
+        title: String = "Undo",
+        actionName: String? = nil,
+        isValid: (@MainActor () -> Bool)? = nil,
+        perform: @escaping @MainActor () async -> Void
+    ) {
         self.title = title
+        self.actionName = actionName
+        self.isValid = isValid
         self.perform = perform
     }
 }

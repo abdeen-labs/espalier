@@ -108,7 +108,7 @@ enum RefusedOperation: String, CaseIterable, Sendable, CustomTestStringConvertib
         case .undoCommit:
             try await fixture.model.commit.undo(try await fixture.commit("feature"))
         case .resetToCommit:
-            try await fixture.model.commit.reset(to: try await fixture.commit("feature~1"))
+            try await fixture.model.commit.reset(to: try await fixture.commit("feature~1"), confirmed: [.resetToCommit])
         }
     }
 

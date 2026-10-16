@@ -59,7 +59,8 @@ enum UIFixtures {
         ("rewritePublishedCommits", .rewritePublishedCommits(operation: "Rebase")),
         ("undoCommitWithChanges", .undoCommitWithChanges(sha: "a1b2c3d", isMergeCommit: false, isWorkingDirectoryClean: false)),
         ("undoCommitWithChanges-merge", .undoCommitWithChanges(sha: "a1b2c3d", isMergeCommit: true, isWorkingDirectoryClean: true)),
-        ("resetWithChanges", .resetWithChanges(sha: "a1b2c3d")),
+        ("resetToCommit", .resetToCommit(sha: "a1b2c3d", branch: "main", hasChanges: false)),
+        ("resetWithChanges", .resetToCommit(sha: "a1b2c3d", branch: "main", hasChanges: true)),
         ("overwriteStash", .overwriteStash(checkingOut: nil)),
         ("commitFilteredChanges", .commitFilteredChanges(hiddenPaths: files)),
         ("commitWithUnknownCoAuthors", .commitWithUnknownCoAuthors(["octocat", "hubot"])),
@@ -265,6 +266,7 @@ enum UIFixtures {
     static let toasts: [(name: String, content: ToastContent)] = [
         ("merged", ToastContent(message: "Merged feature/login into main")),
         ("cherryPick-undo", ToastContent(message: "Copied 2 commits to feature/login.", undoTitle: "Undo", undoShortcut: "⌘Z")),
+        ("reset", ToastContent(message: ResetResult(branchName: "main", sha: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0").summary)),
         ("busy", ToastContent(message: "Another operation is in progress", systemImage: "hourglass")),
     ]
 

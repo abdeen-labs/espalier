@@ -7,7 +7,7 @@ import GitKit
 /// asks the user, then calls the intent again with the kind added.
 public enum ConfirmationKind: String, Sendable, Hashable, CaseIterable {
     case removeRepository, discardChanges, discardAllChanges, discardLines, discardStash, checkoutCommit, leaveCommitsBehind
-    case forcePush, rewritePublishedCommits, undoCommitWithChanges, resetWithChanges, overwriteStash
+    case forcePush, rewritePublishedCommits, undoCommitWithChanges, resetToCommit, resetWithChanges, overwriteStash
     case commitFilteredChanges, commitWithUnknownCoAuthors, commitOversizedFiles, commitConflictMarkers
     case overwriteCommitMessage, removeWorktree, abortWithResolvedConflicts, deleteBranch, deleteRemoteBranch, deleteTag
     case replaceCommandLineTool
@@ -213,14 +213,22 @@ extension Confirmation {
         )
     }
 
-    /// Resetting to a commit while there are changes.
-    public static func resetWithChanges(sha: String) -> Confirmation {
-        Confirmation(
-            kind: .resetWithChanges,
+    /// Resetting to a commit, which always asks: `.resetToCommit` on a clean
+    /// working directory, `.resetWithChanges` with the warning about
+    /// uncommitted changes otherwise.
+    ///
+    /// - Parameter branch: The branch reset, or nil on a detached HEAD.
+    public static func resetToCommit(sha: String, branch: String?, hasChanges: Bool) -> Confirmation {
+        let resetting = branch.map { "Resetting \($0) to this commit" } ?? "Resetting to this commit"
+        let what = "\(resetting) undoes the commits after it. Their changes stay in Changes."
+        return Confirmation(
+            kind: hasChanges ? .resetWithChanges : .resetToCommit,
             details: .commit(sha: sha, isMergeCommit: false),
             title: "Reset to Commit?",
-            message: "You have uncommitted changes, and resetting to an earlier commit might lose some of them.",
-            confirmButton: "Reset Anyway"
+            message: hasChanges
+                ? "\(what)\n\nYou have uncommitted changes, and resetting to an earlier commit might lose some of them."
+                : what,
+            confirmButton: hasChanges ? "Reset Anyway" : "Reset"
         )
     }
 

@@ -283,6 +283,107 @@ struct SquashReorderOperationTests {
         await fixture.app.idle()
     }
 
+    // MARK: How long the undo lasts
+
+    /// Squashes "Add c" into "Add a": `main` is then "Add a and c", "Add
+    /// b". Returns the undo offered.
+    private func squashForUndo(_ fixture: SelectedRepository) async throws -> MultiCommitUndo {
+        let (base, a, _, c) = try await commits(fixture)
+        _ = try await fixture.model.operations.squash([c], into: a, lastRetainedCommitRef: base.sha, message: CommitContext(summary: "Add a and c", description: nil))
+        return try #require(fixture.model.operations.undo)
+    }
+
+    @Test("the undo stays offered as time passes and the repository refreshes, and runs once")
+    func undoLasts() async throws {
+        let fixture = try await makeRepository()
+        let original = try await fixture.head()
+        let operations = fixture.model.operations
+        let offered = try await squashForUndo(fixture)
+
+        // Long after a toast would have closed, through status and full
+        // passes.
+        await fixture.harness.scheduler.advance(by: .seconds(60))
+        await fixture.model.refresh(.status, reason: .fileSystem)
+        await fixture.refreshAll()
+        #expect(operations.undo == offered)
+
+        // Asked twice at once, it undoes once.
+        func attempt() async -> Bool {
+            do {
+                try await operations.undoLastOperation()
+                return true
+            } catch {
+                return false
+            }
+        }
+        async let first = attempt()
+        async let second = attempt()
+        #expect(await [first, second].filter { $0 }.count == 1)
+        #expect(try await fixture.head() == original)
+        #expect(operations.undo == nil)
+        let again = await #expect(throws: OperationError.self) {
+            try await operations.undoLastOperation()
+        }
+        #expect(preconditionText(again) != nil)
+        #expect(try await fixture.head() == original)
+        await fixture.app.idle()
+    }
+
+    /// What moves the branch on after a squash.
+    enum BranchMove: String, CaseIterable, CustomTestStringConvertible {
+        case commit = "a new commit"
+        case checkout = "a checkout"
+        case rewrite = "another rewrite"
+
+        var testDescription: String {
+            rawValue
+        }
+    }
+
+    @Test("moving the branch on ends the undo for good, also once the branch is back at the squash", arguments: BranchMove.allCases)
+    func undoEnds(_ move: BranchMove) async throws {
+        let fixture = try await makeRepository()
+        let base = try await fixture.commit("HEAD~3")
+        let operations = fixture.model.operations
+        let offered = try await squashForUndo(fixture)
+        let squashed = try await fixture.head()
+
+        switch move {
+        case .commit:
+            try await commitFile(fixture.local, "later.txt", "later\n", message: "Later")
+            await fixture.model.refresh(.status, reason: .fileSystem)
+            #expect(operations.undo == nil)
+            try await runGit(["reset", "-q", "--hard", squashed], fixture.local)
+        case .checkout:
+            try await runGit(["branch", "other", base.sha], fixture.local)
+            await fixture.refreshAll()
+            _ = try await fixture.model.branches.checkout(try fixture.branch("other"))
+            await fixture.model.refresh(.status, reason: .fileSystem)
+            #expect(operations.undo == nil)
+            _ = try await fixture.model.branches.checkout(try fixture.branch("main"))
+        case .rewrite:
+            // "Add b" moved below "Add a and c": the reorder's undo replaces
+            // the squash's, and undoing it puts the squash back.
+            let reorder = try await operations.reorder([try await fixture.commit("HEAD")], before: try await fixture.commit("HEAD~1"), lastRetainedCommitRef: base.sha)
+            #expect(reorder == .reordered(count: 1))
+            #expect(operations.undo?.kind == .reorder)
+            #expect(operations.undo?.undoSha == squashed)
+            try await operations.undoLastOperation()
+        }
+        await fixture.model.refresh(.status, reason: .fileSystem)
+        #expect(try await fixture.checkedOutBranch() == "main")
+        #expect(try await fixture.head() == squashed)
+        #expect(operations.undo == nil)
+        #expect(offered.resultTip == squashed)
+
+        let error = await #expect(throws: OperationError.self) {
+            try await operations.undoLastOperation()
+        }
+        #expect(preconditionText(error) != nil)
+        #expect(try await fixture.head() == squashed)
+        await fixture.app.idle()
+    }
+
     // MARK: Hooks
 
     @Test("a hook failing in a squash: Abort cancels it and the branch is as it was")

@@ -58,8 +58,26 @@ public struct ResetToCommitRetry: RetryableOperation {
     @discardableResult
     @MainActor
     public func perform(in app: AppModel, confirmed: Set<ConfirmationKind>) async throws(OperationError) -> OperationOutcome {
-        try await app.requireRepository(repositoryID, for: kind).commit.reset(to: commit, confirmed: self.confirmed.union(confirmed))
-        return .nothing
+        let result = try await app.requireRepository(repositoryID, for: kind).commit.reset(to: commit, confirmed: self.confirmed.union(confirmed))
+        return .reset(result, repositoryID: repositoryID)
+    }
+}
+
+/// What Reset to Commit did. `summary` is the toast's copy.
+public struct ResetResult: Sendable, Equatable {
+    /// The branch reset, or nil on a detached HEAD.
+    public let branchName: String?
+    /// The commit the branch is at now.
+    public let sha: String
+
+    public init(branchName: String?, sha: String) {
+        self.branchName = branchName
+        self.sha = sha
+    }
+
+    /// "Reset main to a1b2c3d".
+    public var summary: String {
+        "Reset \(branchName ?? "HEAD") to \(shortenSHA(sha))"
     }
 }
 
@@ -214,11 +232,15 @@ extension CommitModel {
     /// `commit` must be below HEAD with only unpushed commits after it (it may
     /// itself be the first pushed one). Returns after the status refresh.
     ///
-    /// - Throws: `.confirmationRequired(.resetWithChanges)` when there are
-    ///   changes (no preference turns it off); `.precondition` when `commit`
-    ///   is HEAD, isn't on the branch, has pushed commits after it, or an
+    /// - Returns: The branch reset and the commit it's at.
+    /// - Throws: `.confirmationRequired` always, no preference turning it
+    ///   off: `.resetToCommit` on a clean working directory,
+    ///   `.resetWithChanges` with changes (a clean directory's answer
+    ///   doesn't cover changes made since); `.precondition` when `commit` is
+    ///   HEAD, isn't on the branch, has pushed commits after it, or an
     ///   operation is in progress.
-    public func reset(to commit: Commit, confirmed: Set<ConfirmationKind> = []) async throws(OperationError) {
+    @discardableResult
+    public func reset(to commit: Commit, confirmed: Set<ConfirmationKind> = []) async throws(OperationError) -> ResetResult {
         guard let repository else {
             throw OperationError(.precondition("The repository is no longer in the list."), operation: .resetToCommit)
         }
@@ -234,16 +256,18 @@ extension CommitModel {
             )
         }
 
-        // Warn the user if there are changes in the working directory
-        if !repository.changes.workingDirectory.files.isEmpty, !confirmed.contains(.resetWithChanges) {
+        // Ask first, warning about changes in the working directory.
+        let tip = repository.gitState.tip
+        let hasChanges = !repository.changes.workingDirectory.files.isEmpty
+        let isConfirmed = confirmed.contains(.resetWithChanges) || (!hasChanges && confirmed.contains(.resetToCommit))
+        guard isConfirmed else {
             throw OperationError(
-                .confirmationRequired(.resetWithChanges(sha: commit.sha)),
+                .confirmationRequired(.resetToCommit(sha: commit.sha, branch: tip.branch?.name, hasChanges: hasChanges)),
                 operation: .resetToCommit,
                 repositoryID: repository.id
             )
         }
 
-        let tip = repository.gitState.tip
         let repositoryID = repository.id
         let retry = ResetToCommitRetry(repositoryID: repositoryID, commit: commit, confirmed: confirmed)
         try await repository.perform(OperationDescriptor(kind: .resetToCommit)) { ctx in
@@ -251,6 +275,7 @@ extension CommitModel {
             try await GitKit.reset(ctx.repository, .mixed, commit.sha)
         }
         await repository.awaitOperationRefresh(covering: .status)
+        return ResetResult(branchName: tip.branch?.name, sha: commit.sha)
     }
 
     // MARK: Messages

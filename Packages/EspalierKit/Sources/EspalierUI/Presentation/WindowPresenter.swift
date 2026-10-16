@@ -100,12 +100,13 @@ public final class WindowPresenter {
 
     @ObservationIgnored weak var app: AppModel?
     @ObservationIgnored weak var actions: WindowActions?
-    /// The window's undo manager, which the shell sets: while a toast with
-    /// Undo shows, its Undo is registered there, so Edit ▸ Undo (⌘Z) runs
-    /// it and the toast shows the key.
+    /// The window's undo manager, which the shell sets: a toast's Undo is
+    /// registered there, so Edit ▸ Undo (⌘Z) runs it and the toast shows
+    /// the key. It stays there while the toast shows, or while it's valid
+    /// when it says how long that is (`ToastAction.isValid`).
     @ObservationIgnored public weak var undoManager: UndoManager?
-    /// The toasts' registrations with `undoManager`, by toast.
-    @ObservationIgnored private var toastUndoTargets: [Toast.ID: ToastUndoTarget] = [:]
+    /// The Undos registered with `undoManager`, by toast.
+    private(set) var undoRegistrations: [Toast.ID: UndoRegistration] = [:]
     /// Reports what an operation a recovery ran again did, as the window
     /// reports its first run (the window's context sets it).
     @ObservationIgnored var reportOutcome: (@MainActor (OperationOutcome) -> Void)?
@@ -382,17 +383,20 @@ public final class WindowPresenter {
     // MARK: Toasts
 
     /// Shows a toast and announces it to VoiceOver. A toast with Undo
-    /// registers it with the window's undo manager while it shows.
+    /// offers it from Edit ▸ Undo too (`offerUndo(of:)`).
     public func show(_ toast: Toast) {
         toasts.append(toast)
-        registerUndo(for: toast)
+        offerUndo(of: toast)
         ToastAnnouncer.announce(toast.message)
     }
 
-    /// Closes the toast `id`.
+    /// Closes the toast `id`. Its Undo leaves Edit ▸ Undo with it, unless
+    /// the Undo says how long it's valid (`ToastAction.isValid`).
     public func dismissToast(_ id: Toast.ID) {
         toasts.removeAll { $0.id == id }
-        unregisterUndo(for: id)
+        if undoRegistrations[id]?.action.isValid == nil {
+            unregisterUndo(for: id)
+        }
     }
 
     /// Whether a toast's Undo also runs from Edit ▸ Undo (⌘Z): the window
@@ -404,69 +408,129 @@ public final class WindowPresenter {
     /// The key that runs a toast's Undo, as its key cap shows it.
     public static let toastUndoKey = "⌘Z"
 
-    /// Registers `toast`'s Undo with the window's undo manager: Edit ▸ Undo
-    /// runs it as the button does, once.
-    private func registerUndo(for toast: Toast) {
-        guard toast.undo != nil, let undoManager, toastUndoTargets[toast.id] == nil else {
+    /// Offers `toast`'s Undo from Edit ▸ Undo, and when the Undo says how
+    /// long it's valid, watches that.
+    private func offerUndo(of toast: Toast) {
+        guard let action = toast.undo else {
             return
         }
-        let target = ToastUndoTarget(id: toast.id)
-        toastUndoTargets[toast.id] = target
-        undoManager.registerUndo(withTarget: target) { [weak self] target in
-            self?.undoByKey(target.id)
+        registerUndo(action, id: toast.id)
+        if let isValid = action.isValid {
+            watchUndo(toast.id, isValid: isValid)
         }
     }
 
-    /// Takes the registration of the toast `id` off the undo manager.
+    /// Registers the Undo `id` with the window's undo manager, under its
+    /// action name: Edit ▸ Undo runs it as the button does, once.
+    private func registerUndo(_ action: ToastAction, id: Toast.ID) {
+        guard let undoManager, undoRegistrations[id] == nil else {
+            return
+        }
+        let registration = UndoRegistration(id: id, action: action, undoManager: undoManager)
+        undoRegistrations[id] = registration
+        undoManager.registerUndo(withTarget: registration) { [weak self] registration in
+            self?.undoByKey(registration.id)
+        }
+        if let actionName = action.actionName {
+            undoManager.setActionName(actionName)
+        }
+    }
+
+    /// Takes the Undo `id` off the undo manager.
     private func unregisterUndo(for id: Toast.ID) {
-        guard let target = toastUndoTargets.removeValue(forKey: id) else {
+        guard let registration = undoRegistrations.removeValue(forKey: id) else {
             return
         }
-        undoManager?.removeAllActions(withTarget: target)
+        registration.undoManager?.removeAllActions(withTarget: registration)
     }
 
-    /// Edit ▸ Undo on the toast `id`.
+    /// Edit ▸ Undo on the Undo `id`, whose registration the undo manager
+    /// has taken: closes its toast, if it still shows, and runs it.
     private func undoByKey(_ id: Toast.ID) {
-        if let action = takeToastUndo(id) {
-            Task { await action.perform() }
+        guard let registration = undoRegistrations.removeValue(forKey: id) else {
+            return
+        }
+        toasts.removeAll { $0.id == id }
+        Task { await registration.action.perform() }
+    }
+
+    /// Watches the Undo `id`'s validity while its toast offers it or Edit ▸
+    /// Undo does, and withdraws it once it's no longer valid.
+    private func watchUndo(_ id: Toast.ID, isValid: @escaping @MainActor () -> Bool) {
+        observeWhile { [weak self] in
+            guard let self else {
+                return false
+            }
+            guard toasts.contains(where: { $0.id == id && $0.undo != nil }) || undoRegistrations[id] != nil else {
+                return false
+            }
+            guard isValid() else {
+                withdrawUndo(id)
+                return false
+            }
+            return true
+        }
+    }
+
+    /// Takes the Undo `id` off its toast, which keeps its message, and off
+    /// the undo manager.
+    private func withdrawUndo(_ id: Toast.ID) {
+        unregisterUndo(for: id)
+        if let index = toasts.firstIndex(where: { $0.id == id }), toasts[index].undo != nil {
+            toasts[index].undo = nil
         }
     }
 
     /// Undo on the toast `id`: closes it and returns its action, or nil
-    /// when it has none or has already closed. A toast stays on screen
-    /// while it leaves, so a second click on its Undo runs nothing.
+    /// when it has none or has already closed; Edit ▸ Undo no longer
+    /// offers it. A toast stays on screen while it leaves, so a second
+    /// click on its Undo runs nothing.
     public func takeToastUndo(_ id: Toast.ID) -> ToastAction? {
         guard let toast = toasts.first(where: { $0.id == id }) else {
             return nil
         }
-        dismissToast(id)
+        toasts.removeAll { $0.id == id }
+        unregisterUndo(for: id)
         return toast.undo
-    }
-
-    /// Replaces the toast with `toast`'s ID, if it's still showing, without
-    /// announcing it again: an outcome whose Undo is no longer valid keeps
-    /// its message without the button.
-    public func replaceToast(_ toast: Toast) {
-        guard let index = toasts.firstIndex(where: { $0.id == toast.id }) else {
-            return
-        }
-        toasts[index] = toast
-        if toast.undo == nil {
-            unregisterUndo(for: toast.id)
-        } else {
-            registerUndo(for: toast)
-        }
     }
 }
 
-/// What a toast's Undo is registered with the undo manager as: one per
-/// toast, so closing the toast takes its registration away.
-final class ToastUndoTarget {
+/// What an Undo is registered with the undo manager as: one per Undo, so
+/// withdrawing it takes its registration away.
+final class UndoRegistration {
     let id: Toast.ID
+    let action: ToastAction
+    /// The undo manager it's registered with.
+    weak var undoManager: UndoManager?
 
-    init(id: Toast.ID) {
+    init(id: Toast.ID, action: ToastAction, undoManager: UndoManager) {
         self.id = id
+        self.action = action
+        self.undoManager = undoManager
     }
+}
+
+/// Calls `check` now and again whenever what it reads changes, for as long
+/// as it returns true.
+@MainActor
+private func observeWhile(_ check: @escaping @MainActor () -> Bool) {
+    let registration = ObservationRegistration()
+    let keepsObserving = withObservationTracking {
+        check()
+    } onChange: {
+        Task { @MainActor in
+            if registration.isActive {
+                observeWhile(check)
+            }
+        }
+    }
+    registration.isActive = keepsObserving
+}
+
+/// Whether an observation's change handler should observe again.
+@MainActor
+private final class ObservationRegistration {
+    var isActive = true
 }
 
 extension Confirmation {

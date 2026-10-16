@@ -214,6 +214,8 @@ public enum OperationOutcome: Sendable, Equatable {
     /// A rebase, cherry-pick, squash, or reorder.
     case multiCommit(MultiCommitResult, repositoryID: RepositoryID)
     case push(PushOutcome, repositoryID: RepositoryID)
+    /// Reset to Commit.
+    case reset(ResetResult, repositoryID: RepositoryID)
 }
 
 /// An operation that can be run again with the same arguments.

@@ -350,18 +350,45 @@ struct AmendUndoResetTests {
 
     // MARK: Resetting
 
-    @Test("resetting keeps the changes of the commits it takes off the branch")
+    @Test("resetting keeps the changes of the commits it takes off the branch, and says where the branch is")
     func reset() async throws {
         let (fixture, commits) = try await makeFixture(localCommits: 2)
         let pushedTip = try #require(commits[0].parentSHAs.first)
         let pushed = try #require(try await getCommit(fixture.local, pushedTip))
 
-        try await fixture.commit.reset(to: pushed)
+        let result = try await fixture.commit.reset(to: pushed, confirmed: [.resetToCommit])
+        #expect(result == ResetResult(branchName: "main", sha: pushed.sha))
         #expect(try await fixture.head() == pushed.sha)
         #expect(fixture.paths == ["local1.txt", "local2.txt"])
         #expect(fixture.read("local1.txt") == "local 1\n")
         // No message comes back for a reset.
         #expect(fixture.commit.draft == CommitDraft())
+        await fixture.settle()
+    }
+
+    @Test("resetting always asks first: on a clean tree, and with changes, which a clean tree's answer doesn't cover")
+    func resetConfirmations() async throws {
+        let (fixture, commits) = try await makeFixture(localCommits: 2)
+        let target = commits[0]
+
+        let clean = await #expect(throws: OperationError.self) { try await fixture.commit.reset(to: target) }
+        #expect(confirmation(of: clean)?.kind == .resetToCommit)
+
+        // Changes made while the question showed: asked again, with the
+        // warning.
+        try fixture.write("local2.txt", "changed\n")
+        await fixture.refresh()
+        for confirmed: Set<ConfirmationKind> in [[], [.resetToCommit]] {
+            let dirty = await #expect(throws: OperationError.self) { try await fixture.commit.reset(to: target, confirmed: confirmed) }
+            #expect(confirmation(of: dirty)?.kind == .resetWithChanges)
+        }
+        #expect(try await fixture.head() == commits[1].sha)
+
+        // Confirmed, it resets once, keeping the change.
+        let result = try await fixture.commit.reset(to: target, confirmed: [.resetWithChanges])
+        #expect(result == ResetResult(branchName: "main", sha: target.sha))
+        #expect(try await fixture.head() == target.sha)
+        #expect(fixture.read("local2.txt") == "changed\n")
         await fixture.settle()
     }
 

@@ -41,6 +41,12 @@ private final class UndoRuns {
     var names: [String] = []
 }
 
+/// Whether a lasting Undo is still valid.
+@MainActor @Observable
+private final class UndoValidity {
+    var isValid = true
+}
+
 @Suite("Window presenter", .hangGuard(minutes: 5)) @MainActor
 struct WindowPresenterTests {
     /// Waits until the presenter shows a confirmation, yielding to the task
@@ -209,7 +215,7 @@ struct WindowPresenterTests {
         #expect(presenter.toasts.isEmpty)
     }
 
-    @Test("a toast's Undo runs from Edit ▸ Undo while it shows, once; a closed toast's, or one taken back, doesn't")
+    @Test("a toast's Undo runs from Edit ▸ Undo while it shows, once; a closed toast's doesn't")
     func toastUndoByKey() async {
         let presenter = WindowPresenter()
         let toastWithoutKey = Toast("Squashed", undo: ToastAction {})
@@ -240,27 +246,95 @@ struct WindowPresenterTests {
         #expect(runs.names == ["squash"])
         #expect(!undoManager.canUndo)
 
-        // A toast that closed, or whose Undo was taken back, runs nothing.
+        // A toast that closed runs nothing.
         let reordered = Toast("Successfully reordered 2 commits.", undo: ToastAction { runs.names.append("reorder") })
         show(reordered)
         presenter.dismissToast(reordered.id)
-        let copied = Toast("Successfully copied 1 commit to main.", undo: ToastAction { runs.names.append("cherry-pick") })
-        show(copied)
-        presenter.replaceToast(Toast(id: copied.id, copied.message))
-        for _ in 0..<5 where undoManager.canUndo {
-            undoManager.undo()
-        }
-        // A toast without Undo registers nothing: undoing runs nothing.
+        #expect(!undoManager.canUndo)
+        // A toast without Undo registers nothing.
         let merged = Toast("Successfully merged feature into main")
         show(merged)
-        for _ in 0..<5 where undoManager.canUndo {
-            undoManager.undo()
-        }
-        for _ in 0..<5 {
-            await Task.yield()
-        }
+        #expect(presenter.undoRegistrations.isEmpty)
         #expect(runs.names == ["squash"])
-        #expect(presenter.toasts.map(\.id) == [copied.id, merged.id])
+        #expect(presenter.toasts.map(\.id) == [merged.id])
+    }
+
+    @Test("an Undo valid for longer stays in Edit ▸ Undo after its toast closes, named, until it's no longer valid; from either place it runs once")
+    func lastingUndo() async throws {
+        let presenter = WindowPresenter()
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+        presenter.undoManager = undoManager
+        let runs = UndoRuns()
+        let validity = UndoValidity()
+        /// Shows a toast with an Undo valid while `validity` says so, as one
+        /// event would.
+        func showSquashed() -> Toast {
+            let toast = Toast("Squashed 2 commits.", undo: ToastAction(actionName: "Squash", isValid: { validity.isValid }) {
+                runs.names.append("squash")
+            })
+            undoManager.beginUndoGrouping()
+            presenter.show(toast)
+            undoManager.endUndoGrouping()
+            return toast
+        }
+        /// Typing in a field, as one event would.
+        func type() {
+            undoManager.beginUndoGrouping()
+            undoManager.registerUndo(withTarget: runs) { $0.names.append("typing") }
+            undoManager.endUndoGrouping()
+        }
+
+        // The toast closed: Edit ▸ Undo still offers it, with its name, and
+        // typing since is undone first, also after the validity is read
+        // again (another toast came and went).
+        let first = showSquashed()
+        presenter.dismissToast(first.id)
+        #expect(undoManager.canUndo)
+        #expect(!undoManager.undoActionName.isEmpty)
+        type()
+        let other = Toast("Merged feature into main")
+        presenter.show(other)
+        presenter.dismissToast(other.id)
+        undoManager.undo()
+        #expect(runs.names == ["typing"])
+        #expect(undoManager.canUndo)
+
+        // No longer valid: Edit ▸ Undo no longer offers it.
+        validity.isValid = false
+        await waitUntil { presenter.undoRegistrations[first.id] == nil }
+        #expect(!undoManager.canUndo)
+
+        // While the toast shows, the toast loses its Undo too.
+        validity.isValid = true
+        let second = showSquashed()
+        validity.isValid = false
+        await waitUntil { presenter.toasts.first?.undo == nil }
+        #expect(presenter.toasts.map(\.id) == [second.id])
+        #expect(!undoManager.canUndo)
+        presenter.dismissToast(second.id)
+
+        // Edit ▸ Undo closes the toast; its button then runs nothing.
+        validity.isValid = true
+        let third = showSquashed()
+        undoManager.undo()
+        #expect(presenter.toasts.isEmpty)
+        #expect(presenter.takeToastUndo(third.id) == nil)
+        await waitUntil { runs.names.count == 2 }
+
+        // The button takes it off Edit ▸ Undo.
+        let fourth = showSquashed()
+        let undo = try #require(presenter.takeToastUndo(fourth.id))
+        #expect(!undoManager.canUndo)
+        await undo.perform()
+
+        // After the toast closed, Edit ▸ Undo runs it once.
+        let fifth = showSquashed()
+        presenter.dismissToast(fifth.id)
+        undoManager.undo()
+        await waitUntil { runs.names.count == 4 }
+        #expect(!undoManager.canUndo)
+        #expect(runs.names == ["typing", "squash", "squash", "squash"])
     }
 
     @Test("a cancelled task's confirmation answers cancelled")

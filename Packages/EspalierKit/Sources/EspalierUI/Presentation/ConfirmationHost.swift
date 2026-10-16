@@ -1,4 +1,4 @@
-// How each of the state layer's 21 confirmations is shown. The copy is the
+// How each of the state layer's 24 confirmations is shown. The copy is the
 // state layer's (`Confirmation`); this file decides alert or compact sheet,
 // button roles, severity, lists, and the checkbox. Remove Repository and
 // Delete Branch are Espalier's compact sheets: their option is Espalier's

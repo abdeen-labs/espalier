@@ -38,7 +38,8 @@ enum HistoryActions {
         }
 
         // Reset to Commit…: below HEAD, with only unpushed commits after
-        // it, in the current branch's history; the model checks again.
+        // it, in the current branch's history; the model checks again,
+        // asks first, and a toast says what it did.
         actions.register(.resetToCommit, isEnabled: { [weak context] action in
             guard case .resetToCommit(let sha) = action, let context, case let (repository, commit)? = target(sha, context) else {
                 return false
@@ -51,6 +52,8 @@ enum HistoryActions {
             let model = repository.commit
             await context.presenter.perform { answers throws(OperationError) in
                 try await model.reset(to: commit, confirmed: answers.confirmed)
+            } outcome: { result in
+                OperationOutcomes.toast(for: result)
             }
         }
 

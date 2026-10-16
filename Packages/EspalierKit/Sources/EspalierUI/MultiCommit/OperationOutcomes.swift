@@ -1,14 +1,14 @@
 // The toasts for merges, rebases, cherry-picks, squashes, reorders, undos,
-// and checkouts that switched worktrees, also when a recovery runs the
-// operation again. The copy is the state layer's. Undo is offered only
-// while the state layer's `operations.undo` is valid: a toast whose undo
-// expires loses its button.
+// resets, and checkouts that switched worktrees, also when a recovery runs
+// the operation again. The copy is the state layer's. Undo is offered only
+// while the state layer's `operations.undo` is valid: on the toast while it
+// shows, from Edit ▸ Undo after it closes too; once the undo expires, the
+// toast loses its button and Edit ▸ Undo no longer offers it.
 
 import EspalierCore
 import EspalierSupport
 import Foundation
 import GitKit
-import Observation
 
 /// Builds outcome toasts.
 @MainActor
@@ -31,9 +31,7 @@ enum OperationOutcomes {
             guard let undo = repository.operations.undo, undoMatches(undo, result) else {
                 return Toast(summary)
             }
-            let toast = Toast(summary, undo: undoAction(repository: repository, context: context))
-            expireUndo(of: toast, undo: undo, repository: repository, context: context)
-            return toast
+            return Toast(summary, undo: undoAction(undo, repository: repository, context: context))
         default:
             return Toast(summary)
         }
@@ -77,10 +75,17 @@ enum OperationOutcomes {
         case .push(let push, _):
             ShellActions.finish(push, in: context)
             toast = nil
+        case .reset(let result, _):
+            toast = self.toast(for: result)
         }
         if let toast {
             context.presenter.show(toast)
         }
+    }
+
+    /// "Reset main to a1b2c3d", without Undo.
+    static func toast(for result: ResetResult) -> Toast {
+        Toast(result.summary)
     }
 
     /// "Switched to worktree <name>" when checking out a branch switched to
@@ -93,9 +98,21 @@ enum OperationOutcomes {
     }
 
     /// Undo: undoes the last operation through the presenter, then says so.
-    static func undoAction(repository: RepositoryModel, context: WindowContext) -> ToastAction {
-        ToastAction { [weak context] in
-            guard let context else {
+    /// Edit ▸ Undo names it ("Undo Squash") and offers it, after the toast
+    /// closes too, while the window shows the repository (its ID and its
+    /// worktree's path: another repository or worktree ends it for good)
+    /// and `undo` is still its state layer's.
+    static func undoAction(_ undo: MultiCommitUndo, repository: RepositoryModel, context: WindowContext) -> ToastAction {
+        let id = repository.id
+        let path = repository.record.path
+        let operations = repository.operations
+        return ToastAction(actionName: undo.kind.rawValue, isValid: { [weak context, weak operations] in
+            guard let shown = context?.repository, shown.id == id, JSCompat.strictEquals(shown.record.path, path) else {
+                return false
+            }
+            return operations?.undo == undo
+        }) { [weak context, weak repository] in
+            guard let context, let repository else {
                 return
             }
             await context.presenter.perform { _ throws(OperationError) in
@@ -115,57 +132,4 @@ enum OperationOutcomes {
         default: false
         }
     }
-
-    /// Takes Undo off `toast` once `undo` is no longer the state layer's
-    /// (the branch moved, changes appeared, or it was undone).
-    private static func expireUndo(of toast: Toast, undo: MultiCommitUndo, repository: RepositoryModel, context: WindowContext) {
-        let operations = repository.operations
-        let presenter = context.presenter
-        // The presenter shows the toast once the outcome returns it: watch
-        // from the next turn, when it's there.
-        Task { @MainActor [weak operations, weak presenter] in
-            guard let operations, let presenter else {
-                return
-            }
-            watchUndo(of: toast, undo: undo, operations: operations, presenter: presenter)
-        }
-    }
-
-    private static func watchUndo(of toast: Toast, undo: MultiCommitUndo, operations: MultiCommitOperationsModel, presenter: WindowPresenter) {
-        observe { [weak operations, weak presenter] in
-            guard let operations, let presenter else {
-                return false
-            }
-            guard presenter.toasts.contains(where: { $0.id == toast.id }) else {
-                return false
-            }
-            guard operations.undo == undo else {
-                presenter.replaceToast(Toast(id: toast.id, toast.message, systemImage: toast.systemImage))
-                return false
-            }
-            return true
-        }
-    }
-
-    /// Calls `check` now and again whenever what it reads changes, for as
-    /// long as it returns true.
-    static func observe(_ check: @escaping @MainActor () -> Bool) {
-        let registration = ObservationRegistration()
-        let keepsObserving = withObservationTracking {
-            check()
-        } onChange: {
-            Task { @MainActor in
-                if registration.isActive {
-                    observe(check)
-                }
-            }
-        }
-        registration.isActive = keepsObserving
-    }
-}
-
-/// Whether an observation's change handler should observe again.
-@MainActor
-private final class ObservationRegistration {
-    var isActive = true
 }
