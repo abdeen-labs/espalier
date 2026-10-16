@@ -122,7 +122,7 @@ public final class HistoryModel: RepositoryFeature {
     /// Whether the uncommitted-work row is selected rather than commits.
     public private(set) var isWorkingCopySelected = false
     /// The search, while there is a query.
-    public private(set) var search: HistorySearch?
+    public internal(set) var search: HistorySearch?
     /// The simple list's lines for the commits loaded: its rows, with each
     /// expanded merge's commits; empty until it loads
     /// (HistoryModel+SimpleMode.swift).
@@ -216,6 +216,21 @@ public final class HistoryModel: RepositoryFeature {
     @ObservationIgnored private let searchSlot = LatestTask<SearchKey>()
     /// The number of the active list's commits the search has looked at.
     @ObservationIgnored private var searchCoveredCount = 0
+    /// Whether the search hasn't looked at all the active list's commits.
+    @ObservationIgnored private var isListSearchPending = false
+    /// The commits the simple list's merges brought in, scanned for the
+    /// search, and how many of them the search has looked at
+    /// (HistoryModel+SimpleSearch.swift).
+    @ObservationIgnored var mergedSearchIndex: MergedSearchIndex?
+    @ObservationIgnored var mergedSearchCoveredCount = 0
+    @ObservationIgnored let mergedScanSlot = LatestTask<MergedScanKey>()
+    @ObservationIgnored let mergedMatchSlot = LatestTask<MergedMatchKey>()
+    /// Whether the search hasn't looked at all the commits the simple
+    /// list's merges brought in.
+    @ObservationIgnored var isMergedSearchPending = false
+    /// A match inside a merge moved to, selected once the merge's commits
+    /// load if the selection hasn't changed meanwhile.
+    @ObservationIgnored var pendingMergedReveal: PendingMergedReveal?
     @ObservationIgnored private let countSlot = LatestTask<UInt64>()
     @ObservationIgnored private let localCommitsSlot = LatestTask<Int>()
     @ObservationIgnored private var localCommitsExhausted = false
@@ -263,6 +278,7 @@ public final class HistoryModel: RepositoryFeature {
         resumeMergeLoads()
         if search?.isSearching == true {
             extendSearch()
+            extendMergedSearch()
         }
         // Without git's commit-graph file, every page in topological order
         // walks the whole history.
@@ -449,6 +465,7 @@ public final class HistoryModel: RepositoryFeature {
         }
         cancelMergeLoads()
         mergeExpansions = [:]
+        forgetMergedSearchIndex()
         simpleList = nil
         simpleFrame = nil
         setSimpleLoading(false)
@@ -532,6 +549,8 @@ public final class HistoryModel: RepositoryFeature {
     public func setSearchQuery(_ query: String) {
         guard SearchQuery(query) != nil else {
             searchSlot.cancel()
+            mergedMatchSlot.cancel()
+            pendingMergedReveal = nil
             if search != nil {
                 search = nil
             }
@@ -542,18 +561,21 @@ public final class HistoryModel: RepositoryFeature {
         }
         search = HistorySearch(query: query)
         searchCoveredCount = 0
+        restartMergedSearch()
         extendSearch()
     }
 
     /// Moves to the next match (after the selection when no match was moved
-    /// to yet), wrapping around, and selects it. Returns its row.
+    /// to yet), wrapping around, and selects it: a commit inside a merge of
+    /// the simple list once the merge, expanded to show it, has loaded its
+    /// commits. Returns its row (for a commit inside a merge, the merge's).
     @discardableResult
     public func selectNextSearchMatch() -> Int? {
         moveSearchMatch(forward: true)
     }
 
-    /// Moves to the previous match, wrapping around, and selects it.
-    /// Returns its row.
+    /// Moves to the previous match, wrapping around, and selects it, as
+    /// `selectNextSearchMatch()` does. Returns its row.
     @discardableResult
     public func selectPreviousSearchMatch() -> Int? {
         moveSearchMatch(forward: false)
@@ -568,20 +590,21 @@ public final class HistoryModel: RepositoryFeature {
         }
         let loop = beginPagingLoop()
         defer { endPagingLoop() }
-        await searchSlot.idle()
+        await searchIdle()
         let before = search?.matchCount ?? 0
         while isCurrentPagingLoop(loop), search?.query == query, (search?.matchCount ?? 0) == before {
             guard await loadPage(size: Self.largePageSize) else {
                 break
             }
-            await searchSlot.idle()
+            await searchIdle()
         }
         guard var current = search, current.query == query, current.matchCount > before else {
             return
         }
-        current.currentMatch = before
+        let match = current.match(at: before)
+        current.current = match
         search = current
-        selectRow(current.matchingRows[before])
+        revealSearchMatch(match)
     }
 
     /// Goes to the commit whose SHA starts with `sha` (4 to 64 hexadecimal
@@ -775,6 +798,8 @@ public final class HistoryModel: RepositoryFeature {
             }
             await goToCommitRequest.idle()
             await searchSlot.idle()
+            await mergedScanSlot.idle()
+            await mergedMatchSlot.idle()
             await selectionLoader.idle()
             await comparison.idle()
             await pullRequestPreview.idle()
@@ -787,7 +812,8 @@ public final class HistoryModel: RepositoryFeature {
                 await load.value
             }
             if !historyCheckSlot.isRunning, pageLoad == nil, !compareRequest.isRunning, comparisonRefresh == nil,
-               !goToCommitRequest.isRunning, !searchSlot.isRunning, !countSlot.isRunning, !localCommitsSlot.isRunning,
+               !goToCommitRequest.isRunning, !searchSlot.isRunning, !mergedScanSlot.isRunning, !mergedMatchSlot.isRunning,
+               !countSlot.isRunning, !localCommitsSlot.isRunning,
                !selectionLoader.isRunning, !comparison.isRunning, !pullRequestPreview.isRunning,
                !pullRequestChanges.isRunning, !simpleCheckSlot.isRunning, !simpleFrameSlot.isRunning, mergeLoads.isEmpty {
                 return
@@ -1238,6 +1264,8 @@ public final class HistoryModel: RepositoryFeature {
         pagingLoop &+= 1
         goToCommitRequest.cancel()
         searchSlot.cancel()
+        mergedScanSlot.cancel()
+        mergedMatchSlot.cancel()
         compareRequest.cancel()
         comparisonRefresh?.cancel()
         comparison.cancelLoads()
@@ -1475,7 +1503,8 @@ public final class HistoryModel: RepositoryFeature {
     // MARK: Searching
 
     /// Starts the search over on the list in view: with `rows` already found
-    /// for the whole list, or from its start.
+    /// for the whole list, or from its start. The simple list's merges'
+    /// commits are searched again from the start.
     private func restartSearch(rows: [Int]?, coveredCount: Int) {
         guard let current = search else {
             return
@@ -1484,14 +1513,17 @@ public final class HistoryModel: RepositoryFeature {
         var restarted = HistorySearch(query: current.query)
         if let rows {
             restarted.matchingRows = rows
-            restarted.isSearching = false
             searchCoveredCount = coveredCount
+            isListSearchPending = false
         } else {
             searchCoveredCount = 0
         }
         search = restarted
+        restartMergedSearch()
         if rows == nil {
             extendSearch()
+        } else {
+            publishSearchProgress()
         }
     }
 
@@ -1502,9 +1534,8 @@ public final class HistoryModel: RepositoryFeature {
             return
         }
         guard let list = activeList, searchCoveredCount < list.commits.count else {
-            if current.isSearching {
-                search?.isSearching = false
-            }
+            isListSearchPending = false
+            publishSearchProgress()
             return
         }
         let start = searchCoveredCount
@@ -1512,9 +1543,8 @@ public final class HistoryModel: RepositoryFeature {
         let commits = list.commits[start..<end]
         let rowOffset = list.rowOffset
         let key = SearchKey(query: current.query, listID: list.id, start: start)
-        if !current.isSearching {
-            search?.isSearching = true
-        }
+        isListSearchPending = true
+        publishSearchProgress()
         searchSlot.run(
             key,
             operation: { await searchMatchingRows(commits, query: query, rowOffset: rowOffset) },
@@ -1529,41 +1559,88 @@ public final class HistoryModel: RepositoryFeature {
         )
     }
 
-    /// Adds the matches found with a page, if the search was up to date.
+    /// Adds the matches found with a page, if the search was up to date,
+    /// and searches the commits the page's merges brought in.
     private func appendSearchRows(_ rows: [Int]?, query: SearchQuery?, from start: Int, to end: Int) {
         guard let current = search else {
             return
         }
-        if let rows, !current.isSearching, searchCoveredCount == start, SearchQuery(current.query) == query {
+        if let rows, !isListSearchPending, searchCoveredCount == start, SearchQuery(current.query) == query {
             if !rows.isEmpty {
                 search?.matchingRows.append(contentsOf: rows)
             }
             searchCoveredCount = end
-        } else if !current.isSearching {
+        } else if !isListSearchPending {
             extendSearch()
+        }
+        extendMergedSearch()
+    }
+
+    /// Sets the search's `isSearching`: whether the list's commits, or the
+    /// commits the simple list's merges brought in, are still being
+    /// searched.
+    func publishSearchProgress() {
+        let isSearching = isListSearchPending || isMergedSearchPending
+        if let current = search, current.isSearching != isSearching {
+            search?.isSearching = isSearching
+        }
+    }
+
+    /// Waits until the search has looked at every loaded commit.
+    private func searchIdle() async {
+        while true {
+            await searchSlot.idle()
+            await mergedScanSlot.idle()
+            await mergedMatchSlot.idle()
+            if !searchSlot.isRunning, !mergedScanSlot.isRunning, !mergedMatchSlot.isRunning {
+                return
+            }
         }
     }
 
     private func moveSearchMatch(forward: Bool) -> Int? {
-        guard var current = search, !current.matchingRows.isEmpty else {
+        guard var current = search, current.matchCount > 0 else {
             return nil
         }
-        let count = current.matchingRows.count
+        let count = current.matchCount
         let next: Int
         if let index = current.currentMatch {
             next = forward ? (index + 1) % count : (index + count - 1) % count
-        } else if let selected = selection.shas.first.flatMap(row(of:)) {
-            next = forward
-                ? current.insertionIndex(of: selected + 1) % count
-                : (current.insertionIndex(of: selected) + count - 1) % count
+        } else if let selected = selection.shas.first, let counts = searchMatchCounts(around: selected, in: current) {
+            next = forward ? counts.through % count : (counts.before + count - 1) % count
         } else {
             next = forward ? 0 : count - 1
         }
-        current.currentMatch = next
+        let match = current.match(at: next)
+        current.current = match
         search = current
-        let row = current.matchingRows[next]
-        selectRow(row)
-        return row
+        revealSearchMatch(match)
+        return switch match {
+        case .row(let row): row
+        case .merged(let mergeRow, _): mergeRow
+        }
+    }
+
+    /// How many matches come before the loaded commit `sha`, and how many
+    /// before or at it: a commit of the list, or one an expanded merge of
+    /// the simple list shows.
+    private func searchMatchCounts(around sha: String, in search: HistorySearch) -> (before: Int, through: Int)? {
+        if let row = row(of: sha) {
+            return search.matchCounts(aroundRow: row)
+        }
+        return isSimpleListShown ? mergedSearchMatchCounts(around: sha, in: search) : nil
+    }
+
+    /// Selects a match: a commit of the list, or one a merge of the simple
+    /// list brought in, expanding the merge to show it.
+    private func revealSearchMatch(_ match: HistorySearchMatch) {
+        pendingMergedReveal = nil
+        switch match {
+        case .row(let row):
+            selectRow(row)
+        case .merged(let mergeRow, let sha):
+            revealMergedMatch(mergeRow: mergeRow, sha: sha)
+        }
     }
 
     private func selectRow(_ row: Int) {

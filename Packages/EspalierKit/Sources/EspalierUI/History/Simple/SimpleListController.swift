@@ -557,7 +557,9 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         case .mergedCommit(let mergeRow, let index):
             simpleRow = history.simpleMergedRow(mergeRow: mergeRow, index: index)
             kind = .mergedCommit
-            isDimmed = presentation.search != nil
+            if let search = presentation.search {
+                isDimmed = !(simpleRow.map { search.matches(mergedCommit: $0.commit.sha) } ?? false)
+            }
             let isLast = !isUnderMerge(mergeRow, tableRow: row + 1)
             rail = colors.mergedRail(mergeRow: mergeRow, color: mergedColor(ofRow: mergeRow), isLast: isLast, isDimmed: isDimmed)
         case .mergedCommitsStatus:

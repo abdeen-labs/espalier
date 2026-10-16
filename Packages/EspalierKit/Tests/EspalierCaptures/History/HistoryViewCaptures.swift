@@ -45,7 +45,7 @@ struct HistoryViewCaptures {
         matches.matchingRows = [3, 9, 40]
         matches.isSearching = false
         var moved = matches
-        moved.currentMatch = 1
+        moved.current = .row(9)
         var none = HistorySearch(query: "nothing")
         none.isSearching = false
         var sha = HistorySearch(query: "a1b2c3d4")

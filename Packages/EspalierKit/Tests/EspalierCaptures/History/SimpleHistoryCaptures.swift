@@ -1,7 +1,8 @@
 // History's simple list on a real repository (HistoryCaptureFixtures): the
 // base's notice, then the feature branch's commits one after another,
-// merges as one row; and a merge expanded, the commits it brought in
-// indented under it. The list is drawn alone (the header is History's).
+// merges as one row; a merge expanded, the commits it brought in indented
+// under it; and a search that moved to a match inside a merge. The list is
+// drawn alone (the header is History's).
 
 import AppKit
 @testable import EspalierCore
@@ -37,6 +38,23 @@ struct SimpleHistoryCaptures {
             try fixture.history.select(shas: [#require(fixture.shas["Use the new widget sizes"])], contiguous: true)
             await fixture.settle()
             await captureList(fixture, named: "expanded")
+            await fixture.settle()
+        }
+    }
+
+    @Test("a search moved to a match inside a merge: the merge expanded, its matching commit selected, the others dimmed")
+    func searchInsideMerge() async throws {
+        try await withIsolatedGitConfig { _ in
+            let fixture = try await makeSimpleHistoryFixture()
+            fixture.history.setSearchQuery("refresh")
+            await fixture.settle()
+            // The merge's row, then "Refresh the widget's timeline" inside it.
+            fixture.history.selectNextSearchMatch()
+            fixture.history.selectNextSearchMatch()
+            await fixture.settle()
+            let match = try #require(fixture.shas["Refresh the widget's timeline"])
+            try #require(fixture.history.selection.shas == [match])
+            await captureList(fixture, named: "search-insideMerge")
             await fixture.settle()
         }
     }

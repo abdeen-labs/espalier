@@ -1,5 +1,5 @@
 // The selected commit's header: the summary, then the author, when it was
-// committed, its tags, and the short SHA with a copy button, then the
+// authored, its tags, and the short SHA with a copy button, then the
 // description, two lines until expanded. Its branches show in its row, not
 // here. The summary and description show emoji for shortcodes and link
 // URLs, and in GitHub repositories issue references and mentions
@@ -131,7 +131,7 @@ struct CommitHeader: View {
                 .foregroundStyle(.text)
                 .tooltip(content.authorEmail.isEmpty ? content.authorName : "\(content.authorName) <\(content.authorEmail)>")
             HStack(spacing: 3) {
-                Text("committed")
+                Text("authored")
                 RelativeTimeText(content.date)
             }
             .foregroundStyle(.text3)

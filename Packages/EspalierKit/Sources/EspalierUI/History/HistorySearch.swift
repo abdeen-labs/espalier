@@ -65,11 +65,14 @@ nonisolated struct HistorySearchStatusContent: Sendable, Equatable {
         )
     }
 
+    /// The status of the history's search: the loaded commits counted
+    /// are the list's and, in the simple style, those its merges brought
+    /// in that were searched.
     @MainActor
     init(_ search: HistorySearch, history: HistoryModel, numberFormat: NumberFormat) {
         self.init(
             search: search,
-            loaded: history.commitSHAs.count,
+            loaded: history.commitSHAs.count + search.mergedCommitCount,
             isComplete: history.isComplete,
             isLoadingMore: history.isLoadingMore,
             numberFormat: numberFormat

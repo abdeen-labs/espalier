@@ -353,6 +353,7 @@ extension HistoryModel {
         }
         mergeExpansions[sha] = expansion
         rebuildSimpleOutline()
+        finishMergedSearchLoad(sha)
     }
 
     /// Loads the expanded merges' commits again where a load was stopped

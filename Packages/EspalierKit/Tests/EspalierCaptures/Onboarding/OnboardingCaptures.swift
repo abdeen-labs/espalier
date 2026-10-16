@@ -1,13 +1,15 @@
 // The welcome flow's steps: the first step, and Configure Git with a
-// signed-in account's author, a typed address the account doesn't have,
-// and a lock file that kept Finish from writing. Configure Git reads the
-// global configuration (an isolated one, empty) before it's drawn.
+// signed-in account's author, an author the global configuration already
+// has, a typed address the account doesn't have, and a lock file that kept
+// Finish from writing. Configure Git reads the global configuration (an
+// isolated one, empty unless the capture fills it) before it's drawn.
 
 import AppKit
 @testable import EspalierCore
 import EspalierCoreTestSupport
 import Foundation
 import GitHubKit
+import GitKit
 import SwiftUI
 import Testing
 import TestSupport
@@ -23,15 +25,21 @@ struct OnboardingCaptures {
         capture(WelcomeStart().frame(maxWidth: .infinity, maxHeight: .infinity), named: "start", area: area, size: size)
     }
 
-    /// Configure Git signed in to `accounts`, loaded, then changed by
-    /// `edit`, which gets the global configuration's path.
+    /// Configure Git signed in to `accounts`, over a global configuration
+    /// holding `configured` (`user.name`, `user.email`), loaded, then
+    /// changed by `edit`, which gets the global configuration's path.
     private func configureGit(
         named name: String,
         signedIn accounts: [Account],
+        configured: (name: String, email: String)? = nil,
         size: CGSize? = nil,
         edit: (ConfigureGitModel, String) async throws -> Void = { _, _ in }
     ) async throws {
         try await withIsolatedGitConfig { configPath in
+            if let configured {
+                try await setGlobalConfigValue("user.name", configured.name)
+                try await setGlobalConfigValue("user.email", configured.email)
+            }
             let harness = try AppHarness()
             let app = try await AccountCaptureFixtures.app(harness, signedIn: accounts)
             let model = ConfigureGitModel(app: app, presenter: WindowPresenter(app: app))
@@ -45,6 +53,15 @@ struct OnboardingCaptures {
     @Test("Configure Git: the account's author")
     func account() async throws {
         try await configureGit(named: "configureGit-account", signedIn: [AccountCaptureFixtures.dotCom])
+    }
+
+    @Test("Configure Git: an author the global configuration already has")
+    func configured() async throws {
+        try await configureGit(
+            named: "configureGit-configured",
+            signedIn: [AccountCaptureFixtures.dotCom],
+            configured: ("Joseph Bloggs", "joseph.bloggs@work.example.com")
+        )
     }
 
     @Test("Configure Git: a typed address the account doesn't have")

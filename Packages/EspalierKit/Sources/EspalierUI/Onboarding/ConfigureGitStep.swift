@@ -3,7 +3,9 @@
 // in, the name and email (`GitAuthorForm`: the account's name and its
 // addresses in a pop-up, or typed ones with the attribution check), the
 // example commit, and Finish, which writes only what changed through the
-// global git settings.
+// global git settings. A global configuration that already has a name and
+// an email starts the step on "Configure manually" with them, so Finish
+// keeps them unless the user picks the account or edits them.
 //
 // The pop-up offers the account's verified addresses and its private
 // noreply one; a name git would reject can't be saved; and a write that
@@ -39,13 +41,20 @@ final class ConfigureGitModel {
     @ObservationIgnored let app: AppModel
     @ObservationIgnored let presenter: WindowPresenter
 
-    var source: Source
+    var source: Source {
+        didSet { noteChoiceBeforeLoad() }
+    }
     var manualName = ""
     var manualEmail = ""
     /// The account address chosen in the pop-up.
-    var accountEmail = ""
+    var accountEmail: String {
+        didSet { noteChoiceBeforeLoad() }
+    }
     var lockFile: LockFile?
     var isLoaded = false
+    /// Whether the user picked where the author comes from, or an account
+    /// address, before the configuration loaded.
+    @ObservationIgnored private var choseBeforeLoad = false
     private(set) var isSaving = false
     /// The global configuration when the step loaded it.
     private(set) var configured = GlobalGitSettings(name: nil, email: nil, defaultBranch: "main")
@@ -62,6 +71,8 @@ final class ConfigureGitModel {
             accountEmail = choices.contains(preferred) || choices.isEmpty ? preferred : choices[0]
             manualName = Self.accountName(initial)
             manualEmail = preferred
+        } else {
+            accountEmail = ""
         }
     }
 
@@ -133,7 +144,10 @@ final class ConfigureGitModel {
     // MARK: Loading and saving
 
     /// Reads the global author: a configured name and address fill the
-    /// manual fields, unless something was typed already.
+    /// manual fields, unless something was typed already. When both are
+    /// configured, the step first shows them ("Configure manually"), so
+    /// Finish keeps them, unless the user chose or typed before they
+    /// loaded.
     func load() async {
         do throws(OperationError) {
             configured = try await app.loadGlobalGitSettings()
@@ -141,13 +155,28 @@ final class ConfigureGitModel {
             // Nothing to fill in: the fields keep the account's values.
             logger.error("Could not read the global author: \(error.message, privacy: .public)")
         }
-        if let name = configured.name, !name.isEmpty, !isEdited(\.manualName) {
+        let isFirstLoad = !isLoaded
+        let name = configured.name ?? ""
+        let email = configured.email ?? ""
+        let isUntouched = !choseBeforeLoad && !isEdited(\.manualName) && !isEdited(\.manualEmail)
+        if !name.isEmpty, !isEdited(\.manualName) {
             manualName = name
         }
-        if let email = configured.email, !email.isEmpty, !isEdited(\.manualEmail) {
+        if !email.isEmpty, !isEdited(\.manualEmail) {
             manualEmail = email
         }
         isLoaded = true
+        if isFirstLoad, isUntouched, !name.isEmpty, !email.isEmpty {
+            source = .manual
+        }
+    }
+
+    /// Notes a choice the user made before the configuration loaded, which
+    /// the load leaves as it is.
+    private func noteChoiceBeforeLoad() {
+        if !isLoaded {
+            choseBeforeLoad = true
+        }
     }
 
     /// Whether a manual field differs from what the account suggested
