@@ -13,11 +13,11 @@
 # reused while it holds the same app, a DMG already uploaded is kept when it
 # matches, and the appcast's entry for this version is replaced.
 #
+# The uploads run through the Railway CLI, signed in and with this checkout
+# linked to the updates project, which gives them the bucket's credentials
+# from the update host's service.
+#
 # Environment:
-#   UPDATES_BUCKET, UPDATES_ACCESS_KEY_ID, UPDATES_SECRET_ACCESS_KEY
-#                    The bucket's credentials (not needed with UPLOAD=0).
-#   UPDATES_ENDPOINT, UPDATES_REGION
-#                    Default https://t3.storageapi.dev and auto.
 #   SPARKLE_ACCOUNT  The Keychain account of Sparkle's private key
 #                    (default: espalier).
 #   SPARKLE_BIN      The folder with Sparkle's generate_appcast and
@@ -56,6 +56,14 @@ cleanup() {
   rm -rf "$work"
 }
 trap cleanup EXIT
+
+# Runs a command with the variables of the update host's service, from the
+# Railway project this checkout is linked to (docs/RELEASING.md, One-time
+# setup): BUCKET, ACCESS_KEY_ID, SECRET_ACCESS_KEY, and ENDPOINT, the
+# bucket's.
+with_bucket() {
+  (cd "$root" && railway run --environment production --service updates -- "$@")
+}
 
 read_plist() {
   /usr/libexec/PlistBuddy -c "Print :$2" "$1/Contents/Info.plist" 2>/dev/null || true
@@ -115,11 +123,9 @@ remote_tag="$(git -C "$root" ls-remote --tags origin | awk -v ref="refs/tags/$ta
 [[ -z "$remote_tag" || "$remote_tag" == "$head" ]] || fail "$tag on origin names another commit."
 
 if [[ "$upload" == 1 ]]; then
-  missing=""
-  for name in UPDATES_BUCKET UPDATES_ACCESS_KEY_ID UPDATES_SECRET_ACCESS_KEY; do
-    [[ -n "${!name:-}" ]] || missing+=" $name"
-  done
-  [[ -z "$missing" ]] || fail "not set:$missing (docs/RELEASING.md, One-time setup). UPLOAD=0 stops before uploading."
+  command -v railway >/dev/null || fail "the uploads need the Railway CLI (brew install railway). UPLOAD=0 stops before uploading."
+  with_bucket /bin/sh -c '[ -n "$BUCKET" ] && [ -n "$ACCESS_KEY_ID" ] && [ -n "$SECRET_ACCESS_KEY" ]' ||
+    fail "Railway didn't give the bucket's credentials. Sign in with railway login, link this checkout (docs/RELEASING.md, One-time setup), and run again."
 fi
 
 # Sparkle's tools come with the Sparkle package, which Xcode resolves into
@@ -229,22 +235,25 @@ if [[ "$upload" != 1 ]]; then
   exit 0
 fi
 
-endpoint="${UPDATES_ENDPOINT:-https://t3.storageapi.dev}"
-endpoint="${endpoint#https://}"
-endpoint="${endpoint%%/*}"
-
-# Uploads a file to the bucket's espalier/<name>. The key pair goes to curl
-# on stdin, so the secret never shows in ps.
+# Uploads a file to the bucket's espalier/<name>. Only the upload sees the
+# bucket's credentials, and the key pair goes to curl on stdin, so the secret
+# never shows in ps.
 put() {
-  local file="$1" name="$2" type="$3" cache="${4:-}"
-  local headers=(--header "Content-Type: $type")
-  [[ -z "$cache" ]] || headers+=(--header "Cache-Control: $cache")
-  printf 'user = "%s:%s"\n' "$UPDATES_ACCESS_KEY_ID" "$UPDATES_SECRET_ACCESS_KEY" |
-    curl --config - --fail-with-body --silent --show-error \
-      --aws-sigv4 "aws:amz:${UPDATES_REGION:-auto}:s3" \
-      "${headers[@]}" \
-      --upload-file "$file" \
-      "https://$UPDATES_BUCKET.$endpoint/$app_key/$name"
+  with_bucket /bin/bash -c '
+    set -euo pipefail
+    file="$1" key="$2" type="$3" cache="$4"
+    endpoint="${ENDPOINT:-https://t3.storageapi.dev}"
+    endpoint="${endpoint#https://}"
+    endpoint="${endpoint%%/*}"
+    headers=(--header "Content-Type: $type")
+    [[ -z "$cache" ]] || headers+=(--header "Cache-Control: $cache")
+    printf "user = \"%s:%s\"\n" "$ACCESS_KEY_ID" "$SECRET_ACCESS_KEY" |
+      curl --config - --fail-with-body --silent --show-error \
+        --aws-sigv4 "aws:amz:auto:s3" \
+        "${headers[@]}" \
+        --upload-file "$file" \
+        "https://$BUCKET.$endpoint/$key"
+  ' put "$1" "$app_key/$2" "$3" "${4:-}"
 }
 
 # Whether the update host serves exactly this file as <name>.

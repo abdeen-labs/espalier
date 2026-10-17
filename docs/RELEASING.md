@@ -38,11 +38,13 @@ app; `scripts/publish-release.sh` packages and publishes it.
      keep the file's contents in your password manager, and delete the file.
      Without it, no update reaches installed copies again. On another Mac,
      `generate_keys --account espalier -f <file>` imports it.
-3. **Bucket credentials** in the shell you release from, from the bucket's
-   Credentials tab: `UPDATES_BUCKET`, `UPDATES_ACCESS_KEY_ID`,
-   `UPDATES_SECRET_ACCESS_KEY`, and, when they differ from
-   `https://t3.storageapi.dev` and `auto`, `UPDATES_ENDPOINT` and
-   `UPDATES_REGION`.
+3. **Railway CLI**, signed in (`railway login`) to the account with the
+   `updates` project, and this checkout linked to it: `railway link` in the
+   checkout's root, then the `updates` project, the `production`
+   environment, and the `updates` service. The link is kept in the CLI's
+   settings, not the repo, so a new checkout or Mac links again. The script
+   runs each upload through `railway run`, which gives it the bucket's
+   credentials from the update host's service.
 
 ## Cutting a release
 
