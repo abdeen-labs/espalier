@@ -436,8 +436,7 @@ final class PaneSplitView: NSSplitView, LookChangeObserving {
 /// Hides the window's split view dividers (the sidebar's and the
 /// inspector's) in the floating layout, where the backdrop's gaps divide
 /// the columns; flat, they show as AppKit draws them. It sits in the
-/// background of the window's `NavigationSplitView` and looks after the
-/// splits in the window's content.
+/// background of the window's content and looks after the splits in it.
 struct WindowDividerStyler: NSViewRepresentable {
     func makeNSView(context: Context) -> StylerView {
         StylerView()

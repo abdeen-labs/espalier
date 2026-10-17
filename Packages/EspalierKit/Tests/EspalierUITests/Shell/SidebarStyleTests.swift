@@ -1,7 +1,7 @@
 // The sidebar's two styles (Settings ▸ Appearance ▸ Sidebar): hidden, the
 // column a window opens without, which View ▸ Show Sidebar shows; and
-// icons, the rail, which Hide Sidebar hides while the column stays
-// collapsed, with an icon for each section the repository has.
+// icons, the rail and no column, which Hide Sidebar hides, with an icon
+// for each section the repository has.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport

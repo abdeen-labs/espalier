@@ -1,14 +1,14 @@
-// The main window's layout: a two-column `NavigationSplitView` (the sidebar
-// and a detail area with its own inner split), the inspector, the toolbar
-// with its search field, and the floating capsule and toasts. The window is
-// flat (`FlatWindowChrome`): the sidebar is opaque and the columns draw the
-// toolbar's band. In the floating layout the panes are cards on the
-// backdrop (FloatingPanes.swift).
+// The main window's layout: a detail area with its own inner split, the
+// inspector, the toolbar with its search field, and the floating capsule
+// and toasts. The window is flat (`FlatWindowChrome`): the sidebar is
+// opaque and the columns draw the toolbar's band. In the floating layout
+// the panes are cards on the backdrop (FloatingPanes.swift).
 //
 // The sidebar takes the style Settings ▸ Appearance ▸ Sidebar picks: in the
-// hidden style the column, hidden as the window opens; in the icons style
-// the rail at the detail area's leading edge (SidebarRail.swift), the
-// column always collapsed and its toolbar toggle gone.
+// hidden style a two-column `NavigationSplitView`, the sidebar's column
+// hidden as the window opens; in the icons style the rail at the detail
+// area's leading edge (SidebarRail.swift) and no column, so nothing at the
+// window's edge drags out.
 
 import EspalierCore
 import GitKit
@@ -24,47 +24,21 @@ struct MainWindow: View {
     var body: some View {
         let state = context.state
         let style = context.sidebarStyle
-        NavigationSplitView(columnVisibility: columnVisibility) {
-            Group {
-                if style == .hidden {
+        Group {
+            switch style {
+            case .hidden:
+                NavigationSplitView(columnVisibility: Bindable(state).columnVisibility) {
                     SidebarContainer()
-                } else {
-                    // The modifier only here: even removing nothing, it
-                    // moves the toggle into the toolbar's overflow.
-                    Color.clear
-                        .toolbar(removing: .sidebarToggle)
+                        .navigationSplitViewColumnWidth(
+                            min: Metrics.Column.sidebar.min,
+                            ideal: Metrics.Column.sidebar.ideal,
+                            max: Metrics.Column.sidebar.max ?? Metrics.Column.sidebar.ideal
+                        )
+                } detail: {
+                    detail
                 }
-            }
-            .navigationSplitViewColumnWidth(
-                min: Metrics.Column.sidebar.min,
-                ideal: Metrics.Column.sidebar.ideal,
-                max: Metrics.Column.sidebar.max ?? Metrics.Column.sidebar.ideal
-            )
-        } detail: {
-            let inspector = inspectorBinding
-            HStack(spacing: 0) {
-                if style == .icons, !state.isRailHidden {
-                    SidebarRail()
-                        .transition(.move(edge: .leading))
-                }
-                DetailRouter()
-                    .overlay(alignment: .bottom) {
-                        FloatingStatus()
-                    }
-                    .sidebarNudge(isSidebarHidden: state.columnVisibility == .detailOnly)
-                    // The cards follow the sidebar as it shows and hides and
-                    // keep the window's edge margin once it's hidden; the
-                    // inspector's card keeps the gap after them.
-                    .paneMarginsBesideSidebar(trailing: inspector.wrappedValue ? 0 : PaneCards.frameMargins.trailing)
-            }
-            .toolbarBand()
-            .inspector(isPresented: inspector) {
-                InspectorColumn()
-                    .inspectorColumnWidth(
-                        min: Metrics.Column.inspector.min,
-                        ideal: Metrics.Column.inspector.ideal,
-                        max: Metrics.Column.inspector.max ?? Metrics.Column.inspector.ideal
-                    )
+            case .icons:
+                detail
             }
         }
         .background {
@@ -97,18 +71,35 @@ struct MainWindow: View {
         }
     }
 
-    /// The column's visibility: always collapsed in the icons style, where
-    /// a drag at the window's edge can't bring it out.
-    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
+    /// The detail area, after the rail in the icons style, with the
+    /// inspector.
+    private var detail: some View {
         let state = context.state
-        return Binding(
-            get: { context.sidebarStyle == .icons ? .detailOnly : state.columnVisibility },
-            set: { visibility in
-                if context.sidebarStyle == .hidden {
-                    state.columnVisibility = visibility
-                }
+        let inspector = inspectorBinding
+        return HStack(spacing: 0) {
+            if context.sidebarStyle == .icons, !state.isRailHidden {
+                SidebarRail()
+                    .transition(.move(edge: .leading))
             }
-        )
+            DetailRouter()
+                .overlay(alignment: .bottom) {
+                    FloatingStatus()
+                }
+                .sidebarNudge(isSidebarHidden: state.columnVisibility == .detailOnly)
+                // The cards follow the sidebar as it shows and hides and
+                // keep the window's edge margin once it's hidden; the
+                // inspector's card keeps the gap after them.
+                .paneMarginsBesideSidebar(trailing: inspector.wrappedValue ? 0 : PaneCards.frameMargins.trailing)
+        }
+        .toolbarBand()
+        .inspector(isPresented: inspector) {
+            InspectorColumn()
+                .inspectorColumnWidth(
+                    min: Metrics.Column.inspector.min,
+                    ideal: Metrics.Column.inspector.ideal,
+                    max: Metrics.Column.inspector.max ?? Metrics.Column.inspector.ideal
+                )
+        }
     }
 
     /// Commit Info shows only in History-like places.

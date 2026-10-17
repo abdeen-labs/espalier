@@ -58,7 +58,7 @@ public final class WindowState {
     /// selection).
     public var place: SidebarPlace?
     /// Whether the sidebar's column shows (`.detailOnly` hidden): hidden as
-    /// the window opens, and always in the icons style.
+    /// the window opens, and always in the icons style, which has none.
     public var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     /// Whether the icons style's rail is hidden.
     public var isRailHidden = false

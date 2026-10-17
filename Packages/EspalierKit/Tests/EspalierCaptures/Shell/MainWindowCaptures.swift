@@ -1,8 +1,9 @@
 // The whole main window, its toolbar, sidebar, and detail area, as a
 // titled window draws it offscreen: History with HEAD's commit and its
 // diff, History with Commit Info, History with the sidebar hidden (Changes
-// | History in the toolbar), History beside the icons style's rail, and a
-// merge's conflicts in Changes; and the rail's Branches and Tags popovers.
+// | History in the toolbar), History beside the icons style's rail, with
+// and without Commit Info, and a merge's conflicts in Changes; and the
+// rail's Branches and Tags popovers.
 // The window stays up while its split view, toolbar, and diff finish, so
 // it's drawn in the run's look: `--look islands-lagoon` shows the panes as
 // cards on the backdrop.
@@ -88,6 +89,18 @@ struct MainWindowCaptures {
             fixture.app.preferences.sidebarStyle = .icons
             await fixture.show(.history)
             await captureWindow(fixture.context, named: "history-rail", showsDiff: true)
+            await fixture.settle()
+        }
+    }
+
+    @Test("History with Commit Info beside the icons style's rail")
+    func historyRailInspector() async throws {
+        try await withIsolatedGitConfig { _ in
+            let fixture = try await MainWindowFixture.history()
+            fixture.app.preferences.sidebarStyle = .icons
+            await fixture.show(.history)
+            fixture.context.state.isInspectorPresented = true
+            await captureWindow(fixture.context, named: "history-rail-inspector", showsDiff: true)
             await fixture.settle()
         }
     }
