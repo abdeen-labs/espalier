@@ -237,12 +237,20 @@ final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableV
     }
 }
 
-/// The file list's `NSTableView`: Return opens the selected file, and a
-/// secondary click (or ⇧F10) shows a file's menu.
+/// The file list's `NSTableView`: a click focuses it, Return opens the
+/// selected file, and a secondary click (or ⇧F10) shows a file's menu.
 final class HistoryFileTableView: NSTableView, ContextMenuContentProviding {
     weak var controller: HistoryFileListController?
     /// The row whose context menu is open.
     lazy var contextMenuTarget = TableContextMenuTarget(table: self)
+
+    /// A click on a row focuses the list, so the arrow keys move through
+    /// the files: the row's hosted SwiftUI view takes the click but not
+    /// focus, which would stay with the commit list.
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.mouseDown(with: event)
+    }
 
     override func keyDown(with event: NSEvent) {
         let key = event.charactersIgnoringModifiers?.unicodeScalars.first.map { Int($0.value) }
