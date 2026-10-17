@@ -327,9 +327,11 @@ nonisolated extension Theme {
     }
 
     /// `theme` in `color` (its default when nil or not one of its colors),
-    /// its backgrounds in `background`, made once.
+    /// its backgrounds in `background` (its own when not one it offers),
+    /// made once.
     public static func named(_ theme: DesignTheme, color: DesignThemeColor? = nil, background: BackgroundTint = .own) -> Theme {
         let color = color.flatMap { theme.colors.contains($0) ? $0 : nil } ?? theme.defaultColor
+        let background = theme.backgrounds.contains(background) ? background : .own
         let key = ThemeKey(theme: theme, color: color, background: background)
         if let made = ThemeCache.themes.withLock({ $0[key] }) {
             return made

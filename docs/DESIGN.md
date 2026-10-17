@@ -58,7 +58,7 @@ current look.
 - **A background tint** (Neutral, Warm, Cool, Sage, Rose, Lavender) gives
   any theme's surfaces its hue in place of the theme's own, faint on white
   and stronger toward gray, each surface as light as before. Pop's sidebar
-  keeps its accent.
+  keeps its accent. Islands can also take Classic's backgrounds.
 
 ## Motion
 

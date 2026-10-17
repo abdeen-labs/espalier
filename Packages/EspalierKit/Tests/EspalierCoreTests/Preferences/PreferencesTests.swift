@@ -219,21 +219,28 @@ struct PreferencesTests {
         reloaded.designTheme = .islands
         #expect(reloaded.designThemeColor == .lagoon)
         #expect(reloaded.designThemeBackground == .own)
+        // Classic's backgrounds are Islands' alone.
+        reloaded.designThemeBackground = .classic
+        reloaded.designTheme = .orchard
+        reloaded.designThemeBackground = .classic
+        #expect(reloaded.designThemeBackgrounds == [.classic: .own, .orchard: .warm, .islands: .classic, .pop: .lavender])
         #expect(reloaded.appFont == .atkinson)
         #expect(reloaded.codeFont == .geistMono)
 
-        // Unknown values, and a color of another theme, are the defaults.
+        // Unknown values, a color of another theme, and a background the
+        // theme doesn't offer are the defaults.
         temporary.defaults.set("neon", forKey: "design-theme")
         temporary.defaults.set("berry", forKey: "design-theme-color-orchard")
         temporary.defaults.set("chartreuse", forKey: "design-theme-color-pop")
         temporary.defaults.set("plaid", forKey: "design-theme-background-orchard")
+        temporary.defaults.set("classic", forKey: "design-theme-background-pop")
         temporary.defaults.set("comic", forKey: "app-font")
         // A font of the other kind isn't one of these.
         temporary.defaults.set("atkinson", forKey: "code-font")
         let unknown = Preferences(store: PreferenceStore(temporary.defaults))
         #expect(unknown.designTheme == .classic)
         #expect(unknown.designThemeColors == [.orchard: .ink, .islands: .lagoon, .pop: .tangerine])
-        #expect(unknown.designThemeBackgrounds == [.classic: .own, .orchard: .own, .islands: .own, .pop: .lavender])
+        #expect(unknown.designThemeBackgrounds == [.classic: .own, .orchard: .own, .islands: .classic, .pop: .own])
         #expect(unknown.appFont == .sf)
         #expect(unknown.codeFont == .sfMono)
     }

@@ -5,19 +5,22 @@
 // surface's chroma grows with its depth (away from white in light, away
 // from black in dark), as the themes' own tints do; a surface too near
 // white to carry the hue is as light as the hue allows. Neutral takes the
-// hue away. Translucent washes (hover, selection, the scrim) stay
-// as they are and take the tint from what's under them; text, the accent,
-// and status colors stay the theme's. Hue and chroma are OKLCH's.
+// hue away. Classic (Islands') puts Classic's surfaces in place of the
+// theme's, its sidebar's color for the backdrop. Translucent washes (hover,
+// selection, the scrim) stay as they are and take the tint from what's
+// under them; text, the accent, and status colors stay the theme's. Hue and
+// chroma are OKLCH's.
 
 import AppKit
 import EspalierCore
 import Synchronization
 
 nonisolated extension BackgroundTint {
-    /// The tint's hue, in degrees; nil for the theme's own and for Neutral.
+    /// The tint's hue, in degrees; nil for the theme's own, Classic's, and
+    /// Neutral.
     var hue: Double? {
         switch self {
-        case .own, .neutral: nil
+        case .own, .classic, .neutral: nil
         case .warm: 75
         case .cool: 250
         case .sage: 150
@@ -43,6 +46,9 @@ nonisolated extension ThemeDefinition {
         guard tint != .own else {
             return self
         }
+        guard tint != .classic else {
+            return withClassicSurfaces
+        }
         func tinted(_ color: NSColor) -> NSColor {
             OKLCH.tinted(color, tint)
         }
@@ -62,6 +68,26 @@ nonisolated extension ThemeDefinition {
         definition.segmentSelection = segmentSelection.map(tinted)
         definition.backdrop = backdrop.map(tinted)
         definition.sidebarSelection = tinted(sidebarSelection)
+        return definition
+    }
+
+    /// The definition with Classic's surfaces, and Classic's sidebar for
+    /// the backdrop.
+    private var withClassicSurfaces: ThemeDefinition {
+        let classic = ThemeDefinition.classic
+        var definition = self
+        definition.tint = .classic
+        definition.background = classic.background
+        if sidebarTakesTint {
+            definition.sidebar = classic.sidebar
+        }
+        definition.field = classic.field
+        definition.hunk = classic.hunk
+        definition.line = classic.line
+        definition.line2 = classic.line2
+        definition.quiet = classic.quiet
+        definition.soft = classic.soft
+        definition.backdrop = backdrop.map { _ in classic.sidebar }
         return definition
     }
 }

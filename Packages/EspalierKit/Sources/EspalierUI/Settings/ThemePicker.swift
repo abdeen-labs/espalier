@@ -34,6 +34,7 @@ extension BackgroundTint {
     var title: String {
         switch self {
         case .own: "Default"
+        case .classic: "Classic"
         case .neutral: "Neutral"
         case .warm: "Warm"
         case .cool: "Cool"

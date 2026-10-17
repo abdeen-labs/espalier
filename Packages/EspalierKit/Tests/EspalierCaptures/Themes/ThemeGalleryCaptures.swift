@@ -2,7 +2,8 @@
 // dark: the sidebar with its selection and a section label, a few graph
 // rows, two History rows with ref tags (one selected), the buttons, a
 // commit's title, and file badges. Each theme in each of its colors, each
-// background tint on Classic, and each app font and code font on Classic.
+// background tint on Classic, Classic's backgrounds on Islands, and each app
+// font and code font on Classic.
 
 import AppKit
 import EspalierCore
@@ -23,9 +24,14 @@ struct ThemeGalleryCaptures {
         capture(ThemeGallery(), named: "gallery", area: area, look: look)
     }
 
-    @Test("each background tint on Classic", arguments: BackgroundTint.allCases.filter { $0 != .own })
+    @Test("each background tint on Classic", arguments: DesignTheme.classic.backgrounds.filter { $0 != .own })
     func backgrounds(_ background: BackgroundTint) {
         capture(ThemeGallery(), named: "gallery", area: area, look: Look(background: background))
+    }
+
+    @Test("Classic's backgrounds on Islands")
+    func islandsClassicBackgrounds() {
+        capture(ThemeGallery(), named: "gallery", area: area, look: Look(theme: .islands, background: .classic))
     }
 
     @Test("each app font on Classic", arguments: [AppFont.fixel, .atkinson, .martian])

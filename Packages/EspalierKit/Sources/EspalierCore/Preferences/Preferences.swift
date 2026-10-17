@@ -142,6 +142,15 @@ public enum DesignTheme: String, Sendable, Hashable, CaseIterable {
         case .pop: .tangerine
         }
     }
+
+    /// The theme's background tints, in the order Settings shows them:
+    /// every tint, and for Islands, Classic's backgrounds.
+    public var backgrounds: [BackgroundTint] {
+        switch self {
+        case .islands: BackgroundTint.allCases
+        case .classic, .orchard, .pop: BackgroundTint.allCases.filter { $0 != .classic }
+        }
+    }
 }
 
 /// A design theme's color. Each belongs to one theme (`DesignTheme.colors`).
@@ -157,6 +166,9 @@ public enum DesignThemeColor: String, Sendable, Hashable, CaseIterable {
 public enum BackgroundTint: String, Sendable, Hashable, CaseIterable {
     /// The theme's own backgrounds.
     case own
+    /// Classic's backgrounds, which Islands offers
+    /// (`DesignTheme.backgrounds`).
+    case classic
     case neutral, warm, cool, sage, rose, lavender
 }
 
@@ -493,10 +505,14 @@ public final class Preferences {
         }
     }
 
-    /// The current design theme's background tint.
+    /// The current design theme's background tint; setting one the theme
+    /// doesn't offer does nothing.
     public var designThemeBackground: BackgroundTint {
         get { designThemeBackgrounds[designTheme] ?? .own }
-        set { designThemeBackgrounds[designTheme] = newValue }
+        set {
+            guard designTheme.backgrounds.contains(newValue) else { return }
+            designThemeBackgrounds[designTheme] = newValue
+        }
     }
 
     /// The app font (`app-font`; SF Pro by default).
@@ -537,11 +553,12 @@ public final class Preferences {
         return colors
     }
 
-    /// Each design theme's background tint stored in `store`: an unknown
-    /// one, or none, is the theme's own.
+    /// Each design theme's background tint stored in `store`: one the theme
+    /// doesn't offer, or none, is the theme's own.
     public static func storedDesignThemeBackgrounds(in store: PreferenceStore) -> [DesignTheme: BackgroundTint] {
         Dictionary(uniqueKeysWithValues: DesignTheme.allCases.map { theme in
-            (theme, store.getEnum(PreferenceKey.designThemeBackground(theme), BackgroundTint.self) ?? .own)
+            let stored = store.getEnum(PreferenceKey.designThemeBackground(theme), BackgroundTint.self)
+            return (theme, stored.flatMap { theme.backgrounds.contains($0) ? $0 : nil } ?? .own)
         })
     }
 

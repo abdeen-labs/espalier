@@ -117,7 +117,7 @@ struct AppearanceForm: View {
                     }
                 }
                 SettingsRow("Background", description: preferences.designThemeBackground.title) {
-                    SwatchPicker("Background", values: BackgroundTint.allCases, selection: $preferences.designThemeBackground, title: \.title) { tint in
+                    SwatchPicker("Background", values: preferences.designTheme.backgrounds, selection: $preferences.designThemeBackground, title: \.title) { tint in
                         Theme.named(preferences.designTheme, color: preferences.designThemeColor, background: tint).backgroundSwatch
                     }
                 }
