@@ -1,7 +1,7 @@
 // About ▸ Acknowledgements: GitHub Desktop's MIT notice, which Espalier is
 // based on; dugite, whose git runner Espalier ports; the tools bundled with
-// Espalier, Git (GPL-2.0, with where its source is), Git LFS, and Git
-// Credential Manager; SwiftTreeSitter, tree-sitter, and each grammar
+// Espalier, Git (GPL-2.0, with where its source is), Git LFS, Git
+// Credential Manager, and Sparkle; SwiftTreeSitter, tree-sitter, and each grammar
 // Espalier builds with, from their packages and Vendor/Grammars; and the
 // bundled text fonts, each with its copyright and the SIL Open Font
 // License as it ships with the font. The texts are in
@@ -99,6 +99,16 @@ extension Acknowledgement {
             url: URL(string: "https://github.com/git-ecosystem/git-credential-manager")!,
             note: "Git Credential Manager's license is followed by the notices it ships with.",
             text: AcknowledgementTexts.gitCredentialManager + "\n\n" + AcknowledgementTexts.gitCredentialManagerNotice,
+            group: .bundled
+        ),
+        Acknowledgement(
+            id: "sparkle",
+            name: "Sparkle",
+            version: "2.10.0",
+            license: "MIT License",
+            url: URL(string: "https://sparkle-project.org")!,
+            note: "Espalier updates itself with Sparkle. Its license is followed by those of the code it includes.",
+            text: AcknowledgementTexts.packages["sparkle"] ?? "",
             group: .bundled
         ),
         // Create a New Repository's templates: generated from GitHub

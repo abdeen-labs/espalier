@@ -84,6 +84,8 @@ let package = Package(
         .package(url: "https://github.com/tree-sitter/swift-tree-sitter", exact: "0.25.0"),
         // The C library SwiftTreeSitter wraps; EspalierSyntax imports it directly.
         .package(url: "https://github.com/tree-sitter/tree-sitter", exact: "0.25.10"),
+        // App updates: the appcast at Info.plist's SUFeedURL.
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
     ] + grammarPackages.map { .package(url: $0.url, exact: $0.version) },
     targets: [
         // Shared, dependency-free utilities: Keychain, logging, file helpers.
@@ -154,7 +156,10 @@ let package = Package(
         // are, each family with its license (Resources/Fonts/SOURCES.md).
         .target(
             name: "EspalierUI",
-            dependencies: ["EspalierSupport", "GitKit", "GitHubKit", "AIKit", "EspalierCore", "EspalierSyntax"],
+            dependencies: [
+                "EspalierSupport", "GitKit", "GitHubKit", "AIKit", "EspalierCore", "EspalierSyntax",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             resources: [.copy("Resources/Fonts")],
             swiftSettings: approachable + [.defaultIsolation(MainActor.self)]
         ),

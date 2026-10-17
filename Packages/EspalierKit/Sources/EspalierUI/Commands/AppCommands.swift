@@ -9,11 +9,15 @@ import SwiftUI
 /// Espalier's menus. The app's main window scene declares them.
 public struct EspalierCommands: Commands {
     @FocusedValue(WindowContext.self) private var focused: WindowContext?
+    private let updater: Updater
     private let mainWindowContext: @MainActor () -> WindowContext?
 
-    /// - Parameter mainWindowContext: The main window's context, which the
-    ///   menus act on when no window is key (the main window is minimized).
-    public init(mainWindowContext: @escaping @MainActor () -> WindowContext? = { nil }) {
+    /// - Parameters:
+    ///   - updater: The app's updater, for Check for Updates….
+    ///   - mainWindowContext: The main window's context, which the menus
+    ///     act on when no window is key (the main window is minimized).
+    public init(updater: Updater, mainWindowContext: @escaping @MainActor () -> WindowContext? = { nil }) {
+        self.updater = updater
         self.mainWindowContext = mainWindowContext
     }
 
@@ -22,7 +26,7 @@ public struct EspalierCommands: Commands {
         InspectorCommands()
         ToolbarCommands()
         TextEditingCommands()
-        AppMenuCommands(target: target)
+        AppMenuCommands(target: target, updater: updater)
         FileCommands(target: target)
         EditCommands(target: target)
         ViewCommands(target: target)
@@ -35,9 +39,11 @@ public struct EspalierCommands: Commands {
     }
 }
 
-/// The Espalier menu: About and Install Command Line Tool….
+/// The Espalier menu: About, Check for Updates…, and Install Command Line
+/// Tool….
 struct AppMenuCommands: Commands {
     let target: MenuTarget
+    let updater: Updater
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
@@ -45,10 +51,24 @@ struct AppMenuCommands: Commands {
             Button(ActionKind.about.title) {
                 openWindow(id: EspalierScenes.aboutWindowID)
             }
+            CheckForUpdatesButton(updater: updater)
         }
         CommandGroup(after: .appSettings) {
             MenuEntriesView(entries: Array(MenuCatalog.espalier.entries.dropFirst()), target: target)
         }
+    }
+}
+
+/// Check for Updates…, disabled while Sparkle can't check. A view, so the
+/// menu item follows the updater's state.
+private struct CheckForUpdatesButton: View {
+    let updater: Updater
+
+    var body: some View {
+        Button("Check for Updates…") {
+            updater.checkForUpdates()
+        }
+        .disabled(!updater.canCheckForUpdates)
     }
 }
 

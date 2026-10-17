@@ -31,7 +31,7 @@ public struct EspalierScenes: Scene {
         .commands {
             // With the main window minimized (no window key), the menus act
             // on the main window and bring it back.
-            EspalierCommands(mainWindowContext: { [delegate] in delegate.mainWindowContext })
+            EspalierCommands(updater: delegate.updater, mainWindowContext: { [delegate] in delegate.mainWindowContext })
         }
 
         Settings {
