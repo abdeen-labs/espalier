@@ -439,24 +439,19 @@ public struct RepositoryBadge: View {
         title.first.map { String($0).uppercased() } ?? "?"
     }
 
-    /// The badges' hues, in degrees: blue, teal, pink, orange, violet,
-    /// green, indigo, cyan, rose, and amber.
-    nonisolated static let hues: [Double] = [212, 168, 330, 26, 268, 142, 238, 192, 350, 40]
+    /// The badges' OKLCH hues, in degrees: blue, teal, pink, orange,
+    /// violet, green, indigo, cyan, rose, and amber.
+    nonisolated static let hues: [Double] = [253, 177, 353, 56, 301, 152, 274, 218, 14, 82]
 
-    /// A color by the title: one of `hues`, chosen by a stable hash, at 55%
-    /// saturation and 52% lightness.
+    /// A color by the title: one of `hues`, chosen by a stable hash, at
+    /// OKLCH lightness 0.63 and chroma 0.15 (as much as the hue holds).
     nonisolated static func color(of title: String) -> Color {
         var hash: UInt32 = 2_166_136_261
         for byte in title.lowercased().utf8 {
             hash = (hash ^ UInt32(byte)) &* 16_777_619
         }
-        let hue = hues[Int(hash % UInt32(hues.count))] / 360
-        // HSL(h, 55%, 52%) as HSB.
-        let lightness = 0.52
-        let saturation = 0.55
-        let brightness = lightness + saturation * min(lightness, 1 - lightness)
-        let hsbSaturation = brightness == 0 ? 0 : 2 * (1 - lightness / brightness)
-        return Color(hue: hue, saturation: hsbSaturation, brightness: brightness)
+        let hue = hues[Int(hash % UInt32(hues.count))]
+        return Color(nsColor: OKLCH.color(lightness: 0.63, chroma: 0.15, hue: hue))
     }
 }
 
