@@ -44,6 +44,8 @@ nonisolated extension ThemeDefinition {
             delete: palette.delete,
             modified: ThemeColor.fixed(0x9A6400, 0xE9B64E),
             renamed: palette.accent,
+            conflictOurs: IslandsColor.mint,
+            conflictTheirs: IslandsColor.orange,
             trunk: palette.trunk,
             tones: palette.tones,
             toneColors: palette.toneColors,
@@ -92,7 +94,7 @@ nonisolated private struct IslandsColor {
 
     init(_ color: DesignThemeColor) {
         let toneColors: [TrackPalette.Tone: NSColor] = [
-            .orange: Self.orange, .pink: Self.rose, .indigo: Self.periwinkle,
+            .orange: Self.orange, .pink: Self.rose, .blue: Self.periwinkle,
             .violet: Self.violet, .cyan: Self.sea, .green: Self.green,
         ]
         self.toneColors = toneColors
@@ -106,9 +108,9 @@ nonisolated private struct IslandsColor {
             textSelectionAlpha = (0.14, 0.20)
             sidebarSelection = ThemeColor.wash(.hex(0xB8255F), 0.12, .hex(0xF07AA8), 0.16)
             sidebarSelectionText = ThemeColor.fixed(0x8E1C4C, 0xF7AECB)
-            delete = ThemeColor.fixed(0xBF4513, 0xF2966A)
+            delete = Self.red
             trunk = Self.mint
-            tones = [.orange, .indigo, .violet]
+            tones = [.orange, .blue, .violet]
         case .indigo:
             self.color = .indigo
             accent = ThemeColor.fixed(0x4447C9, 0x9C9FF5)
@@ -133,7 +135,7 @@ nonisolated private struct IslandsColor {
             sidebarSelectionText = ThemeColor.fixed(0x075E6C, 0x93DCE7)
             delete = Self.red
             trunk = Self.green
-            tones = [.orange, .pink, .indigo, .violet]
+            tones = [.orange, .pink, .blue, .violet]
         }
     }
 }

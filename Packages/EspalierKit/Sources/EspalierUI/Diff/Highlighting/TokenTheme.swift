@@ -14,7 +14,7 @@ public enum TokenTheme {
     /// Each style's system tone.
     static func tone(for style: TokenStyle) -> SystemTone? {
         switch style {
-        case .keyword: .pink
+        case .keyword: .purple
         case .string: .red
         case .comment: .gray
         case .number: .blue
@@ -34,8 +34,8 @@ public enum TokenTheme {
         }
         let colors = TokenStyle.allCases.map { style in
             guard let tone = tone(for: style) else {
-                // Operators and punctuation: the system's label color.
-                return NSColor.labelColor
+                // Operators and punctuation: the theme's text color.
+                return theme.text
             }
             return theme.syntaxColors[style] ?? tone.base
         }

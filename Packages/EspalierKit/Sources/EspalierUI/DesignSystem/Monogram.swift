@@ -39,9 +39,8 @@ nonisolated public enum Monogram {
         return CGFloat(hash % 360) / 360
     }
 
-    /// The person's color: their hue at 45% saturation and 55% lightness in
-    /// light, 35% and 42% in dark; or in the theme's tone
-    /// (`Theme.monogramTone`).
+    /// The person's color: their hue in the theme's tone
+    /// (`Theme.monogramTone`), else Classic's.
     public static func color(name: String, email: String = "") -> NSColor {
         let hue = hue(name: name, email: email)
         let tone = Theme.current.monogramTone
@@ -56,35 +55,17 @@ nonisolated public enum Monogram {
         shade(hue(name: name, email: email), tone: Theme.current.monogramTone, isDark: variant.isDark)
     }
 
-    /// `hue` at Classic's saturation and lightness, or at `tone`'s.
+    /// `hue` (0 to 1, as HSB measures it) in `tone`, or in Classic's: the
+    /// OKLCH hue of that hue's pure color, at the tone's lightness and
+    /// chroma.
     static func shade(_ hue: CGFloat, tone: MonogramTone?, isDark: Bool) -> NSColor {
-        guard let tone else {
-            return isDark
-                ? hsl(hue, saturation: 0.35, lightness: 0.42)
-                : hsl(hue, saturation: 0.45, lightness: 0.55)
-        }
-        return hsl(
-            hue,
-            saturation: isDark ? tone.saturation.dark : tone.saturation.light,
-            lightness: isDark ? tone.lightness.dark : tone.lightness.light
+        let tone = tone ?? .classic
+        let pure = NSColor(colorSpace: .sRGB, hue: hue, saturation: 1, brightness: 1, alpha: 1)
+        return OKLCH.color(
+            lightness: Double(isDark ? tone.lightness.dark : tone.lightness.light),
+            chroma: Double(isDark ? tone.chroma.dark : tone.chroma.light),
+            hue: OKLCH.hue(of: pure)
         )
-    }
-
-    /// An sRGB color from hue, saturation, and lightness, each 0 to 1.
-    static func hsl(_ hue: CGFloat, saturation: CGFloat, lightness: CGFloat) -> NSColor {
-        let chroma = (1 - abs(2 * lightness - 1)) * saturation
-        let sector = hue * 6
-        let second = chroma * (1 - abs(sector.truncatingRemainder(dividingBy: 2) - 1))
-        let (red, green, blue): (CGFloat, CGFloat, CGFloat) = switch Int(sector) % 6 {
-        case 0: (chroma, second, 0)
-        case 1: (second, chroma, 0)
-        case 2: (0, chroma, second)
-        case 3: (0, second, chroma)
-        case 4: (second, 0, chroma)
-        default: (chroma, 0, second)
-        }
-        let base = lightness - chroma / 2
-        return NSColor(srgbRed: red + base, green: green + base, blue: blue + base, alpha: 1)
     }
 }
 

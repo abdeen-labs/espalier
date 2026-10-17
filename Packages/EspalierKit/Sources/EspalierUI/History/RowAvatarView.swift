@@ -144,7 +144,7 @@ final class MonogramCache {
 
     func image(name: String, email: String, pointSize: CGFloat, scale: CGFloat, variant: AppearanceVariant, shape: AvatarShape = .circle) -> CGImage? {
         let hue = Monogram.hue(name: name, email: email)
-        let tone = Theme.current.monogramTone.map { "\($0.saturation)\($0.lightness)" } ?? ""
+        let tone = Theme.current.monogramTone.map { "\($0.lightness)\($0.chroma)" } ?? ""
         let key = "\(Monogram.initials(name: name, email: email))|\(hue)|\(pointSize)|\(scale)|\(variant.isDark)|\(shape)|\(tone)"
         if let image = images[key] {
             return image

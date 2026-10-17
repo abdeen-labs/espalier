@@ -30,8 +30,11 @@ nonisolated public struct DiffTints: Sendable {
     public let currentFindMatch: NSColor
     /// Conflict marker rows (`<<<<<<<`, `=======`, `>>>>>>>`).
     public let conflictMarker: NSColor
+    /// Our side of a conflict, and theirs.
+    public let ours: NSColor
+    public let theirs: NSColor
 
-    init(add: NSColor, delete: NSColor, modified: NSColor, accent: NSColor) {
+    init(add: NSColor, delete: NSColor, modified: NSColor, accent: NSColor, ours: NSColor, theirs: NSColor) {
         addedLine = Palette.tint(add, light: 0.075, dark: 0.08)
         addedChange = Palette.tint(add, light: 0.20, dark: 0.20)
         deletedLine = Palette.tint(delete, light: 0.065, dark: 0.08)
@@ -45,7 +48,9 @@ nonisolated public struct DiffTints: Sendable {
             let alpha: CGFloat = variant.isDark ? 0.45 : 0.32
             return resolved.withAlphaComponent(variant.isHighContrast ? min(alpha * 1.6, 1) : alpha)
         }
-        conflictMarker = Palette.tint(modified, light: 0.18, dark: 0.24)
+        conflictMarker = Palette.tint(modified, light: 0.18, dark: 0.16)
+        self.ours = Palette.tint(ours, light: 0.09, dark: 0.11)
+        self.theirs = Palette.tint(theirs, light: 0.08, dark: 0.10)
     }
 }
 
@@ -119,12 +124,12 @@ public enum DiffColors {
 
     /// Conflict marker rows (`<<<<<<<`, `=======`, `>>>>>>>`).
     public static var conflictMarker: NSColor { Theme.current.diff.conflictMarker }
-    /// Our side of a conflict: mint.
-    public static let ours = SystemTone.mint.tint(light: 0.09, dark: 0.11)
+    /// Our side of a conflict: the theme's (Classic's mint).
+    public static var ours: NSColor { Theme.current.diff.ours }
     /// The common ancestor's lines, between ours and theirs: neutral.
     public static let base = SystemTone.gray.tint(light: 0.09, dark: 0.12)
-    /// Their side of a conflict: orange.
-    public static let theirs = SystemTone.orange.tint(light: 0.08, dark: 0.10)
+    /// Their side of a conflict: the theme's (Classic's orange).
+    public static var theirs: NSColor { Theme.current.diff.theirs }
 
     /// The checkerboard behind transparent images.
     public static var checkerboard: NSColor { Palette.field }

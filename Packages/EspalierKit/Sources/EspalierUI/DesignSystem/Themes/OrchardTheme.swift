@@ -47,7 +47,9 @@ nonisolated extension ThemeDefinition {
             add: ThemeColor.fixed(0x46802F, 0x93C77B),
             delete: palette.delete,
             modified: ThemeColor.fixed(0x9C6512, 0xE5B661),
-            renamed: palette.accent,
+            renamed: palette.renamed,
+            conflictOurs: OrchardColor.teal,
+            conflictTheirs: OrchardColor.orange,
             // Code in the orchard's colors rather than the system's.
             syntaxColors: [
                 .keyword: OrchardColor.plum,
@@ -86,6 +88,8 @@ nonisolated private struct OrchardColor {
     let selectionAlpha: (light: CGFloat, dark: CGFloat)
     var textSelectionAlpha: (light: CGFloat, dark: CGFloat) = (0.16, 0.24)
     let delete: NSColor
+    /// Renamed and copied files: the accent, else plum.
+    let renamed: NSColor
     /// The default branch's color.
     let trunk: NSColor
     let tones: [TrackPalette.Tone]
@@ -96,15 +100,14 @@ nonisolated private struct OrchardColor {
     static let rose = ThemeColor.fixed(0xC2416B, 0xE7779B)
     static let plum = ThemeColor.fixed(0x8A43A8, 0xC58BDD)
     static let sky = ThemeColor.fixed(0x3E78B0, 0x73A9DD)
-    static let periwinkle = ThemeColor.fixed(0x5B6CD0, 0x9AA6F0)
     static let teal = ThemeColor.fixed(0x1D7C78, 0x6BC6BF)
     static let leaf = ThemeColor.fixed(0x4F8C3A, 0x8CC072)
     static let brick = ThemeColor.fixed(0xB9472F, 0xE8977F)
 
     init(_ color: DesignThemeColor) {
-        let toneColors: [TrackPalette.Tone: NSColor] = [
+        toneColors = [
             .orange: Self.orange, .pink: Self.rose, .violet: Self.plum,
-            .indigo: Self.sky, .cyan: Self.teal, .green: Self.leaf,
+            .blue: Self.sky, .cyan: Self.teal, .green: Self.leaf,
         ]
         switch color {
         case .clay:
@@ -115,9 +118,9 @@ nonisolated private struct OrchardColor {
             prominentText = .white
             selectionAlpha = (0.10, 0.15)
             delete = ThemeColor.fixed(0xA63049, 0xF2899C)
+            renamed = Self.plum
             trunk = Self.leaf
-            tones = [.indigo, .violet, .cyan]
-            self.toneColors = toneColors
+            tones = [.blue, .violet, .cyan]
         case .plum:
             self.color = .plum
             accent = ThemeColor.fixed(0x7E3D98, 0xCE9BE3)
@@ -126,9 +129,9 @@ nonisolated private struct OrchardColor {
             prominentText = .white
             selectionAlpha = (0.10, 0.15)
             delete = Self.brick
+            renamed = accent
             trunk = Self.leaf
-            tones = [.orange, .pink, .indigo, .cyan]
-            self.toneColors = toneColors
+            tones = [.orange, .pink, .blue, .cyan]
         case .teal:
             self.color = .teal
             accent = ThemeColor.fixed(0x1C7773, 0x6BC6BF)
@@ -137,11 +140,9 @@ nonisolated private struct OrchardColor {
             prominentText = .white
             selectionAlpha = (0.10, 0.14)
             delete = Self.brick
+            renamed = accent
             trunk = ThemeColor.fixed(0xD27A2C, 0xEFA05C)
-            tones = [.pink, .indigo, .green, .violet]
-            var colors = toneColors
-            colors[.indigo] = Self.periwinkle
-            self.toneColors = colors
+            tones = [.pink, .blue, .green, .violet]
         case .espresso:
             // No hue at all: warm black for the prominent action and the
             // current branch.
@@ -155,9 +156,9 @@ nonisolated private struct OrchardColor {
             // Selected text is fainter.
             textSelectionAlpha = (0.12, 0.14)
             delete = Self.brick
+            renamed = Self.plum
             trunk = Self.leaf
-            tones = [.orange, .pink, .violet, .indigo, .cyan]
-            self.toneColors = toneColors
+            tones = [.orange, .pink, .violet, .blue, .cyan]
         default:
             // Ink, the default: a deep, warm navy, blue without the system's
             // blue.
@@ -168,9 +169,9 @@ nonisolated private struct OrchardColor {
             prominentText = .white
             selectionAlpha = (0.10, 0.15)
             delete = Self.brick
+            renamed = accent
             trunk = Self.leaf
             tones = [.orange, .pink, .violet, .cyan]
-            self.toneColors = toneColors
         }
     }
 }

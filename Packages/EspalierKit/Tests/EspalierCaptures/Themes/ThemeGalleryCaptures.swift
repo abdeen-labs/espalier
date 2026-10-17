@@ -42,7 +42,11 @@ struct ThemeGalleryCaptures {
 /// The gallery: a sidebar beside a History-like column.
 struct ThemeGallery: View {
     var body: some View {
-        let palette = TrackPalette.Resolved(currentTrack: 0)
+        let palette = TrackPalette.Resolved(currentTrack: 0, branchColors: BranchColors(
+            branches: ["feature/hourly-forecast", "main", "fix/locale-units"],
+            current: "feature/hourly-forecast",
+            defaultBranch: "main"
+        ))
         HStack(alignment: .top, spacing: 0) {
             GallerySidebar()
                 .frame(width: 210)

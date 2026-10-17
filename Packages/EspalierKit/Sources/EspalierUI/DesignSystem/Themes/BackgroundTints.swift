@@ -32,7 +32,7 @@ nonisolated extension BackgroundTint {
         guard hue != nil else {
             return 0
         }
-        return isDark ? 0.045 * lightness : 0.006 + 0.18 * (1 - lightness)
+        return isDark ? 0.07 * lightness : 0.006 + 0.18 * (1 - lightness)
     }
 }
 
@@ -142,6 +142,36 @@ nonisolated enum OKLCH {
             tinted = low
         }
         return at(tinted).color
+    }
+
+    /// The color of `lightness` and `hue` (in degrees) with `chroma`, or as
+    /// much chroma as sRGB holds there.
+    static func color(lightness: Double, chroma: Double, hue: Double) -> NSColor {
+        let radians = hue * .pi / 180
+        func at(_ chroma: Double) -> RGB {
+            rgb(Lab(lightness: lightness, a: chroma * cos(radians), b: chroma * sin(radians)))
+        }
+        guard !at(chroma).isInGamut else {
+            return at(chroma).color
+        }
+        var low = 0.0
+        var high = chroma
+        for _ in 0..<40 {
+            let middle = (low + high) / 2
+            if at(middle).isInGamut {
+                low = middle
+            } else {
+                high = middle
+            }
+        }
+        return at(low).color
+    }
+
+    /// The hue of `color`, in degrees.
+    static func hue(of color: NSColor) -> Double {
+        let lab = lab(linear(color))
+        let degrees = atan2(lab.b, lab.a) * 180 / .pi
+        return degrees < 0 ? degrees + 360 : degrees
     }
 
     /// `color` with `factor` times its chroma (as much as sRGB holds), at

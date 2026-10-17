@@ -41,6 +41,8 @@ nonisolated extension ThemeDefinition {
             delete: palette.delete,
             modified: ThemeColor.fixed(0xFFC53D, 0xF2B23A),
             renamed: palette.accent,
+            conflictOurs: PopColor.cyan,
+            conflictTheirs: PopColor.orange,
             trunk: ThemeColor.fixed(0x17936A, 0x3CCB98),
             tones: palette.tones,
             toneColors: palette.toneColors,
@@ -60,7 +62,7 @@ nonisolated extension ThemeDefinition {
             refTag: RefTagStyle(fill: .solid(darken: 0.10), currentUsesProminent: true),
             statusBadge: StatusBadgeStyle(fill: .solid, shape: .roundedSquare),
             // Saturated, as solid as the tags and badges.
-            monogramTone: MonogramTone(saturation: (0.75, 0.62), lightness: (0.50, 0.48))
+            monogramTone: MonogramTone(lightness: (0.62, 0.58), chroma: (0.19, 0.16))
         )
     }
 }
@@ -90,18 +92,18 @@ nonisolated private struct PopColor {
     let toneColors: [TrackPalette.Tone: NSColor]
 
     static let orange = ThemeColor.fixed(0xE8590C, 0xFF9A5C)
-    static let electric = ThemeColor.fixed(0x5146E8, 0x8C85FF)
     static let blue = ThemeColor.fixed(0x4F6BE8, 0x7F96FF)
     static let pink = ThemeColor.fixed(0xD6338A, 0xF062B0)
     static let cyan = ThemeColor.fixed(0x0891B2, 0x22D3EE)
     static let violet = ThemeColor.fixed(0x9333EA, 0xC084FC)
+    static let red = ThemeColor.fixed(0xC8361E, 0xFF9480)
     /// Marks on a deep accent: white in light, dark on the light accent
     /// in dark, as the solid tags' text is.
     static let markOnDeepAccent = ThemeColor.fixed(0xFFFFFF, 0x111116)
 
     init(_ color: DesignThemeColor) {
-        var toneColors: [TrackPalette.Tone: NSColor] = [
-            .orange: Self.orange, .indigo: Self.electric, .pink: Self.pink,
+        toneColors = [
+            .orange: Self.orange, .blue: Self.blue, .pink: Self.pink,
             .cyan: Self.cyan, .violet: Self.violet,
         ]
         let sidebarLight: UInt32
@@ -117,12 +119,12 @@ nonisolated private struct PopColor {
             prominent = ThemeColor.fixed(0x5146E8, 0x6359F5)
             prominentText = .white
             onAccent = Self.markOnDeepAccent
-            (sidebarLight, sidebarDark) = (0xF3F2FF, 0x16152A)
+            (sidebarLight, sidebarDark) = (0xF3F2FF, 0x171625)
             selectionAlpha = (0.10, 0.15)
             sidebarSelection = ThemeColor.wash(.hex(0x5146E8), 0.14, .hex(0x8C85FF), 0.18)
             sidebarSelectionText = ThemeColor.fixed(0x3B31BF, 0xC2BEFF)
             sidebarSelectionIcon = ThemeColor.fixed(0x5146E8, 0x8C85FF)
-            delete = ThemeColor.fixed(0xC8361E, 0xFF9480)
+            delete = Self.red
             tones = [.orange, .pink, .cyan]
         case .magenta:
             self.color = .magenta
@@ -136,9 +138,8 @@ nonisolated private struct PopColor {
             sidebarSelection = ThemeColor.wash(.hex(0xC2247E), 0.13, .hex(0xF062B0), 0.17)
             sidebarSelectionText = ThemeColor.fixed(0x941A60, 0xF8A6D2)
             sidebarSelectionIcon = ThemeColor.fixed(0xC2247E, 0xF062B0)
-            delete = ThemeColor.fixed(0xC2410C, 0xFF9A6E)
-            toneColors[.indigo] = Self.blue
-            tones = [.orange, .indigo, .cyan]
+            delete = Self.red
+            tones = [.orange, .blue, .cyan]
         default:
             // Tangerine, the default: dark text on the prominent orange.
             self.color = .tangerine
@@ -147,7 +148,7 @@ nonisolated private struct PopColor {
             prominent = ThemeColor.fixed(0xFF6A1F, 0xFF7A2E)
             prominentText = ThemeColor.fixed(0x1B0F05, 0x1B0F05)
             onAccent = ThemeColor.fixed(0x1B0F05, 0x1B0F05)
-            (sidebarLight, sidebarDark) = (0xFFF3EA, 0x1E1611)
+            (sidebarLight, sidebarDark) = (0xFFF3EA, 0x22150C)
             selectionAlpha = (0.11, 0.14)
             sidebarSelection = ThemeColor.wash(.hex(0xF25C0F), 0.15, .hex(0xFF8A47), 0.17)
             // Deeper under Increase Contrast, on the stronger wash.
@@ -157,9 +158,8 @@ nonisolated private struct PopColor {
             )
             sidebarSelectionIcon = ThemeColor.fixed(0xE5560D, 0xFF8A47)
             delete = ThemeColor.fixed(0xC8264E, 0xFF8AA5)
-            tones = [.indigo, .pink, .cyan, .violet]
+            tones = [.blue, .pink, .cyan, .violet]
         }
-        self.toneColors = toneColors
         ink = ThemeColor.fixed(inkLight, inkDark)
         sidebar = ThemeColor.surface(sidebarLight, sidebarDark)
         let sidebarLightColor = NSColor.hex(sidebarLight)

@@ -267,7 +267,7 @@ nonisolated public final class Theme: Sendable {
             .neutral: definition.text2,
         ]
 
-        diff = DiffTints(add: definition.add, delete: definition.delete, modified: definition.modified, accent: accent)
+        diff = DiffTints(add: definition.add, delete: definition.delete, modified: definition.modified, accent: accent, ours: definition.conflictOurs, theirs: definition.conflictTheirs)
         syntaxColors = definition.syntaxColors
 
         trunk = definition.trunk
@@ -509,14 +509,17 @@ nonisolated public struct ButtonWeights: Sendable, Equatable {
     public static let classic = ButtonWeights(quiet: .medium, prominent: .semibold)
 }
 
-/// Monograms' colors: the person's hue at a saturation and lightness, in
-/// light and dark.
+/// Monograms' colors: the person's hue at an OKLCH lightness and chroma
+/// (as much chroma as sRGB holds at that hue), in light and dark.
 nonisolated public struct MonogramTone: Sendable, Equatable {
-    public var saturation: (light: CGFloat, dark: CGFloat)
     public var lightness: (light: CGFloat, dark: CGFloat)
+    public var chroma: (light: CGFloat, dark: CGFloat)
+
+    /// Classic's muted tones.
+    public static let classic = MonogramTone(lightness: (0.64, 0.52), chroma: (0.12, 0.09))
 
     public static func == (lhs: MonogramTone, rhs: MonogramTone) -> Bool {
-        lhs.saturation == rhs.saturation && lhs.lightness == rhs.lightness
+        lhs.lightness == rhs.lightness && lhs.chroma == rhs.chroma
     }
 }
 
@@ -571,6 +574,9 @@ nonisolated struct ThemeDefinition: Sendable {
     var delete: NSColor
     var modified: NSColor
     var renamed: NSColor
+    /// A conflict's sides in the diff: ours and theirs.
+    var conflictOurs: NSColor = SystemTone.mint.base
+    var conflictTheirs: NSColor = SystemTone.orange.base
     /// Syntax tokens' colors; a style missing here is its system tone.
     var syntaxColors: [TokenStyle: NSColor] = [:]
 

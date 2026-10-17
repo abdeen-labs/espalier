@@ -8,7 +8,7 @@ import SwiftUI
 /// The current branch's track takes the accent color; the trunk (track 0,
 /// the default branch's line) is the theme's default-branch color,
 /// Classic's teal. Other tracks take the theme's tones (Classic's are pink,
-/// violet, orange, green, indigo, and cyan, without the entry nearest the
+/// violet, orange, green, blue, and cyan, without the entry nearest the
 /// accent's hue). A track a local branch starts takes that branch's color
 /// (`BranchColors`), so a line, its branch's tag, and its sidebar dot
 /// agree; other tracks take entry `(t − 1) mod count` of the entries no
@@ -18,17 +18,17 @@ public enum TrackPalette {
     /// A branch color: a hue each theme gives its own shade
     /// (`Theme.toneColors`).
     nonisolated public enum Tone: String, CaseIterable, Sendable {
-        case pink, violet, orange, green, indigo, cyan
+        case pink, violet, orange, green, blue, cyan
 
-        /// Classic's shade, light and dark (three are Tailwind's 600 and
-        /// 400 shades).
+        /// Classic's shade, light and dark: Tailwind's 600 and 400
+        /// shades.
         public var color: NSColor {
             switch self {
             case .pink: .espalierDynamic(light: .hex(0xDB2777), dark: .hex(0xF472B6))
             case .violet: .espalierDynamic(light: .hex(0x7C3AED), dark: .hex(0xA78BFA))
             case .orange: .espalierDynamic(light: .hex(0xEA580C), dark: .hex(0xFB923C))
             case .green: .espalierDynamic(light: .hex(0x16A34A), dark: .hex(0x4ADE80))
-            case .indigo: .espalierDynamic(light: .hex(0x4F46E5), dark: .hex(0x818CF8))
+            case .blue: .espalierDynamic(light: .hex(0x2563EB), dark: .hex(0x60A5FA))
             case .cyan: .espalierDynamic(light: .hex(0x0891B2), dark: .hex(0x22D3EE))
             }
         }
@@ -41,7 +41,7 @@ public enum TrackPalette {
 
     /// Classic's branch palette, in order, before the accent's neighbor is
     /// skipped.
-    nonisolated public static let tones: [Tone] = [.pink, .violet, .orange, .green, .indigo, .cyan]
+    nonisolated public static let tones: [Tone] = [.pink, .violet, .orange, .green, .blue, .cyan]
 
     /// The default branch's color: the current theme's trunk.
     nonisolated public static var trunk: NSColor {

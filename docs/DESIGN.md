@@ -33,7 +33,7 @@ other themes change what their tokens say (Themes, below).
 - **Text to copy** is `Text` that can be selected; multi-line text to edit
   is a `TextEditor` on the `field` fill or a card.
 - **Branch colors:** the current branch is the accent, the default branch
-  teal; the others cycle through pink, violet, orange, green, indigo, and
+  teal; the others cycle through pink, violet, orange, green, blue, and
   cyan, skipping the one nearest the accent. A track keeps its color for
   its line of development.
 - **Buttons come in three styles:** quiet, prominent (one per area), and
