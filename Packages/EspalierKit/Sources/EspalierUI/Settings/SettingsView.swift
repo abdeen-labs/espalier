@@ -104,8 +104,13 @@ struct SettingsLayout<Pane: View>: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     // macOS 27 draws a pane's scroll edge effect up into
                     // the titlebar when the pointer is over it, blurring the
-                    // header band; the band is opaque, so it needs none.
+                    // header band; the pane needs none.
                     .scrollEdgeEffectHidden(true, for: .top)
+                    // The pane's scroll view reaches up under the header
+                    // band, as high as the titlebar, its content inset by
+                    // as much; clipped to the pane, content scrolls out of
+                    // sight at the hairline instead of over the name.
+                    .clipped()
                     // In the floating layout, the pane is a card on the
                     // backdrop, under the band, as the main window's are.
                     .paneCard()
