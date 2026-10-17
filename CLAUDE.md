@@ -7,6 +7,8 @@ Espalier differing from it is fine.
 
 - `docs/PROGRESS.md`: what's left.
 - `docs/DESIGN.md`: how Espalier looks.
+- `docs/RELEASING.md`: how a release is cut. Releases, signing, and their
+  keys are mine; agents write the scripts and steps.
 
 Apply my feedback as stated; ask before extending it. Write down what I
 asked for and nothing more: when I ask for one thing, the rule is that
@@ -35,7 +37,8 @@ Packages/EspalierKit/        All real code, in one library product named Espalie
   Tests/TestSupport/         Test-only helpers and desktop's fixture repositories.
   Tests/<Module>Tests/       Swift Testing suites, many ported from desktop/app/test/unit.
   Tests/EspalierCaptures/    Captures: views drawn to PNGs to look at.
-scripts/                     fetch-git.sh, embed-git.sh, git-version, git-checksums, capture.sh.
+scripts/                     fetch-git.sh, embed-git.sh, git-version, git-checksums, capture.sh,
+                             publish-release.sh, changelog.sh (docs/RELEASING.md).
 Vendor/git/                  The bundled git (gitignored, installed by scripts/fetch-git.sh).
 docs/                        What's left, design.
 ```

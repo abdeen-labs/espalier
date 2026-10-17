@@ -56,13 +56,8 @@ What's left. Every feature is built.
      count, a commit start and finish, and Push complete.
    - History's scrolling in a Release build (Debug ▸ History Scroll
      Benchmark: hitches at most 5 ms/s).
-2. **My checks:** GitHub sign-in (github.com and Enterprise) and
-   what follows it (pull requests, checks and Re-run, notifications, push
-   protection, forks, and the mentionables and branch `push_control`
-   preview endpoints, which may differ for a non-desktop OAuth app); an AI
-   provider key (Azure's routes and `api-key` header, Anthropic's thinking
-   options per model, OpenAI's unverified-organization fallback); installing
-   the command line tool (writes `/usr/local/bin/espalier` behind an
-   administrator prompt: ask first).
-3. **Last, mine:** Sparkle, once the app is close to a release and with my
-   feed and keys; Developer ID signing, notarization, and appcast hosting.
+2. **My checks:** installing the command line tool (writes
+   `/usr/local/bin/espalier` behind an administrator prompt: ask first).
+3. **Last, mine:** the first release, by `docs/RELEASING.md`: its one-time
+   setup (Sparkle's public key goes in `Espalier/Info.plist`), then 1.0 with
+   `FIRST_RELEASE=1`.

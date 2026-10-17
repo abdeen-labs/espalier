@@ -7,3 +7,5 @@ DerivedData/
 .claude/worktrees/
 *.profraw
 /.captures/
+/dist/
+/Espalier.app/
