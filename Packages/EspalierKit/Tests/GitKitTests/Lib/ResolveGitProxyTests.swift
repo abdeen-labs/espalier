@@ -99,6 +99,11 @@ struct ResolveGitProxyTests {
         return options
     }
 
+    /// The timeout for tests that fetch a PAC file from a `PACFileServer`
+    /// and expect its script: a loaded machine can take seconds to answer,
+    /// and a passing test never waits for it.
+    private static let fetchTimeout: TimeInterval = 60
+
     private static let secure: [String: any Sendable] = ["HTTPSEnable": 1, "HTTPSProxy": "secure.example", "HTTPSPort": 8443]
     private static let web: [String: any Sendable] = ["HTTPEnable": 1, "HTTPProxy": "web.example", "HTTPPort": 8080]
     private static let socks: [String: any Sendable] = ["SOCKSEnable": 1, "SOCKSProxy": "socks.example", "SOCKSPort": 1081]
@@ -310,9 +315,10 @@ struct ResolveGitProxyTests {
         server.respond(.init(status: 200, body: Data(repeating: 0x20, count: PACScriptCache.maximumSize) + Data(script.utf8)), for: "/large.pac")
 
         let target = "https://github.com/desktop/desktop.git"
-        #expect(await Self.resolve(target, Self.pacURLSettings(server.url("/proxy.pac"))) == "http://corp.example:3128")
+        let options = Self.testOptions(timeout: Self.fetchTimeout)
+        #expect(await Self.resolve(target, Self.pacURLSettings(server.url("/proxy.pac")), options: options) == "http://corp.example:3128")
         for path in ["/missing.pac", "/portal.pac", "/large.pac"] {
-            #expect(await Self.resolve(target, Self.merging(Self.pacURLSettings(server.url(path)), Self.secure)) == "http://secure.example:8443", "\(path)")
+            #expect(await Self.resolve(target, Self.merging(Self.pacURLSettings(server.url(path)), Self.secure), options: options) == "http://secure.example:8443", "\(path)")
         }
     }
 
@@ -324,7 +330,7 @@ struct ResolveGitProxyTests {
         server.respond(.init(status: 200, body: Data("function FindProxyForURL(url, host) { return 'PROXY other.example:2'; }".utf8)), for: "/other.pac")
 
         let clock = TestClock()
-        let options = Self.testOptions(scripts: PACScriptCache(lifetime: 300, now: { clock.now() }))
+        let options = Self.testOptions(timeout: Self.fetchTimeout, scripts: PACScriptCache(lifetime: 300, now: { clock.now() }))
         let settings = Self.pacURLSettings(server.url("/proxy.pac"))
         let target = "https://github.com/desktop/desktop.git"
 
@@ -374,15 +380,16 @@ struct ResolveGitProxyTests {
         server.respond(.init(status: 200, body: Data("function FindProxyForURL(url, host) { return 'PROXY configured.example:2'; }".utf8)), for: "/proxy.pac")
         let target = "https://github.com/desktop/desktop.git"
         let discovery: [String: any Sendable] = ["ProxyAutoDiscoveryEnable": 1]
-        let found = Self.testOptions(discoveryURL: URL(string: server.url("/wpad.dat"))!)
+        let found = Self.testOptions(timeout: Self.fetchTimeout, discoveryURL: URL(string: server.url("/wpad.dat"))!)
+        let nothingFound = Self.testOptions(timeout: Self.fetchTimeout)
 
         #expect(await Self.resolve(target, discovery, options: found) == "http://discovered.example:1")
         #expect(await Self.resolve(target, Self.merging(discovery, Self.pacURLSettings(server.url("/proxy.pac"))), options: found) == "http://discovered.example:1")
 
         // Nothing to discover: the PAC file, else the manual proxies.
-        #expect(await Self.resolve(target, Self.merging(discovery, Self.pacURLSettings(server.url("/proxy.pac")))) == "http://configured.example:2")
-        #expect(await Self.resolve(target, Self.merging(discovery, Self.secure)) == "http://secure.example:8443")
-        #expect(await Self.resolve(target, discovery) == nil)
+        #expect(await Self.resolve(target, Self.merging(discovery, Self.pacURLSettings(server.url("/proxy.pac"))), options: nothingFound) == "http://configured.example:2")
+        #expect(await Self.resolve(target, Self.merging(discovery, Self.secure), options: nothingFound) == "http://secure.example:8443")
+        #expect(await Self.resolve(target, discovery, options: nothingFound) == nil)
         #expect(await hostResolves("127.0.0.1", within: 5))
     }
 
