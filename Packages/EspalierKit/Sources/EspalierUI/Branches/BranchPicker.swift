@@ -435,7 +435,7 @@ struct BranchPickerList: View {
     /// highlight scrolls into view unless the pointer put it there.
     private var popoverList: some View {
         ScrollViewReader { proxy in
-            ScrollView {
+            OverflowScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(content.groups) { group in
                         ListGroupLabel(group.title)
@@ -447,7 +447,6 @@ struct BranchPickerList: View {
                 }
                 .padding(.bottom, Metrics.ListRow.inset)
             }
-            .scrollsOnlyWhenOverflowing()
             .onChange(of: selection?.ref) {
                 if let ref = selection?.ref, ref != hoveredRef {
                     proxy.scrollTo(ref)

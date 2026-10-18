@@ -246,7 +246,7 @@ struct RepositoryPopoverView: View {
     /// the highlight scrolls into view unless the pointer put it there.
     private var rows: some View {
         ScrollViewReader { proxy in
-            ScrollView {
+            OverflowScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if !content.worktrees.isEmpty {
                         ListGroupLabel("Worktrees") {
@@ -286,7 +286,6 @@ struct RepositoryPopoverView: View {
                 }
                 .padding(.bottom, Metrics.ListRow.inset)
             }
-            .scrollsOnlyWhenOverflowing()
             .onChange(of: highlighted) {
                 if let highlighted, highlighted != hovered {
                     proxy.scrollTo(highlighted)

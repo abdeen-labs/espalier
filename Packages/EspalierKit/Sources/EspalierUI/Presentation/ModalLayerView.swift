@@ -124,11 +124,10 @@ struct ModalCard: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Metrics.Radius.sheet, style: .continuous)
         ModalCardLayout(fillSize: fillSize, margin: margin) {
-            ScrollView(.vertical) {
+            OverflowScrollView {
                 content
                     .frame(width: fillSize?.width, height: fillSize?.height)
             }
-            .scrollsOnlyWhenOverflowing()
         }
         .clipShape(shape)
         .surface(Color(espalier: Palette.background), elevation: .sheet, in: shape)
