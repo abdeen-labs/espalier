@@ -139,19 +139,31 @@ struct MainWindowCaptures {
 /// The main window on an offscreen titled window, its toolbar bridged from
 /// SwiftUI, kept up while it settles.
 @MainActor
-private final class MainWindowStage {
+final class MainWindowStage {
     static let size = CGSize(width: 1_280, height: 720)
 
     let window: CaptureWindow
     let context: WindowContext
 
-    init(_ context: WindowContext, appearance: CaptureAppearance) {
+    /// - Parameters:
+    ///   - size: The window's content size.
+    ///   - highlighter: What colors the diff's code, as the app's own
+    ///     highlighter does; none by default.
+    init(
+        _ context: WindowContext,
+        appearance: CaptureAppearance,
+        size: CGSize = MainWindowStage.size,
+        highlighter: (any SyntaxHighlighter)? = nil
+    ) {
         _ = Capture.look
         self.context = context
-        let controller = NSHostingController(rootView: Capture.prepared(MainWindow().windowEnvironment(context)))
+        let root = MainWindow()
+            .windowEnvironment(context)
+            .environment(\.syntaxHighlighter, highlighter)
+        let controller = NSHostingController(rootView: Capture.prepared(root))
         controller.sceneBridgingOptions = [.toolbars]
         window = CaptureWindow(
-            contentRect: CGRect(origin: .zero, size: Self.size),
+            contentRect: CGRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -160,7 +172,7 @@ private final class MainWindowStage {
         window.appearance = appearance.appearance
         window.contentViewController = controller
         FlatWindowChrome.apply(to: window)
-        window.setContentSize(Self.size)
+        window.setContentSize(size)
     }
 
     /// The window's frame view: its content, titlebar, and toolbar.
@@ -266,7 +278,7 @@ private final class MainWindowStage {
 
 /// A loaded app with one selected repository, and a window's context for it.
 @MainActor
-private struct MainWindowFixture {
+struct MainWindowFixture {
     let harness: AppHarness
     let app: AppModel
     let repository: RepositoryModel
