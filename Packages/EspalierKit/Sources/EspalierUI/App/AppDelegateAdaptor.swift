@@ -36,7 +36,8 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
-    /// Reopens the main window (captured from SwiftUI).
+    /// Opens the main window, or brings it to the front (captured from the
+    /// menus' environment, which exists from launch on).
     @ObservationIgnored var openMainWindow: (() -> Void)?
     /// Set once the user chose to quit, so a second request doesn't ask
     /// again.
@@ -56,7 +57,8 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
 
     /// Starts the rolling log file first, so it has the whole run, then
     /// applies the stored theme, look, and Espalier's text input before the
-    /// first window opens.
+    /// first window opens, and takes over the Apple events for links and
+    /// folders before AppKit passes on the one Espalier was launched for.
     public func applicationWillFinishLaunching(_ notification: Notification) {
         Log.startFileLog()
         let info = Bundle.main.infoDictionary
@@ -67,10 +69,10 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
         BundledFonts.register()
         LookApplier.apply(Look.stored(in: PreferenceStore(.standard)))
         TextInputStyling.install()
+        installExternalEventHandlers()
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
-        installExternalEventHandlers()
         // Context clicks in every window open Espalier's menus.
         MenuEventRouter.shared.install()
         // Before launch finishes, so a notification click that launched
@@ -92,17 +94,9 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Opening
 
-    /// The folders or URL Espalier was launched to open. AppKit passes the
-    /// launch event here before `applicationDidFinishLaunching`, after
-    /// SwiftUI opened the main window for it; the action runs once the
-    /// window is up.
-    public func application(_ application: NSApplication, open urls: [URL]) {
-        deliver(ExternalAction.actions(for: urls))
-    }
-
     /// Takes over "open documents" (folders opened from Finder or dropped
-    /// on the Dock icon) and "get URL" (`espalier://` links) from AppKit
-    /// once Espalier has launched.
+    /// on the Dock icon) and "get URL" (`espalier://` and GitHub Desktop
+    /// links) from AppKit, the event Espalier was launched for included.
     ///
     /// AppKit's handlers pass both to `application(_:open:)`, and SwiftUI
     /// routes them to a scene first: with the main window open, it closes
@@ -121,9 +115,20 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
         deliver(ExternalAction.actions(forAppleEvent: event))
     }
 
+    /// Hands the actions to the main window, which runs them once it's up.
+    /// When it isn't, Espalier was launched for them: the main window opens
+    /// once launching finishes and the menus that can open it are built.
     private func deliver(_ actions: [ExternalAction]) {
         for action in actions {
             externalEvents.deliver(action)
+        }
+        guard !actions.isEmpty, mainWindowContext == nil else {
+            return
+        }
+        Task {
+            if mainWindowContext == nil {
+                openMainWindow?()
+            }
         }
     }
 

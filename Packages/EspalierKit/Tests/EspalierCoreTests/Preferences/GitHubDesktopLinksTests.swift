@@ -404,6 +404,8 @@ struct GitHubDesktopLinksTests {
         let current = try link("x-github-client://openRepo/https://github.com/octocat/app?branch=feature")
         let older = try link("GitHub-Mac://openRepo/https://github.com/octocat/app")
 
+        #expect(app.passesToGitHubDesktop(current))
+        #expect(app.passesToGitHubDesktop(older))
         #expect(try await app.handle(.url(current)) == .forwarded)
         #expect(try await app.handle(.url(older)) == .forwarded)
         #expect(handlers.openedLinks == [
@@ -435,6 +437,7 @@ struct GitHubDesktopLinksTests {
         harness.urlSchemeHandlers.installGitHubDesktop()
         try await app.integrations.setOpenGitHubDesktopLinks(true)
 
+        #expect(!app.passesToGitHubDesktop(try link("x-github-client://openRepo/https://github.com/octocat/app")))
         let current = try await app.handle(.url(try link("x-github-client://openRepo/https://github.com/octocat/app")))
         #expect(cloneURL(current) == "https://github.com/octocat/app")
         let older = try await app.handle(.url(try link("github-mac://openRepo/https://github.com/octocat/other")))
@@ -451,6 +454,7 @@ struct GitHubDesktopLinksTests {
         try await app.integrations.setOpenGitHubDesktopLinks(true)
         let signIn = try link("x-github-client://oauth?code=abc&state=xyz")
 
+        #expect(!app.passesToGitHubDesktop(signIn))
         #expect(try await app.handle(.url(signIn)) == .ignored("Espalier can't open this link: x-github-client://oauth?code=abc&state=xyz"))
         #expect(handlers.openedLinks.isEmpty)
 
@@ -459,6 +463,7 @@ struct GitHubDesktopLinksTests {
         // An openRepo link Espalier rejects: its pull request isn't a number.
         let malformed = try link("x-github-client://openRepo/https://github.com/octocat/app?pr=abc")
         for url in [signIn, older, malformed] {
+            #expect(app.passesToGitHubDesktop(url))
             #expect(try await app.handle(.url(url)) == .forwarded)
         }
         #expect(handlers.openedLinks == [signIn, older, malformed].map { OpenedLink(url: $0, applicationURL: handlers.gitHubDesktopURL) })

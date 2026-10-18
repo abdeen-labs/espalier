@@ -149,27 +149,39 @@ extension IntegrationsModel {
 }
 
 extension AppModel {
-    /// Passes a GitHub Desktop link on to GitHub Desktop when it's installed
-    /// and Espalier doesn't open the link: the setting is off, or the link
-    /// isn't one Espalier can open (an action other than `openRepo`, such
-    /// as GitHub Desktop's sign-in). Returns whether it did: Espalier
-    /// handles every other link itself, since no other app can open one
-    /// when GitHub Desktop isn't installed.
+    /// Whether `url` is a GitHub Desktop link that `handle(_:)` passes on
+    /// to GitHub Desktop rather than opening: GitHub Desktop is installed,
+    /// and the setting is off or the link isn't one Espalier can open.
+    public func passesToGitHubDesktop(_ url: URL) -> Bool {
+        gitHubDesktopOpening(url) != nil
+    }
+
+    /// GitHub Desktop's application, when it's installed and Espalier
+    /// doesn't open the link: the setting is off, or the link isn't one
+    /// Espalier can open (an action other than `openRepo`, such as GitHub
+    /// Desktop's sign-in). Nil for every other link: Espalier handles those
+    /// itself, since no other app can open one when GitHub Desktop isn't
+    /// installed.
+    private func gitHubDesktopOpening(_ url: URL) -> URL? {
+        guard GitHubDesktopLinks.isLink(url) else {
+            return nil
+        }
+        if preferences.openGitHubDesktopLinks, case .openRepositoryFromURL = parseAppURL(url.absoluteString) {
+            return nil
+        }
+        return environment.urlSchemeHandlers.applicationURL(bundleIdentifier: GitHubDesktopLinks.bundleIdentifier)
+    }
+
+    /// Passes a GitHub Desktop link on to GitHub Desktop when
+    /// `passesToGitHubDesktop(_:)`. Returns whether it did.
     ///
     /// - Throws: `.other` when GitHub Desktop couldn't be asked to open it.
     func forwardToGitHubDesktop(_ url: URL) async throws(OperationError) -> Bool {
-        guard GitHubDesktopLinks.isLink(url) else {
-            return false
-        }
-        if preferences.openGitHubDesktopLinks, case .openRepositoryFromURL = parseAppURL(url.absoluteString) {
-            return false
-        }
-        let handlers = environment.urlSchemeHandlers
-        guard let gitHubDesktop = handlers.applicationURL(bundleIdentifier: GitHubDesktopLinks.bundleIdentifier) else {
+        guard let gitHubDesktop = gitHubDesktopOpening(url) else {
             return false
         }
         do {
-            try await handlers.open(url, withApplicationAt: gitHubDesktop)
+            try await environment.urlSchemeHandlers.open(url, withApplicationAt: gitHubDesktop)
         } catch {
             logger.error("Couldn't pass a link on to GitHub Desktop: \(error.localizedDescription, privacy: .public)")
             throw OperationError(

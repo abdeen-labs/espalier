@@ -32,6 +32,7 @@ public struct EspalierScenes: Scene {
             // With the main window minimized (no window key), the menus act
             // on the main window and bring it back.
             EspalierCommands(updater: delegate.updater, mainWindowContext: { [delegate] in delegate.mainWindowContext })
+            MainWindowOpener(delegate: delegate)
         }
 
         Settings {
@@ -57,10 +58,9 @@ public struct EspalierScenes: Scene {
 }
 
 /// The main window's root, which also gives the delegate the window's
-/// context and a way to reopen it.
+/// context.
 private struct MainWindowScene: View {
     let delegate: EspalierAppDelegate
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         RootView(
@@ -72,11 +72,23 @@ private struct MainWindowScene: View {
             }
         )
         .onAppear {
-            let openWindow = openWindow
-            delegate.openMainWindow = {
-                openWindow(id: EspalierScenes.mainWindowID)
-            }
             delegate.updater.start()
         }
+    }
+}
+
+/// Gives the delegate a way to open the main window. The menus are built at
+/// launch, before any window, so it's there even when Espalier was launched
+/// to open a link or a folder and the main window hasn't appeared.
+private struct MainWindowOpener: Commands {
+    let delegate: EspalierAppDelegate
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        let openWindow = openWindow
+        delegate.openMainWindow = {
+            openWindow(id: EspalierScenes.mainWindowID)
+        }
+        return EmptyCommands()
     }
 }

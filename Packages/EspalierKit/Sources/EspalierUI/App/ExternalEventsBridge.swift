@@ -1,7 +1,7 @@
 // Where URL opens, folder opens from Finder, and folders dropped on the Dock
-// icon go. They wait until the main window is up, then each runs through
-// `AppModel.handle(_:)`, with the window's presenter showing its errors and
-// asking its decisions.
+// icon go. They wait until the main window is up, then each brings Espalier
+// and the window to the front and runs through `AppModel.handle(_:)`, with
+// the window's presenter showing its errors and asking its decisions.
 
 import AppKit
 import EspalierCore
@@ -95,14 +95,25 @@ public final class ExternalEventsBridge {
         }
     }
 
-    /// Runs `action` through the window's presenter, then presents what it
-    /// did.
+    /// Brings Espalier and the main window to the front, then runs `action`
+    /// through the window's presenter and presents what it did. A link
+    /// GitHub Desktop opens leaves Espalier where it is.
     ///
     /// A checkout the action started that needs a decision or a
     /// confirmation is thrown with the branch in the error's `gitContext`;
     /// once answered, the branch is checked out again with the answers
     /// rather than the whole action rerun.
     static func run(_ action: ExternalAction, in context: WindowContext) async {
+        switch action {
+        case .url(let url) where context.app.passesToGitHubDesktop(url):
+            // GitHub Desktop opens the link.
+            break
+        default:
+            // The app that sent the action, such as a browser, can leave
+            // Espalier behind it.
+            NSApp.activate()
+            context.revealWindow()
+        }
         await run({ app throws(OperationError) in try await app.handle(action) }, in: context)
     }
 
