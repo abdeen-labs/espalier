@@ -72,6 +72,14 @@ public final class ExternalEventsBridge {
     /// Runs `action` once the main window is up and the actions before it
     /// have finished.
     public func deliver(_ action: ExternalAction) {
+        switch action {
+        case .url(let url):
+            logger.info("Received a \(url.scheme ?? "", privacy: .public) link: \(url.absoluteString, privacy: .private)")
+        case .folders(let paths):
+            logger.info("Received \(paths.count) folders to open")
+        case .clone:
+            logger.info("Received a clone")
+        }
         pending.append(action)
         runPending()
     }
@@ -110,8 +118,9 @@ public final class ExternalEventsBridge {
             break
         default:
             // The app that sent the action, such as a browser, can leave
-            // Espalier behind it.
-            NSApp.activate()
+            // Espalier behind it, and `activate()` does nothing unless that
+            // app yielded activation first.
+            NSApp.activate(ignoringOtherApps: true)
             context.revealWindow()
         }
         await run({ app throws(OperationError) in try await app.handle(action) }, in: context)
