@@ -76,6 +76,7 @@ private struct MainWindowScene: View {
             delegate.openMainWindow = {
                 openWindow(id: EspalierScenes.mainWindowID)
             }
+            delegate.updater.start()
         }
     }
 }

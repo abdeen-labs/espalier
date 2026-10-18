@@ -22,7 +22,7 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
     public private(set) var launchError: String?
     /// The Settings scene's pane, shared with the main window.
     public let settingsNavigation = SettingsNavigation()
-    /// App updates, started with the app.
+    /// App updates, started once the main window appears.
     public let updater = Updater()
 
     /// URLs and folders opened before or after launch.
