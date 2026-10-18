@@ -1,6 +1,7 @@
 // A floating panel anchored to a rect in a view: a borderless, transparent
-// child window that can reach past its parent window's edges. Menus show
-// their card in one; it's general enough for popovers and tooltips too.
+// window that can reach past its parent window's edges, the parent's child
+// window but for a tooltip's. Menus show their card in one; it's general
+// enough for popovers and tooltips too.
 //
 // The panel opens below, above, beside, or at a point of its anchor,
 // flipping to the other side when there's no room and shifting to stay on
@@ -165,7 +166,14 @@ public final class AnchoredPanel: NSPanel {
         observe(parent)
         if parent.isVisible {
             alphaValue = 1
-            parent.addChildWindow(self, ordered: .above)
+            if interaction == .none {
+                // A tooltip floats on its own, above the window at its
+                // level: as the window's child, Mission Control would hide
+                // it yet still frame the window around it.
+                orderFront(nil)
+            } else {
+                parent.addChildWindow(self, ordered: .above)
+            }
         }
     }
 
