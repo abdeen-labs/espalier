@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: &docs
+      - '*.md'
+      - 'docs/**'
+      - 'Marketing/**'
+      - '.github/readme/**'
+      - 'LICENSE'
+      - 'LICENSE-THIRD-PARTY'
+  pull_request:
+    paths-ignore: *docs
+  workflow_dispatch:
+
+# A newer push to the same branch or pull request cancels the run it replaces.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+
+jobs:
+  package:
+    name: Package
+    runs-on: xcode-27
+    timeout-minutes: 40
+    steps:
+      - &checkout
+        uses: actions/checkout@v7
+
+      # Checkout gives every file the current time, so a restored build would
+      # rebuild everything. Each tracked file's time is set from its blob hash
+      # instead: the same contents always get the same time, and changed
+      # contents get a new one. Symlinks are skipped: setting one's time sets
+      # its target's.
+      - &file-times
+        name: Set file times from contents
+        run: |
+          git ls-files -s -z | perl -0 -ne '
+            chomp;
+            my ($meta, $path) = split /\t/, $_, 2;
+            my ($mode, $hash) = split / /, $meta;
+            next if $mode eq "120000" || $mode eq "160000";
+            my $t = 946684800 + hex(substr($hash, 0, 7));
+            utime($t, $t, $path) or die "utime $path: $!\n";
+          '
+
+      # Build caches are keyed on Xcode's build version: a new toolchain
+      # starts from scratch.
+      - &toolchain
+        name: Toolchain
+        id: toolchain
+        run: |
+          xcodebuild -version
+          echo "xcode=$(xcodebuild -version | awk '/Build version/ { print $3 }')" >> "$GITHUB_OUTPUT"
+
+      - &restore-git
+        name: Restore bundled git
+        uses: actions/cache@v6
+        with:
+          path: Vendor/git
+          key: vendor-git-${{ hashFiles('scripts/git-version', 'scripts/git-checksums') }}
+
+      - &install-git
+        name: Install bundled git
+        run: scripts/fetch-git.sh
+
+      # Main's latest build, or this commit's on a re-run. The dependencies'
+      # clones are left out: SwiftPM builds from the checkouts.
+      - name: Restore build
+        id: restore-build
+        uses: actions/cache/restore@v6
+        with:
+          path: &spm-paths |
+            Packages/EspalierKit/.build
+            !Packages/EspalierKit/.build/repositories
+          key: spm-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ github.sha }}
+          restore-keys: spm-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-
+
+      - name: Build
+        id: build
+        working-directory: Packages/EspalierKit
+        run: swift build --build-tests --only-use-versions-from-resolved-file --disable-index-store
+
+      - name: Test
+        working-directory: Packages/EspalierKit
+        run: swift test --skip-build
+
+      # Only main saves, so pull requests can't evict main's caches.
+      - name: Save build
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && github.ref == 'refs/heads/main' && steps.restore-build.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: *spm-paths
+          key: ${{ steps.restore-build.outputs.cache-primary-key }}
+
+  app:
+    name: App
+    runs-on: xcode-27
+    timeout-minutes: 40
+    steps:
+      - *checkout
+      - *file-times
+      - *toolchain
+      - *restore-git
+      - *install-git
+
+      - name: Restore DerivedData
+        id: restore-build
+        uses: actions/cache/restore@v6
+        with:
+          path: &xcode-paths |
+            DerivedData
+            !DerivedData/SourcePackages/repositories
+          key: xcode-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ github.sha }}
+          restore-keys: xcode-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-
+
+      - name: Build
+        id: build
+        run: >-
+          xcodebuild
+          -project Espalier.xcodeproj
+          -scheme Espalier
+          -configuration Debug
+          -derivedDataPath DerivedData
+          -onlyUsePackageVersionsFromResolvedFile
+          CODE_SIGNING_ALLOWED=NO
+          COMPILER_INDEX_STORE_ENABLE=NO
+          build
+
+      - name: Save DerivedData
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && github.ref == 'refs/heads/main' && steps.restore-build.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: *xcode-paths
+          key: ${{ steps.restore-build.outputs.cache-primary-key }}
