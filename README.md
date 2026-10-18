@@ -8,8 +8,8 @@
 <h1 align="center">Espalier</h1>
 
 <p align="center">
-  A Git client for the Mac. See every branch as it grew, commit exactly the
-  lines you mean, and rework history by dragging commits where they belong.
+  A native Git client for the Mac, written in Swift. Keep track of your
+  branches, stage individual lines, and clean up commits before you push.
 </p>
 
 <p align="center">
@@ -20,51 +20,55 @@
   <a href="CHANGELOG.md">What's New</a>
 </p>
 
-<p align="center"><sub>macOS 27 or later on Apple silicon. Free and open source.</sub></p>
+<p align="center"><sub>Requires macOS 27 or later on Apple silicon. Free and MIT-licensed.</sub></p>
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/readme/classic-dark.webp">
-    <img src=".github/readme/classic-light.webp" alt="Espalier showing a project's history: branches in the sidebar, the commit graph, and the changes in the selected commit">
+    <img src=".github/readme/classic-light.webp" alt="Espalier showing a repository's branch sidebar, color-coded commit graph, and selected commit diff">
   </picture>
 </p>
 
 ## Features
 
-- **Every branch, in view.** The graph draws each line of work in its own
-  color, so merges and open branches read at a glance. Switch to Simple for
-  just your branch, search every commit, or jump to one by its SHA.
-- **Commit the lines you mean.** Include whole files, one hunk, or single
-  lines, right in the diff. Read changes unified or side by side, with syntax
-  colors for more than 20 languages, and compare images four ways.
-- **Rework history by dragging.** Squash, reorder, and cherry-pick by dragging
-  commits, without an interactive rebase. Espalier checks for conflicts before
-  it starts, and Undo takes it back.
-- **Pull requests, beside your branches.** Sign in to GitHub.com or GitHub
-  Enterprise to see your open pull requests in the sidebar, follow their
-  checks, and get a notification when a review arrives or a check fails.
-- **AI, with your own keys.** Write commit messages and work through merge
-  conflicts with OpenAI, Anthropic, Azure OpenAI, or a model running on your
-  Mac. Your keys stay in your Keychain.
-- **Make it yours.** Four themes, each with its own colors, plus background
-  tints, a choice of fonts, and light or dark to match your Mac.
+- **Readable commit history.** Graph view draws each branch in its own color
+  so merges and open branches are easy to follow, while Simple view gives you
+  a plain list of commits. Search across commits, jump to any SHA, or compare
+  ahead/behind counts between branches.
+- **Line-by-line staging.** Stage whole files, hunks, or individual lines
+  right in the diff, and discard changes you don't want. Supports unified and
+  split diffs, syntax highlighting for 20+ languages, and four image diff
+  modes (2-Up, Swipe, Onion Skin, and Difference).
+- **Drag to rework history.** Squash, reorder, and cherry-pick commits by
+  dragging them—no interactive rebase required. Espalier checks for conflicts
+  before starting, tracks progress, and lets you Undo (⌘Z).
+- **GitHub integration.** Sign in to GitHub.com or GitHub Enterprise to view
+  open pull requests in the sidebar, check them out, monitor or re-run CI
+  checks, and inspect push-protection secret blocks.
+- **Bring-your-own-key AI.** Draft commit messages and resolve merge conflicts
+  using OpenAI, Anthropic, Azure OpenAI, or a local model on your Mac. API
+  keys stay in your Keychain, and nothing is sent unless you configure a
+  provider.
+- **Customizable interface.** Choose from four themes (Classic, Orchard,
+  Islands, and Pop), tweak background tints, pick your UI and code fonts, and
+  match your Mac's light or dark appearance.
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/readme/orchard-dark.webp">
-    <img src=".github/readme/orchard-light.webp" alt="Espalier in Orchard" width="32%">
+    <img src=".github/readme/orchard-light.webp" alt="Espalier using the Orchard theme" width="32%">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/readme/islands-dark.webp">
-    <img src=".github/readme/islands-light.webp" alt="Espalier in Islands" width="32%">
+    <img src=".github/readme/islands-light.webp" alt="Espalier using the Islands theme" width="32%">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/readme/pop-dark.webp">
-    <img src=".github/readme/pop-light.webp" alt="Espalier in Pop" width="32%">
+    <img src=".github/readme/pop-light.webp" alt="Espalier using the Pop theme" width="32%">
   </picture>
 </p>
 
-<p align="center"><sub>Orchard, Islands, and Pop</sub></p>
+<p align="center"><sub>The Orchard, Islands, and Pop themes</sub></p>
 
 ## Building
 

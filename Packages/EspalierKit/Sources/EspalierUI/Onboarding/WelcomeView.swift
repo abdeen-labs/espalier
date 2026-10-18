@@ -30,7 +30,7 @@ struct WelcomeStart: View {
                 .accessibilityHidden(true)
             WelcomeHeading(
                 title: "Welcome to Espalier",
-                message: "Espalier helps you contribute to projects on GitHub and GitHub Enterprise. Sign in to get started with your existing projects."
+                message: "Sign in to GitHub.com or GitHub Enterprise to work with your remotes and pull requests, or skip this step to jump straight into your local repositories."
             )
             VStack(spacing: Metrics.insetSmall) {
                 Button(action: signIn) {

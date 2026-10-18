@@ -40,7 +40,7 @@ struct AboutView: View {
                 .font(Typography.welcomeTitle)
                 .foregroundStyle(.text)
             MonoChip(content.versionLine, isSelectable: true)
-            Text("Espalier is a Mac app based on GitHub Desktop.")
+            Text("A native Mac Git client, originally rooted in GitHub Desktop.")
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)
                 .multilineTextAlignment(.center)
