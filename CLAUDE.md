@@ -38,6 +38,7 @@ Packages/EspalierKit/        All real code, in one library product named Espalie
   Tests/<Module>Tests/       Swift Testing suites, many ported from desktop/app/test/unit.
   Tests/EspalierCaptures/    Captures: views drawn to PNGs to look at.
 scripts/                     fetch-git.sh, embed-git.sh, git-version, git-checksums, capture.sh,
+                             readme-images.sh (the README's images, from the Showcase captures),
                              publish-release.sh, changelog.sh (docs/RELEASING.md).
 Vendor/git/                  The bundled git (gitignored, installed by scripts/fetch-git.sh).
 docs/                        What's left, design.
