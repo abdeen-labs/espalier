@@ -89,6 +89,32 @@ struct ChangesReconcilerTests {
         #expect(stash.selection == .stash(fileID: "x"))
     }
 
+    @Test("no file selected while the list shows files stays so through a refresh, with or without a filter; a file arriving in an empty list is selected")
+    @MainActor
+    func emptySelectionStays() {
+        let a = ModelFixtures.file("a.txt")
+        let b = ModelFixtures.file("b.txt")
+        let model = ChangesModel()
+        model.reconcile(status([a, b]), options: [])
+        #expect(model.selection == .workingDirectory(fileIDs: [a.id]))
+
+        // A click on no file.
+        model.select(fileIDs: [])
+        model.reconcile(status([a, b, ModelFixtures.file("c.txt")]), options: [])
+        #expect(model.selection == .workingDirectory(fileIDs: []))
+
+        model.filter.text = "b"
+        #expect(model.selection == .workingDirectory(fileIDs: [b.id]))
+        model.select(fileIDs: [])
+        model.reconcile(status([a, b]), options: [])
+        #expect(model.selection == .workingDirectory(fileIDs: []))
+
+        model.filter.text = ""
+        model.reconcile(status([]), options: [])
+        model.reconcile(status([b]), options: [])
+        #expect(model.selection == .workingDirectory(fileIDs: [b.id]))
+    }
+
     @Test("showing the working directory keeps its selection or selects the first file")
     func selectWorkingDirectory() {
         let a = ModelFixtures.file("a.txt")

@@ -25,11 +25,14 @@ struct ChangedFilesResult: Equatable {
 ///   doesn't resets.
 /// - Files are sorted with `caseInsensitiveCompare`, stably, because the
 ///   order is visible.
+/// - When no selected file remains, the first file is selected; with
+///   `keepsEmptySelection` (the user selected no file), none is.
 func updateChangedFiles(
     workingDirectory current: WorkingDirectoryStatus,
     selection: ChangesSelection,
     status: StatusResult,
-    clearPartialState: Bool
+    clearPartialState: Bool,
+    keepsEmptySelection: Bool = false
 ) -> ChangedFilesResult {
     // Populate a map for all files in the current working directory state
     var filesByID: [ExactString: WorkingDirectoryFileChange] = [:]
@@ -102,8 +105,8 @@ func updateChangedFiles(
         }
 
         // Select the first file if we don't have anything selected and we
-        // have something to select.
-        if selectedFileIDs.isEmpty, let first = mergedFiles.first {
+        // have something to select, unless the user selected nothing.
+        if selectedFileIDs.isEmpty, !keepsEmptySelection, let first = mergedFiles.first {
             selectedFileIDs = [first.id]
         }
 

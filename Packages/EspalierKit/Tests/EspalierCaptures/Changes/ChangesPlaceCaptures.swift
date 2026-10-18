@@ -1,5 +1,6 @@
 // The Changes place at the window's size, on real repositories: the files
-// with README.md's diff (light and dark), README.md partly included (also
+// with README.md's diff (light and dark), no file selected after a refresh,
+// README.md partly included (also
 // under Included in Commit), the search typed hiding the selected file,
 // filtered to nothing, no changes with Suggestions and stashes on the
 // branch, a merge's conflicts with the operation panel and the merge's
@@ -23,7 +24,7 @@ struct ChangesPlaceCaptures {
     /// The place at the window's size.
     private let size = CGSize(width: 960, height: 620)
 
-    @Test("files with the diff, a file partly included and under Included in Commit, searched, filtered, no changes")
+    @Test("files with the diff, no file selected, a file partly included and under Included in Commit, searched, filtered, no changes")
     func place() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await ChangesCaptureRepository.make(try await ChangesCaptureRepository.withChanges())
@@ -33,6 +34,15 @@ struct ChangesPlaceCaptures {
             changes.select(fileIDs: [readme.id])
             await fixture.settle()
             await capturePlace(fixture, named: "place-files")
+
+            // No file selected (a click below the files) stays so through a
+            // refresh.
+            changes.select(fileIDs: [])
+            await fixture.repository.refresh(.status, reason: .user)
+            await fixture.settle()
+            await capturePlace(fixture, named: "place-no-selection")
+            changes.select(fileIDs: [readme.id])
+            await fixture.settle()
 
             // Gutter staging (the diff through the changes model): the last
             // added line left out, so the row's checkbox is mixed.

@@ -224,12 +224,16 @@ public final class ChangesModel: RepositoryFeature {
     /// Merges a new status into the files and the selection
     /// (`updateChangedFiles`), keeps the selection to the files the filter
     /// lists (`listedSelection`), then reloads the selected file's diff.
+    /// No file selected while the list shows files (a click on no file)
+    /// stays so.
     func reconcile(_ status: StatusResult, options: RefreshOptions) {
+        let keepsEmptySelection = selection == .workingDirectory(fileIDs: []) && !visibleFiles.isEmpty
         let result = updateChangedFiles(
             workingDirectory: workingDirectory,
             selection: selection,
             status: status,
-            clearPartialState: options.contains(.clearPartialSelections)
+            clearPartialState: options.contains(.clearPartialSelections),
+            keepsEmptySelection: keepsEmptySelection
         )
         if result.workingDirectory != workingDirectory {
             workingDirectory = result.workingDirectory
@@ -237,7 +241,7 @@ public final class ChangesModel: RepositoryFeature {
         if result.selection != selection {
             selection = result.selection
         }
-        if let listed = listedSelection() {
+        if !keepsEmptySelection, let listed = listedSelection() {
             selection = .workingDirectory(fileIDs: listed)
         }
         if !result.keepsDiff {
