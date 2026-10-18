@@ -151,6 +151,21 @@ struct RepositoryCaptures {
         }
     }
 
+    @Test("Clone: a folder whose name ends in .app, with its warning")
+    func cloneURLApplicationBundleWarning() async throws {
+        try await withIsolatedGitConfig { _ in
+            let harness = try AppHarness()
+            let app = try await AccountCaptureFixtures.app(harness)
+            let context = AccountCaptureFixtures.context(app)
+            app.preferences.lastCloneLocation = "/Users/joe/Developer"
+            let model = CloneSheetModel(app: app, initialURL: "https://github.com/joe/getworkouts.app")
+            model.setPath("/Users/joe/Developer/getworkouts.app")
+            await model.validatePath()
+            capture(CloneForm(model: model).windowEnvironment(context), named: "clone-url-app-warning", area: area)
+            await app.idle()
+        }
+    }
+
     @Test("Clone: GitHub.com's list, a repository selected, with two Enterprise accounts signed in too")
     func cloneGitHub() async throws {
         try await withIsolatedGitConfig { _ in

@@ -132,12 +132,6 @@ struct CloneCoordinatorTests {
         #expect(app.selection == nil)
         #expect(app.preferences.lastCloneLocation == defaultLocation)
 
-        let bundle = POSIXPath.join(try createTempDirectory(), "Tool.App")
-        let bundleError = await #expect(throws: OperationError.self) {
-            try await app.clones.clone(source.path, to: bundle)
-        }
-        #expect(preconditionText(bundleError) != nil)
-
         let emptyError = await #expect(throws: OperationError.self) {
             try await app.clones.clone(source.path, to: "")
         }

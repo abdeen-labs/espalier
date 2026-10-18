@@ -1,11 +1,11 @@
 // Clone a Repository (⇧⌘O): GitHub.com, GitHub Enterprise, and URL, each with
 // its own URL, path, filter, selection, and problem; the account picker with
 // two or more accounts; the local path that follows the URL
-// (`clonePath(_:afterURLChangeFrom:to:)`) and its checks
-// (`validateClonePath`); and Clone, which resolves what to clone
-// (`resolveCloneInfo`), closes the sheet, and clones. The GitHub.com segment
-// is always there (its call to action signs in); the Enterprise segment
-// shows once an Enterprise account exists.
+// (`clonePath(_:afterURLChangeFrom:to:)`), its checks (`validateClonePath`),
+// and its warning (`clonePathWarning`); and Clone, which resolves what to
+// clone (`resolveCloneInfo`), closes the sheet, and clones. The GitHub.com
+// segment is always there (its call to action signs in); the Enterprise
+// segment shows once an Enterprise account exists.
 
 import AppKit
 import EspalierCore
@@ -167,8 +167,18 @@ final class CloneSheetModel {
         setURL(url ?? "")
     }
 
+    /// What to know about the current path that doesn't stop the clone:
+    /// nothing about the starting folder until a URL is entered.
+    var pathWarning: CloneDestinationWarning? {
+        let fields = current
+        if JSCompat.strictEquals(fields.path, initialPath), fields.url.isEmpty {
+            return nil
+        }
+        return clonePathWarning(fields.path)
+    }
+
     /// Whether Clone can be pressed: a URL, a path, nothing being resolved,
-    /// and no problem.
+    /// and no problem (a warning doesn't stop it).
     var canClone: Bool {
         let fields = current
         return !JSCompat.trim(fields.url).isEmpty && !fields.path.isEmpty && !isResolving && fields.problem == nil
@@ -388,7 +398,8 @@ struct CloneForm: View {
         }
     }
 
-    /// The URL (for URL) and the local path, with the problem under them.
+    /// The URL (for URL) and the local path, with the problem and the
+    /// path's warning under them.
     private var fields: some View {
         Form {
             // The labels in the form's column; the fields are capsules.
@@ -405,6 +416,9 @@ struct CloneForm: View {
             }
             if let problem = model.current.problem {
                 FieldMessage(problem, kind: .error)
+            }
+            if let warning = model.pathWarning {
+                FieldMessage(warning.message, kind: .warning)
             }
         }
         .formStyle(.columns)

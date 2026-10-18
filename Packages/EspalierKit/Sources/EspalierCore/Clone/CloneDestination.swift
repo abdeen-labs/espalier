@@ -14,9 +14,6 @@ private let logger = Log.logger(category: "clone")
 
 /// Why a folder can't be cloned into.
 public enum CloneDestinationProblem: Sendable, Equatable {
-    /// The folder's name ends in `.app`, which would make an application
-    /// bundle.
-    case applicationBundle
     /// The folder has something in it.
     case notEmpty
     /// There's a file, not a folder, at the path.
@@ -27,8 +24,6 @@ public enum CloneDestinationProblem: Sendable, Equatable {
     /// The message shown to the user.
     public var message: String {
         switch self {
-        case .applicationBundle:
-            "The folder's name can't end in .app, because macOS would treat it as an app. Choose a different name."
         case .notEmpty:
             "This folder contains files. Git can only clone to empty folders."
         case .notAFolder:
@@ -39,15 +34,33 @@ public enum CloneDestinationProblem: Sendable, Equatable {
     }
 }
 
+/// Something to know about a folder that doesn't stop cloning into it.
+public enum CloneDestinationWarning: Sendable, Equatable {
+    /// The folder's name ends in `.app`, so macOS treats it as an
+    /// application bundle.
+    case applicationBundle
+
+    /// The message shown to the user.
+    public var message: String {
+        switch self {
+        case .applicationBundle:
+            "The folder's name ends in .app, so macOS will treat it as an app."
+        }
+    }
+}
+
+/// What to know about cloning into `path` that doesn't stop the clone: a
+/// folder whose name ends in `.app`, whatever its case. Nil when there's
+/// nothing.
+public func clonePathWarning(_ path: String) -> CloneDestinationWarning? {
+    JSCompat.endsWith(JSCompat.toLowerCase(POSIXPath.basename(POSIXPath.resolve(path))), ".app") ? .applicationBundle : nil
+}
+
 /// Validates the destination before cloning can create files in it: a
-/// folder that doesn't exist yet, or an empty one, and not one whose name
-/// ends in `.app`. Nil when it can be cloned into.
+/// folder that doesn't exist yet, or an empty one. Nil when it can be
+/// cloned into.
 @concurrent
 public func validateClonePath(_ path: String) async -> CloneDestinationProblem? {
-    if JSCompat.endsWith(JSCompat.toLowerCase(POSIXPath.basename(POSIXPath.resolve(path))), ".app") {
-        return .applicationBundle
-    }
-
     guard let directory = opendir(path) else {
         switch errno {
         case ENOENT:
@@ -75,9 +88,17 @@ public func validateClonePath(_ path: String) async -> CloneDestinationProblem? 
 }
 
 /// The folder name a clone of `urlOrAlias` gets: the repository's name, made
-/// a single safe path component. Nil when the input names no repository.
+/// a single safe path component, with a trailing `.app` (whatever its case)
+/// as `-app`, so macOS doesn't treat the folder as an app. Nil when the
+/// input names no repository.
 public func cloneFolderName(_ urlOrAlias: String) -> String? {
-    parseRepositoryIdentifier(urlOrAlias).flatMap { sanitizeCloneName($0.name) }
+    guard let name = parseRepositoryIdentifier(urlOrAlias).flatMap({ sanitizeCloneName($0.name) }) else {
+        return nil
+    }
+    guard JSCompat.endsWith(JSCompat.toLowerCase(name), ".app") else {
+        return name
+    }
+    return String(name.dropLast(4)) + "-" + String(name.suffix(3))
 }
 
 /// The clone's local path after its URL changed from `previousURL` to

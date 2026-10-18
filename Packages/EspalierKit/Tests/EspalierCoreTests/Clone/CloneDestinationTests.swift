@@ -1,5 +1,5 @@
 // The clone dialog's behavior that isn't layout: `validateClonePath`, the
-// local path that follows the URL, the default folder, and
+// .app warning, the local path that follows the URL, the default folder, and
 // `resolveCloneInfo` against a mock GitHub. "desktop's dialog test"
 // carries over the cases of
 // desktop/app/test/unit/ui/clone-repository-test.tsx that aren't about
@@ -43,39 +43,63 @@ struct CloneDestinationTests {
         #expect(await validateClonePath(file) == .notAFolder)
     }
 
-    @Test("desktop's dialog test: .app folders are refused, as derived from the URL or edited, whatever the case or trailing separators")
+    @Test("a folder whose name ends in .app gets a warning but can be cloned into, whatever the case or trailing separators")
     func applicationBundleCases() async throws {
         let directory = try createTempDirectory()
-        // Derived from the URL, without renaming.
+        for name in ["repository.app", "repository.APP/", ".app", "repository.app/."] {
+            let path = "\(directory)/\(name)"
+            #expect(clonePathWarning(path) == .applicationBundle, "\(name)")
+            #expect(await validateClonePath(path) == nil, "\(name)")
+        }
+        #expect(clonePathWarning(POSIXPath.join(directory, "repository.app-source")) == nil)
+        #expect(clonePathWarning(POSIXPath.join(directory, "repository-app")) == nil)
+        // An empty folder that's there can be cloned into; one with files
+        // still can't.
+        let existing = POSIXPath.join(directory, "existing.app")
+        try FileManager.default.createDirectory(atPath: existing, withIntermediateDirectories: false)
+        #expect(clonePathWarning(existing) == .applicationBundle)
+        #expect(await validateClonePath(existing) == nil)
+        try Data().write(to: URL(filePath: POSIXPath.join(existing, "file")))
+        #expect(await validateClonePath(existing) == .notEmpty)
+    }
+
+    @Test("desktop's dialog test: a repository whose name ends in .app gets a folder ending in -app, as derived from the URL or after editing it")
+    func applicationBundleFolderName() {
+        let directory = "/Users/me/Developer"
         for (url, name) in [
-            ("https://github.com/owner/repository.app", "repository.app"),
-            ("https://github.com/owner/repository.APP.git", "repository.APP"),
-            ("https://github.com/owner/repository.App.git/", "repository.App"),
+            ("https://github.com/owner/repository.app", "repository-app"),
+            ("https://github.com/owner/repository.APP.git", "repository-APP"),
+            ("https://github.com/owner/repository.App.git/", "repository-App"),
+            ("owner/.app", "-app"),
         ] {
             let path = clonePath(directory, afterURLChangeFrom: "", to: url)
-            #expect(path == POSIXPath.join(directory, name))
-            #expect(await validateClonePath(path) == .applicationBundle, "\(url)")
+            #expect(path == POSIXPath.join(directory, name), "\(url)")
+            #expect(clonePathWarning(path) == nil, "\(url)")
         }
-        // Edited.
-        for name in ["repository.app", "repository.APP/", ".app", "repository.app/."] {
-            #expect(await validateClonePath("\(directory)/\(name)") == .applicationBundle, "\(name)")
-        }
-        #expect(await validateClonePath(POSIXPath.join(directory, "repository.app-source")) == nil)
-        // An empty folder that's there.
-        let empty = POSIXPath.join(directory, "empty.app")
-        try FileManager.default.createDirectory(atPath: empty, withIntermediateDirectories: false)
-        #expect(await validateClonePath(empty) == .applicationBundle)
+        #expect(cloneFolderName("owner/repository.app-source") == "repository.app-source")
         // Derived after editing the URL, then corrected.
         let changed = clonePath(
             POSIXPath.join(directory, "repository"),
             afterURLChangeFrom: "https://example.com/owner/repository.git",
             to: "https://example.com/owner/changed.app.git"
         )
-        #expect(changed == POSIXPath.join(directory, "changed.app"))
-        #expect(await validateClonePath(changed) == .applicationBundle)
+        #expect(changed == POSIXPath.join(directory, "changed-app"))
         let corrected = clonePath(changed, afterURLChangeFrom: "https://example.com/owner/changed.app.git", to: "https://example.com/owner/changed.git")
         #expect(corrected == POSIXPath.join(directory, "changed"))
-        #expect(await validateClonePath(corrected) == nil)
+    }
+
+    @Test("a clone into a folder whose name ends in .app goes ahead") @MainActor
+    func clonesIntoApplicationBundleName() async throws {
+        let harness = try AppHarness()
+        let app = await harness.loadedApp()
+        let source = try await makeCloneSource()
+        let destination = POSIXPath.join(try createTempDirectory(), "website.app")
+
+        let id = try await app.clones.clone(source.path, to: destination)
+
+        #expect(FileManager.default.fileExists(atPath: POSIXPath.join(destination, ".git")))
+        #expect(app.record(id) != nil)
+        await app.idle()
     }
 
     @Test("a folder that can't be read is reported")
