@@ -19,9 +19,11 @@ import GitHubKit
 import GitKit
 import SwiftUI
 
-/// A row of the popover: a repository (or clone), or a worktree.
+/// A row of the popover: a repository (or clone) in a group, or a worktree.
 nonisolated enum RepositoryPopoverRowID: Hashable, Sendable {
-    case entry(RepositoryListEntryID)
+    /// A repository's row in the group with id `group`: one in Recent has
+    /// a row there and another in its owner's group.
+    case entry(RepositoryListEntryID, group: String)
     case worktree(path: String)
 }
 
@@ -41,7 +43,9 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
 
     /// Every row, in order: the worktrees, then the groups'.
     var rowIDs: [RepositoryPopoverRowID] {
-        worktrees.map { .worktree(path: $0.path) } + groups.flatMap { $0.rows.map { .entry($0.id) } }
+        worktrees.map { .worktree(path: $0.path) } + groups.flatMap { group in
+            group.rows.map { .entry($0.id, group: group.id) }
+        }
     }
 
     /// The row highlighted as the popover opens: the window's worktree,
@@ -51,8 +55,8 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
             return .worktree(path: worktree.path)
         }
         for group in groups {
-            if let row = group.rows.first(where: { $0.icon == .current }) {
-                return .entry(row.id)
+            if let row = group.rows.first(where: \.isCurrent) {
+                return .entry(row.id, group: group.id)
             }
         }
         return nil
@@ -151,7 +155,7 @@ public struct RepositoryPopover: View {
 
     private func activate(_ row: RepositoryPopoverRowID) {
         switch row {
-        case .entry(let entry):
+        case .entry(let entry, _):
             RepositoryActions.switchTo(entry, in: context)
         case .worktree(let path):
             close()
@@ -270,7 +274,7 @@ struct RepositoryPopoverView: View {
                         ListGroupLabel(group.title)
                             .padding(.horizontal, Metrics.ListRow.inset)
                         ForEach(group.rows) { repository in
-                            row(.entry(repository.id)) {
+                            row(.entry(repository.id, group: group.id)) {
                                 RepositoryRow(content: repository)
                             } menu: { [context] in
                                 if let context {

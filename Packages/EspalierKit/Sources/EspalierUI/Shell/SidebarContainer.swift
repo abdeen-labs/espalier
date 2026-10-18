@@ -859,7 +859,7 @@ private struct SidebarHeaderButtonBody<Label: View>: View {
         label
             .font(Typography.subheadline.weight(.semibold))
             .foregroundStyle(isInSidebarSectionHeader ? Color.sidebarText3 : Color.text3)
-            .frame(width: Metrics.Sidebar.badgeSize, height: Metrics.Sidebar.badgeSize)
+            .frame(width: Metrics.Sidebar.glyphSize, height: Metrics.Sidebar.glyphSize)
             .contentShape(Rectangle())
             .opacity(isPressed ? 0.6 : 1)
             .focusRing(isFocused, in: RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .continuous), outset: 0)

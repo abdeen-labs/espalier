@@ -102,8 +102,8 @@ struct WorktreeRow: View {
         HStack(spacing: Metrics.insetSmall) {
             Image(systemName: "rectangle.stack")
                 .foregroundStyle(.text2)
-                // In line with the repositories' badges.
-                .frame(width: Metrics.Sidebar.badgeSize)
+                // In line with the repositories' glyphs.
+                .frame(width: Metrics.Sidebar.glyphSize)
                 .accessibilityHidden(true)
             Text(content.name)
                 .font(content.isCurrent ? Typography.row.weight(.semibold) : Typography.row)

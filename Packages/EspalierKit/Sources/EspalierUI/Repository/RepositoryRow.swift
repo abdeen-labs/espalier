@@ -1,5 +1,7 @@
-// A repository's row in the repository popover: the alias or name (the
-// selected repository's semibold), the owner where the name is ambiguous,
+// A repository's row in the repository popover: desktop's glyph for what
+// kind of repository it is (public, private, or a fork on GitHub, or not on
+// GitHub), the alias or name (the selected repository's semibold), the
+// owner where the name is ambiguous,
 // the status indicators with their tooltips, the hover tooltip (full name,
 // alias, path), and the cloning and missing states.
 
@@ -13,9 +15,14 @@ import SwiftUI
 nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
     /// The row's glyph.
     enum Icon: Sendable, Equatable {
-        /// The selected repository: its badge, and its title semibold.
-        case current
-        case other
+        /// A public GitHub repository.
+        case repository
+        /// A private GitHub repository.
+        case `private`
+        /// A fork of a GitHub repository.
+        case fork
+        /// A repository that isn't on GitHub.
+        case local
         /// The folder is gone, or git won't work in it.
         case missing
         /// Being cloned: a ring, determinate once git reports progress.
@@ -29,6 +36,8 @@ nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
     /// in.
     var subtitle: String?
     var icon: Icon
+    /// The selected repository: its title semibold.
+    var isCurrent = false
     /// Changed files, and commits ahead of and behind the upstream: shown
     /// when "Show status icons in the repository list" is on.
     var changedFileCount = 0
@@ -84,9 +93,11 @@ nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
             parts.append(subtitle)
         }
         switch icon {
+        case .private: parts.append("Private")
+        case .fork: parts.append("Fork")
         case .missing: parts.append("Missing")
         case .cloning: parts.append("Cloning")
-        case .current, .other: break
+        case .repository, .local: break
         }
         if showsStatus {
             if changedFileCount > 0 {
@@ -121,7 +132,8 @@ extension RepositoryRowContent {
                 id: item.id,
                 title: title,
                 subtitle: disambiguates ? Self.disambiguation(for: record) : nil,
-                icon: isMissing ? .missing : (selection == .repository(record.id) ? .current : .other),
+                icon: isMissing ? .missing : Self.icon(for: record),
+                isCurrent: !isMissing && selection == .repository(record.id),
                 changedFileCount: item.changedFilesCount,
                 ahead: item.aheadBehind?.ahead ?? 0,
                 behind: item.aheadBehind?.behind ?? 0,
@@ -140,6 +152,19 @@ extension RepositoryRowContent {
                 path: clone.path
             )
         }
+    }
+
+    /// The glyph for a repository that's there, as desktop's
+    /// `iconForRepository`: private, a fork, or public on GitHub, else not
+    /// on GitHub.
+    static func icon(for record: RepositoryRecord) -> Icon {
+        guard let gitHubRepository = record.gitHubRepository else {
+            return .local
+        }
+        if gitHubRepository.isPrivate == true {
+            return .private
+        }
+        return gitHubRepository.fork ? .fork : .repository
     }
 
     /// What tells two repositories with one title apart: the owner of a
@@ -172,10 +197,10 @@ struct RepositoryRow: View {
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
-            RepositoryRowIcon(icon: content.icon, title: content.title)
+            RepositoryRowIcon(icon: content.icon)
             VStack(alignment: .leading, spacing: 0) {
                 Text(content.title)
-                    .font(content.icon == .current ? Typography.row.weight(.semibold) : Typography.row)
+                    .font(content.isCurrent ? Typography.row.weight(.semibold) : Typography.row)
                     .foregroundStyle(.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -196,17 +221,22 @@ struct RepositoryRow: View {
     }
 }
 
-/// The row's glyph.
+/// The row's glyph: the repository's kind in secondary text, with the
+/// clone list's symbols, as the worktrees' glyph is.
 struct RepositoryRowIcon: View {
     let icon: RepositoryRowContent.Icon
-    /// The repository's title, for its badge's letter and color.
-    var title = ""
 
     var body: some View {
         Group {
             switch icon {
-            case .current, .other:
-                RepositoryBadge(title: title)
+            case .repository:
+                kind("folder")
+            case .private:
+                kind("lock.fill")
+            case .fork:
+                kind("arrow.trianglehead.branch")
+            case .local:
+                kind("desktopcomputer")
             case .missing:
                 Image(systemName: "questionmark.folder")
                     .foregroundStyle(.text3)
@@ -215,8 +245,13 @@ struct RepositoryRowIcon: View {
                 ArcProgress(.mini, value: progress > 0 ? progress : nil)
             }
         }
-        .frame(width: Metrics.Sidebar.badgeSize, alignment: .center)
+        .frame(width: Metrics.Sidebar.glyphSize, alignment: .center)
         .accessibilityHidden(true)
+    }
+
+    private func kind(_ systemImage: String) -> some View {
+        Image(systemName: systemImage)
+            .foregroundStyle(.text2)
     }
 }
 

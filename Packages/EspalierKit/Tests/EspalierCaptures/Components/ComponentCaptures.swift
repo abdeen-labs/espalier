@@ -1,7 +1,7 @@
 // The design system's components, each in light and dark: capsule buttons
 // in their three styles and four heights, pressed and disabled; the split
 // button; the search field; the segmented control; chips, key caps, status
-// badges, icon circles, and repository badges; the arc and the progress
+// badges, and icon circles; the arc and the progress
 // bar; the slider; links; flat surfaces; and the window's pieces, the
 // sidebar and the toolbar.
 
@@ -135,7 +135,7 @@ struct ComponentCaptures {
 
     // MARK: Chips and badges
 
-    @Test("status badges, key caps, the ID chip, icon circles, and repository badges")
+    @Test("status badges, key caps, the ID chip, and icon circles")
     func chips() {
         let view = VStack(alignment: .leading, spacing: Metrics.insetMedium) {
             HStack(spacing: Metrics.insetSmall) {
@@ -156,11 +156,6 @@ struct ComponentCaptures {
                 IconCircle("person.2")
                 IconCircle("arrow.triangle.merge", size: 26)
                 IconCircle("checkmark", size: 40, tint: Color(espalier: Palette.add))
-                RepositoryBadge(title: "meridian")
-                RepositoryBadge(title: "meridian-api")
-                RepositoryBadge(title: "design-tokens")
-                RepositoryBadge(title: "forecast-kit")
-                RepositoryBadge(title: ".dotfiles")
                 SectionLabel("Branches", count: 5)
             }
         }

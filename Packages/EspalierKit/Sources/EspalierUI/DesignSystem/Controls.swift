@@ -1,6 +1,6 @@
 // Espalier's small controls: key caps, the capsule search field, the
-// capsule segmented control, the ID chip, icon circles, repository badges,
-// and the progress bar.
+// capsule segmented control, the ID chip, icon circles, and the progress
+// bar.
 
 import AppKit
 import SwiftUI
@@ -406,52 +406,6 @@ public struct IconCircle: View {
             .foregroundStyle(tint ?? .text2)
             .frame(width: size, height: size)
             .background(Circle().fill(tint.map { $0.opacity(0.12) } ?? .field))
-    }
-}
-
-// MARK: - Repository badges
-
-/// A repository's badge: its first letter, white and bold, on a rounded
-/// square in a color chosen by its name.
-public struct RepositoryBadge: View {
-    private let title: String
-    private let size: CGFloat
-
-    public init(title: String, size: CGFloat = Metrics.Sidebar.badgeSize) {
-        self.title = title
-        self.size = size
-    }
-
-    public var body: some View {
-        Text(Self.letter(of: title))
-            .font(.system(size: size * 0.56, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: size, height: size)
-            .background(
-                RoundedRectangle(cornerRadius: Metrics.Sidebar.badgeCornerRadius * size / Metrics.Sidebar.badgeSize, style: .continuous)
-                    .fill(Self.color(of: title))
-            )
-            .accessibilityHidden(true)
-    }
-
-    /// The title's first character, uppercased ("." for ".dotfiles").
-    nonisolated static func letter(of title: String) -> String {
-        title.first.map { String($0).uppercased() } ?? "?"
-    }
-
-    /// The badges' OKLCH hues, in degrees: blue, teal, pink, orange,
-    /// violet, green, indigo, cyan, rose, and amber.
-    nonisolated static let hues: [Double] = [253, 177, 353, 56, 301, 152, 274, 218, 14, 82]
-
-    /// A color by the title: one of `hues`, chosen by a stable hash, at
-    /// OKLCH lightness 0.63 and chroma 0.15 (as much as the hue holds).
-    nonisolated static func color(of title: String) -> Color {
-        var hash: UInt32 = 2_166_136_261
-        for byte in title.lowercased().utf8 {
-            hash = (hash ^ UInt32(byte)) &* 16_777_619
-        }
-        let hue = hues[Int(hash % UInt32(hues.count))]
-        return Color(nsColor: OKLCH.color(lightness: 0.63, chroma: 0.15, hue: hue))
     }
 }
 

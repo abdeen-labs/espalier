@@ -25,13 +25,13 @@ struct RepositoryCaptures {
 
     // MARK: Rows, popover
 
-    @Test("rows: the current repository, others with status, an owner, a folder, missing, cloning, status off")
+    @Test("rows: the current repository, a fork, private with an owner, not on GitHub with a folder, missing, cloning, status off")
     func rows() {
         let rows = VStack(alignment: .leading, spacing: Metrics.grid) {
-            RepositoryRow(content: RepositoryCaptureFixtures.row("espalier", icon: .current, changed: 3, ahead: 2))
-            RepositoryRow(content: RepositoryCaptureFixtures.row("desktop", behind: 1_204))
-            RepositoryRow(content: RepositoryCaptureFixtures.row("website", subtitle: "octo-org", changed: 1200, ahead: 1, behind: 3))
-            RepositoryRow(content: RepositoryCaptureFixtures.row("website", subtitle: "~/Developer/forks"))
+            RepositoryRow(content: RepositoryCaptureFixtures.row("espalier", isCurrent: true, changed: 3, ahead: 2))
+            RepositoryRow(content: RepositoryCaptureFixtures.row("desktop", icon: .fork, behind: 1_204))
+            RepositoryRow(content: RepositoryCaptureFixtures.row("website", icon: .private, subtitle: "octo-org", changed: 1200, ahead: 1, behind: 3))
+            RepositoryRow(content: RepositoryCaptureFixtures.row("website", icon: .local, subtitle: "~/Developer/forks"))
             RepositoryRow(content: RepositoryCaptureFixtures.row("dotfiles", icon: .missing, showsStatus: false))
             RepositoryRow(content: RepositoryCaptureFixtures.row("swift", icon: .cloning(progress: 0)))
             RepositoryRow(content: RepositoryCaptureFixtures.row("linux", icon: .cloning(progress: 0.42)))
@@ -50,14 +50,15 @@ struct RepositoryCaptures {
         ]
         let groups = [
             RepositoryPopoverContent.Group(id: "0:recent", title: "Recent", rows: [
-                RepositoryCaptureFixtures.row("desktop", behind: 14),
-                RepositoryCaptureFixtures.row("website", subtitle: "octo-org"),
+                RepositoryCaptureFixtures.row("desktop", icon: .fork, behind: 14),
+                RepositoryCaptureFixtures.row("website", icon: .private, subtitle: "octo-org"),
             ]),
             RepositoryPopoverContent.Group(id: "1:dotcom:joe", title: "joe", rows: [
-                RepositoryCaptureFixtures.row("espalier", icon: .current, changed: 3, ahead: 2),
-                RepositoryCaptureFixtures.row("dotfiles"),
+                RepositoryCaptureFixtures.row("espalier", isCurrent: true, changed: 3, ahead: 2),
+                RepositoryCaptureFixtures.row("dotfiles", icon: .private),
             ]),
             RepositoryPopoverContent.Group(id: "3:other", title: "Other", rows: [
+                RepositoryCaptureFixtures.row("scratch", icon: .local),
                 RepositoryCaptureFixtures.row("notes", icon: .missing, showsStatus: false),
                 RepositoryCaptureFixtures.row("swift", icon: .cloning(progress: 0.3)),
             ]),
@@ -69,7 +70,7 @@ struct RepositoryCaptures {
                 RepositoryPopoverView(
                     content: content,
                     filter: .constant(""),
-                    highlighted: .constant(.entry(groups[1].rows[1].id)),
+                    highlighted: .constant(.entry(groups[1].rows[1].id, group: groups[1].id)),
                     maxHeight: maxHeight,
                     newWorktree: {}
                 )
@@ -350,7 +351,8 @@ enum RepositoryCaptureFixtures {
     /// A repository row.
     static func row(
         _ title: String,
-        icon: RepositoryRowContent.Icon = .other,
+        icon: RepositoryRowContent.Icon = .repository,
+        isCurrent: Bool = false,
         subtitle: String? = nil,
         changed: Int = 0,
         ahead: Int = 0,
@@ -362,6 +364,7 @@ enum RepositoryCaptureFixtures {
             title: title,
             subtitle: subtitle,
             icon: icon,
+            isCurrent: isCurrent,
             changedFileCount: changed,
             ahead: ahead,
             behind: behind,

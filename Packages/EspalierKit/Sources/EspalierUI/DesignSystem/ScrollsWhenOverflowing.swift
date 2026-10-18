@@ -1,7 +1,8 @@
 // A vertical scroll view that scrolls only while its content is taller than
 // it shows: content that fits holds still under a scroll instead of moving
 // or bouncing. Half a point of difference counts as fitting, so a height
-// rounded to whole points doesn't make it scroll.
+// rounded to whole points doesn't make it scroll. It never moves sideways:
+// its content is as wide as it is, and a sideways swipe doesn't bounce it.
 
 import SwiftUI
 
@@ -19,7 +20,7 @@ private struct ScrollsOnlyWhenOverflowing: ViewModifier {
     func body(content: Content) -> some View {
         content
             .scrollDisabled(!overflows)
-            .scrollBounceBehavior(.basedOnSize)
+            .scrollBounceBehavior(.basedOnSize, axes: [.vertical, .horizontal])
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.contentSize.height > geometry.containerSize.height + 0.5
             } action: { _, overflows in

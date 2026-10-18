@@ -141,10 +141,9 @@ public enum Metrics {
         public static let rowPadding: CGFloat = 8
         /// The branch dot's diameter.
         public static let dotSize: CGFloat = 8
-        /// The repository badge's side.
-        public static let badgeSize: CGFloat = 18
-        /// The repository badge's corner radius.
-        public static let badgeCornerRadius: CGFloat = 5
+        /// A repository or worktree row's glyph column, and a section
+        /// header button's side.
+        public static let glyphSize: CGFloat = 18
     }
 
     /// The main window.
