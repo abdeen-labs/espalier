@@ -3,9 +3,10 @@
 // commit button, and the last commit with Undo. The card holds the
 // summary (with its hints) and the description, the co-authors under them
 // while they show, dividers between, a faint accent tint behind the one
-// that has focus, and a footer: the AI button, Co-Authors, and Options,
-// then the author's avatar. `CommitModel` commits, and the window's
-// presenter shows its gates.
+// that has focus and the focus ring around the card while one does, and a
+// footer: the AI button, Co-Authors, and Options, then the author's
+// avatar. `CommitModel` commits, and the window's presenter shows its
+// gates.
 //
 // While a merge waits on its conflicts, the form shows the merge's message
 // (git's, which the user may edit) and its button is Commit Merge; the
@@ -475,6 +476,9 @@ public struct ComposerView: View {
             footer
         }
         .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+        // A field's ring, on the card's edge, while one of its fields has
+        // focus.
+        .focusRing(markedField != nil, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous), outset: 0)
         .contextMenuCard {
             for item in menuItems {
                 MenuAction(item.title, action: item.action)
