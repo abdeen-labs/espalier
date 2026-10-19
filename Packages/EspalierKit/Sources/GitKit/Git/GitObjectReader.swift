@@ -100,6 +100,8 @@ public actor GitObjectReader {
 
     /// What the reader is doing, for tests to wait on.
     enum Event: Sendable, Equatable {
+        /// A new cat-file process started, before a read sends it anything.
+        case started(processIdentifier: Int32)
         /// A read is queued behind the one in progress.
         case queued
         /// A read sent its name to cat-file and waits for the answer.
@@ -279,6 +281,7 @@ public actor GitObjectReader {
         }
         processesStarted += 1
         self.session = session
+        eventHandler?(.started(processIdentifier: session.child.processIdentifier))
         return (session, true)
     }
 

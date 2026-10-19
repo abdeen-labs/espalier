@@ -6,6 +6,7 @@
 import EspalierSupport
 import Foundation
 @testable import GitKit
+import Synchronization
 import Testing
 import TestSupport
 
@@ -196,6 +197,26 @@ private func readerEvents(of reader: GitObjectReader) async -> AsyncStream<GitOb
 /// Waits until the reader reports `event`, skipping the others.
 private func wait(for event: GitObjectReader.Event, in events: inout AsyncStream<GitObjectReader.Event>.Iterator) async {
     while let next = await events.next(), next != event {}
+}
+
+/// The first process ID it's given.
+private final class FirstProcess: Sendable {
+    private let first = Mutex<Int32?>(nil)
+
+    var processIdentifier: Int32? {
+        first.withLock { $0 }
+    }
+
+    /// Whether `pid` is the first process ID given.
+    func claim(_ pid: Int32) -> Bool {
+        first.withLock { claimed in
+            guard claimed == nil else {
+                return false
+            }
+            claimed = pid
+            return true
+        }
+    }
 }
 
 private func processIsGone(_ pid: Int32) async -> Bool {
@@ -669,19 +690,17 @@ struct GitObjectReaderTests {
             try await validate(reader, repo, "HEAD:small.txt")
             #expect(await reader.processIdentifier == nil)
 
-            let request = Task { try await getBlobContents(repo, "HEAD", "blob.bin") }
-            // Kill the cat-file that request starts as soon as it exists. A new
-            // process isn't retried, so the read falls back to git show.
-            var killed = false
-            let deadline = ContinuousClock.now + .seconds(5)
-            while !killed, ContinuousClock.now < deadline {
-                if let pid = await reader.processIdentifier {
+            // Kill the cat-file the read starts as it starts, before the read
+            // sends it anything. A new process isn't retried, so the read
+            // falls back to git show.
+            let killed = FirstProcess()
+            await reader.observeEvents { event in
+                if case .started(let pid) = event, killed.claim(pid) {
                     kill(pid, SIGKILL)
-                    killed = true
                 }
             }
-            #expect(killed)
-            #expect(try await request.value == blob)
+            #expect(try await getBlobContents(repo, "HEAD", "blob.bin") == blob)
+            #expect(killed.processIdentifier != nil)
             #expect(await reader.processesStarted == 1)
 
             // The next read starts a new process and is served by it.
