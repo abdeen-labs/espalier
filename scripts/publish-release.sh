@@ -194,7 +194,7 @@ fi
 # same file.
 mkdir -p "$dist"
 if [[ -f "$dmg" ]]; then
-  hdiutil attach -quiet -nobrowse -readonly -noautoopen -mountpoint "$mount" "$dmg"
+  diskutil image attach --readOnly --nobrowse --mountPoint "$mount" "$dmg" >/dev/null
   dmg_hash="$(cdhash "$mount/Espalier.app")"
   hdiutil detach -quiet "$mount"
   [[ "$dmg_hash" == "$(cdhash "$app")" ]] || rm -f "$dmg"
