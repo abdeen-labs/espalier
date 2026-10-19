@@ -169,7 +169,10 @@ struct CommitMessageGenerationTests {
     @Test("a message for changes committed while it was generated is dropped")
     func dropsStaleMessage() async throws {
         let fixture = try await fixture()
-        try fixture.addProvider()
+        // The answer waits on a commit and a refresh, which took more than
+        // the default 60 seconds on CI's busy runner; a passing test never
+        // waits for the longer timeout.
+        try fixture.addProvider(requestTimeoutSeconds: 300)
         fixture.server.answer { _ in .deferred(.commitMessage(title: "Too late", description: "")) }
 
         let generation = Task { @MainActor in

@@ -451,16 +451,18 @@ struct AIFixture {
         await settle()
     }
 
-    /// Adds a provider for the mock with `models`, its API key, and (unless
-    /// `consent` is false) the consents of both features.
+    /// Adds a provider for the mock with `models`, its API key, its request
+    /// timeout (nil for the default), and (unless `consent` is false) the
+    /// consents of both features.
     @discardableResult
-    func addProvider(models: [String] = ["test-model"], consent: Bool = true) throws -> BYOKProvider {
+    func addProvider(models: [String] = ["test-model"], consent: Bool = true, requestTimeoutSeconds: Double? = nil) throws -> BYOKProvider {
         let provider = BYOKProvider(
             id: UUID().uuidString.lowercased(),
             name: "Test AI",
             type: .openai,
             baseUrl: server.baseURL,
             authKind: .apiKey,
+            requestTimeoutSeconds: requestTimeoutSeconds,
             models: models.map { BYOKModel(id: $0, name: "Model \($0)") }
         )
         try app.ai.addProvider(provider, secret: .set("sk-test-key"))

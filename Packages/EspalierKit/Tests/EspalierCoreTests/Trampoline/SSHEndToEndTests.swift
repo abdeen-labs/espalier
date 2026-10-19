@@ -87,28 +87,40 @@ final class TestSSHServer: Sendable {
         "ssh://127.0.0.1:\(port)\(repository)"
     }
 
+    /// Waits for sshd to take connections. It took more than 10 seconds to
+    /// start on CI's busy runner, so it has 60, which a passing test never
+    /// waits for; and it's tried once more after the deadline, in case the
+    /// wait itself ran late.
     private func waitForListener() async throws {
-        let deadline = ContinuousClock.now + .seconds(10)
-        while ContinuousClock.now < deadline {
-            let descriptor = socket(AF_INET, SOCK_STREAM, 0)
-            var address = sockaddr_in()
-            address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-            address.sin_family = sa_family_t(AF_INET)
-            address.sin_port = port.bigEndian
-            address.sin_addr.s_addr = inet_addr("127.0.0.1")
-            let result = withUnsafePointer(to: &address) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-                }
-            }
-            close(descriptor)
-            if result == 0 {
+        let deadline = ContinuousClock.now + .seconds(60)
+        while true {
+            if isListening() {
                 return
+            }
+            guard ContinuousClock.now < deadline else {
+                break
             }
             try await Task.sleep(for: .milliseconds(50))
         }
         Issue.record("sshd didn't start listening")
         throw CancellationError()
+    }
+
+    /// Whether sshd takes a connection on its port.
+    private func isListening() -> Bool {
+        let descriptor = socket(AF_INET, SOCK_STREAM, 0)
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = port.bigEndian
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let result = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        close(descriptor)
+        return result == 0
     }
 
     private static func keygen(_ arguments: [String]) async throws {
