@@ -10,9 +10,9 @@
 // `contentInsets` keeps that margin out of the placement. It closes when
 // the app deactivates, when its parent window moves, resizes, or closes,
 // and when its anchor view leaves the window; optionally on a click outside
-// it and on Escape, which a panel opened from it (a menu in a popover)
-// takes first. In a window that isn't on screen (tests) it's laid out but
-// never shown.
+// its content (its shadow's margin included) and on Escape, which a panel
+// opened from it (a menu in a popover) takes first. In a window that isn't
+// on screen (tests) it's laid out but never shown.
 
 import AppKit
 import SwiftUI
@@ -306,7 +306,7 @@ public final class AnchoredPanel: NSPanel {
             close(reason: .escape)
             return true
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
-            guard closesOnOutsideClick, event.window !== self else {
+            guard closesOnOutsideClick, !isOnContent(event) else {
                 return false
             }
             close(reason: .outsideClick)
@@ -316,10 +316,26 @@ public final class AnchoredPanel: NSPanel {
         }
     }
 
-    /// Whether a panel anchored in this one (a menu opened from a popover)
-    /// is open.
+    /// Whether `event` is on what the panel shows: in the panel and inside
+    /// its content. The transparent margin around the content (its
+    /// shadow's) takes clicks too, over whatever is beside the anchor, so
+    /// a click there is outside.
+    private func isOnContent(_ event: NSEvent) -> Bool {
+        guard event.window === self else {
+            return false
+        }
+        return contentFrame.contains(convertPoint(toScreen: event.locationInWindow))
+    }
+
+    /// Whether a panel anchored in this one that takes events (a menu
+    /// opened from a popover; a tooltip takes none) is open.
     private var hasOpenChildPanel: Bool {
-        Self.openPanels.contains { $0.panel?.parentWindowRef === self && $0.panel?.isOpen == true }
+        Self.openPanels.contains { entry in
+            guard let panel = entry.panel else {
+                return false
+            }
+            return panel.parentWindowRef === self && panel.isOpen && panel.interaction != .none
+        }
     }
 
     /// Whether the panel's focused text has marked text (an input method's

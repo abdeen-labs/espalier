@@ -3,8 +3,11 @@
 // ideal size, capped to the screen; the card follows it, and where the
 // card is larger for a moment (while it resizes) the content keeps to the
 // anchor's side. The card fades in and settles from 97% toward its anchor
-// as it arrives, except under Reduce Motion and offscreen.
-// `PopoverController` shows it in an `AnchoredPanel`.
+// as it arrives, except under Reduce Motion and offscreen. Content that
+// measures itself once laid out (a list's rows) holds the arrival until it
+// has (`popoverContentSettling(_:)`), so the card arrives at its size
+// instead of resizing as it settles. `PopoverController` shows it in an
+// `AnchoredPanel`.
 
 import SwiftUI
 
@@ -16,6 +19,28 @@ extension Metrics.Popover {
     public static let shadowInsets = Metrics.Menu.shadowInsets
     /// The card settles from this scale as it arrives.
     public static let settleScale: CGFloat = 0.97
+    /// The longest content still measuring itself holds the card's
+    /// arrival.
+    public static let arrivalHold: TimeInterval = 0.2
+}
+
+extension View {
+    /// Holds the arrival of the popover this view is in while
+    /// `isSettling`: content that measures itself after it lays out sets it
+    /// until it has, so the card arrives at its size. The hold lasts
+    /// `Metrics.Popover.arrivalHold` at most.
+    func popoverContentSettling(_ isSettling: Bool) -> some View {
+        preference(key: PopoverContentSettlingKey.self, value: isSettling)
+    }
+}
+
+/// Whether any of a popover's content is still measuring itself.
+struct PopoverContentSettlingKey: PreferenceKey {
+    static let defaultValue = false
+
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = value || nextValue()
+    }
 }
 
 /// What a popover's card shows, and whether it has arrived.
@@ -39,6 +64,17 @@ final class PopoverCardModel {
     var closeAction: ClosePopoverAction?
     /// Told the content's size as it changes.
     @ObservationIgnored var onContentSize: ((CGSize) -> Void)?
+    /// Whether the content is still measuring itself
+    /// (`popoverContentSettling(_:)`), which holds the card's arrival.
+    @ObservationIgnored var isContentSettling = false {
+        didSet {
+            if isContentSettling != oldValue {
+                onContentSettling?(isContentSettling)
+            }
+        }
+    }
+    /// Told when `isContentSettling` changes.
+    @ObservationIgnored var onContentSettling: ((Bool) -> Void)?
 
     init(
         edge: AnchoredPanel.Edge = .below,
@@ -68,6 +104,11 @@ struct PopoverCardView: View {
             proxy.size
         } action: { [model] size in
             model.onContentSize?(size)
+        }
+        .onPreferenceChange(PopoverContentSettlingKey.self) { [model] isSettling in
+            MainActor.assumeIsolated {
+                model.isContentSettling = isSettling
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: contentAlignment)
         .clipShape(shape)

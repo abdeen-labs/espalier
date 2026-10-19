@@ -8,8 +8,9 @@
 // rounded shape, its text staying primary; disabled rows fade and are
 // never highlighted. Section headers look like the app's section labels;
 // dividers are hairlines inset from the card's edges. A menu taller than
-// the screen scrolls. The card fades and grows very slightly from its
-// anchor as it opens, except under Reduce Motion and offscreen.
+// the screen scrolls, never past its ends. The card fades and grows very
+// slightly from its anchor as it opens, except under Reduce Motion and
+// offscreen.
 
 import SwiftUI
 
@@ -139,6 +140,7 @@ struct MenuCard: View {
                 ScrollViewReader { proxy in
                     ScrollView(.vertical) {
                         rows
+                            .unbouncedScrollContent()
                     }
                     .scrollIndicators(.never)
                     .onScrollGeometryChange(for: MenuScrollEdges.self) { geometry in

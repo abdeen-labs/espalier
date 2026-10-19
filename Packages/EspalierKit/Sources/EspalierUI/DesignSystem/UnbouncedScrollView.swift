@@ -6,8 +6,18 @@
 // stays on the main thread, where that holds: AppKit's responsive scrolling
 // moves the content on its own thread first, so a hard flick would show it
 // past the end for a frame at a time, then back.
+//
+// SwiftUI's scroll views and lists make their own AppKit scroll view, so
+// they take a pin instead (`unbouncedScrollContent()`, `unbouncedList()`):
+// a view that watches the scroll view and, as each scroll starts, turns its
+// elasticity off again (SwiftUI sets it as it updates), then until the
+// scroll ends puts the clip view's origin back inside the content whenever
+// it moves out, and back where it was sideways as the scroll began. SwiftUI's
+// clip view rests where it puts itself, so that sideways origin is measured,
+// not worked out.
 
 import AppKit
+import SwiftUI
 
 /// A scroll view that doesn't bounce past its content's edges.
 final class UnbouncedScrollView: NSScrollView {
@@ -47,18 +57,223 @@ final class EdgeClampingClipView: NSClipView {
     /// `origin` kept where a view of `size` (the clip view's) stays inside
     /// the document and the content insets.
     private func clamped(_ origin: NSPoint, size: NSSize? = nil) -> NSPoint {
-        guard let document = documentView?.frame else {
+        Self.clamped(origin, of: self, size: size ?? bounds.size)
+    }
+
+    /// `origin` kept where `clipView`, `size` big, shows only its document
+    /// and its content insets.
+    static func clamped(_ origin: NSPoint, of clipView: NSClipView, size: NSSize) -> NSPoint {
+        guard let document = clipView.documentView?.frame else {
             return origin
         }
-        let size = size ?? bounds.size
         func clamp(_ value: CGFloat, from low: CGFloat, to high: CGFloat) -> CGFloat {
             max(low, min(value, max(low, high)))
         }
-        let insets = contentInsets
-        let (before, after) = isFlipped ? (insets.top, insets.bottom) : (insets.bottom, insets.top)
+        let insets = clipView.contentInsets
+        let (before, after) = clipView.isFlipped ? (insets.top, insets.bottom) : (insets.bottom, insets.top)
         return NSPoint(
             x: clamp(origin.x, from: document.minX - insets.left, to: document.maxX + insets.right - size.width),
             y: clamp(origin.y, from: document.minY - before, to: document.maxY + after - size.height)
         )
+    }
+}
+
+// MARK: - SwiftUI's scroll views
+
+extension View {
+    /// Keeps the SwiftUI `ScrollView` whose content this is from moving
+    /// past the content's ends, or sideways.
+    func unbouncedScrollContent() -> some View {
+        background {
+            UnbouncedScrollPin(finds: .enclosing)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// Keeps this `List` from scrolling past its rows' ends, or sideways.
+    func unbouncedList() -> some View {
+        background {
+            UnbouncedScrollPin(finds: .besideList)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// Keeps a scroll view SwiftUI made from moving past its content's ends,
+/// or sideways, while it scrolls.
+private struct UnbouncedScrollPin: NSViewRepresentable {
+    /// Where the scroll view is.
+    enum Search {
+        /// Around the pin: it's in the scroll view's content.
+        case enclosing
+        /// Beside the pin: the scroll view of the list's table.
+        case besideList
+    }
+
+    let finds: Search
+
+    func makeNSView(context: Context) -> PinView {
+        PinView(finds: finds)
+    }
+
+    func updateNSView(_ view: PinView, context: Context) {
+        view.attach()
+    }
+
+    final class PinView: NSView {
+        private let search: Search
+        /// The scroll view it watches.
+        private weak var scrollView: NSScrollView?
+        /// The clip view's horizontal origin as the scroll in progress
+        /// began; nil between scrolls.
+        private var heldX: CGFloat?
+        /// Whether it's moving the clip view itself.
+        private var isPinning = false
+
+        init(finds search: Search) {
+            self.search = search
+            super.init(frame: .zero)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) is not supported")
+        }
+
+        override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            attach()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            attach()
+            if window != nil, scrollView == nil {
+                // A list's table isn't there yet: the layout pass that
+                // makes it lays this view out too, and the next turn is a
+                // last resort.
+                needsLayout = true
+                DispatchQueue.main.async { [weak self] in
+                    self?.attach()
+                }
+            }
+        }
+
+        override func layout() {
+            super.layout()
+            if scrollView == nil {
+                attach()
+            }
+        }
+
+        /// Clicks go to the content.
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            nil
+        }
+
+        /// Watches the scroll view, while it's in a window.
+        func attach() {
+            let found = window == nil ? nil : findScrollView()
+            guard found !== scrollView else {
+                return
+            }
+            NotificationCenter.default.removeObserver(self)
+            scrollView = found
+            heldX = nil
+            if let found {
+                observe(found)
+            }
+        }
+
+        private func findScrollView() -> NSScrollView? {
+            switch search {
+            case .enclosing:
+                enclosingScrollView
+            case .besideList:
+                nearestTable()?.enclosingScrollView
+            }
+        }
+
+        private func observe(_ scrollView: NSScrollView) {
+            Self.turnElasticityOff(scrollView)
+            scrollView.contentView.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(self, selector: #selector(willStartLiveScroll(_:)), name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
+            NotificationCenter.default.addObserver(self, selector: #selector(didEndLiveScroll(_:)), name: NSScrollView.didEndLiveScrollNotification, object: scrollView)
+            NotificationCenter.default.addObserver(self, selector: #selector(boundsDidChange(_:)), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
+        }
+
+        @objc private func willStartLiveScroll(_ notification: Notification) {
+            guard let scrollView else {
+                return
+            }
+            Self.turnElasticityOff(scrollView)
+            heldX = scrollView.contentView.bounds.origin.x
+        }
+
+        @objc private func boundsDidChange(_ notification: Notification) {
+            pin()
+        }
+
+        @objc private func didEndLiveScroll(_ notification: Notification) {
+            pin()
+            heldX = nil
+        }
+
+        /// While a scroll lasts, puts the clip view's origin back inside the
+        /// content, and back where it was sideways as the scroll began. Its
+        /// own move comes back here while it's pinning, so it moves the
+        /// origin once, even where the clip view keeps it elsewhere.
+        private func pin() {
+            guard let heldX, !isPinning, let scrollView else {
+                return
+            }
+            let clipView = scrollView.contentView
+            let origin = clipView.bounds.origin
+            let inside = EdgeClampingClipView.clamped(origin, of: clipView, size: clipView.bounds.size)
+            let pinned = NSPoint(x: heldX, y: inside.y)
+            guard pinned != origin else {
+                return
+            }
+            isPinning = true
+            clipView.setBoundsOrigin(pinned)
+            scrollView.reflectScrolledClipView(clipView)
+            isPinning = false
+        }
+
+        private static func turnElasticityOff(_ scrollView: NSScrollView) {
+            if scrollView.verticalScrollElasticity != .none {
+                scrollView.verticalScrollElasticity = .none
+            }
+            if scrollView.horizontalScrollElasticity != .none {
+                scrollView.horizontalScrollElasticity = .none
+            }
+        }
+
+        /// The nearest table beside this view.
+        private func nearestTable() -> NSTableView? {
+            var child: NSView = self
+            while let parent = child.superview {
+                for sibling in parent.subviews where sibling !== child {
+                    if let table = Self.table(in: sibling) {
+                        return table
+                    }
+                }
+                child = parent
+            }
+            return nil
+        }
+
+        private static func table(in view: NSView) -> NSTableView? {
+            if let table = view as? NSTableView {
+                return table
+            }
+            for subview in view.subviews {
+                if let table = table(in: subview) {
+                    return table
+                }
+            }
+            return nil
+        }
     }
 }

@@ -11,12 +11,15 @@
 // popover's `background`, its rows as the sidebar has them (selecting a
 // place, their menus, Return and a double-click), the section always
 // expanded, and is as tall as its rows up to a limit
-// (`SidebarListHeight`). The filter clears as it closes.
+// (`SidebarListHeight`): its card arrives once the list has measured them,
+// a list that fits doesn't scroll, and a longer one never scrolls past its
+// ends. The filter clears as it closes.
 //
 // The rail is flat: the `sidebar` color with a hairline on its trailing
 // edge (on the backdrop with none in the floating layout), its icons 36
-// square with the row radius, the hover wash under the pointer, and the selected
-// one in the sidebar's selection with its symbol in the selection's color.
+// square with the row radius, the hover wash under the pointer and on the
+// icon whose popover is open, and the selected one in the sidebar's
+// selection with its symbol in the selection's color.
 
 import AppKit
 import EspalierCore
@@ -217,7 +220,12 @@ private struct RailSectionButton: View {
     @Environment(WindowContext.self) private var context
 
     var body: some View {
-        RailButton(section.title, systemImage: section.systemImage, isSelected: section.contains(context.state.place)) {
+        RailButton(
+            section.title,
+            systemImage: section.systemImage,
+            isOpen: context.state.railPopover == section,
+            isSelected: section.contains(context.state.place)
+        ) {
             context.state.railPopover = section
         }
         .popoverCard(isPresented: isPresented, edge: .trailing, title: section.title) {
@@ -245,24 +253,29 @@ private struct RailSectionButton: View {
 }
 
 /// A rail icon: its symbol in a 36-point square, the hover wash under the
-/// pointer, the sidebar's selection while selected, and what it badges at
-/// its top trailing corner. Its tooltip is its title and shortcut.
+/// pointer and while its popover is open, the sidebar's selection while
+/// selected, and what it badges at its top trailing corner. Its tooltip is
+/// its title and shortcut.
 struct RailButton<Badge: View>: View {
     private let title: String
     private let systemImage: String
     private let shortcut: String?
     private let accessibilityValue: String?
+    private let isOpen: Bool
     private let isSelected: Bool
     private let action: () -> Void
     private let badge: Badge
     @State private var isHovered = false
 
-    /// - Parameter accessibilityValue: What VoiceOver hears of the badge.
+    /// - Parameters:
+    ///   - accessibilityValue: What VoiceOver hears of the badge.
+    ///   - isOpen: Whether the popover it opens is open.
     init(
         _ title: String,
         systemImage: String,
         shortcut: String? = nil,
         accessibilityValue: String? = nil,
+        isOpen: Bool = false,
         isSelected: Bool,
         action: @escaping () -> Void,
         @ViewBuilder badge: () -> Badge = { EmptyView() }
@@ -271,6 +284,7 @@ struct RailButton<Badge: View>: View {
         self.systemImage = systemImage
         self.shortcut = shortcut
         self.accessibilityValue = accessibilityValue
+        self.isOpen = isOpen
         self.isSelected = isSelected
         self.action = action
         self.badge = badge()
@@ -278,6 +292,7 @@ struct RailButton<Badge: View>: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
+        let isWashed = isHovered || isOpen
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 15))
@@ -285,8 +300,8 @@ struct RailButton<Badge: View>: View {
                 .frame(width: Metrics.Rail.item, height: Metrics.Rail.item)
                 .background {
                     shape
-                        .fill(isHovered && !isSelected ? Color(espalier: Palette.hover) : .clear)
-                        .hoverMotion(isHovered)
+                        .fill(isWashed && !isSelected ? Color(espalier: Palette.hover) : .clear)
+                        .hoverMotion(isWashed)
                 }
                 .background {
                     if isSelected {
@@ -345,6 +360,9 @@ struct RailSectionPopover: View {
                 }
             }
             .sidebarListStyle(surface: Palette.background)
+            .unbouncedList()
+            .scrollDisabled(fits)
+            .scrollIndicators(fits ? .never : .automatic)
             .environment(\.sidebarSelection, selection.wrappedValue)
             .environment(\.sidebarSectionsCollapse, false)
             .contextMenuCard(forSelectionType: SidebarPlace.self, selection: selection.wrappedValue.map { [$0] } ?? []) { [context] places in
@@ -365,14 +383,27 @@ struct RailSectionPopover: View {
         .padding(.bottom, Metrics.insetSmall)
         .frame(width: Metrics.Rail.popoverWidth)
         .background(Color(espalier: Palette.background))
+        .popoverContentSettling(listHeight == nil)
     }
 
-    /// The list's height: its rows', or about that until it has measured
-    /// them, at least a row and at most `popoverMaxHeight`.
-    private var height: CGFloat {
-        let estimate = CGFloat(section.estimatedRowCount(in: repository, filter: context.state.sidebarFilter)) * Metrics.RowHeight.sidebar
+    /// The list's rows' height, or about that until it has measured them.
+    private var rowsHeight: CGFloat {
+        if let listHeight {
+            return listHeight
+        }
+        return CGFloat(section.estimatedRowCount(in: repository, filter: context.state.sidebarFilter)) * Metrics.RowHeight.sidebar
             + Metrics.insetMedium
-        return min(max(listHeight ?? estimate, Metrics.RowHeight.sidebar), Metrics.Rail.popoverMaxHeight)
+    }
+
+    /// The list's height: its rows', at least a row and at most
+    /// `popoverMaxHeight`.
+    private var height: CGFloat {
+        min(max(rowsHeight, Metrics.RowHeight.sidebar), Metrics.Rail.popoverMaxHeight)
+    }
+
+    /// Whether the rows fit: a list that fits doesn't scroll.
+    private var fits: Bool {
+        rowsHeight <= Metrics.Rail.popoverMaxHeight
     }
 }
 

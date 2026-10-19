@@ -380,9 +380,9 @@ struct SuggestionListCardRoot: View {
 
 /// The suggestions drawn as Espalier's menu card, scrolling past
 /// `Metrics.Suggestions.visibleRows` rows, which fade out toward an end
-/// with more past it, as a menu's do. It fades and grows very slightly
-/// from its top as it opens, except under Reduce Motion and offscreen;
-/// what's typed changes it at once.
+/// with more past it, as a menu's do; it never scrolls past its ends. It
+/// fades and grows very slightly from its top as it opens, except under
+/// Reduce Motion and offscreen; what's typed changes it at once.
 struct SuggestionListCard: View {
     let model: SuggestionListModel
     @Environment(\.motion) private var motion
@@ -418,6 +418,7 @@ struct SuggestionListCard: View {
                 ScrollViewReader { proxy in
                     ScrollView(.vertical) {
                         rows
+                            .unbouncedScrollContent()
                     }
                     .scrollIndicators(.never)
                     .onScrollGeometryChange(for: MenuScrollEdges.self) { geometry in
