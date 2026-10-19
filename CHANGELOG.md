@@ -16,6 +16,22 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.2.1] - 2026-10-18
+
+### Changed
+
+- The commit message card shows a focus ring while you type in it, as the filter fields do.
+- As you filter one of the sidebar icons' popovers, it grows and shrinks from the bottom, so the filter field stays where it is.
+
+### Fixed
+
+- A sidebar icon's popover opens in place, instead of bouncing as it appears.
+- Clicking just beside a popover, such as on the sidebar icon that opened it, now closes it, instead of doing nothing.
+- A popover now closes on Escape or a click outside it while one of its tooltips shows.
+- A sidebar icon stays highlighted while its popover is open.
+- The sidebar icons' popovers no longer scroll when everything in them fits.
+- Lists, popovers, menus, sheets, and Settings no longer bounce past their ends when you scroll them.
+
 ## [1.2] - 2026-10-17
 
 ### Changed
@@ -43,7 +59,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.2...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/abdeen-labs/espalier/compare/v1.2...v1.2.1
 [1.2]: https://github.com/abdeen-labs/espalier/compare/v1.1...v1.2
 [1.1]: https://github.com/abdeen-labs/espalier/compare/v1.0...v1.1
 [1.0]: https://github.com/abdeen-labs/espalier/tree/v1.0
