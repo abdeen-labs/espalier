@@ -73,6 +73,7 @@ public struct KeyboardShortcutsSheet: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .rowsDrawSelection()
+            .unbouncedList()
             .sheetListCard()
             .frame(height: 420)
         } buttons: {

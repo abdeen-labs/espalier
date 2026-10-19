@@ -45,6 +45,7 @@ struct AIResolutionChanges: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .rowsDrawSelection()
+            .unbouncedList()
             .background(Color(espalier: Palette.sidebar))
             .frame(width: Self.listWidth)
             Hairline(.vertical)

@@ -172,10 +172,11 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
             nil
         }
 
-        /// Watches the scroll view, while it's in a window.
+        /// Watches the scroll view, while it's in a window. One it can't find
+        /// for a moment (a list's, mid-update) stays watched.
         func attach() {
             let found = window == nil ? nil : findScrollView()
-            guard found !== scrollView else {
+            guard found !== scrollView, found != nil || window == nil else {
                 return
             }
             NotificationCenter.default.removeObserver(self)
@@ -250,12 +251,14 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
             }
         }
 
-        /// The nearest table beside this view.
+        /// The nearest table beside this view whose scroll view it's over:
+        /// the list it's centered on, not another table in the window.
         private func nearestTable() -> NSTableView? {
+            let center = convert(NSPoint(x: bounds.midX, y: bounds.midY), to: nil)
             var child: NSView = self
             while let parent = child.superview {
                 for sibling in parent.subviews where sibling !== child {
-                    if let table = Self.table(in: sibling) {
+                    if let table = Self.table(in: sibling, under: center) {
                         return table
                     }
                 }
@@ -264,12 +267,17 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
             return nil
         }
 
-        private static func table(in view: NSView) -> NSTableView? {
+        /// The first table in `view` whose scroll view is under `point`, in
+        /// window coordinates.
+        private static func table(in view: NSView, under point: NSPoint) -> NSTableView? {
             if let table = view as? NSTableView {
-                return table
+                let scroller: NSView = table.enclosingScrollView ?? table
+                if scroller.convert(scroller.bounds, to: nil).contains(point) {
+                    return table
+                }
             }
             for subview in view.subviews {
-                if let table = table(in: subview) {
+                if let table = table(in: subview, under: point) {
                     return table
                 }
             }

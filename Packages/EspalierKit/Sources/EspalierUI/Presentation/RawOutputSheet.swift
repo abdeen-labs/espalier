@@ -1,11 +1,13 @@
 // Git's raw output, shown monospaced and scrolled to the end, in a box as
-// tall as the output up to `Metrics.Sheet.terminalHeight`, then scrolling.
+// tall as the output up to `Metrics.Sheet.terminalHeight`, then scrolling,
+// never past its ends.
 
 import AppKit
 import SwiftUI
 
 /// Terminal output: SF Mono, selectable, scrolled to the end. The box is as
-/// tall as the output, at most `maximumHeight`; longer output scrolls.
+/// tall as the output, at most `maximumHeight`; longer output scrolls, never
+/// past its ends.
 public struct TerminalOutputView: View {
     private let text: String
     private let maximumHeight: CGFloat
@@ -22,6 +24,7 @@ public struct TerminalOutputView: View {
                 .hidden()
             ScrollView(.vertical) {
                 output
+                    .unbouncedScrollContent()
             }
             // Scrolled to the end, and kept there as output arrives.
             .defaultScrollAnchor(.bottom, for: .initialOffset)

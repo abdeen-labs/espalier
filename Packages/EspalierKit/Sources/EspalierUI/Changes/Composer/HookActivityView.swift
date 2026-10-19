@@ -125,7 +125,8 @@ public struct HookActivityView: View {
     }
 }
 
-/// A hook's terminal output: SF Mono, selectable, scrolled to the end.
+/// A hook's terminal output: SF Mono, selectable, scrolled to the end, and
+/// never scrolling past its ends.
 public struct HookOutputView: View {
     private let text: String
 
@@ -147,6 +148,7 @@ public struct HookOutputView: View {
                         .frame(height: 1)
                         .id(Self.endID)
                 }
+                .unbouncedScrollContent()
             }
             .onChange(of: text, initial: true) {
                 proxy.scrollTo(Self.endID, anchor: .bottom)

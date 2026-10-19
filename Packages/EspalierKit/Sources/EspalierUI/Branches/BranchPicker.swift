@@ -516,6 +516,7 @@ struct BranchPickerList: View {
             .scrollContentBackground(.hidden)
             // The rows draw the selection; the table's own is off.
             .rowsDrawSelection()
+            .unbouncedList()
             .listPrimaryAction(forSelectionType: String.self) { refs in
                 if let ref = refs.first, let branch = content.branches.first(where: { $0.ref == ref }) {
                     onActivate?(branch)

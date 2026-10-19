@@ -309,6 +309,7 @@ struct PullRequestOverviewView: View {
             }
             .padding(Metrics.insetLarge)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .unbouncedScrollContent()
         }
         .background(Color(nsColor: Palette.background))
     }
@@ -634,6 +635,7 @@ struct ChangedFilesList: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
+                    .unbouncedList()
                     .contextMenuCard(forSelectionType: String.self, selection: selection.file.map { [$0.id] } ?? []) { [context, menuContent] ids in
                         if let menuContent, let id = ids.first, let file = changeset.files.first(where: { $0.id == id }) {
                             CommittedFileContextMenu.content(menuContent(file), context: context)

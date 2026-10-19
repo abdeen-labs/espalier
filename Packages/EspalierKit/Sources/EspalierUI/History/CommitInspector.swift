@@ -153,6 +153,7 @@ struct CommitInfoView: View {
             }
             .padding(.horizontal, Metrics.insetLarge)
             .padding(.vertical, Metrics.grid)
+            .unbouncedScrollContent()
         }
         .scrollBounceBehavior(.basedOnSize)
     }

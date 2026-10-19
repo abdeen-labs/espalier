@@ -5,7 +5,8 @@
 //
 // The panel opens below, above, beside, or at a point of its anchor,
 // flipping to the other side when there's no room and shifting to stay on
-// the screen's visible frame; it can resize later, staying at its anchor.
+// the screen's visible frame; it can resize later, staying at its anchor
+// (one centered beside it can keep its top).
 // What it shows draws its own surface and shadow inside the panel, so
 // `contentInsets` keeps that margin out of the placement. It closes when
 // the app deactivates, when its parent window moves, resizes, or closes,
@@ -180,7 +181,11 @@ public final class AnchoredPanel: NSPanel {
     /// Resizes the panel for content `contentSize` big with its insets,
     /// on the side of its anchor it opened on (the other when there's no
     /// longer room): over `Motion.arrive` when `animated` and motion runs.
-    public func resize(to contentSize: CGSize, animated: Bool) {
+    ///
+    /// - Parameter keepsTop: Keeps a panel centered beside its anchor at
+    ///   its content's top, so what's at the top of the content stays put,
+    ///   instead of centering it again.
+    public func resize(to contentSize: CGSize, animated: Bool, keepsTop: Bool = false) {
         guard isOpen, !isClosing, let anchorView, let parent = parentWindowRef, var placement else {
             return
         }
@@ -189,18 +194,41 @@ public final class AnchoredPanel: NSPanel {
         }
         let placed = place(contentSize, placement: placement, in: parent, anchorView: anchorView)
         openedEdge = placed.edge
-        guard placed.frame != frame else {
+        var target = placed.frame
+        if keepsTop, placement.alignment == .center, placed.edge == .trailing || placed.edge == .leading {
+            let screenAnchor = parent.convertToScreen(anchorView.convert(anchorRect, to: nil))
+            target = Self.keepingContentTop(
+                of: frame,
+                for: placed.frame,
+                insets: contentInsets,
+                visibleFrame: Self.visibleFrame(containing: screenAnchor, parent: parent)
+            )
+        }
+        guard target != frame else {
             return
         }
         if animated, isVisible, Motion.animates(contentView) {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = Motion.arrive
                 context.timingFunction = Motion.timingFunction
-                animator().setFrame(placed.frame, display: true)
+                animator().setFrame(target, display: true)
             }
         } else {
-            setFrame(placed.frame, display: isVisible)
+            setFrame(target, display: isVisible)
         }
+    }
+
+    /// `placed` moved up or down so its content's top is where `current`'s
+    /// is, kept on `visibleFrame` (`Metrics.Menu.screenMargin` in from its
+    /// edges) as placement keeps it. Screen coordinates: y grows upward.
+    static func keepingContentTop(of current: CGRect, for placed: CGRect, insets: NSEdgeInsets, visibleFrame: CGRect) -> CGRect {
+        let bounds = visibleFrame.insetBy(dx: Metrics.Menu.screenMargin, dy: Metrics.Menu.screenMargin)
+        let height = placed.height - insets.top - insets.bottom
+        let top = current.maxY - insets.top
+        let bottom = min(max(top - height, bounds.minY), max(bounds.maxY - height, bounds.minY))
+        var frame = placed
+        frame.origin.y = bottom - insets.bottom
+        return frame
     }
 
     /// The frame for content `contentSize` big at the anchor on

@@ -254,6 +254,7 @@ struct AcknowledgementDetail: View {
             }
             .padding(Metrics.insetLarge)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .unbouncedScrollContent()
         }
         .id(acknowledgement.id)
     }
@@ -295,6 +296,7 @@ public struct AcknowledgementsView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .rowsDrawSelection()
+            .unbouncedList()
             .background(Color(espalier: Palette.sidebar))
             .frame(width: Metrics.About.acknowledgementsListWidth)
             Hairline(.vertical)

@@ -70,6 +70,7 @@ struct SubmoduleDiffView: View {
             .frame(maxWidth: 520, alignment: .leading)
             .padding(Metrics.insetLarge)
             .frame(maxWidth: .infinity)
+            .unbouncedScrollContent()
         }
     }
 

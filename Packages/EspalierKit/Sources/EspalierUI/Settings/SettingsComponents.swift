@@ -11,7 +11,8 @@ import SwiftUI
 // MARK: - Page and sections
 
 /// A pane's content: its sections, split by hairlines, inset from the
-/// pane's edges, scrolling when the pane is taller than the window.
+/// pane's edges, scrolling when the pane is taller than the window, never
+/// past its ends.
 struct SettingsPage<Content: View>: View {
     private let content: Content
 
@@ -35,6 +36,7 @@ struct SettingsPage<Content: View>: View {
             .padding(.top, Metrics.SettingsWindow.contentTopInset)
             .padding(.bottom, Metrics.SettingsWindow.contentBottomInset)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .unbouncedScrollContent()
         }
         .scrollBounceBehavior(.basedOnSize)
     }

@@ -51,6 +51,7 @@ struct SidebarContainer: View {
             }
         }
         .sidebarListStyle()
+        .unbouncedList()
         .environment(\.sidebarSelection, selection.wrappedValue)
         .contextMenuCard(forSelectionType: SidebarPlace.self, selection: selection.wrappedValue.map { [$0] } ?? []) { [context] places in
             SidebarContextMenu.content(places: Self.actionable(places, isHolding: isHolding), context: context)

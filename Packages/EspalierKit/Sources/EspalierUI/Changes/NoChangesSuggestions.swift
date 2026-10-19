@@ -370,6 +370,7 @@ public struct NoChangesSuggestions: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.top, SuggestionMetrics.topInset)
+            .unbouncedScrollContent()
         }
         .scrollBounceBehavior(.basedOnSize)
         .background(Color(espalier: Palette.background))

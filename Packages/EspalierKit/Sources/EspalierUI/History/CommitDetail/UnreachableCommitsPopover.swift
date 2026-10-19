@@ -80,6 +80,7 @@ struct UnreachableCommitsPopover: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .unbouncedScrollContent()
             }
             .frame(maxHeight: 220)
         }

@@ -214,13 +214,16 @@ struct ReviewNotificationView: View {
             .accessibilityElement(children: .combine)
             Hairline()
             ScrollView {
-                if content.body.isEmpty {
-                    Text("No description provided.")
-                        .foregroundStyle(.text3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    MarkdownView(document: content.body)
+                Group {
+                    if content.body.isEmpty {
+                        Text("No description provided.")
+                            .foregroundStyle(.text3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        MarkdownView(document: content.body)
+                    }
                 }
+                .unbouncedScrollContent()
             }
             .frame(maxHeight: 320)
             .fixedSize(horizontal: false, vertical: true)

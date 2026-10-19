@@ -5,9 +5,11 @@
 // anchor's side. The card fades in and settles from 97% toward its anchor
 // as it arrives, except under Reduce Motion and offscreen. Content that
 // measures itself once laid out (a list's rows) holds the arrival until it
-// has (`popoverContentSettling(_:)`), so the card arrives at its size
-// instead of resizing as it settles. `PopoverController` shows it in an
-// `AnchoredPanel`.
+// has (`popoverContentSettling(_:)`), and content that changes size until
+// it holds still, so the card arrives at its size instead of resizing as
+// it settles. Beside its anchor, the card that has arrived keeps its top as
+// it resizes and its content keeps to the top. `PopoverController` shows it
+// in an `AnchoredPanel`.
 
 import SwiftUI
 
@@ -21,7 +23,10 @@ extension Metrics.Popover {
     public static let settleScale: CGFloat = 0.97
     /// The longest content still measuring itself holds the card's
     /// arrival.
-    public static let arrivalHold: TimeInterval = 0.2
+    public static let arrivalHold: TimeInterval = 0.25
+    /// How long content that changed size holds still before the card
+    /// arrives.
+    public static let arrivalQuiet: TimeInterval = 0.05
 }
 
 extension View {
@@ -119,12 +124,13 @@ struct PopoverCardView: View {
     }
 
     /// Where the content sits while the card is larger than it: on the
-    /// anchor's side.
+    /// anchor's side, and at the top beside it, where the card keeps its
+    /// top as it resizes.
     private var contentAlignment: Alignment {
         switch model.edge {
         case .above: .bottom
-        case .trailing: .leading
-        case .leading: .trailing
+        case .trailing: .topLeading
+        case .leading: .topTrailing
         case .below, .point: .top
         }
     }

@@ -71,6 +71,7 @@ struct ChecksPopoverView: View {
                 ScrollView {
                     ChecksList(content: content, actions: actions)
                         .padding(Metrics.insetMedium)
+                        .unbouncedScrollContent()
                 }
                 .frame(maxHeight: 420)
                 .fixedSize(horizontal: false, vertical: true)

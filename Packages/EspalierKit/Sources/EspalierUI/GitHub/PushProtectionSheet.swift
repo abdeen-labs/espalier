@@ -153,6 +153,7 @@ struct PushProtectionView: View {
                 }
                 .cardSurface()
                 .padding(1)
+                .unbouncedScrollContent()
             }
             .frame(maxHeight: 280)
             .fixedSize(horizontal: false, vertical: true)

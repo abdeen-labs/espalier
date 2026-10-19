@@ -966,6 +966,7 @@ struct AIConflictResultsView: View {
             ScrollView {
                 summaryTab
                     .padding(.vertical, Metrics.grid)
+                    .unbouncedScrollContent()
             }
         case .changes:
             AIResolutionChanges(repository: repository, paths: content.paths)

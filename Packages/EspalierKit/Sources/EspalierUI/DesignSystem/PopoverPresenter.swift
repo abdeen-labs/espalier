@@ -109,6 +109,8 @@ public final class PopoverController {
     /// When the card arrives even if its content is still measuring
     /// itself; nil once it has arrived.
     private var arrivalDeadline: DispatchTime?
+    /// When the content last changed size while the card waited to arrive.
+    private var lastContentChange: DispatchTime?
 
     /// - Parameters:
     ///   - title: What VoiceOver calls the popover.
@@ -181,7 +183,7 @@ public final class PopoverController {
         model.edge = panel.openedEdge ?? placement.edge
         container.layoutSubtreeIfNeeded()
         model.onContentSize = { [weak self] _ in
-            self?.scheduleResize()
+            self?.contentSizeDidChange()
         }
         observeMenuBar()
         takeFocus(from: window)
@@ -204,6 +206,18 @@ public final class PopoverController {
 
     // MARK: Resizing
 
+    /// The content changed size: the panel follows it, and a card that
+    /// hasn't arrived waits for the content to hold still.
+    private func contentSizeDidChange() {
+        if arrivalDeadline != nil {
+            lastContentChange = .now()
+            DispatchQueue.main.asyncAfter(deadline: .now() + Metrics.Popover.arrivalQuiet) { [weak self] in
+                self?.arriveIfSettled()
+            }
+        }
+        scheduleResize()
+    }
+
     /// Resizes the panel to the content's new size on the next turn, once
     /// the content has laid out.
     private func scheduleResize() {
@@ -220,8 +234,9 @@ public final class PopoverController {
         }
     }
 
-    /// Resizes the panel to its content: smoothly where motion runs, and at
-    /// once before the card has arrived.
+    /// Resizes the panel to its content: at once and centered on its anchor
+    /// before the card has arrived; once it has, smoothly where motion runs,
+    /// and beside its anchor keeping its top, so the content doesn't move.
     func resizeToContent() {
         guard isOpen else {
             return
@@ -230,7 +245,7 @@ public final class PopoverController {
         guard size != panel.frame.size else {
             return
         }
-        panel.resize(to: size, animated: model.isShown)
+        panel.resize(to: size, animated: model.isShown, keepsTop: model.isShown)
         if let edge = panel.openedEdge, edge != model.edge {
             model.edge = edge
         }
@@ -239,8 +254,10 @@ public final class PopoverController {
     // MARK: Arrival
 
     /// Starts the card's arrival the next turn, so the clear card draws
-    /// first; content still measuring itself holds it until it's done, for
-    /// `Metrics.Popover.arrivalHold` at most.
+    /// first. Content still measuring itself holds it until it's done, and
+    /// content that changed size until it has held still for
+    /// `Metrics.Popover.arrivalQuiet`, for `Metrics.Popover.arrivalHold` at
+    /// most.
     private func scheduleArrival() {
         let deadline = DispatchTime.now() + Metrics.Popover.arrivalHold
         arrivalDeadline = deadline
@@ -264,16 +281,23 @@ public final class PopoverController {
     }
 
     /// Sizes the card to its content at once, then fades it in and settles
-    /// it, unless it has arrived or its content is still measuring itself
-    /// within the hold.
+    /// it, unless it has arrived or, within the hold, its content is still
+    /// measuring itself or changed size within `arrivalQuiet`.
     private func arriveIfSettled() {
         guard isOpen, let arrivalDeadline else {
             return
         }
-        if model.isContentSettling, DispatchTime.now() < arrivalDeadline {
-            return
+        let now = DispatchTime.now()
+        if now < arrivalDeadline {
+            if model.isContentSettling {
+                return
+            }
+            if let lastContentChange, now < lastContentChange + Metrics.Popover.arrivalQuiet {
+                return
+            }
         }
         self.arrivalDeadline = nil
+        lastContentChange = nil
         resizeToContent()
         withAnimation(Motion.animation(Motion.arrive)) {
             model.isShown = true
@@ -331,6 +355,7 @@ public final class PopoverController {
     private func didClose(_ reason: AnchoredPanel.CloseReason) {
         isOpen = false
         arrivalDeadline = nil
+        lastContentChange = nil
         model.onContentSize = nil
         if let menuBarObserver {
             NotificationCenter.default.removeObserver(menuBarObserver)
