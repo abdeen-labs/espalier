@@ -5,7 +5,6 @@ GitHub Desktop (MIT) and is its own app now: desktop's source is there for
 knowledge (how git behaves, edge cases, bugs fixed over its history), and
 Espalier differing from it is fine.
 
-- `docs/PROGRESS.md`: what's left.
 - `docs/DESIGN.md`: how Espalier looks.
 - `docs/RELEASING.md`: how a release is cut. Releases, signing, and their
   keys are mine; agents write the scripts and steps.
@@ -41,7 +40,7 @@ scripts/                     fetch-git.sh, embed-git.sh, git-version, git-checks
                              readme-images.sh (the README's images, from the Showcase captures),
                              publish-release.sh, changelog.sh (docs/RELEASING.md).
 Vendor/git/                  The bundled git (gitignored, installed by scripts/fetch-git.sh).
-docs/                        What's left, design.
+docs/                        Design, releasing.
 ```
 
 Reference source, shared by every session and worktree:

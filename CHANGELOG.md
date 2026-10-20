@@ -16,6 +16,10 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+### Fixed
+
+- The window no longer flashes empty as Espalier opens.
+
 ## [1.2.1] - 2026-10-18
 
 ### Changed
