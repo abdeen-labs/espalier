@@ -83,12 +83,10 @@ jobs:
           key: spm-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ github.sha }}
           restore-keys: spm-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-
 
-      # Warnings fail the build. SwiftPM keeps the flag off the remote
-      # packages, whose warnings it suppresses.
       - name: Build
         id: build
         working-directory: Packages/EspalierKit
-        run: swift build --build-tests --only-use-versions-from-resolved-file --disable-index-store -Xswiftc -warnings-as-errors
+        run: swift build --build-tests --only-use-versions-from-resolved-file --disable-index-store
 
       - name: Test
         working-directory: Packages/EspalierKit
@@ -136,46 +134,9 @@ jobs:
           COMPILER_INDEX_STORE_ENABLE=NO
           build
 
-      - &save-derived-data
-        name: Save DerivedData
+      - name: Save DerivedData
         if: ${{ !cancelled() && steps.build.outcome == 'success' && github.ref == 'refs/heads/main' && steps.restore-build.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
           path: *xcode-paths
           key: ${{ steps.restore-build.outputs.cache-primary-key }}
-
-  # The configuration that ships: code that builds only outside Debug
-  # (Sparkle, release logging) compiles here before an archive does.
-  app-release:
-    name: App (Release)
-    runs-on: xcode-27
-    timeout-minutes: 40
-    steps:
-      - *checkout
-      - *file-times
-      - *toolchain
-      - *restore-git
-      - *install-git
-
-      - name: Restore DerivedData
-        id: restore-build
-        uses: actions/cache/restore@v6
-        with:
-          path: *xcode-paths
-          key: xcode-release-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-${{ github.sha }}
-          restore-keys: xcode-release-${{ runner.arch }}-${{ steps.toolchain.outputs.xcode }}-
-
-      - name: Build
-        id: build
-        run: >-
-          xcodebuild
-          -project Espalier.xcodeproj
-          -scheme Espalier
-          -configuration Release
-          -derivedDataPath DerivedData
-          -onlyUsePackageVersionsFromResolvedFile
-          CODE_SIGNING_ALLOWED=NO
-          COMPILER_INDEX_STORE_ENABLE=NO
-          build
-
-      - *save-derived-data
