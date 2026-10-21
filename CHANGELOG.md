@@ -16,9 +16,29 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+### Added
+
+- Create pull requests in Espalier. Create Pull Request… opens a sheet with the base branch, a title, a description filled in from the repository's pull request template, and a draft option, instead of GitHub's form in the browser.
+
+### Changed
+
+- A link that checks out a branch or pull request in a repository you already have asks first, naming the branch, the pull request, and any remote it adds for a fork.
+- Initialize Git LFS asks before replacing hooks the repository already has, and moves the old hooks to the Trash.
+- Delete Branch names the remote branch that "on the remote too" deletes, which can have another name than the local branch.
+- A new branch can't take an existing tag's name, and a new tag can't take a branch's.
+
 ### Fixed
 
 - The window no longer flashes empty as Espalier opens.
+- Discarding a deleted file no longer deletes an untracked folder or file now at its path.
+- Discarding changes permanently removes staged new files and renamed files' new paths, instead of leaving them behind.
+- Merge, rebase, push, and new branches use the branch when a tag has the same name.
+- A build or tool writing into folders git ignores no longer keeps Espalier refreshing the repository.
+- Very large diffs no longer load in full before showing as too large.
+- Stash Changes and Continue is no longer offered on a detached HEAD, where it did nothing.
+- Pull, Push, and Fetch could wait for a later full refresh before finishing.
+- A token in a remote's address no longer appears in Espalier's log.
+- Move to Applications handles an app name with accented characters.
 
 ## [1.2.1] - 2026-10-18
 
