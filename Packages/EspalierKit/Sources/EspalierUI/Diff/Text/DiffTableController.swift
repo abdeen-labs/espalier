@@ -295,22 +295,26 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
         // The document is current: settings that don't shape rows.
         let stagingShapeChanged = (shown.staging != nil) != (content.staging != nil)
+        let stagingChanged = shown.staging != content.staging
         // Lines included or left out: the rows on screen whose number
         // cells or hunk checkbox change crossfade over 0.12 s.
-        let fadingRows = stagingShapeChanged || shown.staging == content.staging
-            ? []
+        let fading = stagingShapeChanged || !stagingChanged
+            ? InclusionChange()
             : rowsChangingInclusion(from: shown.staging, to: content.staging)
         defer {
-            crossfade(rows: fadingRows, duration: Motion.mark)
+            crossfade(rows: fading.rows, duration: Motion.mark)
         }
         shownContent = content
+        if stagingChanged {
+            hunkInclusions = fading.hunkInclusions
+        }
         if fontChanged || stagingShapeChanged || shown.wrapsLines != content.wrapsLines {
             relayout(force: true)
         }
         if shown.tokensGeneration != content.tokensGeneration || fontChanged {
             textCache.reset()
         }
-        if shown.tokensGeneration != content.tokensGeneration || shown.staging != content.staging
+        if shown.tokensGeneration != content.tokensGeneration || stagingChanged
             || shown.hasExpandedLines != content.hasExpandedLines || fontChanged || stagingShapeChanged {
             redrawVisibleRows()
         }
@@ -353,6 +357,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
 
         self.document = document
         shownContent = content
+        hunkInclusions.removeAll()
         textCache.reset()
         lineLayouts.removeAll()
         intraLineChanges.removeAll()
@@ -839,21 +844,32 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
 
     // MARK: Drawing's motion
 
-    /// The rows on screen whose staging marks differ between `old` and
-    /// `new` (a line's number cells, a hunk's checkbox); none when motion
-    /// doesn't run.
-    private func rowsChangingInclusion(from old: StagingState?, to new: StagingState?) -> [Int] {
+    /// The rows on screen whose staging marks differ between two stagings,
+    /// and the new staging's inclusions of the hunks on screen.
+    private struct InclusionChange {
+        var rows: [Int] = []
+        /// By header row, as `hunkInclusions` keeps them.
+        var hunkInclusions: [Int: DiffSelectionType?] = [:]
+    }
+
+    /// The rows on screen whose staging marks differ between `old`, the
+    /// shown staging, and `new` (a line's number cells, a hunk's checkbox);
+    /// none when motion doesn't run.
+    private func rowsChangingInclusion(from old: StagingState?, to new: StagingState?) -> InclusionChange {
         guard let old, let new, Motion.animates(tableView) else {
-            return []
+            return InclusionChange()
         }
         let visible = tableView.rows(in: tableView.visibleRect)
-        var rows: [Int] = []
+        var change = InclusionChange()
         for row in visible.location..<(visible.location + visible.length) where document.rows.indices.contains(row) {
             let documentRow = document.rows[row]
             if documentRow.kind == .hunk {
                 let hunk = document.hunks[Int(documentRow.hunk)]
-                if inclusion(ofHunk: hunk, staging: old) != inclusion(ofHunk: hunk, staging: new) {
-                    rows.append(row)
+                let newInclusion = inclusion(ofHunk: hunk, in: new.selection)
+                change.hunkInclusions[hunk.row] = .some(newInclusion)
+                // The shown staging's, from the cache.
+                if inclusion(ofHunk: hunk) != newInclusion {
+                    change.rows.append(row)
                 }
                 continue
             }
@@ -863,12 +879,12 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
                 }
                 let number = document.lines[line].diffLineNumber
                 if number >= 0, old.selection.isSelected(number) != new.selection.isSelected(number) {
-                    rows.append(row)
+                    change.rows.append(row)
                     break
                 }
             }
         }
-        return rows
+        return change
     }
 
     /// Crossfades `rows`' next drawing over `duration` (a transition on
@@ -924,16 +940,27 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         return staging.selection.isSelected(number)
     }
 
+    /// Each hunk's inclusion in the shown staging's selection, by its
+    /// header's row. A header draws it every time it draws, and working it
+    /// out walks the hunk's lines, so it's kept until the document or the
+    /// staging changes.
+    private var hunkInclusions: [Int: DiffSelectionType?] = [:]
+
     /// How much of a hunk the commit includes.
     func inclusion(ofHunk hunk: DocumentHunk) -> DiffSelectionType? {
-        inclusion(ofHunk: hunk, staging: shownContent?.staging)
-    }
-
-    /// How much of a hunk `staging` includes.
-    private func inclusion(ofHunk hunk: DocumentHunk, staging: StagingState?) -> DiffSelectionType? {
-        guard let staging else {
+        guard let staging = shownContent?.staging else {
             return nil
         }
+        if let cached = hunkInclusions[hunk.row] {
+            return cached
+        }
+        let computed = inclusion(ofHunk: hunk, in: staging.selection)
+        hunkInclusions[hunk.row] = .some(computed)
+        return computed
+    }
+
+    /// How much of a hunk `selection` includes.
+    private func inclusion(ofHunk hunk: DocumentHunk, in selection: DiffSelection) -> DiffSelectionType? {
         var lines = Set<Int>()
         for row in hunk.rows where document.rows[row].isChange {
             for column in [DiffColumn.before, .after] {
@@ -942,14 +969,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
                 }
             }
         }
-        guard !lines.isEmpty else {
-            return nil
-        }
-        let selected = lines.filter { staging.selection.isSelected(document.lines[$0].diffLineNumber) }.count
-        if selected == lines.count {
-            return .all
-        }
-        return selected == 0 ? DiffSelectionType.none : .partial
+        return hunkInclusion(ofChangedLines: lines.map { document.lines[$0].diffLineNumber }, in: selection)
     }
 
     // MARK: Hit-testing
@@ -1598,6 +1618,19 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
         .disabled(!canExpandWholeFile)
     }
+}
+
+/// How much of a hunk `selection` includes, given the original diff's
+/// indexes of the hunk's changed lines: nil for a hunk with none.
+nonisolated func hunkInclusion(ofChangedLines lines: [Int], in selection: DiffSelection) -> DiffSelectionType? {
+    guard !lines.isEmpty else {
+        return nil
+    }
+    let selected = lines.count(where: { selection.isSelected($0) })
+    if selected == lines.count {
+        return .all
+    }
+    return selected == 0 ? DiffSelectionType.none : .partial
 }
 
 /// How a mouse drag is tracked.

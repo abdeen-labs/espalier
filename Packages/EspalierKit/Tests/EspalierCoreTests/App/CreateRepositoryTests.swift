@@ -428,6 +428,22 @@ struct CreateRepositoryTests {
         }
     }
 
+    @Test("finds the files creating writes in any case, and only at the top level")
+    func existingFilesInAnyCase() async throws {
+        try await withIsolatedGitConfig { _ in
+            let folder = try createTempDirectory()
+            try FileManager.default.createDirectory(atPath: POSIXPath.join(folder, "docs"), withIntermediateDirectories: true)
+            for name in ["readme.MD", "License", "LICENSE.txt", "docs/README.md"] {
+                try write("text\n", to: POSIXPath.join(folder, name))
+            }
+
+            #expect(await checkCreateRepositoryExistingFiles(folder, gitIgnore: nil) == CreateRepositoryExistingFiles(
+                count: 4,
+                filesItWrites: ["README.md", "LICENSE"]
+            ))
+        }
+    }
+
     @Test("with a template chosen, the count reads the template in place of the folder's top-level .gitignore, and the .gitignore files below it")
     func countsWithTemplateReplacingGitIgnore() async throws {
         try await withIsolatedGitConfig { _ in

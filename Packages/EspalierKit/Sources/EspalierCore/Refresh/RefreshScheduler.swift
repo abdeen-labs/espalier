@@ -24,7 +24,8 @@ struct RefreshPassToken {
     }
 
     /// The pass applied `scope`: waiters that only need it (a commit
-    /// waiting for the status) can go on before the pass ends.
+    /// waiting for the status) can go on before the pass ends, and an
+    /// operation that invalidates the pass doesn't request it again.
     func didApply(_ scope: RefreshScope) {
         scheduler?.passDidApply(scope, sequence: sequence)
     }
@@ -43,9 +44,11 @@ struct RefreshHold: Hashable, Sendable {
 /// - A hold (taken by local-lane operations) keeps passes from starting;
 ///   requests accumulate and run when the last hold is released.
 /// - `invalidateInFlight()` (an operation starting) bumps the epoch and
-///   cancels the pass in flight: its unapplied steps are dropped, and the
-///   operation's own refresh follows. Callers waiting for that pass wait
-///   for a later one instead: what they asked for is requested again.
+///   cancels the pass in flight, which stops applying. When it ends, what it
+///   hadn't applied is requested again, so it merges with the operation's
+///   own refresh and, behind the operation's hold, runs after it. Callers
+///   waiting for that pass wait for a later one instead: what they asked
+///   for is requested again too.
 @MainActor
 final class RefreshScheduler {
     typealias Pass = @MainActor (RefreshScope, RefreshOptions, RefreshPassToken) async -> Void
@@ -70,11 +73,17 @@ final class RefreshScheduler {
 
     private struct Waiter {
         let id: UUID
-        /// Only a pass with a later sequence covers the waiter.
-        var after: Int
-        let scope: RefreshScope
+        /// What the waiter still needs; it goes on once no part is left.
+        var parts: [WaitPart]
         let options: RefreshOptions
         let continuation: CheckedContinuation<Void, Never>
+    }
+
+    /// Part of what a waiter needs, which one pass loads.
+    private struct WaitPart {
+        /// Only a pass with a later sequence covers the part.
+        var after: Int
+        let scope: RefreshScope
     }
 
     /// Runs one pass. Set by the repository model.
@@ -91,6 +100,15 @@ final class RefreshScheduler {
     private var holds: Set<UUID> = []
     private var waiters: [Waiter] = []
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// For each scope component, the sequence of the pass that applies the
+    /// latest request for it: the queued pass, the one in flight, or one that
+    /// ended having loaded it (an invalidated pass requests again what it
+    /// hadn't applied).
+    private var requestedSequences: [RefreshScope: Int] = [:]
+    /// For each scope component, the sequence of the latest pass that loaded
+    /// it: applied it, or ran to its end with it in its scope.
+    private var loadedSequences: [RefreshScope: Int] = [:]
 
     /// The number of passes started (for tests).
     private(set) var passCount = 0
@@ -154,6 +172,10 @@ final class RefreshScheduler {
         } else {
             pending = Pending(scope: scope, options: options, reasons: reasons)
         }
+        // The queued pass is the next to start.
+        for component in Self.components(of: scope) {
+            requestedSequences[component] = passCount + 1
+        }
     }
 
     /// Requests a pass covering `scope` and waits until one that started
@@ -167,28 +189,45 @@ final class RefreshScheduler {
         }
         let after = passCount
         request(scope, options: options, reason: reason)
-        await waitForPass(after: after, covering: scope, options: options)
+        await waitUntilLoaded([WaitPart(after: after, scope: scope)], options: options)
     }
 
-    /// Waits, without requesting anything, for the pass that applies what
-    /// has been requested so far (the queued pass, or the one in flight when
-    /// nothing is queued) to load `scope`, if it covers it; otherwise for a
-    /// later one that does. A pass an operation invalidates first hands the
-    /// wait on, as `refresh` does. Returns at once when nothing is in flight
-    /// or queued.
+    /// Waits, without requesting anything, until the passes that apply what
+    /// has been requested for `scope` have loaded it.
+    ///
+    /// Each component of the scope (status, refs, remotes, metadata) was
+    /// last requested of a pass: the queued one, the one in flight, or one
+    /// that has ended. The wait starts from the oldest of those passes and
+    /// ends once that pass or a later one has loaded every component. So the
+    /// pass in flight that covers the scope ends the wait though a narrower
+    /// request (a status the watcher asked for) is queued behind it, and the
+    /// wait ends at once when that pass has already ended. A pass an
+    /// operation invalidates first hands the wait on, as `refresh` does.
+    /// Returns at once when nothing was requested for the scope.
     func waitForRequestedPass(covering scope: RefreshScope) async {
-        let after: Int
-        if pending != nil {
-            after = passCount
-        } else if inFlight != nil {
-            after = passCount - 1
-        } else {
+        var requested: [RefreshScope: Int] = [:]
+        for component in Self.components(of: scope) {
+            requested[component] = requestedSequences[component]
+        }
+        guard let oldest = requested.values.min() else {
             return
         }
-        await waitForPass(after: after, covering: scope, options: [])
+        // What hasn't been loaded since the oldest pass, grouped by the pass
+        // that applies its latest request, which covers each group.
+        var unloaded: [Int: RefreshScope] = [:]
+        for (component, sequence) in requested where (loadedSequences[component] ?? 0) < oldest {
+            unloaded[sequence, default: []].formUnion(component)
+        }
+        guard !unloaded.isEmpty else {
+            return
+        }
+        let parts = unloaded.keys.sorted().map { sequence in
+            WaitPart(after: oldest - 1, scope: unloaded[sequence] ?? [])
+        }
+        await waitUntilLoaded(parts, options: [])
     }
 
-    private func waitForPass(after: Int, covering scope: RefreshScope, options: RefreshOptions) async {
+    private func waitUntilLoaded(_ parts: [WaitPart], options: RefreshOptions) async {
         let id = UUID()
         await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -196,7 +235,7 @@ final class RefreshScheduler {
                     continuation.resume()
                     return
                 }
-                waiters.append(Waiter(id: id, after: after, scope: scope, options: options, continuation: continuation))
+                waiters.append(Waiter(id: id, parts: parts, options: options, continuation: continuation))
             }
         } onCancel: {
             Task { @MainActor in
@@ -228,7 +267,8 @@ final class RefreshScheduler {
     }
 
     /// Bumps the epoch and cancels the pass in flight (read-only git gets
-    /// SIGTERM). Steps it hasn't applied are dropped.
+    /// SIGTERM): it applies no more steps, and when it ends, what it hadn't
+    /// applied is requested again.
     func invalidateInFlight() {
         epoch &+= 1
         inFlight?.task.cancel()
@@ -277,6 +317,7 @@ final class RefreshScheduler {
         }
         current.applied.formUnion(scope)
         inFlight = current
+        markLoaded(scope, sequence: sequence)
         resumeWaiters(coveredBy: current.applied, options: current.options, sequence: sequence)
     }
 
@@ -288,12 +329,13 @@ final class RefreshScheduler {
 
         // A pass that ran to its end covers what it was asked for (a step
         // whose load failed stays as it was). One an operation invalidated
-        // covers only what it applied before then: its other waiters wait
-        // for a later pass, which is requested for them.
+        // covers only what it applied before then: the rest is requested
+        // again, and its other waiters wait for that later pass.
         if finished.epoch == epoch {
+            markLoaded(finished.scope, sequence: sequence)
             resumeWaiters(coveredBy: finished.scope, options: finished.options, sequence: sequence)
         } else {
-            handOnWaiters(of: finished)
+            requestAgain(finished)
         }
 
         startIfPossible()
@@ -303,38 +345,72 @@ final class RefreshScheduler {
         resumeIdleWaitersIfIdle()
     }
 
-    /// The waiters an invalidated pass would have covered wait for a pass
-    /// that starts after now, and what they need is requested again (it
-    /// runs once no operation holds passes).
-    private func handOnWaiters(of finished: InFlight) {
-        var scope: RefreshScope = []
-        var options: RefreshOptions = []
-        for index in waiters.indices {
-            let waiter = waiters[index]
-            guard waiter.after < finished.sequence,
-                  finished.scope.isSuperset(of: waiter.scope),
-                  finished.options.isSuperset(of: waiter.options) else {
-                continue
-            }
-            waiters[index].after = passCount
-            scope.formUnion(waiter.scope)
-            options.formUnion(waiter.options)
-        }
+    /// An invalidated pass requests again what it hadn't applied, with what
+    /// the waiters it would have covered need. That merges with what's
+    /// queued (the operation's own refresh) and runs once no operation holds
+    /// passes.
+    private func requestAgain(_ finished: InFlight) {
+        var scope = finished.scope.subtracting(finished.applied)
+        // The options apply with the pass's first step, the status, which is
+        // what they change: they go again only when it applied nothing.
+        var options: RefreshOptions = finished.applied.isEmpty ? finished.options : []
+        let handedOn = handOnWaiters(of: finished)
+        scope.formUnion(handedOn.scope)
+        options.formUnion(handedOn.options)
         if !scope.isEmpty {
             enqueue(scope, options: options, reasons: finished.reasons)
         }
     }
 
+    /// The waiters an invalidated pass would have covered wait for a pass
+    /// that starts after now. Returns what they need, to request again.
+    private func handOnWaiters(of finished: InFlight) -> (scope: RefreshScope, options: RefreshOptions) {
+        var scope: RefreshScope = []
+        var options: RefreshOptions = []
+        for index in waiters.indices where finished.options.isSuperset(of: waiters[index].options) {
+            for partIndex in waiters[index].parts.indices {
+                let part = waiters[index].parts[partIndex]
+                guard part.after < finished.sequence, finished.scope.isSuperset(of: part.scope) else {
+                    continue
+                }
+                waiters[index].parts[partIndex].after = passCount
+                scope.formUnion(part.scope)
+                options.formUnion(waiters[index].options)
+            }
+        }
+        return (scope, options)
+    }
+
+    /// Resumes the waiters whose parts a pass with `sequence` has now all
+    /// covered, having loaded `scope` with `options`.
     private func resumeWaiters(coveredBy scope: RefreshScope, options: RefreshOptions, sequence: Int) {
         var remaining: [Waiter] = []
-        for waiter in waiters {
-            if waiter.after < sequence, scope.isSuperset(of: waiter.scope), options.isSuperset(of: waiter.options) {
+        for var waiter in waiters {
+            if options.isSuperset(of: waiter.options) {
+                waiter.parts.removeAll { $0.after < sequence && scope.isSuperset(of: $0.scope) }
+            }
+            if waiter.parts.isEmpty {
                 waiter.continuation.resume()
             } else {
                 remaining.append(waiter)
             }
         }
         waiters = remaining
+    }
+
+    /// Records that the pass with `sequence` loaded `scope`.
+    private func markLoaded(_ scope: RefreshScope, sequence: Int) {
+        for component in Self.components(of: scope) {
+            loadedSequences[component] = max(loadedSequences[component] ?? 0, sequence)
+        }
+    }
+
+    /// The components of `scope` (status, refs, remotes, metadata), each on
+    /// its own.
+    private static func components(of scope: RefreshScope) -> [RefreshScope] {
+        (0..<RefreshScope.RawValue.bitWidth)
+            .map { RefreshScope(rawValue: RefreshScope.RawValue(1) << $0) }
+            .filter { scope.contains($0) }
     }
 
     private func resumeIdleWaitersIfIdle() {

@@ -1,6 +1,8 @@
-// Coalescing, holds, epoch discard, and `refresh` waiting only for a
-// covering pass that loads its scope, past passes an operation invalidates;
-// then the same for a repository's real passes.
+// Coalescing, holds, epoch discard, what an invalidated pass hadn't applied
+// running again after the operation, `refresh` waiting only for a covering
+// pass that loads its scope, past passes an operation invalidates, and
+// `waitForRequestedPass` waiting for the passes that apply what was
+// requested; then the same for a repository's real passes.
 //
 // The waits are continuations the passes and tasks resume, never polling or
 // counting yields, so the tests take the same few steps however busy the
@@ -153,7 +155,7 @@ struct RefreshSchedulerTests {
         #expect(scheduler.isIdle)
     }
 
-    @Test("an operation starting invalidates the pass in flight, which drops its remaining steps")
+    @Test("an operation starting invalidates the pass in flight, which applies no more steps")
     func epochDiscard() async throws {
         let (scheduler, passes) = makeScheduler()
         scheduler.request(.full, reason: .selection)
@@ -161,6 +163,7 @@ struct RefreshSchedulerTests {
         let token = try #require(passes.started.first).token
         #expect(token.isCurrent)
 
+        let hold = scheduler.hold()
         scheduler.invalidateInFlight()
         #expect(!token.isCurrent)
         await passes.finishCurrent()
@@ -168,9 +171,83 @@ struct RefreshSchedulerTests {
 
         // A pass started after the operation is current again.
         scheduler.request(.status, reason: .operation(.checkoutBranch))
+        scheduler.release(hold)
         await passes.waitForStarted(2)
         #expect(passes.started.last?.token.isCurrent == true)
         await passes.finishCurrent()
+        #expect(scheduler.isIdle)
+    }
+
+    /// A `.full` pass with options, which an operation invalidates: what the
+    /// pass had applied, the operation's refresh, and the one pass after the
+    /// operation (an empty scope for none).
+    struct InvalidatedPassCase: Sendable {
+        let applied: RefreshScope
+        let refreshAfter: RefreshScope
+        let again: RefreshScope
+        let options: RefreshOptions
+        let reasons: [RefreshReason]
+    }
+
+    nonisolated static let invalidatedPassCases: [NamedCase<InvalidatedPassCase>] = [
+        NamedCase("nothing applied, and the operation requests nothing", InvalidatedPassCase(
+            applied: [], refreshAfter: [],
+            again: .full, options: .clearPartialSelections, reasons: [.operation(.commit)]
+        )),
+        // The options went with the status.
+        NamedCase("the status applied", InvalidatedPassCase(
+            applied: .status, refreshAfter: [],
+            again: [.refs, .remotes, .metadata], options: [], reasons: [.operation(.commit)]
+        )),
+        NamedCase("everything applied", InvalidatedPassCase(
+            applied: .full, refreshAfter: [],
+            again: [], options: [], reasons: []
+        )),
+        NamedCase("the operation's refresh covering what's left", InvalidatedPassCase(
+            applied: .status, refreshAfter: .full,
+            again: .full, options: [], reasons: [.operation(.commit), .operation(.createTag)]
+        )),
+        NamedCase("the operation's refresh covering part of what's left", InvalidatedPassCase(
+            applied: [], refreshAfter: .refs,
+            again: .full, options: .clearPartialSelections, reasons: [.operation(.commit), .operation(.createTag)]
+        )),
+    ]
+
+    @Test(
+        "a pass an operation invalidates requests again what it hadn't applied, which runs after the operation in one pass with its refresh",
+        arguments: invalidatedPassCases
+    )
+    func invalidatedPassRequestsAgain(_ testCase: NamedCase<InvalidatedPassCase>) async throws {
+        let value = testCase.value
+        let (scheduler, passes) = makeScheduler()
+        scheduler.request(.full, options: .clearPartialSelections, reason: .operation(.commit))
+        await passes.waitForStarted(1)
+        if !value.applied.isEmpty {
+            try #require(passes.started.first).token.didApply(value.applied)
+        }
+
+        // A local operation starts, holding passes, and nobody waits for the
+        // pass it invalidates.
+        let hold = scheduler.hold()
+        scheduler.invalidateInFlight()
+        await passes.finishCurrent()
+        #expect(scheduler.passCount == 1)
+        #expect(scheduler.isIdle)
+
+        // It ends: it requests its refresh and releases the hold.
+        scheduler.request(value.refreshAfter, reason: .operation(.createTag))
+        scheduler.release(hold)
+        if value.again.isEmpty {
+            #expect(scheduler.passCount == 1)
+        } else {
+            await passes.waitForStarted(2)
+            #expect(passes.started.last?.scope == value.again)
+            #expect(passes.started.last?.options == value.options)
+            #expect(scheduler.lastPassReasons == value.reasons)
+            await passes.finishCurrent()
+            #expect(scheduler.passCount == 2)
+        }
+        #expect(scheduler.isIdle)
     }
 
     @Test("refresh waits for a pass that started after the call and covers the scope")
@@ -405,6 +482,127 @@ struct RefreshSchedulerTests {
         #expect(everything.isSet)
     }
 
+    @Test("a wait for what was requested ends with the pass in flight that covers the scope, though a narrower request is queued behind it")
+    func waitEndsWithCoveringPassInFlight() async {
+        let (scheduler, passes) = makeScheduler()
+        // An operation's refresh runs, and the watcher asks for the status
+        // meanwhile.
+        scheduler.request(.full, reason: .operation(.pull))
+        await passes.waitForStarted(1)
+        scheduler.request(.status, reason: .fileSystem)
+        let done = Flag()
+        let waiting = await startTask {
+            await scheduler.waitForRequestedPass(covering: .full)
+            done.set()
+        }
+        #expect(scheduler.waitingCount == 1)
+
+        await passes.finishCurrent()
+        #expect(scheduler.waitingCount == 0)
+        await waiting.value
+        #expect(done.isSet)
+
+        // The status pass runs on its own.
+        await passes.waitForStarted(2)
+        #expect(passes.started.last?.scope == .status)
+        await passes.finishCurrent()
+        #expect(scheduler.isIdle)
+    }
+
+    @Test("a wait for what was requested returns at once when the pass that covers the scope has ended, though narrower ones run and are queued")
+    func waitReturnsOnceCoveringPassEnded() async {
+        let (scheduler, passes) = makeScheduler()
+        scheduler.request(.full, reason: .operation(.pull))
+        await passes.finishCurrent()
+        scheduler.request(.status, reason: .fileSystem)
+        await passes.waitForStarted(2)
+        scheduler.request(.status, reason: .fileSystem)
+
+        let done = Flag()
+        let waiting = await startTask {
+            await scheduler.waitForRequestedPass(covering: .full)
+            done.set()
+        }
+        #expect(done.isSet)
+        #expect(scheduler.waitingCount == 0)
+        await waiting.value
+
+        await passes.finishCurrent()
+        await passes.finishCurrent()
+        #expect(scheduler.passCount == 3)
+        #expect(scheduler.isIdle)
+    }
+
+    /// A wait for what was requested, with a pass in flight and one queued
+    /// behind it that applies the latest request for part of the scope.
+    struct QueuedPassCase: Sendable {
+        let inFlight: RefreshScope
+        let queued: RefreshScope
+        let waitingFor: RefreshScope
+    }
+
+    nonisolated static let queuedPassCases: [NamedCase<QueuedPassCase>] = [
+        // An operation's refresh requested while a selection's pass runs.
+        NamedCase("the same scope queued again", QueuedPassCase(inFlight: .full, queued: .full, waitingFor: .full)),
+        NamedCase("a narrower scope queued that covers the wait", QueuedPassCase(inFlight: .full, queued: .status, waitingFor: .status)),
+        NamedCase("the scope split between the two passes", QueuedPassCase(inFlight: .status, queued: .refs, waitingFor: [.status, .refs])),
+    ]
+
+    @Test("a wait for what was requested goes on to the queued pass when it applies the latest request for part of the scope", arguments: queuedPassCases)
+    func waitForQueuedPass(_ testCase: NamedCase<QueuedPassCase>) async {
+        let value = testCase.value
+        let (scheduler, passes) = makeScheduler()
+        scheduler.request(value.inFlight, reason: .selection)
+        await passes.waitForStarted(1)
+        scheduler.request(value.queued, reason: .fileSystem)
+        let done = Flag()
+        let waiting = await startTask {
+            await scheduler.waitForRequestedPass(covering: value.waitingFor)
+            done.set()
+        }
+        #expect(scheduler.waitingCount == 1)
+
+        await passes.finishCurrent()
+        #expect(scheduler.waitingCount == 1)
+        #expect(!done.isSet)
+
+        await passes.finishCurrent()
+        #expect(scheduler.waitingCount == 0)
+        await waiting.value
+        #expect(done.isSet)
+    }
+
+    @Test("a wait for what was requested whose covering pass an operation invalidates goes on to the pass after the operation")
+    func waitHandedOn() async {
+        let (scheduler, passes) = makeScheduler()
+        scheduler.request(.full, reason: .operation(.pull))
+        await passes.waitForStarted(1)
+        scheduler.request(.status, reason: .fileSystem)
+        let done = Flag()
+        let waiting = await startTask {
+            await scheduler.waitForRequestedPass(covering: .full)
+            done.set()
+        }
+
+        let hold = scheduler.hold()
+        scheduler.invalidateInFlight()
+        await passes.finishCurrent()
+        #expect(scheduler.waitingCount == 1)
+        #expect(!done.isSet)
+        #expect(scheduler.isIdle)
+
+        // One pass, with the queued status.
+        scheduler.release(hold)
+        await passes.waitForStarted(2)
+        #expect(passes.started.last?.scope == .full)
+        #expect(scheduler.lastPassReasons == [.fileSystem, .operation(.pull)])
+        await passes.finishCurrent()
+        #expect(scheduler.waitingCount == 0)
+        await waiting.value
+        #expect(done.isSet)
+        #expect(scheduler.passCount == 2)
+    }
+
     @Test("reports when passes run")
     func activity() async {
         let (scheduler, passes) = makeScheduler()
@@ -419,7 +617,7 @@ struct RefreshSchedulerTests {
     }
 }
 
-@Suite("Awaited refresh of a repository", .offline, .hangGuard(minutes: 5)) @MainActor
+@Suite("Refreshes of a repository that an operation supersedes", .offline, .hangGuard(minutes: 5)) @MainActor
 struct AwaitedRepositoryRefreshTests {
     @Test("a full refresh an operation supersedes returns once the pass after it has loaded the branches")
     func supersededFullRefresh() async throws {
@@ -475,6 +673,61 @@ struct AwaitedRepositoryRefreshTests {
         try await operation.value
         await refreshing.value
         #expect(knowsExtra())
+        await app.idle()
+    }
+
+    @Test("a full refresh an operation cancels loads after it, though nobody waits for it and the operation requests none")
+    func cancelledFullRefresh() async throws {
+        let (local, _) = try await setupRepositoryWithRemote()
+        let harness = try AppHarness()
+        let app = await harness.loadedApp()
+        let model = try await harness.addAndSelect(local, to: app)
+        try await runGit(["branch", "extra"], local)
+        func knowsExtra() -> Bool {
+            model.gitState.branches.all.contains { $0.name == "extra" }
+        }
+        #expect(!knowsExtra())
+
+        // The next pass waits to run until the operation has started.
+        let passStarted = Signal(), passMayRun = Signal()
+        let run = model.refreshScheduler.runPass
+        var isFirstPass = true
+        model.refreshScheduler.runPass = { scope, options, token in
+            if isFirstPass {
+                isFirstPass = false
+                passStarted.fire()
+                await passMayRun.wait()
+            }
+            await run?(scope, options, token)
+        }
+
+        // The pass a selection requests, which background work cancels as it
+        // starts.
+        let passes = model.refreshScheduler.passCount
+        model.requestRefresh(.full, reason: .selection)
+        await passStarted.wait()
+        let operationStarted = Signal(), operationMayEnd = Signal()
+        let operation = Task {
+            try await model.perform(OperationDescriptor(kind: .createTag, refreshAfter: [])) { _ in
+                operationStarted.fire()
+                await operationMayEnd.wait()
+            }
+        }
+        await operationStarted.wait()
+        passMayRun.fire()
+        await model.refreshScheduler.idle()
+        // The cancelled pass loaded nothing, and the rest waits behind the
+        // operation.
+        #expect(!knowsExtra())
+        #expect(model.refreshScheduler.passCount == passes + 1)
+
+        operationMayEnd.fire()
+        try await operation.value
+        await model.idle()
+        #expect(knowsExtra())
+        #expect(model.refreshScheduler.passCount == passes + 2)
+        #expect(model.refreshScheduler.lastPassScope == .full)
+        #expect(model.refreshScheduler.lastPassReasons == [.selection])
         await app.idle()
     }
 }

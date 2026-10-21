@@ -218,8 +218,9 @@ extension AppModel {
         let wasSelected = selection == .repository(id)
 
         if let model = models.removeValue(forKey: id) {
-            // Its watcher stops, view loads end, the pass in flight drops what
-            // it hasn't applied, and nothing it does reaches the list again.
+            // Its watcher stops, view loads end, the pass in flight stops
+            // applying (what it requests again ends at once without an app),
+            // and nothing it does reaches the list again.
             model.becomeInactive()
             model.refreshScheduler.invalidateInFlight()
             model.app = nil

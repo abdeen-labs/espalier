@@ -15,12 +15,49 @@ let MaxReasonableDiffSize = MaxDiffBufferSize / 16 // ~4.375MB in decimal
 /// than this, we probably shouldn't attempt it
 let MaxCharactersPerLine = 5000
 
+/// The size limits the diff functions apply. A test can lower them for its
+/// task.
+enum DiffLimits {
+    /// The most bytes of diff output turned into a diff: `MaxDiffBufferSize`
+    /// unless a test lowered it. More gives `.unrenderable`.
+    @TaskLocal static var maxBufferSize: Int = MaxDiffBufferSize
+
+    /// The most bytes of diff text `getFilesDiffText` returns.
+    @TaskLocal static var maxFilesDiffTextSize: Int = 10 * 1024 * 1024
+}
+
 /// Utility function to check whether parsing this buffer is going to cause
 /// issues at runtime.
 ///
 /// - Parameter buffer: A buffer of binary text from a spawned process
 private func isValidBuffer(_ buffer: Data) -> Bool {
-    buffer.count <= MaxDiffBufferSize
+    buffer.count <= DiffLimits.maxBufferSize
+}
+
+/// Runs a diff command with its output capped one byte past
+/// `DiffLimits.maxBufferSize` (stdout and stderr separately), so git stops
+/// once its diff is too large to show. Returns nil when the output went past
+/// the cap: the callers give `.unrenderable`, as `buildDiff` does for output
+/// over the limit.
+///
+/// - Parameter capsOutput: Whether to cap the output. A submodule's diff is
+///   read whole, as `buildSubmoduleDiff` reads one of any size.
+private func runDiff(
+    _ args: [String],
+    _ path: String,
+    _ name: String,
+    options: GitExecutionOptions = GitExecutionOptions(),
+    capsOutput: Bool = true
+) async throws -> GitResult? {
+    var options = options
+    if capsOutput {
+        options.maxBuffer = DiffLimits.maxBufferSize + 1
+    }
+    do {
+        return try await git(args, path, name, options: options)
+    } catch let error as ExecError where error.isMaxBufferExceeded {
+        return nil
+    }
 }
 
 /// Is the buffer too large for us to reasonably represent?
@@ -91,7 +128,14 @@ public func getCommitDiff(
         "--",
     ] + pathspecs(for: file)
 
-    let result = try await git(args, repository.path, "getCommitDiff")
+    guard let result = try await runDiff(
+        args,
+        repository.path,
+        "getCommitDiff",
+        capsOutput: file.status.submoduleStatus == nil
+    ) else {
+        return .unrenderable
+    }
 
     return try await buildDiff(result.stdoutData, repository, file, commitish, commitish)
 }
@@ -123,7 +167,14 @@ public func getBranchMergeBaseDiff(
         "--",
     ] + pathspecs(for: file)
 
-    let result = try await git(args, repository.path, "getBranchMergeBaseDiff")
+    guard let result = try await runDiff(
+        args,
+        repository.path,
+        "getBranchMergeBaseDiff",
+        capsOutput: file.status.submoduleStatus == nil
+    ) else {
+        return .unrenderable
+    }
 
     return try await buildDiff(result.stdoutData, repository, file, latestCommit, latestCommit)
 }
@@ -162,12 +213,15 @@ public func getCommitRangeDiff(
         "--",
     ] + pathspecs(for: file)
 
-    let result = try await git(
+    guard let result = try await runDiff(
         args,
         repository.path,
         "getCommitsDiff",
-        options: GitExecutionOptions(expectedErrors: [.badRevision])
-    )
+        options: GitExecutionOptions(expectedErrors: [.badRevision]),
+        capsOutput: file.status.submoduleStatus == nil
+    ) else {
+        return .unrenderable
+    }
 
     // This should only happen if the oldest commit does not have a parent (ex:
     // initial commit of a branch) and therefore `SHA^` is not a valid reference.
@@ -312,12 +366,15 @@ public func getWorkingDirectoryDiff(
         args += ["HEAD", "--", ensureRelativePath(file.path)]
     }
 
-    let result = try await git(
+    guard let result = try await runDiff(
         args,
         repository.path,
         "getWorkingDirectoryDiff",
-        options: GitExecutionOptions(successExitCodes: successExitCodes)
-    )
+        options: GitExecutionOptions(successExitCodes: successExitCodes),
+        capsOutput: !isSubmodule
+    ) else {
+        return .unrenderable
+    }
     let lineEndingsChange = parseLineEndingsWarning(result.stderrData)
 
     return try await buildDiff(result.stdoutData, repository, file, "HEAD", "HEAD", lineEndingsChange)
@@ -438,17 +495,15 @@ public func getResolutionDiff(
         tempTarget,
     ]
 
-    let result = try await git(
+    guard let result = try await runDiff(
         args,
         repository.path,
         "getResolutionDiff",
         options: GitExecutionOptions(successExitCodes: [0, 1])
-    )
-    let stdout = result.stdoutData
-
-    if !isValidBuffer(stdout) {
+    ), isValidBuffer(result.stdoutData) else {
         return ResolutionDiff(diff: .unrenderable, oldContents: baseContent, newContents: targetContent)
     }
+    let stdout = result.stdoutData
 
     let diff = try diffFromRawDiffOutput(stdout)
 
@@ -500,7 +555,8 @@ public func getFilesDiffText(
     _ files: [WorkingDirectoryFileChange],
     _ commitish: String? = nil
 ) async throws -> String {
-    let stdout = try await withTemporaryIndex(repository) {
+    let maxSize = DiffLimits.maxFilesDiffTextSize
+    let stdout = try await withTemporaryIndex(repository) { () async throws -> Data? in
         // Clear the staging area, our diffs reflect the difference between the
         // working directory and the last commit (if any) so our commits should
         // do the same thing.
@@ -521,18 +577,22 @@ public func getFilesDiffText(
             args.append(commitish)
         }
 
-        let result = try await git(
-            args,
-            repository.path,
-            "getFilesDiffText",
-            options: GitExecutionOptions(successExitCodes: [0])
-        )
-
-        return result.stdoutData
+        // Output past the limit stops git and gives nil.
+        do {
+            let result = try await git(
+                args,
+                repository.path,
+                "getFilesDiffText",
+                options: GitExecutionOptions(maxBuffer: maxSize + 1, successExitCodes: [0])
+            )
+            return result.stdoutData
+        } catch let error as ExecError where error.isMaxBufferExceeded {
+            return nil
+        }
     }
 
     // No more than 10MB
-    if stdout.count > 10 * 1024 * 1024 {
+    guard let stdout, stdout.count <= maxSize else {
         throw GitLibError("Diff is too large to render")
     }
 

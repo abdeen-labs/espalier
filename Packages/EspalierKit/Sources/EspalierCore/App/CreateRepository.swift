@@ -350,7 +350,9 @@ public func checkCreateRepositoryDestination(_ fullPath: String) async -> Create
 /// files it ignores count.
 ///
 /// Cancelling the task stops git. Nothing for a folder that doesn't exist
-/// or can't be listed.
+/// or can't be listed. Runs off the caller's actor: a folder can have
+/// hundreds of thousands of files to go through.
+@concurrent
 public func checkCreateRepositoryExistingFiles(_ folder: String, gitIgnore: String?) async -> CreateRepositoryExistingFiles {
     guard await directoryExists(folder) else {
         return CreateRepositoryExistingFiles()
@@ -385,10 +387,13 @@ public func checkCreateRepositoryExistingFiles(_ folder: String, gitIgnore: Stri
             args.append("--exclude-from=\(excludesPath)")
         }
         let result = try await git(args, folder, "listExistingFiles")
-        let paths = result.stdoutData.split(separator: 0).map { String(decoding: $0, as: UTF8.self) }
+        let paths = result.stdoutData.split(separator: 0)
         let written = [defaultReadmeName, gitIgnoreName, licenseName]
+        // The names are ASCII, and no other text lowercases to one, so a
+        // path's bytes are compared with them in ASCII's case, with no path
+        // decoded or lowercased.
         let filesItWrites = paths.compactMap { path in
-            written.first { $0.lowercased() == path.lowercased() }
+            written.first { equalsIgnoringASCIICase(path, $0) }
         }
         return CreateRepositoryExistingFiles(count: paths.count, filesItWrites: Set(filesItWrites))
     } catch {
@@ -537,6 +542,14 @@ private func trimTrailingSpaces(_ line: inout [UInt8]) {
     if let lastSpace {
         line.removeSubrange(lastSpace...)
     }
+}
+
+/// Whether `bytes` spell `name`, an ASCII name, in any case.
+private func equalsIgnoringASCIICase(_ bytes: Data, _ name: String) -> Bool {
+    func lowercased(_ byte: UInt8) -> UInt8 {
+        byte >= UInt8(ascii: "A") && byte <= UInt8(ascii: "Z") ? byte + 32 : byte
+    }
+    return bytes.count == name.utf8.count && zip(bytes, name.utf8).allSatisfy { lowercased($0) == lowercased($1) }
 }
 
 /// How many folders deep a relative path is.
