@@ -28,6 +28,10 @@ struct ClassificationContext: Sendable {
     /// offered.
     var isUnbornBranch = false
 
+    /// HEAD is detached. Espalier's stash entries are the branch's, so
+    /// "Stash Changes and Continue" isn't offered.
+    var isDetachedHead = false
+
     /// The rebase state in the git directory that Espalier can't continue
     /// or abort (`getLeftoverRebase`), looked for when git refuses to start
     /// a rebase over one.
@@ -92,6 +96,12 @@ enum ErrorClassifier {
             )
         }
 
+        // 2b. A discard that stopped because items the user didn't discard
+        // are in the way of the files it restores.
+        if let inTheWay = error as? DiscardItemsInTheWayError {
+            return make(.precondition(inTheWay.localizedDescription))
+        }
+
         // 3. A workflow file pushed without the `workflow` scope.
         if let gitError, let gitHubRepository = record?.gitHubRepository,
            let rejectedPath = getRejectedWorkflowPath(gitError.message) {
@@ -111,6 +121,7 @@ enum ErrorClassifier {
            let retry = descriptor.retry, let record {
             let files = parseFilesToBeOverwritten(stderr)
             let canStash = retry.kind != .restoreStash && retry.kind != .applyStash && !context.isUnbornBranch
+                && !context.isDetachedHead
             return make(.localChangesOverwritten(files: files), canStash ? [.stashChangesAndRetry(record.id, retry)] : [])
         }
 

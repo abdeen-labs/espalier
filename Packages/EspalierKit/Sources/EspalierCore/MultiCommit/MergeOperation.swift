@@ -41,7 +41,10 @@ extension MultiCommitOperationsModel {
     /// at once with git's message, and the repository is refreshed before this
     /// returns. Conflicts aren't an error: the merge returns `.conflicted` with
     /// `conflictState` set, and `continueOperation()` or `abortOperation()`
-    /// ends it.
+    /// ends it. A tag (or for a remote branch, a local branch) of the
+    /// branch's name doesn't get merged in its place: GitKit's
+    /// `merge(_:_:_:)` merges the branch by its full ref then, with git's
+    /// message for its name.
     ///
     /// - Returns: `.merged` or `.alreadyUpToDate` with the banner copy in
     ///   `summary`; `.conflicted`.
@@ -91,7 +94,7 @@ extension MultiCommitOperationsModel {
                         origin: .espalier
                     )
                 }
-                return try await GitKit.merge(ctx.repository, branch.name, MergeOptions(
+                return try await GitKit.merge(ctx.repository, branch, MergeOptions(
                     squash: squash,
                     onHookProgress: ctx.hooks.onHookProgress,
                     onHookFailure: ctx.hooks.onHookFailure,

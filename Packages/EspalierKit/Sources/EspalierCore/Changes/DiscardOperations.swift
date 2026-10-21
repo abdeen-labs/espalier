@@ -54,7 +54,16 @@ extension ChangesModel {
     /// When the Trash fails with `confirmDiscardChangesPermanently` on, the
     /// files already in the Trash are discarded and the operation fails with
     /// `.trashFailed` and the "Permanently Discard Changes" recovery for the
-    /// rest; with it off, untracked files are deleted instead.
+    /// rest; with it off, the files git doesn't restore are deleted instead,
+    /// as when discarding permanently.
+    ///
+    /// Items the user didn't discard that are in the way of a file git
+    /// restores (a folder made where a deleted file was, a file or a link
+    /// where its folder was) go to the Trash first. When discarding
+    /// permanently, or when the Trash fails for one, nothing is discarded:
+    /// it fails with `.precondition` naming them. A file whose restore
+    /// would delete a working copy not in the Trash yet waits with the rest
+    /// when the Trash fails partway.
     ///
     /// Discarding a copied file removes only the copy, so its source keeps its
     /// own changes; a renamed file's old path isn't overwritten when a file
@@ -243,15 +252,40 @@ extension ChangesModel {
 
 // MARK: - The git side
 
+/// Items in the way of the files a discard restores from the index: things
+/// the user didn't discard where git would write a file or make a folder,
+/// which it would delete. The discard stopped before discarding anything.
+struct DiscardItemsInTheWayError: Error, Sendable, LocalizedError {
+    /// The items, relative to the repository.
+    let paths: [String]
+    /// Why moving the first of `paths` to the Trash failed; nil when the
+    /// discard doesn't use the Trash.
+    let trashError: (any Error)?
+
+    var errorDescription: String? {
+        let names = paths.map { "\u{201C}\($0)\u{201D}" }.joined(separator: ", ")
+        let isOne = paths.count == 1
+        let trash = trashError == nil ? "" : " and couldn't be moved to the Trash"
+        return "Espalier can't discard the changes because \(names) \(isOne ? "is" : "are") in the way of the files it restores\(trash). "
+            + "Move \(isOne ? "it" : "them"), then try again."
+    }
+}
+
 /// Discards the changes to files, as `ChangesModel.discard` describes.
 /// Assumes the local lane is held.
 ///
+/// First it looks, without changing anything, for items in the way of the
+/// files git restores from the index (`itemsInTheWay`). With the Trash
+/// they're moved there before anything else; without it, or when the
+/// Trash fails for one, it throws `DiscardItemsInTheWayError` naming them.
+///
 /// - Parameters:
-///   - moveToTrash: Move working copies to the Trash; otherwise only
-///     untracked files are deleted (git overwrites tracked ones).
+///   - moveToTrash: Move working copies to the Trash; otherwise the working
+///     files of the changes git doesn't restore from the index are deleted
+///     (git overwrites the others).
 ///   - askBeforeDeleting: When the Trash fails, stop and throw
 ///     `TrashFailedError` with the files not yet discarded, rather than
-///     deleting untracked files (`confirmDiscardChangesPermanentlyKey`).
+///     deleting them (`confirmDiscardChangesPermanentlyKey`).
 @concurrent
 func discardChanges(
     _ files: [WorkingDirectoryFileChange],
@@ -261,6 +295,31 @@ func discardChanges(
     trash: any TrashService
 ) async throws {
     let submodulePaths = try await listSubmodules(repository).map(\.path).exactSet
+
+    let inTheWay = itemsInTheWay(
+        of: files,
+        discarded: discardedPaths(of: files, submodulePaths: submodulePaths),
+        submodulePaths: submodulePaths,
+        in: repository
+    )
+    if !inTheWay.isEmpty {
+        logger.info("Found \(inTheWay.count, privacy: .public) items in the way of restoring discarded files")
+        guard moveToTrash else {
+            throw DiscardItemsInTheWayError(paths: inTheWay, trashError: nil)
+        }
+        for (index, item) in inTheWay.enumerated() {
+            let path = POSIXPath.join(repository.path, item)
+            // Already in the Trash with an item that held it.
+            guard itemExists(atPath: path) else {
+                continue
+            }
+            do {
+                try await trash.moveToTrash(path)
+            } catch {
+                throw DiscardItemsInTheWayError(paths: Array(inTheWay[index...]), trashError: error)
+            }
+        }
+    }
 
     var processed: [WorkingDirectoryFileChange] = []
     for (index, file) in files.enumerated() {
@@ -274,24 +333,35 @@ func discardChanges(
                     } catch {
                         if askBeforeDeleting {
                             // Finish what's already in the Trash; the rest
-                            // waits for the user's answer.
-                            try await restoreFromIndex(processed, submodulePaths: submodulePaths, in: repository)
-                            throw TrashFailedError(files: Array(files[index...]), underlying: error)
+                            // waits for the user's answer, with the files
+                            // whose restore would delete a working copy
+                            // that isn't in the Trash yet (a deleted file's
+                            // folder holding one).
+                            let inTheTrash = discardedPaths(of: processed, submodulePaths: submodulePaths)
+                            var restorable: [WorkingDirectoryFileChange] = []
+                            var waiting: [WorkingDirectoryFileChange] = []
+                            for done in processed {
+                                if itemsInTheWay(of: [done], discarded: inTheTrash, submodulePaths: submodulePaths, in: repository).isEmpty {
+                                    restorable.append(done)
+                                } else {
+                                    waiting.append(done)
+                                }
+                            }
+                            try await restoreFromIndex(restorable, submodulePaths: submodulePaths, in: repository)
+                            throw TrashFailedError(files: waiting + Array(files[index...]), underlying: error)
                         }
 
-                        // The user has received the confirmation dialog in
-                        // past and has chosen to always discard the changes
-                        // permanently if trash fails. We need to remove the
-                        // file manually.
-                        if file.status.kind == .untracked {
+                        // The user has chosen to always discard the changes
+                        // permanently when the Trash fails: the files git
+                        // doesn't restore are deleted here.
+                        if !isRestoredFromIndex(file.status) {
                             try removeFile(path)
                         }
                     }
                 }
-            } else if file.status.kind == .untracked {
-                // The user has received the confirmation dialog and has
-                // chosen to discard the changes permanently. We need to
-                // remove the file manually.
+            } else if !isRestoredFromIndex(file.status) {
+                // Discarding permanently: git overwrites the files it
+                // restores, and the others are deleted here.
                 try removeFile(path)
             }
         }
@@ -299,6 +369,164 @@ func discardChanges(
     }
 
     try await restoreFromIndex(processed, submodulePaths: submodulePaths, in: repository)
+}
+
+/// Whether git restores the file's path from the index once its index
+/// entry is reset to HEAD: whether HEAD has the path. Staged new files,
+/// renamed and copied files' new paths, and untracked files aren't in HEAD.
+/// A conflicted path is when the conflict's "us" side (HEAD's version) has
+/// it: both modified, both added, added by us, and deleted by them.
+private func isRestoredFromIndex(_ status: AppFileStatus) -> Bool {
+    switch status {
+    case .modified, .deleted:
+        return true
+    case .new, .untracked, .renamed, .copied:
+        return false
+    case .conflicted(let conflict):
+        switch conflict.entry.action {
+        case .bothModified, .bothAdded, .addedByUs, .deletedByThem:
+            return true
+        case .deletedByUs, .addedByThem, .bothDeleted:
+            return false
+        }
+    }
+}
+
+/// The paths of the working copies a discard of `files` moves or deletes:
+/// every file's but the deleted ones' and submodules'.
+private func discardedPaths(of files: [WorkingDirectoryFileChange], submodulePaths: Set<ExactString>) -> Set<ExactString> {
+    files
+        .filter { $0.status.kind != .deleted && !submodulePaths.contains(ExactString($0.path)) }
+        .map(\.path)
+        .exactSet
+}
+
+/// The items `checkout-index -f` would delete to restore `files` that
+/// aren't `discarded` (`discardedPaths`), relative to the repository, in
+/// the order found. Looks at each item itself, never following a symbolic
+/// link, and changes nothing.
+///
+/// For each path git restores (`isRestoredFromIndex`, and renamed files'
+/// old paths), not a submodule's:
+/// - each of its folders that's something else, a symbolic link included,
+///   where git would make the folder;
+/// - what's at the path itself, which git replaces: anything at a deleted
+///   file's path (a folder made where the file was, say), and a folder
+///   holding anything not discarded. A renamed file's old path isn't
+///   restored over something there (`restoreFromIndex`), so only its
+///   folders count.
+///
+/// The discarded working copies aren't in the way, nor are folders that
+/// hold nothing else.
+private func itemsInTheWay(
+    of files: [WorkingDirectoryFileChange],
+    discarded: Set<ExactString>,
+    submodulePaths: Set<ExactString>,
+    in repository: Repository
+) -> [String] {
+    var folders = Set<ExactString>()
+    var inTheWay: [String] = []
+    var found = Set<ExactString>()
+
+    func add(_ path: String) {
+        if found.insert(ExactString(path)).inserted {
+            inTheWay.append(path)
+        }
+    }
+
+    /// Whether each of `path`'s folders is a folder, adding the first that
+    /// isn't when it isn't being discarded. False when one isn't, or
+    /// when one is missing (so nothing is at the path).
+    func foldersAreFolders(of path: String) -> Bool {
+        var folder = ""
+        for component in JSCompat.split(path, "/").dropLast() {
+            folder = folder.isEmpty ? component : "\(folder)/\(component)"
+            if folders.contains(ExactString(folder)) {
+                continue
+            }
+            switch itemKind(atPath: POSIXPath.join(repository.path, folder)) {
+            case .directory:
+                folders.insert(ExactString(folder))
+            case .missing:
+                return false
+            case .other:
+                if !discarded.contains(ExactString(folder)) {
+                    add(folder)
+                }
+                return false
+            }
+        }
+        return true
+    }
+
+    for file in files where !submodulePaths.contains(ExactString(file.path)) {
+        if case .renamed(let oldPath, _, _) = file.status, !submodulePaths.contains(ExactString(oldPath)) {
+            _ = foldersAreFolders(of: oldPath)
+        }
+        guard isRestoredFromIndex(file.status), foldersAreFolders(of: file.path) else {
+            continue
+        }
+        switch itemKind(atPath: POSIXPath.join(repository.path, file.path)) {
+        case .missing:
+            break
+        case .other:
+            if !discarded.contains(ExactString(file.path)) {
+                add(file.path)
+            }
+        case .directory:
+            if !holdsOnlyDiscarded(file.path, discarded: discarded, in: repository) {
+                add(file.path)
+            }
+        }
+    }
+    return inTheWay
+}
+
+/// Whether the folder at `path` (relative to the repository) holds nothing
+/// but `discarded` items and folders that hold nothing else. Links aren't
+/// followed; a folder that can't be read holds something.
+private func holdsOnlyDiscarded(_ path: String, discarded: Set<ExactString>, in repository: Repository) -> Bool {
+    var pending = [path]
+    while let folder = pending.popLast() {
+        guard let directory = opendir(POSIXPath.join(repository.path, folder)) else {
+            return false
+        }
+        defer { closedir(directory) }
+        while let entry = readdir(directory) {
+            let name = withUnsafeBytes(of: entry.pointee.d_name) { bytes in
+                String(decoding: bytes.prefix(Int(entry.pointee.d_namlen)), as: UTF8.self)
+            }
+            if name == "." || name == ".." {
+                continue
+            }
+            let child = "\(folder)/\(name)"
+            if discarded.contains(ExactString(child)) {
+                continue
+            }
+            guard itemKind(atPath: POSIXPath.join(repository.path, child)) == .directory else {
+                return false
+            }
+            pending.append(child)
+        }
+    }
+    return true
+}
+
+/// What's at a path, looked at without following a symbolic link.
+private enum ItemKind {
+    /// Nothing, or nothing that can be looked at.
+    case missing
+    case directory
+    /// A file, a symbolic link, or anything else that isn't a directory.
+    case other
+}
+
+private func itemKind(atPath path: String) -> ItemKind {
+    var info = stat()
+    guard lstat(path, &info) == 0 else {
+        return .missing
+    }
+    return info.st_mode & S_IFMT == S_IFDIR ? .directory : .other
 }
 
 /// Resets the files' changed index entries to HEAD and checks them out

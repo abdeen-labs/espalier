@@ -11,12 +11,20 @@ extension BranchesModel {
         repository?.record.tagsToPush ?? []
     }
 
-    /// Why `name` can't be a new tag's name, or nil: it's too long, taken,
-    /// or git can't keep it beside a tag (`refNameConflict`).
+    /// Why `name` can't be a new tag's name, or nil: it's too long, taken by
+    /// a tag or a branch (local or remote: git reads a short name as the tag
+    /// before the branch), or git can't keep it beside a tag
+    /// (`refNameConflict`).
     public func tagNameError(_ name: String) -> String? {
         // JavaScript's string length: UTF-16 code units.
         if name.utf16.count > maxTagNameLength {
             return "The tag name cannot be longer than \(maxTagNameLength) characters"
+        }
+        // The listed branches, and the remote branches local ones track,
+        // which the list leaves out.
+        if let branches = repository?.gitState.branches,
+           (branches.all + Array(branches.upstreams.values)).contains(where: { JSCompat.strictEquals($0.name, name) }) {
+            return "A branch named \(name) already exists"
         }
         guard let tags = repository?.gitState.tags else {
             return nil

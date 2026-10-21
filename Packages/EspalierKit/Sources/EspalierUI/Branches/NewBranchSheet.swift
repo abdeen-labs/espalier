@@ -41,16 +41,24 @@ nonisolated public struct BranchNameValidation: Sendable, Equatable {
         !JSCompat.trim(sanitizedName).isEmpty && !messages.contains(where: \.isError)
     }
 
-    /// Checks `proposed` against the repository's branches: a name that's
-    /// taken, or that git can't keep beside a local branch
+    /// Checks `proposed` against the repository's branches and tags: a name
+    /// that's taken by a branch or a tag (git reads a short name as the tag
+    /// before the branch), or that git can't keep beside a local branch
     /// (`refNameConflict`), is an error.
     ///
     /// - Parameters:
+    ///   - tags: The repository's tags' names.
     ///   - verb: How the warning names what happens to the name ("Will be
     ///     created as …").
     ///   - currentName: A rename's current name, which the new name may
     ///     keep.
-    public static func validate(_ proposed: String, branches: [Branch], verb: String = "created", currentName: String? = nil) -> BranchNameValidation {
+    public static func validate(
+        _ proposed: String,
+        branches: [Branch],
+        tags: [String] = [],
+        verb: String = "created",
+        currentName: String? = nil
+    ) -> BranchNameValidation {
         let sanitized = sanitizedRefName(proposed)
         var messages: [Message] = []
         if proposed.isEmpty {
@@ -77,6 +85,8 @@ nonisolated public struct BranchNameValidation: Sendable, Equatable {
                     ? "A branch named \(conflict.existingName) already exists."
                     : "A branch named \(conflict.existingName) already exists, so \(sanitized) can't be used."
             ))
+        } else if !isCurrentName, tags.contains(where: { JSCompat.strictEquals($0, sanitized) }) {
+            messages.append(.error("A tag named \(sanitized) already exists."))
         } else if currentName == nil,
                   branches.contains(where: { $0.type == .remote && JSCompat.strictEquals($0.nameWithoutRemote, sanitized) }) {
             messages.append(.warning("A branch named \(sanitized) already exists on the remote."))
@@ -324,6 +334,7 @@ public struct NewBranchSheet: View {
 
     private let content: NewBranchSheetContent
     private let branches: [Branch]
+    private let tags: [String]
     private let checkRules: (@MainActor (String) async -> BranchNameRuleError?)?
     private let onCreate: (_ name: String, _ startPoint: StartPoint) -> Void
     private let onForkBehavior: (() -> Void)?
@@ -335,6 +346,7 @@ public struct NewBranchSheet: View {
 
     /// - Parameters:
     ///   - branches: The repository's branches, for the name checks.
+    ///   - tags: The repository's tags' names, for the name checks.
     ///   - checkRules: Asks the repository's rules about a name
     ///     (`checkBranchNameRules`), or nil.
     ///   - onCreate: Creates the branch (the sheet has closed).
@@ -343,12 +355,14 @@ public struct NewBranchSheet: View {
         _ content: NewBranchSheetContent,
         initialName: String = "",
         branches: [Branch],
+        tags: [String] = [],
         checkRules: (@MainActor (String) async -> BranchNameRuleError?)? = nil,
         onCreate: @escaping (_ name: String, _ startPoint: StartPoint) -> Void,
         onForkBehavior: (() -> Void)? = nil
     ) {
         self.content = content
         self.branches = branches
+        self.tags = tags
         self.checkRules = checkRules
         self.onCreate = onCreate
         self.onForkBehavior = onForkBehavior
@@ -357,7 +371,7 @@ public struct NewBranchSheet: View {
     }
 
     public var body: some View {
-        let basic = BranchNameValidation.validate(name, branches: branches)
+        let basic = BranchNameValidation.validate(name, branches: branches, tags: tags)
         let validation = BranchNameRuleCheck.applying(ruleCheck, to: basic)
         SheetScaffold(content.title) {
             VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
@@ -443,6 +457,7 @@ public struct NewBranchSheet: View {
                 content,
                 initialName: mode.initialName,
                 branches: repository.gitState.branches.all,
+                tags: Array((repository.gitState.tags ?? [:]).keys),
                 checkRules: { [weak repository] name in
                     await repository?.gitHub.checkBranchNameRules(name)
                 },

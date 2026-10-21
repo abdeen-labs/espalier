@@ -75,6 +75,31 @@ struct TagOperationsTests {
         await fixture.app.idle()
     }
 
+    // Git reads a short name as the tag before the branch, so a tag can't
+    // share a branch's name: a local branch's, or a remote branch's, listed
+    // or tracked by a local branch.
+    @Test("a branch's name is refused for a new tag before git runs", arguments: [
+        NamedCase("a local branch's", "feature"),
+        NamedCase("a remote branch's that a local branch tracks", "origin/main"),
+        NamedCase("a remote branch's that no local branch tracks", "origin/topic"),
+    ])
+    func branchNames(_ testCase: NamedCase<String>) async throws {
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["branch", "feature"], local)
+            try await runGit(["push", "-q", "origin", "main:topic"], local)
+        }
+        let head = try await fixture.head()
+        #expect(fixture.model.branches.tagNameError(testCase.value) != nil)
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.model.branches.createTag(testCase.value, at: head)
+        }
+        #expect(preconditionText(error) != nil)
+        #expect(try await runGit(["tag", "--list"], fixture.local).isEmpty)
+        #expect(fixture.model.branches.tagsToPush.isEmpty)
+        await fixture.app.idle()
+    }
+
     @Test("a tag git refuses isn't queued")
     func refusedTag() async throws {
         let fixture = try await makeSelectedRepository()

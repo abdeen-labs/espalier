@@ -132,7 +132,8 @@ extension MultiCommitOperationsModel {
     /// - Parameter noTrack: Pass `--no-track`, for a branch made from the
     ///   upstream default branch of a fork.
     /// - Throws: As `cherryPick(_:onto:confirmed:)`, and
-    ///   `.precondition("A branch named <name> already exists.")`.
+    ///   `.precondition("A branch named <name> already exists.")` or "A tag
+    ///   named <name> already exists." (`branchNameError(_:)`).
     public func cherryPick(
         _ commits: [CommitOneLine],
         toNewBranch name: String,

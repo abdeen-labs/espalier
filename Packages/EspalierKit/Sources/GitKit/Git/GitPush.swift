@@ -50,9 +50,11 @@ public struct PushOptions: Sendable {
 /// - Parameters:
 ///   - repository: The repository from which to push
 ///   - remote: The remote to push the specified branch to
-///   - localBranch: The local branch to push
-///   - remoteBranch: The remote branch to push to
-///   - tagsToPush: The tags to push along with the branch.
+///   - localBranch: The name of the local branch to push
+///   - remoteBranch: The name of the branch on the remote to push to; nil
+///     or empty pushes to the branch of the local branch's name, and sets
+///     it as the upstream
+///   - tagsToPush: The names of the tags to push along with the branch.
 ///   - options: Optional customizations for the push execution.
 ///     see PushOptions for more information.
 ///   - progressCallback: An optional function which will be invoked
@@ -112,14 +114,17 @@ public func push(
         progressCallback(PushProgress(value: 0, title: title, remote: remote.name, branch: localBranch))
     }
 
+    // Full refs on both sides: git reads a short name as a tag of that
+    // name too, and refuses a name that's both a branch and a tag ("src
+    // refspec matches more than one"), here or on the remote.
     if let remoteBranch, !remoteBranch.isEmpty {
-        args += ["--", remote.name, "\(localBranch):\(remoteBranch)"]
+        args += ["--", remote.name, "refs/heads/\(localBranch):refs/heads/\(remoteBranch)"]
     } else {
-        args += ["--", remote.name, localBranch]
+        args += ["--", remote.name, "refs/heads/\(localBranch)"]
     }
 
     if let tagsToPush {
-        args += tagsToPush
+        args += tagsToPush.map { "refs/tags/\($0)" }
     }
 
     try await git(args, repository.path, "push", options: opts)

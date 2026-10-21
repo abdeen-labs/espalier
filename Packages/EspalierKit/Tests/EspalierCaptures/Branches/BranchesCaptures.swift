@@ -344,6 +344,15 @@ struct BranchesCaptures {
         capture(view, named: "nameMessages-clash", area: area)
     }
 
+    @Test("the name's messages: a tag's name")
+    func tagNameMessage() {
+        let validation = BranchNameValidation.validate("v1.2.0", branches: Self.sheetBranches, tags: ["v1.2.0"])
+        let view = NameValidationMessages(validation)
+            .padding(Metrics.insetLarge)
+            .frame(width: Metrics.Sheet.standardWidth, alignment: .leading)
+        capture(view, named: "nameMessages-tag", area: area)
+    }
+
     @Test("Rename: a tracking branch's warning")
     func rename() {
         capture(

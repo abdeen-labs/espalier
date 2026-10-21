@@ -149,7 +149,8 @@ extension MultiCommitOperationsModel {
 extension MultiCommitOperationsModel {
     /// The check cherry-pick, squash, and reorder start with: any change,
     /// untracked files included, refuses them with the files listed and "Stash
-    /// Changes and Continue". Nil when there are none.
+    /// Changes and Continue" (not on a detached HEAD, where Espalier can't
+    /// stash: its entries are the branch's). Nil when there are none.
     ///
     /// - Parameter listsFiles: Whether the error names the files (the
     ///   dialog lists those git named; for a rebase git names none).
@@ -162,12 +163,13 @@ extension MultiCommitOperationsModel {
         guard !files.isEmpty, let repository else {
             return nil
         }
+        let canStash: Bool = if case .detached = repository.gitState.tip { false } else { true }
         return OperationError(
             .localChangesOverwritten(files: listsFiles ? files.map(\.path) : []),
             operation: operation,
             repositoryID: repository.id,
             retry: retry,
-            recoveries: [.stashChangesAndRetry(repository.id, retry)]
+            recoveries: canStash ? [.stashChangesAndRetry(repository.id, retry)] : []
         )
     }
 

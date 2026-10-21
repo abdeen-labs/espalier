@@ -173,4 +173,24 @@ struct PushTests {
         let result = try await Dugite.exec(["rev-parse", "master"], barePath)
         #expect(JSCompat.trim(stdout(result)) == (try await getTipOrError(repo)).sha)
     }
+
+    @Test("pushes to the remote's branch when a tag on the remote has its name")
+    func destinationBesideRemoteTag() async throws {
+        let repo = try setupEmptyRepository()
+        try await makeCommit(repo, Tree(entries: [TreeEntry(path: "README.md", contents: "initial")]))
+        let barePath = try await createBareUpstream(repo)
+        _ = try await Dugite.exec(["remote", "add", "origin", barePath], repo.path)
+        // The remote has a branch and a tag named `shared`, at the first commit.
+        _ = try await Dugite.exec(["branch", "shared"], barePath)
+        _ = try await Dugite.exec(["tag", "shared"], barePath)
+        let first = (try await getTipOrError(repo)).sha
+        try await makeCommit(repo, Tree(entries: [TreeEntry(path: "README.md", contents: "second")]))
+
+        try await push(repo, Remote(name: "origin", url: barePath), "master", "shared", nil)
+
+        let branch = try await Dugite.exec(["rev-parse", "refs/heads/shared"], barePath)
+        #expect(JSCompat.trim(stdout(branch)) == (try await getTipOrError(repo)).sha)
+        let tag = try await Dugite.exec(["rev-parse", "refs/tags/shared"], barePath)
+        #expect(JSCompat.trim(stdout(tag)) == first)
+    }
 }

@@ -98,6 +98,50 @@ struct PushOperationTests {
         await fixture.app.idle()
     }
 
+    // Git refuses a short name that's both a branch and a tag ("src refspec
+    // matches more than one"), here or on the remote.
+    @Test("pushes the branch beside a tag of its name, here and on the remote", arguments: [
+        NamedCase("to its upstream", (branch: "main", hasUpstream: true)),
+        NamedCase("publishing it", (branch: "feature", hasUpstream: false)),
+    ])
+    func branchBesideTag(_ testCase: NamedCase<(branch: String, hasUpstream: Bool)>) async throws {
+        let name = testCase.value.branch
+        let fixture = try await makeSelectedRepository { local in
+            if !testCase.value.hasUpstream {
+                try await runGit(["checkout", "-q", "-b", name], local)
+            }
+            let base = JSCompat.trim(try await runGit(["rev-parse", "HEAD"], local))
+            try await commitFile(local, "a.txt", "a\n")
+            try await runGit(["tag", name, base], local)
+            try await runGit(["push", "-q", "origin", "refs/tags/\(name)"], local)
+        }
+        let base = try #require(try await resolveRef("refs/tags/\(name)", in: fixture.local))
+
+        #expect(try await fixture.model.sync.push() == .pushed(branch: name, remote: "origin", tags: [], fetchFailure: nil))
+
+        #expect(try await fixture.remoteTip(name) == (try await fixture.head()))
+        #expect(try await resolveRef("refs/tags/\(name)", in: fixture.remote) == base)
+        // `<branch>@{upstream}` reads its name as a branch's.
+        #expect(try await fixture.localSHA("\(name)@{upstream}") == (try await fixture.head()))
+        await fixture.app.idle()
+    }
+
+    @Test("pushes a queued tag beside a branch of its name")
+    func tagBesideBranch() async throws {
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["branch", "release"], local)
+            try await runGit(["tag", "release"], local)
+        }
+        fixture.app.updateRecord(fixture.model.id) { $0.tagsToPush = ["release"] }
+
+        #expect(try await fixture.model.sync.push() == .pushed(branch: "main", remote: "origin", tags: ["release"], fetchFailure: nil))
+
+        #expect(try await resolveRef("refs/tags/release", in: fixture.remote) == (try await fixture.head()))
+        #expect(try await fixture.remoteTip("release") == nil)
+        #expect(fixture.model.branches.tagsToPush.isEmpty)
+        await fixture.app.idle()
+    }
+
     @Test("pushes the queued tags with the branch and takes them off the queue")
     func tags() async throws {
         let fixture = try await makeSelectedRepository()

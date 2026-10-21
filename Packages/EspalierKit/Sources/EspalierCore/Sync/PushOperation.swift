@@ -190,10 +190,13 @@ extension SyncModel {
 
         let tags = repository.record.tagsToPush
         let pushProgress = progress.scaled(from: 0, to: pushWeight)
+        // The branch's name from its ref, which GitKit's `push` pushes as
+        // `refs/heads/<name>`: the branch list names a branch that shares
+        // its name with a tag `heads/<name>`.
         try await GitKit.push(
             ctx.repository,
             safeRemote,
-            branch.name,
+            branchNameFromRef(branch),
             branch.upstreamWithoutRemote,
             tags.isEmpty ? nil : tags,
             PushOptions(

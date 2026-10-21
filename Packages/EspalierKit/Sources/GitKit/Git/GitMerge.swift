@@ -32,6 +32,11 @@ public struct MergeOptions: Sendable {
 
     public var onTerminalOutputAvailable: TerminalOutputCallback?
 
+    /// The merge commit's message (`-m`) in place of the one git makes; git
+    /// still adds the merged commits' summaries after it when `merge.log`
+    /// is set.
+    var message: String?
+
     public init(
         squash: Bool = false,
         noVerify: Bool = false,
@@ -88,6 +93,10 @@ public func merge(
         args.append("--no-verify")
     }
 
+    if let message = options?.message {
+        args.append(contentsOf: ["-m", message])
+    }
+
     args.append(contentsOf: ["--", branch])
 
     let result = try await git(args, repository.path, "merge", options: GitExecutionOptions(
@@ -137,6 +146,75 @@ public func merge(
     }
 
     return JSCompat.strictEquals(stdout, noopMergeMessage) ? .alreadyUpToDate : .success
+}
+
+/// Merges `branch` into the current branch, and only that branch, as
+/// `merge(_:_:_:)` merges a name.
+///
+/// Git reads a short name as the first ref it finds: a tag of the same name
+/// (`refs/tags/<name>`) before the branch, and for a remote branch
+/// (`origin/feature`) a local branch of that name before the remote-tracking
+/// branch. While `branch`'s short name is the only ref git finds for it,
+/// the branch is merged by that name, so the message ("Merge branch
+/// 'feature'") and the conflict markers' label are git's own. Otherwise
+/// it's merged by its full ref, with the message git makes for its short
+/// name (`mergeTitle`); the conflict markers then name the full ref.
+public func merge(
+    _ repository: Repository,
+    _ branch: Branch,
+    _ options: MergeOptions? = nil
+) async throws -> MergeResult {
+    if try await nameResolvesOnlyToRef(repository, branch.name, branch.ref) {
+        return try await merge(repository, branch.name, options)
+    }
+    var options = options ?? MergeOptions()
+    // A squash merge's message lists the commits, never the branch. Without
+    // the title, git's message names the full ref.
+    if !options.squash {
+        options.message = try? await mergeTitle(repository, branch)
+    }
+    return try await merge(repository, branch.ref, options)
+}
+
+/// Whether `name`, read as a revision, names `ref` and no other ref: `git
+/// rev-parse --symbolic-full-name` prints the one full ref it finds, and
+/// nothing for a name that two refs have.
+func nameResolvesOnlyToRef(_ repository: Repository, _ name: String, _ ref: String) async throws -> Bool {
+    let result = try await git(
+        ["rev-parse", "--verify", "--quiet", "--symbolic-full-name", "--end-of-options", name],
+        repository.path,
+        "nameResolvesOnlyToRef",
+        options: GitExecutionOptions(successExitCodes: [0, 1, 128])
+    )
+    return result.exitCode == 0 && JSCompat.strictEquals(JSCompat.trim(result.stdout), ref)
+}
+
+/// The message `git merge` makes for merging `branch` by its short name
+/// ("Merge branch 'feature'", "Merge remote-tracking branch
+/// 'origin/feature' into topic"), without the commits' summaries that
+/// `merge.log` adds: `git fmt-merge-msg` given the line `git merge` writes
+/// for the branch. Nil when the branch is gone or git makes no message (the
+/// branch is merged already).
+func mergeTitle(_ repository: Repository, _ branch: Branch) async throws -> String? {
+    let tip = try await git(
+        ["rev-parse", "--verify", "--quiet", "--end-of-options", branch.ref],
+        repository.path,
+        "mergeTitleTip",
+        options: GitExecutionOptions(successExitCodes: [0, 1])
+    )
+    let sha = JSCompat.trim(tip.stdout)
+    guard tip.exitCode == 0, !sha.isEmpty else {
+        return nil
+    }
+    let kind = branch.type == .remote ? "remote-tracking branch" : "branch"
+    let result = try await git(
+        ["fmt-merge-msg", "--no-log"],
+        repository.path,
+        "mergeTitle",
+        options: GitExecutionOptions(stdin: "\(sha)\t\t\(kind) '\(branch.name)' of .\n")
+    )
+    let title = JSCompat.trim(result.stdout)
+    return title.isEmpty ? nil : title
 }
 
 private let noopMergeMessage = "Already up to date.\n"

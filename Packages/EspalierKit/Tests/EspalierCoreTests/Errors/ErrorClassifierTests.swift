@@ -209,6 +209,17 @@ struct ErrorClassifierTests {
         #expect(error.recoveries.map(\.kind) == [.discardPermanently])
     }
 
+    @Test("2b. a discard stopped by items in the way of its restored files is a precondition, with nothing offered")
+    func discardItemsInTheWay() async {
+        let inTheWay = DiscardItemsInTheWayError(paths: ["config"], trashError: CocoaError(.fileWriteNoPermission))
+        let error = await classify(inTheWay, kind: .discardChanges)
+        guard case .precondition = error.reason else {
+            Issue.record("Unexpected reason \(error.reason)")
+            return
+        }
+        #expect(error.recoveries.isEmpty)
+    }
+
     // MARK: 3. refusedWorkflowUpdate
 
     @Test("3. a push rejected for a workflow file asks to sign in again, for GitHub repositories")
@@ -247,6 +258,15 @@ struct ErrorClassifierTests {
         let error = await classify(gitError(localChangesStderr), kind: .checkoutBranch, retry: retry, record: record)
         #expect(error.reason == .localChangesOverwritten(files: ["README.md", "src/app.swift"]))
         #expect(error.recoveries.map(\.kind) == [.stashChangesAndRetry])
+    }
+
+    @Test("5. on a detached HEAD, local changes that would be overwritten offer no stash")
+    func localChangesOverwrittenOnDetachedHead() async {
+        var context = ClassificationContext()
+        context.isDetachedHead = true
+        let error = await classify(gitError(localChangesStderr), kind: .checkoutBranch, retry: FakeRetry(.checkoutBranch), context: context)
+        #expect(error.reason == .localChangesOverwritten(files: ["README.md", "src/app.swift"]))
+        #expect(error.recoveries.isEmpty)
     }
 
     @Test("5. no stash is offered when restoring or applying a stash", arguments: [OperationKind.restoreStash, .applyStash])

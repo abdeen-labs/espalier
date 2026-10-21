@@ -68,7 +68,9 @@ extension MultiCommitOperationsModel {
             // whether the submit button is enabled.
             let commitCount: Int?
             do {
-                commitCount = try await getAheadBehind(gitRepository, revSymmetricDifference("", branch.name))?.behind
+                // The branch's full ref, which the merge merges: git reads its
+                // short name as a tag of that name first.
+                commitCount = try await getAheadBehind(gitRepository, revSymmetricDifference("", branch.ref))?.behind
             } catch {
                 logger.error("Failed counting the commits to merge: \(error.localizedDescription, privacy: .public)")
                 commitCount = nil

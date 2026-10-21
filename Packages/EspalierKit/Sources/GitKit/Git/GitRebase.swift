@@ -417,8 +417,9 @@ private func configureOptionsForRebase(
 /// and it will probably have a different commit history.
 ///
 /// - Parameters:
-///   - baseBranch: the ref to start the rebase from
-///   - targetBranch: the ref to rebase onto `baseBranch`
+///   - baseBranch: the branch to rebase onto, by its full ref
+///   - targetBranch: the local branch to rebase onto `baseBranch`, by its
+///     name
 ///   - progressCallback: Called with the progress of the rebase, off the main
 ///     thread, one call at a time, all before this returns.
 public func rebase(
@@ -452,12 +453,18 @@ public func rebase(
         ))
     }
 
+    // The upstream is the base branch's full ref: by its short name, git
+    // would rebase onto a tag of that name. The branch to rebase stays its
+    // name (from its ref, as git keeps it), which git looks up as a branch
+    // (`refs/heads/<name>`) and checks out; git takes anything else, its
+    // full ref included, as a commit, and would rebase a detached HEAD,
+    // leaving the branch behind.
     let result = try await git(
         gitRebaseArguments() + [
             "rebase",
             "--",
-            baseBranch.name,
-            targetBranch.name,
+            baseBranch.ref,
+            branchNameFromRef(targetBranch),
         ],
         repository.path,
         "rebase",

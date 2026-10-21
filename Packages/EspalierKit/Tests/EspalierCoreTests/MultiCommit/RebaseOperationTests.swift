@@ -69,6 +69,31 @@ struct RebaseOperationTests {
         await fixture.app.idle()
     }
 
+    @Test("rebases onto the branch, not a tag of its name, and keeps the branch checked out beside a tag of its own name")
+    func ontoBranchOverTag() async throws {
+        let fixture = try await makeRepository()
+        let main = try fixture.branch("main")
+        // Tags `main` and `feature` at a commit of their own (adding
+        // other.txt), made after the last refresh: the branch list names a
+        // branch that shares a tag's name `heads/<name>`, so main keeps the
+        // name it was listed by.
+        try await runGit(["checkout", "-q", "--detach", "main~1"], fixture.local)
+        let other = try await commitFile(fixture.local, "other.txt", "other\n", message: "Other")
+        try await runGit(["checkout", "-q", "feature"], fixture.local)
+        try await runGit(["tag", "main", other], fixture.local)
+        try await runGit(["tag", "feature", other], fixture.local)
+
+        let result = try await fixture.model.operations.rebase(onto: main)
+
+        #expect(result == .rebased(targetBranch: "feature", baseBranch: "main"))
+        #expect(try await fixture.checkedOutBranch() == "feature")
+        #expect(try await fixture.sha("refs/heads/feature~1") == main.tip.sha)
+        #expect(try await fixture.summaries("refs/heads/main..refs/heads/feature") == ["Feature"])
+        #expect(try await fixture.sha("refs/tags/main") == other)
+        #expect(!FileManager.default.fileExists(atPath: POSIXPath.join(fixture.local.path, "other.txt")))
+        await fixture.app.idle()
+    }
+
     @Test("rebases onto a remote branch")
     func ontoRemoteBranch() async throws {
         let fixture = try await makeRepository()

@@ -269,8 +269,13 @@ extension RepositoryModel {
         let account = app?.accounts.account(for: record)
         context.hasAccountForRepository = account != nil
         context.applicationSettingsURL = account.flatMap(GitHubWebURLs.applicationSettings(for:))
-        if case .unborn = gitState.tip {
+        switch gitState.tip {
+        case .unborn:
             context.isUnbornBranch = true
+        case .detached:
+            context.isDetachedHead = true
+        case .unknown, .valid:
+            break
         }
         if (error as? GitError)?.result.gitError == .rebaseAlreadyInProgress {
             context.leftoverRebase = await getLeftoverRebase(record.gitRepository)

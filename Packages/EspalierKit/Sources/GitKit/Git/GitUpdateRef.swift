@@ -24,6 +24,29 @@ public func updateRef(
     )
 }
 
+/// Deletes `ref` only while it points at `expectedValue`, in one step: git
+/// compares and deletes it under the ref's lock (`git update-ref -d <ref>
+/// <expectedValue>`), so a ref that moves in between is never deleted. A
+/// symbolic ref is deleted itself, not the ref it points at (`--no-deref`),
+/// as `git branch -D` deletes a branch. Its reflog goes with it.
+///
+/// - Parameters:
+///   - repository: The repository in which the ref exists.
+///   - ref: The ref to delete, fully qualified (`refs/heads/NAME`).
+///   - expectedValue: The SHA the ref must still point at.
+/// - Returns: Whether the ref was deleted: false when it points at another
+///   commit, is gone, or is locked (git exits 1).
+@discardableResult
+public func deleteRef(_ repository: Repository, _ ref: String, ifAt expectedValue: String) async throws -> Bool {
+    let result = try await git(
+        ["update-ref", "--no-deref", "-d", ref, expectedValue],
+        repository.path,
+        "deleteRefIfAt",
+        options: GitExecutionOptions(successExitCodes: [0, 1])
+    )
+    return result.exitCode == 0
+}
+
 /// Remove a ref.
 ///
 /// - Parameters:

@@ -116,6 +116,32 @@ public func deleteLocalBranch(_ repository: Repository, _ branchName: String) as
     return true
 }
 
+/// A local branch's name as git keeps it: its ref without `refs/heads/`.
+/// `name` is the branch listing's short name, which is longer
+/// (`heads/<name>`) for a branch that shares its name with a tag. A branch
+/// whose ref isn't under `refs/heads/` keeps `name`.
+public func branchNameFromRef(_ branch: Branch) -> String {
+    let prefix = "refs/heads/"
+    guard JSCompat.startsWith(branch.ref, prefix) else {
+        return branch.name
+    }
+    return JSCompat.dropFirst(branch.ref, prefix.unicodeScalars.count)
+}
+
+/// Removes a branch's section of the repository's configuration
+/// (`branch.<name>.*`: its upstream, its description, and the rest), as
+/// `git branch -D` does after deleting the branch. A branch without one
+/// leaves nothing to remove, which isn't an error.
+public func removeBranchConfiguration(_ repository: Repository, _ branchName: String) async throws {
+    try await git(
+        ["config", "--remove-section", "branch.\(branchName)"],
+        repository.path,
+        "removeBranchConfiguration",
+        // 128: "fatal: no such section".
+        options: GitExecutionOptions(successExitCodes: [0, 128])
+    )
+}
+
 /// Deletes a remote branch
 ///
 /// - Parameters:
@@ -192,7 +218,9 @@ private enum MergedBranchField: Hashable, Sendable {
 ///
 /// - Parameters:
 ///   - repository: The repository in which to search
-///   - branchName: The to be used as the base branch
+///   - branchName: The branch to be used as the base: its full ref
+///     (`refs/heads/main`), since git reads a short name as a tag of that
+///     name first; it's left out of the result
 /// - Returns: map of branch canonical refs paired to its sha
 public func getMergedBranches(_ repository: Repository, _ branchName: String) async throws -> [String: String] {
     let canonicalBranchRef = formatAsLocalRef(branchName)

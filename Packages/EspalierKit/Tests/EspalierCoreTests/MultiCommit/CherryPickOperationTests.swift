@@ -223,6 +223,27 @@ struct CherryPickOperationTests {
         await fixture.app.idle()
     }
 
+    @Test("on a detached HEAD, where Espalier can't stash, changes refuse it without Stash Changes and Continue")
+    func localChangesOnDetachedHead() async throws {
+        let fixture = try await makeRepository()
+        try await runGit(["checkout", "-q", "--detach", "feature"], fixture.local)
+        try fixture.write("scratch.txt", "scratch\n")
+        await fixture.model.refresh(.full, reason: .user)
+        guard case .detached = fixture.model.gitState.tip else {
+            Issue.record("Expected a detached HEAD, got \(fixture.model.gitState.tip)")
+            return
+        }
+        let target = try fixture.branch("target")
+        let commit = try await fixture.oneLine("feature")
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.model.operations.cherryPick([commit], onto: target)
+        }
+        #expect(error?.reason == .localChangesOverwritten(files: ["scratch.txt"]))
+        #expect(error?.recoveries.isEmpty == true)
+        await fixture.app.idle()
+    }
+
     @Test("a cherry-pick to a new branch with changes offers the same, creating the branch on retry")
     func newBranchLocalChanges() async throws {
         let fixture = try await makeRepository()

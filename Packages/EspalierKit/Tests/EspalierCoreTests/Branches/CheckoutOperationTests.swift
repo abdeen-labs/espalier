@@ -237,6 +237,29 @@ struct CheckoutOperationTests {
         await app.idle()
     }
 
+    @Test("on a detached HEAD, where Espalier can't stash, local changes git would overwrite don't offer to stash")
+    func localChangesOverwrittenOnDetachedHead() async throws {
+        let (harness, app, repository, local) = try await makeRepository()
+        try await runGit(["checkout", "-q", "--detach", "HEAD"], local)
+        await repository.refresh(.full, reason: .user)
+        guard case .detached = repository.gitState.tip else {
+            Issue.record("Expected a detached HEAD, got \(repository.gitState.tip)")
+            return
+        }
+        // A change the model hasn't seen yet, so checking out runs.
+        try harness.write("README.md", mainReadme + "local\n", in: local)
+        let feature = try branch("feature", in: repository)
+
+        let error = await #expect(throws: OperationError.self) {
+            try await repository.branches.checkout(feature)
+        }
+        #expect(error?.reason == .localChangesOverwritten(files: ["README.md"]))
+        #expect(error?.recoveries.isEmpty == true)
+        await repository.idle()
+        #expect(try read("README.md", in: local) == mainReadme + "local\n")
+        await app.idle()
+    }
+
     @Test("an untracked file git would overwrite offers to stash and retry, which stashes the file and checks out")
     func untrackedFileOverwritten() async throws {
         let (harness, app, repository, local) = try await makeRepository()

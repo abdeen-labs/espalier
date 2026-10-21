@@ -57,9 +57,10 @@ public struct Confirmation: Sendable, Equatable {
         /// A branch name: the remote branch to delete, or the upstream a
         /// force push rewrites.
         case branch(String)
-        /// The local branch to delete, and whether its upstream exists on
-        /// the remote (the UI then offers to delete it there too).
-        case deleteBranch(name: String, existsOnRemote: Bool)
+        /// The local branch to delete, and the remote branch deleting it on
+        /// the remote too deletes (`origin/develop`), when its upstream
+        /// exists there (the UI then offers that option, naming it).
+        case deleteBranch(name: String, upstream: String?)
         /// A tag name.
         case tag(String)
         /// A worktree to delete.
@@ -320,15 +321,15 @@ extension Confirmation {
 
     /// Deleting a local branch.
     ///
-    /// - Parameter existsOnRemote: Whether the branch's upstream exists, so
-    ///   the UI offers "Delete it on the remote too".
-    public static func deleteBranch(_ name: String, existsOnRemote: Bool) -> Confirmation {
-        let remote = existsOnRemote
-            ? "\n\nThe branch also exists on the remote."
-            : ""
+    /// - Parameter upstream: The remote branch that deleting on the remote
+    ///   too deletes, as `<remote>/<branch>` (`origin/develop`, whatever the
+    ///   local branch's name), when the branch's upstream exists; the UI
+    ///   then offers "Delete origin/develop on the remote too".
+    public static func deleteBranch(_ name: String, upstream: String?) -> Confirmation {
+        let remote = upstream.map { "\n\nIt tracks \($0) on the remote." } ?? ""
         return Confirmation(
             kind: .deleteBranch,
-            details: .deleteBranch(name: name, existsOnRemote: existsOnRemote),
+            details: .deleteBranch(name: name, upstream: upstream),
             title: "Delete Branch?",
             message: "Delete the branch \(name)?\n\nThis can't be undone.\(remote)",
             confirmButton: "Delete"

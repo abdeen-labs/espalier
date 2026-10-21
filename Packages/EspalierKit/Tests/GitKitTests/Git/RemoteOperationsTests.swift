@@ -305,7 +305,7 @@ struct RemoteOperationsTests {
                     remote,
                     "master",
                     "published",
-                    ["refs/tags/v1.0"],
+                    ["v1.0"],
                     PushOptions(noVerify: true),
                     progressCallback: progress.callback(withProgress)
                 )

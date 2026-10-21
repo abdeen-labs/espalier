@@ -37,4 +37,17 @@ struct BranchNameValidationTests {
         let validation = BranchNameValidation.validate(value.proposed, branches: Self.branches(value), currentName: value.currentName)
         #expect(validation.isValid == value.isValid)
     }
+
+    // Git reads a short name as the tag before the branch.
+    @Test("New Branch refuses a tag's name", arguments: [
+        NamedCase("a tag's name", (proposed: "v1.0", isValid: false)),
+        NamedCase("a tag's name once sanitized", (proposed: "v1 0", isValid: false)),
+        NamedCase("another name", (proposed: "v1.1", isValid: true)),
+        NamedCase("a name inside a tag's", (proposed: "v1.0/fix", isValid: true)),
+    ])
+    func tags(_ testCase: NamedCase<(proposed: String, isValid: Bool)>) {
+        let branches = Self.branches((local: ["main"], remote: [], proposed: "", currentName: nil, isValid: true))
+        let validation = BranchNameValidation.validate(testCase.value.proposed, branches: branches, tags: ["v1.0", "v1-0"])
+        #expect(validation.isValid == testCase.value.isValid)
+    }
 }

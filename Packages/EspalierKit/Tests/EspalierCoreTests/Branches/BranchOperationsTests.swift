@@ -103,6 +103,37 @@ struct BranchOperationsTests {
         await fixture.app.idle()
     }
 
+    @Test("a branch from the default branch starts at the branch, not a tag of its name")
+    func fromDefaultBranchOverTag() async throws {
+        let fixture = try await makeRepository()
+        let main = try fixture.branch("main")
+        let featureTip = try fixture.branch("feature").tip.sha
+        // A tag `main` at feature's tip, made after the last refresh: the
+        // branch list names a branch that shares a tag's name `heads/main`,
+        // so the default branch keeps the name it was listed by.
+        try await runGit(["tag", "main", featureTip], fixture.local)
+
+        let topic = try await fixture.model.branches.createBranch("topic", from: .defaultBranch, checkout: false)
+        #expect(topic.tip.sha == main.tip.sha)
+        #expect(try await resolveRef("refs/heads/topic", in: fixture.local) == main.tip.sha)
+        await fixture.app.idle()
+    }
+
+    @Test("a tag's name is refused for a new branch")
+    func tagNameTaken() async throws {
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["tag", "v1.0"], local)
+        }
+        #expect(fixture.model.branches.branchNameError("v1.0") != nil)
+        #expect(fixture.model.branches.branchNameError("v1.1") == nil)
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.model.branches.createBranch("v1.0", startPoint: nil)
+        }
+        #expect(preconditionText(error) != nil)
+        #expect(try await localBranchNames(fixture) == ["main"])
+        await fixture.app.idle()
+    }
+
     @Test("a taken name is refused")
     func nameTaken() async throws {
         let fixture = try await makeRepository()
@@ -184,21 +215,74 @@ struct BranchOperationsTests {
 
     // MARK: Deleting
 
-    @Test("deleting asks first, saying whether the branch is on the remote")
+    @Test("deleting asks first, naming the remote branch when the branch is on the remote")
     func deleteConfirmation() async throws {
         let fixture = try await makeRepository()
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.branches.delete(try fixture.branch("feature"), includingRemote: false)
         }
-        #expect(error?.reason == .confirmationRequired(.deleteBranch("feature", existsOnRemote: false)))
+        #expect(error?.reason == .confirmationRequired(.deleteBranch("feature", upstream: nil)))
 
         try await runGit(["push", "-q", "-u", "origin", "feature"], fixture.local)
         await fixture.model.refresh(.full, reason: .user)
         let pushed = await #expect(throws: OperationError.self) {
             try await fixture.model.branches.delete(try fixture.branch("feature"), includingRemote: true)
         }
-        #expect(pushed?.reason == .confirmationRequired(.deleteBranch("feature", existsOnRemote: true)))
+        #expect(pushed?.reason == .confirmationRequired(.deleteBranch("feature", upstream: "origin/feature")))
         #expect(try await localBranchNames(fixture).contains("feature"))
+        await fixture.app.idle()
+    }
+
+    /// `main`, and `topic` (checked out) made from `origin/develop` and
+    /// tracking it. The remote has `main`, `develop`, and a `topic` of its
+    /// own that `topic` doesn't track.
+    private func makeRepositoryTrackingOtherName() async throws -> SelectedRepository {
+        try await makeSelectedRepository { local in
+            try await runGit(["checkout", "-q", "-b", "develop"], local)
+            try await commitFile(local, "develop.txt", "develop\n", message: "Develop")
+            try await runGit(["push", "-q", "origin", "develop", "develop:topic"], local)
+            try await runGit(["checkout", "-q", "main"], local)
+            try await runGit(["branch", "-q", "-D", "develop"], local)
+            try await runGit(["fetch", "-q", "origin"], local)
+            try await runGit(["checkout", "-q", "-b", "topic", "--track", "origin/develop"], local)
+        }
+    }
+
+    @Test("a branch tracking a remote branch of another name names that one in the confirmation")
+    func deleteConfirmationNamesUpstream() async throws {
+        let fixture = try await makeRepositoryTrackingOtherName()
+        let topic = try fixture.branch("topic")
+        #expect(topic.upstream == "origin/develop")
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.model.branches.delete(topic, includingRemote: true)
+        }
+        guard case .confirmationRequired(let confirmation)? = error?.reason else {
+            Issue.record("Deleting didn't ask first")
+            return
+        }
+        #expect(confirmation.details == .deleteBranch(name: "topic", upstream: "origin/develop"))
+        #expect(try await localBranchNames(fixture).contains("topic"))
+        #expect(try await remoteHasBranch(fixture, "develop"))
+        await fixture.app.idle()
+    }
+
+    @Test("deleting with its upstream deletes the remote branch the confirmation named and nothing else")
+    func deletesUpstreamOfOtherName() async throws {
+        let fixture = try await makeRepositoryTrackingOtherName()
+        let remoteBefore = try await runGit(["for-each-ref", "--format=%(refname) %(objectname)"], fixture.remote)
+            .split(separator: "\n").map(String.init)
+
+        try await fixture.model.branches.delete(try fixture.branch("topic"), includingRemote: true, confirmed: [.deleteBranch])
+
+        let remoteAfter = try await runGit(["for-each-ref", "--format=%(refname) %(objectname)"], fixture.remote)
+            .split(separator: "\n").map(String.init)
+        #expect(remoteAfter == remoteBefore.filter { !$0.hasPrefix("refs/heads/develop ") })
+        #expect(!(try await remoteHasBranch(fixture, "develop")))
+        #expect(try await remoteHasBranch(fixture, "topic"))
+        #expect(try await remoteHasBranch(fixture, "main"))
+        #expect(try await localBranchNames(fixture) == ["main"])
+        #expect(fixture.model.gitState.tip.branch?.name == "main")
         await fixture.app.idle()
     }
 

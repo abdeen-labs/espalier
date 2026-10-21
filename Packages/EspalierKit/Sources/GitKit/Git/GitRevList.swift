@@ -99,7 +99,9 @@ public func getBranchAheadBehind(_ repository: Repository, _ branch: Branch) asy
     // NB: The three dot form means we'll go all the way back to the merge base
     // of the branch and its upstream. Practically this is important for seeing
     // "through" merges.
-    let range = revSymmetricDifference(branch.name, upstream)
+    // The branch's full ref: git reads its short name as a tag of that name
+    // first.
+    let range = revSymmetricDifference(branch.ref, upstream)
     return try await getAheadBehind(repository, range)
 }
 

@@ -130,13 +130,17 @@ extension BranchesModel {
     }
 
     /// Why `name` can't be a new branch's name (any branch, local or remote,
-    /// has it), or nil.
+    /// or a tag has it: git reads a short name as the tag before the branch),
+    /// or nil.
     public func branchNameError(_ name: String) -> String? {
-        guard let branches = repository?.gitState.branches.all else {
+        guard let state = repository?.gitState else {
             return nil
         }
-        if branches.contains(where: { JSCompat.strictEquals($0.name, name) }) {
+        if state.branches.all.contains(where: { JSCompat.strictEquals($0.name, name) }) {
             return "A branch named \(name) already exists."
+        }
+        if let tags = state.tags, tags.keys.contains(where: { JSCompat.strictEquals($0, name) }) {
+            return "A tag named \(name) already exists."
         }
         return nil
     }
@@ -197,7 +201,8 @@ extension BranchesModel {
     /// - Parameter noTrack: Pass `--no-track`, for a branch made from the
     ///   upstream default branch of a fork.
     /// - Returns: The new branch, after the repository's refresh.
-    /// - Throws: `.precondition("A branch named <name> already exists.")`;
+    /// - Throws: `.precondition("A branch named <name> already exists.")`,
+    ///   or "A tag named <name> already exists.";
     ///   `.precondition("Finish or abort the merge first.")` (naming the
     ///   operation) when it would check out; git's errors; the checkout's
     ///   errors.
@@ -265,10 +270,12 @@ extension BranchesModel {
                     repositoryID: repository?.id
                 )
             }
-            // Tracking a remote branch would push the new branch to it.
+            // Tracking a remote branch would push the new branch to it. The
+            // full ref, since git reads a short name as a tag of that name
+            // first.
             return try await createBranch(
                 name,
-                startPoint: base.name,
+                startPoint: base.ref,
                 noTrack: base.type == .remote,
                 checkout: checkout
             )
@@ -345,8 +352,8 @@ extension BranchesModel {
     /// - A local branch is deleted with `git branch -D`, and with
     ///   `includingRemote` its upstream too. Deleting the checked-out branch
     ///   first checks out the default branch, else the most recent other
-    ///   branch. Asks first: `.deleteBranch`, saying whether the branch
-    ///   exists on the remote.
+    ///   branch. Asks first: `.deleteBranch`, naming the remote branch its
+    ///   upstream is (`origin/develop`) when that exists on its remote.
     ///
     /// On a detached HEAD nothing is checked out first (no branch is checked
     /// out, so nothing needs switching away from); deleting the checked-out
@@ -405,10 +412,17 @@ extension BranchesModel {
         }
 
         if !confirmed.contains(.deleteBranch) {
-            // The confirmation offers deleting the upstream when it exists.
-            let existsOnRemote = await aheadBehind(of: branch) != nil
+            // The confirmation offers deleting the upstream when it exists,
+            // naming the remote branch `deleteBranchPrimitive` deletes, which
+            // can have another name than the local branch.
+            var upstream: String?
+            if await aheadBehind(of: branch) != nil,
+               let remoteName = branch.upstreamRemoteName,
+               let upstreamWithoutRemote = branch.upstreamWithoutRemote {
+                upstream = "\(remoteName)/\(upstreamWithoutRemote)"
+            }
             throw OperationError(
-                .confirmationRequired(.deleteBranch(branch.name, existsOnRemote: existsOnRemote)),
+                .confirmationRequired(.deleteBranch(branch.name, upstream: upstream)),
                 operation: .deleteBranch,
                 repositoryID: repository.id
             )

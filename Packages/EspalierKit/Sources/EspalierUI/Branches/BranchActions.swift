@@ -251,13 +251,14 @@ enum BranchActions {
     }
 
     /// The `startPoint` and `noTrack` arguments for a sheet's choice: the
-    /// (upstream) default branch's name, untracked when it's a remote
-    /// branch; HEAD otherwise.
+    /// (upstream) default branch's full ref (git reads a short name as a tag
+    /// of that name first), untracked when it's a remote branch; HEAD
+    /// otherwise.
     static func startPointArguments(_ startPoint: StartPoint, in repository: RepositoryModel) -> (startPoint: String?, noTrack: Bool) {
         guard let base = repository.branches.branch(for: startPoint) else {
             return (nil, false)
         }
-        return (base.name, base.type == .remote)
+        return (base.ref, base.type == .remote)
     }
 
     // MARK: Merge, squash and merge, rebase, update

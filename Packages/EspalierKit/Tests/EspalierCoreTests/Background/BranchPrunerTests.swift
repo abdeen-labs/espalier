@@ -331,19 +331,46 @@ struct BranchPrunerTests {
         await fixture.app.idle()
     }
 
-    @Test("keeps a branch that moved since it was found merged")
+    /// Whether the repository's configuration has a `branch.<name>` section
+    /// with anything in it. `name` has no characters a regular expression
+    /// reads specially.
+    private func hasBranchConfiguration(_ name: String, in repository: Repository) async throws -> Bool {
+        try await runGitAllowingFailure(["config", "--get-regexp", "^branch\\.\(name)\\."], repository) == 0
+    }
+
+    @Test("keeps a branch that moved since it was found merged, and its configuration")
     func movedBranch() async throws {
         let path = try setupFixtureRepository("branch-prune-tests")
         let fixture = try await setupRepository(path, includesGhRepo: true)
         let master = try #require(try await resolveRef("refs/heads/master", in: fixture.repository))
 
+        // Found merged at master's commit; it's at another since.
         let moved = PrunedBranch(name: "deleted-branch-1", sha: master, date: Date())
         #expect(await fixture.pruner.deleteIfUnchanged(moved, in: fixture.repository) == false)
         #expect(try await resolveRef("refs/heads/deleted-branch-1", in: fixture.repository) == deletedBranchSHA)
+        #expect(try await hasBranchConfiguration("deleted-branch-1", in: fixture.repository))
+        await fixture.app.idle()
+    }
+
+    @Test("deletes an unchanged branch with its configuration, leaving the other branches' alone")
+    func unchangedBranch() async throws {
+        let path = try setupFixtureRepository("branch-prune-tests")
+        let fixture = try await setupRepository(path, includesGhRepo: true)
+        try await runGit(["config", "branch.deleted-branch-1.description", "Old work"], fixture.repository)
+        #expect(try await hasBranchConfiguration("deleted-branch-1", in: fixture.repository))
 
         let unchanged = PrunedBranch(name: "deleted-branch-1", sha: deletedBranchSHA, date: Date())
         #expect(await fixture.pruner.deleteIfUnchanged(unchanged, in: fixture.repository))
         #expect(try await resolveRef("refs/heads/deleted-branch-1", in: fixture.repository) == nil)
+        #expect(!(try await hasBranchConfiguration("deleted-branch-1", in: fixture.repository)))
+        #expect(try await hasBranchConfiguration("not-deleted-branch-1", in: fixture.repository))
+        #expect(try await hasBranchConfiguration("master", in: fixture.repository))
+
+        // A branch without a configuration section is deleted all the same.
+        try await runGit(["branch", "unconfigured", deletedBranchSHA], fixture.repository)
+        let unconfigured = PrunedBranch(name: "unconfigured", sha: deletedBranchSHA, date: Date())
+        #expect(await fixture.pruner.deleteIfUnchanged(unconfigured, in: fixture.repository))
+        #expect(try await resolveRef("refs/heads/unconfigured", in: fixture.repository) == nil)
         await fixture.app.idle()
     }
 

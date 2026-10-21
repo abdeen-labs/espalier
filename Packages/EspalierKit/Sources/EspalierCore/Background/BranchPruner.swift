@@ -23,8 +23,9 @@ private let logger = Log.logger(category: "branch-pruner")
 /// longer exists (a branch tracking a local branch is never pruned for its
 /// upstream); never a branch a rebase in progress in any worktree is rebasing
 /// (HEAD is detached then, so it isn't the current branch), stopped or
-/// interrupted. Each deletion (`git branch -D`) is logged and recorded in
-/// `sync.prunedBranches` with its SHA, so it can be restored.
+/// interrupted. Each deletion (`git update-ref -d` with the SHA it was found
+/// merged at, then its `branch.<name>` configuration) is logged and recorded
+/// in `sync.prunedBranches` with its SHA, so it can be restored.
 ///
 /// Stopping ends the loop even during the first prune; the dry run leaves
 /// the last prune date alone; a branch whose tip moved since it was found
@@ -193,7 +194,10 @@ final class BranchPruner: SelectionScopedService {
         }
 
         do {
-            var mergedBranches = try await getMergedBranches(gitRepository, defaultBranch.name)
+            // By the default branch's full ref: git reads its short name as a
+            // tag of that name first, and the branches merged into the tag
+            // aren't necessarily merged into the branch.
+            var mergedBranches = try await getMergedBranches(gitRepository, defaultBranch.ref)
 
             // remove the current branch
             if let currentBranchCanonicalRef = try await getSymbolicRef(gitRepository, "HEAD") {
@@ -254,27 +258,29 @@ final class BranchPruner: SelectionScopedService {
         }
     }
 
-    /// Deletes `branch` (`git branch -D`) if it still points at the commit it
-    /// was found merged at; a branch that moved since then may hold new work.
+    /// Deletes `branch` if it still points at the commit it was found merged
+    /// at, comparing and deleting in one step (`git update-ref -d` with that
+    /// commit), so a branch that moved since then, which may hold new work,
+    /// is kept even when it moves while the pruner runs. A deleted branch's
+    /// configuration (`branch.<name>.*`) goes too, as with `git branch -D`;
+    /// failing to remove it is only logged, since the branch is gone.
     func deleteIfUnchanged(_ branch: PrunedBranch, in repository: Repository) async -> Bool {
         do {
-            let tip = try await git(
-                ["rev-parse", "--verify", "--quiet", "--end-of-options", "refs/heads/\(branch.name)"],
-                repository.path,
-                "branchPrunerTip",
-                options: GitExecutionOptions(successExitCodes: [0, 1])
-            )
-            guard tip.exitCode == 0, JSCompat.strictEquals(JSCompat.trim(tip.stdout), branch.sha) else {
+            guard try await deleteRef(repository, "refs/heads/\(branch.name)", ifAt: branch.sha) else {
                 logger.info("[BranchPruner] Kept branch \(branch.name, privacy: .private), which moved")
                 return false
             }
-            try await deleteLocalBranch(repository, branch.name)
-            logger.info("[BranchPruner] Pruned branch \(branch.name, privacy: .private) ((was \(branch.sha, privacy: .public)))")
-            return true
         } catch {
             SyncModel.logFailure("[BranchPruner] Deleting \(branch.name) failed", error)
             return false
         }
+        do {
+            try await removeBranchConfiguration(repository, branch.name)
+        } catch {
+            SyncModel.logFailure("[BranchPruner] Removing the configuration of \(branch.name) failed", error)
+        }
+        logger.info("[BranchPruner] Pruned branch \(branch.name, privacy: .private) ((was \(branch.sha, privacy: .public)))")
+        return true
     }
 
     /// Records the last prune date in the repository's GitHub row.

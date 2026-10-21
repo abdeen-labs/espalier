@@ -290,12 +290,12 @@ extension RepositoryGitHubModel {
         // No such luck, let's see if we can at least find the remote branch
         // then. It's quite possible that the PR was created after our last
         // fetch of the remote so let's fetch it and then try again.
-        var existingBranch = findRemoteBranch()
-        if existingBranch == nil {
+        var foundBranch = findRemoteBranch()
+        if foundBranch == nil {
             try await repository.sync.fetchRemote(remote)
-            existingBranch = findRemoteBranch()
+            foundBranch = findRemoteBranch()
         }
-        guard existingBranch != nil else {
+        guard let existingBranch = foundBranch else {
             throw notFound(headRefName, remote: remote.name, repository)
         }
 
@@ -306,15 +306,17 @@ extension RepositoryGitHubModel {
         let remotesState = repository.gitState.remotes
         let isForkRemote = remote.name != remotesState.defaultRemote?.name && remote.name != remotesState.upstreamRemote?.name
         if isForkRemote {
+            // From the remote branch's full ref: git reads its short name as
+            // a tag, or a local branch, of that name first.
             return try await repository.branches.createBranch(
                 "pr/\(number)",
-                startPoint: remoteRef,
+                startPoint: existingBranch.ref,
                 noTrack: false,
                 checkout: false
             )
         }
 
-        return existingBranch!
+        return existingBranch
     }
 
     private func notFound(_ headRefName: String, remote: String?, _ repository: RepositoryModel) -> OperationError {

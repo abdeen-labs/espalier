@@ -112,6 +112,76 @@ struct MergeOperationTests {
         await fixture.app.idle()
     }
 
+    /// Another ref that git reads a branch's short name as, before the
+    /// branch.
+    enum SameNamedRef: Sendable {
+        /// A tag `feature`, beside the local branch `feature`.
+        case tag
+        /// A local branch `origin/feature`, beside the remote branch
+        /// `origin/feature`.
+        case localBranch
+    }
+
+    /// The repository of `makeRepository(conflicting: false)`, `feature`
+    /// pushed, then a ref of `ref`'s kind, at a commit of its own (adding
+    /// other.txt), made after the last refresh: the branch list names a
+    /// branch that shares its name with another ref by a longer name
+    /// (`heads/feature`), so the branch keeps the short name it was listed
+    /// by before the ref appeared, as after a fetch brought the tag in.
+    /// Returns the branch to merge.
+    private func makeRepository(sameNamedRef ref: SameNamedRef) async throws -> (SelectedRepository, Branch) {
+        let fixture = try await makeRepository(conflicting: false)
+        try await runGit(["push", "-q", "origin", "feature"], fixture.local)
+        try await runGit(["fetch", "-q", "origin"], fixture.local)
+        await fixture.model.refresh(.full, reason: .user)
+        let branch = try fixture.branch(ref == .tag ? "feature" : "origin/feature")
+
+        try await runGit(["checkout", "-q", "--detach", "main~1"], fixture.local)
+        let other = try await commitFile(fixture.local, "other.txt", "other\n", message: "Other")
+        try await runGit(["checkout", "-q", "main"], fixture.local)
+        switch ref {
+        case .tag: try await runGit(["tag", "feature", other], fixture.local)
+        case .localBranch: try await runGit(["branch", "origin/feature", other], fixture.local)
+        }
+        return (fixture, branch)
+    }
+
+    @Test("merges the branch, not another ref of its name, with git's message for its name", arguments: [
+        NamedCase("a tag of the branch's name", (ref: SameNamedRef.tag, message: "Merge branch 'feature'")),
+        NamedCase(
+            "a local branch of the remote branch's name",
+            (ref: SameNamedRef.localBranch, message: "Merge remote-tracking branch 'origin/feature'")
+        ),
+    ])
+    func mergesBranchOverSameNamedRef(_ testCase: NamedCase<(ref: SameNamedRef, message: String)>) async throws {
+        let (fixture, branch) = try await makeRepository(sameNamedRef: testCase.value.ref)
+        let main = try await fixture.head()
+
+        let outcome = try await fixture.model.operations.merge(branch)
+
+        #expect(outcome == .merged(ours: "main", theirs: branch.name))
+        #expect(try await headParents(fixture) == [main, branch.tip.sha])
+        #expect(try await headMessage(fixture) == testCase.value.message + "\n")
+        #expect(try fixture.read("feature.txt") == "feature\n")
+        #expect(!FileManager.default.fileExists(atPath: POSIXPath.join(fixture.local.path, "other.txt")))
+        await fixture.app.idle()
+    }
+
+    @Test("a squash merge squashes the branch, not a tag of its name")
+    func squashMergesBranchOverTag() async throws {
+        let (fixture, branch) = try await makeRepository(sameNamedRef: .tag)
+        let main = try await fixture.head()
+
+        let outcome = try await fixture.model.operations.merge(branch, squash: true)
+
+        #expect(outcome == .merged(ours: "main", theirs: "feature"))
+        #expect(try await headParents(fixture) == [main])
+        #expect(try await headSubject(fixture) == "Squashed commit of the following:")
+        #expect(try fixture.read("feature.txt") == "feature\n")
+        #expect(!FileManager.default.fileExists(atPath: POSIXPath.join(fixture.local.path, "other.txt")))
+        await fixture.app.idle()
+    }
+
     @Test("merging needs a branch checked out")
     func detached() async throws {
         let fixture = try await makeRepository(conflicting: false)
