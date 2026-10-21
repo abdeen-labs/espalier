@@ -115,7 +115,7 @@ struct WindowPresenterTests {
         #expect(intent.calls.last?.moveToTrash == true)
         #expect(intent.calls.last?.includeRemoteBranch == false)
 
-        let delete = ScriptedIntent([required(.deleteBranch("feature", upstream: "origin/feature"))])
+        let delete = ScriptedIntent([required(.deleteBranch("feature", existsOnRemote: true))])
         let deleteTask = Task { await presenter.perform { answers throws(OperationError) in try delete.run(answers) } }
         presenter.respond(to: await confirmation(of: presenter).id, with: ConfirmationResponse(isConfirmed: true, isOptionSelected: true))
         #expect(await deleteTask.value == "done")
@@ -422,8 +422,8 @@ struct WindowPresenterTests {
 
     @Test("Delete Branch and Remove Repository are compact sheets with their option as the checkbox")
     func compactSheets() throws {
-        guard case .compactSheet(let local) = EspalierCore.Confirmation.deleteBranch("x", upstream: nil).presentation(defaultNumberFormat),
-              case .compactSheet(let remote) = EspalierCore.Confirmation.deleteBranch("x", upstream: "origin/y").presentation(defaultNumberFormat),
+        guard case .compactSheet(let local) = EspalierCore.Confirmation.deleteBranch("x", existsOnRemote: false).presentation(defaultNumberFormat),
+              case .compactSheet(let remote) = EspalierCore.Confirmation.deleteBranch("x", existsOnRemote: true).presentation(defaultNumberFormat),
               case .compactSheet(let repository) = EspalierCore.Confirmation.removeRepository(name: "espalier", path: "/Users/joe/Developer/espalier").presentation(defaultNumberFormat) else {
             Issue.record("Delete Branch or Remove Repository isn't a compact sheet")
             return

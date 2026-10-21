@@ -15,7 +15,7 @@ import Testing
 
 @Suite("Presentation", .captures) @MainActor
 struct PresentationCaptures {
-    @Test("the compact confirmation sheets", arguments: ["removeRepository", "deleteBranch-remote", "deleteBranch-otherUpstream"])
+    @Test("the compact confirmation sheets", arguments: ["removeRepository", "deleteBranch-remote"])
     func confirmation(name: String) throws {
         let confirmation = try #require(UIFixtures.confirmations.first { $0.name == name }?.confirmation)
         guard case .compactSheet(let compact) = confirmation.presentation(Capture.numberFormat) else {

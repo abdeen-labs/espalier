@@ -57,10 +57,9 @@ public struct Confirmation: Sendable, Equatable {
         /// A branch name: the remote branch to delete, or the upstream a
         /// force push rewrites.
         case branch(String)
-        /// The local branch to delete, and its upstream (`origin/develop`)
-        /// when that exists on the remote (the UI then offers to delete it
-        /// too, naming it).
-        case deleteBranch(name: String, upstream: String?)
+        /// The local branch to delete, and whether its upstream exists on
+        /// the remote (the UI then offers to delete it there too).
+        case deleteBranch(name: String, existsOnRemote: Bool)
         /// A tag name.
         case tag(String)
         /// A worktree to delete.
@@ -321,15 +320,17 @@ extension Confirmation {
 
     /// Deleting a local branch.
     ///
-    /// - Parameter upstream: The branch's upstream, as `<remote>/<branch>`
-    ///   (`origin/develop`, whatever the local branch's name), when it exists
-    ///   on the remote; the UI then offers "Also delete origin/develop".
-    public static func deleteBranch(_ name: String, upstream: String?) -> Confirmation {
-        Confirmation(
+    /// - Parameter existsOnRemote: Whether the branch's upstream exists, so
+    ///   the UI offers "Delete it on the remote too".
+    public static func deleteBranch(_ name: String, existsOnRemote: Bool) -> Confirmation {
+        let remote = existsOnRemote
+            ? "\n\nThe branch also exists on the remote."
+            : ""
+        return Confirmation(
             kind: .deleteBranch,
-            details: .deleteBranch(name: name, upstream: upstream),
+            details: .deleteBranch(name: name, existsOnRemote: existsOnRemote),
             title: "Delete Branch?",
-            message: "Delete the branch \(name)?\n\nThis can't be undone.",
+            message: "Delete the branch \(name)?\n\nThis can't be undone.\(remote)",
             confirmButton: "Delete"
         )
     }

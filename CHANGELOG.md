@@ -24,7 +24,6 @@ install the update.
 
 - A link that checks out a branch or pull request in a repository you already have asks first, naming the branch, the pull request, and any remote it adds for a fork.
 - Initialize Git LFS asks before replacing hooks the repository already has, and moves the old hooks to the Trash.
-- Delete Branch names the remote branch it can also delete, which can have another name than the local branch.
 - A new branch can't take an existing tag's name, and a new tag can't take a branch's.
 
 ### Fixed

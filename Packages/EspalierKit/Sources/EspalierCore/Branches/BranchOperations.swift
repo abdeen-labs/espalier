@@ -352,8 +352,8 @@ extension BranchesModel {
     /// - A local branch is deleted with `git branch -D`, and with
     ///   `includingRemote` its upstream too. Deleting the checked-out branch
     ///   first checks out the default branch, else the most recent other
-    ///   branch. Asks first: `.deleteBranch`, naming the remote branch its
-    ///   upstream is (`origin/develop`) when that exists on its remote.
+    ///   branch. Asks first: `.deleteBranch`, saying whether the branch
+    ///   exists on the remote.
     ///
     /// On a detached HEAD nothing is checked out first (no branch is checked
     /// out, so nothing needs switching away from); deleting the checked-out
@@ -412,17 +412,10 @@ extension BranchesModel {
         }
 
         if !confirmed.contains(.deleteBranch) {
-            // The confirmation offers deleting the upstream when it exists,
-            // naming the remote branch `deleteBranchPrimitive` deletes, which
-            // can have another name than the local branch.
-            var upstream: String?
-            if await aheadBehind(of: branch) != nil,
-               let remoteName = branch.upstreamRemoteName,
-               let upstreamWithoutRemote = branch.upstreamWithoutRemote {
-                upstream = "\(remoteName)/\(upstreamWithoutRemote)"
-            }
+            // The confirmation offers deleting the upstream when it exists.
+            let existsOnRemote = await aheadBehind(of: branch) != nil
             throw OperationError(
-                .confirmationRequired(.deleteBranch(branch.name, upstream: upstream)),
+                .confirmationRequired(.deleteBranch(branch.name, existsOnRemote: existsOnRemote)),
                 operation: .deleteBranch,
                 repositoryID: repository.id
             )
