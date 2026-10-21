@@ -967,7 +967,7 @@ public struct API: Sendable {
 
     /// Make an authenticated request to the client's endpoint with its token.
     /// Used for GitHub API requests.
-    private func ghRequest(
+    func ghRequest(
         _ method: HTTPMethod,
         _ path: String,
         body: JSONValue? = nil,

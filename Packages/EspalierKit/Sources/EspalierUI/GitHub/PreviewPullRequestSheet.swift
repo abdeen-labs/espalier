@@ -5,8 +5,9 @@
 // the lines added and removed, the files beside the selected file's diff
 // from the merge base (with the pull request diff's own Hide Whitespace
 // setting), whether it merges cleanly, and Create Pull Request (or View Pull
-// Request when the branch has one), which opens GitHub's form. With no base
-// branch, or nothing to merge, a message says so.
+// Request when the branch has one), which opens the Create Pull Request
+// sheet with the base chosen here. With no base branch, or nothing to merge,
+// a message says so.
 
 import EspalierCore
 import GitHubKit

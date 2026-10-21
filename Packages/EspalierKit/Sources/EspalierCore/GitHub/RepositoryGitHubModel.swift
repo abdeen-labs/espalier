@@ -171,15 +171,6 @@ public final class RepositoryGitHubModel: RepositoryFeature {
         return store.model(for: apiPullRequest, endpoint: gitHubRepository.endpoint)
     }
 
-    /// The URL that opens GitHub's form for a pull request from `head` into
-    /// `base` (the default branch when nil): fork-aware.
-    public func createPullRequestURL(head: Branch, base: Branch?) -> URL? {
-        guard let record = repository?.record else {
-            return nil
-        }
-        return GitHubWebURLs.createPullRequest(for: record, compare: head, base: base)
-    }
-
     /// The current branch's pull request on GitHub ("View Pull Request on
     /// GitHub").
     public var currentPullRequestURL: URL? {

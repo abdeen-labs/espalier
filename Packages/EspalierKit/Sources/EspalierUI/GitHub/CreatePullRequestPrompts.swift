@@ -1,8 +1,10 @@
 // Create Pull Request's questions, as alerts: an unpublished branch asks
 // "Publish Branch?" [Cancel] [Publish Branch]; unpushed commits ask "Push
 // Local Changes?" [Cancel] [Create Without Pushing] [Push Commits]. Then
-// `createPullRequest(base:choice:)` opens GitHub's form in the browser
-// (fork-aware); a repository without a remote is published first.
+// `prepareToCreatePullRequest(base:choice:)` is ready and the Create Pull
+// Request sheet opens for the branch; without an account for the
+// repository's server, GitHub's form opens in the browser instead
+// (fork-aware). A repository without a remote is published first.
 
 import EspalierCore
 import GitHubKit
@@ -31,9 +33,9 @@ enum CreatePullRequestPrompts {
         }
     }
 
-    /// Opens GitHub's form for a pull request from the current branch into
-    /// `base` (the default branch when nil), asking first when the branch
-    /// must be published or has commits to push.
+    /// Opens the Create Pull Request sheet for a pull request from the
+    /// current branch into `base` (the default branch when nil), asking
+    /// first when the branch must be published or has commits to push.
     static func run(base: Branch? = nil, in context: WindowContext) async {
         guard let repository = context.repository else {
             return
@@ -42,7 +44,7 @@ enum CreatePullRequestPrompts {
         while true {
             let answered = choice
             let outcome = await context.presenter.perform { _ throws(OperationError) in
-                try await repository.gitHub.createPullRequest(base: base, choice: answered)
+                try await repository.gitHub.prepareToCreatePullRequest(base: base, choice: answered)
             }
             switch outcome {
             case .choiceRequired(let step)?:
@@ -57,7 +59,10 @@ enum CreatePullRequestPrompts {
             case .publishRepositoryRequired?:
                 context.actions.perform(.publishRepository)
                 return
-            case .opened?, nil:
+            case .ready(let head)?:
+                CreatePullRequestSheet.present(head: head, base: base, repository: repository, in: context)
+                return
+            case .openedInBrowser?, nil:
                 return
             }
         }

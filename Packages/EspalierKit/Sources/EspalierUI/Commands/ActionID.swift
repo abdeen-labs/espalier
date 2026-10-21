@@ -125,7 +125,7 @@ nonisolated public enum ActionID: Sendable {
     case compareOnGitHub
     case viewBranchOnGitHub(name: String?)
     case previewPullRequest
-    /// "Create Pull Request", or "View Pull Request on GitHub" when the
+    /// "Create Pull Request…", or "View Pull Request on GitHub" when the
     /// branch has one.
     case createPullRequest
     case checkoutBranch(name: String)
@@ -420,7 +420,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .compareOnGitHub: "Compare on GitHub"
         case .viewBranchOnGitHub: "View Branch on GitHub"
         case .previewPullRequest: "Preview Pull Request…"
-        case .createPullRequest: "Create Pull Request"
+        case .createPullRequest: "Create Pull Request…"
         case .checkoutBranch: "Check Out"
         case .copyBranchName: "Copy Branch Name"
         case .restorePrunedBranch: "Restore Pruned Branch"

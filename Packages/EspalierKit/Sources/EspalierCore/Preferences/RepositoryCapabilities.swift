@@ -157,7 +157,7 @@ public struct RepositoryCapabilities: Sendable, Equatable {
     /// Whether the stash shows, so the toggle hides it.
     public let isShowingStashedChanges: Bool
     /// "View Pull Request on GitHub" when the branch has a pull request,
-    /// else "Create Pull Request".
+    /// else "Create Pull Request…".
     public let createPullRequestTitle: String
     /// Whether the current branch has a pull request, so the command views
     /// it.
@@ -415,7 +415,7 @@ extension RepositoryCapabilities {
         isShowingStashedChanges = repositoryState?.isShowingStash ?? false
         toggleStashedChangesTitle = isShowingStashedChanges ? "Hide Stashed Changes" : "Show Stashed Changes"
         hasCurrentPullRequest = repositoryState?.hasCurrentPullRequest ?? false
-        createPullRequestTitle = hasCurrentPullRequest ? "View Pull Request on GitHub" : "Create Pull Request"
+        createPullRequestTitle = hasCurrentPullRequest ? "View Pull Request on GitHub" : "Create Pull Request…"
     }
 }
 

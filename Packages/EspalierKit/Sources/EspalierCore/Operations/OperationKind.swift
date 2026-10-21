@@ -56,8 +56,9 @@ public enum OperationKind: String, Sendable, Hashable, CaseIterable {
     /// Checking out a pull request: finding its branch, adding its fork's
     /// remote. The checkout itself is `checkoutBranch`.
     case checkoutPullRequest
-    /// Opening GitHub's form for a pull request, after publishing or
-    /// pushing the branch (the push is `push` or `publishBranch`).
+    /// Creating a pull request, in the app or on GitHub's form, after
+    /// publishing or pushing the branch (the push is `push` or
+    /// `publishBranch`).
     case createPullRequest
 
     // Read-only loads whose failures are shown: the changes diff, and a

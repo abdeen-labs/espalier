@@ -139,7 +139,7 @@ enum GitHubActions {
             }
         }
 
-        // "Create Pull Request", or "View Pull Request on GitHub" when the
+        // "Create Pull Request…", or "View Pull Request on GitHub" when the
         // branch has one.
         actions.register(.createPullRequest) { [weak context] _ in
             guard let context, let repository = context.repository else {

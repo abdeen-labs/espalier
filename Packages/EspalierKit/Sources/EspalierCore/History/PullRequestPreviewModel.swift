@@ -248,15 +248,6 @@ public final class PullRequestPreviewModel {
         return repository.gitState.branches.all.filter { isOnRemote($0, remote) }
     }
 
-    /// The recent branches among `baseBranchCandidates`.
-    public var recentBaseBranchCandidates: [Branch] {
-        guard let repository else {
-            return []
-        }
-        let remote = pullRequestRemoteName(repository)
-        return repository.gitState.branches.recent.filter { isOnRemote($0, remote) }
-    }
-
     /// The newest commit, when it has been pushed: files can be viewed on
     /// GitHub at it.
     public var nonLocalCommitSHA: String? {
