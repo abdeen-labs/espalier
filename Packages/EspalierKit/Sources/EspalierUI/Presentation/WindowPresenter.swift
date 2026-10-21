@@ -18,7 +18,7 @@ nonisolated public struct IntentAnswers: Sendable, Equatable {
     public var strategy: UncommittedChangesStrategy?
     /// "Also move the folder to the Trash" (`removeRepository`).
     public var moveToTrash = false
-    /// "Delete it on the remote too" (`deleteBranch`).
+    /// "Delete the remote branch" (`deleteBranch`).
     public var includeRemoteBranch = false
     /// The decision's answer about the hooks in Git LFS's way
     /// (`replaceLFSHooks`).
@@ -44,7 +44,7 @@ nonisolated public struct ConfirmationResponse: Sendable, Equatable {
     /// "Do not show this message again" was on.
     public var suppressesFutureConfirmations: Bool
     /// The compact sheets' checkbox: "Also move the folder to the Trash",
-    /// or "Delete it on the remote too".
+    /// or "Delete the remote branch".
     public var isOptionSelected: Bool
 
     public init(isConfirmed: Bool, suppressesFutureConfirmations: Bool = false, isOptionSelected: Bool = false) {

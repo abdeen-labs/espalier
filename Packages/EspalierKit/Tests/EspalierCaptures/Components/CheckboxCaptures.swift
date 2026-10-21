@@ -45,7 +45,7 @@ struct CheckboxCaptures {
         let view = VStack(alignment: .leading, spacing: Metrics.insetMedium) {
             Toggle("Initialize this repository with a README", isOn: .constant(false))
             Toggle("Keep this code private", isOn: .constant(true))
-            Toggle("Delete it on the remote too", isOn: .constant(true))
+            Toggle("Delete the remote branch", isOn: .constant(true))
                 .disabled(true)
             Toggle("Always use AI when conflicts are detected", isOn: .constant(false))
                 .font(Typography.secondary)

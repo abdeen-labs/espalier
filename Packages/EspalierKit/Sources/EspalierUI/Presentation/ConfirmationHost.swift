@@ -69,7 +69,7 @@ extension Confirmation {
             return .compactSheet(CompactConfirmation(
                 title: title,
                 paragraphs: message.components(separatedBy: "\n\n"),
-                optionTitle: existsOnRemote ? "Delete it on the remote too" : nil,
+                optionTitle: existsOnRemote ? "Delete the remote branch" : nil,
                 confirmButton: confirmButton,
                 isDestructive: isDestructive
             ))

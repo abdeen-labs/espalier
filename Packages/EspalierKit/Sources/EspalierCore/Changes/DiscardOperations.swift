@@ -265,8 +265,8 @@ struct DiscardItemsInTheWayError: Error, Sendable, LocalizedError {
     var errorDescription: String? {
         let names = paths.map { "\u{201C}\($0)\u{201D}" }.joined(separator: ", ")
         let isOne = paths.count == 1
-        let trash = trashError == nil ? "" : " and couldn't be moved to the Trash"
-        return "\(names) \(isOne ? "is" : "are") in the way of the files the discard restores\(trash)."
+        let trash = trashError == nil ? "" : " \(isOne ? "It" : "They") couldn't be moved to the Trash."
+        return "Discarding would delete \(names).\(trash)"
     }
 }
 

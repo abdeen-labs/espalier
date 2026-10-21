@@ -321,7 +321,7 @@ extension Confirmation {
     /// Deleting a local branch.
     ///
     /// - Parameter existsOnRemote: Whether the branch's upstream exists, so
-    ///   the UI offers "Delete it on the remote too".
+    ///   the UI offers "Delete the remote branch".
     public static func deleteBranch(_ name: String, existsOnRemote: Bool) -> Confirmation {
         let remote = existsOnRemote
             ? "\n\nThe branch also exists on the remote."
@@ -463,7 +463,7 @@ public enum Decision: Sendable, Equatable {
         case .externalEditor:
             "Espalier found more than one editor on your Mac. Which one should it open repositories and files in?"
         case .replaceLFSHooks:
-            "Git LFS replaces these hooks:\n\nThey go to the Trash."
+            "Git LFS replaces these hooks:\n\nThe old hooks are moved to the Trash."
         }
     }
 
