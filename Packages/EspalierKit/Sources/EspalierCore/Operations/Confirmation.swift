@@ -321,7 +321,7 @@ extension Confirmation {
     /// Deleting a local branch.
     ///
     /// - Parameter existsOnRemote: Whether the branch's upstream exists, so
-    ///   the UI offers "Delete the remote branch".
+    ///   the UI offers "Delete this branch on the remote".
     public static func deleteBranch(_ name: String, existsOnRemote: Bool) -> Confirmation {
         let remote = existsOnRemote
             ? "\n\nThe branch also exists on the remote."
