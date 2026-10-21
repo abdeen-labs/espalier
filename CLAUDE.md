@@ -48,7 +48,8 @@ Reference source, shared by every session and worktree:
 - `/tmp/espalier-ref/desktop`: desktop at release-3.6.7-beta2.
 - `/tmp/espalier-ref/dugite`: dugite 3.2.3.
 
-If missing, clone them again: `git clone https://github.com/desktop/desktop.git /tmp/espalier-ref/desktop`
+If missing or broken, you're always welcome to clone them again, as long as
+they're in a temp directory: `git clone https://github.com/desktop/desktop.git /tmp/espalier-ref/desktop`
 and `git clone https://github.com/desktop/dugite.git /tmp/espalier-ref/dugite`.
 
 ## Commands
