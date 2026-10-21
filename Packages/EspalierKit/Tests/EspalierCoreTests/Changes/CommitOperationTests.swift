@@ -8,7 +8,7 @@ import GitKit
 import Testing
 import TestSupport
 
-@Suite("Commit", .offline) @MainActor
+@Suite("Commit", .offline, .hangGuard(minutes: 5)) @MainActor
 struct CommitOperationTests {
     /// A selected repository with one commit on `main` and a remote.
     private func makeRepository(
@@ -254,13 +254,13 @@ struct CommitOperationTests {
         await repository.refresh(.status, reason: .user)
         repository.commit.draft.summary = "Add a"
 
-        let gate = Gate()
+        let gate = AsyncGate()
         let other = Task {
             try await repository.perform(OperationDescriptor(kind: .commit)) { _ in
                 await gate.wait()
             }
         }
-        await gate.waitUntilWaiting()
+        try await gate.waitUntilWaiting()
         let error = await #expect(throws: OperationError.self) { try await repository.commit.commit() }
         #expect(error?.reason == .busy(.commit))
         gate.open()

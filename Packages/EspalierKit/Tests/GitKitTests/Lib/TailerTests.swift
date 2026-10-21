@@ -417,27 +417,27 @@ struct TailByLineTests {
         #expect(lines.withLock { $0 }.isEmpty)
     }
 
-    @Test("continues reporting lines across file updates")
+    @Test("continues reporting lines across file updates", .hangGuard(minutes: 5))
     func acrossUpdates() async throws {
         let directory = try createTempDirectory()
         let path = "\(directory)/progress"
         try Data().write(to: URL(filePath: path))
 
-        let lines = Mutex<[String]>([])
+        let reported = ReportedLines()
         let disposable = tailByLine(path) { line in
-            lines.withLock { $0.append(line) }
+            reported.append(line)
         }
         defer { disposable.dispose() }
 
         try append("first\n", to: path)
-        try await waitUntil { lines.withLock { $0 } == ["first"] }
+        #expect(try await reported.waitFor(1) == ["first"])
         try append("second\n", to: path)
-        try await waitUntil { lines.withLock { $0 } == ["first", "second"] }
+        #expect(try await reported.waitFor(2) == ["first", "second"])
     }
 
     // MARK: - Espalier
 
-    @Test("reports lines written before tailing starts")
+    @Test("reports lines written before tailing starts", .hangGuard(minutes: 5))
     func writtenBeforeStart() async throws {
         let directory = try createTempDirectory()
         let path = "\(directory)/progress"
@@ -445,15 +445,15 @@ struct TailByLineTests {
         // registered: no change event follows.
         try Data("download 1/1 10/10 a.bin\n".utf8).write(to: URL(filePath: path))
 
-        let lines = Mutex<[String]>([])
+        let reported = ReportedLines()
         let disposable = tailByLine(path) { line in
-            lines.withLock { $0.append(line) }
+            reported.append(line)
         }
         defer { disposable.dispose() }
 
-        try await waitUntil { lines.withLock { $0 } == ["download 1/1 10/10 a.bin"] }
+        #expect(try await reported.waitFor(1) == ["download 1/1 10/10 a.bin"])
         try append("upload 1/1 5/5 b.bin\n", to: path)
-        try await waitUntil { lines.withLock { $0 } == ["download 1/1 10/10 a.bin", "upload 1/1 5/5 b.bin"] }
+        #expect(try await reported.waitFor(2) == ["download 1/1 10/10 a.bin", "upload 1/1 5/5 b.bin"])
     }
 
     @Test("keeps a line that straddles two reads whole")
@@ -505,13 +505,44 @@ struct TailByLineTests {
     }
 }
 
-/// Waits until `condition` holds, failing after `seconds`.
-private func waitUntil(seconds: Double = 5, _ condition: @Sendable () -> Bool) async throws {
-    let deadline = ContinuousClock.now + .seconds(seconds)
-    while !condition() {
-        if ContinuousClock.now > deadline {
-            throw TestSupportError("Timed out after \(seconds) seconds")
+/// The lines a tailer reported, which a test can wait for.
+private final class ReportedLines: Sendable {
+    private struct State {
+        var lines: [String] = []
+        /// Waits for a number of lines, and the events that end them.
+        var waits: [(count: Int, reached: AsyncEvent<Void>)] = []
+    }
+
+    private let state = Mutex(State())
+
+    /// Records a reported line, ending the waits it completes.
+    func append(_ line: String) {
+        let reached = state.withLock { state -> [AsyncEvent<Void>] in
+            state.lines.append(line)
+            let count = state.lines.count
+            defer { state.waits.removeAll { $0.count <= count } }
+            return state.waits.filter { $0.count <= count }.map { $0.reached }
         }
-        try await Task.sleep(for: .milliseconds(10))
+        for event in reached {
+            event.resolve()
+        }
+    }
+
+    /// Returns the lines reported once there are `count`, at once if there
+    /// are. Throws `CancellationError` once the waiting task is cancelled
+    /// first (as a test's hang guard does).
+    func waitFor(_ count: Int) async throws -> [String] {
+        let reached = AsyncEvent<Void>()
+        let isReached = state.withLock { state in
+            guard state.lines.count < count else {
+                return true
+            }
+            state.waits.append((count, reached))
+            return false
+        }
+        if !isReached {
+            try await reached.wait()
+        }
+        return state.withLock { $0.lines }
     }
 }

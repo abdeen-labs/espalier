@@ -83,13 +83,4 @@ enum RebaseTesting {
             fi
             """)
     }
-
-    /// Waits until `condition` holds, failing after `timeout`.
-    static func waitFor(timeout: Duration = .seconds(30), _ condition: () -> Bool) async throws {
-        let deadline = ContinuousClock.now + timeout
-        while !condition() {
-            try #require(ContinuousClock.now < deadline, "Timed out waiting")
-            try await Task.sleep(for: .milliseconds(20))
-        }
-    }
 }

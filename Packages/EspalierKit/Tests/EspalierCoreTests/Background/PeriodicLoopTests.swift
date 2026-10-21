@@ -32,7 +32,7 @@ private func settle(_ scheduler: ManualScheduler, until condition: () -> Bool) a
     }
 }
 
-@Suite("PeriodicLoop") @MainActor
+@Suite("PeriodicLoop", .hangGuard(minutes: 5)) @MainActor
 struct PeriodicLoopTests {
     @Test("a run that returns nil stops the loop")
     func nilStops() async {

@@ -9,7 +9,7 @@ import GitKit
 import Testing
 import TestSupport
 
-@Suite("Repository watcher") @MainActor
+@Suite("Repository watcher", .hangGuard(minutes: 5)) @MainActor
 struct RepositoryWatcherTests {
     let paths = WatchedPaths(workingDirectory: "/repo", gitDirectory: "/repo/.git", commonDirectory: "/repo/.git")
     let fileWatcher = ManualFileWatcher(currentEventID: 100)

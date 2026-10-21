@@ -318,7 +318,7 @@ struct DeviceFlowTests {
         }
     }
 
-    @Test("stops polling when cancelled while waiting")
+    @Test("stops polling when cancelled while waiting", .hangGuard(minutes: 5))
     func cancelsWhileWaiting() async throws {
         mock.on("POST", tokenPath, respond: pending)
         let started = AsyncStream<Void>.makeStream()
@@ -349,7 +349,7 @@ struct DeviceFlowTests {
         #expect(mock.requests.isEmpty)
     }
 
-    @Test("stops polling when cancelled during a request")
+    @Test("stops polling when cancelled during a request", .hangGuard(minutes: 5))
     func cancelsDuringRequest() async throws {
         let requested = AsyncStream<Void>.makeStream()
         mock.on("POST", tokenPath) { _ in

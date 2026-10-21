@@ -10,7 +10,7 @@ import Synchronization
 import Testing
 import TestSupport
 
-@Suite("Line counts", .offline) @MainActor
+@Suite("Line counts", .offline, .hangGuard(minutes: 5)) @MainActor
 struct LineCountsLoadTests {
     private func count(_ added: Int, _ deleted: Int) -> FileLineCount {
         FileLineCount(added: added, deleted: deleted)

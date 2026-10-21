@@ -30,7 +30,7 @@ private func gitError(_ stderr: String, exitCode: Int = 128) -> GitError {
     )
 }
 
-@Suite("Operation runner", .offline) @MainActor
+@Suite("Operation runner", .offline, .hangGuard(minutes: 5)) @MainActor
 struct OperationRunnerTests {
     /// A selected repository with a remote, refreshed.
     private func makeRepository(
@@ -141,13 +141,13 @@ struct OperationRunnerTests {
     @Test("a user operation is busy behind another user operation")
     func busy() async throws {
         let (_, app, repository) = try await makeRepository()
-        let gate = Gate()
+        let gate = AsyncGate()
         let first = Task {
             try await repository.perform(OperationDescriptor(kind: .commit)) { _ in
                 await gate.wait()
             }
         }
-        await gate.waitUntilWaiting()
+        try await gate.waitUntilWaiting()
         let second = await #expect(throws: OperationError.self) {
             try await repository.perform(OperationDescriptor(kind: .checkoutBranch)) { _ in }
         }
@@ -162,14 +162,14 @@ struct OperationRunnerTests {
     @Test("a user operation waits behind background work")
     func waitsBehindBackground() async throws {
         let (_, app, repository) = try await makeRepository()
-        let gate = Gate()
+        let gate = AsyncGate()
         let background = Task {
             try await repository.performIfIdle(OperationDescriptor(kind: .pruneBranches, policy: .background)) { _ in
                 await gate.wait()
                 return "pruned"
             }
         }
-        await gate.waitUntilWaiting()
+        try await gate.waitUntilWaiting()
         let user = Task {
             try await repository.perform(OperationDescriptor(kind: .checkoutBranch)) { _ in
                 repository.localOperation?.kind
@@ -186,13 +186,13 @@ struct OperationRunnerTests {
     @Test("background work skips when a lane is busy")
     func backgroundSkips() async throws {
         let (_, app, repository) = try await makeRepository()
-        let gate = Gate()
+        let gate = AsyncGate()
         let user = Task {
             try await repository.perform(OperationDescriptor(kind: .fetch, lanes: [.network])) { _ in
                 await gate.wait()
             }
         }
-        await gate.waitUntilWaiting()
+        try await gate.waitUntilWaiting()
         let skipped = try await repository.performIfIdle(OperationDescriptor(kind: .fetch, lanes: [.network], policy: .background)) { _ in
             "fetched"
         }
@@ -249,14 +249,14 @@ struct OperationRunnerTests {
     @Test("the body runs in its own task: cancelling the caller doesn't reach it")
     func cancellationShielding() async throws {
         let (_, app, repository) = try await makeRepository()
-        let gate = Gate()
+        let gate = AsyncGate()
         let caller = Task {
             try await repository.perform(OperationDescriptor(kind: .commit)) { _ in
                 await gate.wait()
                 return Task.isCancelled
             }
         }
-        await gate.waitUntilWaiting()
+        try await gate.waitUntilWaiting()
         caller.cancel()
         await settle()
         #expect(repository.localOperation?.kind == .commit)
@@ -285,7 +285,7 @@ struct OperationRunnerTests {
     @Test("aborting the running hook ends the operation as a cancellation")
     func abortRunningHook() async throws {
         let (_, app, repository) = try await makeRepository()
-        let gate = Gate()
+        let gate = AsyncGate()
         let aborted = Flag()
         let operation = Task {
             try await repository.perform(OperationDescriptor(kind: .commit)) { ctx in
@@ -296,7 +296,7 @@ struct OperationRunnerTests {
                 throw gitError("error: failed to push some refs\n", exitCode: 1)
             }
         }
-        await gate.waitUntilWaiting()
+        try await gate.waitUntilWaiting()
         repository.abortRunningHook()
         gate.open()
         let error = await #expect(throws: OperationError.self) {

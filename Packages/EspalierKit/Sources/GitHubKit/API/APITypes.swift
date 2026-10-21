@@ -173,28 +173,6 @@ public struct APIRepositoryPermissions: Codable, Sendable, Hashable {
     }
 }
 
-/// Information about a commit as returned by the GitHub API.
-public struct APICommit: Codable, Sendable, Hashable {
-    public let sha: String
-    /// `null`, or `{}` when GitHub can't match the commit's author to a user.
-    public let author: APIIdentity?
-
-    private enum CodingKeys: String, CodingKey {
-        case sha, author
-    }
-
-    public init(sha: String, author: APIIdentity?) {
-        self.sha = sha
-        self.author = author
-    }
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        sha = try container.decode(String.self, forKey: .sha)
-        author = try? container.decodeIfPresent(APIIdentity.self, forKey: .author)
-    }
-}
-
 /// Entity returned by the `/user/orgs` endpoint.
 ///
 /// Because this is specific to one endpoint it omits the `type` member from
@@ -610,19 +588,6 @@ public struct APIRefCheckRunApp: Codable, Sendable, Hashable {
 
     public init(name: String) {
         self.name = name
-    }
-}
-
-// NB. Only partially mapped
-public struct APIRefCheckRunOutput: Codable, Sendable, Hashable {
-    public let title: String?
-    public let summary: String?
-    public let text: String?
-
-    public init(title: String?, summary: String?, text: String?) {
-        self.title = title
-        self.summary = summary
-        self.text = text
     }
 }
 

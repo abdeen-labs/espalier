@@ -358,16 +358,3 @@ func readLine(fromPipe path: String) async throws -> String {
     defer { source.cancel() }
     return try await line.wait()
 }
-
-/// Waits until the process with this ID has exited (whether or not its
-/// parent has reaped it yet). Returns at once if there is no such process.
-func waitForExit(_ pid: Int32) async throws {
-    let exited = AsyncEvent<Void>()
-    let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .global())
-    source.setEventHandler {
-        exited.resolve()
-    }
-    source.activate()
-    defer { source.cancel() }
-    try await exited.wait()
-}

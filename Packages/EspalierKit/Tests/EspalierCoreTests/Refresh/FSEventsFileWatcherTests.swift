@@ -1,5 +1,6 @@
-// These watch real temporary directories with FSEvents. Waits are bounded
-// and end as soon as the expected event arrives.
+// These watch real temporary directories with FSEvents. Waits end as soon
+// as the expected event arrives, or when the test's hang guard cancels
+// them.
 
 @testable import EspalierCore
 import EspalierSupport
@@ -7,10 +8,6 @@ import Foundation
 import Synchronization
 import Testing
 import TestSupport
-
-/// How long to wait for an event FSEvents should deliver within a fraction
-/// of a second; only a failing test waits this long.
-private let deliveryTimeout: Duration = .seconds(10)
 
 private let latency: Duration = .milliseconds(50)
 
@@ -23,6 +20,13 @@ private final class EventCollector: Sendable {
     }
 
     private let state = Mutex(State())
+    /// Yields each time events arrive or the subscription finishes.
+    private let changes: AsyncStream<Void>
+    private let changed: AsyncStream<Void>.Continuation
+
+    private init() {
+        (changes, changed) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
+    }
 
     /// Starts collecting `subscription`'s events.
     static func collecting(_ subscription: FileWatchSubscription) -> EventCollector {
@@ -30,8 +34,10 @@ private final class EventCollector: Sendable {
         Task {
             for await batch in subscription.events {
                 collector.state.withLock { $0.events += batch }
+                collector.changed.yield()
             }
             collector.state.withLock { $0.isFinished = true }
+            collector.changed.yield()
         }
         return collector
     }
@@ -44,21 +50,25 @@ private final class EventCollector: Sendable {
         state.withLock { $0.isFinished }
     }
 
-    /// Waits until `condition` holds for the events so far, for at most
-    /// `timeout`, and returns whether it held.
-    func wait(timeout: Duration = deliveryTimeout, until condition: (_ events: [FileWatchEvent], _ isFinished: Bool) -> Bool) async -> Bool {
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: timeout)
-        while true {
+    /// Waits until `condition` holds for the events so far, checking again
+    /// each time events arrive or the subscription finishes. Returns
+    /// whether it held: false once the waiting task is cancelled first (as
+    /// a test's hang guard does).
+    func wait(until condition: (_ events: [FileWatchEvent], _ isFinished: Bool) -> Bool) async -> Bool {
+        func holds() -> Bool {
             let (events, isFinished) = state.withLock { ($0.events, $0.isFinished) }
-            if condition(events, isFinished) {
+            return condition(events, isFinished)
+        }
+        if holds() {
+            return true
+        }
+        // The stream ends only when this task is cancelled.
+        for await _ in changes {
+            if holds() {
                 return true
             }
-            if clock.now >= deadline {
-                return false
-            }
-            try? await clock.sleep(for: .milliseconds(10))
         }
+        return false
     }
 
     /// Waits until an event for `path` arrives, and returns the first one.
@@ -72,7 +82,7 @@ private func write(_ text: String, to path: String) throws {
     try Data(text.utf8).write(to: URL(filePath: path))
 }
 
-@Suite("FSEventsFileWatcher")
+@Suite("FSEventsFileWatcher", .hangGuard(minutes: 5))
 struct FSEventsFileWatcherTests {
     @Test("reports a file written under a watched directory, at its real path")
     func reportsWrites() async throws {
@@ -140,7 +150,8 @@ struct FSEventsFileWatcherTests {
     func noPaths() async {
         let subscription = FSEventsFileWatcher().subscribe(to: [], latency: latency)
         let collector = EventCollector.collecting(subscription)
-        #expect(await collector.wait { events, isFinished in isFinished && events.isEmpty })
+        #expect(await collector.wait { _, isFinished in isFinished })
+        #expect(collector.events.isEmpty)
         subscription.cancel()
     }
 

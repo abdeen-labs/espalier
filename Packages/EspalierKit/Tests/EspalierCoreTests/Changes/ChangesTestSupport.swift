@@ -170,66 +170,6 @@ func confirmation(of error: OperationError?) -> EspalierCore.Confirmation? {
     return nil
 }
 
-/// A latch a load waits at until the test opens it. Waiting ignores
-/// cancellation, so a superseded load still returns, as one that finished
-/// just as it was replaced does.
-final class LoadLatch: Sendable {
-    private struct State {
-        var isOpen = false
-        var waiting = 0
-        var waiters: [CheckedContinuation<Void, Never>] = []
-    }
-
-    private let state = Mutex(State())
-
-    func wait() async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            let isOpen = state.withLock { state in
-                if !state.isOpen {
-                    state.waiting += 1
-                    state.waiters.append(continuation)
-                }
-                return state.isOpen
-            }
-            if isOpen {
-                continuation.resume()
-            }
-        }
-    }
-
-    func open() {
-        let waiters = state.withLock { state in
-            state.isOpen = true
-            defer { state.waiters = [] }
-            return state.waiters
-        }
-        for waiter in waiters {
-            waiter.resume()
-        }
-    }
-
-    /// Whether a load has waited here.
-    var hasWaiter: Bool {
-        state.withLock { $0.waiting > 0 }
-    }
-
-    /// Yields until a load waits here.
-    func waitUntilWaiting() async {
-        for _ in 0..<100_000 where !hasWaiter {
-            await Task.yield()
-        }
-    }
-}
-
-/// Gives the main actor's queued work a chance to run, to check that
-/// something doesn't happen.
-@MainActor
-func drainMainActor() async {
-    for _ in 0..<200 {
-        await Task.yield()
-    }
-}
-
 /// Lines `1` through `count`, each "line N", newline-terminated.
 func numberedLines(_ count: Int, replacing replacements: [Int: String] = [:]) -> String {
     (1...count).map { replacements[$0] ?? "line \($0)" }.joined(separator: "\n") + "\n"

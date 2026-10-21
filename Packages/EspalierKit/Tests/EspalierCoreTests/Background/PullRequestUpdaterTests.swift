@@ -9,7 +9,7 @@ import GitHubKit
 import Testing
 import TestSupport
 
-@Suite("Pull request updater", .offline) @MainActor
+@Suite("Pull request updater", .offline, .hangGuard(minutes: 5)) @MainActor
 struct PullRequestUpdaterTests {
     private func pullsRequests(_ fixture: GitHubFixture) -> Int {
         fixture.gitHub.requests("GET", "/repos/octocat/hello/pulls").count

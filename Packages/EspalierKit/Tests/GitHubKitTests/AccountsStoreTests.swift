@@ -84,24 +84,6 @@ private final class CaseMatchingSecretStore: SecretStore {
     }
 }
 
-/// Holds a mock's response on its thread until the test opens it (for at
-/// most 30 seconds, so a broken test can't hang), so the test can act while
-/// the request is in flight.
-private final class ResponseGate: Sendable {
-    private let opened = DispatchSemaphore(value: 0)
-    /// Resolved once a response is held.
-    let arrived = AsyncEvent<Void>()
-
-    func hold() {
-        arrived.resolve()
-        _ = opened.wait(timeout: .now() + 30)
-    }
-
-    func open() {
-        opened.signal()
-    }
-}
-
 private func storedUser(endpoint: String) -> String {
     """
     [{"login":"joan","endpoint":"\(endpoint)","token":"deadbeef","emails":[],"avatarURL":"","id":1,"name":"","plan":"free"}]
@@ -472,10 +454,10 @@ struct AccountsStoreTests {
         ])
         func signInDuringRefresh(_ testCase: NamedCase<(refreshed: String, signedIn: String)>) async throws {
             let mock = MockGitHub()
-            let gate = ResponseGate()
+            let gate = MockResponseGate()
             let refreshedLogin = testCase.value.refreshed
             mock.on("GET", "/user") { _ in
-                gate.hold()
+                gate.wait()
                 return .json(encoding: createMockAPIFullIdentity(id: 1, login: refreshedLogin))
             }
             mock.on("GET", "/user/emails", respond: .json(encoding: [createMockAPIEmail("\(refreshedLogin)@example.com")]))
@@ -485,7 +467,7 @@ struct AccountsStoreTests {
             try await store.addAccount(account("octocat", token: "old-token"))
 
             let refreshing = Task { await store.refresh() }
-            try await gate.arrived.wait()
+            try await gate.waitForArrival()
             let signedIn = account(testCase.value.signedIn, token: "new-token")
             try await store.addAccount(signedIn)
             gate.open()

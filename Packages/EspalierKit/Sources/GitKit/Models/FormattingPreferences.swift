@@ -91,11 +91,6 @@ public func getNumberFormatPreference() -> NumberFormat {
     return numberFormatFromKey(key)
 }
 
-/// Set the user's preferred number format.
-public func setNumberFormatPreference(_ format: NumberFormat) {
-    UserDefaults.standard.set(numberFormatToKey(format), forKey: numberFormatKey)
-}
-
 /// Serialize a number format to a string key for use in pickers and
 /// storage.
 public func numberFormatToKey(_ fmt: NumberFormat) -> String {

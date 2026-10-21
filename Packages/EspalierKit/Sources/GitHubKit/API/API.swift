@@ -419,23 +419,6 @@ public struct API: Sendable {
     }
 
     /// Fetches all review comments from a given pull request.
-    public func fetchPullRequestReviewComments(
-        owner: String,
-        name: String,
-        prNumber: String,
-        reviewId: String
-    ) async -> [APIComment] {
-        do {
-            let path = "/repos/\(owner)/\(name)/pulls/\(prNumber)/reviews/\(reviewId)/comments"
-            let response = try await ghRequest(.get, path)
-            return try parsedResponse(response, as: [APIComment].self)
-        } catch {
-            log.debug("failed fetching PR review comments for \(owner, privacy: .public)/\(name, privacy: .public)/pulls/\(prNumber, privacy: .public): \(String(describing: error), privacy: .public)")
-            return []
-        }
-    }
-
-    /// Fetches all review comments from a given pull request.
     public func fetchPullRequestComments(owner: String, name: String, prNumber: String) async -> [APIComment] {
         do {
             let path = "/repos/\(owner)/\(name)/pulls/\(prNumber)/comments"

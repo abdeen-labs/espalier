@@ -96,16 +96,6 @@ public struct UpstreamRemoteConflict: Sendable, Equatable {
     public var question: String {
         "Would you like to update the remote to use the expected URL?"
     }
-
-    /// The button that calls `updateUpstreamRemote()`.
-    public var updateButton: String {
-        "Update"
-    }
-
-    /// The button that calls `ignoreUpstreamRemote()`.
-    public var ignoreButton: String {
-        "Ignore"
-    }
 }
 
 /// A branch the pruner deleted, restorable with

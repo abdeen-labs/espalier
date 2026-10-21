@@ -21,19 +21,6 @@ public struct AheadBehind: Hashable, Sendable {
     }
 }
 
-/// The result of comparing two refs in a repository.
-public struct CompareResult: Hashable, Sendable {
-    public let ahead: Int
-    public let behind: Int
-    public let commits: [Commit]
-
-    public init(ahead: Int, behind: Int, commits: [Commit]) {
-        self.ahead = ahead
-        self.behind = behind
-        self.commits = commits
-    }
-}
-
 /// Basic data about a branch, and the branch it's tracking.
 public struct TrackingBranch: Hashable, Sendable {
     public let ref: String

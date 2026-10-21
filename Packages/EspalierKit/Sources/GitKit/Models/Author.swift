@@ -55,11 +55,3 @@ public enum Author: Hashable, Sendable {
     case known(KnownAuthor)
     case unknown(UnknownAuthor)
 }
-
-/// Checks whether or not a given author is a known user
-public func isKnownAuthor(_ author: Author) -> Bool {
-    if case .known = author {
-        return true
-    }
-    return false
-}

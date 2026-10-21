@@ -10,7 +10,7 @@ import GitKit
 import Testing
 import TestSupport
 
-@Suite("Working directory diff", .offline) @MainActor
+@Suite("Working directory diff", .offline, .hangGuard(minutes: 5)) @MainActor
 struct WorkingDirectoryDiffTests {
     /// A selected repository whose numbered.txt has 20 committed lines, then
     /// lines 2 and 15 changed (two hunks), and other.txt added.
@@ -300,14 +300,16 @@ struct WorkingDirectoryDiffTests {
         try await fixture.select("numbered.txt")
         #expect(!fixture.changes.diffHidesWhitespace)
 
+        // Changing the preference starts a reload, which sets
+        // diffHidesWhitespace as it starts.
         fixture.app.preferences.hideWhitespaceInChangesDiff = true
-        await drainMainActor()
+        await waitUntilObserved { fixture.changes.diffHidesWhitespace }
         await fixture.changes.diffIdle()
         #expect(fixture.changes.diffHidesWhitespace)
         #expect(!fixture.changes.canSelectLines)
 
         fixture.app.preferences.hideWhitespaceInChangesDiff = false
-        await drainMainActor()
+        await waitUntilObserved { !fixture.changes.diffHidesWhitespace }
         await fixture.changes.diffIdle()
         #expect(!fixture.changes.diffHidesWhitespace)
         #expect(fixture.changes.canSelectLines)
@@ -317,12 +319,17 @@ struct WorkingDirectoryDiffTests {
     @Test("a load that's no longer the latest never applies")
     func staleLoads() async throws {
         let fixture = try await makeFixture()
-        let latch = LoadLatch()
+        // The superseded load waits at the latch through its cancellation,
+        // as a load that finishes just as it's replaced does.
+        let latch = AsyncGate(ignoresCancellation: true)
+        let lateLoadReturned = AsyncEvent<Void>()
         let load = fixture.changes.loadDiffs
         fixture.changes.loadDiffs = { repository, file, hidesWhitespace in
-            if file.path == "numbered.txt" {
-                await latch.wait()
+            guard file.path == "numbered.txt" else {
+                return try await load(repository, file, hidesWhitespace)
             }
+            await latch.wait()
+            defer { lateLoadReturned.resolve() }
             return try await load(repository, file, hidesWhitespace)
         }
 
@@ -330,7 +337,7 @@ struct WorkingDirectoryDiffTests {
         let other = try fixture.file("other.txt")
         fixture.changes.select(fileIDs: [])
         fixture.changes.select(fileIDs: [numbered.id])
-        await latch.waitUntilWaiting()
+        try await latch.waitUntilWaiting()
         #expect(fixture.changes.diff == .loading(previous: nil))
 
         fixture.changes.select(fileIDs: [other.id])
@@ -340,7 +347,7 @@ struct WorkingDirectoryDiffTests {
 
         // The first load finishes late; nothing changes.
         latch.open()
-        await drainMainActor()
+        try await lateLoadReturned.wait()
         await fixture.settle()
         #expect(fixture.changes.diffFileID == other.id)
         #expect(fixture.changes.diff == .loaded(otherDiff))
@@ -352,7 +359,7 @@ struct WorkingDirectoryDiffTests {
         try await fixture.select("numbered.txt")
         let shown = try #require(fixture.changes.diff.value)
 
-        let latch = LoadLatch()
+        let latch = AsyncGate()
         let load = fixture.changes.loadDiffs
         fixture.changes.loadDiffs = { repository, file, hidesWhitespace in
             await latch.wait()
@@ -360,7 +367,7 @@ struct WorkingDirectoryDiffTests {
         }
         try fixture.write("numbered.txt", numberedLines(20, replacing: [2: "line two"]))
         await fixture.model.refresh(.status, reason: .user)
-        await latch.waitUntilWaiting()
+        try await latch.waitUntilWaiting()
         #expect(fixture.changes.diff == .loading(previous: shown))
         latch.open()
         await fixture.settle()
@@ -409,13 +416,13 @@ struct WorkingDirectoryDiffTests {
         try await fixture.select("numbered.txt")
         let addTwo = try fixture.lineIndex(.add, "line two")
 
-        let gate = Gate()
+        let gate = AsyncGate()
         let commit = Task {
             try await fixture.model.perform(OperationDescriptor(kind: .commit)) { _ in
                 await gate.wait()
             }
         }
-        await gate.waitUntilWaiting()
+        try await gate.waitUntilWaiting()
         #expect(!fixture.changes.canSelectLines)
         #expect(!fixture.changes.toggleLines(.line(addTwo)))
         #expect(fixture.changes.inclusionState(of: try fixture.file("numbered.txt")).isEnabled == false)

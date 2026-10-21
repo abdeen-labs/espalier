@@ -4,43 +4,7 @@
 @testable import EspalierCore
 import Synchronization
 import Testing
-
-/// A gate an operation waits at until the test opens it. Waiting ignores
-/// cancellation, so a cancelled operation can still return a value, as a
-/// load that finished just as it was replaced does.
-private final class Latch: Sendable {
-    private struct State {
-        var isOpen = false
-        var waiters: [CheckedContinuation<Void, Never>] = []
-    }
-
-    private let state = Mutex(State())
-
-    func wait() async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            let isOpen = state.withLock { state in
-                if !state.isOpen {
-                    state.waiters.append(continuation)
-                }
-                return state.isOpen
-            }
-            if isOpen {
-                continuation.resume()
-            }
-        }
-    }
-
-    func open() {
-        let waiters = state.withLock { state in
-            state.isOpen = true
-            defer { state.waiters = [] }
-            return state.waiters
-        }
-        for waiter in waiters {
-            waiter.resume()
-        }
-    }
-}
+import TestSupport
 
 /// A value an operation records for the test to check.
 private final class Recorded<Value: Sendable>: Sendable {
@@ -73,12 +37,14 @@ private struct LoadError: Error, CustomStringConvertible {
 }
 
 /// An operation that waits at `latch`, records whether its task was
-/// cancelled by then, opens `returned` and returns `value`.
+/// cancelled by then, opens `returned` and returns `value`. The tests'
+/// latches ignore cancellation, so a cancelled operation still returns a
+/// value, as a load that finished just as it was replaced does.
 private func controlled(
     _ value: String,
-    latch: Latch,
+    latch: AsyncGate,
     cancelled: Recorded<Bool>,
-    returned: Latch
+    returned: AsyncGate
 ) -> @Sendable () async throws -> String {
     {
         await latch.wait()
@@ -88,7 +54,7 @@ private func controlled(
     }
 }
 
-@Suite("LatestTask") @MainActor
+@Suite("LatestTask", .hangGuard(minutes: 5)) @MainActor
 struct LatestTaskTests {
     @Test("applies the latest load's result, and keeps its key")
     func appliesResult() async {
@@ -111,8 +77,8 @@ struct LatestTaskTests {
     func newerKeyCancelsOlder() async {
         let slot = LatestTask<String>()
         let applied = Applied()
-        let latch = Latch()
-        let returned = Latch()
+        let latch = AsyncGate(ignoresCancellation: true)
+        let returned = AsyncGate()
         let cancelled = Recorded<Bool>()
 
         slot.run("a", operation: controlled("result a", latch: latch, cancelled: cancelled, returned: returned), apply: applied.record)
@@ -134,11 +100,11 @@ struct LatestTaskTests {
     func staleResultFirst() async {
         let slot = LatestTask<String>()
         let applied = Applied()
-        let latchA = Latch()
-        let returnedA = Latch()
+        let latchA = AsyncGate(ignoresCancellation: true)
+        let returnedA = AsyncGate()
         let cancelledA = Recorded<Bool>()
-        let latchB = Latch()
-        let returnedB = Latch()
+        let latchB = AsyncGate(ignoresCancellation: true)
+        let returnedB = AsyncGate()
         let cancelledB = Recorded<Bool>()
 
         slot.run("a", operation: controlled("result a", latch: latchA, cancelled: cancelledA, returned: returnedA), apply: applied.record)
@@ -161,8 +127,8 @@ struct LatestTaskTests {
     func sameKeyReplaces() async {
         let slot = LatestTask<String>()
         let applied = Applied()
-        let latch = Latch()
-        let returned = Latch()
+        let latch = AsyncGate(ignoresCancellation: true)
+        let returned = AsyncGate()
         let cancelled = Recorded<Bool>()
 
         slot.run("a", operation: controlled("first", latch: latch, cancelled: cancelled, returned: returned), apply: applied.record)
@@ -181,8 +147,8 @@ struct LatestTaskTests {
     func cancel() async {
         let slot = LatestTask<String>()
         let applied = Applied()
-        let latch = Latch()
-        let returned = Latch()
+        let latch = AsyncGate(ignoresCancellation: true)
+        let returned = AsyncGate()
         let cancelled = Recorded<Bool>()
 
         slot.run("a", operation: controlled("result a", latch: latch, cancelled: cancelled, returned: returned), apply: applied.record)
@@ -203,8 +169,8 @@ struct LatestTaskTests {
     func releaseCancels() async {
         var slot: LatestTask<String>? = LatestTask<String>()
         let applied = Applied()
-        let latch = Latch()
-        let returned = Latch()
+        let latch = AsyncGate(ignoresCancellation: true)
+        let returned = AsyncGate()
         let cancelled = Recorded<Bool>()
 
         slot?.run("a", operation: controlled("result a", latch: latch, cancelled: cancelled, returned: returned), apply: applied.record)
@@ -254,8 +220,8 @@ struct LatestTaskTests {
     func idleWaitsForNewerLoads() async {
         let slot = LatestTask<String>()
         let applied = Applied()
-        let latchA = Latch()
-        let latchB = Latch()
+        let latchA = AsyncGate(ignoresCancellation: true)
+        let latchB = AsyncGate(ignoresCancellation: true)
 
         slot.run("a", operation: { await latchA.wait(); return "result a" }, apply: applied.record)
         let waiter = Task { @MainActor in

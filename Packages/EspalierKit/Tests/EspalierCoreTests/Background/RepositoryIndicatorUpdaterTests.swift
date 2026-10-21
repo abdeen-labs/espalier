@@ -57,7 +57,7 @@ struct RepositoryIndicatorsTests {
     }
 }
 
-@Suite("Repository indicator updater", .offline) @MainActor
+@Suite("Repository indicator updater", .offline, .hangGuard(minutes: 5)) @MainActor
 struct RepositoryIndicatorUpdaterTests {
     /// A loaded app (its own updater off) on a clock set to now, so
     /// `FETCH_HEAD`'s real dates compare with it, and an updater of the
@@ -162,7 +162,7 @@ struct RepositoryIndicatorUpdaterTests {
         return (local, try await BlockingFetchGate(clone: local))
     }
 
-    @Test("reads the list before each repository: added, removed, and newly selected ones", .hangGuard(minutes: 5))
+    @Test("reads the list before each repository: added, removed, and newly selected ones")
     func readsTheListAsItGoes() async throws {
         let (_, app, updater) = try await makeApp()
         let (local, gate) = try await gatedRepository()
@@ -189,7 +189,7 @@ struct RepositoryIndicatorUpdaterTests {
         await app.idle()
     }
 
-    @Test("pauses between repositories until resumed", .hangGuard(minutes: 5))
+    @Test("pauses between repositories until resumed")
     func pausesBetweenRepositories() async throws {
         let (harness, app, updater) = try await makeApp()
         let (local, gate) = try await gatedRepository()
@@ -216,7 +216,7 @@ struct RepositoryIndicatorUpdaterTests {
         await app.idle()
     }
 
-    @Test("stopping ends a pass after its repository, and nothing runs again", .hangGuard(minutes: 5))
+    @Test("stopping ends a pass after its repository, and nothing runs again")
     func stoppingEndsAPass() async throws {
         let (harness, app, updater) = try await makeApp()
         let (local, gate) = try await gatedRepository()
@@ -332,7 +332,7 @@ struct RepositoryIndicatorUpdaterTests {
         await app.idle()
     }
 
-    @Test("the app's updater refreshes the other repositories two minutes after launch", .hangGuard(minutes: 5))
+    @Test("the app's updater refreshes the other repositories two minutes after launch")
     func appUpdater() async throws {
         let harness = try AppHarness(scheduler: ManualScheduler(now: Date()), skew: .seconds(3), repositoryIndicators: true)
         let first = await harness.loadedApp()
@@ -357,7 +357,7 @@ struct RepositoryIndicatorUpdaterTests {
         await app.prepareForTermination()
     }
 
-    @Test("opening the repository list starts the first pass after only the skew; after it, opening changes nothing", .hangGuard(minutes: 5))
+    @Test("opening the repository list starts the first pass after only the skew; after it, opening changes nothing")
     func repositoryListOpens() async throws {
         let harness = try AppHarness(scheduler: ManualScheduler(now: Date()), skew: .seconds(3), repositoryIndicators: true)
         let app = await harness.loadedApp()
@@ -403,7 +403,7 @@ struct RepositoryIndicatorUpdaterTests {
     }
 }
 
-@Suite("inferLastPushForRepository", .offline) @MainActor
+@Suite("inferLastPushForRepository", .offline, .hangGuard(minutes: 5)) @MainActor
 struct InferLastPushTests {
     private func pushed(_ owner: String, _ name: String, at pushedAt: String?) -> MockGitHub.Response {
         .json(encoding: APIFullRepository(repository: createMockAPIRepository(

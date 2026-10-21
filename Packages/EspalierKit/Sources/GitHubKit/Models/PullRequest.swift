@@ -81,10 +81,5 @@ public enum PullRequestSuggestedNextAction: String, Codable, Sendable, Hashable 
     public static let `default` = PullRequestSuggestedNextAction.previewPullRequest
 }
 
-/// Whether a string names a `PullRequestSuggestedNextAction`.
-public func isIdPullRequestSuggestedNextAction(_ id: String) -> Bool {
-    PullRequestSuggestedNextAction(rawValue: id) != nil
-}
-
 /// The suggested next action used when the user hasn't picked one.
 public let defaultPullRequestSuggestedNextAction = PullRequestSuggestedNextAction.default

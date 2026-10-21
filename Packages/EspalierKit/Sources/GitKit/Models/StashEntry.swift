@@ -67,5 +67,3 @@ public enum StashedFileChanges: Hashable, Sendable {
         }
     }
 }
-
-public typealias StashCallback = @Sendable (StashEntry) async throws -> Void

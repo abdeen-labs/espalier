@@ -363,7 +363,7 @@ struct BranchPrunerTests {
         await fixture.app.idle()
     }
 
-    @Test("runs at once, then checks every 4 hours, pruning at most once a day")
+    @Test("runs at once, then checks every 4 hours, pruning at most once a day", .hangGuard(minutes: 5))
     func cadence() async throws {
         let path = try setupFixtureRepository("branch-prune-tests")
         let fixture = try await setupRepository(path, includesGhRepo: true)

@@ -87,10 +87,11 @@ final class TestSSHServer: Sendable {
         "ssh://127.0.0.1:\(port)\(repository)"
     }
 
-    /// Waits for sshd to take connections. It took more than 10 seconds to
-    /// start on CI's busy runner, so it has 60, which a passing test never
-    /// waits for; and it's tried once more after the deadline, in case the
-    /// wait itself ran late.
+    /// Waits for sshd to take connections. Nothing reports when it starts
+    /// listening, so this tries to connect every 50 milliseconds. It took
+    /// more than 10 seconds to start on CI's busy runner, so it has 60,
+    /// which a passing test never waits for; and it's tried once more after
+    /// the deadline, in case the wait itself ran late.
     private func waitForListener() async throws {
         let deadline = ContinuousClock.now + .seconds(60)
         while true {

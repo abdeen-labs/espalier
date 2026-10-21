@@ -100,13 +100,12 @@ enum CommitDragging {
     /// (nil: the top of the branch). Nil when the line isn't between
     /// commits.
     static func reorderPlan(_ shas: [String], aboveRow row: Int, history: HistoryModel) -> (check: CurrentBranchRewriteCheck, base: Commit?)? {
-        let graph = history.graph
-        let firstRow = graph.hasUncommittedWorkRow ? 1 : 0
-        guard row >= firstRow, row <= graph.count else {
+        let rows = CommitRows(history.graph)
+        guard rows.isInsertionRow(row) else {
             return nil
         }
         var base: Commit?
-        if row > firstRow {
+        if row > rows.firstRow {
             guard let above = history.commit(atRow: row - 1) else {
                 return nil
             }

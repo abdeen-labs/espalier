@@ -181,7 +181,7 @@ struct BackgroundCoordinatorTests {
         #expect(!model.refreshScheduler.lastPassReasons.contains(.operation(.fetch)))
     }
 
-    @Test("updates pull requests while active, for a GitHub repository with an account")
+    @Test("updates pull requests while active, for a GitHub repository with an account", .hangGuard(minutes: 5))
     func pullRequests() async throws {
         let harness = try AppHarness(backgroundServices: .all)
         let app = await harness.loadedApp()
@@ -205,7 +205,7 @@ struct BackgroundCoordinatorTests {
         await app.idle()
     }
 
-    @Test("nothing runs after quitting")
+    @Test("nothing runs after quitting", .hangGuard(minutes: 5))
     func stopsOnQuit() async throws {
         let harness = try AppHarness(backgroundServices: .all)
         let app = await harness.loadedApp()

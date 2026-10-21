@@ -11,7 +11,7 @@ import Synchronization
 import Testing
 import TestSupport
 
-@Suite("Branch upstream states", .offline) @MainActor
+@Suite("Branch upstream states", .offline, .hangGuard(minutes: 5)) @MainActor
 struct BranchUpstreamStatesTests {
     /// The local branches of the repository's branch list.
     private func localRefs(_ model: RepositoryModel) -> [String] {
@@ -348,10 +348,7 @@ private final class ScriptedHost: UpstreamStatesHost {
 
     func listUpstreamTracking(_ refs: [String]) async throws -> [ExactString: UpstreamTrackingLine] {
         calls.append(refs)
-        guard let answer = await gate.wait() else {
-            throw CancellationError()
-        }
-        let lines = try answer.get()
+        let lines = try await gate.wait()
         // Only what git would list for these refs.
         let asked = refs.exactSet
         return lines.filter { asked.contains($0.key) }
@@ -362,64 +359,27 @@ private final class ScriptedHost: UpstreamStatesHost {
     }
 }
 
-/// Holds calls until the test answers them; a cancelled call gets nil.
+/// Holds calls until the test answers them; a cancelled call throws
+/// `CancellationError`.
 private final class ResponseGate: Sendable {
-    private typealias Answer = Result<[ExactString: UpstreamTrackingLine], any Error>
-
-    private struct State {
-        var waiters: [Int: CheckedContinuation<Answer?, Never>] = [:]
-        var nextID = 0
-        var answer: Answer?
-        var cancelledCalls = 0
-    }
-
-    private let state = Mutex(State())
+    private let answer = AsyncEvent<[ExactString: UpstreamTrackingLine]>()
+    private let cancelledCalls = Mutex(0)
 
     /// Whether a call was cancelled.
     var wasCancelled: Bool {
-        state.withLock { $0.cancelledCalls > 0 }
+        cancelledCalls.withLock { $0 > 0 }
     }
 
     /// Answers the calls waiting and the ones to come.
     func open(with lines: [ExactString: UpstreamTrackingLine]) {
-        answer(.success(lines))
+        answer.resolve(lines)
     }
 
-    private func answer(_ answer: Answer) {
-        let waiters = state.withLock { state in
-            state.answer = answer
-            defer { state.waiters = [:] }
-            return Array(state.waiters.values)
-        }
-        for waiter in waiters {
-            waiter.resume(returning: answer)
-        }
-    }
-
-    func wait() async -> Result<[ExactString: UpstreamTrackingLine], any Error>? {
-        let id = state.withLock { state in
-            defer { state.nextID += 1 }
-            return state.nextID
-        }
-        return await withTaskCancellationHandler {
-            await withCheckedContinuation { (continuation: CheckedContinuation<Answer?, Never>) in
-                let answer: Answer? = state.withLock { state in
-                    if let answer = state.answer {
-                        return answer
-                    }
-                    state.waiters[id] = continuation
-                    return nil
-                }
-                if let answer {
-                    continuation.resume(returning: answer)
-                }
-            }
+    func wait() async throws -> [ExactString: UpstreamTrackingLine] {
+        try await withTaskCancellationHandler {
+            try await answer.wait()
         } onCancel: {
-            let waiter = state.withLock { state in
-                state.cancelledCalls += 1
-                return state.waiters.removeValue(forKey: id)
-            }
-            waiter?.resume(returning: nil)
+            cancelledCalls.withLock { $0 += 1 }
         }
     }
 }

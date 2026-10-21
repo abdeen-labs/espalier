@@ -251,7 +251,7 @@ struct PushOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("pushing to a GitHub repository without write access offers a fork when an account matches")
+    @Test("pushing to a GitHub repository without write access offers a fork when an account matches", .hangGuard(minutes: 5))
     func insufficientPermissions() async throws {
         let fixture = try await makeSelectedRepository { local in
             try await commitFile(local, "a.txt", "a\n")

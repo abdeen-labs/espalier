@@ -286,7 +286,7 @@ struct ExternalActionsTests {
         ))
     }
 
-    @Test("a pull request link opens the repository its head belongs to, else its base, and names the pull request")
+    @Test("a pull request link opens the repository its head belongs to, else its base, and names the pull request", .hangGuard(minutes: 5))
     func pullRequest() async throws {
         let (harness, app, base, _, _) = try await makeRepository()
         try await harness.signIn([testAccount], to: app)
@@ -316,7 +316,7 @@ struct ExternalActionsTests {
         await app.idle()
     }
 
-    @Test("a pull request from a fork that contributes to itself: the link opens the fork, shows the link's pull request, and, once confirmed, checks out its branch there")
+    @Test("a pull request from a fork that contributes to itself: the link opens the fork, shows the link's pull request, and, once confirmed, checks out its branch there", .hangGuard(minutes: 5))
     func pullRequestFromSelfContributingFork() async throws {
         // hubot's fork, with a `patch` branch, cloned: the clone's origin is
         // the fork on GitHub, with `patch` fetched. A proxy that refuses
@@ -392,7 +392,7 @@ struct ExternalActionsTests {
         await app.idle()
     }
 
-    @Test("a pull request link without an account, or one GitHub can't find, throws")
+    @Test("a pull request link without an account, or one GitHub can't find, throws", .hangGuard(minutes: 5))
     func pullRequestErrors() async throws {
         let (harness, app, _, _, _) = try await makeRepository()
         let action = try url("espalier://openRepo/https://github.com/octocat/app?pr=12")
@@ -414,7 +414,7 @@ struct ExternalActionsTests {
         await app.idle()
     }
 
-    @Test("a pull request of a repository not in the list asks for a clone, then names it in the clone")
+    @Test("a pull request of a repository not in the list asks for a clone, then names it in the clone", .hangGuard(minutes: 5))
     func pullRequestClone() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()

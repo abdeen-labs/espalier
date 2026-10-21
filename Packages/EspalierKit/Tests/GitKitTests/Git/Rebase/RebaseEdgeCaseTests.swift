@@ -531,7 +531,7 @@ struct RebaseEdgeCaseTests {
             let task = Task {
                 try await rebase(repository, base, feature)
             }
-            try await RebaseTesting.waitFor { FileManager.default.fileExists(atPath: POSIXPath.join(signals, "blocked")) }
+            try await waitUntilFileExists(atPath: POSIXPath.join(signals, "blocked"))
             task.cancel()
 
             // git is killed while its hook waits; the hook is released after.

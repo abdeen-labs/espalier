@@ -62,18 +62,16 @@ enum KeyboardReorder {
         guard var reorder = state.reorder else {
             return
         }
-        let graph = repository.history.graph
-        let firstRow = graph.hasUncommittedWorkRow ? 1 : 0
-        let row = min(max(reorder.insertionRow + delta, firstRow), graph.count)
+        let rows = CommitRows(repository.history.graph)
+        let row = rows.insertionRow(reorder.insertionRow, movedBy: delta)
         guard row != reorder.insertionRow else {
             NSSound.beep()
             return
         }
         reorder.insertionRow = row
         state.reorder = reorder
-        let position = row - firstRow
-        let count = graph.count - firstRow
-        let place = position < count ? "before commit \(position + 1)" : "after commit \(position)"
+        let position = rows.position(ofRow: row)
+        let place = position < rows.commitCount ? "before commit \(position + 1)" : "after commit \(position)"
         announce("Press Return to insert the selected \(noun(reorder.shas.count)) \(place), or press Escape to cancel.")
     }
 

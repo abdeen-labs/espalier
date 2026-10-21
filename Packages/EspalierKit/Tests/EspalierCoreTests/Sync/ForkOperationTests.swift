@@ -253,7 +253,7 @@ struct ForkOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("when the default remote is upstream and origin has no URL, forking is refused before GitHub is asked and nothing changes; without origin, forking again finishes")
+    @Test("when the default remote is upstream and origin has no URL, forking is refused before GitHub is asked and nothing changes; without origin, forking again finishes", .hangGuard(minutes: 5))
     func upstreamDefaultWithURLlessOrigin() async throws {
         let repository = try await makeUpstreamDefaultRepository(otherRemotes: []) { local in
             try await runGit(["config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"], local)
@@ -341,7 +341,7 @@ struct ForkOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("creating a fork forks through the API under the account, then converts")
+    @Test("creating a fork forks through the API under the account, then converts", .hangGuard(minutes: 5))
     func createsFork() async throws {
         let fixture = try await makeSelectedRepository()
         fixture.associate(parentGitHubRepository)
@@ -356,7 +356,7 @@ struct ForkOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("a fork GitHub refuses leaves the repository as it was")
+    @Test("a fork GitHub refuses leaves the repository as it was", .hangGuard(minutes: 5))
     func forkRefused() async throws {
         let fixture = try await makeSelectedRepository()
         fixture.associate(parentGitHubRepository)

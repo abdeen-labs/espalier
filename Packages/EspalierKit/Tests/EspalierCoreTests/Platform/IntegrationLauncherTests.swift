@@ -7,7 +7,7 @@ import Testing
 import TestSupport
 
 /// These run `/bin/sh`, never an application.
-@Suite("Integration launcher")
+@Suite("Integration launcher", .hangGuard(minutes: 5))
 struct IntegrationLauncherTests {
     /// What a traced process reported.
     private final class Trace: Sendable {

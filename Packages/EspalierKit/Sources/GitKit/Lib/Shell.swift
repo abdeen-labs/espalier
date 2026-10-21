@@ -235,6 +235,9 @@ public final class ShellEnvironment: Sendable {
     }
 
     private let storage: Storage
+    /// The load, which ends once the variables are set (for tests to wait
+    /// on).
+    let loading: Task<Void, Never>
 
     /// Starts loading the variables with `load`, normally
     /// `getEnvironmentFromShell(_:timeout:)`; nil from it means none.
@@ -253,7 +256,7 @@ public final class ShellEnvironment: Sendable {
             try? await scheduler.sleep(for: patience)
             storage.runOutOfPatience()
         }
-        Task.detached(priority: .userInitiated) {
+        loading = Task.detached(priority: .userInitiated) {
             let variables = await load() ?? [:]
             storage.finish(variables)
             patienceTimer.cancel()

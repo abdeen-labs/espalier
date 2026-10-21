@@ -373,7 +373,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     private func recordAnchor() {
         shownAnchor = captureAnchor()
         if let source, shownRowCount > 0 {
-            shownFirstCommitSHA = source.commit(atRow: source.graph.hasUncommittedWorkRow ? 1 : 0)?.sha
+            shownFirstCommitSHA = source.commit(atRow: CommitRows(source.graph).firstRow)?.sha
         } else {
             shownFirstCommitSHA = nil
         }

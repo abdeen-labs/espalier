@@ -19,7 +19,7 @@ private func rule(_ type: String, ruleset: Int, operator: String? = nil, pattern
     return .object(rule)
 }
 
-@Suite("Branch protection and rules", .offline) @MainActor
+@Suite("Branch protection and rules", .offline, .hangGuard(minutes: 5)) @MainActor
 struct BranchProtectionTests {
     /// Mocks rulesets 1 (never bypassed) and 2 (always), and `rules` for
     /// the main branch.
@@ -172,7 +172,7 @@ struct BranchProtectionTests {
         }
         let gitHub = fixture.model.gitHub
         let refresh = Task { await gitHub.refreshBranchProtection() }
-        await gate.waitForArrival()
+        try await gate.waitForArrival()
         gitHub.clearBranchProtection()
         gate.open()
         await refresh.value

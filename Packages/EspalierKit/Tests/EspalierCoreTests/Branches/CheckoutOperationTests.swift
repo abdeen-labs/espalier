@@ -15,7 +15,7 @@ import TestSupport
 private let mainReadme = (1...8).map { "line \($0)" }.joined(separator: "\n") + "\n"
 private let featureReadme = mainReadme.replacingOccurrences(of: "line 1\n", with: "line one\n")
 
-@Suite("Checkout", .offline) @MainActor
+@Suite("Checkout", .offline, .hangGuard(minutes: 5)) @MainActor
 struct CheckoutOperationTests {
     /// A selected repository on `main` with a `feature` branch.
     private func makeRepository(
@@ -335,13 +335,13 @@ struct CheckoutOperationTests {
     @Test("checking out while another local operation runs is busy")
     func busy() async throws {
         let (_, app, repository, _) = try await makeRepository()
-        let gate = Gate()
+        let gate = AsyncGate()
         let other = Task {
             try await repository.perform(OperationDescriptor(kind: .commit)) { _ in
                 await gate.wait()
             }
         }
-        await gate.waitUntilWaiting()
+        try await gate.waitUntilWaiting()
         let error = await #expect(throws: OperationError.self) {
             try await repository.branches.checkout(try branch("feature", in: repository))
         }

@@ -516,11 +516,8 @@ struct FinderLaunchHooksTests {
             _ = try await commit.value
             #expect(try session.hookEnvironment("pre-commit")["NVM_BIN"] == session.nodeBin)
 
-            // Once loaded, operations get the shell's variables. Nothing
-            // reports the load once operations have stopped waiting for it.
-            while shellEnvironment.variables == nil {
-                try await Task.sleep(for: .milliseconds(20))
-            }
+            // Once loaded, operations get the shell's variables.
+            _ = try await shellEnvironment.loading.resultUnlessCancelled
             #expect(try await printShellVariable() == session.nodeBin + "\n")
             await app.idle()
         }

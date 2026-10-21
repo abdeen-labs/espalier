@@ -176,35 +176,8 @@ public final class AppHarness {
             try await environment.accountsStore.addAccount(account)
         }
         let stored = await environment.accountsStore.getAll()
-        await Self.waitUntil { app.accounts.accounts == stored }
+        await waitUntilObserved { app.accounts.accounts == stored }
         await app.idle()
-    }
-
-    /// Waits until `condition` holds, checking again whenever the observable
-    /// state it reads changes.
-    private static func waitUntil(_ condition: @escaping @MainActor () -> Bool) async {
-        while !condition() {
-            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                let resumed = Mutex(false)
-                let resume: @Sendable () -> Void = {
-                    let first = resumed.withLock { resumed in
-                        defer { resumed = true }
-                        return !resumed
-                    }
-                    if first {
-                        continuation.resume()
-                    }
-                }
-                let satisfied = withObservationTracking {
-                    condition()
-                } onChange: {
-                    resume()
-                }
-                if satisfied {
-                    resume()
-                }
-            }
-        }
     }
 
     /// Writes `contents` to `path` (relative to the repository).

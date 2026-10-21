@@ -10,7 +10,7 @@ import GitKit
 import Testing
 import TestSupport
 
-@Suite("Upstream comparisons' commit-graph", .offline) @MainActor
+@Suite("Upstream comparisons' commit-graph", .offline, .hangGuard(minutes: 5)) @MainActor
 struct UpstreamStatesCommitGraphTests {
     /// Where `git commit-graph write --split` writes.
     private func graphDirectory(_ repository: Repository) -> String {
@@ -99,7 +99,7 @@ struct UpstreamStatesCommitGraphTests {
         try await withIsolatedGitConfig { _ in
             let selected = try await makeRepository()
             let model = selected.model
-            let gate = Gate()
+            let gate = AsyncGate()
             let operation = Task {
                 try await model.perform(OperationDescriptor(kind: lanes == .network ? .fetch : .commit, lanes: lanes)) { _ in
                     await gate.wait()

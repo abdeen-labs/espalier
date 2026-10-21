@@ -310,9 +310,6 @@ public enum Metrics {
     public enum Diff {
         public static let codeFontSize: CGFloat = 11.5
         public static let lineHeight: CGFloat = 20
-        /// Code text size limits (⌘= / ⌘− / ⌘0).
-        public static let minimumCodeFontSize: CGFloat = 9
-        public static let maximumCodeFontSize: CGFloat = 24
     }
 
     /// The Changes list: an AppKit table with fixed rows, so applying a
@@ -369,8 +366,6 @@ public enum Metrics {
         /// The hook output popover.
         public static let hookOutputWidth: CGFloat = 520
         public static let hookOutputHeight: CGFloat = 260
-        /// The Suggestions shown when there are no local changes.
-        public static let suggestionsMaximumWidth: CGFloat = 620
     }
 
     /// The capsule and toasts floating over the detail area.

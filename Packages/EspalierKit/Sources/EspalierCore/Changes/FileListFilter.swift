@@ -442,11 +442,6 @@ public struct FuzzyQuery: Sendable {
     }
 }
 
-/// Whether fuzzaldrin-plus's `match(text, query)` returns any match.
-func fuzzyMatches(_ text: String, query: String) -> Bool {
-    FuzzyQuery(query)?.matches(text) ?? false
-}
-
 /// fuzzaldrin-plus's `truncatedUpperCase`: each code unit uppercased, keeping
 /// only the first code unit of the result. A lone surrogate stays itself, as
 /// JavaScript's `toUpperCase` leaves it.

@@ -14,7 +14,7 @@ import Synchronization
 import Testing
 import TestSupport
 
-@Suite("Background fetcher", .offline) @MainActor
+@Suite("Background fetcher", .offline, .hangGuard(minutes: 5)) @MainActor
 struct BackgroundFetcherTests {
     @MainActor
     private struct Fixture {
@@ -90,7 +90,7 @@ struct BackgroundFetcherTests {
         await fixture.app.idle()
     }
 
-    @Test("a repository not on GitHub fetches too, every hour plus the skew", .hangGuard(minutes: 5))
+    @Test("a repository not on GitHub fetches too, every hour plus the skew")
     func notOnGitHub() async throws {
         let fixture = try await makeFixture(gitHub: false)
         let pushed = try await pushCommitFromAnotherClone(fixture.remote, path: "other.txt", contents: "other\n")
@@ -105,7 +105,7 @@ struct BackgroundFetcherTests {
         await fixture.app.idle()
     }
 
-    @Test("a repository without a remote isn't fetched, and is checked again an hour later", .hangGuard(minutes: 5))
+    @Test("a repository without a remote isn't fetched, and is checked again an hour later")
     func noRemote() async throws {
         let fixture = try await makeFixture(gitHub: false)
         try await runGit(["remote", "remove", "origin"], fixture.local)
@@ -170,7 +170,7 @@ struct BackgroundFetcherTests {
         await fixture.app.idle()
     }
 
-    @Test("stopping cancels the wait; a fetch in progress finishes and nothing follows it", .hangGuard(minutes: 5))
+    @Test("stopping cancels the wait; a fetch in progress finishes and nothing follows it")
     func stopping() async throws {
         let fixture = try await makeFixture()
         fixture.fetcher.start(for: fixture.model, isFirstSelectionSinceLaunch: true)
@@ -211,7 +211,7 @@ struct BackgroundFetcherTests {
         await fixture.app.idle()
     }
 
-    @Test("a user fetch waits behind a background fetch, then runs", .hangGuard(minutes: 5))
+    @Test("a user fetch waits behind a background fetch, then runs")
     func userFetchWaitsBehindBackgroundFetch() async throws {
         let fixture = try await makeFixture()
         let gate = try await FetchGate(clone: fixture.local)

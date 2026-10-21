@@ -52,7 +52,8 @@ struct ChildProcessTests {
         data.map { String(format: "%02x", $0) }.joined(separator: " ")
     }
 
-    /// Polls `condition` for up to ten seconds.
+    /// Polls `condition` for up to ten seconds, for what no event reports:
+    /// that ChildProcess has reaped a child.
     static func eventually(_ condition: () -> Bool) async -> Bool {
         let deadline = ContinuousClock.now + .seconds(10)
         while ContinuousClock.now < deadline {
@@ -432,7 +433,7 @@ struct ChildProcessTests {
 
     // MARK: - Detached processes
 
-    @Test("starts a detached child in a session of its own, with its standard streams on /dev/null")
+    @Test("starts a detached child in a session of its own, with its standard streams on /dev/null", .hangGuard(minutes: 5))
     func detached() async throws {
         let marker = try createTempDirectory() + "/streams"
         let (exits, exited) = AsyncStream.makeStream(of: ChildProcess.Termination.self)
@@ -456,7 +457,7 @@ struct ChildProcessTests {
 
         #expect(getsid(pid) == pid)
         #expect(getpgid(pid) == pid)
-        #expect(await Self.eventually { access(marker, F_OK) == 0 })
+        try await waitUntilFileExists(atPath: marker)
 
         kill(pid, SIGTERM)
         var terminations = exits.makeAsyncIterator()
@@ -466,7 +467,7 @@ struct ChildProcessTests {
         #expect(errno == ECHILD)
     }
 
-    @Test("reports a detached child's exit status")
+    @Test("reports a detached child's exit status", .hangGuard(minutes: 5))
     func detachedExit() async throws {
         let (exits, exited) = AsyncStream.makeStream(of: ChildProcess.Termination.self)
         try ChildProcess.spawnDetached(

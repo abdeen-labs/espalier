@@ -265,13 +265,13 @@ struct WorktreesModelTests {
         let linked = try await fixture.addLinked()
         let model = fixture.model
 
-        let gate = Gate()
+        let gate = AsyncGate()
         let running = Task {
             try await model.perform(OperationDescriptor(kind: .commit)) { _ in
                 await gate.wait()
             }
         }
-        await gate.waitUntilWaiting()
+        try await gate.waitUntilWaiting()
         let busy = await #expect(throws: OperationError.self) {
             try await model.worktrees.switchToWorktree(linked)
         }

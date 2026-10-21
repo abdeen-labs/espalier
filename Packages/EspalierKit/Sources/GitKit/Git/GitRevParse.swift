@@ -104,31 +104,3 @@ public func getRepositoryType(_ path: String) async throws -> RepositoryType {
         return .missing
     }
 }
-
-public func getUpstreamRefForRef(_ path: String, _ ref: String? = nil) async throws -> String? {
-    let rev = (ref ?? "") + "@{upstream}"
-    let args = ["rev-parse", "--symbolic-full-name", rev]
-    let opts = GitExecutionOptions(successExitCodes: [0, 128])
-    let result = try await git(args, path, "getUpstreamRefForRef", options: opts)
-
-    return result.exitCode == 0 ? JSCompat.trim(result.stdout) : nil
-}
-
-/// `/^refs\/remotes\/([^/]+)\//`
-private let upstreamRemoteNamePattern = JSCompat.regex("^refs/remotes/([^/]+)/")
-
-public func getUpstreamRemoteNameForRef(_ path: String, _ ref: String? = nil) async throws -> String? {
-    let remoteRef = try await getUpstreamRefForRef(path, ref)
-    guard let remoteRef, let match = JSCompat.match(remoteRef, upstreamRemoteNamePattern) else {
-        return nil
-    }
-    return match[1]
-}
-
-public func getCurrentUpstreamRef(_ path: String) async throws -> String? {
-    try await getUpstreamRefForRef(path)
-}
-
-public func getCurrentUpstreamRemoteName(_ path: String) async throws -> String? {
-    try await getUpstreamRemoteNameForRef(path)
-}

@@ -49,7 +49,7 @@ struct RollingLogFileTests {
 
     // MARK: Batches
 
-    @Test("messages wait for their batch, then go to disk in one write")
+    @Test("messages wait for their batch, then go to disk in one write", .hangGuard(minutes: 5))
     func batches() async throws {
         let scheduler = ManualScheduler()
         let log = try makeLog(scheduler: scheduler)

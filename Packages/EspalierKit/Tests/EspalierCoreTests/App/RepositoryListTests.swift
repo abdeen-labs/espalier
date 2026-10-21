@@ -53,7 +53,7 @@ struct RepositoryListTests {
         await app.idle()
     }
 
-    @Test("loads an added repository's remotes, associates it with GitHub, and tells whether it uses Git LFS")
+    @Test("loads an added repository's remotes, associates it with GitHub, and tells whether it uses Git LFS", .hangGuard(minutes: 5))
     func addLoadsRemotesAssociationAndLFS() async throws {
         let repository = try await setupTwoCommitRepo()
         try await runGit(["remote", "add", "origin", "https://github.com/octocat/app.git"], repository)

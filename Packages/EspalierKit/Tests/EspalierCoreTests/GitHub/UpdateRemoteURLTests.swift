@@ -130,7 +130,7 @@ struct UpdateRemoteURLTests {
     func skipsWhileBusy() async throws {
         let (app, id, gitHubRepository, repository) = try await createRepository(apiRepository)
         let model = try #require(app.repository(id))
-        let gate = Gate()
+        let gate = AsyncGate()
         let fetch = Task {
             try await model.perform(OperationDescriptor(kind: .fetch, lanes: [.network])) { _ in
                 await gate.wait()

@@ -3,46 +3,28 @@
 
 @testable import EspalierCore
 import Testing
+import TestSupport
 
-/// Holds operations until it's opened.
-private nonisolated struct RequestGate: Sendable {
-    private let stream: AsyncStream<Void>
-    private let continuation: AsyncStream<Void>.Continuation
-
-    init() {
-        (stream, continuation) = AsyncStream<Void>.makeStream()
-    }
-
-    /// Waits until the gate opens or the task is cancelled.
-    func wait() async {
-        for await _ in stream {
-            break
-        }
-    }
-
-    func open() {
-        continuation.finish()
-    }
-}
-
-@Suite("Latest request") @MainActor
+@Suite("Latest request", .hangGuard(minutes: 5)) @MainActor
 struct LatestRequestTests {
-    /// Starts `operation` in a task and returns once its request is in
-    /// flight.
-    private func start(_ request: LatestRequest, _ operation: @escaping @Sendable () async -> Int) async -> Task<Int?, Never> {
+    /// Starts `operation`, which waits at `gate`, in a task and returns once
+    /// it waits there.
+    private func start(
+        _ request: LatestRequest,
+        at gate: AsyncGate,
+        _ operation: @escaping @Sendable () async -> Int
+    ) async throws -> Task<Int?, Never> {
         let task = Task { await request.perform(operation) }
-        for _ in 0..<1_000 where !request.isRunning {
-            await Task.yield()
-        }
+        try await gate.waitUntilWaiting()
         #expect(request.isRunning)
         return task
     }
 
     @Test("a newer request replaces the one in flight, whose caller gets nil")
-    func latestWins() async {
+    func latestWins() async throws {
         let request = LatestRequest()
-        let gate = RequestGate()
-        let first = await start(request) {
+        let gate = AsyncGate()
+        let first = try await start(request, at: gate) {
             await gate.wait()
             return Task.isCancelled ? -1 : 1
         }
@@ -54,10 +36,10 @@ struct LatestRequestTests {
     }
 
     @Test("cancel gives the caller nil and cancels the operation")
-    func cancel() async {
+    func cancel() async throws {
         let request = LatestRequest()
-        let gate = RequestGate()
-        let first = await start(request) {
+        let gate = AsyncGate()
+        let first = try await start(request, at: gate) {
             await gate.wait()
             return Task.isCancelled ? -1 : 1
         }
@@ -71,11 +53,11 @@ struct LatestRequestTests {
     }
 
     @Test("a cancelled caller gets nil, and its operation is cancelled")
-    func callerCancelled() async {
+    func callerCancelled() async throws {
         let request = LatestRequest()
-        let gate = RequestGate()
-        let sawCancellation = RequestGate()
-        let first = await start(request) {
+        let gate = AsyncGate()
+        let sawCancellation = AsyncGate()
+        let first = try await start(request, at: gate) {
             await gate.wait()
             if Task.isCancelled {
                 sawCancellation.open()
@@ -91,10 +73,10 @@ struct LatestRequestTests {
     }
 
     @Test("idle waits for the request in flight")
-    func idle() async {
+    func idle() async throws {
         let request = LatestRequest()
-        let gate = RequestGate()
-        let first = await start(request) {
+        let gate = AsyncGate()
+        let first = try await start(request, at: gate) {
             await gate.wait()
             return 1
         }

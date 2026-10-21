@@ -252,11 +252,6 @@ public func removeConfigValue(
     try await removeConfigValueInPath(name, repository.path, env: env)
 }
 
-/// Remove the global config value by name.
-public func removeGlobalConfigValue(_ name: String, env: [String: String]? = nil) async throws {
-    try await removeConfigValueInPath(name, nil, env: env)
-}
-
 /// Remove config value by name
 ///
 /// - Parameter path: The path to execute the `git` command in. If null

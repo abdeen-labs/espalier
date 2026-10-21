@@ -338,7 +338,10 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     /// Delivers a redirect response once it's clear the redirect wasn't
-    /// followed.
+    /// followed. URLSession tells a protocol nothing when its delegate
+    /// refuses a redirect; it stops the protocol at once when it follows
+    /// one. So this waits 100 milliseconds for that stop, and delivers the
+    /// response itself when none came.
     private struct RefusedRedirect: Sendable {
         let `protocol`: MockURLProtocol
         let response: HTTPURLResponse

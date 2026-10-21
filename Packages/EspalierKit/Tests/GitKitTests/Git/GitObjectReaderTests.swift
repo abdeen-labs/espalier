@@ -219,16 +219,6 @@ private final class FirstProcess: Sendable {
     }
 }
 
-private func processIsGone(_ pid: Int32) async -> Bool {
-    for _ in 0..<200 {
-        if kill(pid, 0) != 0, errno == ESRCH {
-            return true
-        }
-        try? await Task.sleep(for: .milliseconds(10))
-    }
-    return false
-}
-
 // MARK: - Tests
 
 @Suite("GitObjectReader")
@@ -553,7 +543,7 @@ struct GitObjectReaderTests {
             }
 
             // The stopped process was discarded; its answer can't reach the next request.
-            #expect(await processIsGone(pid))
+            try await waitForExit(pid)
             guard case .object(let object)? = try await reader.read("HEAD:b.txt") else {
                 Issue.record("Expected b.txt")
                 return
@@ -608,6 +598,8 @@ struct GitObjectReaderTests {
             let reader = GitObjectReader(repositoryPath: repo.path)
             _ = try await reader.read("HEAD:small.txt")
 
+            // Each delay lets the read get to a different point before it's
+            // cancelled; either outcome is checked.
             for delay in [1, 3, 10] {
                 let request = Task { try await reader.read("HEAD:large.bin") }
                 try await Task.sleep(for: .milliseconds(delay))
@@ -642,7 +634,7 @@ struct GitObjectReaderTests {
             _ = try await reader.read("HEAD:f")
             let pid = try #require(await reader.processIdentifier)
             kill(pid, SIGKILL)
-            #expect(await processIsGone(pid))
+            try await waitForExit(pid)
 
             guard case .object(let object)? = try await reader.read("HEAD:f") else {
                 Issue.record("Expected f")

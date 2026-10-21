@@ -528,7 +528,7 @@ struct SquashReorderEdgeCaseTests {
             let task = Task {
                 try await squash(repository, [commits[5]], commits[0], initial.sha, "Squashed", progressCallback: nil, todoPath: todoPath)
             }
-            try await RebaseTesting.waitFor { FileManager.default.fileExists(atPath: POSIXPath.join(signals, "blocked")) }
+            try await waitUntilFileExists(atPath: POSIXPath.join(signals, "blocked"))
             task.cancel()
             await #expect(throws: CancellationError.self) {
                 try await task.value

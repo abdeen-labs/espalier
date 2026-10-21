@@ -31,18 +31,6 @@ nonisolated public struct BackgroundFailureSummary: Sendable, Equatable {
     }
 }
 
-/// The small warning badge on the sync button.
-public struct BackgroundFailureBadge: View {
-    public init() {}
-
-    public var body: some View {
-        Image(systemName: "exclamationmark.triangle.fill")
-            .symbolRenderingMode(.multicolor)
-            .font(.system(size: 9, weight: .semibold))
-            .accessibilityLabel("Background fetch failed")
-    }
-}
-
 /// The details popover: the error's message and its recoveries.
 public struct BackgroundFailureDetails: View {
     private let summary: BackgroundFailureSummary

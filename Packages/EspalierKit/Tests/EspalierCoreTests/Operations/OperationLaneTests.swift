@@ -7,7 +7,7 @@ import GitKit
 import Testing
 import TestSupport
 
-@Suite("Operation lanes") @MainActor
+@Suite("Operation lanes", .hangGuard(minutes: 5)) @MainActor
 struct OperationLaneTests {
     let commit = ActiveOperation(kind: .commit)
     let checkout = ActiveOperation(kind: .checkoutBranch)
@@ -79,13 +79,13 @@ struct OperationLaneTests {
             let app = await harness.loadedApp()
             let repository = try await harness.addAndSelect(local, to: app)
 
-            let gate = Gate()
+            let gate = AsyncGate()
             let commit = Task {
                 try await repository.perform(OperationDescriptor(kind: .commit)) { _ in
                     await gate.wait()
                 }
             }
-            await gate.waitUntilWaiting()
+            try await gate.waitUntilWaiting()
 
             let pull = await #expect(throws: OperationError.self) {
                 try await repository.perform(OperationDescriptor(kind: .pull, lanes: [.network, .local])) { _ in }
@@ -120,13 +120,13 @@ struct OperationLaneTests {
             #expect(main.networkLane === linked.networkLane)
             #expect(main.localLane !== linked.localLane)
 
-            let gate = Gate()
+            let gate = AsyncGate()
             let fetch = Task {
                 try await main.perform(OperationDescriptor(kind: .fetch, lanes: [.network])) { _ in
                     await gate.wait()
                 }
             }
-            await gate.waitUntilWaiting()
+            try await gate.waitUntilWaiting()
             let other = await #expect(throws: OperationError.self) {
                 try await linked.perform(OperationDescriptor(kind: .fetch, lanes: [.network])) { _ in }
             }
@@ -137,36 +137,6 @@ struct OperationLaneTests {
             gate.open()
             try await fetch.value
             await app.idle()
-        }
-    }
-}
-
-/// A gate an operation's body waits at until the test opens it.
-@MainActor
-final class Gate {
-    private var continuation: CheckedContinuation<Void, Never>?
-    private var isOpen = false
-    private(set) var isWaiting = false
-
-    func wait() async {
-        guard !isOpen else {
-            return
-        }
-        isWaiting = true
-        await withCheckedContinuation { continuation = $0 }
-        isWaiting = false
-    }
-
-    func open() {
-        isOpen = true
-        continuation?.resume()
-        continuation = nil
-    }
-
-    /// Waits until something waits at the gate.
-    func waitUntilWaiting() async {
-        for _ in 0..<100_000 where !isWaiting {
-            await Task.yield()
         }
     }
 }

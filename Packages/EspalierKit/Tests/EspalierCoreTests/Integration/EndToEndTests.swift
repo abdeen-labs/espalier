@@ -15,7 +15,7 @@ import GitKit
 import Testing
 import TestSupport
 
-@Suite("End to end", .offline) @MainActor
+@Suite("End to end", .offline, .hangGuard(minutes: 5)) @MainActor
 struct EndToEndTests {
     @Test("stages, commits, branches, merges, and pushes to a local bare remote, and the list survives a relaunch")
     func gate() async throws {

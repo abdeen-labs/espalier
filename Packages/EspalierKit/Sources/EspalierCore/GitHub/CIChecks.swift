@@ -495,13 +495,6 @@ public func getFormattedCheckRunDuration(completedAt: String?, startedAt: String
     getCheckDurationInMilliseconds(completedAt: completedAt, startedAt: startedAt).map(formatPreciseDuration) ?? ""
 }
 
-/// Gets the duration of a check run or job step formatted in minutes and
-/// seconds with long notation (e.g. 1 minute 30 seconds); empty when it
-/// isn't known.
-public func getFormattedCheckRunLongDuration(completedAt: String?, startedAt: String?) -> String {
-    getCheckDurationInMilliseconds(completedAt: completedAt, startedAt: startedAt).map(formatLongPreciseDuration) ?? ""
-}
-
 /// Generates the URL pointing to the details of a given check run. If that check
 /// run has no specific URL, returns the URL of the associated pull request.
 ///
@@ -768,15 +761,14 @@ func rerunPlan(_ checkRuns: [RefCheck], failedOnly: Bool, checkSuites: [APICheck
 
 private struct TimeUnitDescriptor {
     let shortUnit: String
-    let longUnit: String
     let ms: Double
 }
 
 private let units: [TimeUnitDescriptor] = [
-    TimeUnitDescriptor(shortUnit: "d", longUnit: "day", ms: 86_400_000),
-    TimeUnitDescriptor(shortUnit: "h", longUnit: "hour", ms: 3_600_000),
-    TimeUnitDescriptor(shortUnit: "m", longUnit: "minute", ms: 60000),
-    TimeUnitDescriptor(shortUnit: "s", longUnit: "second", ms: 1000),
+    TimeUnitDescriptor(shortUnit: "d", ms: 86_400_000),
+    TimeUnitDescriptor(shortUnit: "h", ms: 3_600_000),
+    TimeUnitDescriptor(shortUnit: "m", ms: 60000),
+    TimeUnitDescriptor(shortUnit: "s", ms: 1000),
 ]
 
 /// Creates a narrow style precise duration format used for displaying things
@@ -793,25 +785,6 @@ public func formatPreciseDuration(_ ms: Double) -> String {
         let qty = (ms / unit.ms).rounded(.down)
         ms -= qty * unit.ms
         parts.append("\(Int(qty))\(unit.shortUnit)")
-    }
-
-    return parts.joined(separator: " ")
-}
-
-/// Creates a long style precise duration format used for displaying things
-/// like check run durations that typically only last for a few minutes.
-///
-/// Example: formatLongPreciseDuration(3670000) -> "1 hour 1 minute 10 seconds"
-///
-/// - Parameter ms: The duration in milliseconds
-public func formatLongPreciseDuration(_ ms: Double) -> String {
-    var parts: [String] = []
-    var ms = abs(ms)
-
-    for unit in units where !parts.isEmpty || ms >= unit.ms || unit.shortUnit == "s" {
-        let qty = (ms / unit.ms).rounded(.down)
-        ms -= qty * unit.ms
-        parts.append("\(Int(qty)) \(unit.longUnit)\(qty == 1 ? "" : "s")")
     }
 
     return parts.joined(separator: " ")

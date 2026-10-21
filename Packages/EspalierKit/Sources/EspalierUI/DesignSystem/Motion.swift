@@ -74,11 +74,6 @@ public enum Motion {
         .timingCurve(controlPoints.x1, controlPoints.y1, controlPoints.x2, controlPoints.y2, duration: duration)
     }
 
-    /// A scroll's ease-in-out, as a SwiftUI animation.
-    nonisolated public static var scrollAnimation: Animation {
-        .easeInOut(duration: scroll)
-    }
-
     /// The curve as a Core Animation timing function.
     nonisolated public static var timingFunction: CAMediaTimingFunction {
         CAMediaTimingFunction(

@@ -87,7 +87,7 @@ final class Events: Sendable {
     }
 }
 
-@Suite("HooksProxy")
+@Suite("HooksProxy", .hangGuard(minutes: 5))
 struct HooksProxyTests {
     let output: String
     let shellEnv: [String: String]

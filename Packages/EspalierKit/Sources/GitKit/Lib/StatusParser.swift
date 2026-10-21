@@ -78,14 +78,6 @@ public enum StatusItem: Hashable, Sendable {
     }
 }
 
-public func isStatusHeader(_ statusItem: StatusItem) -> Bool {
-    statusItem.header != nil
-}
-
-public func isStatusEntry(_ statusItem: StatusItem) -> Bool {
-    statusItem.entry != nil
-}
-
 private let ChangedEntryType = UInt8(ascii: "1")
 private let RenamedOrCopiedEntryType = UInt8(ascii: "2")
 private let UnmergedEntryType = UInt8(ascii: "u")

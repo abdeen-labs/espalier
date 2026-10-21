@@ -117,11 +117,6 @@ extension Dugite {
         runtime.gitDirectory
     }
 
-    /// Find the path to the embedded git binary.
-    public static func resolveGitBinary(_ runtime: GitRuntime = .current) -> URL {
-        runtime.gitBinary
-    }
-
     /// Find the path to the embedded git exec path.
     ///
     /// If a custom git exec path is given as the `GIT_EXEC_PATH` environment
