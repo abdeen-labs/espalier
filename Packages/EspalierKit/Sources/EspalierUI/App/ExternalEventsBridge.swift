@@ -1,7 +1,9 @@
 // Where URL opens, folder opens from Finder, and folders dropped on the Dock
 // icon go. They wait until the main window is up, then each brings Espalier
-// and the window to the front and runs through `AppModel.handle(_:)`, with
-// the window's presenter showing its errors and asking its decisions.
+// and the window to the front and runs through
+// `AppModel.handle(_:confirmed:)`, with the window's presenter showing its
+// errors and asking its questions: a link's branch or pull request is
+// checked out only once the user agrees.
 
 import AppKit
 import EspalierCore
@@ -107,10 +109,12 @@ public final class ExternalEventsBridge {
     /// through the window's presenter and presents what it did. A link
     /// GitHub Desktop opens leaves Espalier where it is.
     ///
-    /// A checkout the action started that needs a decision or a
-    /// confirmation is thrown with the branch in the error's `gitContext`;
-    /// once answered, the branch is checked out again with the answers
-    /// rather than the whole action rerun.
+    /// A link's question (`checkoutLinkedBranch`) runs the whole action
+    /// again once confirmed; cancelled, the repository stays selected with
+    /// nothing fetched or checked out. A checkout the action started that
+    /// needs a decision or a confirmation is thrown with the branch in the
+    /// error's `gitContext`; once answered, the branch is checked out again
+    /// with the answers rather than the whole action rerun.
     static func run(_ action: ExternalAction, in context: WindowContext) async {
         switch action {
         case .url(let url) where context.app.passesToGitHubDesktop(url):
@@ -123,18 +127,20 @@ public final class ExternalEventsBridge {
             NSApp.activate(ignoringOtherApps: true)
             context.revealWindow()
         }
-        await run({ app throws(OperationError) in try await app.handle(action) }, in: context)
+        await run({ app, answers throws(OperationError) in try await app.handle(action, confirmed: answers.confirmed) }, in: context)
     }
 
     /// Goes on with a link that asked for a clone, in the repository the
     /// clone added (`continueExternalAction`): its branch, pull request, and
-    /// file, presented as `run` presents an action.
+    /// file, asked and presented as `run` asks and presents an action.
     static func continueAfterClone(_ request: ExternalCloneRequest, in id: RepositoryID, context: WindowContext) async {
-        await run({ app throws(OperationError) in try await app.continueExternalAction(request, in: id) }, in: context)
+        await run({ app, answers throws(OperationError) in
+            try await app.continueExternalAction(request, in: id, confirmed: answers.confirmed)
+        }, in: context)
     }
 
     private static func run(
-        _ intent: @escaping @MainActor (AppModel) async throws(OperationError) -> ExternalActionResult,
+        _ intent: @escaping @MainActor (AppModel, IntentAnswers) async throws(OperationError) -> ExternalActionResult,
         in context: WindowContext
     ) async {
         let app = context.app
@@ -145,7 +151,7 @@ public final class ExternalEventsBridge {
                 return ExternalActionResult.opened(OpenedRepository(repositoryID: repository.id, checkout: checkout))
             }
             do throws(OperationError) {
-                return try await intent(app)
+                return try await intent(app, answers)
             } catch {
                 retry.remember(error, in: app)
                 throw error
@@ -196,8 +202,10 @@ public final class ExternalEventsBridge {
 }
 
 extension ExternalEventsBridge {
-    /// Checks out a link's pull request, asking about uncommitted changes as
-    /// any checkout does, and shows what it did.
+    /// Checks out a link's pull request, asking first (naming the pull
+    /// request, and the remote added for its fork), then about uncommitted
+    /// changes as any checkout does, and shows what it did. Cancelled, the
+    /// pull request stays shown with nothing added, fetched, or checked out.
     static func checkOut(_ pullRequest: ExternalPullRequest, in id: RepositoryID, context: WindowContext) async {
         guard let repository = context.app.repository(id) else {
             return

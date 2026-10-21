@@ -10,7 +10,9 @@ enum GitPerf {
     private static let signposter = OSSignposter(subsystem: Log.subsystem, category: "git-perf")
     private static let logger = Log.logger(category: "git-perf")
 
-    /// Measure an async git operation.
+    /// Measure an async git operation. `command` goes into the log and the
+    /// signpost as it is, so it holds no credentials (`git()` takes them
+    /// out of URLs with `withoutURLCredentials`).
     static func measure<T>(_ command: String, _ body: () async throws -> T) async rethrows -> T {
         let state = signposter.beginInterval("git", id: signposter.makeSignpostID(), "\(command, privacy: .public)")
         let start = ContinuousClock.now

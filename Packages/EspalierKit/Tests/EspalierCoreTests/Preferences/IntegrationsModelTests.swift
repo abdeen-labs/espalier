@@ -524,6 +524,23 @@ struct IntegrationsModelTests {
         #expect(fixture.harness.workspace.revealedPaths.isEmpty)
     }
 
+    @Test("the browser opens only web pages, and System Settings only its panes")
+    func browserAndSystemSettings() async throws {
+        let fixture = try await makeIntegrationsFixture()
+        let page = try #require(URL(string: "https://github.com/octocat/hello"))
+        let pane = try #require(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension"))
+        // A link from a server could name an app to launch.
+        let app = URL(exactFilePath: "/Applications/Calculator.app", isDirectory: true)
+
+        #expect(fixture.integrations.openInBrowser(page))
+        #expect(!fixture.integrations.openInBrowser(app))
+        #expect(!fixture.integrations.openInBrowser(pane))
+        #expect(fixture.integrations.openSystemSettings(pane))
+        #expect(!fixture.integrations.openSystemSettings(page))
+        #expect(!fixture.integrations.openSystemSettings(app))
+        #expect(fixture.harness.workspace.openedURLs == [page, pane])
+    }
+
     // MARK: The global git configuration
 
     @Test("opens the global git configuration in the editor, creating the file")

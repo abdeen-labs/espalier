@@ -11,6 +11,7 @@ public enum ConfirmationKind: String, Sendable, Hashable, CaseIterable {
     case commitFilteredChanges, commitWithUnknownCoAuthors, commitOversizedFiles, commitConflictMarkers
     case overwriteCommitMessage, removeWorktree, abortWithResolvedConflicts, deleteBranch, deleteRemoteBranch, deleteTag
     case replaceCommandLineTool
+    case checkoutLinkedBranch, checkoutLinkedPullRequest
 }
 
 /// What's at the command line tool's path that installing would replace
@@ -67,6 +68,12 @@ public struct Confirmation: Sendable, Equatable {
         case operation(String)
         /// The commit to undo.
         case commit(sha: String, isMergeCommit: Bool)
+        /// The branch a link asks to check out, and the repository's name.
+        case linkedBranch(repository: String, branch: String)
+        /// The pull request a link asks to check out, the repository's name,
+        /// and the remote added for the pull request's fork, when the
+        /// repository has none for it.
+        case linkedPullRequest(repository: String, number: Int, title: String, forkRemote: Remote?)
     }
 }
 
@@ -370,6 +377,42 @@ extension Confirmation {
             title: "Replace Existing Command?",
             message: message,
             confirmButton: "Replace"
+        )
+    }
+
+    /// Fetching and checking out the branch a link named.
+    ///
+    /// - Parameters:
+    ///   - branch: The branch, as the link names it (without its remote).
+    ///   - repository: The repository's name, as the list shows it.
+    public static func checkoutLinkedBranch(_ branch: String, repository: String) -> Confirmation {
+        Confirmation(
+            kind: .checkoutLinkedBranch,
+            details: .linkedBranch(repository: repository, branch: branch),
+            title: "Check Out Branch?",
+            message: "A link asks to check out the branch \(branch) in \(repository). Espalier fetches first, so the branch is up to date.",
+            confirmButton: "Check Out"
+        )
+    }
+
+    /// Checking out the pull request a link named, adding a remote for its
+    /// fork when the repository has none for it.
+    ///
+    /// - Parameters:
+    ///   - repository: The repository's name, as the list shows it.
+    ///   - forkRemote: The remote that will be added, or nil when one of the
+    ///     repository's remotes is the pull request's head repository.
+    public static func checkoutLinkedPullRequest(number: Int, title pullRequestTitle: String, repository: String, forkRemote: Remote?) -> Confirmation {
+        var message = "A link asks to check out the pull request \u{201C}\(pullRequestTitle)\u{201D} (#\(number)) in \(repository)."
+        if let forkRemote {
+            message += "\n\nIt comes from a fork, so Espalier adds the remote \(forkRemote.name) for \(forkRemote.url) and fetches its branch from there."
+        }
+        return Confirmation(
+            kind: .checkoutLinkedPullRequest,
+            details: .linkedPullRequest(repository: repository, number: number, title: pullRequestTitle, forkRemote: forkRemote),
+            title: "Check Out Pull Request?",
+            message: message,
+            confirmButton: "Check Out"
         )
     }
 }

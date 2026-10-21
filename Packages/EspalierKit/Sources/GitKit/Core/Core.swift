@@ -283,7 +283,10 @@ public func git(
 
     return try await withHooksEnv(path: path, options: opts, runtime: runtime) { hooksEnv in
         try await withTrampolineEnv(path: path, isBackgroundTask: opts.isBackgroundTask, customEnv: hooksEnv, runtime: runtime) { trampolineEnv in
-            let commandName = "\(name): git \(args.joined(separator: " "))"
+            // The arguments as the log and the signpost show them: without
+            // the credentials a URL typed as `https://user:token@host` has.
+            let loggedArguments = args.map(withoutURLCredentials).joined(separator: " ")
+            let commandName = "\(name): git \(loggedArguments)"
 
             // Explicitly set TERM to 'dumb' so that if Espalier was launched
             // from a terminal or if the system environment variables have
@@ -360,13 +363,15 @@ public func git(
             // The caller should either handle this error, or expect that exit
             // code.
             let terminalOutput = terminal.output()
-            var errorMessage = ["`git \(args.joined(separator: " "))` exited with an unexpected code: \(exitCode)."]
+            var errorMessage = ["`git \(loggedArguments)` exited with an unexpected code: \(exitCode)."]
             if !terminalOutput.isEmpty {
-                // Leave even less of the combined output in the log
-                errorMessage.append(String(terminalOutput.suffix(1024)))
+                // Leave even less of the combined output in the log, without
+                // URLs' credentials. They come out before the output is cut,
+                // so a URL cut at the start can't keep part of its own.
+                errorMessage.append(String(withoutURLCredentials(terminalOutput).suffix(1024)))
             }
             if let gitError {
-                let description = gitErrorDescription.map { ": \($0)" } ?? ""
+                let description = gitErrorDescription.map { ": \(withoutURLCredentials($0))" } ?? ""
                 errorMessage.append("(The error was parsed as \(gitError.rawValue)\(description))")
             }
             logger.error("\(errorMessage.joined(separator: "\n"), privacy: .public)")

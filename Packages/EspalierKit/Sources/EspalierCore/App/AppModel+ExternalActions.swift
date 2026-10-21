@@ -31,8 +31,8 @@ public enum ExternalActionResult: Sendable, Equatable {
     case opened(OpenedRepository)
     /// No repository in the list matches the URL. Show Clone on its URL tab
     /// prefilled with `request.url`; once cloned, call
-    /// `continueExternalAction(_:in:)` with the new repository so the
-    /// branch, the pull request, and the file follow.
+    /// `continueExternalAction(_:in:confirmed:)` with the new repository so
+    /// the branch, the pull request, and the file follow.
     case cloneRequested(ExternalCloneRequest)
     /// Folders were opened: those in the list (or worktrees of repositories
     /// in it) are existing, the others added, as Add adds them. Present it as
@@ -57,7 +57,8 @@ public struct OpenedRepository: Sendable, Equatable {
     /// The fetch before the checkout failed; the checkout went on.
     public var fetchError: OperationError?
     /// The pull request the action named, to show and check out with
-    /// `RepositoryGitHubModel.checkout(_:strategy:confirmed:)`.
+    /// `RepositoryGitHubModel.checkout(_:strategy:confirmed:)`, which asks
+    /// first.
     public var pullRequest: ExternalPullRequest?
     /// The file the action named, shown in the Finder. Nil when it named
     /// none, or one that is absolute, outside the repository, or missing.
@@ -80,7 +81,8 @@ public struct OpenedRepository: Sendable, Equatable {
 
 /// A pull request an external action named: what showing and checking it out
 /// takes. Check it out with
-/// `RepositoryGitHubModel.checkout(_:strategy:confirmed:)`.
+/// `RepositoryGitHubModel.checkout(_:strategy:confirmed:)`, which asks first
+/// (`checkoutLinkedPullRequest`).
 public struct ExternalPullRequest: Sendable, Equatable {
     public let number: Int
     public let title: String
@@ -121,10 +123,14 @@ extension AppModel {
     ///   pull request, loads it from GitHub and opens the
     ///   repository its head or base belongs to; otherwise opens the
     ///   repository whose GitHub repository (or fork parent) the URL names.
-    ///   With a branch, the repository refreshes, fetches, and checks the
-    ///   branch out (local or remote, through checkout's decisions). Then the
-    ///   file is shown in the Finder. A URL no repository matches asks for a
-    ///   clone; one that isn't an action is ignored.
+    ///   With a branch other than the current one, the repository refreshes
+    ///   and asks first (`checkoutLinkedBranch`, naming the repository and
+    ///   the branch): until it's in `confirmed`, nothing is fetched or checked
+    ///   out and the file isn't shown. Once confirmed, the repository fetches
+    ///   and checks the branch out (local or remote, through checkout's
+    ///   decisions). The current branch is neither fetched nor checked out.
+    ///   Then the file is shown in the Finder. A URL no repository matches
+    ///   asks for a clone; one that isn't an action is ignored.
     /// - `clone`: the same, without a pull request or file (`owner/name`
     ///   means GitHub.com).
     /// - `folders`: a folder's repository in the list is existing; a
@@ -132,13 +138,14 @@ extension AppModel {
     ///   it; anything else is added (`addRepositories`). The first added,
     ///   else existing, else unsafe repository is selected.
     ///
-    /// - Throws: Checking out the branch: its decisions and confirmations
-    ///   (uncommitted changes), with the branch in the error's
+    /// - Throws: `.confirmationRequired(.checkoutLinkedBranch)`, after the
+    ///   repository is selected. Checking out the branch: its decisions and
+    ///   confirmations (uncommitted changes), with the branch in the error's
     ///   `gitContext`, and its failures; the file is shown first. A pull
     ///   request that can't be loaded: no account is signed in to its
     ///   server, or GitHub's error. A link GitHub Desktop couldn't be asked
     ///   to open.
-    public func handle(_ action: ExternalAction) async throws(OperationError) -> ExternalActionResult {
+    public func handle(_ action: ExternalAction, confirmed: Set<ConfirmationKind> = []) async throws(OperationError) -> ExternalActionResult {
         if case .url(let url) = action, try await forwardToGitHubDesktop(url) {
             return .forwarded
         }
@@ -147,7 +154,7 @@ extension AppModel {
         case .url(let url):
             switch parseAppURL(url.absoluteString) {
             case .openRepositoryFromURL(let action):
-                return try await openRepositoryFromURL(action)
+                return try await openRepositoryFromURL(action, confirmed: confirmed)
             case .unknown(let string):
                 logger.warning("Unknown URL action: \(string, privacy: .private)")
                 return .ignored("Espalier can't open this link: \(string)")
@@ -157,50 +164,64 @@ extension AppModel {
         case .clone(let url, let branch):
             // Assume name with owner slug if it looks like it.
             let url = isOwnerAndName(url) ? "https://github.com/\(url)" : url
-            return try await openRepositoryFromURL(OpenRepositoryFromURLAction(url: url, branch: branch))
+            return try await openRepositoryFromURL(OpenRepositoryFromURLAction(url: url, branch: branch), confirmed: confirmed)
         }
     }
 
     /// Goes on with an action that asked for a clone, in the repository the
-    /// clone added: its branch, pull request, and file.
+    /// clone added: its branch, pull request, and file, asking first as
+    /// `handle(_:confirmed:)` does.
     ///
-    /// - Throws: As `handle(_:)`.
-    public func continueExternalAction(_ request: ExternalCloneRequest, in id: RepositoryID) async throws(OperationError) -> ExternalActionResult {
+    /// - Throws: As `handle(_:confirmed:)`.
+    public func continueExternalAction(
+        _ request: ExternalCloneRequest,
+        in id: RepositoryID,
+        confirmed: Set<ConfirmationKind> = []
+    ) async throws(OperationError) -> ExternalActionResult {
         await waitUntilLoaded()
         guard record(id) != nil else {
             logger.warning("Open Repository from URL failed, did not find or clone repository: \(request.url, privacy: .private)")
             return .ignored("The repository is no longer in the list.")
         }
-        return try await openMatchedRepository(id, request.action, pullRequest: request.pullRequest)
+        return try await openMatchedRepository(id, request.action, pullRequest: request.pullRequest, confirmed: confirmed)
     }
 
     // MARK: URLs
 
-    private func openRepositoryFromURL(_ action: OpenRepositoryFromURLAction) async throws(OperationError) -> ExternalActionResult {
+    private func openRepositoryFromURL(
+        _ action: OpenRepositoryFromURLAction,
+        confirmed: Set<ConfirmationKind>
+    ) async throws(OperationError) -> ExternalActionResult {
         if let pr = action.pr {
             return try await openPullRequestFromURL(action, pr)
         }
         guard let id = repositoryMatchingURL(action.url) else {
             return .cloneRequested(ExternalCloneRequest(action: action, pullRequest: nil))
         }
-        return try await openMatchedRepository(id, action, pullRequest: nil)
+        return try await openMatchedRepository(id, action, pullRequest: nil, confirmed: confirmed)
     }
 
+    /// The pull request's checkout asks its own question
+    /// (`RepositoryGitHubModel.checkout(_:strategy:confirmed:)`), so this
+    /// needs no confirmation.
     private func openPullRequestFromURL(_ action: OpenRepositoryFromURLAction, _ pr: String) async throws(OperationError) -> ExternalActionResult {
         let pullRequest = try await fetchPullRequest(action.url, pr)
 
         // Find the repository where the PR is created in Espalier.
         if let id = repositoryFromPullRequest(pullRequest) ?? repositoryMatchingURL(action.url) {
-            return try await openMatchedRepository(id, action, pullRequest: pullRequest)
+            return try await openMatchedRepository(id, action, pullRequest: pullRequest, confirmed: [])
         }
         return .cloneRequested(ExternalCloneRequest(action: action, pullRequest: pullRequest))
     }
 
-    /// Selects the repository, then runs the action's steps in it.
+    /// Selects the repository, then runs the action's steps in it. A branch
+    /// to check out asks first, unless `confirmed` has
+    /// `checkoutLinkedBranch`.
     private func openMatchedRepository(
         _ id: RepositoryID,
         _ action: OpenRepositoryFromURLAction,
-        pullRequest: APIPullRequest?
+        pullRequest: APIPullRequest?,
+        confirmed: Set<ConfirmationKind>
     ) async throws(OperationError) -> ExternalActionResult {
         select(.repository(id))
         if record(id)?.isMissing == true {
@@ -237,21 +258,32 @@ extension AppModel {
         } else if let branch = action.branch {
             // Ensure a fresh clone has its state before the next steps.
             await model.refreshScheduler.waitForRequestedPass(covering: .full)
-            // If the repo has a remote, fetch before switching branches to
-            // ensure the checkout will be successful. This operation could
-            // be a no-op.
-            do {
-                try await model.sync.fetch()
-            } catch {
-                if !error.isCancellation {
-                    logger.error("Fetching before checking out \(branch, privacy: .private) failed: \(error.message, privacy: .public)")
-                    opened.fetchError = error
+            if !isCurrentBranch(model, branch) {
+                // Any web page can open a link, so nothing is fetched or
+                // checked out until the user agrees.
+                guard confirmed.contains(.checkoutLinkedBranch) else {
+                    throw OperationError(
+                        .confirmationRequired(.checkoutLinkedBranch(branch, repository: record.displayName)),
+                        operation: .checkoutBranch,
+                        repositoryID: id
+                    )
                 }
-            }
-            do {
-                opened.checkout = try await checkoutLocalBranch(model, branch)
-            } catch {
-                checkoutError = error
+                // If the repo has a remote, fetch before switching branches
+                // to ensure the checkout will be successful. This operation
+                // could be a no-op.
+                do {
+                    try await model.sync.fetch()
+                } catch {
+                    if !error.isCancellation {
+                        logger.error("Fetching before checking out \(branch, privacy: .private) failed: \(error.message, privacy: .public)")
+                        opened.fetchError = error
+                    }
+                }
+                do {
+                    opened.checkout = try await checkoutLocalBranch(model, branch)
+                } catch {
+                    checkoutError = error
+                }
             }
         }
 
@@ -264,12 +296,21 @@ extension AppModel {
         return .opened(opened)
     }
 
+    /// Whether the branch named `name` (a local branch, or a remote one
+    /// without its remote) is the current branch.
+    private func isCurrentBranch(_ model: RepositoryModel, _ name: String) -> Bool {
+        guard let current = model.gitState.tip.branch else {
+            return false
+        }
+        return JSCompat.strictEquals(current.nameWithoutRemote, name)
+    }
+
     /// Checks out the branch named `name` (a local branch, or a remote one
     /// without its remote) unless it's the current branch; nothing when the
     /// repository has no such branch.
     private func checkoutLocalBranch(_ model: RepositoryModel, _ name: String) async throws(OperationError) -> CheckoutResult? {
         let state = model.gitState
-        if let current = state.tip.branch, JSCompat.strictEquals(current.nameWithoutRemote, name) {
+        if isCurrentBranch(model, name) {
             return nil
         }
         guard let branch = state.branches.all.first(where: { JSCompat.strictEquals($0.nameWithoutRemote, name) }) else {

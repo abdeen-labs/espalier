@@ -32,20 +32,68 @@ public struct FileManagerTrash: TrashService {
 /// Opens URLs and reveals files.
 @MainActor
 public protocol WorkspaceService: Sendable {
-    /// Opens `url` in its default app. Returns whether it opened. Callers
-    /// make file URLs with `URL(exactFilePath:)`.
+    /// Opens `url` in its default app. Returns whether it opened.
+    ///
+    /// For URLs Espalier builds itself: file URLs, made with
+    /// `URL(exactFilePath:)`, and System Settings panes. A link that comes
+    /// from a server or a repository goes through `openWebLink(_:)`.
     func open(_ url: URL) -> Bool
 
     /// Shows the file or directory at `path` in the Finder, selected.
     func revealInFinder(_ path: String)
 }
 
+extension WorkspaceService {
+    /// Opens `url` when it's a web page (`http` or `https`, in the browser)
+    /// or an email address (`mailto`, in the mail app); anything else
+    /// doesn't open, and it returns false.
+    ///
+    /// For links that come from a server or a repository: the GitHub API,
+    /// a remote's output, commit messages, Markdown. As a file URL
+    /// (`file:///Applications/...`) one would launch an app, and with any
+    /// other scheme it would go to whichever app claims that scheme.
+    public func openWebLink(_ url: URL) -> Bool {
+        guard isWebLink(url) else {
+            logger.info("Didn't open a link with the scheme \(url.scheme ?? "(none)", privacy: .public) as a web page")
+            return false
+        }
+        return open(url)
+    }
+}
+
+/// Whether `url` is a web page or an email address: an `http`, `https`,
+/// or `mailto` URL.
+func isWebLink(_ url: URL) -> Bool {
+    switch url.scheme?.lowercased() {
+    case "http", "https", "mailto":
+        true
+    default:
+        false
+    }
+}
+
 /// The workspace, through `NSWorkspace`.
 public struct NSWorkspaceService: WorkspaceService {
     public init() {}
 
+    /// Opens `url` when `opens(_:)` allows it, else returns false.
     public func open(_ url: URL) -> Bool {
-        NSWorkspace.shared.open(url)
+        guard Self.opens(url) else {
+            logger.info("Didn't open a link with the scheme \(url.scheme ?? "(none)", privacy: .public)")
+            return false
+        }
+        return NSWorkspace.shared.open(url)
+    }
+
+    /// Whether `open(_:)` opens `url`: a file URL, a web page or an email
+    /// address (`http`, `https`, or `mailto`, which `openWebLink(_:)` opens
+    /// through it), or a System Settings pane (`x-apple.systempreferences`).
+    /// No other scheme opens, whoever passes it.
+    nonisolated static func opens(_ url: URL) -> Bool {
+        if url.isFileURL {
+            return true
+        }
+        return isWebLink(url) || url.scheme?.lowercased() == "x-apple.systempreferences"
     }
 
     public func revealInFinder(_ path: String) {

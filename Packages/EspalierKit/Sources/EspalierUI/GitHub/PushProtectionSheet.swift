@@ -4,7 +4,7 @@
 // location (the short SHA with a copy button, "<path> at line <n>") and Show
 // More Locations, and Bypass…, which asks why (BypassReasonSheet) and then
 // shows "Bypassed"; a secret that needs approval links to GitHub's page
-// instead. Then the user pushes again.
+// instead, when the remote's link is on GitHub. Then the user pushes again.
 
 import AppKit
 import EspalierCore
@@ -20,21 +20,23 @@ nonisolated struct DetectedSecretContent: Sendable, Equatable, Identifiable {
     /// has the same description.
     var title: String
     var locations: [SecretLocation]
-    /// GitHub's page for bypassing it.
+    /// GitHub's page for bypassing it, when it's on GitHub
+    /// (`bypassPage(onGitHubAt:)`).
     var bypassURL: URL?
     /// The user can't bypass it, only ask for a bypass on GitHub.
     var requiresApproval: Bool
     var isBypassed: Bool
 
-    /// The secrets of an error, `bypassed` marked.
-    static func list(_ secrets: [SecretScanResult], bypassed: Set<String>) -> [DetectedSecretContent] {
+    /// The secrets of an error, `bypassed` marked, for a repository on
+    /// `endpoint` (its GitHub API endpoint, if it's known to be on GitHub).
+    static func list(_ secrets: [SecretScanResult], bypassed: Set<String>, endpoint: String?) -> [DetectedSecretContent] {
         secrets.map { secret in
             let shared = secrets.filter { $0.description == secret.description }.count > 1
             return DetectedSecretContent(
                 id: secret.id,
                 title: shared ? "\(secret.description) (\(secret.id))" : secret.description,
                 locations: secret.locations,
-                bypassURL: URL(string: secret.bypassURL),
+                bypassURL: secret.bypassPage(onGitHubAt: endpoint),
                 requiresApproval: secret.requiresApproval,
                 isBypassed: bypassed.contains(secret.id)
             )
@@ -57,7 +59,7 @@ public struct PushProtectionSheet: View {
         PushProtectionView(
             title: error.title,
             message: error.message,
-            secrets: DetectedSecretContent.list(secrets, bypassed: bypassed),
+            secrets: DetectedSecretContent.list(secrets, bypassed: bypassed, endpoint: endpoint),
             actions: PushProtectionActions(
                 bypass: { id in
                     guard let secret = secrets.first(where: { $0.id == id }) else {
@@ -81,6 +83,16 @@ public struct PushProtectionSheet: View {
             return secrets
         }
         return []
+    }
+
+    /// The GitHub API endpoint of the error's repository, as
+    /// `BypassReasonSheet` finds the repository.
+    private var endpoint: String? {
+        guard let context else {
+            return nil
+        }
+        let repository = error.repositoryID.flatMap { context.app.repository($0) } ?? context.repository
+        return repository?.record.gitHubRepository?.endpoint
     }
 
     private static func copy(_ text: String) {

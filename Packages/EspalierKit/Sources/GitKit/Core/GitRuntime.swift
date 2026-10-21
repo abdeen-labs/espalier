@@ -1,3 +1,4 @@
+import EspalierSupport
 import Foundation
 import Synchronization
 
@@ -139,12 +140,18 @@ extension GitRuntime {
 
 /// Finds the bundled git.
 public enum GitLocation {
-    /// The environment variable that overrides git's location everywhere.
+    /// The environment variable that overrides git's location: in Debug
+    /// builds (`resolveDefault`), and in tests, which read it themselves
+    /// (`TestEnvironment`).
     public static let overrideVariable = "ESPALIER_GIT_DIR"
 
     /// Resolves the root of the bundled git:
     ///
-    /// 1. `ESPALIER_GIT_DIR`, when set.
+    /// 1. `ESPALIER_GIT_DIR`, when set and `honorsOverride` is true, as it
+    ///    is in Debug builds. A release ignores it: anything that can set
+    ///    the app's launch environment (`launchctl setenv`, `open --env`)
+    ///    would otherwise pick the program every git call runs, which gets
+    ///    the askpass socket and its token.
     /// 2. In an app bundle, `Contents/Resources/git`.
     /// 3. Otherwise (tests and command-line tools), the nearest `Vendor/git`
     ///    in the current directory or one of its parents.
@@ -153,9 +160,10 @@ public enum GitLocation {
     public static func resolveDefault(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         bundle: Bundle = .main,
-        currentDirectory: URL = URL(filePath: FileManager.default.currentDirectoryPath, directoryHint: .isDirectory)
+        currentDirectory: URL = URL(filePath: FileManager.default.currentDirectoryPath, directoryHint: .isDirectory),
+        honorsOverride: Bool = BuildConfiguration.isDebug
     ) -> URL? {
-        if let path = environment[overrideVariable], !path.isEmpty {
+        if honorsOverride, let path = environment[overrideVariable], !path.isEmpty {
             return URL(filePath: path, directoryHint: .isDirectory).standardizedFileURL
         }
 

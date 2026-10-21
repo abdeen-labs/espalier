@@ -794,7 +794,7 @@ public func rebaseInteractive(
         [
             "-c",
             // This replaces interactive todo with contents of file at pathOfGeneratedTodo
-            "sequence.editor=cat \(shellSingleQuoted(pathOfGeneratedTodo)) >",
+            "sequence.editor=cat \(posixShellQuote(pathOfGeneratedTodo)) >",
         ]
             + rebaseConflictAdviceArguments
             + ["rebase"]
@@ -960,14 +960,6 @@ private func reportingCommitSteps(
             totalCommitCount: total
         ))
     }
-}
-
-/// Quotes `value` as one word for `/bin/sh`.
-///
-/// Single quotes take every character literally; in double quotes `$`,
-/// `` ` ``, `"`, and `\` keep their meaning.
-func shellSingleQuoted(_ value: String) -> String {
-    "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
 }
 
 /// Writes `contents` to a new file at `path`, readable only by the user.

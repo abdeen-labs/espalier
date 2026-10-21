@@ -29,20 +29,3 @@ public enum GitConfigParameters {
         return prefix + parameters.joined(separator: " ")
     }
 }
-
-/// Quotes `word` for a POSIX shell: in single quotes, with `'` written as
-/// `'\''`. Unlike `ShellEscape`, which strips control characters, this keeps
-/// every character, so a path round-trips exactly. Works on Unicode scalars,
-/// so a quote followed by a combining mark is still escaped.
-func posixShellQuote(_ word: String) -> String {
-    var quoted = "'"
-    for scalar in word.unicodeScalars {
-        if scalar == "'" {
-            quoted += "'\\''"
-        } else {
-            quoted.unicodeScalars.append(scalar)
-        }
-    }
-    quoted += "'"
-    return quoted
-}

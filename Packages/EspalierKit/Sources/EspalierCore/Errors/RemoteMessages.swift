@@ -7,6 +7,7 @@
 
 import EspalierSupport
 import Foundation
+import GitHubKit
 
 /// Represents the location of a detected secret detected on push
 public struct SecretLocation: Sendable, Hashable {
@@ -43,6 +44,27 @@ public struct SecretScanResult: Sendable, Hashable {
         self.locations = locations
         self.bypassURL = bypassURL
         self.requiresApproval = requiresApproval
+    }
+}
+
+extension SecretScanResult {
+    /// GitHub's bypass page for the secret, to open for a repository on
+    /// `endpoint` (its GitHub API endpoint; nil when the repository isn't
+    /// known to be on GitHub): `bypassURL` when it's an `https` address on
+    /// github.com or on `endpoint`'s server, else nil. The address comes
+    /// from the remote's output, which any server can write.
+    public func bypassPage(onGitHubAt endpoint: String?) -> URL? {
+        guard let url = URL(string: bypassURL),
+              url.scheme?.lowercased() == "https",
+              let host = url.host(percentEncoded: false)?.lowercased()
+        else {
+            return nil
+        }
+        var gitHubHosts: Set<String> = ["github.com"]
+        if let endpoint, let serverHost = URL(string: getHTMLURL(endpoint))?.host(percentEncoded: false) {
+            gitHubHosts.insert(serverHost.lowercased())
+        }
+        return gitHubHosts.contains(host) ? url : nil
     }
 }
 

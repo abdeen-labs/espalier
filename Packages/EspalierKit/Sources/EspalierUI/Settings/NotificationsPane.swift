@@ -100,7 +100,7 @@ public struct NotificationsPane: View {
             NotificationsPaneContent(settings: NotificationSettings(
                 preferences: model.preferences,
                 permissions: .live,
-                open: { url in model.integrations.openInBrowser(url) }
+                open: { url in model.integrations.openSystemSettings(url) }
             ))
         } else {
             SettingsPanePlaceholder(tab: .notifications)

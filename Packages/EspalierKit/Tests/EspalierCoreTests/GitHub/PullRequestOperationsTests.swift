@@ -1,8 +1,8 @@
 // Checking out pull requests (the repository's own branches, forks as
 // `pr/<number>`, an existing tracking branch, a branch that's gone, the
-// uncommitted changes decision), creating one (publishing or pushing
-// first, the compare URL with its base), and bypassing push protection,
-// against local remotes and a mock GitHub.
+// uncommitted changes decision, a link's question first), creating one
+// (publishing or pushing first, the compare URL with its base), and
+// bypassing push protection, against local remotes and a mock GitHub.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -62,6 +62,23 @@ struct PullRequestOperationsTests {
         await fixture.model.gitHub.refreshPullRequests()
         return try #require(fixture.model.gitHub.openPullRequests.first { $0.pullRequestNumber == number })
     }
+
+    /// The details of the question checking out `link` asks, which must ask
+    /// one.
+    private func linkQuestion(_ link: ExternalPullRequest, in fixture: GitHubFixture) async throws -> EspalierCore.Confirmation.Details {
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.model.gitHub.checkout(link)
+        }
+        guard case .confirmationRequired(let confirmation)? = error?.reason else {
+            Issue.record("Expected a question, got \(String(describing: error))")
+            throw QuestionMissing()
+        }
+        #expect(confirmation.kind == .checkoutLinkedPullRequest)
+        #expect(error?.repositoryID == fixture.model.id)
+        return confirmation.details
+    }
+
+    private struct QuestionMissing: Error {}
 
     @Test("checks out a pull request from the repository's own remote as a local branch tracking it")
     func ownRemote() async throws {
@@ -206,7 +223,7 @@ struct PullRequestOperationsTests {
         await fixture.settle()
     }
 
-    @Test("a link's pull request from the repository's own remote is checked out as a local branch tracking it")
+    @Test("a link's pull request from the repository's own remote asks first, naming no remote; confirmed, it's checked out as a local branch tracking it")
     func linkOwnRemote() async throws {
         let fixture = try await makeGitHubFixture(prepare: Self.pushFeature)
         let link = ExternalPullRequest(
@@ -217,7 +234,11 @@ struct PullRequestOperationsTests {
             headRef: "feature"
         )
 
-        let result = try await fixture.model.gitHub.checkout(link)
+        let details = try await linkQuestion(link, in: fixture)
+        #expect(details == .linkedPullRequest(repository: fixture.model.record.displayName, number: 5, title: "Pull request 5", forkRemote: nil))
+        #expect(fixture.model.gitState.tip.branch?.name == "main")
+
+        let result = try await fixture.model.gitHub.checkout(link, confirmed: [.checkoutLinkedPullRequest])
         guard case .checkedOut = result else {
             Issue.record("Unexpected \(result)")
             return
@@ -229,13 +250,25 @@ struct PullRequestOperationsTests {
         await fixture.settle()
     }
 
-    @Test("a link's pull request from a fork adds the fork as a remote, fetches it, and is checked out as pr/<number>")
+    @Test("a link's pull request from a fork asks first, naming the remote it adds, with nothing added, fetched, or checked out; confirmed, it adds the fork as a remote, fetches it, and is checked out as pr/<number>")
     func linkFork() async throws {
         let fixture = try await makeGitHubFixture { _, _ in }
         let fork = try await Self.makeFork(of: fixture.local)
         let link = ExternalPullRequest(number: 7, title: "Pull request 7", headRepositoryOwner: "hubot", headCloneURL: fork.path, headRef: "patch")
 
-        _ = try await fixture.model.gitHub.checkout(link)
+        let details = try await linkQuestion(link, in: fixture)
+        #expect(details == .linkedPullRequest(
+            repository: fixture.model.record.displayName,
+            number: 7,
+            title: "Pull request 7",
+            forkRemote: Remote(name: "espalier-hubot", url: fork.path)
+        ))
+        // What cancelling leaves.
+        #expect(try await remoteURLs(fixture.local).keys.sorted() == ["origin"])
+        #expect(try await localBranchNames(fixture.local) == ["main"])
+        #expect(fixture.model.gitState.tip.branch?.name == "main")
+
+        _ = try await fixture.model.gitHub.checkout(link, confirmed: [.checkoutLinkedPullRequest])
         let branch = try #require(fixture.model.gitState.tip.branch)
         #expect(branch.name == "pr/7")
         #expect(branch.upstream == "espalier-hubot/patch")
@@ -260,7 +293,7 @@ struct PullRequestOperationsTests {
         await fixture.model.refresh(.status, reason: .user)
 
         let error = await #expect(throws: OperationError.self) {
-            try await fixture.model.gitHub.checkout(link)
+            try await fixture.model.gitHub.checkout(link, confirmed: [.checkoutLinkedPullRequest])
         }
         guard case .decisionRequired(.uncommittedChanges)? = error?.reason else {
             Issue.record("Unexpected \(String(describing: error))")
@@ -268,11 +301,30 @@ struct PullRequestOperationsTests {
         }
         #expect(fixture.model.gitState.tip.branch?.name == "main")
 
-        _ = try await fixture.model.gitHub.checkout(link, strategy: .moveToNewBranch)
+        _ = try await fixture.model.gitHub.checkout(link, strategy: .moveToNewBranch, confirmed: [.checkoutLinkedPullRequest])
         let branch = try #require(fixture.model.gitState.tip.branch)
         #expect(branch.name == "pr/7")
         #expect(branch.upstream == "espalier-hubot/patch")
         #expect(try String(contentsOfFile: POSIXPath.join(fixture.local.path, "README.md"), encoding: .utf8) == "# Changed\n")
+        await fixture.settle()
+    }
+
+    @Test("a link's pull request whose branch is already checked out asks nothing")
+    func linkCurrentBranch() async throws {
+        let fixture = try await makeGitHubFixture(prepare: { local in
+            try await Self.pushFeature(local)
+            try await runGit(["checkout", "-b", "feature", "--track", "origin/feature"], local)
+        })
+        let link = ExternalPullRequest(
+            number: 5,
+            title: "Pull request 5",
+            headRepositoryOwner: "octocat",
+            headCloneURL: "https://github.com/octocat/hello.git",
+            headRef: "feature"
+        )
+
+        #expect(try await fixture.model.gitHub.checkout(link) == .alreadyCheckedOut)
+        #expect(fixture.model.gitState.tip.branch?.name == "feature")
         await fixture.settle()
     }
 
@@ -393,6 +445,24 @@ struct PullRequestOperationsTests {
         // Without a reason, GitHub's own page asks for one.
         try await fixture.model.gitHub.bypassPushProtection(secret)
         #expect(fixture.harness.workspace.openedURLs == [URL(string: secret.bypassURL)])
+        await fixture.settle()
+    }
+
+    @Test("doesn't open a bypass page the remote put on another server")
+    func bypassPageElsewhere() async throws {
+        let fixture = try await makeGitHubFixture()
+        let secret = SecretScanResult(
+            id: "2abc",
+            description: "GitHub Personal Access Token",
+            locations: [],
+            bypassURL: "https://example.com/octocat/hello/security/secret-scanning/unblock-secret/2abc",
+            requiresApproval: true
+        )
+
+        await #expect(throws: OperationError.self) {
+            try await fixture.model.gitHub.bypassPushProtection(secret)
+        }
+        #expect(fixture.harness.workspace.openedURLs.isEmpty)
         await fixture.settle()
     }
 }

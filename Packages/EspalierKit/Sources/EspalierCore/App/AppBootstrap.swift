@@ -99,8 +99,9 @@ public enum AppBootstrap {
         )
         let hooks = HooksEnvironment(server: server, helperPath: helperPath, prompter: prompts, defaults: defaults)
 
-        // 5. Git.
-        guard let gitDirectory = GitLocation.resolveDefault(bundle: bundle) else {
+        // 5. Git: the bundled one. Only a Debug build takes another from
+        // `ESPALIER_GIT_DIR`.
+        guard let gitDirectory = GitLocation.resolveDefault(bundle: bundle, honorsOverride: BuildConfiguration.isDebug) else {
             throw AppBootstrapError.gitMissing
         }
         let git = GitRuntime(

@@ -492,7 +492,7 @@ public final class SignInModel {
         else {
             return false
         }
-        return workspace.open(url)
+        return workspace.openWebLink(url)
     }
 
     /// Cancels the sign-in in progress, if any, and returns to no sign-in;

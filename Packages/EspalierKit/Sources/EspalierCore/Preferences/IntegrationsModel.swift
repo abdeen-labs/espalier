@@ -451,14 +451,33 @@ public final class IntegrationsModel {
         }
     }
 
-    /// Opens `url` in its default app, the browser for web pages.
+    /// Opens `url` in the browser when it's a web page (`http` or `https`,
+    /// `openWebLink(_:)`): links from GitHub, a remote, or a repository, and
+    /// Espalier's own web pages. Anything else doesn't open.
     ///
     /// - Returns: Whether it opened. A failure is only logged.
     @discardableResult
     public func openInBrowser(_ url: URL) -> Bool {
-        let opened = environment.workspace.open(url)
+        let opened = environment.workspace.openWebLink(url)
         if !opened {
             logger.error("Call to openExternal failed")
+        }
+        return opened
+    }
+
+    /// Opens a System Settings pane: an `x-apple.systempreferences:` URL
+    /// that Espalier builds. Other URLs don't open.
+    ///
+    /// - Returns: Whether it opened. A failure is only logged.
+    @discardableResult
+    public func openSystemSettings(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "x-apple.systempreferences" else {
+            logger.error("Didn't open a System Settings link with the scheme \(url.scheme ?? "(none)", privacy: .public)")
+            return false
+        }
+        let opened = environment.workspace.open(url)
+        if !opened {
+            logger.error("Could not open System Settings")
         }
         return opened
     }

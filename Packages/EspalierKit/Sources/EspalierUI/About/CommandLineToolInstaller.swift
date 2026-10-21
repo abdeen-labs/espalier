@@ -131,14 +131,25 @@ enum AdministratorCommand {
         throw .failed(message.isEmpty ? "The command failed." : message)
     }
 
-    /// `text` as an AppleScript string literal.
+    /// `text` as an AppleScript string literal: in double quotes, with a
+    /// backslash before each `\` and `"`. Works on Unicode scalars, so a
+    /// `"` followed by a combining mark is escaped too, and can't end the
+    /// string.
     static func appleScriptString(_ text: String) -> String {
-        "\"" + text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+        var literal = "\""
+        for scalar in text.unicodeScalars {
+            if scalar == "\\" || scalar == "\"" {
+                literal += "\\"
+            }
+            literal.unicodeScalars.append(scalar)
+        }
+        literal += "\""
+        return literal
     }
 
-    /// `text` quoted for `/bin/sh`.
+    /// `text` quoted for `/bin/sh` (`posixShellQuote`).
     static func shellQuoted(_ text: String) -> String {
-        "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
+        posixShellQuote(text)
     }
 
     /// `text` as one `/bin/sh` word: as it is when it's safe, else quoted.

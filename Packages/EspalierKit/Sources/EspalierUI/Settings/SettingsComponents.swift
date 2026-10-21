@@ -322,10 +322,10 @@ private struct AtLeastIdealWidth: Layout {
 
 extension AppModel {
     /// Opens a System Settings pane (`x-apple.systempreferences:` URLs),
-    /// through the integrations' browser opener, which tests record.
+    /// through the integrations' System Settings opener, which tests record.
     func openSystemSettings(_ url: String) {
         if let url = URL(string: url) {
-            integrations.openInBrowser(url)
+            integrations.openSystemSettings(url)
         }
     }
 }

@@ -261,7 +261,8 @@ extension Dugite {
             return Result(stdout: stdout, stderr: stderr, exitCode: Int(status))
         case .signal(let signal):
             throw ExecError(
-                message: "Command failed: git \(args.joined(separator: " ")) (killed by signal \(signal))",
+                // Callers log the message, so URLs leave out their credentials.
+                message: "Command failed: git \(args.map(withoutURLCredentials).joined(separator: " ")) (killed by signal \(signal))",
                 stdout: stdout,
                 stderr: stderr,
                 signal: signal

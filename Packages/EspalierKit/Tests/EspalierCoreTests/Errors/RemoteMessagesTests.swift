@@ -3,6 +3,7 @@
 // expects, and the GH001 file size message.
 
 @testable import EspalierCore
+import Foundation
 import Testing
 import TestSupport
 
@@ -26,6 +27,28 @@ private let firstSHA = "8728dbe67b7e6c2c3b2b0a1b6e5e9b8b6b1b9b0a"
 private let secondSHA = "03d69e5d3c1f4e2b8a7d6c5b4a39281706f5e4d3"
 private let unblockURL = "https://github.com/example-org/example-repo/security/secret-scanning/unblock-secret/2b4mZp3lFBlqWwSmW3bwcVJF1jJ"
 private let secondUnblockURL = "https://github.com/example-org/example-repo/security/secret-scanning/unblock-secret/2b4mZpQ8nXkcZ0Qx1lyb2WF6tHr"
+
+/// Bypass pages, the GitHub API endpoint of the repository they're for
+/// (nil when it isn't known to be on GitHub), and whether they open.
+private let bypassPageCases: [NamedCase<(url: String, endpoint: String?, opens: Bool)>] = [
+    NamedCase("github.com, for a repository on github.com", (url: "https://github.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: true)),
+    NamedCase("github.com, for a repository not known to be on GitHub", (url: "https://github.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: nil, opens: true)),
+    NamedCase("github.com, in capitals", (url: "https://GitHub.COM/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: true)),
+    NamedCase("the repository's Enterprise server", (url: "https://ghe.example.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://ghe.example.com/api/v3", opens: true)),
+    NamedCase("the repository's Enterprise server, on a port", (url: "https://ghe.example.com:8443/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://ghe.example.com:8443/api/v3", opens: true)),
+    NamedCase("the repository's GHE.com server", (url: "https://octo.ghe.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.octo.ghe.com/", opens: true)),
+    NamedCase("an Enterprise server, for a repository on github.com", (url: "https://ghe.example.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: false)),
+    NamedCase("an Enterprise server, for a repository not known to be on GitHub", (url: "https://ghe.example.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: nil, opens: false)),
+    NamedCase("another Enterprise server", (url: "https://ghe.other.example/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://ghe.example.com/api/v3", opens: false)),
+    NamedCase("another server", (url: "https://example.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: false)),
+    NamedCase("a server named after github.com", (url: "https://github.com.example.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: false)),
+    NamedCase("a subdomain of github.com", (url: "https://gist.github.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: false)),
+    NamedCase("github.com as a user name", (url: "https://github.com@example.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: false)),
+    NamedCase("github.com after a fragment", (url: "https://example.com#@github.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: false)),
+    NamedCase("http", (url: "http://github.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: false)),
+    NamedCase("another scheme", (url: "httpsx://github.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: false)),
+    NamedCase("no host", (url: "https:/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: false)),
+]
 
 private let pushProgress = """
     Enumerating objects: 5, done.
@@ -291,6 +314,13 @@ struct RemoteMessagesTests {
                 ["      \(dashes(2)) GitHub Personal Access Token \(dashes(22))", "       locations:", "         - commit: \(firstSHA)", "           path: README.md:4"],
             ])
             #expect(extractSecretScanningResults(getRemoteMessage(withoutURL)).isEmpty)
+        }
+
+        @Test("opens a bypass page only on github.com or the repository's GitHub server", arguments: bypassPageCases)
+        func bypassPage(_ testCase: NamedCase<(url: String, endpoint: String?, opens: Bool)>) {
+            let (url, endpoint, opens) = testCase.value
+            let secret = SecretScanResult(id: "2abc", description: "GitHub Personal Access Token", locations: [], bypassURL: url, requiresApproval: true)
+            #expect(secret.bypassPage(onGitHubAt: endpoint) == (opens ? URL(string: url) : nil))
         }
     }
 

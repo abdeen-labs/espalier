@@ -1,7 +1,8 @@
-// URL and command line actions through `AppModel.handle(_:)`: matching
-// repositories, clone requests and their continuation, branches (fetched,
-// checked out, decisions thrown), pull requests from a mock GitHub, files
-// revealed and refused, folders, and the command line's clone.
+// URL and command line actions through `AppModel.handle(_:confirmed:)`:
+// matching repositories, clone requests and their continuation, branches
+// (asked first, then fetched and checked out, decisions thrown), pull
+// requests from a mock GitHub, files revealed and refused, folders, and the
+// command line's clone.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -110,7 +111,19 @@ struct ExternalActionsTests {
         let clone = try await cloneRepository(remote)
         let id = try #require(try await app.addRepositories([clone.path]).added.first)
 
-        let continued = try opened(try await app.continueExternalAction(request, in: id))
+        // The link's branch asks first in the clone too.
+        let question = await #expect(throws: OperationError.self) {
+            try await app.continueExternalAction(request, in: id)
+        }
+        guard case .confirmationRequired(let confirmation)? = question?.reason else {
+            Issue.record("Expected a question, got \(String(describing: question))")
+            return
+        }
+        let cloneName = try #require(app.record(id)).displayName
+        #expect(confirmation.details == .linkedBranch(repository: cloneName, branch: "feature"))
+        #expect(harness.workspace.revealedPaths.isEmpty)
+
+        let continued = try opened(try await app.continueExternalAction(request, in: id, confirmed: [.checkoutLinkedBranch]))
         let model = try #require(app.repository(id))
         #expect(app.selection == .repository(id))
         #expect(model.gitState.tip.branch?.name == "feature")
@@ -127,18 +140,36 @@ struct ExternalActionsTests {
 
     // MARK: Branches
 
-    @Test("a branch pushed elsewhere is fetched, then checked out")
-    func fetchesThenChecksOut() async throws {
-        let (_, app, model, _, remote) = try await makeRepository()
+    @Test("a branch asks first, naming the repository and the branch, with nothing fetched, checked out, or shown; confirmed, a branch pushed elsewhere is fetched, then checked out")
+    func asksThenFetchesAndChecksOut() async throws {
+        let (harness, app, model, local, remote) = try await makeRepository()
         let other = try await cloneRepository(remote)
         try await runGit(["checkout", "-b", "topic"], other)
         try await commitFile(other, "topic.txt", "topic\n")
         try await runGit(["push", "origin", "topic"], other)
+        let action = try url("espalier://openRepo/https://github.com/octocat/app?branch=topic&filepath=README.md")
 
-        let result = try opened(try await app.handle(try url("espalier://openRepo/https://github.com/octocat/app?branch=topic")))
+        let question = await #expect(throws: OperationError.self) {
+            try await app.handle(action)
+        }
+        guard case .confirmationRequired(let confirmation)? = question?.reason else {
+            Issue.record("Expected a question, got \(String(describing: question))")
+            return
+        }
+        #expect(confirmation.kind == .checkoutLinkedBranch)
+        #expect(confirmation.details == .linkedBranch(repository: "app", branch: "topic"))
+        #expect(question?.repositoryID == model.id)
+        // The repository shows, and nothing else ran: what cancelling leaves.
+        #expect(app.selection == .repository(model.id))
+        #expect(try await resolveRef("refs/remotes/origin/topic", in: local) == nil)
+        #expect(model.gitState.tip.branch?.name == "main")
+        #expect(harness.workspace.revealedPaths.isEmpty)
+
+        let result = try opened(try await app.handle(action, confirmed: [.checkoutLinkedBranch]))
         #expect(result.fetchError == nil)
         #expect(model.gitState.tip.branch?.name == "topic")
-        #expect(try await localBranchNames(Repository(path: model.record.path)).contains("topic"))
+        #expect(try await localBranchNames(local).contains("topic"))
+        #expect(result.revealedFile == POSIXPath.join(local.path, "README.md"))
         await app.idle()
     }
 
@@ -149,7 +180,10 @@ struct ExternalActionsTests {
         try harness.write("README.md", "Changed\n", in: local)
 
         let error = await #expect(throws: OperationError.self) {
-            try await app.handle(try url("espalier://openRepo/https://github.com/octocat/app?branch=other&filepath=README.md"))
+            try await app.handle(
+                try url("espalier://openRepo/https://github.com/octocat/app?branch=other&filepath=README.md"),
+                confirmed: [.checkoutLinkedBranch]
+            )
         }
         #expect(error?.reason == .decisionRequired(.uncommittedChanges(
             currentBranch: "main",
@@ -169,13 +203,21 @@ struct ExternalActionsTests {
         await app.idle()
     }
 
-    @Test("the current branch, or one the repository doesn't have, isn't checked out")
+    @Test("the current branch asks nothing and is neither fetched nor checked out; one the repository doesn't have asks, then isn't checked out")
     func noCheckout() async throws {
-        let (_, app, model, _, _) = try await makeRepository()
+        let (_, app, model, local, remote) = try await makeRepository()
+        try await pushCommitFromAnotherClone(remote, path: "other.txt", contents: "other\n")
+        let fetched = try await resolveRef("refs/remotes/origin/main", in: local)
+
         let current = try opened(try await app.handle(try url("espalier://openRepo/https://github.com/octocat/app?branch=main")))
         #expect(current.checkout == nil)
-        let unknown = try opened(try await app.handle(try url("espalier://openRepo/https://github.com/octocat/app?branch=nope")))
-        #expect(unknown.checkout == nil)
+        #expect(try await resolveRef("refs/remotes/origin/main", in: local) == fetched)
+
+        let unknown = try url("espalier://openRepo/https://github.com/octocat/app?branch=nope")
+        await #expect(throws: OperationError.self) {
+            try await app.handle(unknown)
+        }
+        #expect(try opened(try await app.handle(unknown, confirmed: [.checkoutLinkedBranch])).checkout == nil)
         #expect(model.gitState.tip.branch?.name == "main")
         await app.idle()
     }
@@ -274,7 +316,7 @@ struct ExternalActionsTests {
         await app.idle()
     }
 
-    @Test("a pull request from a fork that contributes to itself: the link opens the fork, shows the link's pull request, and checks out its branch there")
+    @Test("a pull request from a fork that contributes to itself: the link opens the fork, shows the link's pull request, and, once confirmed, checks out its branch there")
     func pullRequestFromSelfContributingFork() async throws {
         // hubot's fork, with a `patch` branch, cloned: the clone's origin is
         // the fork on GitHub, with `patch` fetched. A proxy that refuses
@@ -330,7 +372,18 @@ struct ExternalActionsTests {
         // fork's upstream remote meanwhile superseded the selection's pass.
         let model = try #require(app.repository(id))
         #expect(model.gitState.branches.all.contains { $0.name == "origin/patch" })
-        _ = try await model.gitHub.checkout(link)
+        // The checkout asks first, naming no remote: the fork is origin.
+        let question = await #expect(throws: OperationError.self) {
+            try await model.gitHub.checkout(link)
+        }
+        guard case .confirmationRequired(let confirmation)? = question?.reason else {
+            Issue.record("Expected a question, got \(String(describing: question))")
+            return
+        }
+        let name = try #require(app.record(id)).displayName
+        #expect(confirmation.details == .linkedPullRequest(repository: name, number: 7, title: "Patch the thing", forkRemote: nil))
+        #expect(model.gitState.tip.branch?.name == "main")
+        _ = try await model.gitHub.checkout(link, confirmed: [.checkoutLinkedPullRequest])
         let branch = try #require(model.gitState.tip.branch)
         #expect(branch.name == "patch")
         #expect(branch.upstream == "origin/patch")

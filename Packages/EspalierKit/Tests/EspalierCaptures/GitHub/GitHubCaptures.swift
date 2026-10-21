@@ -95,7 +95,8 @@ struct GitHubCaptures {
         let error = OperationError(.pushProtectionBlocked([GitHubCaptureFixtures.secret]), operation: .push)
         let several = DetectedSecretContent.list(
             [GitHubCaptureFixtures.secret, GitHubCaptureFixtures.secondSecret, GitHubCaptureFixtures.approvalSecret],
-            bypassed: [GitHubCaptureFixtures.secret.id]
+            bypassed: [GitHubCaptureFixtures.secret.id],
+            endpoint: getDotComAPIEndpoint()
         )
         capture(
             PushProtectionView(

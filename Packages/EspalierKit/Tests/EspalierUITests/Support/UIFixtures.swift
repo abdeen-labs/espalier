@@ -64,6 +64,14 @@ enum UIFixtures {
         ("deleteTag", .deleteTag("v1.2.0")),
         ("replaceCommandLineTool", .replaceCommandLineTool(path: "/usr/local/bin/espalier", existing: .link("/opt/homebrew/bin/espalier"))),
         ("replaceCommandLineTool-file", .replaceCommandLineTool(path: "/usr/local/bin/espalier", existing: .file)),
+        ("checkoutLinkedBranch", .checkoutLinkedBranch("feature/login", repository: "espalier")),
+        ("checkoutLinkedPullRequest", .checkoutLinkedPullRequest(number: 128, title: "Show fetch progress in the toolbar", repository: "espalier", forkRemote: nil)),
+        ("checkoutLinkedPullRequest-fork", .checkoutLinkedPullRequest(
+            number: 128,
+            title: "Show fetch progress in the toolbar",
+            repository: "espalier",
+            forkRemote: Remote(name: "espalier-hubot", url: "https://github.com/hubot/espalier.git")
+        )),
     ]
 
     // MARK: Errors, every reason

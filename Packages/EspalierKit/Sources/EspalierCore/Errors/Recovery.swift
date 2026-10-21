@@ -141,11 +141,12 @@ public enum Recovery: Sendable {
 
         case .downloadSuggestedEditor:
             if let url = URL(string: suggestedExternalEditor.url) {
-                _ = app.environment.workspace.open(url)
+                _ = app.environment.workspace.openWebLink(url)
             }
 
         case .requestOrganizationAccess(let url):
-            _ = app.environment.workspace.open(url)
+            // The organization's page, from GitHub.
+            _ = app.environment.workspace.openWebLink(url)
 
         case .createFork, .signIn, .reviewPushProtection, .openSettings:
             throw OperationError(.precondition("This needs to be done in Espalier's window."), operation: .push)

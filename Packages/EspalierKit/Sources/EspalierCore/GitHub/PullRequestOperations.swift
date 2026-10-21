@@ -111,8 +111,17 @@ extension RepositoryGitHubModel {
     /// be this very repository, a fork that contributes to itself, whose own
     /// pull requests don't include it.
     ///
+    /// Asks first, unless `confirmed` has `checkoutLinkedPullRequest` or the
+    /// pull request's branch is the current one: until then, no remote is
+    /// added and nothing is fetched, created, or checked out. The question
+    /// names the repository, the pull request, and the remote added for its
+    /// fork when the repository has none for it.
+    ///
     /// The fork remote, the fetch, `pr/<number>`, the checkout's decision
     /// and confirmations, and the errors are `checkout(_:strategy:confirmed:)`'s.
+    ///
+    /// - Throws: `.confirmationRequired(.checkoutLinkedPullRequest)`; then as
+    ///   `checkout(_:strategy:confirmed:)`.
     @discardableResult
     public func checkout(
         _ pullRequest: ExternalPullRequest,
@@ -121,6 +130,11 @@ extension RepositoryGitHubModel {
     ) async throws(OperationError) -> CheckoutResult {
         guard let repository else {
             throw OperationError(.precondition("The repository is no longer in the list."), operation: .checkoutPullRequest)
+        }
+        // Any web page can open a link, so the user agrees before anything
+        // is added, fetched, or checked out.
+        if !confirmed.contains(.checkoutLinkedPullRequest), let confirmation = await linkedCheckoutConfirmation(pullRequest, in: repository) {
+            throw OperationError(.confirmationRequired(confirmation), operation: .checkoutPullRequest, repositoryID: repository.id)
         }
         let branch = try await findPullRequestBranch(
             number: pullRequest.number,
@@ -168,6 +182,44 @@ extension RepositoryGitHubModel {
         return try await findPullRequestBranch(pullRequest, in: repository)
     }
 
+    /// The question checking out a link's pull request asks: nil when its
+    /// branch is already the current one, so the checkout does nothing.
+    private func linkedCheckoutConfirmation(_ pullRequest: ExternalPullRequest, in repository: RepositoryModel) async -> Confirmation? {
+        let remote = await headRemote(pullRequest.headCloneURL, in: repository)
+        if let remote,
+           let tracking = localBranchTracking("\(remote.name)/\(pullRequest.headRef)", in: repository),
+           let current = repository.gitState.tip.branch,
+           JSCompat.strictEquals(current.name, tracking.name) {
+            return nil
+        }
+        let forkRemote: Remote? = remote == nil
+            ? Remote(name: forkPullRequestRemoteName(pullRequest.headRepositoryOwner), url: pullRequest.headCloneURL)
+            : nil
+        return .checkoutLinkedPullRequest(
+            number: pullRequest.number,
+            title: pullRequest.title,
+            repository: repository.record.displayName,
+            forkRemote: forkRemote
+        )
+    }
+
+    /// The repository's remote for a pull request's head repository, set up
+    /// by Espalier or outside it; nil when it has none.
+    private func headRemote(_ headCloneURL: String, in repository: RepositoryModel) async -> Remote? {
+        let gitRepository = repository.gitRepository
+        let remotes = await repository.environment.withRuntimes {
+            (try? await getRemotes(gitRepository)) ?? []
+        }
+        return remotes.first { urlMatchesRemote(headCloneURL, remoteURL: $0.url) }
+    }
+
+    /// The first local branch that tracks `remoteRef`.
+    private func localBranchTracking(_ remoteRef: String, in repository: RepositoryModel) -> Branch? {
+        repository.gitState.branches.all.first { branch in
+            branch.type == .local && branch.upstream.map { JSCompat.strictEquals($0, remoteRef) } == true
+        }
+    }
+
     /// The branch a pull request model's commits are on.
     private func findPullRequestBranch(_ pullRequest: PullRequest, in repository: RepositoryModel) async throws(OperationError) -> Branch {
         let head = pullRequest.head
@@ -195,11 +247,7 @@ extension RepositoryGitHubModel {
 
         // Find an existing remote (regardless if set up by us or outside of
         // Espalier).
-        let gitRepository = repository.gitRepository
-        let remotes = await repository.environment.withRuntimes {
-            (try? await getRemotes(gitRepository)) ?? []
-        }
-        var remote = remotes.first { urlMatchesRemote(headCloneURL, remoteURL: $0.url) }
+        var remote = await headRemote(headCloneURL, in: repository)
 
         // If we can't find one we'll create a fork remote, marked as
         // Espalier's so it's hidden and pruned once unused. Remote
@@ -231,9 +279,7 @@ extension RepositoryGitHubModel {
 
         // Start by trying to find a local branch that is tracking the remote
         // ref.
-        if let existing = repository.gitState.branches.all.first(where: { branch in
-            branch.type == .local && branch.upstream.map { JSCompat.strictEquals($0, remoteRef) } == true
-        }) {
+        if let existing = localBranchTracking(remoteRef, in: repository) {
             return existing
         }
 
@@ -386,11 +432,18 @@ extension RepositoryGitHubModel {
     /// the user gives a reason or, when the secret needs approval, asks for
     /// it (the dialog's link). Use `bypassPushProtection(_:reason:)` to
     /// bypass from Espalier.
+    ///
+    /// - Throws: `.other` when the page isn't on github.com or the
+    ///   repository's GitHub server (`bypassPage(onGitHubAt:)`), or doesn't
+    ///   open.
     public func bypassPushProtection(_ secret: SecretScanResult) async throws(OperationError) {
         guard let repository, let app = repository.app else {
             throw OperationError(.precondition("The repository is no longer in the list."), operation: .push)
         }
-        guard let url = URL(string: secret.bypassURL), app.integrations.openInBrowser(url) else {
+        guard let url = secret.bypassPage(onGitHubAt: repository.record.gitHubRepository?.endpoint) else {
+            throw OperationError(.other("Espalier didn't open the bypass page: it isn't on GitHub."), operation: .push, repositoryID: repository.id)
+        }
+        guard app.integrations.openInBrowser(url) else {
             throw OperationError(.other("Couldn't open \(secret.bypassURL)."), operation: .push, repositoryID: repository.id)
         }
     }

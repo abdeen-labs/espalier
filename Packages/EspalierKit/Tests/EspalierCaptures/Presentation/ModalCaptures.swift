@@ -1,9 +1,10 @@
-// Espalier's alert card in each of its layouts and Reset to Commit's
-// question, through the same mappings the hosts use where there's one, and
-// the modal layer over a window: a sheet in its card over the scrim, an
-// alert stacked over it, a card that scrolls, and a sheet that fills the
-// window. The window images are the window's content with each layer's
-// panel drawn over it, in the window's corners.
+// Espalier's alert card in each of its layouts, Reset to Commit's question,
+// and a link's questions (a branch, a pull request, one from a fork),
+// through the same mappings the hosts use where there's one, and the modal
+// layer over a window: a sheet in its card over the scrim, an alert stacked
+// over it, a card that scrolls, and a sheet that fills the window. The
+// window images are the window's content with each layer's panel drawn over
+// it, in the window's corners.
 
 import AppKit
 import EspalierCore
@@ -60,6 +61,13 @@ struct ModalCaptures {
 
     @Test("Reset to Commit's question, on a clean tree and with changes", arguments: ["resetToCommit", "resetWithChanges"])
     func resetAlert(name: String) throws {
+        capture(card(try confirmation(name)), named: "alert-\(name)", area: area)
+    }
+
+    @Test("a link's questions: its branch, its pull request, and a pull request from a fork", arguments: [
+        "checkoutLinkedBranch", "checkoutLinkedPullRequest", "checkoutLinkedPullRequest-fork",
+    ])
+    func linkAlert(name: String) throws {
         capture(card(try confirmation(name)), named: "alert-\(name)", area: area)
     }
 
