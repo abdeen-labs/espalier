@@ -423,7 +423,8 @@ extension Confirmation {
 /// A choice an intent needs before it can run, answered with a
 /// `DecisionAnswer`: checkout is called again with an explicit argument
 /// (`strategy:`); an editor answer is saved as the editor, and the intent
-/// called again.
+/// called again; initializing Git LFS is called again with the answer about
+/// the hooks in its way (`replacingHooks:`).
 public enum Decision: Sendable, Equatable {
     /// Switching branches with uncommitted changes and the "ask" strategy:
     /// leave the changes on the current branch (stash them there) or bring
@@ -436,11 +437,22 @@ public enum Decision: Sendable, Equatable {
     /// - Parameter editors: The installed editors' names, in order.
     case externalEditor(editors: [String])
 
+    /// Initializing Git LFS in repositories that have hooks where Git LFS
+    /// installs its own: replace them (moving them to the Trash), or leave
+    /// those repositories as they are. The UI lists the hooks
+    /// (`LFSHooksToReplace.listLines(_:)`) after the message's first
+    /// paragraph.
+    ///
+    /// - Parameter repositories: Each repository's hooks in the way, in the
+    ///   order initializing takes them.
+    case replaceLFSHooks([LFSHooksToReplace])
+
     /// The dialog's title.
     public var title: String {
         switch self {
         case .uncommittedChanges: "Switch Branch"
         case .externalEditor: "Choose an Editor"
+        case .replaceLFSHooks: "Replace Hooks?"
         }
     }
 
@@ -451,14 +463,19 @@ public enum Decision: Sendable, Equatable {
             "You have changes on this branch. What would you like to do with them?"
         case .externalEditor:
             "Espalier found more than one editor on your Mac. Which one should it open repositories and files in?"
+        case .replaceLFSHooks(let repositories) where repositories.count == 1:
+            "To initialize Git LFS, these hooks need to be replaced with Git LFS's own:\n\nThe hooks are moved to the Trash."
+        case .replaceLFSHooks:
+            "To initialize Git LFS, these hooks need to be replaced with Git LFS's own:\n\nThe hooks are moved to the Trash. A repository whose hooks you don't replace isn't initialized."
         }
     }
 
     /// The answers to `uncommittedChanges`. Each one's `strategy` is the
-    /// argument to pass back. An editor's answers are its `editors`.
+    /// argument to pass back. An editor's answers are its `editors`; the
+    /// hooks in Git LFS's way are replaced or not.
     public var choices: [DecisionChoice] {
         switch self {
-        case .externalEditor:
+        case .externalEditor, .replaceLFSHooks:
             []
         case .uncommittedChanges(let currentBranch, let targetBranch):
             [
@@ -481,6 +498,7 @@ public enum Decision: Sendable, Equatable {
         switch self {
         case .uncommittedChanges: "Switch Branch"
         case .externalEditor: "Open"
+        case .replaceLFSHooks: "Replace Hooks"
         }
     }
 }
@@ -491,6 +509,8 @@ public enum DecisionAnswer: Sendable, Equatable {
     case strategy(UncommittedChangesStrategy)
     /// The editor to use, by name (`externalEditor`).
     case editor(String)
+    /// Whether to replace the hooks in Git LFS's way (`replaceLFSHooks`).
+    case replaceLFSHooks(LFSHooksAnswer)
 }
 
 /// One answer to a `Decision`.

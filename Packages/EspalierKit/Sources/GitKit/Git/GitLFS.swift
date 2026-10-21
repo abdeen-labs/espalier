@@ -14,6 +14,11 @@ public func installGlobalLFSFilters(_ force: Bool) async throws {
 }
 
 /// Install LFS hooks in the repository.
+///
+/// `git lfs install` also installs the global LFS filters. Without `force`
+/// it refuses to replace hooks that aren't its own
+/// (`getHooksInTheWayOfLFS`) and global filters set to other values; with
+/// `force` it overwrites both.
 public func installLFSHooks(_ repository: Repository, _ force: Bool) async throws {
     var args = ["lfs", "install"]
     if force {
@@ -21,6 +26,144 @@ public func installLFSHooks(_ repository: Repository, _ force: Bool) async throw
     }
 
     try await git(args, repository.path, "installLFSHooks")
+}
+
+/// The hooks Git LFS installs in a repository, in the order it installs
+/// them.
+public let lfsHookNames = ["pre-push", "post-checkout", "post-commit", "post-merge"]
+
+/// A repository's hooks folder, and the hooks in it that are in the way of
+/// Git LFS's.
+public struct LFSHooksInTheWay: Sendable, Equatable {
+    /// The folder git runs the repository's hooks from, where Git LFS
+    /// installs its own (`getRepoHooksPath`: `core.hooksPath`, or the git
+    /// directory's `hooks` folder).
+    public let hooksPath: String
+    /// The hooks in the way, in `lfsHookNames`' order.
+    public let names: [String]
+
+    public init(hooksPath: String, names: [String]) {
+        self.hooksPath = hooksPath
+        self.names = names
+    }
+
+    /// The paths of the hooks in the way.
+    public var paths: [String] {
+        names.map { POSIXPath.join(hooksPath, $0) }
+    }
+}
+
+/// The repository's hooks that Git LFS's would replace: anything at one of
+/// `lfsHookNames` in the hooks folder other than Git LFS's own hook. Git
+/// LFS's own is the hook as this version or an earlier one wrote it, or an
+/// empty file, which `git lfs install` replaces without `--force`; it
+/// refuses to replace anything else unless forced.
+///
+/// A link counts as what it points to, as it does for Git LFS, which writes
+/// through it. A link that points nowhere, a folder, or a file that can't be
+/// read is in the way. Where this differs from Git LFS it's stricter: Git
+/// LFS reads a hook's first kilobyte, and this reads the whole file (a file
+/// over 4 KB is in the way), so Git LFS never refuses a hook left out here.
+public func getHooksInTheWayOfLFS(_ repository: Repository) async throws -> LFSHooksInTheWay {
+    let hooksPath = try await getRepoHooksPath(repository.path)
+    let names = lfsHookNames.filter { name in
+        isInTheWayOfLFS(POSIXPath.join(hooksPath, name), hook: name)
+    }
+    return LFSHooksInTheWay(hooksPath: hooksPath, names: names)
+}
+
+/// The most bytes of a hook that are read: Git LFS's own hooks are a few
+/// hundred.
+private let maximumLFSHookSize = 4096
+
+/// Whether the item at `path` is in the way of Git LFS's `hook`.
+private func isInTheWayOfLFS(_ path: String, hook: String) -> Bool {
+    var info = stat()
+    guard lstat(path, &info) == 0 else {
+        // Nothing there, or nothing that can be looked at, which Git LFS
+        // then reports itself.
+        return false
+    }
+    guard let contents = readHook(path) else {
+        return true
+    }
+    let normalized = normalizedHookContents(contents)
+    if normalized.isEmpty {
+        return false
+    }
+    return !lfsHookContents(hook).contains { $0.utf8.elementsEqual(normalized.utf8) }
+}
+
+/// The text of the hook at `path`, following links: nil for anything but a
+/// regular file of UTF-8 text of at most `maximumLFSHookSize` bytes.
+private func readHook(_ path: String) -> String? {
+    var info = stat()
+    guard stat(path, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, Int(info.st_size) <= maximumLFSHookSize,
+          let data = FileManager.default.contents(atPath: path) else {
+        return nil
+    }
+    return String(data: data, encoding: .utf8)
+}
+
+/// A hook's text as Git LFS compares it: each line without its leading
+/// spaces and tabs, and the whole without the white space around it.
+private func normalizedHookContents(_ contents: String) -> String {
+    var scalars = String.UnicodeScalarView()
+    var isAtLineStart = true
+    for scalar in contents.unicodeScalars {
+        if isAtLineStart, scalar == " " || scalar == "\t" {
+            continue
+        }
+        isAtLineStart = scalar == "\n"
+        scalars.append(scalar)
+    }
+    return String(scalars).trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+/// Git LFS's `hook` as each version wrote it, the bundled version's last:
+/// what `git lfs install` replaces without `--force` (Git LFS's
+/// `lfs/hook.go`). The `\n` inside the messages are a backslash and an `n`,
+/// as in the hooks.
+private func lfsHookContents(_ hook: String) -> [String] {
+    func script(_ lines: String...) -> String {
+        (["#!/bin/sh"] + lines).joined(separator: "\n")
+    }
+    let run = #"git lfs \#(hook) "$@""#
+    var versions: [String] = []
+    if hook == "pre-push" {
+        versions += [
+            script("git lfs push --stdin $*"),
+            script(#"git lfs push --stdin "$@""#),
+            script(#"git lfs pre-push "$@""#),
+            script(
+                #"command -v git-lfs >/dev/null 2>&1 || { echo >&2 "\nThis repository has been set up with Git LFS but Git LFS is not installed.\n"; exit 0; }"#,
+                run
+            ),
+            script(
+                #"command -v git-lfs >/dev/null 2>&1 || { echo >&2 "\nThis repository has been set up with Git LFS but Git LFS is not installed.\n"; exit 2; }"#,
+                run
+            ),
+        ]
+    }
+    versions += [
+        script(
+            #"command -v git-lfs >/dev/null 2>&1 || { echo >&2 "\nThis repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting .git/hooks/\#(hook).\n"; exit 2; }"#,
+            run
+        ),
+        script(
+            #"command -v git-lfs >/dev/null 2>&1 || { echo >&2 "\nThis repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting '.git/hooks/\#(hook)'.\n"; exit 2; }"#,
+            run
+        ),
+        script(
+            #"command -v git-lfs >/dev/null 2>&1 || { echo >&2 "\nThis repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting the '\#(hook)' file in the hooks directory (set by 'core.hookspath'; usually '.git/hooks').\n"; exit 2; }"#,
+            run
+        ),
+        script(
+            #"command -v git-lfs >/dev/null 2>&1 || { printf >&2 "\n%s\n\n" "This repository is configured for Git LFS but 'git-lfs' was not found on your path. If you no longer wish to use Git LFS, remove this hook by deleting the '\#(hook)' file in the hooks directory (set by 'core.hookspath'; usually '.git/hooks')."; exit 2; }"#,
+            run
+        ),
+    ]
+    return versions
 }
 
 /// Is the repository configured to track any paths with LFS?

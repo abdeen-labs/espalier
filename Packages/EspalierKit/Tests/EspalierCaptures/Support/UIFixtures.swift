@@ -91,6 +91,21 @@ enum UIFixtures {
     static let decisions: [(name: String, decision: Decision)] = [
         ("uncommittedChanges", .uncommittedChanges(currentBranch: "main", targetBranch: "feature/login")),
         ("externalEditor", .externalEditor(editors: ["Cursor", "Visual Studio Code", "Xcode", "Zed"])),
+        ("replaceLFSHooks", .replaceLFSHooks([
+            LFSHooksToReplace(
+                repositoryID: repositoryID,
+                path: "/Users/joe/Developer/espalier",
+                hooks: ["/Users/joe/Developer/espalier/.git/hooks/pre-push", "/Users/joe/Developer/espalier/.git/hooks/post-merge"]
+            ),
+        ])),
+        ("replaceLFSHooks-several", .replaceLFSHooks([
+            LFSHooksToReplace(repositoryID: repositoryID, path: "/Users/joe/Developer/espalier", hooks: ["/Users/joe/Developer/espalier/.git/hooks/pre-push"]),
+            LFSHooksToReplace(
+                repositoryID: RepositoryID(rawValue: UUID(uuidString: "7C4B9E2A-1D3F-4A5B-8C6D-9E0F1A2B3C4D")!),
+                path: "/Users/joe/Developer/espalier-site",
+                hooks: ["pre-push", "post-checkout", "post-commit", "post-merge"].map { "/Users/joe/Developer/espalier-site/.husky/_/\($0)" }
+            ),
+        ])),
     ]
 
     // MARK: Prompts

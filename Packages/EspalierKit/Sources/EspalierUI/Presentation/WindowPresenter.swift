@@ -20,6 +20,9 @@ nonisolated public struct IntentAnswers: Sendable, Equatable {
     public var moveToTrash = false
     /// "Delete it on the remote too" (`deleteBranch`).
     public var includeRemoteBranch = false
+    /// The decision's answer about the hooks in Git LFS's way
+    /// (`replaceLFSHooks`).
+    public var lfsHooks: LFSHooksAnswer?
 
     public init() {}
 }
@@ -186,6 +189,9 @@ public final class WindowPresenter {
                     let isAnswered = switch decision {
                     case .uncommittedChanges: answers.strategy != nil
                     case .externalEditor: hasChosenEditor
+                    // Hooks that changed since the answer are asked about
+                    // again.
+                    case .replaceLFSHooks(let repositories): answers.lfsHooks?.asked == repositories
                     }
                     guard !isAnswered else {
                         logger.error("An intent asked again for a decision it was given")
@@ -200,6 +206,8 @@ public final class WindowPresenter {
                         // The editor chosen is saved; the intent finds it.
                         hasChosenEditor = true
                         app?.integrations.selectEditor(name)
+                    case .replaceLFSHooks(let answer):
+                        answers.lfsHooks = answer
                     }
 
                 case .cancelled:

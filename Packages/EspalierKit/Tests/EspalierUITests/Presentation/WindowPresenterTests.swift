@@ -135,6 +135,30 @@ struct WindowPresenterTests {
         #expect(intent.calls.last?.strategy == .moveToNewBranch)
     }
 
+    @Test("the hooks question is asked, then the intent runs with the answer; hooks that changed since are asked about again")
+    func decidesLFSHooks() async {
+        let presenter = WindowPresenter()
+        let id = RepositoryID()
+        let hooks = "/Users/joe/Developer/espalier/.git/hooks"
+        let first = [LFSHooksToReplace(repositoryID: id, path: "/Users/joe/Developer/espalier", hooks: ["\(hooks)/pre-push"])]
+        let second = [LFSHooksToReplace(repositoryID: id, path: "/Users/joe/Developer/espalier", hooks: ["\(hooks)/pre-push", "\(hooks)/post-merge"])]
+        let intent = ScriptedIntent([
+            OperationError(.decisionRequired(.replaceLFSHooks(first)), operation: .installLFSHooks),
+            OperationError(.decisionRequired(.replaceLFSHooks(second)), operation: .installLFSHooks),
+        ])
+        let task = Task { await presenter.perform { answers throws(OperationError) in try intent.run(answers) } }
+
+        let replace = LFSHooksAnswer(asked: first, replace: true)
+        presenter.respond(to: await self.decision(of: presenter).id, with: .replaceLFSHooks(replace))
+        let again = await self.decision(of: presenter)
+        #expect(again.decision == .replaceLFSHooks(second))
+        let keep = LFSHooksAnswer(asked: second, replace: false)
+        presenter.respond(to: again.id, with: .replaceLFSHooks(keep))
+
+        #expect(await task.value == "done")
+        #expect(intent.calls.map(\.lfsHooks) == [nil, replace, keep])
+    }
+
     @Test("the editor question's answer is saved as the editor, then the intent runs again; cancelling saves nothing")
     func choosesEditor() async throws {
         let harness = try AppHarness()

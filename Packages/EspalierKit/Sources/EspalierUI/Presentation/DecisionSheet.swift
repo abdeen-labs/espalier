@@ -1,6 +1,7 @@
 // The decisions as sheets: Switch Branch's radio choices with an explicit
 // default, and the editor's pop-up of the installed editors, with none
-// chosen until the user picks one. The copy is the state layer's
+// chosen until the user picks one. Replacing the hooks in Git LFS's way is
+// an alert (`LFSAlerts.replaceHooksAlert`). The copy is the state layer's
 // `Decision`.
 
 import EspalierCore
@@ -89,6 +90,17 @@ enum DecisionHost {
     static func present(_ pending: PendingDecision, in context: WindowContext) {
         let presenter = context.presenter
         let modals = context.modals
+        if case .replaceLFSHooks(let repositories) = pending.decision {
+            // Replace Hooks replaces them; Don't Replace, or closing the
+            // alert, keeps them.
+            let content = LFSAlerts.replaceHooksAlert(pending.decision, numberFormat: context.app.preferences.numberFormat)
+            Task {
+                let response = await modals.alert(content)
+                let hooksAnswer = LFSHooksAnswer(asked: repositories, replace: response.buttonIndex == 0)
+                presenter.respond(to: pending.id, with: .replaceLFSHooks(hooksAnswer))
+            }
+            return
+        }
         let answer: (DecisionAnswer?) -> Void = { answer in
             presenter.respond(to: pending.id, with: answer)
             modals.dismissSheet(id: sheetID)
@@ -105,6 +117,9 @@ enum DecisionHost {
                 EditorDecisionSheet(pending.decision, editors: editors) { name in
                     answer(name.map(DecisionAnswer.editor))
                 }
+            case .replaceLFSHooks:
+                // An alert, above.
+                EmptyView()
             }
         }
     }

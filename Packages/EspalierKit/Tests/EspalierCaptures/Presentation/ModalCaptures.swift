@@ -1,10 +1,10 @@
 // Espalier's alert card in each of its layouts, Reset to Commit's question,
-// and a link's questions (a branch, a pull request, one from a fork),
-// through the same mappings the hosts use where there's one, and the modal
-// layer over a window: a sheet in its card over the scrim, an alert stacked
-// over it, a card that scrolls, and a sheet that fills the window. The
-// window images are the window's content with each layer's panel drawn over
-// it, in the window's corners.
+// a link's questions (a branch, a pull request, one from a fork), and
+// Replace Hooks?, through the same mappings the hosts use where there's
+// one, and the modal layer over a window: a sheet in its card over the
+// scrim, an alert stacked over it, a card that scrolls, and a sheet that
+// fills the window. The window images are the window's content with each
+// layer's panel drawn over it, in the window's corners.
 
 import AppKit
 import EspalierCore
@@ -69,6 +69,12 @@ struct ModalCaptures {
     ])
     func linkAlert(name: String) throws {
         capture(card(try confirmation(name)), named: "alert-\(name)", area: area)
+    }
+
+    @Test("Replace Hooks?, for one repository and for several", arguments: ["replaceLFSHooks", "replaceLFSHooks-several"])
+    func replaceLFSHooksAlert(name: String) throws {
+        let decision = try #require(UIFixtures.decisions.first { $0.name == name }?.decision)
+        capture(card(LFSAlerts.replaceHooksAlert(decision, numberFormat: Capture.numberFormat)), named: "alert-\(name)", area: area)
     }
 
     @Test("alerts: the checkbox on, a list of ten and the rest counted, a long URL")
