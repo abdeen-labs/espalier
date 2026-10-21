@@ -66,20 +66,16 @@ public struct CreatePullRequestError: Error, LocalizedError, CustomStringConvert
                 return CreatePullRequestError(.alreadyExists, message: "There's already an open pull request for \(head).", status: status)
             }
             if mentions("no commits between") {
-                return CreatePullRequestError(.noCommits, message: "There's nothing to merge: \(base) already has every commit on \(head).", status: status)
+                return CreatePullRequestError(.noCommits, message: "\(base) already has every commit on \(head).", status: status)
             }
             if mentions("draft pull requests are not supported") {
-                return CreatePullRequestError(
-                    .draftsNotSupported,
-                    message: "\(repository) doesn't allow draft pull requests. Create a regular pull request instead.",
-                    status: status
-                )
+                return CreatePullRequestError(.draftsNotSupported, message: "\(repository) doesn't allow draft pull requests.", status: status)
             }
             if names("base") {
-                return CreatePullRequestError(.baseNotFound, message: "\(base) isn't a branch on \(repository). Choose another base branch.", status: status)
+                return CreatePullRequestError(.baseNotFound, message: "\(base) isn't a branch on \(repository).", status: status)
             }
             if names("head") {
-                return CreatePullRequestError(.headNotFound, message: "GitHub can't find the branch \(head). Push it, then try again.", status: status)
+                return CreatePullRequestError(.headNotFound, message: "\(head) isn't on GitHub.", status: status)
             }
             if names("title"), items.allSatisfy({ ($0.message ?? "").isEmpty }) {
                 return CreatePullRequestError(.validationFailed, message: "Enter a title for the pull request.", status: status)
@@ -87,7 +83,7 @@ public struct CreatePullRequestError: Error, LocalizedError, CustomStringConvert
             // GitHub's own reasons, else its summary ("Validation Failed").
             let reasons = items.compactMap(\.message).filter { !$0.isEmpty }
             let details = reasons.isEmpty ? error.message : reasons.joined(separator: " ")
-            return CreatePullRequestError(.validationFailed, message: "GitHub couldn't create the pull request. \(details)", status: status)
+            return CreatePullRequestError(.validationFailed, message: details, status: status)
         case HTTPStatusCode.notFound.rawValue:
             return CreatePullRequestError(
                 .notFound,
@@ -95,7 +91,7 @@ public struct CreatePullRequestError: Error, LocalizedError, CustomStringConvert
                 status: status
             )
         default:
-            return CreatePullRequestError(.other, message: "GitHub couldn't create the pull request. \(error.message)", status: status)
+            return CreatePullRequestError(.other, message: error.message, status: status)
         }
     }
 }
@@ -144,7 +140,7 @@ extension API {
                 throw CancellationError()
             }
             log.error("createPullRequest: couldn't reach \(endpoint, privacy: .public) for \(repository, privacy: .public): \(String(describing: error), privacy: .public)")
-            throw CreatePullRequestError(.unreachable, message: "Couldn't create the pull request. Check your internet connection and try again.")
+            throw CreatePullRequestError(.unreachable, message: "GitHub couldn't be reached.")
         }
 
         do {
@@ -156,7 +152,7 @@ extension API {
             log.error("createPullRequest: unreadable answer from \(repository, privacy: .public) (\(response.status, privacy: .public)): \(String(describing: error), privacy: .public)")
             throw CreatePullRequestError(
                 .other,
-                message: "GitHub's answer couldn't be read. Check GitHub for the pull request before trying again.",
+                message: "GitHub's answer couldn't be read. The pull request may have been created.",
                 status: response.status
             )
         }

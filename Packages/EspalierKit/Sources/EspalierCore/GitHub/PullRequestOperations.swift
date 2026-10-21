@@ -446,7 +446,7 @@ extension RepositoryGitHubModel {
             throw OperationError(.precondition("The repository is no longer in the list."), operation: .push)
         }
         guard let url = secret.bypassPage(onGitHubAt: repository.record.gitHubRepository?.endpoint) else {
-            throw OperationError(.other("Espalier didn't open the bypass page: it isn't on GitHub."), operation: .push, repositoryID: repository.id)
+            throw OperationError(.other("The bypass page isn't on GitHub."), operation: .push, repositoryID: repository.id)
         }
         guard app.integrations.openInBrowser(url) else {
             throw OperationError(.other("Couldn't open \(secret.bypassURL)."), operation: .push, repositoryID: repository.id)

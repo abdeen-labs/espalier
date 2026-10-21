@@ -3,9 +3,9 @@
 // Deleting a branch that may have an open pull request deletes only the
 // local branch, and says so. Branches without a pull request ask through
 // the state layer's `deleteBranch` confirmation, which the presenter shows
-// as a compact sheet with "Delete it on the remote too" when the branch
-// exists there. This sheet looks and answers like that one: Delete is the
-// default button.
+// as a compact sheet with "Also delete origin/develop" when the branch's
+// upstream exists there. This sheet looks and answers like that one: Delete
+// is the default button.
 
 import EspalierCore
 import GitKit

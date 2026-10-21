@@ -266,8 +266,7 @@ struct DiscardItemsInTheWayError: Error, Sendable, LocalizedError {
         let names = paths.map { "\u{201C}\($0)\u{201D}" }.joined(separator: ", ")
         let isOne = paths.count == 1
         let trash = trashError == nil ? "" : " and couldn't be moved to the Trash"
-        return "Espalier can't discard the changes because \(names) \(isOne ? "is" : "are") in the way of the files it restores\(trash). "
-            + "Move \(isOne ? "it" : "them"), then try again."
+        return "\(names) \(isOne ? "is" : "are") in the way of the files the discard restores\(trash)."
     }
 }
 

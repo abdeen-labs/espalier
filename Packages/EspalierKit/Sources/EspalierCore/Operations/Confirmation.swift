@@ -57,9 +57,9 @@ public struct Confirmation: Sendable, Equatable {
         /// A branch name: the remote branch to delete, or the upstream a
         /// force push rewrites.
         case branch(String)
-        /// The local branch to delete, and the remote branch deleting it on
-        /// the remote too deletes (`origin/develop`), when its upstream
-        /// exists there (the UI then offers that option, naming it).
+        /// The local branch to delete, and its upstream (`origin/develop`)
+        /// when that exists on the remote (the UI then offers to delete it
+        /// too, naming it).
         case deleteBranch(name: String, upstream: String?)
         /// A tag name.
         case tag(String)
@@ -321,17 +321,15 @@ extension Confirmation {
 
     /// Deleting a local branch.
     ///
-    /// - Parameter upstream: The remote branch that deleting on the remote
-    ///   too deletes, as `<remote>/<branch>` (`origin/develop`, whatever the
-    ///   local branch's name), when the branch's upstream exists; the UI
-    ///   then offers "Delete origin/develop on the remote too".
+    /// - Parameter upstream: The branch's upstream, as `<remote>/<branch>`
+    ///   (`origin/develop`, whatever the local branch's name), when it exists
+    ///   on the remote; the UI then offers "Also delete origin/develop".
     public static func deleteBranch(_ name: String, upstream: String?) -> Confirmation {
-        let remote = upstream.map { "\n\nIt tracks \($0) on the remote." } ?? ""
-        return Confirmation(
+        Confirmation(
             kind: .deleteBranch,
             details: .deleteBranch(name: name, upstream: upstream),
             title: "Delete Branch?",
-            message: "Delete the branch \(name)?\n\nThis can't be undone.\(remote)",
+            message: "Delete the branch \(name)?\n\nThis can't be undone.",
             confirmButton: "Delete"
         )
     }
@@ -391,7 +389,7 @@ extension Confirmation {
             kind: .checkoutLinkedBranch,
             details: .linkedBranch(repository: repository, branch: branch),
             title: "Check Out Branch?",
-            message: "A link asks to check out the branch \(branch) in \(repository). Espalier fetches first, so the branch is up to date.",
+            message: "Check out the branch \(branch) in \(repository)?",
             confirmButton: "Check Out"
         )
     }
@@ -404,9 +402,9 @@ extension Confirmation {
     ///   - forkRemote: The remote that will be added, or nil when one of the
     ///     repository's remotes is the pull request's head repository.
     public static func checkoutLinkedPullRequest(number: Int, title pullRequestTitle: String, repository: String, forkRemote: Remote?) -> Confirmation {
-        var message = "A link asks to check out the pull request \u{201C}\(pullRequestTitle)\u{201D} (#\(number)) in \(repository)."
+        var message = "Check out the pull request #\(number) \u{201C}\(pullRequestTitle)\u{201D} in \(repository)?"
         if let forkRemote {
-            message += "\n\nIt comes from a fork, so Espalier adds the remote \(forkRemote.name) for \(forkRemote.url) and fetches its branch from there."
+            message += "\n\nThis adds the remote \(forkRemote.name) (\(forkRemote.url))."
         }
         return Confirmation(
             kind: .checkoutLinkedPullRequest,
@@ -463,10 +461,8 @@ public enum Decision: Sendable, Equatable {
             "You have changes on this branch. What would you like to do with them?"
         case .externalEditor:
             "Espalier found more than one editor on your Mac. Which one should it open repositories and files in?"
-        case .replaceLFSHooks(let repositories) where repositories.count == 1:
-            "To initialize Git LFS, these hooks need to be replaced with Git LFS's own:\n\nThe hooks are moved to the Trash."
         case .replaceLFSHooks:
-            "To initialize Git LFS, these hooks need to be replaced with Git LFS's own:\n\nThe hooks are moved to the Trash. A repository whose hooks you don't replace isn't initialized."
+            "Git LFS replaces these hooks:\n\nThey go to the Trash."
         }
     }
 

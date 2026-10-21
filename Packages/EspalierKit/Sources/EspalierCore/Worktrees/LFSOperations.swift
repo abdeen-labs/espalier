@@ -221,7 +221,7 @@ extension AppModel {
             return error
         }
         return OperationError(
-            .precondition("Git LFS wasn't initialized in \(repository.record.path) because its hooks changed in the meantime."),
+            .precondition("Git LFS wasn't initialized in \(repository.record.path): its hooks changed."),
             operation: .installLFSHooks,
             repositoryID: repository.id
         )
@@ -297,7 +297,7 @@ private func installLFS(
             try await trash.moveToTrash(hookPath)
         } catch {
             throw OperationError(
-                .fileSystem("Espalier couldn't move the \(name) hook to the Trash, so Git LFS wasn't initialized."),
+                .fileSystem("Git LFS wasn't initialized: the \(name) hook couldn't be moved to the Trash."),
                 operation: .installLFSHooks,
                 repositoryID: repositoryID,
                 underlying: error

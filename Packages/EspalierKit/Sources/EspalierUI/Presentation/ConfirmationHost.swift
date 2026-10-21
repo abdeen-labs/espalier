@@ -2,11 +2,10 @@
 // state layer's (`Confirmation`); this file decides alert or compact sheet,
 // button roles, severity, lists, and the checkbox. Remove Repository and
 // Delete Branch are Espalier's compact sheets: their option is Espalier's
-// checkbox ("Also move the folder to the Trash", "Delete origin/develop on
-// the remote too", naming the remote branch that goes), and Remove or
-// Delete is the default button. The others are
-// alerts, with "Do not show this message again" where the confirmation can
-// be turned off.
+// checkbox ("Also move the folder to the Trash", "Also delete
+// origin/develop", naming the remote branch that goes), and Remove or
+// Delete is the default button. The others are alerts, with "Do not show
+// this message again" where the confirmation can be turned off.
 
 import EspalierCore
 import GitKit
@@ -70,7 +69,7 @@ extension Confirmation {
             return .compactSheet(CompactConfirmation(
                 title: title,
                 paragraphs: message.components(separatedBy: "\n\n"),
-                optionTitle: upstream.map { "Delete \($0) on the remote too" },
+                optionTitle: upstream.map { "Also delete \($0)" },
                 confirmButton: confirmButton,
                 isDestructive: isDestructive
             ))
