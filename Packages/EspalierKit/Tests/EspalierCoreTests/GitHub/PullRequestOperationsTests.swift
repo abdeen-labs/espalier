@@ -279,6 +279,31 @@ struct PullRequestOperationsTests {
         await fixture.settle()
     }
 
+    @Test("a link's pull request is refused while a merge is in progress, before it asks, with nothing added or fetched")
+    func linkDuringMerge() async throws {
+        let fixture = try await makeGitHubFixture()
+        let fork = try await Self.makeFork(of: fixture.local)
+        try await runGit(["checkout", "-b", "other"], fixture.local)
+        try await commitFile(fixture.local, "other.txt", "other\n")
+        try await runGit(["checkout", "main"], fixture.local)
+        try await runGit(["merge", "--no-ff", "--no-commit", "other"], fixture.local)
+        await fixture.model.refresh(.full, reason: .user)
+        let link = ExternalPullRequest(number: 7, title: "Pull request 7", headRepositoryOwner: "hubot", headCloneURL: fork.path, headRef: "patch")
+
+        for confirmed: Set<ConfirmationKind> in [[], [.checkoutLinkedPullRequest]] {
+            let error = await #expect(throws: OperationError.self) {
+                try await fixture.model.gitHub.checkout(link, confirmed: confirmed)
+            }
+            guard case .precondition? = error?.reason else {
+                Issue.record("Expected a refusal, got \(String(describing: error))")
+                return
+            }
+        }
+        #expect(try await remoteURLs(fixture.local).keys.sorted() == ["origin"])
+        #expect(try await localBranchNames(fixture.local) == ["main", "other"])
+        await fixture.settle()
+    }
+
     @Test("a link's pull request asks first with uncommitted changes; answering checks out the branch it found")
     func linkUncommittedChanges() async throws {
         let fixture = try await makeGitHubFixture(prepare: Self.addFetchedFork)

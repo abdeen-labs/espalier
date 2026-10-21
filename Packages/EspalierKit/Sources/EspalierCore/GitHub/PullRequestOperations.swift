@@ -120,7 +120,9 @@ extension RepositoryGitHubModel {
     /// The fork remote, the fetch, `pr/<number>`, the checkout's decision
     /// and confirmations, and the errors are `checkout(_:strategy:confirmed:)`'s.
     ///
-    /// - Throws: `.confirmationRequired(.checkoutLinkedPullRequest)`; then as
+    /// - Throws: `.precondition` while an operation in progress refuses a
+    ///   checkout, before it asks;
+    ///   `.confirmationRequired(.checkoutLinkedPullRequest)`; then as
     ///   `checkout(_:strategy:confirmed:)`.
     @discardableResult
     public func checkout(
@@ -131,6 +133,7 @@ extension RepositoryGitHubModel {
         guard let repository else {
             throw OperationError(.precondition("The repository is no longer in the list."), operation: .checkoutPullRequest)
         }
+        try repository.branches.requireCheckoutAllowed(.checkoutPullRequest)
         // Any web page can open a link, so the user agrees before anything
         // is added, fetched, or checked out.
         if !confirmed.contains(.checkoutLinkedPullRequest), let confirmation = await linkedCheckoutConfirmation(pullRequest, in: repository) {

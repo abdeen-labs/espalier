@@ -37,7 +37,7 @@ private func repositoryWithIgnoreRules() async throws -> Repository {
 }
 
 /// Where a case's `core.excludesFile` comes from.
-private enum ExcludesSetup: Sendable {
+enum ExcludesSetup: Sendable {
     case configuredAbsolute
     case configuredUnderHome
     case configuredRelative

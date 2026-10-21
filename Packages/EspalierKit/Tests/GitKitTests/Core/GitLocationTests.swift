@@ -72,7 +72,8 @@ struct GitLocationTests {
             honorsOverride: false
         )
 
-        #expect(resolved?.path(percentEncoded: false) == currentDirectory.appending(path: "Vendor/git", directoryHint: .isDirectory).path(percentEncoded: false))
+        // The search starts from the standardized folder (/var, not /private/var).
+        #expect(resolved?.path(percentEncoded: false) == currentDirectory.standardizedFileURL.appending(path: "Vendor/git", directoryHint: .isDirectory).path(percentEncoded: false))
     }
 
     @Test("by default, only a Debug build honors ESPALIER_GIT_DIR")

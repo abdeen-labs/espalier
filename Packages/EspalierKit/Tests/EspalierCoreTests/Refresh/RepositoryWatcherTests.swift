@@ -450,7 +450,7 @@ struct RepositoryWatcherTests {
         NamedCase("an operation that refreshes everything", (
             refreshAfter: RefreshScope.full,
             scope: RefreshScope.full,
-            reasons: [RefreshReason.fileSystem, .operation(.installLFSHooks)]
+            reasons: [RefreshReason.operation(.installLFSHooks)]
         )),
     ])
     func changesDuringOperation(
