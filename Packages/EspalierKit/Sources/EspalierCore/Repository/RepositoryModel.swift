@@ -108,7 +108,11 @@ public final class RepositoryModel: Identifiable {
         refresher = RepositoryRefresher()
         localLane = OperationLane(name: "local")
         networkLaneKey = record.id.description
-        watcher = RepositoryWatcher(watcher: environment.fileWatcher, scheduler: environment.scheduler) { _ in }
+        watcher = RepositoryWatcher(
+            watcher: environment.fileWatcher,
+            scheduler: environment.scheduler,
+            ignoreRules: .usingGit(environment)
+        ) { _ in }
 
         changes = ChangesModel()
         commit = CommitModel()

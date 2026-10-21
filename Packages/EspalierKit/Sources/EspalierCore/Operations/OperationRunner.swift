@@ -164,7 +164,7 @@ extension RepositoryModel {
         } else {
             clearActivity(operation.id)
         }
-        watcher.resume(suspension)
+        watcher.resume(suspension, covering: descriptor.refreshAfter)
         requestRefresh(descriptor.refreshAfter, options: descriptor.refreshOptions, reason: .operation(descriptor.kind))
         if let hold {
             refreshScheduler.release(hold)

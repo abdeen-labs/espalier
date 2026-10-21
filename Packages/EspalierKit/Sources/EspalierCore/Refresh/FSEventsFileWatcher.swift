@@ -163,8 +163,13 @@ private func fsEventsCallback(
     var events: [FileWatchEvent] = []
     events.reserveCapacity(count)
     for index in 0..<min(count, paths.count) {
+        // A path bridged from FSEvents' array is copied into contiguous
+        // UTF-8 here, off the main actor, so the watcher reads its bytes
+        // directly.
+        var path = paths[index]
+        path.makeContiguousUTF8()
         events.append(FileWatchEvent(
-            path: paths[index],
+            path: path,
             flags: FileWatchEvent.Flags(rawValue: eventFlags[index]),
             id: eventIDs[index]
         ))

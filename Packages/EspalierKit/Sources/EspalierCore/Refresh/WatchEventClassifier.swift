@@ -14,6 +14,9 @@ import Foundation
 /// | `*.lock`, `objects/**`, `logs/**`, `config`, a submodule's other files, everything else | nothing |
 /// | Working directory paths outside the git directory | status |
 ///
+/// The watcher drops the working directory's paths that git ignores before
+/// it asks for that status (`RepositoryWatcher`).
+///
 /// An event that says events were lost (`mustScanSubDirs`) calls for a full
 /// refresh, unless it is confined to a part of the git directory that
 /// doesn't count (`objects/`, `logs/`, and a submodule's). An event for a watched directory
@@ -27,7 +30,9 @@ import Foundation
 public enum WatchEventClassifier {
     /// The refresh `event` calls for, or nil when it calls for none.
     public static func scope(for event: FileWatchEvent, in paths: WatchedPaths) -> RefreshScope? {
-        scope(for: event, in: NormalizedPaths(paths))
+        let paths = NormalizedPaths(paths)
+        let path = normalized(event.path)
+        return eventScope(flags: event.flags, at: path, location: paths.location(of: path), in: paths)?.refreshScope
     }
 
     /// The refresh a batch of events calls for: the union of what each one
@@ -36,14 +41,76 @@ public enum WatchEventClassifier {
         let paths = NormalizedPaths(paths)
         var merged: RefreshScope = []
         for event in events {
-            if let scope = scope(for: event, in: paths) {
-                merged.formUnion(scope)
+            let path = normalized(event.path)
+            if let scope = eventScope(flags: event.flags, at: path, location: paths.location(of: path), in: paths) {
+                merged.formUnion(scope.refreshScope)
                 if merged == .full {
                     break
                 }
             }
         }
         return merged.isEmpty ? nil : merged
+    }
+
+    /// What an event calls for, with the working directory's paths apart,
+    /// since git may ignore them.
+    enum EventScope: Equatable, Sendable {
+        /// A path in the working directory, outside the git directory:
+        /// a status refresh. Relative to the working directory (`""` for the
+        /// directory itself) and normalized.
+        case workingDirectory(String)
+        /// Any other event's refresh.
+        case scope(RefreshScope)
+
+        /// The refresh it calls for, whatever git ignores.
+        var refreshScope: RefreshScope {
+            switch self {
+            case .workingDirectory: .status
+            case .scope(let scope): scope
+            }
+        }
+    }
+
+    /// Where a normalized path is among the watched directories.
+    enum Location: Sendable, Equatable {
+        /// In the git directory or the common directory, relative to the
+        /// first that holds it.
+        case gitDirectory(String)
+        /// In the working directory, outside the git directory, relative to
+        /// it.
+        case workingDirectory(String)
+        /// Outside them.
+        case outside
+    }
+
+    /// What an event with `flags` calls for, at `path` (normalized), which
+    /// is at `location`; nil when it calls for nothing.
+    static func eventScope(
+        flags: FileWatchEvent.Flags,
+        at path: String,
+        location: Location,
+        in paths: NormalizedPaths
+    ) -> EventScope? {
+        if !flags.isDisjoint(with: [.rootChanged, .mount, .unmount]) {
+            return .scope(.full)
+        }
+
+        let mustScan = flags.contains(.mustScanSubDirs)
+        if mustScan, paths.containsWatchedDirectory(path) {
+            return .scope(.full)
+        }
+
+        switch location {
+        case .gitDirectory(let relative):
+            if mustScan {
+                return countsLostEvents(underRelativePath: relative) ? .scope(.full) : nil
+            }
+            return gitDirectoryScope(forRelativePath: relative).map(EventScope.scope)
+        case .workingDirectory(let relative):
+            return mustScan ? .scope(.full) : .workingDirectory(relative)
+        case .outside:
+            return nil
+        }
     }
 
     /// The scope for a path relative to the git directory or the common
@@ -130,10 +197,11 @@ public enum WatchEventClassifier {
     }
 
     /// `path` in the form classification compares: canonically decomposed,
-    /// without trailing slashes.
+    /// without trailing slashes. An ASCII path is its own decomposition, so
+    /// only its slashes go.
     static func normalized(_ path: String) -> String {
-        var normalized = path.decomposedStringWithCanonicalMapping
-        while normalized.utf8.count > 1, JSCompat.endsWith(normalized, "/") {
+        var normalized = path.utf8.allSatisfy { $0 < 0x80 } ? path : path.decomposedStringWithCanonicalMapping
+        while normalized.utf8.count > 1, normalized.utf8.last == UInt8(ascii: "/") {
             normalized.removeLast()
         }
         return normalized
@@ -142,25 +210,59 @@ public enum WatchEventClassifier {
     /// `path` relative to `root` (`""` for the root itself), or nil when
     /// `path` isn't `root` or inside it. Both are normalized.
     static func relativePath(of path: String, under root: String) -> String? {
-        if JSCompat.strictEquals(path, root) {
-            return ""
-        }
-        let prefix = JSCompat.endsWith(root, "/") ? root : root + "/"
-        guard JSCompat.startsWith(path, prefix) else {
-            return nil
-        }
-        return JSCompat.dropFirst(path, prefix.unicodeScalars.count)
+        relativePath(of: path, under: root, prefix: directoryPrefix(root))
     }
 
-    private struct NormalizedPaths {
+    /// `root` ending in one slash: what the paths inside it start with.
+    static func directoryPrefix(_ root: String) -> String {
+        JSCompat.endsWith(root, "/") ? root : root + "/"
+    }
+
+    /// `path` relative to `root`, whose contents start with `prefix`
+    /// (`directoryPrefix(root)`). Compares UTF-8 bytes, which match where
+    /// the Unicode scalars do.
+    static func relativePath(of path: String, under root: String, prefix: String) -> String? {
+        let bytes = path.utf8
+        if bytes.elementsEqual(root.utf8) {
+            return ""
+        }
+        guard bytes.starts(with: prefix.utf8) else {
+            return nil
+        }
+        return String(decoding: bytes.dropFirst(prefix.utf8.count), as: UTF8.self)
+    }
+
+    /// The watched directories in the form classification compares, and
+    /// the prefixes of the paths inside them, made once for every event of
+    /// a watch.
+    struct NormalizedPaths: Sendable {
         let workingDirectory: String
         let gitDirectory: String
         let commonDirectory: String
+        private let workingDirectoryPrefix: String
+        private let gitDirectoryPrefix: String
+        private let commonDirectoryPrefix: String
 
         init(_ paths: WatchedPaths) {
             workingDirectory = WatchEventClassifier.normalized(paths.workingDirectory)
             gitDirectory = WatchEventClassifier.normalized(paths.gitDirectory)
             commonDirectory = WatchEventClassifier.normalized(paths.commonDirectory)
+            workingDirectoryPrefix = WatchEventClassifier.directoryPrefix(workingDirectory)
+            gitDirectoryPrefix = WatchEventClassifier.directoryPrefix(gitDirectory)
+            commonDirectoryPrefix = WatchEventClassifier.directoryPrefix(commonDirectory)
+        }
+
+        /// Where `path` (normalized) is: the git directory counts first,
+        /// then the common directory, then the working directory.
+        func location(of path: String) -> Location {
+            if let relative = WatchEventClassifier.relativePath(of: path, under: gitDirectory, prefix: gitDirectoryPrefix)
+                ?? WatchEventClassifier.relativePath(of: path, under: commonDirectory, prefix: commonDirectoryPrefix) {
+                return .gitDirectory(relative)
+            }
+            if let relative = WatchEventClassifier.relativePath(of: path, under: workingDirectory, prefix: workingDirectoryPrefix) {
+                return .workingDirectory(relative)
+            }
+            return .outside
         }
 
         /// Whether `path` is one of the watched directories or contains one.
@@ -169,32 +271,5 @@ public enum WatchEventClassifier {
                 WatchEventClassifier.relativePath(of: $0, under: path) != nil
             }
         }
-    }
-
-    private static func scope(for event: FileWatchEvent, in paths: NormalizedPaths) -> RefreshScope? {
-        let flags = event.flags
-        if !flags.isDisjoint(with: [.rootChanged, .mount, .unmount]) {
-            return .full
-        }
-
-        let path = normalized(event.path)
-        let mustScan = flags.contains(.mustScanSubDirs)
-        if mustScan, paths.containsWatchedDirectory(path) {
-            return .full
-        }
-
-        if let relative = relativePath(of: path, under: paths.gitDirectory)
-            ?? relativePath(of: path, under: paths.commonDirectory) {
-            if mustScan {
-                return countsLostEvents(underRelativePath: relative) ? .full : nil
-            }
-            return gitDirectoryScope(forRelativePath: relative)
-        }
-
-        if relativePath(of: path, under: paths.workingDirectory) != nil {
-            return mustScan ? .full : .status
-        }
-
-        return nil
     }
 }

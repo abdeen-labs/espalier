@@ -219,6 +219,11 @@ struct WatchEventClassifierTests {
         #expect(scope("/Users/me/caf\u{E9}/.git/objects/ab/cd", in: decomposed) == nil)
         #expect(scope("/Users/me/src/app/r\u{E9}sum\u{E9}.txt") == .status)
         #expect(scope("/Users/me/src/app/.git/refs/heads/caf\u{E9}", in: mainWorktree) == [.refs, .status])
+        // An ASCII path is never inside a directory whose name isn't.
+        #expect(scope("/Users/me/cafe/notes.txt", in: precomposed) == nil)
+        #expect(scope("/Users/me/cafe/.git/HEAD", in: decomposed) == nil)
+        // A path that isn't ASCII loses its trailing slashes too.
+        #expect(scope("/Users/me/caf\u{E9}/.git/refs/heads/", in: decomposed) == [.refs, .status])
     }
 
     @Test("ignores trailing slashes")
