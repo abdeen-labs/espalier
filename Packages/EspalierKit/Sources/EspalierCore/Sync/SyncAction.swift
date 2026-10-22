@@ -227,38 +227,42 @@ extension SyncModel {
 // MARK: - Stop
 
 extension SyncModel {
-    /// How long a push, pull, fetch, or publish runs before the sync button
-    /// offers Stop.
-    public static let stopDelay: TimeInterval = 10
-
     /// The operations the sync button offers to stop: what it shows as a
     /// push, pull, fetch, or publish.
     private static let stoppableKinds: Set<OperationKind> = [.fetch, .fetchRefspec, .pull, .push, .publishBranch, .publishRepository]
 
-    /// When the sync button offers Stop for the operation it shows:
-    /// `stopDelay` after a push, pull, fetch, or publish started, a
-    /// background fetch too. Nil while none runs.
-    public var stopOfferedAt: Date? {
-        guard let operation = repository?.networkOperation, Self.stoppableKinds.contains(operation.kind) else {
+    /// The push, pull, fetch, or publish the sync button shows, while it
+    /// hangs: nothing from git or its hooks for 10 seconds
+    /// (`ActiveOperation.isHanging`). A background fetch too.
+    private var hangingOperation: ActiveOperation? {
+        guard let operation = repository?.networkOperation, Self.stoppableKinds.contains(operation.kind), operation.isHanging else {
             return nil
         }
-        return operation.startedAt.addingTimeInterval(Self.stopDelay)
+        return operation
     }
 
-    /// Stops the push, pull, fetch, or publish the sync button shows, once
-    /// it offers Stop (`stopOfferedAt`): git and the processes it started
-    /// end, and the operation fails as `cancelled(.userCancelled)`, which
-    /// shows no error and leaves a background fetch's failure badge as it
-    /// was. A hook it runs is aborted instead (`cancelled(.hookAborted)`).
-    /// A pull is stopped only while it fetches; once it merges or rebases,
-    /// it goes on.
+    /// Whether the sync button offers Stop: the operation it shows hangs,
+    /// and stopping it would stop something now. A hook it runs can be
+    /// aborted; a pull can be stopped while it fetches, not once it merges
+    /// or rebases.
+    public var offersStop: Bool {
+        guard let repository, let operation = hangingOperation else {
+            return false
+        }
+        return operation.hook?.status == .running || repository.stoppableOperations.contains(operation.id)
+    }
+
+    /// Stops the push, pull, fetch, or publish the sync button shows, while
+    /// it hangs: git and the processes it started end, and the operation
+    /// fails as `cancelled(.userCancelled)`, which shows no error and
+    /// leaves a background fetch's failure badge as it was. A hook it runs
+    /// is aborted instead (`cancelled(.hookAborted)`). Nothing stops while
+    /// it doesn't hang, or while a pull merges or rebases.
     ///
     /// - Returns: Whether anything stopped.
     @discardableResult
     public func stop() -> Bool {
-        guard let repository, let operation = repository.networkOperation, let offeredAt = stopOfferedAt,
-              repository.environment.scheduler.now >= offeredAt
-        else {
+        guard let repository, let operation = hangingOperation else {
             return false
         }
         return repository.stopOperation(operation.id)

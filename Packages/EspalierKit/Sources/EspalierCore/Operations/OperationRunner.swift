@@ -16,7 +16,8 @@ extension RepositoryModel {
     ///    local operations, and invalidates the refresh in flight.
     /// 3. Runs `body` in its own task, so cancelling the caller never reaches
     ///    git, inside the environment's runtimes. Only the user's Stop
-    ///    (`stopOperation(_:)`) cancels that task.
+    ///    (`stopOperation(_:)`) cancels that task. While it runs, a network
+    ///    operation is watched for hanging (`OperationStall`).
     /// 4. On failure: a hook the user aborted becomes
     ///    `cancelled(.hookAborted)`, an operation the user stopped
     ///    `cancelled(.userCancelled)`; anything else is classified, with its
@@ -122,9 +123,16 @@ extension RepositoryModel {
         // 3. The context.
         let hookState = HookState()
         hookStates[operation.id] = hookState
+        let operationID = operation.id
         let stop = OperationStop()
-        operationStops[operation.id] = stop
-        let context = makeContext(for: operation, descriptor: descriptor, hookState: hookState, stop: stop)
+        operationStops[operationID] = stop
+        stop.setOnChange { [weak self] in
+            Task { @MainActor [weak self] in self?.updateStoppable(operationID) }
+        }
+        // A network operation is watched for hanging, which the sync
+        // button's Stop waits for.
+        let stall = descriptor.lanes.contains(.network) ? OperationStall(scheduler: environment.scheduler) : nil
+        let context = makeContext(for: operation, descriptor: descriptor, hookState: hookState, stop: stop, stall: stall)
 
         // 4. The body, in a task of its own, which the user's Stop cancels.
         let environment = environment
@@ -138,7 +146,18 @@ extension RepositoryModel {
             }
         }
         stop.setCancel { task.cancel() }
+        updateStoppable(operationID)
+        let stallWatch = stall.map { stall in
+            Task { @MainActor [weak self] in
+                await stall.watch { isHanging in
+                    self?.updateActivity(operationID) { $0.isHanging = isHanging }
+                }
+            }
+        }
         let result = await task.value
+        stop.finish()
+        stallWatch?.cancel()
+        stall?.end()
 
         let outcome: Result<T, OperationError>
         switch result {
@@ -162,6 +181,8 @@ extension RepositoryModel {
         // 5. Always.
         hookStates[operation.id] = nil
         operationStops[operation.id] = nil
+        updateStoppable(operation.id)
+        updateActivity(operation.id) { $0.isHanging = false }
         let showsProgressUntilRefreshed = descriptor.showsProgressUntilRefreshed
             && descriptor.lanes.contains(.network)
             && !descriptor.refreshAfter.isEmpty
@@ -219,13 +240,18 @@ extension RepositoryModel {
         for operation: ActiveOperation,
         descriptor: OperationDescriptor,
         hookState: HookState,
-        stop: OperationStop
+        stop: OperationStop,
+        stall: OperationStall?
     ) -> OperationContext {
         let id = operation.id
+        // Progress, hooks, and git's output are a network operation's
+        // activity: it hangs without them (`OperationStall`).
         let hookRelay = ProgressRelay<HookActivity> { [weak self] activity in
+            stall?.recordActivity()
             self?.updateActivity(id) { $0.hook = activity }
         }
         let progressRelay = ProgressRelay<AnyProgress> { [weak self] progress in
+            stall?.recordActivity()
             self?.updateActivity(id) { $0.progress = progress }
         }
         let outputRelay = ProgressRelay<TerminalOutputListener> { [weak self] listener in
@@ -256,6 +282,7 @@ extension RepositoryModel {
             },
             onHookFailure: onHookFailure,
             onTerminalOutputAvailable: { subscribe in
+                stall?.recordActivity(from: subscribe)
                 outputRelay.send(subscribe)
             },
             state: hookState

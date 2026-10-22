@@ -1,8 +1,8 @@
 // The sync button, a split button whose chevron lists the alternatives.
 // `SyncAction` decides the state, read in one function
 // (`SyncButtonState.make`); this file adds what the button shows besides:
-// the counts, the last fetch, the background failure, and Stop once a push,
-// pull, or fetch has run a while.
+// the counts, the last fetch, the background failure, and Stop while a push,
+// pull, or fetch hangs.
 
 import EspalierCore
 import GitHubKit
@@ -63,8 +63,8 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
     /// Whether a force push asks first (the menu item shows a warning when
     /// it doesn't).
     public var asksBeforeForcePush: Bool
-    /// Whether Stop shows beside the button: a push, pull, or fetch has run
-    /// `SyncModel.stopDelay`.
+    /// Whether Stop shows beside the button: a push, pull, or fetch hangs,
+    /// and stopping it would stop something (`SyncModel.offersStop`).
     public var offersStop: Bool
 
     public init(
@@ -116,7 +116,7 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
         return "Stop \(first.lowercased())\(activityTitle.dropFirst())"
     }
 
-    /// Whether Stop shows: while a push, pull, or fetch runs, once it's
+    /// Whether Stop shows: while a push, pull, or fetch runs and Stop is
     /// offered.
     public var showsStop: Bool {
         isInProgress && offersStop
@@ -287,24 +287,17 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
     }
 
     /// The state for a repository: its `SyncAction`, with the last fetch,
-    /// the background failure, and whether a force push asks first. Stop
-    /// isn't offered; `offeringStop(at:)` says when it is.
+    /// the background failure, whether a force push asks first, and whether
+    /// Stop is offered.
     @MainActor
     public static func make(_ repository: RepositoryModel, preferences: Preferences) -> SyncButtonState {
         SyncButtonState(
             kind: kind(repository.sync.action, repository: repository),
             lastFetched: repository.gitState.lastFetched,
             backgroundFailure: repository.lastBackgroundFailure.map(BackgroundFailureSummary.init),
-            asksBeforeForcePush: preferences.confirmForcePush
+            asksBeforeForcePush: preferences.confirmForcePush,
+            offersStop: repository.sync.offersStop
         )
-    }
-
-    /// This state at `now`, with Stop offered once `offeredAt` has passed
-    /// (`SyncModel.stopOfferedAt`).
-    public func offeringStop(at now: Date, offeredAt: Date?) -> SyncButtonState {
-        var state = self
-        state.offersStop = offeredAt.map { now >= $0 } ?? false
-        return state
     }
 
     /// The button's state for a `SyncAction`. The action has one fetch state
@@ -682,7 +675,7 @@ public struct LastFetchedLabel: View {
 /// what they showed before it started, when it's the action the button
 /// offered (or none of the button's), and the group doesn't narrow: the
 /// button keeps its trailing edge, and the search field its place. Once it
-/// has run a while, Stop takes the last fetch's place.
+/// hangs, Stop takes the last fetch's place.
 public struct SyncButtonGroup: View {
     private let state: SyncButtonState
     private let scope: AnyHashable?
@@ -768,8 +761,8 @@ public struct SyncButtonGroup: View {
     }
 }
 
-/// Stop, beside the sync button once a push, pull, or fetch has run
-/// `SyncModel.stopDelay`: a quiet capsule with the stop symbol.
+/// Stop, beside the sync button while a push, pull, or fetch hangs: a quiet
+/// capsule with the stop symbol.
 struct SyncStopButton: View {
     /// What it stops ("Stop fetching origin"), its tooltip.
     let title: String
@@ -795,13 +788,7 @@ struct SyncButton: View {
     @State private var isShowingFailure = false
 
     var body: some View {
-        let state = SyncButtonState.make(repository, preferences: context.app.preferences)
-        let stopOfferedAt = repository.sync.stopOfferedAt
-        // Drawn again when Stop is offered: a stalled push, pull, or fetch
-        // changes nothing else then.
-        TimelineView(.explicit(stopOfferedAt.map { [$0] } ?? [])) { timeline in
-            group(state.offeringStop(at: timeline.date, offeredAt: stopOfferedAt))
-        }
+        group(SyncButtonState.make(repository, preferences: context.app.preferences))
         // Another repository's button shows at once, as navigation between
         // repositories does.
         .motionScope(AnyHashable(ObjectIdentifier(repository)))

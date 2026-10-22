@@ -120,7 +120,12 @@ func pullPrimitive(_ remote: Remote, in ctx: OperationContext) async throws -> M
             onHookFailure: ctx.hooks.onHookFailure,
             onTerminalOutputAvailable: ctx.hooks.onTerminalOutputAvailable,
             processCallback: { process in
-                stop.setStopper { stopPullFetch(process) }
+                // Stop can stop the pull while it fetches, not once it
+                // merges or rebases.
+                stop.setStopper({ stopPullFetch(process) }, canStop: false)
+                PullFetchWatch.watch(process) { isFetching in
+                    stop.setStopperCanStop(isFetching)
+                }
             }
         ))
     } catch {

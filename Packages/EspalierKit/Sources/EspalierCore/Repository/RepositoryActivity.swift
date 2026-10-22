@@ -16,6 +16,9 @@ public struct ActiveOperation: Sendable, Identifiable {
     /// Subscribes to the live terminal output of the operation's current git
     /// process, once git has started.
     public var terminalOutput: TerminalOutputListener?
+    /// Whether the operation hangs: a network operation that has had nothing
+    /// from git (progress or output) or its hooks for 10 seconds.
+    public var isHanging = false
 
     public init(
         id: UUID = UUID(),

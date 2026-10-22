@@ -48,6 +48,9 @@ public final class RepositoryModel: Identifiable {
     public private(set) var localOperation: ActiveOperation?
     /// The operation holding the network lane, if any (pull holds both).
     public private(set) var networkOperation: ActiveOperation?
+    /// The running operations the user's Stop would stop now
+    /// (`OperationStop.canStop`).
+    public private(set) var stoppableOperations: Set<UUID> = []
     /// Whether a refresh pass is running.
     public private(set) var isRefreshing = false
     /// The last failure of background work, which the sync button shows
@@ -192,6 +195,18 @@ public final class RepositoryModel: Identifiable {
             await commitGraphIdle()
             if operationsInFlight == 0, refreshScheduler.isIdle {
                 return
+            }
+        }
+    }
+
+    /// Brings `stoppableOperations` up to date for operation `id`.
+    func updateStoppable(_ id: UUID) {
+        let canStop = operationStops[id]?.canStop == true
+        if canStop != stoppableOperations.contains(id) {
+            if canStop {
+                stoppableOperations.insert(id)
+            } else {
+                stoppableOperations.remove(id)
             }
         }
     }

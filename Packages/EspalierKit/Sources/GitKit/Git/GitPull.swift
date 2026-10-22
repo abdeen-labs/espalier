@@ -3,6 +3,7 @@
 import EspalierSupport
 import Foundation
 import os
+import Synchronization
 
 private let logger = Log.logger(category: "pull")
 
@@ -175,6 +176,134 @@ func isGitFetch(_ arguments: [String]) -> Bool {
     arguments.count >= 2
         && JSCompat.strictEquals(POSIXPath.basename(arguments[0]), "git")
         && JSCompat.strictEquals(arguments[1], "fetch")
+}
+
+/// Watches a running `git pull` for the `git fetch` it runs before it
+/// merges or rebases, and says whether that fetch runs (`stopPullFetch(_:)`
+/// stops it then, and nothing after). The kernel reports the pull's forks
+/// and each child's exec and exit (dispatch process sources); a child is
+/// the fetch once it has exec'd `git fetch`. `onChange` gets each change on
+/// the watch's queue. The watch ends when the fetch or the pull exits.
+public final class PullFetchWatch: Sendable {
+    /// A process source, used only on the watch's queue and under its lock.
+    private struct Source: @unchecked Sendable {
+        let source: any DispatchSourceProcess
+    }
+
+    private struct State {
+        var sources: [pid_t: [Source]] = [:]
+        var fetch: pid_t?
+        var isEnded = false
+    }
+
+    private let pull: pid_t
+    private let queue = DispatchQueue(label: "dev.espalier.pull-fetch-watch")
+    private let state = Mutex(State())
+    private let onChange: @Sendable (_ isFetching: Bool) -> Void
+
+    private init(pull: pid_t, onChange: @escaping @Sendable (_ isFetching: Bool) -> Void) {
+        self.pull = pull
+        self.onChange = onChange
+    }
+
+    /// Starts watching `pull` (`PullOptions.processCallback`).
+    @discardableResult
+    public static func watch(_ pull: ChildProcess, onChange: @escaping @Sendable (_ isFetching: Bool) -> Void) -> PullFetchWatch {
+        let watch = PullFetchWatch(pull: pull.processIdentifier, onChange: onChange)
+        watch.queue.async { watch.start() }
+        return watch
+    }
+
+    // The rest runs on `queue`.
+
+    private func start() {
+        observe(pull, .fork) { $0.findChildren() }
+        observe(pull, .exit) { $0.end() }
+        // Children started before the pull was observed.
+        findChildren()
+    }
+
+    /// Observes the pull's children not observed yet; one that has exec'd
+    /// already is checked now.
+    private func findChildren() {
+        for child in ProcessTree.children(of: pull) where !isObserved(child) {
+            observe(child, .exec) { $0.check(child) }
+            observe(child, .exit) { $0.childExited(child) }
+            check(child)
+        }
+    }
+
+    /// Notes `child` as the fetch when it runs `git fetch`.
+    private func check(_ child: pid_t) {
+        guard let arguments = ProcessTree.arguments(of: child), isGitFetch(arguments) else {
+            return
+        }
+        let isNew = state.withLock { state in
+            guard !state.isEnded, state.fetch == nil else {
+                return false
+            }
+            state.fetch = child
+            return true
+        }
+        if isNew {
+            onChange(true)
+        }
+    }
+
+    /// Stops observing `child`; the watch ends with the fetch.
+    private func childExited(_ child: pid_t) {
+        let (sources, wasFetch) = state.withLock { state in
+            (state.sources.removeValue(forKey: child) ?? [], state.fetch == child)
+        }
+        for source in sources {
+            source.source.cancel()
+        }
+        if wasFetch {
+            end()
+        }
+    }
+
+    /// Stops observing; a fetch it reported is over.
+    private func end() {
+        let (sources, wasFetching) = state.withLock { state -> ([Source], Bool) in
+            guard !state.isEnded else {
+                return ([], false)
+            }
+            state.isEnded = true
+            defer { state.sources = [:] }
+            return (state.sources.values.flatMap { $0 }, state.fetch != nil)
+        }
+        for source in sources {
+            source.source.cancel()
+        }
+        if wasFetching {
+            onChange(false)
+        }
+    }
+
+    private func isObserved(_ pid: pid_t) -> Bool {
+        state.withLock { $0.sources[pid] != nil }
+    }
+
+    /// Calls `handler` on the queue at `event` of process `pid`, until the
+    /// watch ends.
+    private func observe(_ pid: pid_t, _ event: DispatchSource.ProcessEvent, _ handler: @escaping @Sendable (PullFetchWatch) -> Void) {
+        let source = Source(source: DispatchSource.makeProcessSource(identifier: pid, eventMask: event, queue: queue))
+        source.source.setEventHandler { [self] in
+            handler(self)
+        }
+        let isEnded = state.withLock { state in
+            if !state.isEnded {
+                state.sources[pid, default: []].append(source)
+            }
+            return state.isEnded
+        }
+        // A source is released only once it has been activated.
+        source.source.resume()
+        if isEnded {
+            source.source.cancel()
+        }
+    }
 }
 
 /// Defaults the pull default for divergent paths to try to fast forward and if
