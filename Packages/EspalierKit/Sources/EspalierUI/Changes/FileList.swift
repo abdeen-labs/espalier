@@ -1015,7 +1015,7 @@ struct ChangesController {
                 await context.presenter.perform { _ throws(OperationError) in
                     try await repository.ignore(action, of: files)
                 } outcome: { stillTracked in
-                    Self.stillTrackedMessage(stillTracked, numberFormat: numberFormat).map { Toast($0, systemImage: "info.circle.fill") }
+                    Self.stillTrackedMessage(stillTracked, numberFormat: numberFormat).map { Toast($0, systemImage: "info.circle.fill", tone: .notice) }
                 }
             }
         case .include:

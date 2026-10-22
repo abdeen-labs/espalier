@@ -20,7 +20,7 @@ enum Benchmarks {
                 return
             }
             let result = await runner(context)
-            context.presenter.show(Toast(result, systemImage: "speedometer"))
+            context.presenter.show(Toast(result, systemImage: "speedometer", tone: .notice))
         }
     }
 

@@ -192,7 +192,7 @@ enum MenuBarAudit {
         let actions = context.actions
         let problems = problems(in: menuBar, isHidden: { actions.isHidden($0) })
         if problems.isEmpty {
-            context.presenter.show(Toast("Every menu shortcut is on its item, once.", systemImage: "keyboard"))
+            context.presenter.show(Toast("Every menu shortcut is on its item, once.", systemImage: "keyboard", tone: .notice))
             return
         }
         _ = await context.modals.alert(AlertContent(

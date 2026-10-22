@@ -22,9 +22,9 @@ enum DebugActions {
                 return
             }
             if let pullRequest = await repository.gitHub.postSampleNotification() {
-                context.presenter.show(Toast("Posted a sample notification for #\(pullRequest.pullRequestNumber).", systemImage: "bell"))
+                context.presenter.show(Toast("Posted a sample notification for #\(pullRequest.pullRequestNumber).", systemImage: "bell", tone: .notice))
             } else {
-                context.presenter.show(Toast("This repository has no open pull request to notify about.", systemImage: "bell.slash"))
+                context.presenter.show(Toast("This repository has no open pull request to notify about.", systemImage: "bell.slash", tone: .notice))
             }
         }
     }

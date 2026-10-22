@@ -1,4 +1,6 @@
-// Success outcomes as toasts. Their copy is the state layer's; they last 5 s,
+// Outcomes and notices as toasts: a success's symbol is green, a notice's
+// (a refusal, something the app did on its own) is gray. Their copy is the
+// state layer's; they last 5 s,
 // or 15 s with Undo, counted once the pointer leaves the toast, and the
 // close button dismisses one at once. Edit ▸ Undo (⌘Z) runs a toast's Undo
 // too, and its button shows the key (the window's undo manager;
@@ -9,17 +11,27 @@ import AppKit
 import EspalierCore
 import SwiftUI
 
+/// What a toast tells the user, which colors its symbol.
+nonisolated public enum ToastTone: Sendable, Equatable {
+    /// Something the user asked for was done.
+    case success
+    /// A notice: why something can't run, or what changed on its own.
+    case notice
+}
+
 /// A toast: a message, a symbol, and an optional Undo.
 public struct Toast: Identifiable {
     public let id: UUID
     public var message: String
     public var systemImage: String
+    public var tone: ToastTone
     public var undo: ToastAction?
 
-    public init(id: UUID = UUID(), _ message: String, systemImage: String = "checkmark.circle.fill", undo: ToastAction? = nil) {
+    public init(id: UUID = UUID(), _ message: String, systemImage: String = "checkmark.circle.fill", tone: ToastTone = .success, undo: ToastAction? = nil) {
         self.id = id
         self.message = message
         self.systemImage = systemImage
+        self.tone = tone
         self.undo = undo
     }
 
@@ -30,22 +42,22 @@ public struct Toast: Identifiable {
 
     /// The toast's look, for the view.
     public var content: ToastContent {
-        ToastContent(message: message, systemImage: systemImage, undoTitle: undo?.title)
+        ToastContent(message: message, systemImage: systemImage, tone: tone, undoTitle: undo?.title)
     }
 
     /// "Another operation is in progress".
     public static var busy: Toast {
-        Toast("Another operation is in progress", systemImage: "hourglass")
+        Toast("Another operation is in progress", systemImage: "hourglass", tone: .notice)
     }
 
     /// Why an action the user asked for can't run.
     public static func refused(_ reason: String) -> Toast {
-        Toast(reason, systemImage: "info.circle.fill")
+        Toast(reason, systemImage: "info.circle.fill", tone: .notice)
     }
 
     /// "<worktree> was removed. Showing <repository>."
     public static func removedWorktree(_ notice: RemovedWorktreeNotice) -> Toast {
-        Toast("\(notice.worktreeName) was removed. Showing \(notice.shownName).", systemImage: "folder.badge.minus")
+        Toast("\(notice.worktreeName) was removed. Showing \(notice.shownName).", systemImage: "folder.badge.minus", tone: .notice)
     }
 }
 
@@ -79,15 +91,17 @@ public struct ToastAction {
 nonisolated public struct ToastContent: Sendable, Equatable {
     public var message: String
     public var systemImage: String
+    public var tone: ToastTone
     /// The button's title, or nil for none.
     public var undoTitle: String?
     /// The key that also runs the button ("⌘Z"), as a key cap beside its
     /// title; nil where it doesn't run by key.
     public var undoShortcut: String?
 
-    public init(message: String, systemImage: String = "checkmark.circle.fill", undoTitle: String? = nil, undoShortcut: String? = nil) {
+    public init(message: String, systemImage: String = "checkmark.circle.fill", tone: ToastTone = .success, undoTitle: String? = nil, undoShortcut: String? = nil) {
         self.message = message
         self.systemImage = systemImage
+        self.tone = tone
         self.undoTitle = undoTitle
         self.undoShortcut = undoShortcut
     }
@@ -118,7 +132,7 @@ public struct ToastView: View {
             Image(systemName: content.systemImage)
                 .font(Typography.row)
                 .imageScale(.large)
-                .foregroundStyle(Color(espalier: Palette.success))
+                .foregroundStyle(symbolStyle)
                 .accessibilityHidden(true)
             Text(content.message)
                 .font(Typography.row)
@@ -151,6 +165,14 @@ public struct ToastView: View {
         .floatingSurface()
         // One element: the message, with Undo and Close as its actions.
         .accessibilityElement(children: .combine)
+    }
+
+    /// The symbol's color: green for a success, gray for a notice.
+    private var symbolStyle: AnyShapeStyle {
+        switch content.tone {
+        case .success: AnyShapeStyle(Color(espalier: Palette.success))
+        case .notice: AnyShapeStyle(.text2)
+        }
     }
 }
 
