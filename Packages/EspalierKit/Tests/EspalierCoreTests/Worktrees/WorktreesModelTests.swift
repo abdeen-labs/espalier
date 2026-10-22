@@ -1,8 +1,8 @@
 // Worktrees against real repositories: the list and its rules, adding for
 // new, existing, and remote branches, switching with the state it seeds,
 // removing (the current worktree, a failure and the forced deletion),
-// renaming and moving, and repositories in the list that are worktrees
-// too.
+// renaming and moving, repositories in the list that are worktrees too,
+// and a folder that isn't a full path.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -77,6 +77,31 @@ struct WorktreesModelTests {
         #expect(fixture.model.gitState.tip.branch?.name == "topic")
         #expect(fixture.model.gitState.worktrees.count == 2)
         #expect(try await fixture.sha("topic") == (try await fixture.sha("master")))
+    }
+
+    @Test("a folder that isn't a full path is refused with nothing made in the repository; a leading ~ is the home folder")
+    func addRelativePath() async throws {
+        let fixture = try await WorktreeFixture()
+        let worktrees = fixture.model.worktrees
+        #expect(WorktreesModel.worktreePath(in: "~/trees", name: "topic") == POSIXPath.join(NSHomeDirectory(), "trees", "topic"))
+        #expect(WorktreesModel.worktreePath(in: "~", name: "topic") == POSIXPath.join(NSHomeDirectory(), "topic"))
+
+        let relative = try #require(WorktreesModel.worktreePath(in: "trees", name: "topic"))
+        do throws(OperationError) {
+            try await worktrees.add(AddWorktreeRequest(path: relative, branchName: "topic"))
+            Issue.record("Expected a folder that isn't a full path to be refused")
+        } catch {
+            if case .precondition = error.reason {} else {
+                Issue.record("Expected a precondition, got \(error.reason)")
+            }
+        }
+        #expect(!FileManager.default.fileExists(atPath: POSIXPath.join(fixture.main.path, "trees")))
+        let listed = try await runGit(["worktree", "list", "--porcelain"], fixture.main)
+        #expect(listed.split(separator: "\n").filter { $0.hasPrefix("worktree ") }.count == 1)
+        let branches = try await runGit(["branch", "--list", "topic"], fixture.main)
+        #expect(!branches.contains("topic"))
+        #expect(fixture.model.record.path == fixture.main.path)
+        await fixture.app.idle()
     }
 
     @Test("adds a worktree for an existing local branch, and one named after its folder")

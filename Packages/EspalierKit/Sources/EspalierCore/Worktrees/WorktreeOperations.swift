@@ -21,7 +21,8 @@ extension WorktreesModel {
     /// are initialized, and deletes it only when forced.)
     ///
     /// - Returns: The new worktree, now the repository's.
-    /// - Throws: A precondition error without a path or a branch name, and
+    /// - Throws: A precondition error without a path, with one that isn't a
+    ///   full path, or without a branch name, and
     ///   "Failed to find the newly created worktree"; git's error (a branch
     ///   checked out elsewhere, a folder that exists); errors of the switch
     ///   (`switchToWorktree(_:)`). When only updating the submodules fails,
@@ -35,6 +36,11 @@ extension WorktreesModel {
         let path = request.path
         guard !path.isEmpty else {
             throw OperationError(.precondition("Choose a folder for the worktree."), operation: .addWorktree, repositoryID: repository.id)
+        }
+        // Git resolves a relative path against the repository, not the
+        // folder the user meant.
+        guard POSIXPath.isAbsolute(path) else {
+            throw OperationError(.precondition(AddWorktreeRequest.notFullPathMessage), operation: .addWorktree, repositoryID: repository.id)
         }
         let branchName: String?
         if request.isExplicit {

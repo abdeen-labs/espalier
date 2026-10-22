@@ -261,10 +261,11 @@ extension AppModel {
 
     // MARK: Alias, fork target
 
-    /// Sets or removes (nil or empty) the name the list shows for a
-    /// repository. Nothing else about the repository resets.
+    /// Sets the name the list shows for a repository, without the spaces
+    /// around it, or removes it (nil, or nothing but spaces). Nothing else
+    /// about the repository resets.
     public func setAlias(_ alias: String?, for id: RepositoryID) {
-        let alias = alias.flatMap { $0.isEmpty ? nil : $0 }
+        let alias = alias.map { JSCompat.trim($0) }.flatMap { $0.isEmpty ? nil : $0 }
         updateRecord(id) { $0.alias = alias }
     }
 

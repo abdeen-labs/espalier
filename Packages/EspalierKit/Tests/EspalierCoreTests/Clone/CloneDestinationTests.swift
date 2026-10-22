@@ -27,6 +27,13 @@ struct CloneDestinationTests {
         #expect(await validateClonePath(directory) == nil)
     }
 
+    @Test("a path that isn't a full path can't be cloned into")
+    func notFullPath() async {
+        #expect(await validateClonePath("Developer/app") == .notFullPath)
+        #expect(await validateClonePath("~/Developer/app") == .notFullPath)
+        #expect(await validateClonePath("") == .notFullPath)
+    }
+
     @Test("a folder with files, even hidden ones, can't be cloned into")
     func notEmpty() async throws {
         let directory = try createTempDirectory()

@@ -291,6 +291,7 @@ enum UIFixtures {
         ("reset", ToastContent(message: ResetResult(branchName: "main", sha: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0").summary)),
         ("busy", ToastContent(message: "Another operation is in progress", systemImage: "hourglass")),
         ("ignored-tracked", ToastContent(message: "config.json is still tracked, so its changes still show.", systemImage: "info.circle.fill")),
+        ("removedWorktree", Toast.removedWorktree(RemovedWorktreeNotice(worktreeName: "espalier-login", shownName: "espalier")).content),
     ]
 
     static let capsules: [(name: String, content: OperationCapsuleContent)] = [

@@ -141,7 +141,10 @@ extension AppModel {
     /// - Throws: `.confirmationRequired(.checkoutLinkedBranch)`, after the
     ///   repository is selected. Checking out the branch: its decisions and
     ///   confirmations (uncommitted changes), with the branch in the error's
-    ///   `gitContext`, and its failures; the file is shown first. A pull
+    ///   `gitContext`, and its failures, `.precondition` when the repository
+    ///   has no such branch; the file is shown first. `.precondition` for a
+    ///   pull request whose fork was deleted, after the repository is
+    ///   selected. A pull
     ///   request that can't be loaded: no account is signed in to its
     ///   server, or GitHub's error. A link GitHub Desktop couldn't be asked
     ///   to open.
@@ -245,7 +248,11 @@ extension AppModel {
             await model.refresh(.full, reason: .selection)
             guard let head = pullRequest.head.repo else {
                 // The head repository was deleted.
-                return .opened(opened)
+                throw OperationError(
+                    .precondition("Couldn't check out pull request #\(pullRequest.number): the fork its branch was in has been deleted."),
+                    operation: .checkoutPullRequest,
+                    repositoryID: id
+                )
             }
             opened.pullRequest = ExternalPullRequest(
                 number: pullRequest.number,
@@ -306,15 +313,21 @@ extension AppModel {
     }
 
     /// Checks out the branch named `name` (a local branch, or a remote one
-    /// without its remote) unless it's the current branch; nothing when the
-    /// repository has no such branch.
+    /// without its remote) unless it's the current branch.
+    ///
+    /// - Throws: `.precondition` when the repository has no such branch;
+    ///   checkout's errors.
     private func checkoutLocalBranch(_ model: RepositoryModel, _ name: String) async throws(OperationError) -> CheckoutResult? {
         let state = model.gitState
         if isCurrentBranch(model, name) {
             return nil
         }
         guard let branch = state.branches.all.first(where: { JSCompat.strictEquals($0.nameWithoutRemote, name) }) else {
-            return nil
+            throw OperationError(
+                .precondition("Couldn't find a branch named \(name) in \(model.record.displayName)."),
+                operation: .checkoutBranch,
+                repositoryID: model.id
+            )
         }
         return try await model.branches.checkout(branch)
     }

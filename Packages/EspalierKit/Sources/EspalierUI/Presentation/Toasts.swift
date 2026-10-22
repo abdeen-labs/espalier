@@ -6,6 +6,7 @@
 // it says how long that is, after the toast closes too.
 
 import AppKit
+import EspalierCore
 import SwiftUI
 
 /// A toast: a message, a symbol, and an optional Undo.
@@ -35,6 +36,11 @@ public struct Toast: Identifiable {
     /// "Another operation is in progress".
     public static var busy: Toast {
         Toast("Another operation is in progress", systemImage: "hourglass")
+    }
+
+    /// "<worktree> was removed. Showing <repository>."
+    public static func removedWorktree(_ notice: RemovedWorktreeNotice) -> Toast {
+        Toast("\(notice.worktreeName) was removed. Showing \(notice.shownName).", systemImage: "folder.badge.minus")
     }
 }
 

@@ -1,9 +1,11 @@
 // Clone a Repository (⇧⌘O): GitHub.com, GitHub Enterprise, and URL, each with
 // its own URL, path, filter, selection, and problem; the account picker with
 // two or more accounts; the local path that follows the URL
-// (`clonePath(_:afterURLChangeFrom:to:)`), its checks (`validateClonePath`),
-// and its warning (`clonePathWarning`); and Clone, which resolves what to
-// clone (`resolveCloneInfo`), closes the sheet, and clones. The GitHub.com
+// (`clonePath(_:afterURLChangeFrom:to:)`), a leading `~` in it as the home
+// folder, its checks (`validateClonePath`), and its warning
+// (`clonePathWarning`); and Clone, which resolves what to clone
+// (`resolveCloneInfo`), closes the sheet, and clones, unless Cancel was
+// pressed meanwhile. The GitHub.com
 // segment is always there (its call to action signs in); the Enterprise
 // segment shows once an Enterprise account exists.
 
@@ -63,6 +65,8 @@ final class CloneSheetModel {
     private(set) var fields: [CloneSource: Fields] = [:]
     /// Clone is resolving what to clone.
     private(set) var isResolving = false
+    /// Cancel was pressed: a clone being prepared doesn't start.
+    private(set) var isCancelled = false
     @ObservationIgnored var onSourceChange: ((CloneSource) -> Void)?
 
     /// - Parameters:
@@ -186,16 +190,16 @@ final class CloneSheetModel {
 
     // MARK: Checks and cloning
 
-    /// Checks the current path: nothing to say about the starting folder
-    /// until a URL is entered.
+    /// Checks the current path: nothing to say about an empty one, or about
+    /// the starting folder until a URL is entered.
     func validatePath() async {
         let source = source
         let fields = current
-        if JSCompat.strictEquals(fields.path, initialPath), fields.url.isEmpty {
+        if fields.path.isEmpty || (JSCompat.strictEquals(fields.path, initialPath) && fields.url.isEmpty) {
             update(source) { $0.problem = nil }
             return
         }
-        let problem = await validateClonePath(fields.path)
+        let problem = await validateClonePath(expandingTilde(fields.path))
         // A check that finished after the path changed is stale.
         guard self.fields[source]?.path == fields.path else {
             return
@@ -214,27 +218,36 @@ final class CloneSheetModel {
     }
 
     /// Checks the path again and resolves what to clone. Nil when there's a
-    /// problem, which the sheet shows.
+    /// problem, which the sheet shows, and when Cancel was pressed meanwhile.
     func prepareClone() async -> CloneRequest? {
         guard canClone else {
             return nil
         }
         let source = source
         let fields = current
+        let path = expandingTilde(fields.path)
         isResolving = true
         defer { isResolving = false }
 
-        if let problem = await validateClonePath(fields.path) {
+        if let problem = await validateClonePath(path) {
             update(source) { $0.problem = problem.message }
             return nil
         }
         do throws(OperationError) {
             let info = try await app.clones.resolveCloneInfo(fields.url)
-            return CloneRequest(url: info.url, path: fields.path, options: CloneOptions(defaultBranch: info.defaultBranch))
+            guard !isCancelled else {
+                return nil
+            }
+            return CloneRequest(url: info.url, path: path, options: CloneOptions(defaultBranch: info.defaultBranch))
         } catch {
             update(source) { $0.problem = error.message }
             return nil
         }
+    }
+
+    /// Cancel: a clone being prepared doesn't start.
+    func cancel() {
+        isCancelled = true
     }
 
     private func update(_ source: CloneSource, _ change: (inout Fields) -> Void) {
@@ -257,7 +270,7 @@ struct CloneSheet: View {
     @Environment(\.dismissModal) private var dismiss
 
     var body: some View {
-        CloneForm(model: model, cancel: { dismiss() }, clone: clone)
+        CloneForm(model: model, cancel: cancel, clone: clone)
             .task(id: ValidationKey(source: model.source, path: model.current.path, url: model.current.url)) {
                 await model.validatePath()
             }
@@ -270,6 +283,11 @@ struct CloneSheet: View {
         let source: CloneSource
         let path: String
         let url: String
+    }
+
+    private func cancel() {
+        model.cancel()
+        dismiss()
     }
 
     private func clone() {

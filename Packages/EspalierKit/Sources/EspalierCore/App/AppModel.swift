@@ -16,6 +16,22 @@ public enum AppSelection: Hashable, Sendable {
     case clone(CloneID)
 }
 
+/// A worktree whose folder disappeared while it was selected: the window
+/// shows another worktree of its repository instead.
+public struct RemovedWorktreeNotice: Sendable, Equatable, Identifiable {
+    public let id: UUID
+    /// The removed worktree's folder name.
+    public let worktreeName: String
+    /// The name of the repository selected instead.
+    public let shownName: String
+
+    public init(id: UUID = UUID(), worktreeName: String, shownName: String) {
+        self.id = id
+        self.worktreeName = worktreeName
+        self.shownName = shownName
+    }
+}
+
 /// A problem with the repository list file, to tell the user about.
 public enum PersistenceIssue: Sendable, Equatable {
     /// The list couldn't be read; the file was moved aside and what could be
@@ -71,6 +87,9 @@ public final class AppModel {
     // MARK: Unsolicited facts
 
     public internal(set) var persistenceIssue: PersistenceIssue?
+    /// The selected worktree whose folder disappeared, until the user has
+    /// been told.
+    public internal(set) var removedWorktreeNotice: RemovedWorktreeNotice?
 
     // MARK: Internals
 
@@ -127,5 +146,10 @@ public final class AppModel {
     /// Forgets the persistence issue once the user has seen it.
     public func dismissPersistenceIssue() {
         persistenceIssue = nil
+    }
+
+    /// Forgets the removed worktree once the user has been told.
+    public func dismissRemovedWorktreeNotice() {
+        removedWorktreeNotice = nil
     }
 }

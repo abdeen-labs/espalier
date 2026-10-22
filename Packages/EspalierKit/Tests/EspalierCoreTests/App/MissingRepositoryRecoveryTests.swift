@@ -2,7 +2,8 @@
 // after a worktree recovery, against real repositories and linked
 // worktrees: the main worktree recorded when added, git's list in the
 // worktree's git directory, a main worktree already in the list, the state
-// worktrees share, unsafe folders, and moved git directories.
+// worktrees share, unsafe folders, and moved git directories. A selected
+// worktree that goes leaves a notice of what shows instead.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -23,7 +24,7 @@ struct MissingRepositoryRecoveryTests {
         return (main, worktree)
     }
 
-    @Test("a selected linked worktree whose folder is gone moves to its main worktree, even after git forgot it")
+    @Test("a selected linked worktree whose folder is gone moves to its main worktree, even after git forgot it, and says so")
     func worktreeMovesToMain() async throws {
         let (main, worktree) = try await repositoryWithWorktree()
         let harness = try AppHarness()
@@ -41,6 +42,11 @@ struct MissingRepositoryRecoveryTests {
         #expect(model.record.mainWorktreePath == main.path)
         #expect(model.record.gitDir == POSIXPath.join(main.path, ".git"))
         #expect(!model.record.isMissing)
+        let notice = try #require(app.removedWorktreeNotice)
+        #expect(notice.worktreeName == POSIXPath.basename(worktree))
+        #expect(notice.shownName == model.record.displayName)
+        app.dismissRemovedWorktreeNotice()
+        #expect(app.removedWorktreeNotice == nil)
         await app.idle()
         #expect(app.selection == .repository(model.id))
         #expect(model.gitState.tip.branch?.name == "master")
@@ -65,7 +71,8 @@ struct MissingRepositoryRecoveryTests {
         #expect(await app.recoverMissingRepository(id))
         #expect(app.record(id)?.path == main.path)
         #expect(app.record(id)?.isMissing == false)
-        // Not selected: refreshed, not watched.
+        // Not selected: nothing to tell; refreshed, not watched.
+        #expect(app.removedWorktreeNotice == nil)
         await app.idle()
         #expect(app.repository(id)?.gitState.tip.branch?.name == "master")
         #expect(harness.fileWatcher.activeSubscriptions.isEmpty)
@@ -98,7 +105,7 @@ struct MissingRepositoryRecoveryTests {
         #expect(model.gitState.tip.branch?.name == "feature")
     }
 
-    @Test("a worktree whose main worktree is in the list passes the selection to it, and is missing")
+    @Test("a worktree whose main worktree is in the list passes the selection to it, says so, and is missing")
     func mainAlreadyListed() async throws {
         let (main, worktree) = try await repositoryWithWorktree()
         let harness = try AppHarness()
@@ -113,12 +120,18 @@ struct MissingRepositoryRecoveryTests {
         #expect(worktreeModel.record.isMissing)
         #expect(worktreeModel.record.path == worktree)
         #expect(app.recentRepositoryIDs.first == worktreeModel.id)
+        let notice = try #require(app.removedWorktreeNotice)
+        #expect(notice.worktreeName == POSIXPath.basename(worktree))
+        #expect(notice.shownName == app.record(mainID)?.displayName)
+        app.dismissRemovedWorktreeNotice()
 
-        // Selected by the user, it shows as missing rather than moving on.
+        // Selected by the user, it shows as missing rather than moving on,
+        // with nothing more to tell.
         app.select(.repository(worktreeModel.id))
         #expect(!(await app.recoverMissingRepository(worktreeModel.id)))
         #expect(app.selection == .repository(worktreeModel.id))
         #expect(worktreeModel.availability == .missing)
+        #expect(app.removedWorktreeNotice == nil)
         await app.idle()
     }
 

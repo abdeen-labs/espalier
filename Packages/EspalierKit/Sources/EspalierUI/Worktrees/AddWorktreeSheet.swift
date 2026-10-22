@@ -6,7 +6,8 @@
 // window to the new worktree.
 //
 // It also says when a file or folder is already where the worktree would
-// go, which git refuses.
+// go, which git refuses, and when the Local Path isn't a full path (a
+// leading `~` is the home folder).
 
 import AppKit
 import EspalierCore
@@ -72,7 +73,9 @@ nonisolated struct AddWorktreeContent: Sendable, Equatable {
             branches: repository.gitState.branches.all
         )
         var pathProblem: String?
-        if let path {
+        if let path, !POSIXPath.isAbsolute(path) {
+            pathProblem = AddWorktreeRequest.notFullPathMessage
+        } else if let path {
             switch itemExists(path) {
             case .none, .emptyFolder:
                 break

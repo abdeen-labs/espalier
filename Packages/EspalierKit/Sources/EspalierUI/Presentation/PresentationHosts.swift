@@ -7,7 +7,7 @@ import GitKit
 import SwiftUI
 
 /// Shows the presenter's confirmations, decisions, and errors, the prompts
-/// git waits on, and the state notices.
+/// git waits on, the state notices, and a removed worktree's toast.
 struct PresentationHosts: ViewModifier {
     let context: WindowContext
 
@@ -44,6 +44,14 @@ struct PresentationHosts: ViewModifier {
             }
             .onChange(of: context.app.selectedRepository?.sync.upstreamRemoteConflict, initial: true) {
                 StateNoticesHost.showUpstreamRemoteConflict(in: context)
+            }
+            // A selected worktree whose folder disappeared: a toast says
+            // what shows instead.
+            .onChange(of: context.app.removedWorktreeNotice?.id, initial: true) {
+                if let notice = context.app.removedWorktreeNotice {
+                    context.presenter.show(.removedWorktree(notice))
+                    context.app.dismissRemovedWorktreeNotice()
+                }
             }
             // The AI conflict sheet opens with a round, also one that
             // started by itself.

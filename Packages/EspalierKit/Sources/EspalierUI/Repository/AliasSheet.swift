@@ -1,8 +1,9 @@
 // Create Alias… and Change Alias…: the field starts with the alias or the
-// name, the note about GitHub shows for GitHub repositories, and an empty
-// alias can't be saved.
+// name, the note about GitHub shows for GitHub repositories, and an alias of
+// nothing but spaces can't be saved.
 
 import EspalierCore
+import EspalierSupport
 import GitHubKit
 import GitKit
 import SwiftUI
@@ -34,9 +35,9 @@ nonisolated struct AliasContent: Sendable, Equatable {
     /// Shown for GitHub repositories.
     static let gitHubNote = "This doesn't change the repository's name on GitHub."
 
-    /// Whether `alias` can be saved: not empty.
+    /// Whether `alias` can be saved: something besides spaces.
     static func canSave(_ alias: String) -> Bool {
-        !alias.isEmpty
+        !JSCompat.trim(alias).isEmpty
     }
 }
 

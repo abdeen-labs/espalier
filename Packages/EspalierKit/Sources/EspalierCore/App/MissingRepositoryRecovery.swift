@@ -91,6 +91,9 @@ extension AppModel {
     /// When the main worktree is already in the list, nothing moves: a
     /// selected worktree passes the selection to it, and the worktree's
     /// record is then marked missing.
+    ///
+    /// Either way, when the worktree was selected, `removedWorktreeNotice`
+    /// says which worktree went and what shows instead.
     func recoverMissingWorktree(_ id: RepositoryID) async -> Bool {
         await recoverMissingWorktree(id, redirectingSelection: true)
     }
@@ -131,6 +134,8 @@ extension AppModel {
             return false
         }
 
+        let worktreeName = POSIXPath.basename(record.path)
+        let wasSelected = selection == .repository(id)
         let result = switchWorktree(
             id,
             to: topLevelWorkingDirectory,
@@ -139,16 +144,29 @@ extension AppModel {
             mainWorktreePath: topLevelWorkingDirectory
         )
         if result.existingRepository {
-            if redirectingSelection, result.id != id, selection == .repository(id) {
+            if redirectingSelection, result.id != id, wasSelected {
                 select(.repository(result.id))
+                noteRemovedWorktree(worktreeName, showing: result.id)
             }
             return false
         }
         logger.info("Moved a repository whose worktree is gone to its main worktree")
+        if wasSelected {
+            noteRemovedWorktree(worktreeName, showing: id)
+        }
         if current.isMissing {
             repositoryDidRecover(id)
         }
         return true
+    }
+
+    /// Tells the user that the selected worktree `worktreeName` went, and
+    /// that `shown` shows instead.
+    private func noteRemovedWorktree(_ worktreeName: String, showing shown: RepositoryID) {
+        guard let shownName = record(shown)?.displayName else {
+            return
+        }
+        removedWorktreeNotice = RemovedWorktreeNotice(worktreeName: worktreeName, shownName: shownName)
     }
 
     private func isStillMissing(_ id: RepositoryID, at path: String) -> Bool {

@@ -27,6 +27,9 @@ public struct AddWorktreeRequest: Sendable, Equatable {
     /// What to check out, or where the new branch starts.
     public var commitish: String?
 
+    /// What's wrong with a folder that isn't a full path.
+    public static let notFullPathMessage = "Choose the folder for the worktree by its full path."
+
     public init(path: String, branchName: String? = nil, createBranch: String? = nil, commitish: String? = nil) {
         self.path = path
         self.branchName = branchName
@@ -143,13 +146,13 @@ public final class WorktreesModel: RepositoryFeature {
         repository?.app?.preferences.lastCloneLocation
     }
 
-    /// The new worktree's folder: `name` in `directory`, nil while either is
-    /// empty.
+    /// The new worktree's folder: `name` in `directory`, a leading `~` in
+    /// `directory` as the home folder; nil while either is empty.
     public nonisolated static func worktreePath(in directory: String, name: String) -> String? {
         guard !directory.isEmpty, !JSCompat.trim(name).isEmpty else {
             return nil
         }
-        return POSIXPath.join(directory, name)
+        return POSIXPath.join(expandingTilde(directory), name)
     }
 
     /// The name suggested for a worktree that checks out `branch` ("Check

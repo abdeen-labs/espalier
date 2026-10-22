@@ -52,6 +52,9 @@ public enum OperationKind: String, Sendable, Hashable, CaseIterable {
     case forwardLink
     /// Installing the command line tool at `/usr/local/bin/espalier`.
     case installCommandLineTool
+    /// Opening a link, or a folder from the command line tool, that
+    /// Espalier can't act on.
+    case openLink
 
     /// Checking out a pull request: finding its branch, adding its fork's
     /// remote. The checkout itself is `checkoutBranch`.
@@ -78,7 +81,7 @@ public enum OperationKind: String, Sendable, Hashable, CaseIterable {
         case .fetch, .fetchRefspec, .push, .publishRepository, .deleteRemoteBranch, .clone,
              .addRepository, .removeRepository, .relocateRepository, .createRepository,
              .openInEditor, .openInShell, .openFile, .updateLFSFilters, .setGlobalGitConfig, .generateCommitMessage, .resolveConflicts,
-             .updateAIProviders, .signOut, .createPullRequest, .setLinkHandler, .forwardLink, .installCommandLineTool:
+             .updateAIProviders, .signOut, .createPullRequest, .setLinkHandler, .forwardLink, .installCommandLineTool, .openLink:
             false
         case .loadChangesDiff, .loadStashedChanges, .loadHistory, .loadDiff:
             false

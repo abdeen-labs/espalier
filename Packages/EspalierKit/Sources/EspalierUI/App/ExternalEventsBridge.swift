@@ -3,7 +3,8 @@
 // and the window to the front and runs through
 // `AppModel.handle(_:confirmed:)`, with the window's presenter showing its
 // errors and asking its questions: a link's branch or pull request is
-// checked out only once the user agrees.
+// checked out only once the user agrees, and a link Espalier can't act on
+// says why.
 
 import AppKit
 import EspalierCore
@@ -162,8 +163,9 @@ public final class ExternalEventsBridge {
         }
     }
 
-    /// Shows what an action did. The app model has already selected the
-    /// repository and shown the action's file in the Finder.
+    /// Shows what an action did, or why it did nothing. The app model has
+    /// already selected the repository and shown the action's file in the
+    /// Finder.
     static func present(_ result: ExternalActionResult, in context: WindowContext) async {
         switch result {
         case .opened(let opened):
@@ -193,6 +195,7 @@ public final class ExternalEventsBridge {
 
         case .ignored(let reason):
             logger.info("Ignored an external action: \(reason, privacy: .private)")
+            context.presenter.present(OperationError(.precondition(reason), operation: .openLink))
 
         case .forwarded:
             // GitHub Desktop opens the link.

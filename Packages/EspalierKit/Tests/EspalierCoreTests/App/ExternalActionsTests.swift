@@ -203,7 +203,7 @@ struct ExternalActionsTests {
         await app.idle()
     }
 
-    @Test("the current branch asks nothing and is neither fetched nor checked out; one the repository doesn't have asks, then isn't checked out")
+    @Test("the current branch asks nothing and is neither fetched nor checked out; one the repository doesn't have asks, then says it isn't there")
     func noCheckout() async throws {
         let (_, app, model, local, remote) = try await makeRepository()
         try await pushCommitFromAnotherClone(remote, path: "other.txt", contents: "other\n")
@@ -217,7 +217,16 @@ struct ExternalActionsTests {
         await #expect(throws: OperationError.self) {
             try await app.handle(unknown)
         }
-        #expect(try opened(try await app.handle(unknown, confirmed: [.checkoutLinkedBranch])).checkout == nil)
+        do throws(OperationError) {
+            _ = try await app.handle(unknown, confirmed: [.checkoutLinkedBranch])
+            Issue.record("Expected a branch the repository doesn't have to throw")
+        } catch {
+            if case .precondition = error.reason {} else {
+                Issue.record("Expected a precondition, got \(error.reason)")
+            }
+            #expect(error.repositoryID == model.id)
+        }
+        #expect(app.selection == .repository(model.id))
         #expect(model.gitState.tip.branch?.name == "main")
         await app.idle()
     }
@@ -414,7 +423,7 @@ struct ExternalActionsTests {
         await app.idle()
     }
 
-    @Test("a pull request of a repository not in the list asks for a clone, then names it in the clone", .hangGuard(minutes: 5))
+    @Test("a pull request of a repository not in the list asks for a clone, then names it in the clone; one whose fork was deleted says so", .hangGuard(minutes: 5))
     func pullRequestClone() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
@@ -432,9 +441,19 @@ struct ExternalActionsTests {
         let id = try #require(try await app.addRepositories([local.path]).added.first)
         // Not associated with GitHub: the pull request can't be checked out.
         #expect(try opened(try await app.continueExternalAction(request, in: id)).pullRequest == nil)
-        // Associated, but the head repository was deleted: neither.
+        // Associated, but the head repository was deleted: it says so, with
+        // the repository selected.
         app.updateRecord(id) { $0.gitHubRepository = ModelFixtures.gitHubRepository() }
-        #expect(try opened(try await app.continueExternalAction(request, in: id)).pullRequest == nil)
+        do throws(OperationError) {
+            _ = try await app.continueExternalAction(request, in: id)
+            Issue.record("Expected a pull request whose fork was deleted to throw")
+        } catch {
+            if case .precondition = error.reason {} else {
+                Issue.record("Expected a precondition, got \(error.reason)")
+            }
+            #expect(error.repositoryID == id)
+        }
+        #expect(app.selection == .repository(id))
         await app.idle()
     }
 

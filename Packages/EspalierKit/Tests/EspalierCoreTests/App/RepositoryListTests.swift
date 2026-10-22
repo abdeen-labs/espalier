@@ -322,7 +322,7 @@ struct RepositoryListTests {
 
     // MARK: Alias
 
-    @Test("an alias changes only the name shown; an empty one removes it")
+    @Test("an alias changes only the name shown, without the spaces around it; an empty one or one of spaces removes it")
     func alias() async throws {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
@@ -343,8 +343,16 @@ struct RepositoryListTests {
         #expect(relaunched.record(model.id)?.alias == "Work")
         await relaunched.idle()
 
+        app.setAlias("  Side project\t", for: model.id)
+        #expect(model.record.alias == "Side project")
+
         app.setAlias("", for: model.id)
         #expect(model.record.alias == nil)
+
+        app.setAlias("Work", for: model.id)
+        app.setAlias("   ", for: model.id)
+        #expect(model.record.alias == nil)
+        #expect(model.record.displayName == model.record.name)
         await app.idle()
     }
 

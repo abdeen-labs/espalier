@@ -4,8 +4,9 @@
 // decision, the editor question, the prompts (a secret, a username and
 // password, a failed hook's output), git's raw output (one line and a few,
 // with a note and a recovery) and output longer than the terminal, the
-// toast with Undo and without, the operation capsule running and waiting on
-// the user, and a background failure's details.
+// toast with Undo and without and a removed worktree's, the operation
+// capsule running and waiting on the user, and a background failure's
+// details.
 
 import AppKit
 import EspalierCore
@@ -78,7 +79,7 @@ struct PresentationCaptures {
         )
     }
 
-    @Test("the toast, with Undo and its key, and without", arguments: ["cherryPick-undo", "revert-undo", "merged", "reset", "ignored-tracked"])
+    @Test("the toast, with Undo and its key, and without", arguments: ["cherryPick-undo", "revert-undo", "merged", "reset", "ignored-tracked", "removedWorktree"])
     func toast(name: String) throws {
         let content = try #require(UIFixtures.toasts.first { $0.name == name }?.content)
         capture(ToastView(content).padding(Metrics.insetLarge), named: name, area: "Toasts")

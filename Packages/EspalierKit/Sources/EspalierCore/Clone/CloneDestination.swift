@@ -20,6 +20,9 @@ public enum CloneDestinationProblem: Sendable, Equatable {
     case notAFolder
     /// The path couldn't be read.
     case unreadable
+    /// The path isn't a full path: git and this process would resolve it
+    /// against different folders.
+    case notFullPath
 
     /// The message shown to the user.
     public var message: String {
@@ -30,6 +33,8 @@ public enum CloneDestinationProblem: Sendable, Equatable {
             "There is already a file with this name. Git can only clone to a folder."
         case .unreadable:
             "Couldn't read this location. Check the path and try again."
+        case .notFullPath:
+            "Choose the folder to clone into by its full path."
         }
     }
 }
@@ -57,10 +62,13 @@ public func clonePathWarning(_ path: String) -> CloneDestinationWarning? {
 }
 
 /// Validates the destination before cloning can create files in it: a
-/// folder that doesn't exist yet, or an empty one. Nil when it can be
-/// cloned into.
+/// full path to a folder that doesn't exist yet, or an empty one. Nil when
+/// it can be cloned into.
 @concurrent
 public func validateClonePath(_ path: String) async -> CloneDestinationProblem? {
+    guard POSIXPath.isAbsolute(path) else {
+        return .notFullPath
+    }
     guard let directory = opendir(path) else {
         switch errno {
         case ENOENT:
