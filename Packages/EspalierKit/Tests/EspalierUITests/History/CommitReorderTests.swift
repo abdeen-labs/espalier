@@ -50,6 +50,7 @@ struct CommitReorderTests {
             shas["B"] = try await commitFile(local, "B.txt", "B\n", message: "B")
         }
         shas["M"] = try await fixture.sha("main~1")
+        shas["README"] = try await fixture.sha("main~3")
         fixture.repository.history.setStyle(style)
         await fixture.loadHistory()
         return (fixture, shas)

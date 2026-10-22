@@ -284,7 +284,7 @@ enum UIFixtures {
 
     // MARK: Toasts and the capsule
 
-    static let toasts: [(name: String, content: ToastContent)] = [
+    @MainActor static let toasts: [(name: String, content: ToastContent)] = [
         ("merged", ToastContent(message: "Merged feature/login into main")),
         ("cherryPick-undo", ToastContent(message: "Copied 2 commits to feature/login.", undoTitle: "Undo", undoShortcut: "⌘Z")),
         ("revert-undo", ToastContent(message: MultiCommitResult.reverted(summary: "Add sign-in sheet").summary ?? "", undoTitle: "Undo", undoShortcut: "⌘Z")),
