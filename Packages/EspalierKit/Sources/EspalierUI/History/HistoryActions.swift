@@ -92,8 +92,11 @@ enum HistoryActions {
             let operations = repository.operations
             await context.presenter.perform { _ throws(OperationError) in
                 try await operations.revert(commit)
-            } outcome: { result in
-                result.summary.map { Toast($0) }
+            } outcome: { [weak context] result in
+                guard let context else {
+                    return nil
+                }
+                return OperationOutcomes.toast(for: result, repository: repository, context: context)
             }
         }
 
@@ -171,10 +174,10 @@ enum HistoryActions {
                 } else {
                     KeyboardReorder.begin(shas, repository: repository, context: context)
                 }
-            case .mergeCommitReplayed:
+            case .mergeCommitReplayed(let merge):
                 // A merge would be replayed (from the commits themselves
                 // without `before`: wherever they'd go).
-                context.presenter.present(repository.operations.mergeCommitReplayedError(.reorder))
+                context.presenter.present(repository.operations.mergeCommitReplayedError(.reorder, merge: merge))
             case .unavailable:
                 break
             }

@@ -173,7 +173,9 @@ public enum MultiCommitResult: Sendable, Equatable {
     /// were squashed into too.
     case squashed(count: Int)
     case reordered(count: Int)
-    case reverted
+    /// The commit was reverted: `summary` is the reverted commit's; nil for
+    /// a revert started elsewhere, which may have reverted several.
+    case reverted(summary: String?)
     /// Stopped on conflicts; `conflictState` has them.
     case conflicted
 
@@ -186,10 +188,9 @@ public enum MultiCommitResult: Sendable, Equatable {
         }
     }
 
-    /// The banner copy; nil for a revert, which has no banner, and for
-    /// conflicts, whose state is `MultiCommitOperation.conflictsMessage`. The
-    /// banners of squash, reorder, and cherry-pick offer Undo: see
-    /// `operations.undo`.
+    /// The banner copy; nil for conflicts, whose state is
+    /// `MultiCommitOperation.conflictsMessage`. The banners of squash,
+    /// reorder, cherry-pick, and revert offer Undo: see `operations.undo`.
     public var summary: String? {
         switch self {
         case .rebased(let target, let base?):
@@ -204,7 +205,11 @@ public enum MultiCommitResult: Sendable, Equatable {
             "Squashed \(count) \(commitsNoun(count))."
         case .reordered(let count):
             "Reordered \(count) \(commitsNoun(count))."
-        case .reverted, .conflicted:
+        case .reverted(let summary?):
+            "Reverted \u{201C}\(summary)\u{201D}."
+        case .reverted(nil):
+            "Finished reverting."
+        case .conflicted:
             nil
         }
     }

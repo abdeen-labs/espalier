@@ -5,8 +5,8 @@ import os
 
 private let logger = Log.logger(category: "multi-commit")
 
-/// How to undo the last squash, reorder, or cherry-pick: reset its branch
-/// to where it was, or for a cherry-pick to a new branch, delete that
+/// How to undo the last squash, reorder, cherry-pick, or revert: reset its
+/// branch to where it was, or for a cherry-pick to a new branch, delete that
 /// branch. Offered (`operations.undo`) only while the branch is checked out
 /// at the operation's result and there are no changes at all, so an undo
 /// never resets newer commits or local changes away.
@@ -20,7 +20,7 @@ public struct MultiCommitUndo: Sendable, Equatable {
     /// The branch tip the operation left.
     public let resultTip: String
     /// The commits squashed (counting the one squashed into), reordered, or
-    /// cherry-picked.
+    /// cherry-picked; 1 for a revert.
     public let commitCount: Int
     /// The branch the operation created, if any (cherry-pick to a new
     /// branch): undoing deletes it.
@@ -47,8 +47,9 @@ public struct MultiCommitUndo: Sendable, Equatable {
         self.sourceBranch = sourceBranch
     }
 
-    /// The banner once undone ("Squash of 2 commits undone."); nil for a
-    /// cherry-pick to a new branch, whose undo isn't announced.
+    /// The banner once undone ("Squash of 2 commits undone.", "Revert
+    /// undone."); nil for a cherry-pick to a new branch, whose undo isn't
+    /// announced.
     public var undoneMessage: String? {
         switch kind {
         case .squash:
@@ -60,7 +61,9 @@ public struct MultiCommitUndo: Sendable, Equatable {
                 return nil
             }
             return "Cherry-pick undone. Removed the \(commitCount) copied \(commitsNoun(commitCount)) from \(branchName)."
-        case .rebase, .merge, .revert:
+        case .revert:
+            return "Revert undone."
+        case .rebase, .merge:
             return nil
         }
     }
@@ -72,10 +75,11 @@ public struct MultiCommitUndo: Sendable, Equatable {
 }
 
 extension MultiCommitOperationsModel {
-    /// Undoes the last squash, reorder, or cherry-pick, while `undo` offers it:
-    /// resets the branch to its tip before the operation (`git reset --hard`),
-    /// then for a cherry-pick checks out the branch it started on (failing that
-    /// is logged, not thrown: the copies are gone). A cherry-pick to a new
+    /// Undoes the last squash, reorder, cherry-pick, or revert, while `undo`
+    /// offers it: resets the branch to its tip before the operation (`git
+    /// reset --hard`; for a revert, that removes its commit), then for a
+    /// cherry-pick checks out the branch it started on (failing that is
+    /// logged, not thrown: the copies are gone). A cherry-pick to a new
     /// branch deletes that branch instead, after checking out the branch it
     /// started on. A squash or reorder undone recommends a force push.
     ///
@@ -190,8 +194,8 @@ extension MultiCommitOperationsModel {
     }
 
     /// Offers the undo of `operation`, which completed at `resultTip`: a
-    /// squash, reorder, or cherry-pick Espalier started, with the tip it
-    /// started from. Called with the lane held, so the refresh that follows
+    /// squash, reorder, cherry-pick, or revert Espalier started, with the tip
+    /// it started from. Called with the lane held, so the refresh that follows
     /// decides whether it's safe (`reconcileUndo(_:)`).
     func offerUndo(of operation: MultiCommitOperation, resultTip: String?) {
         guard operation.origin == .espalier, let resultTip,
@@ -202,12 +206,12 @@ extension MultiCommitOperationsModel {
         var sourceBranch: Branch?
         var createdBranch: String?
         switch operation.detail {
-        case .squash, .reorder:
+        case .squash, .reorder, .revert:
             break
         case .cherryPick(let source, let branchCreated, _):
             sourceBranch = source
             createdBranch = branchCreated ? branch.name : nil
-        case .merge, .rebase, .revert:
+        case .merge, .rebase:
             return
         }
         undoCandidate = MultiCommitUndo(

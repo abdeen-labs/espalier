@@ -76,8 +76,8 @@ enum KeyboardReorder {
     }
 
     /// Reorders the commits to the line, if they can go there. When a merge
-    /// commit would be replayed, the mode ends with the reason ("Unable to
-    /// reorder. …"); otherwise it stays.
+    /// commit would be replayed, the mode ends with the reason, naming the
+    /// merge ("Can't reorder. …"); otherwise it stays.
     static func confirm(repository: RepositoryModel, context: WindowContext) async {
         let state = context.state.history
         guard let reorder = state.reorder else {
@@ -95,12 +95,12 @@ enum KeyboardReorder {
                 return
             }
             await perform(rewrite, below: plan.base, repository: repository, context: context)
-        case .mergeCommitReplayed:
+        case .mergeCommitReplayed(let merge):
             state.reorder = nil
             guard !CommitDragging.isInPlace(reorder.shas, aboveRow: reorder.insertionRow, history: history) else {
                 return
             }
-            context.presenter.present(repository.operations.mergeCommitReplayedError(.reorder))
+            context.presenter.present(repository.operations.mergeCommitReplayedError(.reorder, merge: merge))
         case .unavailable:
             NSSound.beep()
         }

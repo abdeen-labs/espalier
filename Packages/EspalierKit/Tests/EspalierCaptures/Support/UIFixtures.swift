@@ -287,6 +287,7 @@ enum UIFixtures {
     static let toasts: [(name: String, content: ToastContent)] = [
         ("merged", ToastContent(message: "Merged feature/login into main")),
         ("cherryPick-undo", ToastContent(message: "Copied 2 commits to feature/login.", undoTitle: "Undo", undoShortcut: "⌘Z")),
+        ("revert-undo", ToastContent(message: MultiCommitResult.reverted(summary: "Add sign-in sheet").summary ?? "", undoTitle: "Undo", undoShortcut: "⌘Z")),
         ("reset", ToastContent(message: ResetResult(branchName: "main", sha: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0").summary)),
         ("busy", ToastContent(message: "Another operation is in progress", systemImage: "hourglass")),
     ]

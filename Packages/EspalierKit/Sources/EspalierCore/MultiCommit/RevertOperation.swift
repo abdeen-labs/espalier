@@ -5,6 +5,13 @@ import os
 
 private let logger = Log.logger(category: "revert")
 
+/// What a revert's git run did.
+private struct RevertRun: Sendable {
+    let conflicted: Bool
+    /// HEAD after git ran, when it committed the revert.
+    let head: String?
+}
+
 /// Reverts the commit again.
 public struct RevertRetry: RetryableOperation {
     public let repositoryID: RepositoryID
@@ -30,13 +37,14 @@ public struct RevertRetry: RetryableOperation {
 extension MultiCommitOperationsModel {
     /// Creates a commit that reverts `commit` on the current branch (a merge
     /// commit relative to its first parent), reporting Git LFS's progress, and
-    /// returns after the repository's refresh.
+    /// returns after the repository's refresh, with the new commit selected
+    /// and its undo offered (`undo`), as a cherry-pick's is.
     ///
     /// Conflicts aren't an error: it returns `.conflicted` with `conflictState`
     /// set to `.revert`, and `continueOperation()` commits the revert or
     /// `abortOperation()` gives it up, as for a cherry-pick.
     ///
-    /// - Returns: `.reverted`; `.conflicted`.
+    /// - Returns: `.reverted` with `commit`'s summary; `.conflicted`.
     /// - Throws: `.precondition` while another operation waits on its
     ///   conflicts; git's errors (local changes in the way);
     ///   `cancelled(.hookAborted)` when the user aborts a failed hook. A
@@ -52,13 +60,11 @@ extension MultiCommitOperationsModel {
         let currentBranch = repository.gitState.tip.branch
         let retry = RevertRetry(repositoryID: repository.id, commit: commit)
 
-        let conflicted: Bool
+        let run: RevertRun
         do {
-            conflicted = try await repository.perform(OperationDescriptor(kind: .revert)) { ctx in
+            run = try await repository.perform(OperationDescriptor(kind: .revert)) { ctx in
                 try await self.requireNothingInProgress(.revert, retry: retry, in: ctx)
-                // Set while the lane is held, so no status pass sees the
-                // operation before git ran.
-                self.current = MultiCommitOperation(
+                let operation = MultiCommitOperation(
                     kind: .revert,
                     detail: .revert(commit: commit),
                     phase: .running(MultiCommitOperationProgress(
@@ -71,6 +77,9 @@ extension MultiCommitOperationsModel {
                     targetBranch: currentBranch,
                     origin: .espalier
                 )
+                // Set while the lane is held, so no status pass sees the
+                // operation before git ran.
+                self.current = operation
                 let progress = ctx.progress
                 let nothingStaged = await indexMatchesHead(ctx.repository)
                 do {
@@ -83,12 +92,14 @@ extension MultiCommitOperationsModel {
                             gitHubHTMLURL: ctx.gitHubHTMLURL
                         )
                     }
-                    return false
+                    let head = await resolveCommit(ctx.repository, "HEAD")
+                    self.offerUndo(of: operation, resultTip: head)
+                    return RevertRun(conflicted: false, head: head)
                 } catch let error as GitError where error.result.gitError == .revertConflicts {
-                    return true
+                    return RevertRun(conflicted: true, head: nil)
                 } catch {
                     if await stoppedOnConflicts(ctx.repository, head: "REVERT_HEAD") {
-                        return true
+                        return RevertRun(conflicted: true, head: nil)
                     }
                     if nothingStaged {
                         await rollBackUncommittedRevert(ctx.repository)
@@ -102,15 +113,25 @@ extension MultiCommitOperationsModel {
             throw error
         }
 
-        if conflicted {
-            // The status pass finds the conflicts and stops the operation on
-            // them.
+        return await finishRevert(run, summary: commit.summary)
+    }
+
+    /// What follows a revert that ran: on conflicts, the status pass stops
+    /// the operation on them; once committed, the new commit is selected.
+    private func finishRevert(_ run: RevertRun, summary: String?) async -> MultiCommitResult {
+        guard let repository else {
+            return run.conflicted ? .conflicted : .reverted(summary: summary)
+        }
+        if run.conflicted {
             await repository.awaitOperationRefresh(covering: .full)
             return .conflicted
         }
         clearCurrentOperation()
         await repository.awaitOperationRefresh(covering: .full)
-        return .reverted
+        if let head = run.head {
+            repository.history.select(shas: [head], contiguous: true)
+        }
+        return .reverted(summary: summary)
     }
 
     /// Commits a revert whose conflicts are resolved (`continueOperation`):
@@ -120,21 +141,26 @@ extension MultiCommitOperationsModel {
     /// and goes on with the commits a revert of several left (one started
     /// elsewhere). A resolution that leaves nothing to commit is committed
     /// empty, as a cherry-pick's is, so the revert shows in history. The commit
-    /// hooks are intercepted, as when committing.
+    /// hooks are intercepted, as when committing. Once committed, the new
+    /// commit is selected and, for a revert Espalier started, its undo
+    /// offered.
     func continueRevert() async throws(OperationError) -> MultiCommitResult {
         guard let repository else {
             throw repositoryGoneError(.continueRevert)
         }
         let resolutions = conflictState?.manualResolutions ?? [:]
-        let summary: String = if case .revert(let commit?)? = current?.detail { commit.summary } else { "" }
+        let summary: String? = if case .revert(let commit?)? = current?.detail { commit.summary } else { nil }
+        // A revert started elsewhere may revert several commits: its result
+        // names none.
+        let revertedSummary = current?.origin == .espalier ? summary : nil
         let id = repository.id
 
-        let conflicted: Bool
+        let run: RevertRun
         do {
-            conflicted = try await repository.perform(OperationDescriptor(kind: .continueRevert)) { ctx in
+            run = try await repository.perform(OperationDescriptor(kind: .continueRevert)) { ctx in
                 self.setPhase(.continuing(MultiCommitOperationProgress(
                     value: 0,
-                    currentCommitSummary: summary,
+                    currentCommitSummary: summary ?? "",
                     position: 1,
                     totalCommitCount: 1
                 )))
@@ -178,10 +204,14 @@ extension MultiCommitOperationsModel {
                     result = try await git(["revert", "--continue"], ctx.repository.path, "continueRevert", options: options)
                 }
                 if result.exitCode == 0 {
-                    return false
+                    let head = await resolveCommit(ctx.repository, "HEAD")
+                    if let operation = self.current {
+                        self.offerUndo(of: operation, resultTip: head)
+                    }
+                    return RevertRun(conflicted: false, head: head)
                 }
                 // The next commit of a revert of several conflicts.
-                return true
+                return RevertRun(conflicted: true, head: nil)
             }
         } catch {
             // The refresh puts the revert back to waiting.
@@ -189,13 +219,7 @@ extension MultiCommitOperationsModel {
             throw error
         }
 
-        if conflicted {
-            await repository.awaitOperationRefresh(covering: .full)
-            return .conflicted
-        }
-        clearCurrentOperation()
-        await repository.awaitOperationRefresh(covering: .full)
-        return .reverted
+        return await finishRevert(run, summary: revertedSummary)
     }
 
     /// Gives up a revert stopped on conflicts (`abortOperation`):

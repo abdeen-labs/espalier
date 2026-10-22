@@ -2,7 +2,7 @@
 // uncommitted-work row on top, the commits from row 1) and in the simple
 // list (the commits from row 0): the commit an insertion line moves them
 // below, where they already are, where the keyboard's line starts and
-// stops, and a move that would replay a merge commit.
+// stops, and a move or squash that would replay a merge commit.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -132,18 +132,30 @@ struct CommitReorderTests {
         #expect(state.reorder?.insertionRow == first)
     }
 
-    @Test("a drop that would replay a merge commit is taken and refused with the reason, unless the commits are already there", arguments: styles)
+    @Test("a drop that would replay a merge commit is refused before it lands; keyboard reorder says why", arguments: styles)
     func mergeCommitReplayed(_ testCase: NamedCase<Style>) async throws {
         let (fixture, shas) = try await mergeFixture(testCase.value.style)
         let repository = fixture.repository, context = fixture.context
         let history = repository.history
-        let b = try #require(shas["B"]), m = try #require(shas["M"])
+        let b = try #require(shas["B"]), m = try #require(shas["M"]), readme = try #require(shas["README"])
 
-        // B below README, the last row: the move replays M.
+        // B below README, the last row, or squashed into README: both
+        // replay M, so neither drop is offered or taken.
         let moveB = CommitDragPayload(repositoryID: repository.id, shas: [b])
         let bottom = GraphDropTarget.above(row: history.graph.count)
-        #expect(CommitDragging.validate(moveB, bottom, repository: repository, context: context) == .insertAbove)
-        #expect(CommitDragging.accept(moveB, bottom, repository: repository, context: context))
+        #expect(CommitDragging.validate(moveB, bottom, repository: repository, context: context) == nil)
+        #expect(!CommitDragging.accept(moveB, bottom, repository: repository, context: context))
+        let readmeRow = try #require(history.row(of: readme))
+        #expect(CommitDragging.validate(moveB, .onto(row: readmeRow), repository: repository, context: context) == nil)
+        #expect(!CommitDragging.accept(moveB, .onto(row: readmeRow), repository: repository, context: context))
+        #expect(fixture.presenter.error == nil)
+
+        // Keyboard reorder to the same line ends with the reason.
+        let state = context.state.history
+        KeyboardReorder.begin([b], repository: repository, context: context)
+        state.reorder?.insertionRow = history.graph.count
+        await KeyboardReorder.confirm(repository: repository, context: context)
+        #expect(state.reorder == nil)
         let presented = try #require(fixture.presenter.error)
         #expect(presented.error.operation == .reorder)
         if case .precondition = presented.error.reason {} else {

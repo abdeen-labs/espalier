@@ -1,7 +1,7 @@
 // These drive `MultiCommitOperationsModel`'s reverts against real git
-// (GitKitTests/Git/RevertTests has the git half): reverting, conflicts
-// (with `REVERT_HEAD`), continuing (with a resolution and an empty one),
-// aborting, a revert rebuilt after a relaunch, local changes, and the
+// (GitKitTests/Git/RevertTests has the git half): reverting and undoing it,
+// conflicts (with `REVERT_HEAD`), continuing (with a resolution and an empty
+// one), aborting, a revert rebuilt after a relaunch, local changes, and the
 // commit hooks when continuing.
 
 @testable import EspalierCore
@@ -30,22 +30,47 @@ struct RevertOperationTests {
         }
     }
 
-    @Test("reverts a commit, without a banner, as desktop")
+    @Test("reverts a commit, selects the new commit, and offers an undo")
     func reverts() async throws {
         let fixture = try await makeRepository()
         let notes = try await fixture.commit("HEAD")
         let operations = fixture.model.operations
 
         let result = try await operations.revert(notes)
-        #expect(result == .reverted)
+        #expect(result == .reverted(summary: "notes"))
         #expect(result.outcome == .completed)
-        #expect(result.summary == nil)
-        #expect(try await fixture.summaries("-1") == ["Revert \"notes\""])
-        #expect(try await fixture.commit("HEAD").parentSHAs == [notes.sha])
+        let reverted = try await fixture.commit("HEAD")
+        #expect(reverted.summary == "Revert \"notes\"")
+        #expect(reverted.parentSHAs == [notes.sha])
         #expect(!FileManager.default.fileExists(atPath: POSIXPath.join(fixture.local.path, "notes.txt")))
         #expect(operations.current == nil)
-        #expect(operations.undo == nil)
+        #expect(fixture.model.history.selection.shas == [reverted.sha])
+        #expect(operations.undo == MultiCommitUndo(
+            kind: .revert,
+            undoSha: notes.sha,
+            branchName: "main",
+            resultTip: reverted.sha,
+            commitCount: 1,
+            createdBranch: nil
+        ))
         #expect(fixture.model.refreshScheduler.lastPassReasons.contains(.operation(.revert)))
+        await fixture.app.idle()
+    }
+
+    @Test("undoing a revert removes its commit and puts the files back, without a force push")
+    func undo() async throws {
+        let fixture = try await makeRepository()
+        let notes = try await fixture.commit("HEAD")
+        let operations = fixture.model.operations
+        _ = try await operations.revert(notes)
+
+        let undone = try await operations.undoLastOperation()
+        #expect(undone.kind == .revert)
+        #expect(try await fixture.head() == notes.sha)
+        #expect(try fixture.read("notes.txt") == "notes\n")
+        #expect(try await runGit(["status", "--porcelain"], fixture.local).isEmpty)
+        #expect(operations.undo == nil)
+        #expect(operations.rewrittenBranches.isEmpty)
         await fixture.app.idle()
     }
 
@@ -89,7 +114,7 @@ struct RevertOperationTests {
         // "theirs" is the revert's side: the file before "two".
         operations.setManualResolution(.theirs, forPath: "file.txt")
         #expect(operations.canContinue)
-        #expect(try await operations.continueOperation() == .multiCommit(.reverted))
+        #expect(try await operations.continueOperation() == .multiCommit(.reverted(summary: "two")))
         let reverted = try await fixture.commit("HEAD")
         #expect(reverted.summary == "Revert \"two\"")
         #expect(reverted.parentSHAs == [head])
@@ -100,6 +125,14 @@ struct RevertOperationTests {
         #expect(operations.current == nil)
         #expect(operations.conflictState == nil)
         #expect(fixture.model.gitState.inProgress == nil)
+        #expect(fixture.model.history.selection.shas == [reverted.sha])
+
+        // Its undo goes back to before the revert.
+        #expect(operations.undo?.undoSha == head)
+        #expect(operations.undo?.resultTip == reverted.sha)
+        try await operations.undoLastOperation()
+        #expect(try await fixture.head() == head)
+        #expect(try fixture.read("file.txt") == "three\n")
         await fixture.app.idle()
     }
 
@@ -111,7 +144,7 @@ struct RevertOperationTests {
         #expect(try await operations.revert(try await fixture.commit("HEAD~2")) == .conflicted)
 
         operations.setManualResolution(.ours, forPath: "file.txt")
-        #expect(try await operations.continueOperation() == .multiCommit(.reverted))
+        #expect(try await operations.continueOperation() == .multiCommit(.reverted(summary: "two")))
         #expect(try await fixture.summaries("-1") == ["Revert \"two\""])
         #expect(try await fixture.commit("HEAD").parentSHAs == [head])
         #expect(try fixture.read("file.txt") == "three\n")
@@ -161,10 +194,12 @@ struct RevertOperationTests {
 
         try fixture.write("file.txt", "resolved\n")
         await model.refresh(.status, reason: .fileSystem)
-        #expect(try await operations.continueOperation() == .multiCommit(.reverted))
+        // A rebuilt revert names no commit and has no undo point.
+        #expect(try await operations.continueOperation() == .multiCommit(.reverted(summary: nil)))
         #expect(try await fixture.summaries("-1") == ["Revert \"two\""])
         #expect(try fixture.read("file.txt") == "resolved\n")
         #expect(operations.current == nil)
+        #expect(operations.undo == nil)
         await relaunched.idle()
     }
 
@@ -233,7 +268,7 @@ struct RevertOperationTests {
                 #expect(name == "prepare-commit-msg")
                 #expect(output.contains("lint failed"))
 
-                #expect(try await operations.revert(notes) == .reverted)
+                #expect(try await operations.revert(notes) == .reverted(summary: "notes"))
                 #expect(try await fixture.summaries("-1") == ["Revert \"notes\""])
                 #expect(!FileManager.default.fileExists(atPath: POSIXPath.join(fixture.local.path, "notes.txt")))
                 await fixture.app.idle()
@@ -267,7 +302,7 @@ struct RevertOperationTests {
                 #expect(operations.current?.phase == .conflicted)
                 #expect(operations.canContinue)
 
-                #expect(try await operations.continueOperation() == .multiCommit(.reverted))
+                #expect(try await operations.continueOperation() == .multiCommit(.reverted(summary: "two")))
                 #expect(try await fixture.summaries("-1") == ["Revert \"two\""])
                 await fixture.app.idle()
             }

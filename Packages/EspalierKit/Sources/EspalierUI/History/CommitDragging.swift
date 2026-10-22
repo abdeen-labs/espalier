@@ -2,9 +2,8 @@
 // (Shell/DragPayloads.swift) for the sidebar's drop targets, and takes
 // drops itself: onto a commit squashes into it, between commits reorders.
 // Refused: a drop onto itself or where the commits already are, a
-// comparison, or an operation in progress. A drop that would replay a merge
-// commit is taken and refused with the reason ("Can't reorder. …", "Can't
-// squash. …").
+// comparison, an operation in progress, or a squash or move that would
+// replay a merge commit (the Commit menu and keyboard reorder name it).
 
 import AppKit
 import EspalierCore
@@ -32,25 +31,18 @@ enum CommitDragging {
         switch target {
         case .onto(let row):
             guard let commit = history.commit(atRow: row), !payload.shas.contains(commit.sha),
-                  context.actions.canPerform(.squash(shas: payload.shas, into: commit.sha)) else {
+                  context.actions.canPerform(.squash(shas: payload.shas, into: commit.sha)),
+                  history.checkCurrentBranchRewrite(moving: payload.shas, relativeTo: commit.sha).mergeInTheWay == nil
+            else {
                 return nil
             }
             let summary = commit.summary.isEmpty ? CommitRowContent.emptySummary : RichText.emojified(commit.summary)
             return .squash(label: "Squash into \(summary)")
         case .above(let row):
-            guard let plan = reorderPlan(payload.shas, aboveRow: row, history: history) else {
+            guard let plan = reorderPlan(payload.shas, aboveRow: row, history: history), case .allowed(let rewrite) = plan.check else {
                 return nil
             }
-            switch plan.check {
-            case .allowed(let rewrite):
-                return rewrite.isNoOpReorder(below: plan.base?.sha) ? nil : .insertAbove
-            case .mergeCommitReplayed:
-                // Taken, to say why it can't be done; unless the commits are
-                // already there.
-                return isInPlace(payload.shas, aboveRow: row, history: history) ? nil : .insertAbove
-            case .unavailable:
-                return nil
-            }
+            return rewrite.isNoOpReorder(below: plan.base?.sha) ? nil : .insertAbove
         }
     }
 
@@ -68,18 +60,11 @@ enum CommitDragging {
             }
             context.actions.perform(.squash(shas: payload.shas, into: commit.sha))
         case .above(let row):
-            guard let plan = reorderPlan(payload.shas, aboveRow: row, history: history) else {
+            guard let plan = reorderPlan(payload.shas, aboveRow: row, history: history), case .allowed(let rewrite) = plan.check else {
                 return false
             }
-            switch plan.check {
-            case .allowed(let rewrite):
-                Task {
-                    await KeyboardReorder.perform(rewrite, below: plan.base, repository: repository, context: context)
-                }
-            case .mergeCommitReplayed:
-                context.presenter.present(repository.operations.mergeCommitReplayedError(.reorder))
-            case .unavailable:
-                return false
+            Task {
+                await KeyboardReorder.perform(rewrite, below: plan.base, repository: repository, context: context)
             }
         }
         return true

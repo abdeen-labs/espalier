@@ -319,11 +319,15 @@ extension MultiCommitOperationsModel {
     }
 
     /// Why a squash or reorder (`kind`) can't replay the commits it needs: a
-    /// merge commit is among them.
-    public func mergeCommitReplayedError(_ kind: OperationKind) -> OperationError {
-        let message = kind == .squash
-            ? "Can't squash. Squashing replays every commit back to the oldest one involved, and none of them can be a merge commit."
-            : "Can't reorder. Reordering replays every commit back to the oldest one involved, and none of them can be a merge commit."
+    /// merge commit is among them, named by its short SHA and summary when
+    /// it's known (`CurrentBranchRewriteCheck.mergeCommitReplayed`).
+    public func mergeCommitReplayedError(_ kind: OperationKind, merge: Commit? = nil) -> OperationError {
+        let action = kind == .squash ? "Can't squash. Squashing" : "Can't reorder. Reordering"
+        let message = if let merge {
+            "\(action) replays every commit back to the oldest one involved, including the merge commit \(shortenSHA(merge.sha)) \u{201C}\(merge.summary)\u{201D}."
+        } else {
+            "\(action) replays every commit back to the oldest one involved, and none of them can be a merge commit."
+        }
         return preconditionError(message, kind, repository)
     }
 }

@@ -15,7 +15,8 @@
 //   History's `checkCurrentBranchRewrite(moving:relativeTo:)`: they must
 //   be on the current branch's first-parent line, with no merge among the
 //   commits replayed. When a merge is the only obstacle, Squash stays
-//   enabled and says why ("Can't squash. …").
+//   enabled and says why, naming the merge ("Can't squash. …"), before the
+//   squash sheet asks for a message.
 //
 // `.reorder(shas:before:)` is History's: without `before` it enters
 // keyboard reorder mode, with it it reorders; its toasts come from
@@ -70,8 +71,8 @@ enum MultiCommitActions {
             switch SquashPlan.check(shas: shas, into: into, in: repository) {
             case .allowed(let plan):
                 await squash(plan, in: context, repository: repository)
-            case .mergeCommitReplayed:
-                context.presenter.present(repository.operations.mergeCommitReplayedError(.squash))
+            case .mergeCommitReplayed(let merge):
+                context.presenter.present(repository.operations.mergeCommitReplayedError(.squash, merge: merge))
             case .unavailable:
                 break
             }
@@ -189,8 +190,8 @@ struct SquashPlan: Equatable {
     enum Check: Equatable {
         case allowed(SquashPlan)
         /// A merge commit is among the commits the squash would replay
-        /// (`CurrentBranchRewriteCheck.mergeCommitReplayed`).
-        case mergeCommitReplayed
+        /// (`CurrentBranchRewriteCheck.mergeCommitReplayed`): `merge`.
+        case mergeCommitReplayed(merge: Commit)
         case unavailable
     }
 
@@ -210,8 +211,8 @@ struct SquashPlan: Equatable {
         switch repository.history.checkCurrentBranchRewrite(moving: selected, relativeTo: into) {
         case .allowed:
             return make(shas: shas, into: into, in: repository).map(Check.allowed) ?? .unavailable
-        case .mergeCommitReplayed:
-            return .mergeCommitReplayed
+        case .mergeCommitReplayed(let merge):
+            return .mergeCommitReplayed(merge: merge)
         case .unavailable:
             return .unavailable
         }

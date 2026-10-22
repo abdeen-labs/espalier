@@ -78,7 +78,7 @@ struct PresentationCaptures {
         )
     }
 
-    @Test("the toast, with Undo and its key, and without", arguments: ["cherryPick-undo", "merged", "reset"])
+    @Test("the toast, with Undo and its key, and without", arguments: ["cherryPick-undo", "revert-undo", "merged", "reset"])
     func toast(name: String) throws {
         let content = try #require(UIFixtures.toasts.first { $0.name == name }?.content)
         capture(ToastView(content).padding(Metrics.insetLarge), named: name, area: "Toasts")

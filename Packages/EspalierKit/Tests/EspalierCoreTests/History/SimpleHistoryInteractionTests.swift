@@ -191,10 +191,11 @@ struct SimpleHistoryInteractionTests {
         #expect(rewrite.lastRetainedCommitRef == "\(main2)^")
 
         // A commit the merge brought in replays the merge.
+        let merge = try await fixture.sha("HEAD~2")
         _ = await history.loadUntil(sha: side1)
-        #expect(history.checkCurrentBranchRewrite(moving: [side1], relativeTo: main3) == .mergeCommitReplayed)
+        #expect(history.checkCurrentBranchRewrite(moving: [side1], relativeTo: main3).mergeInTheWay?.sha == merge)
         let main1 = try await fixture.sha("main~3")
-        #expect(history.checkCurrentBranchRewrite(moving: [main1], relativeTo: main3) == .mergeCommitReplayed)
+        #expect(history.checkCurrentBranchRewrite(moving: [main1], relativeTo: main3).mergeInTheWay?.sha == merge)
     }
 
     @Test("a contiguous selection of the simple list's rows diffs the range, merges included")

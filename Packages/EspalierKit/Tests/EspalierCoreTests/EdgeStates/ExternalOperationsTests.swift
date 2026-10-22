@@ -320,7 +320,7 @@ struct ExternalOperationsTests {
 
         fixture.model.operations.setManualResolution(.ours, forPath: "shared.txt")
         let outcome = try await fixture.model.operations.continueOperation()
-        #expect(outcome == .multiCommit(.reverted))
+        #expect(outcome == .multiCommit(.reverted(summary: nil)))
         await fixture.settle()
         #expect(fixture.model.operations.current == nil)
         #expect(fixture.gitState.inProgress == nil)

@@ -1,5 +1,5 @@
-// The toasts for merges, rebases, cherry-picks, squashes, reorders, undos,
-// resets, and checkouts that switched worktrees, also when a recovery runs
+// The toasts for merges, rebases, cherry-picks, squashes, reorders, reverts,
+// undos, resets, and checkouts that switched worktrees, also when a recovery runs
 // the operation again. The copy is the state layer's. Undo is offered only
 // while the state layer's `operations.undo` is valid: on the toast while it
 // shows, from Edit ▸ Undo after it closes too; once the undo expires, the
@@ -20,14 +20,14 @@ enum OperationOutcomes {
         outcome.summary.map { Toast($0) }
     }
 
-    /// The toast for a rebase, cherry-pick, squash, or reorder, with Undo
-    /// for the last three while the state layer offers it.
+    /// The toast for a rebase, cherry-pick, squash, reorder, or revert, with
+    /// Undo for all but the rebase while the state layer offers it.
     static func toast(for result: MultiCommitResult, repository: RepositoryModel, context: WindowContext) -> Toast? {
         guard let summary = result.summary else {
             return nil
         }
         switch result {
-        case .cherryPicked, .squashed, .reordered:
+        case .cherryPicked, .squashed, .reordered, .reverted:
             guard let undo = repository.operations.undo, undoMatches(undo, result) else {
                 return Toast(summary)
             }
@@ -49,7 +49,7 @@ enum OperationOutcomes {
 
     /// "Squash of 2 commits undone.", "Reorder of 2 commits undone.",
     /// "Cherry-pick undone. Removed the 2 copied commits from
-    /// main."; nil for a cherry-pick to a new branch, whose undo deletes
+    /// main.", "Revert undone."; nil for a cherry-pick to a new branch, whose undo deletes
     /// the branch.
     static func toast(for undo: MultiCommitUndo) -> Toast? {
         undo.undoneMessage.map { Toast($0, systemImage: "arrow.uturn.backward.circle.fill") }
@@ -129,6 +129,7 @@ enum OperationOutcomes {
         case .cherryPicked: undo.kind == .cherryPick
         case .squashed: undo.kind == .squash
         case .reordered: undo.kind == .reorder
+        case .reverted: undo.kind == .revert
         default: false
         }
     }

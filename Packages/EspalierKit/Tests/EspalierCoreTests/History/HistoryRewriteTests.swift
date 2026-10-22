@@ -70,17 +70,46 @@ struct HistoryRewriteTests {
     func mergeReason() async throws {
         let (fixture, shas) = try await makeRepository()
         let history = fixture.history
+        let m = shas["M"]!
         // B is below M on the line.
-        #expect(history.checkCurrentBranchRewrite(moving: [shas["B"]!], relativeTo: nil) == .mergeCommitReplayed)
+        #expect(history.checkCurrentBranchRewrite(moving: [shas["B"]!], relativeTo: nil).mergeInTheWay?.sha == m)
         // Squashing C into B, or moving D below B, replays M.
-        #expect(history.checkCurrentBranchRewrite(moving: [shas["C"]!], relativeTo: shas["B"]!) == .mergeCommitReplayed)
-        #expect(history.checkCurrentBranchRewrite(moving: [shas["D"]!], relativeTo: shas["B"]!) == .mergeCommitReplayed)
+        #expect(history.checkCurrentBranchRewrite(moving: [shas["C"]!], relativeTo: shas["B"]!).mergeInTheWay?.sha == m)
+        #expect(history.checkCurrentBranchRewrite(moving: [shas["D"]!], relativeTo: shas["B"]!).mergeInTheWay?.sha == m)
         // S1 came in with M, off the first-parent line.
-        #expect(history.checkCurrentBranchRewrite(moving: [shas["S1"]!], relativeTo: nil) == .mergeCommitReplayed)
+        #expect(history.checkCurrentBranchRewrite(moving: [shas["S1"]!], relativeTo: nil).mergeInTheWay?.sha == m)
         // The merge itself.
-        #expect(history.checkCurrentBranchRewrite(moving: [shas["M"]!], relativeTo: nil) == .mergeCommitReplayed)
+        #expect(history.checkCurrentBranchRewrite(moving: [m], relativeTo: nil).mergeInTheWay?.sha == m)
         // Above the merge it's allowed.
         #expect(history.checkCurrentBranchRewrite(moving: [shas["D"]!], relativeTo: shas["C"]!).rewrite != nil)
+    }
+
+    @Test("below two merges, the reason is the older one, nearest the commits")
+    func nearestMerge() async throws {
+        // `main`: A (root), B, "Merge one" (of `one`'s commit from A), C,
+        // "Merge two" (of `two`'s commit from A), D (HEAD).
+        var shas: [String: String] = [:]
+        let fixture = try await makeHistoryFixture { repository in
+            shas["A"] = try await commitWithGit(repository, "a.txt", "a\n", message: "A")
+            try await runGit(["checkout", "-q", "-b", "one"], repository)
+            try await commitWithGit(repository, "one.txt", "one\n", message: "One")
+            try await runGit(["checkout", "-q", "-b", "two", shas["A"]!], repository)
+            try await commitWithGit(repository, "two.txt", "two\n", message: "Two")
+            try await runGit(["checkout", "-q", "main"], repository)
+            try await commitWithGit(repository, "b.txt", "b\n", message: "B")
+            try await runGit(["merge", "-q", "--no-ff", "-m", "Merge one", "one"], repository)
+            shas["Merge one"] = JSCompat.trim(try await runGit(["rev-parse", "HEAD"], repository))
+            shas["C"] = try await commitWithGit(repository, "c.txt", "c\n", message: "C")
+            try await runGit(["merge", "-q", "--no-ff", "-m", "Merge two", "two"], repository)
+            shas["Merge two"] = JSCompat.trim(try await runGit(["rev-parse", "HEAD"], repository))
+            shas["D"] = try await commitWithGit(repository, "d.txt", "d\n", message: "D")
+        }
+        await fixture.activate()
+        let history = fixture.history
+        // A is below both merges; C only below "Merge two".
+        #expect(history.checkCurrentBranchRewrite(moving: [shas["A"]!], relativeTo: nil).mergeInTheWay?.sha == shas["Merge one"])
+        #expect(history.checkCurrentBranchRewrite(moving: [shas["C"]!], relativeTo: nil).mergeInTheWay?.sha == shas["Merge two"])
+        #expect(history.checkCurrentBranchRewrite(moving: [shas["D"]!], relativeTo: nil).rewrite != nil)
     }
 
     @Test("another branch's commits, or any with a detached HEAD, can't be rewritten, with nothing to explain")
