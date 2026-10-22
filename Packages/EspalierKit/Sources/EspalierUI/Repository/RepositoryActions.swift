@@ -420,7 +420,7 @@ nonisolated enum AddRepositoryAlert: Sendable, Equatable {
             )
         case .invalidPaths(let message):
             AlertContent(
-                title: "Espalier couldn't add these folders.",
+                title: "Couldn't add these folders.",
                 message: message,
                 buttons: [AlertContent.Button("OK", role: .primary)]
             )

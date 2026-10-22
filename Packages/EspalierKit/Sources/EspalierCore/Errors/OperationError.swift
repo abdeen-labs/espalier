@@ -394,7 +394,7 @@ extension OperationError {
         case .lfsAttributeMismatch:
             return "Your global Git config already has Git LFS filters, but not the values Git LFS expects. Update them now?"
         case .trashFailed:
-            return "Espalier couldn't move the discarded changes to the Trash. This can happen on a volume without a Trash, or when Espalier isn't allowed to move the files.\n\nIf you discard them permanently, you can't get them back from the Trash."
+            return "Couldn't move the discarded changes to the Trash. This can happen on a volume without a Trash, or when Espalier isn't allowed to move the files.\n\nIf you discard them permanently, you can't get them back from the Trash."
         case .busy(let kind):
             return "Espalier can't start this while another operation (\(kind.rawValue)) is running in the repository."
         case .confirmationRequired(let confirmation):

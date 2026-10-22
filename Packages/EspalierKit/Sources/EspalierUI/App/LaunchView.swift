@@ -94,7 +94,7 @@ struct LaunchErrorView: View {
 
     var body: some View {
         CenteredMessage(
-            "Espalier Couldn't Start",
+            "Couldn't Start",
             systemImage: "exclamationmark.triangle",
             description: message,
             tint: Color(espalier: Palette.warningMark),

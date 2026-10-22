@@ -291,9 +291,9 @@ public final class IntegrationsModel {
     /// - Throws: `.decisionRequired(.externalEditor)` when none is selected
     ///   and several are installed: the answer is saved as the selected
     ///   editor (`selectEditor(_:)`), and opening runs again.
-    ///   `.integration(.editor)`: no editor is installed ("Espalier couldn't
-    ///   find a supported editor…", recovery "Download Visual Studio Code"),
-    ///   the selected one isn't ("Espalier couldn't find <name>…", recovery
+    ///   `.integration(.editor)`: no editor is installed ("Couldn't find a
+    ///   supported editor…", recovery "Download Visual Studio Code"),
+    ///   the selected one isn't ("Couldn't find <name>…", recovery
     ///   "Open Settings"), or it can't start.
     public func openInEditor(_ path: String) async throws(OperationError) {
         let settings = preferences.integrations
@@ -373,7 +373,7 @@ public final class IntegrationsModel {
             } else {
                 guard let shell = await lookUpShells().first(where: { $0.shell == settings.selectedShell }) else {
                     throw ShellError(
-                        "Espalier couldn't find \(settings.selectedShell.rawValue). Choose an available shell in Settings ▸ Integrations."
+                        "Couldn't find \(settings.selectedShell.rawValue). Choose an available shell in Settings ▸ Integrations."
                     )
                 }
                 try await launchShell(shell, path, onError: spawnFailures.record, launcher: environment.launcher)

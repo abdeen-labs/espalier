@@ -83,7 +83,7 @@ private struct PullRequestNotFound: View {
         CenteredMessage(
             "Pull Request #\(number)",
             systemImage: "arrow.trianglehead.pull",
-            description: "Espalier couldn't load this pull request. It may have been closed, or its branch deleted.",
+            description: "Couldn't load this pull request. It may have been closed, or its branch deleted.",
             isLarge: true
         ) {
             if let url = pageURL {

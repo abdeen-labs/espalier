@@ -370,7 +370,7 @@ extension Confirmation {
         case .file:
             "\(path) is a file other than Espalier's command line tool. Installing deletes it and puts the tool in its place."
         case .unexamined:
-            "Espalier couldn't check what's at \(path). If there's a file or link there, installing replaces it with the command line tool."
+            "Couldn't check what's at \(path). If there's a file or link there, installing replaces it with the command line tool."
         }
         return Confirmation(
             kind: .replaceCommandLineTool,

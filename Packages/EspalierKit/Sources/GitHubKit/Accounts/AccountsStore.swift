@@ -103,7 +103,7 @@ public struct UnreadableTokenError: Error, LocalizedError, Sendable, Equatable {
     }
 
     public var errorDescription: String? {
-        "Espalier couldn't read the token for your \(friendlyEndpoint) account from your keychain. "
+        "Couldn't read the token for your \(friendlyEndpoint) account from your keychain. "
             + "Make sure your login keychain is unlocked, then try again in Settings ▸ Accounts."
     }
 }
@@ -266,7 +266,7 @@ public actor AccountsStore {
 
             if isKeyChainError(error) {
                 throw GitHubError(
-                    "Espalier couldn't save the account's token in your keychain. Make sure your login keychain is unlocked."
+                    "Couldn't save the account's token in your keychain. Make sure your login keychain is unlocked."
                 )
             }
             throw error

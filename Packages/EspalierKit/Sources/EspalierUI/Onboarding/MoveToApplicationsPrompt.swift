@@ -169,7 +169,7 @@ enum ApplicationsFolderMove {
     @MainActor
     static func moveAndRelaunch(_ bundlePath: String) async throws(ApplicationsFolderMoveError) {
         guard let destination = destination(for: bundlePath) else {
-            throw ApplicationsFolderMoveError(message: "Espalier couldn't tell where to move itself in the Applications folder.")
+            throw ApplicationsFolderMoveError(message: "Couldn't tell where to move Espalier in the Applications folder.")
         }
         if let running = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
             .first(where: { $0.bundleURL?.path(percentEncoded: false) == destination && $0 != NSRunningApplication.current }) {

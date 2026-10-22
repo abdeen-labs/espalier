@@ -41,7 +41,7 @@ public struct AddRepositoriesResult: Sendable, Equatable {
 
 /// The message when moving a repository to the Trash fails.
 let moveRepositoryToTrashFailedMessage =
-    "Espalier couldn't move the repository to the Trash.\n\nThe folder or one of its files may be open in another app."
+    "Couldn't move the repository to the Trash.\n\nThe folder or one of its files may be open in another app."
 
 extension AppModel {
     // MARK: Adding

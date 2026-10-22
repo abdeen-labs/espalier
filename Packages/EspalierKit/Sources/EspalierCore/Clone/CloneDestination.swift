@@ -232,7 +232,7 @@ extension CloneCoordinator {
         let failure = apiFailure(from: error)
         return OperationError(
             .api(APIFailure(
-                message: "Espalier couldn't look up \(identifier.owner)/\(identifier.name) on GitHub. \(failure.message)",
+                message: "Couldn't look up \(identifier.owner)/\(identifier.name) on GitHub. \(failure.message)",
                 status: failure.status
             )),
             operation: .clone,
@@ -243,7 +243,7 @@ extension CloneCoordinator {
     private var repositoryNotFound: OperationError {
         OperationError(
             .precondition(
-                "Espalier couldn't find that repository. Check that you're signed in and that the URL or owner/name is spelled correctly."
+                "Couldn't find that repository. Check that you're signed in and that the URL or owner/name is spelled correctly."
             ),
             operation: .clone
         )

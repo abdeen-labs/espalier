@@ -232,11 +232,11 @@ enum UIFixtures {
                 operation: .publishRepository, repositoryID: id
             )),
             ("integration-editor", OperationError(
-                .integration(.editor(message: "Espalier couldn't find a supported editor. Install Visual Studio Code, then try again.", suggestDefaultEditor: true, openPreferences: false)),
+                .integration(.editor(message: "Couldn't find a supported editor. Install Visual Studio Code, then try again.", suggestDefaultEditor: true, openPreferences: false)),
                 operation: .openInEditor, recoveries: [.downloadSuggestedEditor, .openSettings(.integrations)]
             )),
             ("integration-shell", OperationError(
-                .integration(.shell(message: "Espalier couldn't find Kitty at /Applications/kitty.app. Choose an available shell in Settings ▸ Integrations.")),
+                .integration(.shell(message: "Couldn't find Kitty at /Applications/kitty.app. Choose an available shell in Settings ▸ Integrations.")),
                 operation: .openInShell, recoveries: [.openSettings(.integrations)]
             )),
             ("fileSystem", OperationError(.fileSystem("The folder “espalier” couldn’t be moved to the Trash."), operation: .removeRepository, repositoryID: id)),

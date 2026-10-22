@@ -1,9 +1,9 @@
-// How each of the state layer's 24 confirmations is shown. The copy is the
+// How each of the state layer's 25 confirmations is shown. The copy is the
 // state layer's (`Confirmation`); this file decides alert or compact sheet,
 // button roles, severity, lists, and the checkbox. Remove Repository and
 // Delete Branch are Espalier's compact sheets: their option is Espalier's
-// checkbox ("Also move the folder to the Trash", "Delete it on the remote
-// too"), and Remove or Delete is the default button. The others are
+// checkbox ("Also move the folder to the Trash", "Delete this branch on the
+// remote"), and Remove or Delete is the default button. The others are
 // alerts, with "Do not show this message again" where the confirmation can
 // be turned off.
 

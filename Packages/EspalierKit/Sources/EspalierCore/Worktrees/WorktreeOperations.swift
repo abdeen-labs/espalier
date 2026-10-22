@@ -162,7 +162,7 @@ extension WorktreesModel {
                 var directory = ctx.repository.path
                 if isCurrent {
                     guard let main else {
-                        throw OperationError(.precondition("Espalier couldn't find the main worktree."), operation: .removeWorktree, repositoryID: self.repository?.id)
+                        throw OperationError(.precondition("Couldn't find the main worktree."), operation: .removeWorktree, repositoryID: self.repository?.id)
                     }
                     directory = main.path
                 }

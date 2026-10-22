@@ -54,7 +54,7 @@ public struct AccountCredentialError: Error, LocalizedError, CustomStringConvert
         self.isUnknownVersion = isUnknownVersion
     }
 
-    public var message: String { "Espalier couldn't read this account's saved credentials. Sign in again." }
+    public var message: String { "Couldn't read this account's saved credentials. Sign in again." }
     public var errorDescription: String? { message }
     public var description: String { message }
 }

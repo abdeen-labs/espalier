@@ -25,7 +25,7 @@ extension StateNotice {
         switch issue {
         case .repositoryListUnreadable(let movedTo):
             StateNotice(key: "persistence.unreadable", alert: AlertContent(
-                title: "Espalier couldn't read its repository list.",
+                title: "Couldn't read the repository list.",
                 message: "The file was moved to \(movedTo.path(percentEncoded: false)) and Espalier started with an empty list.",
                 buttons: [AlertContent.Button("OK", role: .primary), AlertContent.Button("Show in Finder", role: .secondary)]
             ))
@@ -37,13 +37,13 @@ extension StateNotice {
             ))
         case .repositoryListInaccessible(let reason):
             StateNotice(key: "persistence.inaccessible", alert: AlertContent(
-                title: "Espalier couldn't read its repository list.",
+                title: "Couldn't read the repository list.",
                 message: "\(reason)\n\nChanges to the list won't be saved until Espalier can read it.",
                 buttons: [AlertContent.Button("OK", role: .primary)]
             ))
         case .repositoryListSaveFailed(let reason):
             StateNotice(key: "persistence.saveFailed", alert: AlertContent(
-                title: "Espalier couldn't save its repository list.",
+                title: "Couldn't save the repository list.",
                 message: reason,
                 buttons: [AlertContent.Button("OK", role: .primary)]
             ))

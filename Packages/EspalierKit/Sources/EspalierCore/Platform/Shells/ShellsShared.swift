@@ -61,7 +61,7 @@ public func launchShell(
     let exists = await pathExists(shell.path)
     if !exists {
         throw ShellError(
-            "Espalier couldn't find \(shell.shell.rawValue) at \(shell.path). Choose an available shell in Settings ▸ Integrations."
+            "Couldn't find \(shell.shell.rawValue) at \(shell.path). Choose an available shell in Settings ▸ Integrations."
         )
     }
 
@@ -90,7 +90,7 @@ public func launchCustomShell(
     let exists = await pathExists(customShell.path)
     if !exists {
         throw ShellError(
-            "Espalier couldn't find the custom shell at \(customShell.path). Choose an available shell in Settings ▸ Integrations."
+            "Couldn't find the custom shell at \(customShell.path). Choose an available shell in Settings ▸ Integrations."
         )
     }
 

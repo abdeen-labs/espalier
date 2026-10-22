@@ -177,9 +177,9 @@ public struct GenericAuthPrompt: View {
 
     private var explanation: String {
         if let knownUsername {
-            return "Espalier couldn't sign in to \(endpoint). Enter the password for \(knownUsername) to try again."
+            return "Couldn't sign in to \(endpoint). Enter the password for \(knownUsername) to try again."
         }
-        return "Espalier couldn't sign in to \(endpoint). Enter your username and password to try again."
+        return "Couldn't sign in to \(endpoint). Enter your username and password to try again."
     }
 }
 

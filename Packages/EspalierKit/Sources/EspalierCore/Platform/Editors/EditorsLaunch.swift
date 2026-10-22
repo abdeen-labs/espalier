@@ -33,7 +33,7 @@ func launchEditor(
     if !exists {
         let editor = editorNameIncludesPath ? editorName : "\(editorName) at \(editorPath)"
         throw ExternalEditorError(
-            "Espalier couldn't find \(editor). Choose an available editor in Settings ▸ Integrations.",
+            "Couldn't find \(editor). Choose an available editor in Settings ▸ Integrations.",
             metadata: ExternalEditorError.Metadata(openPreferences: true)
         )
     }
@@ -54,7 +54,7 @@ func launchEditor(
         throw ExternalEditorError(
             error.code == "EACCES"
                 ? "Espalier doesn't have permission to open \(editorName). Choose another editor in Settings ▸ Integrations."
-                : "Espalier couldn't open \(editorName). Choose another editor in Settings ▸ Integrations.",
+                : "Couldn't open \(editorName). Choose another editor in Settings ▸ Integrations.",
             metadata: ExternalEditorError.Metadata(openPreferences: true)
         )
     }

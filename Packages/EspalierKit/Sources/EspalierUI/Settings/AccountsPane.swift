@@ -366,7 +366,7 @@ private struct UnreadableAccountRow: View {
                 .settingsButton()
         } footer: {
             FieldMessage(
-                "Espalier couldn't read this account's token from your keychain. Make sure your login keychain is unlocked, then try again.",
+                "Couldn't read this account's token from your keychain. Make sure your login keychain is unlocked, then try again.",
                 kind: .warning
             )
         }
