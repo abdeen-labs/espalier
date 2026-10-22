@@ -340,9 +340,12 @@ struct CreatePullRequestForm<BasePicker: View>: View {
                 .popoverCard(isPresented: $isPickingBase, title: "Base Branch", content: basePicker)
                 Text("from")
                     .foregroundStyle(.text2)
-                QuietCapsule(content.head, monospaced: true)
-                Text(".")
-                    .foregroundStyle(.text2)
+                // The period follows the branch as it would a word.
+                HStack(spacing: 0) {
+                    QuietCapsule(content.head, monospaced: true)
+                    Text(".")
+                        .foregroundStyle(.text2)
+                }
             }
             if let baseNote {
                 FieldMessage(baseNote, kind: .error)

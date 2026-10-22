@@ -164,9 +164,12 @@ struct PreviewPullRequestSheet: View {
                 }
                 Text("from")
                     .foregroundStyle(.text2)
-                QuietCapsule(content.headBranch, monospaced: true)
-                Text(".")
-                    .foregroundStyle(.text2)
+                // The period follows the branch as it would a word.
+                HStack(spacing: 0) {
+                    QuietCapsule(content.headBranch, monospaced: true)
+                    Text(".")
+                        .foregroundStyle(.text2)
+                }
             }
             if let baseNote {
                 SignInInlineError(message: baseNote)
