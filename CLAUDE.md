@@ -95,8 +95,7 @@ Run the app as a Debug build with scratch repositories and an isolated home:
 `~/.gitconfig` links to my dotfiles, so Configure Git and repository
 settings are tried only in that home. `CFFIXED_USER_HOME` moves Application
 Support and caches but not `UserDefaults`; pass `--args
--has-shown-welcome-flow NO` to see Welcome. I need the Mac back between
-sessions: ask before taking control.
+-has-shown-welcome-flow NO` to see Welcome.
 
 ## Rules
 
