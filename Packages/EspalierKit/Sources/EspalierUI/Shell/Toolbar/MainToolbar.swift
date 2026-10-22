@@ -227,13 +227,15 @@ struct ActionToolbarButton: View {
 
     var body: some View {
         let title = context.actions.title(for: action).replacingOccurrences(of: "…", with: "")
+        let isEnabled = context.actions.canPerform(action)
         Button {
             context.actions.perform(action)
         } label: {
             Label(title, systemImage: systemImage)
         }
         .buttonStyle(.icon)
-        .disabled(!context.actions.canPerform(action))
-        .tooltip(title)
+        .disabled(!isEnabled)
+        // Disabled, it says why when something does.
+        .tooltip(isEnabled ? title : context.actions.disabledReason(action) ?? title)
     }
 }

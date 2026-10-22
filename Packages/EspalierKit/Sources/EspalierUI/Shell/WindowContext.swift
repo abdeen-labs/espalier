@@ -73,8 +73,17 @@ public final class WindowContext {
             }
             return CommandAvailability(context: self).title(for: action)
         }
+        actions.stateReason = { [weak self] action in
+            guard let self else {
+                return nil
+            }
+            return CommandAvailability(context: self).reason(for: action)
+        }
         actions.isModalPresented = { [weak self] in
             self?.isModalPresented ?? false
+        }
+        actions.onRefused = { [weak self] reason in
+            self?.presenter.show(.refused(reason))
         }
         modals.environment = { [weak self] content in
             guard let self else {

@@ -32,6 +32,8 @@ enum BranchActions {
             return branch.ref != repository.gitState.tip.branch?.ref
                 && repository.localOperation?.kind != .checkoutBranch
                 && repository.operations.checkoutRefusal == nil
+        }, disabledReason: { [weak context] _ in
+            context?.repository?.operations.checkoutRefusal
         }) { [weak context] action in
             guard case .checkoutBranch(let name) = action, let context, let repository = context.repository,
                   let branch = HistoryCommits.branch(named: name, in: repository) else {

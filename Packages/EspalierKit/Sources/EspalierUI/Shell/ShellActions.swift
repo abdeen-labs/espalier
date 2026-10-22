@@ -42,8 +42,9 @@ enum ShellActions {
                 return
             }
             let modals = context.modals
+            let actions = context.actions
             modals.presentSheet(id: KeyboardShortcutsSheet.sheetID) {
-                KeyboardShortcutsSheet()
+                KeyboardShortcutsSheet(isHidden: { actions.isHidden($0) })
             }
         }
         actions.register(.showLogsInFinder) { _ in

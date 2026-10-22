@@ -1,7 +1,8 @@
 // History's actions: the Go menu, the Commit menu's commit actions, the
 // history scope, Compare, and the History Scroll Benchmark. Items invoked
 // from the menu bar act on the commit selected in a place that shows
-// commits; context menus name their commit.
+// commits; context menus name their commit. A disabled commit action says
+// why when there's more to say than its state shows.
 
 import AppKit
 import EspalierCore
@@ -23,11 +24,20 @@ enum HistoryActions {
     // MARK: Commits
 
     private static func registerCommitActions(into actions: WindowActions, context: WindowContext) {
+        // Copy SHA: the commits named, or those selected where commits show.
         actions.register(.copySHA, isEnabled: { [weak context] action in
-            guard case .copySHA(let shas) = action else {
+            guard case .copySHA(let shas) = action, let context else {
                 return false
             }
-            return !(shas ?? context?.repository?.history.selection.shas ?? []).isEmpty
+            if let shas {
+                return !shas.isEmpty
+            }
+            return showsCommits(context) && !(context.repository?.history.selection.shas ?? []).isEmpty
+        }, disabledReason: { [weak context] action in
+            guard case .copySHA(let shas) = action, shas == nil, let context, !showsCommits(context) else {
+                return nil
+            }
+            return Self.selectInHistory
         }) { [weak context] action in
             guard case .copySHA(let shas) = action,
                   let selected = shas ?? context?.repository?.history.selection.shas, !selected.isEmpty else {
@@ -45,6 +55,14 @@ enum HistoryActions {
                 return false
             }
             return repository.history.showsCurrentBranchHistory && isResettable(commit, in: repository)
+        }, disabledReason: { [weak context] action in
+            guard case .resetToCommit(let sha) = action, let context else {
+                return nil
+            }
+            guard case let (repository, commit)? = target(sha, context) else {
+                return selectionRefusal(sha, context)
+            }
+            return resetRefusal(commit, in: repository)
         }) { [weak context] action in
             guard case .resetToCommit(let sha) = action, let context, case let (repository, commit)? = target(sha, context) else {
                 return
@@ -65,6 +83,14 @@ enum HistoryActions {
             // while an operation is in progress (the intent refuses).
             return repository.gitState.tip.sha != commit.sha
                 && repository.operations.checkoutRefusal == nil
+        }, disabledReason: { [weak context] action in
+            guard case .checkoutCommit(let sha) = action, let context else {
+                return nil
+            }
+            guard target(sha, context) != nil else {
+                return selectionRefusal(sha, context)
+            }
+            return context.repository?.operations.checkoutRefusal
         }) { [weak context] action in
             guard case .checkoutCommit(let sha) = action, let context, case let (repository, commit)? = target(sha, context) else {
                 return
@@ -75,16 +101,22 @@ enum HistoryActions {
             }
         }
 
-        // Revert Changes in Commit: in the history, or the comparison's
-        // Behind list (the current branch's own commits).
+        // Revert Changes in Commit: a commit in the checked-out branch's
+        // history (the revert goes on it), or in the comparison's Ahead list
+        // (the current branch's own commits).
         actions.register(.revertCommit, isEnabled: { [weak context] action in
-            guard case .revertCommit(let sha) = action, let context, case let (repository, _)? = target(sha, context) else {
+            guard case .revertCommit(let sha) = action, let context, case let (repository, commit)? = target(sha, context) else {
                 return false
             }
-            switch repository.history.mode {
-            case .history, .compare(_, .ahead): return repository.operations.current == nil
-            case .compare(_, .behind): return false
+            return revertRefusal(commit, in: repository) == nil
+        }, disabledReason: { [weak context] action in
+            guard case .revertCommit(let sha) = action, let context else {
+                return nil
             }
+            guard case let (repository, commit)? = target(sha, context) else {
+                return selectionRefusal(sha, context)
+            }
+            return revertRefusal(commit, in: repository)
         }) { [weak context] action in
             guard case .revertCommit(let sha) = action, let context, case let (repository, commit)? = target(sha, context) else {
                 return
@@ -131,6 +163,8 @@ enum HistoryActions {
                 return false
             }
             return repository.branches.tagsToPush.contains(name)
+        }, disabledReason: { _ in
+            "Only tags that haven't been pushed can be deleted."
         }) { [weak context] action in
             guard case .deleteTag(let name) = action, let context, let repository = context.repository else {
                 return
@@ -161,6 +195,14 @@ enum HistoryActions {
             }
             let count = shas?.count ?? context.repository?.history.selection.shas.count ?? 1
             return count > 1 ? "Reorder \(formatCount(count, context.app.preferences.numberFormat)) Commits…" : "Reorder Commit"
+        }, disabledReason: { [weak context] action in
+            guard case .reorder(let shas, _) = action, let context, let repository = context.repository else {
+                return nil
+            }
+            guard showsCommits(context) || shas != nil else {
+                return Self.selectInHistory
+            }
+            return rewriteRefusal(in: repository, verb: "reordered")
         }) { [weak context] action in
             guard case .reorder(let shas, let before) = action, let context, let repository = context.repository else {
                 return
@@ -217,9 +259,104 @@ enum HistoryActions {
         return (repository, commit)
     }
 
-    private static func showsCommits(_ context: WindowContext) -> Bool {
+    /// Whether the window shows a place with commits (History, a branch, a
+    /// tag): where the Commit menu's items find their commits.
+    static func showsCommits(_ context: WindowContext) -> Bool {
         context.state.place?.showsCommits == true
     }
+
+    // MARK: Reasons
+
+    /// Why a menu bar item has no commit: one acts on a place with commits.
+    static let selectInHistory = "Select a commit in History."
+
+    /// Why an action that takes one commit has none (`target`): commits
+    /// aren't showing, or several are selected. Nil when it names its
+    /// commit.
+    static func selectionRefusal(_ sha: String?, _ context: WindowContext) -> String? {
+        guard sha == nil else {
+            return nil
+        }
+        guard showsCommits(context) else {
+            return selectInHistory
+        }
+        return (context.repository?.history.selection.shas.count ?? 0) > 1 ? "Select one commit." : nil
+    }
+
+    /// Why `commit` can't be reverted, or nil when it can: an operation is
+    /// in progress, History shows another branch's history (the revert
+    /// would go on the checked-out branch), or the commit isn't in the
+    /// checked-out branch's history (another branch's in the graph, the
+    /// comparison's Behind list).
+    static func revertRefusal(_ commit: Commit, in repository: RepositoryModel) -> String? {
+        if repository.operations.current != nil {
+            return repository.operations.checkoutRefusal ?? "Wait for the operation in progress to finish."
+        }
+        let history = repository.history
+        switch history.mode {
+        case .compare(_, .ahead):
+            return nil
+        case .compare(_, .behind):
+            return notOnCurrentBranch
+        case .history:
+            guard history.showsCurrentBranchHistory else {
+                return "Check out this branch to revert its commits."
+            }
+            return history.isInCurrentBranchHistory(commit.sha) ? nil : notOnCurrentBranch
+        }
+    }
+
+    /// Why the branch can't be reset to `commit` (`isResettable`), or nil
+    /// when it can.
+    static func resetRefusal(_ commit: Commit, in repository: RepositoryModel) -> String? {
+        let history = repository.history
+        guard history.showsCurrentBranchHistory else {
+            return notOnCurrentBranch
+        }
+        if repository.operations.current != nil {
+            return repository.operations.checkoutRefusal ?? "Wait for the operation in progress to finish."
+        }
+        guard let head = repository.gitState.tip.sha else {
+            return nil
+        }
+        if head == commit.sha {
+            return "The branch is already at this commit."
+        }
+        guard !isResettable(commit, in: repository) else {
+            return nil
+        }
+        // Down the branch's own line: past its unpushed commits, the commit
+        // is below a pushed one.
+        var next: String? = head
+        while let sha = next, let current = history.commit(sha) {
+            next = current.parentSHAs.first
+            if next == commit.sha {
+                return "Commits after this one have been pushed."
+            }
+        }
+        return "Only commits on the branch's own line can be reset to."
+    }
+
+    /// Why the current branch's commits can't be rewritten now (squashed or
+    /// reordered: `verb`), or nil when there's nothing to say: an operation
+    /// is in progress, HEAD isn't on a branch, or the commits aren't the
+    /// checked-out branch's.
+    static func rewriteRefusal(in repository: RepositoryModel, verb: String) -> String? {
+        if let refusal = repository.operations.checkoutRefusal {
+            return refusal
+        }
+        guard CommitDragging.canRewrite(repository) else {
+            return nil
+        }
+        guard repository.gitState.tip.branch != nil else {
+            return "Commits can be \(verb) only on a branch."
+        }
+        return "Only the checked-out branch's commits can be \(verb)."
+    }
+
+    /// Why an action refuses a commit off the checked-out branch.
+    static let notOnCurrentBranch = "This commit isn't on the checked-out branch."
+
 
     /// Whether the branch can be reset to `commit`: it's below HEAD on the
     /// current branch's line, and only unpushed commits come after it (it
@@ -337,14 +474,20 @@ enum HistoryActions {
             HistoryPlaces.showComparison(of: branch, in: context)
         }
 
-        // The history's scope, remembered per repository.
+        // The history's scope, remembered per repository: the graph's (the
+        // simple list shows one branch's line).
         actions.register(.setHistoryScope, isEnabled: { [weak context] _ in
-            context?.repository?.isUsable ?? false
+            guard let repository = context?.repository, repository.isUsable else {
+                return false
+            }
+            return repository.history.style == .graph
         }, isChecked: { [weak context] action in
             guard case .setHistoryScope(let scope) = action else {
                 return false
             }
             return context?.repository?.history.scope == scope
+        }, disabledReason: { [weak context] _ in
+            context?.repository?.history.style == .simple ? "Choose Graph to show other branches." : nil
         }) { [weak context] action in
             guard case .setHistoryScope(let scope) = action else {
                 return

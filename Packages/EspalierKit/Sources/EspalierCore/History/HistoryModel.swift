@@ -439,6 +439,37 @@ public final class HistoryModel: RepositoryFeature {
         mode == .history && shownBranch == nil
     }
 
+    /// Whether the loaded commit `sha` is in the checked-out branch's
+    /// history as the list shows it: any commit of the simple list (HEAD's
+    /// line) or of a merge it expanded; in the graph, one reachable from
+    /// HEAD through the loaded commits. False while History shows a
+    /// comparison or another branch's history.
+    public func isInCurrentBranchHistory(_ sha: String) -> Bool {
+        guard showsCurrentBranchHistory else {
+            return false
+        }
+        if isSimpleListShown {
+            return simpleList?.commits.commit(sha) != nil || mergedCommit(sha) != nil
+        }
+        guard let head = repository?.gitState.tip.sha, let target = row(of: sha) else {
+            return false
+        }
+        // History is in topological order: nothing below the commit's row
+        // reaches it.
+        var queue = [head]
+        var visited: Set<String> = []
+        while let next = queue.popLast() {
+            if next == sha {
+                return true
+            }
+            guard visited.insert(next).inserted, let commit = commit(next), let row = row(of: next), row < target else {
+                continue
+            }
+            queue.append(contentsOf: commit.parentSHAs)
+        }
+        return false
+    }
+
     /// Shows the history of the branch `ref` names instead of HEAD's (nil:
     /// HEAD's). The simple style lists that branch's first-parent line,
     /// loaded again from its tip; the graph shows its scope either way.

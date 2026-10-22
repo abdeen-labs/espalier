@@ -194,6 +194,9 @@ struct PullRequestOverviewActions {
     var checkOutInNewWorktree: (() -> Void)?
     var open: (URL) -> Void
     var checks: ChecksListActions
+    /// Why Check Out can't run now (an operation in progress): it's
+    /// disabled, with this as its tooltip.
+    var checkOutRefusal: String? = nil
 }
 
 /// The overview, from the models.
@@ -262,7 +265,8 @@ struct PullRequestOverview: View {
                 rerun: { failedOnly, checkID in
                     RerunChecksSheet.present(repository: repository, pullRequest: pullRequest, failedOnly: failedOnly, checkID: checkID, in: context)
                 }
-            )
+            ),
+            checkOutRefusal: context.actions.disabledReason(.checkoutPullRequest(number: number))
         )
     }
 
@@ -377,7 +381,9 @@ struct PullRequestOverviewView: View {
         } else {
             Button("Check Out", action: actions.checkOut)
                 .buttonStyle(.prominent)
+                .disabled(actions.checkOutRefusal != nil)
                 .fixedSize()
+                .tooltip(actions.checkOutRefusal)
         }
         if let url = content.url {
             Button(content.viewOnGitHubTitle) {
@@ -469,10 +475,14 @@ struct PullRequestChangesView: View {
                         systemImage: "doc.text.magnifyingglass",
                         description: "Check out this pull request to see its changes."
                     ) {
+                        let checkOut = ActionID.checkoutPullRequest(number: pullRequest.pullRequestNumber)
+                        let refusal = context.actions.disabledReason(checkOut)
                         Button("Check Out") {
-                            context.actions.perform(.checkoutPullRequest(number: pullRequest.pullRequestNumber))
+                            context.actions.perform(checkOut)
                         }
                         .buttonStyle(.quiet)
+                        .disabled(refusal != nil)
+                        .tooltip(refusal)
                     }
                 case .failed(let error):
                     CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))

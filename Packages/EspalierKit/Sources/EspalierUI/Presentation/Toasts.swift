@@ -38,6 +38,11 @@ public struct Toast: Identifiable {
         Toast("Another operation is in progress", systemImage: "hourglass")
     }
 
+    /// Why an action the user asked for can't run.
+    public static func refused(_ reason: String) -> Toast {
+        Toast(reason, systemImage: "info.circle.fill")
+    }
+
     /// "<worktree> was removed. Showing <repository>."
     public static func removedWorktree(_ notice: RemovedWorktreeNotice) -> Toast {
         Toast("\(notice.worktreeName) was removed. Showing \(notice.shownName).", systemImage: "folder.badge.minus")

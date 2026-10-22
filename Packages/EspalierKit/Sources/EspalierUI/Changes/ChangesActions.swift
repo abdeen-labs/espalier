@@ -1,4 +1,6 @@
-// The Changes place's menu actions: Commit Changes (⌘↩), Generate Commit
+// The Changes place's menu actions: Commit Changes (⌘↩, which presses Commit
+// Merge or Continue in the commit form's place while an operation waits on
+// the user, and is titled as they are), Generate Commit
 // Message (⌥⌘G, gone while AI is off), Go to Commit Message (⌘J), Amend Last
 // Commit, Undo Commit…, and Discard All Changes…, plus the Debug menu's
 // Changes Apply benchmark. Each runs what the composer's controls run,
@@ -12,20 +14,37 @@ import GitKit
 enum ChangesActions {
     static func register(into actions: WindowActions, context: WindowContext) {
         actions.register(.commitChanges, isEnabled: { [weak context] _ in
-            guard let context, let controller = controller(context) else {
+            guard let context, context.state.place == .changes, let controller = controller(context) else {
                 return false
             }
-            // ⌘↩ commits from Changes, where the composer is, and not while
-            // an operation runs or waits (the commit form then commits a
-            // merge, or Continue takes its place).
-            return context.state.place == .changes
-                && OperationCapsuleContent.make(controller.repository) == nil
-                && controller.canCommit
+            // ⌘↩ presses the button the commit form's place shows, in
+            // Changes: Commit Merge or Continue while an operation waits on
+            // the user, else Commit, and nothing while an operation runs.
+            if let slot = OperationSlotContent.make(controller.repository) {
+                return slot.button.isEnabled
+            }
+            return OperationCapsuleContent.make(controller.repository) == nil && controller.canCommit
+        }, title: { [weak context] _ in
+            guard let repository = context?.repository, let slot = OperationSlotContent.make(repository) else {
+                return nil
+            }
+            switch slot.button.kind {
+            case .merge: return "Commit Merge"
+            case .continueOperation(let name): return "Continue \(name)"
+            case .commit: return nil
+            }
         }) { [weak context] _ in
             guard let context, let controller = controller(context) else {
                 return
             }
-            await controller.commit()
+            switch OperationSlotContent.make(controller.repository)?.kind {
+            case .merge?:
+                await controller.commitMerge()
+            case .continueOperation?:
+                await MultiCommitActions.continueOperation(in: context, repository: controller.repository)
+            case nil:
+                await controller.commit()
+            }
         }
 
         // Always asks: one file too, and with the confirmation setting off.

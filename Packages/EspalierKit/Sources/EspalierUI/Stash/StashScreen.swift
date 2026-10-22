@@ -46,6 +46,8 @@ nonisolated struct StashColumnContent: Sendable, Equatable {
     var canRestore: Bool
     var canApply: Bool
     var canDiscard: Bool
+    /// Why Restore and Apply are disabled, when something says.
+    var applyRefusal: String?
     /// Restoring, applying, or discarding it.
     var isBusy: Bool
     /// The toolbar search's text.
@@ -102,12 +104,12 @@ struct StashHeader: View {
             Button("Restore", action: restore)
                 .buttonStyle(.prominent)
                 .disabled(!content.canRestore)
-                .tooltip("Move your stashed files to the Changes list")
+                .tooltip((content.canRestore ? nil : content.applyRefusal) ?? "Move your stashed files to the Changes list")
                 .fixedSize()
             Button("Apply", action: apply)
                 .buttonStyle(.quiet)
                 .disabled(!content.canApply)
-                .tooltip("Copy your stashed files to the Changes list and keep the stash")
+                .tooltip((content.canApply ? nil : content.applyRefusal) ?? "Copy your stashed files to the Changes list and keep the stash")
                 .fixedSize()
             Button("Discard…", action: discard)
                 .buttonStyle(.quiet)
@@ -312,6 +314,7 @@ public struct StashScreen: View {
             canRestore: actions.canPerform(.restoreStash(sha: sha)),
             canApply: actions.canPerform(.applyStash(sha: sha)),
             canDiscard: actions.canPerform(.discardStash(sha: sha)),
+            applyRefusal: actions.disabledReason(.restoreStash(sha: sha)),
             isBusy: StashActions.isBusy(repository),
             filter: filter,
             selectedFileID: isShowingThisStash ? stash.selectedFile?.id : nil

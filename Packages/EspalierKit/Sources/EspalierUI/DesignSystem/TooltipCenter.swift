@@ -7,8 +7,9 @@
 // below the cursor (below the area, for an AppKit view's area), above the
 // pointer at the screen's bottom, and fades in and out where motion runs.
 //
-// It hides when the pointer leaves its area, its text goes, a menu opens,
-// the pointer's window becomes or resigns key, the app deactivates, or its
+// It hides when the pointer leaves its area, its text goes, a menu opens
+// (a menu's own cards show theirs: a disabled item's reason), the pointer's
+// window becomes or resigns key, the app deactivates, or its
 // window moves or its view leaves. A click, a key press, or a scroll hides
 // it too, and then nothing shows until the pointer moves off the area it
 // was on, or onto one a scroll put under it. The panel takes no clicks or
@@ -222,11 +223,10 @@ final class TooltipCenter {
         syncObservers()
     }
 
-    /// Shows `target`'s card, unless a menu is open, its view has gone or
-    /// hidden, or it has no text.
+    /// Shows `target`'s card, unless a menu is open (other than over the
+    /// menu's own cards), its view has gone or hidden, or it has no text.
     private func show(_ target: Target) {
-        guard MenuSession.current?.isOpen != true,
-              let view = target.tracker.view, let window = view.window, window === pointerWindow,
+        guard let view = target.tracker.view, let window = view.window, !Self.isBlockedByMenu(window), window === pointerWindow,
               !view.isHiddenOrHasHiddenAncestor, let location = pointerLocation else {
             return
         }
@@ -305,15 +305,30 @@ final class TooltipCenter {
         syncObservers()
     }
 
-    /// Hides the tooltip once a menu has opened.
+    /// Hides the tooltip once a menu has opened, unless it's over the menu's
+    /// own card.
     private func hideIfMenuOpened() {
-        guard MenuSession.current?.isOpen == true else {
+        let window = shown?.target.tracker.view?.window ?? pending?.target.tracker.view?.window
+        guard Self.isBlockedByMenu(window) else {
             return
         }
         cancelPending()
         hideShown(animated: false, followsOn: false)
         lastHidden = nil
         syncObservers()
+    }
+
+    /// Whether an open menu keeps tooltips in `window` from showing: one is
+    /// open and `window` isn't one of its cards (whose disabled items show
+    /// why they're disabled).
+    private static func isBlockedByMenu(_ window: NSWindow?) -> Bool {
+        guard let session = MenuSession.current, session.isOpen else {
+            return false
+        }
+        guard let window else {
+            return true
+        }
+        return !session.levels.contains { $0.panel === window }
     }
 
     /// Watches what hides a tooltip while one shows or waits.

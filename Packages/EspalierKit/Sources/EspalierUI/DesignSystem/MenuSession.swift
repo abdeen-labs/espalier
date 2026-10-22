@@ -738,7 +738,7 @@ nonisolated final class MenuItemElement: NSAccessibilityElement {
         super.init()
         setAccessibilityRole(.menuItem)
         setAccessibilityLabel(item.title)
-        setAccessibilityHelp(item.subtitle)
+        setAccessibilityHelp(item.subtitle ?? (item.isEnabled ? nil : item.tooltip))
         setAccessibilityEnabled(item.isEnabled)
         setAccessibilityParent(panel)
     }

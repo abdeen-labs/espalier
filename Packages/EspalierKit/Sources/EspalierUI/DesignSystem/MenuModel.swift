@@ -68,6 +68,9 @@ public struct MenuItem {
     /// The title's font, when it isn't the row's (a font's name in that
     /// font).
     public var titleFont: Font?
+    /// Why a disabled item can't be chosen: its tooltip, and what VoiceOver
+    /// says about it.
+    public var tooltip: String?
 
     public init(
         _ title: String,
@@ -190,6 +193,14 @@ public struct MenuAction: MenuElement {
         return copy
     }
 
+    /// Gives a disabled item the reason it can't be chosen, as its
+    /// tooltip.
+    public func tooltip(_ text: String?) -> MenuAction {
+        var copy = self
+        copy.item.tooltip = text
+        return copy
+    }
+
     /// Closes the popover the menu was opened from before the action runs.
     public func closesPopover(_ closes: Bool = true) -> MenuAction {
         var copy = self
@@ -221,6 +232,14 @@ public struct MenuToggle: MenuElement {
     public func disabled(_ isDisabled: Bool) -> MenuToggle {
         var copy = self
         copy.item.isEnabled = item.isEnabled && !isDisabled
+        return copy
+    }
+
+    /// Gives a disabled item the reason it can't be chosen, as its
+    /// tooltip.
+    public func tooltip(_ text: String?) -> MenuToggle {
+        var copy = self
+        copy.item.tooltip = text
         return copy
     }
 

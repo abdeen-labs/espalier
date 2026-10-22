@@ -75,6 +75,43 @@ struct CommandAvailability {
         }
     }
 
+    /// Why the state doesn't allow `action`, when there's something to say:
+    /// the operation in progress, or where HEAD is.
+    func reason(for action: ActionID) -> String? {
+        guard let repository = context.repository, repository.isUsable else {
+            return nil
+        }
+        switch action.kind {
+        case .stashAllChanges:
+            return Self.stashRefusal(repository)
+        case .switchBranch, .newBranch:
+            return repository.operations.checkoutRefusal
+        default:
+            return nil
+        }
+    }
+
+    /// Why Stash All Changes can't run: an operation waits, files are
+    /// conflicted, or HEAD isn't on a branch. Nil without changes, or when
+    /// it can.
+    static func stashRefusal(_ repository: RepositoryModel) -> String? {
+        let files = repository.changes.workingDirectory.files
+        guard !files.isEmpty else {
+            return nil
+        }
+        if let refusal = repository.operations.checkoutRefusal {
+            return refusal
+        }
+        if files.contains(where: { $0.status.kind == .conflicted }) {
+            return "Resolve the conflicted files first."
+        }
+        switch repository.gitState.tip {
+        case .detached: return "Changes can't be stashed on a detached HEAD."
+        case .unborn: return "Changes can't be stashed before the first commit."
+        default: return nil
+        }
+    }
+
     /// The title `action` has in the current state, if it differs from its
     /// kind's.
     func title(for action: ActionID) -> String? {

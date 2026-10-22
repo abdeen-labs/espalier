@@ -128,6 +128,8 @@ enum GitHubActions {
             return repository.record.gitHubRepository != nil
                 && repository.gitHub.currentPullRequest?.pullRequestNumber != number
                 && repository.operations.checkoutRefusal == nil
+        }, disabledReason: { [weak context] _ in
+            context?.repository?.operations.checkoutRefusal
         }) { [weak context] action in
             guard case .checkoutPullRequest(let number) = action, let context, let repository = context.repository else {
                 return

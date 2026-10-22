@@ -134,11 +134,14 @@ struct MenuLeafView: View {
         case .item(let action) where actions?.isHidden(action) == true:
             EmptyView()
         case .item(let action):
+            let isEnabled = actions?.canPerform(action) ?? false
+            // A disabled item says why as the menu bar's own tooltip.
             Button(actions?.title(for: action) ?? action.defaultTitle) {
                 target.perform(action)
             }
             .keyboardShortcut(action.kind.shortcut?.keyboardShortcut)
-            .disabled(!(actions?.canPerform(action) ?? false))
+            .disabled(!isEnabled)
+            .help(isEnabled ? "" : actions?.disabledReason(action) ?? "")
         case .toggle(let action):
             Toggle(actions?.title(for: action) ?? action.defaultTitle, isOn: Binding(
                 get: { actions?.isChecked(action) ?? false },

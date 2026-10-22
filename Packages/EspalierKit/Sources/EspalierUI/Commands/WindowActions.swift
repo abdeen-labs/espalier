@@ -13,7 +13,10 @@ import Observation
 /// action can run when a handler is registered, the handler says it's
 /// enabled, the repository's state allows it (`CommandAvailability`, from
 /// `RepositoryCapabilities`), and, for repository-scoped actions, no
-/// confirmation, decision, error, or prompt is showing.
+/// confirmation, decision, error, or prompt is showing. When it can't, the
+/// handler or the window's state may say why (`disabledReason(_:)`): menus
+/// and buttons show it as their tooltip, and asking for the action anyway
+/// shows it in a toast (`onRefused`).
 @MainActor @Observable
 public final class WindowActions {
     /// A feature's handler for one action kind.
@@ -28,6 +31,9 @@ public final class WindowActions {
         /// Whether the menu item is left out, with its shortcut (a feature
         /// turned off, such as AI).
         public var isHidden: (@MainActor (ActionID) -> Bool)?
+        /// Why the action can't run, read when `isEnabled` says it can't:
+        /// one short sentence, or nil when there's nothing to say.
+        public var disabledReason: (@MainActor (ActionID) -> String?)?
         /// Runs the action.
         public var perform: @MainActor (ActionID) async -> Void
 
@@ -36,12 +42,14 @@ public final class WindowActions {
             isChecked: (@MainActor (ActionID) -> Bool)? = nil,
             title: (@MainActor (ActionID) -> String?)? = nil,
             isHidden: (@MainActor (ActionID) -> Bool)? = nil,
+            disabledReason: (@MainActor (ActionID) -> String?)? = nil,
             perform: @escaping @MainActor (ActionID) async -> Void
         ) {
             self.isEnabled = isEnabled
             self.isChecked = isChecked
             self.title = title
             self.isHidden = isHidden
+            self.disabledReason = disabledReason
             self.perform = perform
         }
     }
@@ -55,6 +63,11 @@ public final class WindowActions {
     /// Window-level titles that depend on the state ("Force Push…",
     /// "Remove…").
     @ObservationIgnored var stateTitle: (@MainActor (ActionID) -> String?)?
+    /// Why the repository's state doesn't allow an action
+    /// (`CommandAvailability`), when there's something to say.
+    @ObservationIgnored var stateReason: (@MainActor (ActionID) -> String?)?
+    /// Shows why an action the user asked for can't run (a toast).
+    @ObservationIgnored var onRefused: (@MainActor (String) -> Void)?
     /// Whether a confirmation, decision, error, or prompt is showing.
     @ObservationIgnored var isModalPresented: (@MainActor () -> Bool)?
 
@@ -75,9 +88,17 @@ public final class WindowActions {
         isChecked: (@MainActor (ActionID) -> Bool)? = nil,
         title: (@MainActor (ActionID) -> String?)? = nil,
         isHidden: (@MainActor (ActionID) -> Bool)? = nil,
+        disabledReason: (@MainActor (ActionID) -> String?)? = nil,
         perform: @escaping @MainActor (ActionID) async -> Void
     ) {
-        register(kind, Handler(isEnabled: isEnabled, isChecked: isChecked, title: title, isHidden: isHidden, perform: perform))
+        register(kind, Handler(
+            isEnabled: isEnabled,
+            isChecked: isChecked,
+            title: title,
+            isHidden: isHidden,
+            disabledReason: disabledReason,
+            perform: perform
+        ))
     }
 
     // MARK: Validating
@@ -98,6 +119,26 @@ public final class WindowActions {
             return false
         }
         return handler.isEnabled(action)
+    }
+
+    /// Why `action` can't run now: its handler's reason, or the window
+    /// state's when that's what refuses it. Nil when it can run, when it's
+    /// hidden or a modal is up, or when nothing says why.
+    public func disabledReason(_ action: ActionID) -> String? {
+        let kind = action.kind
+        guard let handler = handlers[kind], handler.isHidden?(action) != true else {
+            return nil
+        }
+        if kind.isRepositoryScoped, isModalPresented?() == true {
+            return nil
+        }
+        if let availability, !availability(kind) {
+            return stateReason?(action)
+        }
+        guard !handler.isEnabled(action) else {
+            return nil
+        }
+        return handler.disabledReason?(action)
     }
 
     /// Whether `action`'s menu item shows a check mark.
@@ -123,10 +164,13 @@ public final class WindowActions {
 
     // MARK: Performing
 
-    /// Runs `action` if it can run. Returns at once; the handler runs in a
-    /// task.
+    /// Runs `action` if it can run, or says why it can't when something
+    /// does (`onRefused`). Returns at once; the handler runs in a task.
     public func perform(_ action: ActionID) {
         guard canPerform(action) else {
+            if let reason = disabledReason(action) {
+                onRefused?(reason)
+            }
             return
         }
         let kind = action.kind

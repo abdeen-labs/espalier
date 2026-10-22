@@ -4,7 +4,8 @@
 // and the outcome toasts with Undo (OperationOutcomes.swift). A squash over
 // a merge commit says "Can't squash. …" before asking for a message.
 //
-// The actions' arguments:
+// The actions' arguments (nil `shas`, the menu bar's, only where commits
+// show):
 // - `.cherryPick(shas:target:)`: `shas` nil means History's selection;
 //   `target` names the branch to copy to (a drop on its row), or nil for
 //   the target sheet.
@@ -32,7 +33,8 @@ import GitKit
 enum MultiCommitActions {
     static func register(into actions: WindowActions, context: WindowContext) {
         actions.register(.cherryPick, isEnabled: { [weak context] action in
-            guard case .cherryPick(let shas, let target) = action, let context, let repository = context.repository else {
+            guard case .cherryPick(let shas, let target) = action, let context, let repository = context.repository,
+                  shas != nil || HistoryActions.showsCommits(context) else {
                 return false
             }
             let commits = HistoryCommits.resolve(shas, in: repository)
@@ -43,6 +45,14 @@ enum MultiCommitActions {
                 return HistoryCommits.branch(named: target, in: repository) != nil
             }
             return true
+        }, disabledReason: { [weak context] action in
+            guard case .cherryPick(let shas, _) = action, let context, let repository = context.repository else {
+                return nil
+            }
+            guard shas != nil || HistoryActions.showsCommits(context) else {
+                return HistoryActions.selectInHistory
+            }
+            return repository.operations.checkoutRefusal
         }) { [weak context] action in
             guard case .cherryPick(let shas, let target) = action, let context, let repository = context.repository else {
                 return
@@ -60,10 +70,26 @@ enum MultiCommitActions {
 
         // Squash: enabled below a merge too, to say why it can't run.
         actions.register(.squash, isEnabled: { [weak context] action in
-            guard case .squash(let shas, let into) = action, let context, let repository = context.repository else {
+            guard case .squash(let shas, let into) = action, let context, let repository = context.repository,
+                  shas != nil || HistoryActions.showsCommits(context) else {
                 return false
             }
             return !CommitDropDecision.isBusy(repository) && SquashPlan.check(shas: shas, into: into, in: repository) != .unavailable
+        }, disabledReason: { [weak context] action in
+            guard case .squash(let shas, let into) = action, let context, let repository = context.repository else {
+                return nil
+            }
+            guard shas != nil || HistoryActions.showsCommits(context) else {
+                return HistoryActions.selectInHistory
+            }
+            var involved = Set(shas ?? repository.history.selection.shas)
+            if let into {
+                involved.insert(into)
+            }
+            guard involved.count >= 2 else {
+                return "Select two or more commits to squash."
+            }
+            return HistoryActions.rewriteRefusal(in: repository, verb: "squashed")
         }) { [weak context] action in
             guard case .squash(let shas, let into) = action, let context, let repository = context.repository else {
                 return

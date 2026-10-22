@@ -182,6 +182,7 @@ enum ChangesHeaderMenu {
                     context.actions.perform(item.action)
                 }
                 .disabled(!item.isEnabled)
+                .tooltip(item.isEnabled ? nil : context.actions.disabledReason(item.action))
             }
         }
     }

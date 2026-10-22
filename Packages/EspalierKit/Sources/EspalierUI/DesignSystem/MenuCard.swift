@@ -5,8 +5,8 @@
 // text, the title (the error color for a destructive item) with an
 // optional subtitle under it, and a chevron for a submenu. The highlighted
 // row, under the pointer or the keyboard, is the soft accent in its
-// rounded shape, its text staying primary; disabled rows fade and are
-// never highlighted. Section headers look like the app's section labels;
+// rounded shape, its text staying primary; disabled rows fade, are never
+// highlighted, and show why as their tooltip when they say. Section headers look like the app's section labels;
 // dividers are hairlines inset from the card's edges. A menu taller than
 // the screen scrolls, never past its ends. The card fades and grows very
 // slightly from its anchor as it opens, except under Reduce Motion and
@@ -276,6 +276,7 @@ private struct MenuRowView: View {
                 .fill(isHighlighted ? AnyShapeStyle(.accentSoft) : AnyShapeStyle(.clear))
         )
         .opacity(item.isEnabled ? 1 : Palette.disabledOpacity)
+        .tooltip(item.isEnabled ? nil : item.tooltip)
     }
 }
 

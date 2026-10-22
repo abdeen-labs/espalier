@@ -102,12 +102,6 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
         }
         return disabledReason ?? title
     }
-
-    /// Whether the button shows ⌘↩, the shortcut Commit Changes runs: only
-    /// a commit's.
-    public var showsShortcut: Bool {
-        kind == .commit
-    }
 }
 
 /// The commit button: the full-width prominent capsule, 34 high, with its
@@ -169,9 +163,10 @@ public struct CommitButton: View {
         .accessibilityLabel(content.title)
     }
 
-    /// ⌘↩, for a commit.
+    /// ⌘↩, which Commit Changes runs: it presses Commit, Commit Merge, or
+    /// Continue, whichever shows.
     private var shortcutSymbols: String? {
-        content.showsShortcut ? ActionKind.commitChanges.shortcut?.symbols : nil
+        ActionKind.commitChanges.shortcut?.symbols
     }
 
     private func shortcut(_ symbols: String) -> some View {

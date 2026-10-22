@@ -292,6 +292,7 @@ enum UIFixtures {
         ("busy", ToastContent(message: "Another operation is in progress", systemImage: "hourglass")),
         ("ignored-tracked", ToastContent(message: "config.json is still tracked, so its changes still show.", systemImage: "info.circle.fill")),
         ("removedWorktree", Toast.removedWorktree(RemovedWorktreeNotice(worktreeName: "espalier-login", shownName: "espalier")).content),
+        ("refused", Toast.refused("Finish or abort the merge first.").content),
     ]
 
     static let capsules: [(name: String, content: OperationCapsuleContent)] = [

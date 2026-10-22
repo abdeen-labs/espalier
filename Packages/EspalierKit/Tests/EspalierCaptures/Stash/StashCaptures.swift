@@ -43,6 +43,7 @@ struct StashCaptures {
             canRestore: true,
             canApply: true,
             canDiscard: true,
+            applyRefusal: nil,
             isBusy: false,
             filter: filter,
             selectedFileID: selected.flatMap { rows.indices.contains($0) ? rows[$0].id : nil }

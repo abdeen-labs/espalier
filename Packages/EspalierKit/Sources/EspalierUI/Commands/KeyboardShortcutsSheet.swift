@@ -1,5 +1,5 @@
-// Help ▸ Keyboard Shortcuts, a sheet listing the menus' shortcuts and the
-// lists' context menu key.
+// Help ▸ Keyboard Shortcuts, a sheet listing the menus' shortcuts (not
+// those of items the menus hide) and the lists' context menu key.
 
 import SwiftUI
 
@@ -8,20 +8,24 @@ nonisolated struct ShortcutListing: Sendable, Identifiable {
     let menu: String
     let title: String
     let symbols: String
+    /// The action whose menu item has the shortcut; nil for the system's.
+    var kind: ActionKind? = nil
 
     var id: String { "\(menu).\(title)" }
 
-    /// Every menu item with a shortcut, by menu, in menu order, plus a few
-    /// of the system's (Find, the sidebar, full screen, Settings) and the
+    /// Every menu item with a shortcut that `isHidden` doesn't leave out
+    /// (`WindowActions.isHidden`), by menu, in menu order, plus a few of
+    /// the system's (Find, the sidebar, full screen, Settings) and the
     /// lists' context menu key (`KeyboardContextMenu`).
-    static var all: [ShortcutListing] {
+    @MainActor
+    static func listings(isHidden: @MainActor (ActionID) -> Bool) -> [ShortcutListing] {
         var listings: [ShortcutListing] = []
         for menu in MenuCatalog.all {
-            for action in menu.actions {
+            for action in menu.actions where !isHidden(action) {
                 guard let shortcut = action.kind.shortcut else {
                     continue
                 }
-                listings.append(ShortcutListing(menu: menu.title, title: action.defaultTitle, symbols: shortcut.symbols))
+                listings.append(ShortcutListing(menu: menu.title, title: action.defaultTitle, symbols: shortcut.symbols, kind: action.kind))
             }
         }
         listings += [
@@ -40,8 +44,13 @@ nonisolated struct ShortcutListing: Sendable, Identifiable {
 public struct KeyboardShortcutsSheet: View {
     static let sheetID = "espalier.keyboardShortcuts"
     @Environment(\.dismissModal) private var dismissModal
+    private let listings: [ShortcutListing]
 
-    public init() {}
+    /// - Parameter isHidden: Whether the menus hide an action's item (and
+    ///   its shortcut).
+    public init(isHidden: @MainActor (ActionID) -> Bool = { _ in false }) {
+        listings = ShortcutListing.listings(isHidden: isHidden)
+    }
 
     public var body: some View {
         SheetScaffold("Keyboard Shortcuts") {
@@ -53,7 +62,7 @@ public struct KeyboardShortcutsSheet: View {
                         .listRowInsets(EdgeInsets(top: 0, leading: Metrics.ListRow.inset, bottom: 0, trailing: Metrics.ListRow.inset))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
-                    ForEach(ShortcutListing.all.filter { $0.menu == menu }) { listing in
+                    ForEach(listings.filter { $0.menu == menu }) { listing in
                         LabeledContent(listing.title) {
                             KeyCap(listing.symbols)
                         }
@@ -85,7 +94,7 @@ public struct KeyboardShortcutsSheet: View {
 
     private var menus: [String] {
         var seen: [String] = []
-        for listing in ShortcutListing.all where !seen.contains(listing.menu) {
+        for listing in listings where !seen.contains(listing.menu) {
             seen.append(listing.menu)
         }
         return seen

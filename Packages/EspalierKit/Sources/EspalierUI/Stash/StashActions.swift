@@ -40,6 +40,11 @@ enum StashActions {
                 return false
             }
             return canApply(sha, in: repository)
+        }, disabledReason: { [weak context] action in
+            guard case .restoreStash(let sha) = action, let repository = context?.repository else {
+                return nil
+            }
+            return applyRefusal(sha, in: repository)
         }) { [weak context] action in
             guard case .restoreStash(let sha) = action, let context, let repository = context.repository,
                   let stash = entry(sha, in: repository) else {
@@ -59,6 +64,11 @@ enum StashActions {
                 return false
             }
             return canApply(sha, in: repository)
+        }, disabledReason: { [weak context] action in
+            guard case .applyStash(let sha) = action, let repository = context?.repository else {
+                return nil
+            }
+            return applyRefusal(sha, in: repository)
         }) { [weak context] action in
             guard case .applyStash(let sha) = action, let context, let repository = context.repository,
                   let stash = entry(sha, in: repository) else {
@@ -104,6 +114,25 @@ enum StashActions {
         let hasConflicts = repository.operations.conflictState != nil
             || repository.changes.workingDirectory.files.contains { $0.status.kind == .conflicted }
         return !hasConflicts
+    }
+
+    /// Why the entry `sha` can't be restored or applied (`canApply`): an
+    /// operation runs, or conflicts are in the way. Nil when it can, or
+    /// when it isn't listed.
+    static func applyRefusal(_ sha: String, in repository: RepositoryModel) -> String? {
+        guard repository.isUsable, entry(sha, in: repository) != nil else {
+            return nil
+        }
+        if isBusy(repository) {
+            return "Wait for the current operation to finish."
+        }
+        if repository.operations.conflictState != nil {
+            return repository.operations.checkoutRefusal ?? "Resolve the conflicts first."
+        }
+        if repository.changes.workingDirectory.files.contains(where: { $0.status.kind == .conflicted }) {
+            return "Resolve the conflicted files first."
+        }
+        return nil
     }
 
     /// Whether the entry `sha` can be discarded: it's listed, and nothing
