@@ -25,14 +25,17 @@ struct ChangedFilesResult: Equatable {
 ///   doesn't resets.
 /// - Files are sorted with `caseInsensitiveCompare`, stably, because the
 ///   order is visible.
-/// - When no selected file remains, the first file is selected; with
+/// - When no selected file remains (they were discarded or committed), the
+///   file in their place that `isListed` is selected (`fileInPlace`), so
+///   the list stays where it was; the first file when none is. With
 ///   `keepsEmptySelection` (the user selected no file), none is.
 func updateChangedFiles(
     workingDirectory current: WorkingDirectoryStatus,
     selection: ChangesSelection,
     status: StatusResult,
     clearPartialState: Bool,
-    keepsEmptySelection: Bool = false
+    keepsEmptySelection: Bool = false,
+    isListed: (WorkingDirectoryFileChange) -> Bool = { _ in true }
 ) -> ChangedFilesResult {
     // Populate a map for all files in the current working directory state
     var filesByID: [ExactString: WorkingDirectoryFileChange] = [:]
@@ -104,10 +107,13 @@ func updateChangedFiles(
             }
         }
 
-        // Select the first file if we don't have anything selected and we
-        // have something to select, unless the user selected nothing.
-        if selectedFileIDs.isEmpty, !keepsEmptySelection, let first = mergedFiles.first {
-            selectedFileIDs = [first.id]
+        // Select the file in the departed selection's place, or else the
+        // first file, if we don't have anything selected and we have
+        // something to select, unless the user selected nothing.
+        if selectedFileIDs.isEmpty, !keepsEmptySelection,
+           let file = fileInPlace(of: previousIDs, in: current.files, now: { newFilesByPath[ExactString($0.path)] }, isListed: isListed)
+               ?? mergedFiles.first {
+            selectedFileIDs = [file.id]
         }
 
         let keepsDiff = selectedFileIDs.count == 1
@@ -121,6 +127,34 @@ func updateChangedFiles(
     case .stash:
         return ChangedFilesResult(workingDirectory: workingDirectory, selection: selection, keepsDiff: true)
     }
+}
+
+/// The file that takes the place of selected files that left the list:
+/// counting from the first of them in `files` (the list before), the next
+/// file whose path `now` still has and `isListed`, or else the nearest such
+/// file before it. Nil when none of them was in `files`, or no file around
+/// them remains listed.
+private func fileInPlace(
+    of selectedIDs: [String],
+    in files: [WorkingDirectoryFileChange],
+    now: (WorkingDirectoryFileChange) -> WorkingDirectoryFileChange?,
+    isListed: (WorkingDirectoryFileChange) -> Bool
+) -> WorkingDirectoryFileChange? {
+    let selected = selectedIDs.exactSet
+    guard let anchor = files.firstIndex(where: { selected.contains(ExactString($0.id)) }) else {
+        return nil
+    }
+    for index in (anchor + 1)..<files.count {
+        if let file = now(files[index]), isListed(file) {
+            return file
+        }
+    }
+    for index in (0..<anchor).reversed() {
+        if let file = now(files[index]), isListed(file) {
+            return file
+        }
+    }
+    return nil
 }
 
 /// The selection that shows the working directory: the given files, or

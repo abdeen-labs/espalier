@@ -228,12 +228,16 @@ public final class ChangesModel: RepositoryFeature {
     /// stays so.
     func reconcile(_ status: StatusResult, options: RefreshOptions) {
         let keepsEmptySelection = selection == .workingDirectory(fileIDs: []) && !visibleFiles.isEmpty
+        // A file taking a departed selection's place is one the filter lists.
+        let filter = filter
+        let query = filter.textQuery
         let result = updateChangedFiles(
             workingDirectory: workingDirectory,
             selection: selection,
             status: status,
             clearPartialState: options.contains(.clearPartialSelections),
-            keepsEmptySelection: keepsEmptySelection
+            keepsEmptySelection: keepsEmptySelection,
+            isListed: { file in filter.matchesOptions(file) && (query?.matches(file.path) ?? true) }
         )
         if result.workingDirectory != workingDirectory {
             workingDirectory = result.workingDirectory
