@@ -15,9 +15,11 @@ extension RepositoryModel {
     /// 2. Publishes the activity, suspends the watcher, holds refreshes for
     ///    local operations, and invalidates the refresh in flight.
     /// 3. Runs `body` in its own task, so cancelling the caller never reaches
-    ///    git, inside the environment's runtimes.
+    ///    git, inside the environment's runtimes. Only the user's Stop
+    ///    (`stopOperation(_:)`) cancels that task.
     /// 4. On failure: a hook the user aborted becomes
-    ///    `cancelled(.hookAborted)`; anything else is classified, with its
+    ///    `cancelled(.hookAborted)`, an operation the user stopped
+    ///    `cancelled(.userCancelled)`; anything else is classified, with its
     ///    side effects (marking the repository missing), and a background
     ///    failure is kept in `lastBackgroundFailure`. On success, a kept
     ///    failure of the same kind is cleared. Neither happens without
@@ -120,9 +122,11 @@ extension RepositoryModel {
         // 3. The context.
         let hookState = HookState()
         hookStates[operation.id] = hookState
-        let context = makeContext(for: operation, descriptor: descriptor, hookState: hookState)
+        let stop = OperationStop()
+        operationStops[operation.id] = stop
+        let context = makeContext(for: operation, descriptor: descriptor, hookState: hookState, stop: stop)
 
-        // 4. The body, in a task of its own.
+        // 4. The body, in a task of its own, which the user's Stop cancels.
         let environment = environment
         let task = Task { @MainActor () async -> Result<T, any Error> in
             do {
@@ -133,6 +137,7 @@ extension RepositoryModel {
                 return .failure(error)
             }
         }
+        stop.setCancel { task.cancel() }
         let result = await task.value
 
         let outcome: Result<T, OperationError>
@@ -143,7 +148,7 @@ extension RepositoryModel {
             }
             outcome = .success(value)
         case .failure(let error):
-            let operationError = await classify(error, descriptor: descriptor, hookState: hookState)
+            let operationError = await classify(error, descriptor: descriptor, hookState: hookState, stop: stop)
             applySideEffects(of: operationError)
             if descriptor.updatesBackgroundFailure, operationError.isBackgroundTask, !operationError.isCancellation {
                 lastBackgroundFailure = BackgroundFailure(error: operationError, date: environment.scheduler.now)
@@ -156,6 +161,7 @@ extension RepositoryModel {
 
         // 5. Always.
         hookStates[operation.id] = nil
+        operationStops[operation.id] = nil
         let showsProgressUntilRefreshed = descriptor.showsProgressUntilRefreshed
             && descriptor.lanes.contains(.network)
             && !descriptor.refreshAfter.isEmpty
@@ -196,10 +202,24 @@ extension RepositoryModel {
         }
     }
 
+    /// Stops the running operation `id` for the user: a hook it runs is
+    /// aborted (the operation fails as `cancelled(.hookAborted)`, as a hook
+    /// failure the user aborts does), otherwise its work stops
+    /// (`OperationStop`, `cancelled(.userCancelled)`). Returns whether
+    /// anything stopped.
+    @discardableResult
+    func stopOperation(_ id: UUID) -> Bool {
+        if hookStates[id]?.abortRunningHook() == true {
+            return true
+        }
+        return operationStops[id]?.stop() ?? false
+    }
+
     private func makeContext(
         for operation: ActiveOperation,
         descriptor: OperationDescriptor,
-        hookState: HookState
+        hookState: HookState,
+        stop: OperationStop
     ) -> OperationContext {
         let id = operation.id
         let hookRelay = ProgressRelay<HookActivity> { [weak self] activity in
@@ -248,14 +268,26 @@ extension RepositoryModel {
             hooks: hooks,
             progress: ProgressSink(relay: progressRelay),
             gitHubHTMLURL: record.gitHubRepository.map { getHTMLURL($0.endpoint) },
-            mainWorktreePath: record.mainWorktreePath
+            mainWorktreePath: record.mainWorktreePath,
+            stop: stop
         )
     }
 
-    private func classify(_ error: any Error, descriptor: OperationDescriptor, hookState: HookState) async -> OperationError {
+    private func classify(_ error: any Error, descriptor: OperationDescriptor, hookState: HookState, stop: OperationStop) async -> OperationError {
         if let hookName = hookState.abortedHook {
             return OperationError(
                 .cancelled(.hookAborted(hookName)),
+                operation: descriptor.kind,
+                repositoryID: id,
+                retry: descriptor.retry,
+                isBackgroundTask: descriptor.isBackgroundTask,
+                underlying: error,
+                gitContext: descriptor.gitContext
+            )
+        }
+        if stop.isStopped {
+            return OperationError(
+                .cancelled(.userCancelled),
                 operation: descriptor.kind,
                 repositoryID: id,
                 retry: descriptor.retry,

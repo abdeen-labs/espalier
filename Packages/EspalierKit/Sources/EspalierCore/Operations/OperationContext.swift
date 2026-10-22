@@ -23,6 +23,9 @@ public final class OperationContext: Sendable {
     public nonisolated let gitHubHTMLURL: String?
     /// The repository's main worktree, when it's a linked worktree.
     public nonisolated let mainWorktreePath: String?
+    /// How the user's Stop stops the operation: a body that must not be
+    /// cancelled at any point sets its own stopper while that part runs.
+    public nonisolated let stop: OperationStop
 
     nonisolated init(
         repository: Repository,
@@ -31,7 +34,8 @@ public final class OperationContext: Sendable {
         hooks: HookCallbacks,
         progress: ProgressSink,
         gitHubHTMLURL: String?,
-        mainWorktreePath: String?
+        mainWorktreePath: String?,
+        stop: OperationStop = OperationStop()
     ) {
         self.repository = repository
         self.kind = kind
@@ -40,6 +44,7 @@ public final class OperationContext: Sendable {
         self.progress = progress
         self.gitHubHTMLURL = gitHubHTMLURL
         self.mainWorktreePath = mainWorktreePath
+        self.stop = stop
     }
 }
 

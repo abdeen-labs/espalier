@@ -189,11 +189,14 @@ public func getRemoteURL(_ repository: Repository, _ name: String) async throws 
 /// - Parameter isBackgroundTask: Whether the fetch is being performed as a
 ///   background task as opposed to being user initiated
 public func updateRemoteHEAD(_ repository: Repository, _ remote: Remote, _ isBackgroundTask: Bool) async throws {
-    let options = GitExecutionOptions(
+    var options = GitExecutionOptions(
         env: await envForRemoteOperation(remote.url),
         successExitCodes: [0, 1, 128],
         isBackgroundTask: isBackgroundTask
     )
+    // It asks the remote: cancelling stops the transport too, as `fetch`
+    // does.
+    options.killsProcessGroup = true
 
     try await git(
         ["remote", "set-head", "-a", "--", remote.name],

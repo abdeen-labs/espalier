@@ -89,6 +89,9 @@ public final class RepositoryModel: Identifiable {
     @ObservationIgnored var operationsInFlight = 0
     @ObservationIgnored private var operationWaiters: [CheckedContinuation<Void, Never>] = []
     @ObservationIgnored var hookStates: [UUID: HookState] = [:]
+    /// How each running operation stops when the user asks
+    /// (`stopOperation(_:)`).
+    @ObservationIgnored var operationStops: [UUID: OperationStop] = [:]
     /// Writing git's commit-graph file, once, when the repository had none
     /// (RepositoryModel+CommitGraph.swift).
     @ObservationIgnored var commitGraphTask: Task<Void, Never>?

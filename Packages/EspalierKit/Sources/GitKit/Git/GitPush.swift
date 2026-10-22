@@ -127,5 +127,8 @@ public func push(
         args += tagsToPush.map { "refs/tags/\($0)" }
     }
 
+    // Cancelling the task (the sync button's Stop) stops git's whole
+    // process group: the transport, ssh, and pack-objects too.
+    opts.killsProcessGroup = true
     try await git(args, repository.path, "push", options: opts)
 }

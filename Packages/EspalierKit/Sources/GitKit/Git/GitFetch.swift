@@ -69,20 +69,21 @@ public func fetch(
 
     let args = getFetchArgs(remote.name, hasProgressCallback: progressCallback != nil)
 
+    // Cancelling the task (the sync button's Stop) stops git's whole
+    // process group: the transport, ssh, and the submodules' fetches too.
+    opts.killsProcessGroup = true
     try await git(args, repository.path, "fetch", options: opts)
 }
 
 /// Fetch a given refspec from the given remote.
 public func fetchRefspec(_ repository: Repository, _ remote: Remote, _ refspec: String) async throws {
-    try await git(
-        ["fetch", "--", remote.name, refspec],
-        repository.path,
-        "fetchRefspec",
-        options: GitExecutionOptions(
-            env: await envForRemoteOperation(remote.url),
-            successExitCodes: [0, 128]
-        )
+    var options = GitExecutionOptions(
+        env: await envForRemoteOperation(remote.url),
+        successExitCodes: [0, 128]
     )
+    // Cancelling stops the transport too, as `fetch` does.
+    options.killsProcessGroup = true
+    try await git(["fetch", "--", remote.name, refspec], repository.path, "fetchRefspec", options: options)
 }
 
 /// Fast-forwards the given branches to their upstreams, with `git fetch .`.

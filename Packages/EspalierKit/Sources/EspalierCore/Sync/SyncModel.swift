@@ -1,7 +1,8 @@
 // The intents live in FetchOperation.swift, PullOperation.swift,
 // PushOperation.swift, PublishOperations.swift, RemoteOperations.swift, and
-// ForkOperations.swift; the sync button's state in SyncAction.swift; the
-// background fetcher and branch pruner in Background/.
+// ForkOperations.swift; the sync button's state and Stop in
+// SyncAction.swift; the background fetcher and branch pruner in
+// Background/.
 
 import EspalierSupport
 import Foundation

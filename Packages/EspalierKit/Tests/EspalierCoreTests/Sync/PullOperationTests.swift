@@ -307,7 +307,9 @@ struct PullOperationTests {
         let error = await #expect(throws: OperationError.self) {
             try await fixture.model.sync.pull()
         }
-        #expect(error?.gitFailure?.gitError == .rebaseAlreadyInProgress)
+        // Refused before git runs, as a checkout is.
+        #expect(preconditionMessage(error) != nil)
+        #expect(error?.gitFailure == nil)
         #expect(error?.recoveries.isEmpty == true)
         #expect(fixture.gitFileExists("rebase-merge/orig-head"))
         await fixture.app.idle()

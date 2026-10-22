@@ -30,18 +30,24 @@ public struct PullOptions: Sendable {
 
     public var noVerify: Bool
 
+    /// Invoked with `git pull`'s process right after it starts, as
+    /// `stopPullFetch(_:)` takes it.
+    public var processCallback: (@Sendable (ChildProcess) -> Void)?
+
     public init(
         progressCallback: (@Sendable (PullProgress) -> Void)? = nil,
         onHookProgress: (@Sendable (HookProgress) -> Void)? = nil,
         onHookFailure: (@Sendable (String, TerminalOutput) async -> HookFailureResolution)? = nil,
         onTerminalOutputAvailable: TerminalOutputCallback? = nil,
-        noVerify: Bool = false
+        noVerify: Bool = false,
+        processCallback: (@Sendable (ChildProcess) -> Void)? = nil
     ) {
         self.progressCallback = progressCallback
         self.onHookProgress = onHookProgress
         self.onHookFailure = onHookFailure
         self.onTerminalOutputAvailable = onTerminalOutputAvailable
         self.noVerify = noVerify
+        self.processCallback = processCallback
     }
 }
 
@@ -114,6 +120,15 @@ public func pull(_ repository: Repository, _ remote: Remote, _ options: PullOpti
         progressCallback(PullProgress(value: 0, title: title, remote: remote.name))
     }
 
+    // After the progress's, which reads the process's output.
+    if let onProcess = options?.processCallback {
+        let readsProgress = opts.processCallback
+        opts.processCallback = { process in
+            readsProgress?(process)
+            onProcess(process)
+        }
+    }
+
     let args = gitRebaseArguments()
         + ["pull"]
         + (await getDefaultPullDivergentBranchArguments(repository))
@@ -123,6 +138,43 @@ public func pull(_ repository: Repository, _ remote: Remote, _ options: PullOpti
         + ["--", remote.name]
 
     try await git(args, repository.path, "pull", options: opts)
+}
+
+/// Stops a pull that's still fetching: ends the `git fetch` that `git pull`
+/// runs and every process the fetch started (the transport, ssh,
+/// upload-pack), so the pull fails before it merges or rebases. Once the
+/// fetch is over, the pull is merging, rebasing, or updating submodules,
+/// which stopping would leave half done in the working tree and the index,
+/// and nothing is stopped.
+///
+/// - Parameter pull: The `git pull` process (`PullOptions.processCallback`).
+/// - Returns: Whether a fetch was stopped.
+@discardableResult
+public func stopPullFetch(_ pull: ChildProcess) -> Bool {
+    // While `git pull` hasn't been reaped, its identifier is its own.
+    pull.whileRunning { pullID in
+        let fetches = ProcessTree.children(of: pullID).filter { pid in
+            ProcessTree.arguments(of: pid).map(isGitFetch) ?? false
+        }
+        guard !fetches.isEmpty else {
+            return false
+        }
+        // Each fetch's processes are found before it ends, while they're
+        // still its own.
+        let processes = fetches.flatMap { [$0] + ProcessTree.descendants(of: $0) }
+        for pid in processes {
+            _ = kill(pid, SIGTERM)
+        }
+        return true
+    }
+}
+
+/// Whether `arguments` run `git fetch`, as `git pull` runs it: `git`, then
+/// `fetch`.
+func isGitFetch(_ arguments: [String]) -> Bool {
+    arguments.count >= 2
+        && JSCompat.strictEquals(POSIXPath.basename(arguments[0]), "git")
+        && JSCompat.strictEquals(arguments[1], "fetch")
 }
 
 /// Defaults the pull default for divergent paths to try to fast forward and if

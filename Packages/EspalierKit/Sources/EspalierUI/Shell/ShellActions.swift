@@ -186,8 +186,15 @@ enum ShellActions {
             let outcome = await context.presenter.perform { _ throws(OperationError) in
                 try await repository.sync.pull()
             }
-            if outcome != nil {
+            switch outcome {
+            case .conflicted?:
+                // What the conflicts banner says ("Resolve conflicts to
+                // continue merging into main.").
+                context.announcer.announce(repository.operations.current?.conflictsMessage ?? "The pull stopped on conflicts.")
+            case .completed?, .alreadyUpToDate?:
                 context.announcer.announce("Pull complete")
+            case nil:
+                break
             }
         }
         actions.register(.fetch) { [weak context] _ in

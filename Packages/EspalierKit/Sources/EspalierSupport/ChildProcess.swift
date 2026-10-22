@@ -258,6 +258,14 @@ public final class ChildProcess: Sendable {
         core.signalGroup(signal)
     }
 
+    /// Calls `body` with the child's process identifier while the child
+    /// hasn't been reaped, so the identifier names no other process
+    /// meanwhile, as the signals above are sent. Returns `body`'s result, or
+    /// false without calling it once the child has been reaped.
+    public func whileRunning(_ body: (Int32) -> Bool) -> Bool {
+        core.whileRunning(body)
+    }
+
     /// Waits until the process has terminated and all of its output has been
     /// delivered. Starts reading if nobody has yet.
     public func waitUntilExit() async -> Termination {
@@ -629,6 +637,12 @@ private final class Core: Sendable {
             if state.termination == nil {
                 _ = kill(pid, signal)
             }
+        }
+    }
+
+    func whileRunning(_ body: (pid_t) -> Bool) -> Bool {
+        state.withLock { state in
+            state.termination == nil && body(pid)
         }
     }
 

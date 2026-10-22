@@ -35,19 +35,28 @@ extension SyncModel {
     /// Holds both lanes. The pull's hooks are intercepted; aborting a failed
     /// hook surfaces as `cancelled(.hookAborted)`. Conflicts aren't an error:
     /// the pull returns `.conflicted`, and the refresh's reducer builds the
-    /// merge or rebase waiting on them, naming the upstream.
+    /// merge or rebase waiting on them, naming the upstream. The user's Stop
+    /// stops the pull while it fetches (`cancelled(.userCancelled)`); once
+    /// it merges or rebases, the pull goes on.
+    ///
+    /// Refused while Espalier shows a merge, rebase, cherry-pick, or other
+    /// operation in progress (`operations.checkoutRefusal`), as a checkout
+    /// is: git would refuse too, with its own output.
     ///
     /// - Returns: `.completed`, or `.conflicted` with
     ///   `operations.conflictState` set.
-    /// - Throws: preconditions ("The repository has no remotes.", an unborn
-    ///   branch, a detached HEAD); `.localChangesOverwritten` with "Stash
-    ///   Changes and Continue" when changes are in the way; git's other
-    ///   errors, after fast-forwarding the other branches.
+    /// - Throws: `.precondition("Finish or abort the merge first.")` (naming
+    ///   the operation) while one is in progress; preconditions ("The
+    ///   repository has no remotes.", an unborn branch, a detached HEAD);
+    ///   `.localChangesOverwritten` with "Stash Changes and Continue" when
+    ///   changes are in the way; git's other errors, after fast-forwarding
+    ///   the other branches.
     @discardableResult
     public func pull() async throws(OperationError) -> MultiCommitOutcome {
         guard let repository else {
             throw notInList(.pull)
         }
+        try repository.operations.requireCheckoutAllowed(.pull)
         await refreshGitHubRepositoryIfNeeded()
 
         let state = repository.gitState
@@ -85,7 +94,9 @@ extension SyncModel {
 
 /// The pull (0-0.6 of the progress), the remote's HEAD after a successful
 /// pull, then fast-forwarding the other branches ("Refreshing Repository",
-/// 0.9-0.95), whether the pull succeeded or not.
+/// 0.9-0.95), whether the pull succeeded or not. A pull the user stopped
+/// (`OperationContext.stop`) ends after git: while `git pull` runs, Stop
+/// stops only its fetch (`stopPullFetch(_:)`), never its merge or rebase.
 @MainActor
 func pullPrimitive(_ remote: Remote, in ctx: OperationContext) async throws -> MultiCommitOutcome {
     // Let's say that a pull takes twice as long as a fetch, this is of
@@ -100,16 +111,24 @@ func pullPrimitive(_ remote: Remote, in ctx: OperationContext) async throws -> M
     fetchWeight *= scale
 
     let pullProgress = ctx.progress.scaled(from: 0, to: pullWeight)
+    let stop = ctx.stop
     var failure: (any Error)?
     do {
         try await GitKit.pull(ctx.repository, remote, PullOptions(
             progressCallback: { pullProgress.send(.pull($0)) },
             onHookProgress: ctx.hooks.onHookProgress,
             onHookFailure: ctx.hooks.onHookFailure,
-            onTerminalOutputAvailable: ctx.hooks.onTerminalOutputAvailable
+            onTerminalOutputAvailable: ctx.hooks.onTerminalOutputAvailable,
+            processCallback: { process in
+                stop.setStopper { stopPullFetch(process) }
+            }
         ))
     } catch {
         failure = error
+    }
+    stop.setStopper(nil)
+    if stop.isStopped {
+        throw failure ?? CancellationError()
     }
 
     // If the pull failed we shouldn't try to update the remote HEAD because

@@ -1,7 +1,8 @@
 // The sync button, a split button whose chevron lists the alternatives.
 // `SyncAction` decides the state, read in one function
 // (`SyncButtonState.make`); this file adds what the button shows besides:
-// the counts, the last fetch, and the background failure.
+// the counts, the last fetch, the background failure, and Stop once a push,
+// pull, or fetch has run a while.
 
 import EspalierCore
 import GitHubKit
@@ -62,12 +63,22 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
     /// Whether a force push asks first (the menu item shows a warning when
     /// it doesn't).
     public var asksBeforeForcePush: Bool
+    /// Whether Stop shows beside the button: a push, pull, or fetch has run
+    /// `SyncModel.stopDelay`.
+    public var offersStop: Bool
 
-    public init(kind: Kind, lastFetched: Date? = nil, backgroundFailure: BackgroundFailureSummary? = nil, asksBeforeForcePush: Bool = true) {
+    public init(
+        kind: Kind,
+        lastFetched: Date? = nil,
+        backgroundFailure: BackgroundFailureSummary? = nil,
+        asksBeforeForcePush: Bool = true,
+        offersStop: Bool = false
+    ) {
         self.kind = kind
         self.lastFetched = lastFetched
         self.backgroundFailure = backgroundFailure
         self.asksBeforeForcePush = asksBeforeForcePush
+        self.offersStop = offersStop
     }
 
     /// The state whose label the button shows: while a push, pull, or fetch
@@ -95,6 +106,20 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
     /// While a push, pull, or fetch runs: what it is ("Fetching origin").
     public var activityTitle: String? {
         if case .progress(let title, _, _, _) = kind { title } else { nil }
+    }
+
+    /// Stop's tooltip: what it stops ("Stop fetching origin").
+    public var stopTitle: String {
+        guard let activityTitle, let first = activityTitle.first else {
+            return "Stop"
+        }
+        return "Stop \(first.lowercased())\(activityTitle.dropFirst())"
+    }
+
+    /// Whether Stop shows: while a push, pull, or fetch runs, once it's
+    /// offered.
+    public var showsStop: Bool {
+        isInProgress && offersStop
     }
 
     /// The button's tooltip and the menu's header; while an operation runs,
@@ -256,12 +281,14 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
             kind: .progress(title: title, description: description, value: value, shown: settled.kind),
             lastFetched: settled.lastFetched,
             backgroundFailure: settled.backgroundFailure,
-            asksBeforeForcePush: settled.asksBeforeForcePush
+            asksBeforeForcePush: settled.asksBeforeForcePush,
+            offersStop: offersStop
         )
     }
 
     /// The state for a repository: its `SyncAction`, with the last fetch,
-    /// the background failure, and whether a force push asks first.
+    /// the background failure, and whether a force push asks first. Stop
+    /// isn't offered; `offeringStop(at:)` says when it is.
     @MainActor
     public static func make(_ repository: RepositoryModel, preferences: Preferences) -> SyncButtonState {
         SyncButtonState(
@@ -270,6 +297,14 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
             backgroundFailure: repository.lastBackgroundFailure.map(BackgroundFailureSummary.init),
             asksBeforeForcePush: preferences.confirmForcePush
         )
+    }
+
+    /// This state at `now`, with Stop offered once `offeredAt` has passed
+    /// (`SyncModel.stopOfferedAt`).
+    public func offeringStop(at now: Date, offeredAt: Date?) -> SyncButtonState {
+        var state = self
+        state.offersStop = offeredAt.map { now >= $0 } ?? false
+        return state
     }
 
     /// The button's state for a `SyncAction`. The action has one fetch state
@@ -384,6 +419,7 @@ public struct SyncButtonView: View {
     private let onPrimary: () -> Void
     private let onMenuItem: (SyncMenuItem) -> Void
     private let onShowFailure: () -> Void
+    private let onStop: () -> Void
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
     @Environment(\.numberFormat) private var numberFormat
@@ -396,12 +432,14 @@ public struct SyncButtonView: View {
         _ state: SyncButtonState,
         onPrimary: @escaping () -> Void = {},
         onMenuItem: @escaping (SyncMenuItem) -> Void = { _ in },
-        onShowFailure: @escaping () -> Void = {}
+        onShowFailure: @escaping () -> Void = {},
+        onStop: @escaping () -> Void = {}
     ) {
         self.state = state
         self.onPrimary = onPrimary
         self.onMenuItem = onMenuItem
         self.onShowFailure = onShowFailure
+        self.onStop = onStop
     }
 
     /// Which capsule the button is, without its words: a change of it (quiet
@@ -449,7 +487,8 @@ public struct SyncButtonView: View {
         let detail = state.detail(now: Date(), formatting: formatting, timeZone: timeZone)
         if case .progress(_, let description, _, _) = state.kind {
             // While it runs: the capsule it was, legible, taking no clicks;
-            // what runs and git's step are its tooltip.
+            // what runs and git's step are its tooltip. Once Stop shows
+            // beside it, VoiceOver can stop it from here too.
             control(look, detail: detail)
                 .allowsHitTesting(false)
                 .overlay {
@@ -460,6 +499,11 @@ public struct SyncButtonView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(state.accessibilityTitle(numberFormat))
                 .accessibilityValue(description)
+                .accessibilityActions {
+                    if state.showsStop {
+                        Button("Stop", action: onStop)
+                    }
+                }
         } else {
             control(look, detail: detail)
                 .disabled(!state.isEnabled)
@@ -637,13 +681,15 @@ public struct LastFetchedLabel: View {
 /// While a push, pull, or fetch runs, the button and the last fetch show
 /// what they showed before it started, when it's the action the button
 /// offered (or none of the button's), and the group doesn't narrow: the
-/// button keeps its trailing edge, and the search field its place.
+/// button keeps its trailing edge, and the search field its place. Once it
+/// has run a while, Stop takes the last fetch's place.
 public struct SyncButtonGroup: View {
     private let state: SyncButtonState
     private let scope: AnyHashable?
     private let onPrimary: () -> Void
     private let onMenuItem: (SyncMenuItem) -> Void
     private let onShowFailure: () -> Void
+    private let onStop: () -> Void
     /// The width the group last had with something to show.
     @State private var shownWidth: CGFloat?
     /// The last state that wasn't progress or loading.
@@ -663,13 +709,15 @@ public struct SyncButtonGroup: View {
         scope: AnyHashable? = nil,
         onPrimary: @escaping () -> Void = {},
         onMenuItem: @escaping (SyncMenuItem) -> Void = { _ in },
-        onShowFailure: @escaping () -> Void = {}
+        onShowFailure: @escaping () -> Void = {},
+        onStop: @escaping () -> Void = {}
     ) {
         self.state = state
         self.scope = scope
         self.onPrimary = onPrimary
         self.onMenuItem = onMenuItem
         self.onShowFailure = onShowFailure
+        self.onStop = onStop
     }
 
     public var body: some View {
@@ -678,12 +726,21 @@ public struct SyncButtonGroup: View {
         let isLoading = shown.isLoading
         let isInProgress = shown.isInProgress
         HStack(spacing: 10) {
-            LastFetchedLabel(lastFetched: Self.lastFetched(shown, settled: settledHere))
-                // Over a wider capsule crossfading out as the button narrows.
-                .zIndex(1)
-            SyncButtonView(shown, onPrimary: onPrimary, onMenuItem: onMenuItem, onShowFailure: onShowFailure)
+            Group {
+                if shown.showsStop {
+                    SyncStopButton(title: shown.stopTitle, action: onStop)
+                        .controlSize(.large)
+                        .transition(.opacity)
+                } else {
+                    LastFetchedLabel(lastFetched: Self.lastFetched(shown, settled: settledHere))
+                }
+            }
+            // Over a wider capsule crossfading out as the button narrows.
+            .zIndex(1)
+            SyncButtonView(shown, onPrimary: onPrimary, onMenuItem: onMenuItem, onShowFailure: onShowFailure, onStop: onStop)
                 .controlSize(.large)
         }
+        .motion(Motion.kindChange, value: shown.showsStop)
         .frame(width: isLoading ? shownWidth : nil)
         .frame(minWidth: isInProgress ? shownWidth : nil, alignment: .trailing)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
@@ -711,6 +768,26 @@ public struct SyncButtonGroup: View {
     }
 }
 
+/// Stop, beside the sync button once a push, pull, or fetch has run
+/// `SyncModel.stopDelay`: a quiet capsule with the stop symbol.
+struct SyncStopButton: View {
+    /// What it stops ("Stop fetching origin"), its tooltip.
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "stop.fill")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Color(nsColor: Palette.text2))
+        }
+        .buttonStyle(CapsuleButtonStyle(.quiet))
+        .tooltip(title)
+        .accessibilityLabel("Stop")
+        .accessibilityHint(title)
+    }
+}
+
 /// The toolbar's sync button for the selected repository.
 struct SyncButton: View {
     let repository: RepositoryModel
@@ -719,16 +796,12 @@ struct SyncButton: View {
 
     var body: some View {
         let state = SyncButtonState.make(repository, preferences: context.app.preferences)
-        SyncButtonGroup(state, scope: AnyHashable(ObjectIdentifier(repository)), onPrimary: {
-            primaryAction(state)
-        }, onMenuItem: { item in
-            switch item {
-            case .fetch: context.actions.perform(.fetch)
-            case .forcePush: context.actions.perform(.forcePush)
-            }
-        }, onShowFailure: {
-            isShowingFailure = true
-        })
+        let stopOfferedAt = repository.sync.stopOfferedAt
+        // Drawn again when Stop is offered: a stalled push, pull, or fetch
+        // changes nothing else then.
+        TimelineView(.explicit(stopOfferedAt.map { [$0] } ?? [])) { timeline in
+            group(state.offeringStop(at: timeline.date, offeredAt: stopOfferedAt))
+        }
         // Another repository's button shows at once, as navigation between
         // repositories does.
         .motionScope(AnyHashable(ObjectIdentifier(repository)))
@@ -744,6 +817,23 @@ struct SyncButton: View {
                 }
             }
         }
+    }
+
+    private func group(_ state: SyncButtonState) -> some View {
+        SyncButtonGroup(state, scope: AnyHashable(ObjectIdentifier(repository)), onPrimary: {
+            primaryAction(state)
+        }, onMenuItem: { item in
+            switch item {
+            case .fetch: context.actions.perform(.fetch)
+            case .forcePush: context.actions.perform(.forcePush)
+            }
+        }, onShowFailure: {
+            isShowingFailure = true
+        }, onStop: {
+            if repository.sync.stop() {
+                context.announcer.announce("Stopped")
+            }
+        })
     }
 
     private func primaryAction(_ state: SyncButtonState) {

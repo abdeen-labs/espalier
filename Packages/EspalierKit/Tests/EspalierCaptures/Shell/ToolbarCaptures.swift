@@ -1,9 +1,9 @@
 // The toolbar's controls: the sync button in each of its states (a push's
 // progress on its blue capsule, a fetch's before git reports a value, the
-// counts, a diverged pull, a background failure, ...), the toolbar while
-// the selected repository loads (nothing where the last fetch and the
-// button were, in the width they had), and the location control in each of
-// its states.
+// counts, a diverged pull, a background failure, ...), Stop beside it once
+// a push or fetch has run a while, the toolbar while the selected
+// repository loads (nothing where the last fetch and the button were, in
+// the width they had), and the location control in each of its states.
 
 import AppKit
 import EspalierCore
@@ -30,6 +30,13 @@ struct ToolbarCaptures {
     func syncButton(name: String) throws {
         let state = try Self.syncState(name)
         capture(SyncButtonView(state).padding(Metrics.insetMedium), named: name, area: "SyncButton")
+    }
+
+    @Test("the sync group once Stop shows, in the last fetch's place", arguments: ["1-progress", "1-progress-starting"])
+    func syncGroupWithStop(name: String) throws {
+        var state = try Self.syncState(name)
+        state.offersStop = true
+        capture(SyncButtonGroup(state).padding(Metrics.insetMedium), named: "\(name)-stop", area: "SyncButton")
     }
 
     /// The state the loading toolbar's group shows.
