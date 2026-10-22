@@ -2,7 +2,9 @@
 // brought into view (animated when it's near, at once and pulsed when it's
 // far); one that isn't loaded yet loads pages until it is, with a spinner at
 // the stub and Esc to stop. Jumps are recorded for Go ▸ Back and Forward,
-// and ⌥⌘↓, ⌥⌘⇧↓, and ⌥⌘↑ follow parents and children across stubs.
+// one list per repository, and ⌥⌘↓, ⌥⌘⇧↓, and ⌥⌘↑ follow parents and
+// children across stubs. In the simple list, going to a commit selects it,
+// and the list scrolls to it.
 
 import AppKit
 import EspalierCore
@@ -51,11 +53,12 @@ struct HistoryNavigationStack: Equatable {
     }
 }
 
-/// Follows stubs, parents, and children in one window's graph, and keeps
-/// the places jumped between.
+/// Follows stubs, parents, and children in one window's history, and keeps
+/// the places jumped between in each repository.
 @MainActor @Observable
 final class StubNavigator {
-    private(set) var stack = HistoryNavigationStack()
+    /// The places jumped between, by repository.
+    private var stacks: [RepositoryID: HistoryNavigationStack] = [:]
     /// The commit being loaded toward, while a stub's other end loads.
     private(set) var pendingSHA: String?
 
@@ -64,12 +67,12 @@ final class StubNavigator {
 
     init() {}
 
-    var canGoBack: Bool {
-        !stack.back.isEmpty
+    func canGoBack(in history: HistoryModel) -> Bool {
+        !stack(of: history).back.isEmpty
     }
 
-    var canGoForward: Bool {
-        !stack.forward.isEmpty
+    func canGoForward(in history: HistoryModel) -> Bool {
+        !stack(of: history).forward.isEmpty
     }
 
     // MARK: Following
@@ -101,7 +104,8 @@ final class StubNavigator {
     }
 
     /// Goes to the selected row's parent (`index` 0 for the first) or child,
-    /// across stubs, loading the parent when it isn't loaded.
+    /// across stubs, loading the parent when it isn't loaded. In the simple
+    /// list, a merge's other parents show inside the merge.
     func goToParent(index: Int, in history: HistoryModel) {
         guard let row = selectedRow(in: history) else {
             return
@@ -111,7 +115,8 @@ final class StubNavigator {
             go(toRow: parentRow, from: origin, in: history)
             return
         }
-        guard let commit = history.commit(atRow: row), commit.parentSHAs.indices.contains(index), !history.isComplete else {
+        guard let commit = history.commit(atRow: row), commit.parentSHAs.indices.contains(index),
+              !history.isComplete || Self.showsSimpleList(history) else {
             NSSound.beep()
             return
         }
@@ -158,14 +163,14 @@ final class StubNavigator {
     // MARK: Back and Forward
 
     func goBack(in history: HistoryModel) {
-        guard let target = stack.goBack(from: currentSHA(in: history)) else {
+        guard let id = history.repositoryID, let target = stacks[id]?.goBack(from: currentSHA(in: history)) else {
             return
         }
         show(target, in: history)
     }
 
     func goForward(in history: HistoryModel) {
-        guard let target = stack.goForward(from: currentSHA(in: history)) else {
+        guard let id = history.repositoryID, let target = stacks[id]?.goForward(from: currentSHA(in: history)) else {
             return
         }
         show(target, in: history)
@@ -182,11 +187,15 @@ final class StubNavigator {
         if pendingSHA == sha {
             pendingSHA = nil
         }
-        if case .found(let row) = result {
-            if let origin {
-                stack.record(from: origin)
-            }
-            controller?.reveal(row: row, pulse: true)
+        switch result {
+        case .found(let row):
+            record(from: origin, in: history)
+            reveal(row: row, pulse: true, in: history)
+        case .foundInMerge:
+            // Selected inside its merge, which the simple list expanded.
+            record(from: origin, in: history)
+        case .notFound, .notInHistory, .cancelled:
+            break
         }
         return result
     }
@@ -204,15 +213,13 @@ final class StubNavigator {
     // MARK: Moving
 
     private func go(toRow row: Int, from origin: String?, in history: HistoryModel) {
-        if let origin {
-            stack.record(from: origin)
-        }
-        controller?.reveal(row: row, pulse: true)
+        record(from: origin, in: history)
+        reveal(row: row, pulse: true, in: history)
     }
 
     private func show(_ sha: String, in history: HistoryModel) {
         if let row = history.row(of: sha) {
-            controller?.reveal(row: row, pulse: true)
+            reveal(row: row, pulse: true, in: history)
             return
         }
         loadTask?.cancel()
@@ -223,7 +230,7 @@ final class StubNavigator {
             guard let self, !Task.isCancelled, self.pendingSHA == sha else { return }
             self.pendingSHA = nil
             if case .found(let row) = result {
-                self.controller?.reveal(row: row, pulse: true)
+                self.reveal(row: row, pulse: true, in: history)
             }
         }
     }
@@ -240,13 +247,53 @@ final class StubNavigator {
             guard let self, !Task.isCancelled, self.pendingSHA == sha else { return }
             self.pendingSHA = nil
             self.controller?.setLoadingStub(row: nil)
-            if case .found(let row) = result {
-                if let origin {
-                    self.stack.record(from: origin)
-                }
-                self.controller?.reveal(row: row, pulse: true)
+            switch result {
+            case .found(let row):
+                self.record(from: origin, in: history)
+                self.reveal(row: row, pulse: true, in: history)
+            case .foundInMerge:
+                // Selected inside its merge, which the simple list expanded.
+                self.record(from: origin, in: history)
+            case .notFound, .notInHistory, .cancelled:
+                break
             }
         }
+    }
+
+    /// Selects `row`'s commit and brings it into view: the graph's table
+    /// reveals it, pulsed when `pulse`; the simple list scrolls to a new
+    /// selection itself.
+    private func reveal(row: Int, pulse: Bool, in history: HistoryModel) {
+        guard Self.showsSimpleList(history) else {
+            if let controller, controller.source === history {
+                controller.reveal(row: row, pulse: pulse)
+            }
+            return
+        }
+        if let sha = history.commit(atRow: row)?.sha {
+            history.select(shas: [sha], contiguous: true)
+        } else if row == 0, history.graph.hasUncommittedWorkRow {
+            history.selectWorkingCopy()
+        }
+    }
+
+    /// Whether `history` shows the simple list (its history in the simple
+    /// style), not the graph's table.
+    private static func showsSimpleList(_ history: HistoryModel) -> Bool {
+        history.style == .simple && history.mode == .history
+    }
+
+    /// The places jumped between in `history`'s repository.
+    private func stack(of history: HistoryModel) -> HistoryNavigationStack {
+        history.repositoryID.flatMap { stacks[$0] } ?? HistoryNavigationStack()
+    }
+
+    /// Records a jump from `origin` in `history`'s repository.
+    private func record(from origin: String?, in history: HistoryModel) {
+        guard let origin, let id = history.repositoryID else {
+            return
+        }
+        stacks[id, default: HistoryNavigationStack()].record(from: origin)
     }
 
     private func selectedRow(in history: HistoryModel) -> Int? {

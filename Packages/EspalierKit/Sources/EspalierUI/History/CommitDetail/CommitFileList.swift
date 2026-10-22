@@ -89,7 +89,9 @@ struct CommitFiles: View {
         }
     }
 
-    /// Selecting a file shows its diff; opening it opens it in the editor.
+    /// Selecting a file shows its diff; opening it opens it in the editor
+    /// when it's on disk, and beeps when it isn't (a file the commit
+    /// deleted).
     private func actions(_ changeset: ChangesetData) -> HistoryFilesActions {
         let history = repository.history
         func change(_ id: String) -> CommittedFileChange? {
@@ -100,9 +102,15 @@ struct CommitFiles: View {
                 history.selectFile(id.flatMap(change))
             },
             open: { id in
-                if let file = change(id) {
-                    context.actions.perform(.openInEditor(path: POSIXPath.join(repository.record.path, file.path)))
+                guard let file = change(id) else {
+                    return
                 }
+                let path = POSIXPath.join(repository.record.path, file.path)
+                guard FileManager.default.fileExists(atPath: path) else {
+                    NSSound.beep()
+                    return
+                }
+                context.actions.perform(.openInEditor(path: path))
             },
             menu: { id in
                 guard let file = change(id) else {

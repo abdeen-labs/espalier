@@ -62,6 +62,8 @@ struct SimpleListActions {
     var copy: () -> Void = {}
     /// ⌘G and ⇧⌘G; returns whether there was a search to move in.
     var moveSearchMatch: (_ forward: Bool) -> Bool = { _ in false }
+    /// ⌘F: focuses the toolbar's search.
+    var showFind: () -> Void = {}
     /// VoiceOver's actions for a commit; `row` is its history row when
     /// it's on the branch's line.
     var accessibilityActions: (_ sha: String, _ row: Int?) -> [NSAccessibilityCustomAction] = { _, _ in [] }

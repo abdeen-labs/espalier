@@ -87,6 +87,8 @@ public final class WindowState {
     public private(set) var commitMessageFocusRequest = 0
 
     @ObservationIgnored private var placesByRepository: [RepositoryID: SidebarPlace] = [:]
+    /// The repository the place was last selected in.
+    @ObservationIgnored private var placeRepository: RepositoryID?
     @ObservationIgnored private var featureStates: [ObjectIdentifier: AnyObject] = [:]
     /// The state notices already shown.
     @ObservationIgnored var shownNotices: Set<String> = []
@@ -98,11 +100,15 @@ public final class WindowState {
     public init() {}
 
     /// Selects `place` and remembers it as `repository`'s last place.
-    /// Changing places clears the search.
+    /// Changing places or repositories clears the search.
     public func select(_ place: SidebarPlace?, in repository: RepositoryID?) {
         if let linked = linkedPullRequest,
            place != .pullRequest(number: linked.pullRequest.pullRequestNumber) || repository != linked.repositoryID {
             linkedPullRequest = nil
+        }
+        if repository != placeRepository {
+            searchText = ""
+            placeRepository = repository
         }
         if place != self.place {
             searchText = ""

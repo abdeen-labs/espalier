@@ -243,10 +243,10 @@ enum HistoryActions {
 
     private static func registerNavigation(into actions: WindowActions, context: WindowContext) {
         actions.register(.goBack, isEnabled: { [weak context] _ in
-            guard let context, showsCommits(context) else {
+            guard let context, showsCommits(context), let history = context.repository?.history else {
                 return false
             }
-            return context.state.history.navigator.canGoBack
+            return context.state.history.navigator.canGoBack(in: history)
         }) { [weak context] _ in
             guard let context, let history = context.repository?.history else {
                 return
@@ -255,10 +255,10 @@ enum HistoryActions {
         }
 
         actions.register(.goForward, isEnabled: { [weak context] _ in
-            guard let context, showsCommits(context) else {
+            guard let context, showsCommits(context), let history = context.repository?.history else {
                 return false
             }
-            return context.state.history.navigator.canGoForward
+            return context.state.history.navigator.canGoForward(in: history)
         }) { [weak context] _ in
             guard let context, let history = context.repository?.history else {
                 return

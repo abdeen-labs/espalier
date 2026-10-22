@@ -130,6 +130,7 @@ extension SimpleListActions {
         actions.cancel = graph.cancel
         actions.copy = graph.copy
         actions.moveSearchMatch = graph.moveSearchMatch
+        actions.showFind = graph.showFind
         actions.accessibilityActions = { [weak context] sha, row in
             guard let context else {
                 return []

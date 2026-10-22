@@ -334,6 +334,11 @@ public final class HistoryModel: RepositoryFeature {
 
     // MARK: Rows and commits
 
+    /// The ID of the repository whose history this is.
+    public var repositoryID: RepositoryID? {
+        repository?.id
+    }
+
     /// The commit in `row` of the graph; nil for the uncommitted-work row.
     public func commit(atRow row: Int) -> Commit? {
         activeList?.commit(atRow: row)

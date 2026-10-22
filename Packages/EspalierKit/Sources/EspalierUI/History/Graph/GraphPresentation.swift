@@ -235,6 +235,8 @@ struct GraphTableActions {
     /// ⌘G and ⇧⌘G: the next or previous search match; returns whether
     /// there was a search to move in.
     var moveSearchMatch: (_ forward: Bool) -> Bool = { _ in false }
+    /// ⌘F: focuses the toolbar's search.
+    var showFind: () -> Void = {}
     /// VoiceOver's actions for a row.
     var accessibilityActions: (_ row: Int) -> [NSAccessibilityCustomAction] = { _ in [] }
 }

@@ -166,7 +166,8 @@ final class GraphNSTableView: NSTableView, ContextMenuContentProviding {
         controller?.actions.copy()
     }
 
-    /// Find Next (⌘G) and Find Previous (⇧⌘G) move between search matches.
+    /// Find Next (⌘G) and Find Previous (⇧⌘G) move between search matches;
+    /// Find (⌘F) focuses the toolbar's search.
     override func performTextFinderAction(_ sender: Any?) {
         guard let tag = (sender as? NSValidatedUserInterfaceItem)?.tag,
               let action = NSTextFinder.Action(rawValue: tag) else {
@@ -177,6 +178,8 @@ final class GraphNSTableView: NSTableView, ContextMenuContentProviding {
             _ = controller?.actions.moveSearchMatch(true)
         case .previousMatch:
             _ = controller?.actions.moveSearchMatch(false)
+        case .showFindInterface:
+            controller?.actions.showFind()
         default:
             NSSound.beep()
         }
@@ -194,7 +197,7 @@ final class GraphNSTableView: NSTableView, ContextMenuContentProviding {
             return !selectedRowIndexes.isEmpty
         case #selector(performTextFinderAction(_:)), #selector(performFindPanelAction(_:)):
             let action = NSTextFinder.Action(rawValue: item.tag)
-            return action == .nextMatch || action == .previousMatch
+            return action == .nextMatch || action == .previousMatch || action == .showFindInterface
         default:
             return super.validateUserInterfaceItem(item)
         }

@@ -95,6 +95,9 @@ enum HistoryTableActions {
             }
             return true
         }
+        actions.showFind = { [weak context] in
+            context?.actions.perform(.search)
+        }
         actions.accessibilityActions = { [weak context] row in
             guard let context else {
                 return []
