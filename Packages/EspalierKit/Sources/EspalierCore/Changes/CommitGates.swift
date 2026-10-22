@@ -184,7 +184,7 @@ extension CommitModel {
         guard let repository, !repository.record.isTutorialRepository else {
             return nil
         }
-        let files = repository.changes.workingDirectory.files.filter { $0.selection.getSelectionType() != .none }
+        let files = repository.changes.workingDirectory.files.filter(\.isIncludedInCommit)
         return files.count == 1 ? placeholderSummary(for: files[0]) : nil
     }
 }

@@ -227,7 +227,7 @@ public struct StashScreen: View {
                         apply: { context.actions.perform(.applyStash(sha: sha)) },
                         discard: { context.actions.perform(.discardStash(sha: sha)) },
                         select: selectFile,
-                        open: { path in context.actions.perform(.openInEditor(path: POSIXPath.join(repository.record.path, path))) }
+                        open: openFile
                     )
                 } trailing: {
                     if isShowingThisStash {
@@ -261,6 +261,17 @@ public struct StashScreen: View {
         .onDisappear {
             repository.stash.hide()
         }
+    }
+
+    /// Opens a stashed file's working copy in the editor. A file stashed
+    /// as new or deleted may have none: then nothing opens, with a beep.
+    private func openFile(_ path: String) {
+        let target = POSIXPath.join(repository.record.path, path)
+        guard FileManager.default.fileExists(atPath: target) else {
+            NSSound.beep()
+            return
+        }
+        context.actions.perform(.openInEditor(path: target))
     }
 
     /// The entry, while it's listed.

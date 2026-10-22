@@ -1,6 +1,9 @@
 import EspalierSupport
 import Foundation
 import GitKit
+import os
+
+private let logger = Log.logger(category: "gitignore")
 
 /// What an ignore item adds to the root .gitignore.
 public enum GitIgnoreAction: Sendable, Hashable {
@@ -149,31 +152,55 @@ extension RepositoryModel {
     /// when needed (from the changes list's context menu). Returns once the
     /// changes list shows the result.
     ///
+    /// - Parameter files: The changed files the menu applied to.
+    /// - Returns: The paths of the tracked ones among `files` that an ignore
+    ///   rule now matches: git keeps tracking them, so their changes still
+    ///   show. None when git can't tell.
     /// - Throws: As `saveGitIgnore(_:)`.
-    public func ignore(_ action: GitIgnoreAction) async throws(OperationError) {
+    @discardableResult
+    public func ignore(_ action: GitIgnoreAction, of files: [WorkingDirectoryFileChange] = []) async throws(OperationError) -> [String] {
+        let tracked = files.filter { $0.status.kind != .untracked }.map(\.path)
+        let append: @Sendable (Repository) async throws -> Void
         switch action {
         case .files(let paths):
-            guard !paths.isEmpty else { return }
-            try await performGitIgnoreChange { repository in
-                try await appendIgnoreFile(repository, paths)
-            }
+            guard !paths.isEmpty else { return [] }
+            append = { repository in try await appendIgnoreFile(repository, paths) }
         case .patterns(let patterns):
-            guard !patterns.isEmpty else { return }
-            try await performGitIgnoreChange { repository in
-                try await appendIgnoreRule(repository, patterns)
-            }
+            guard !patterns.isEmpty else { return [] }
+            append = { repository in try await appendIgnoreRule(repository, patterns) }
+        }
+        return try await performGitIgnoreChange { repository -> [String] in
+            try await append(repository)
+            return await ignoredTrackedPaths(tracked, in: repository)
         }
     }
 
     /// Runs a change of the root .gitignore as an operation in the local
     /// lane, then waits for the status it changes.
-    private func performGitIgnoreChange(
-        _ change: @escaping @Sendable (Repository) async throws -> Void
-    ) async throws(OperationError) {
+    private func performGitIgnoreChange<T: Sendable>(
+        _ change: @escaping @Sendable (Repository) async throws -> T
+    ) async throws(OperationError) -> T {
         let descriptor = OperationDescriptor(kind: .saveGitIgnore, refreshAfter: .status)
-        try await perform(descriptor) { context in
+        let result = try await perform(descriptor) { context in
             try await change(context.repository)
         }
         await awaitOperationRefresh(covering: .status)
+        return result
+    }
+}
+
+/// The paths among `tracked` that an ignore rule matches; none when git
+/// can't tell.
+@concurrent
+private func ignoredTrackedPaths(_ tracked: [String], in repository: Repository) async -> [String] {
+    guard !tracked.isEmpty else {
+        return []
+    }
+    do {
+        let ignored = try await getIgnoredPaths(repository, tracked, includingTracked: true)
+        return tracked.filter { ignored.contains(ExactString($0)) }
+    } catch {
+        logger.error("Could not check which tracked files are ignored: \(String(describing: error), privacy: .private)")
+        return []
     }
 }

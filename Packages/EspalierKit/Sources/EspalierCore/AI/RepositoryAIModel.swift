@@ -84,7 +84,7 @@ public final class RepositoryAIModel: RepositoryFeature {
             return false
         }
         return repository.commit.amending != nil
-            || repository.changes.workingDirectory.files.contains { $0.selection.getSelectionType() != .none }
+            || repository.changes.workingDirectory.files.contains(where: \.isIncludedInCommit)
     }
 
     /// Generates a commit message for the included changes (every file
@@ -128,7 +128,7 @@ public final class RepositoryAIModel: RepositoryFeature {
             throw fail(.busy(.commit))
         }
 
-        let files = repository.changes.workingDirectory.files.filter { $0.selection.getSelectionType() != .none }
+        let files = repository.changes.workingDirectory.files.filter(\.isIncludedInCommit)
         let amending = repository.commit.amending
         if files.isEmpty, amending == nil {
             throw fail(.precondition("Include at least one file to generate a commit message."))

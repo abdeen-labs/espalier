@@ -212,7 +212,7 @@ extension ChangesModel {
 
         var hidden: [WorkingDirectoryFileChange] = []
         if filter.hasActiveFilters, visible.count != files.count {
-            let included = files.filter { $0.selection.getSelectionType() != .none }
+            let included = files.filter(\.isIncludedInCommit)
             let visibleIDs = visible.map(\.id).exactSet
             if isCommittingFileHiddenByFilter(included.map(\.id), visibleFileIDs: visibleIDs, fileCount: files.count, filter) {
                 hidden = included.filter { !visibleIDs.contains(ExactString($0.id)) }
@@ -239,11 +239,12 @@ extension ChangesModel {
 
     /// The header checkbox's value for the files the list shows: during a
     /// rebase's conflicts, tracked files count as included and untracked ones
-    /// (which the rebase skips) as excluded.
+    /// (which the rebase skips) as excluded. Submodules that can't be
+    /// committed don't count.
     public var visibleIncludeAll: Bool? {
         let files = visibleFiles
         let rebaseConflicts = isInRebaseConflicts
-        if files.count == workingDirectory.files.count, !rebaseConflicts {
+        if files.count == workingDirectory.files.count, !rebaseConflicts, !files.contains(where: \.isUncommittableSubmodule) {
             return workingDirectory.includeAll
         }
 
@@ -263,8 +264,12 @@ extension ChangesModel {
             return files.allSatisfy { $0.status.kind != .untracked } ? true : nil
         }
 
-        // `WorkingDirectoryStatus.fromFiles(files).includeAll`.
-        let types = files.map { $0.selection.getSelectionType() }
+        // `WorkingDirectoryStatus.fromFiles(files).includeAll`, without the
+        // submodules that can't be committed.
+        let types = files.filter { !$0.isUncommittableSubmodule }.map { $0.selection.getSelectionType() }
+        if types.isEmpty {
+            return false
+        }
         if types.allSatisfy({ $0 == .all }) {
             return true
         }
@@ -461,5 +466,11 @@ extension WorkingDirectoryFileChange {
     /// whatever its selection.
     public var isUncommittableSubmodule: Bool {
         status.submoduleStatus.map { status.kind == .modified && !$0.commitChanged } ?? false
+    }
+
+    /// Whether the next commit includes this file: its selection isn't none
+    /// and it isn't a submodule the repository can't commit.
+    public var isIncludedInCommit: Bool {
+        selection.getSelectionType() != .none && !isUncommittableSubmodule
     }
 }

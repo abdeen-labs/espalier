@@ -157,7 +157,8 @@ extension ComposerContent {
         let draft = commit.draft
         let state = repository.gitState
         let files = repository.changes.workingDirectory.files
-        let included = files.filter { $0.selection.getSelectionType() != .none }
+        let included = files.filter(\.isIncludedInCommit)
+        let hasCommittableFiles = files.contains { !$0.isUncommittableSubmodule }
         let isCommitting = repository.localOperation?.kind == .commit
         let isGenerating = repository.ai.commitMessageGeneration == .generating
         let isAmending = commit.amending != nil
@@ -191,11 +192,11 @@ extension ComposerContent {
         let isEnabled = (canCommit || canAmend) && !isCommitting && !isSummaryBlank && !isGenerating
         let disabledReason: String? = if isSummaryBlank {
             "Enter a summary to commit"
-        } else if included.isEmpty, !files.isEmpty, !commit.options.allowEmpty, !isAmending {
+        } else if included.isEmpty, hasCommittableFiles, !commit.options.allowEmpty, !isAmending {
             "Select one or more files to commit"
         } else if isCommitting {
             "Committing changes…"
-        } else if files.isEmpty, !commit.options.allowEmpty, !isAmending {
+        } else if !hasCommittableFiles, !commit.options.allowEmpty, !isAmending {
             "There are no changes to commit."
         } else {
             nil

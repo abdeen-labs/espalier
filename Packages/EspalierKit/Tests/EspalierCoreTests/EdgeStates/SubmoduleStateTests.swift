@@ -109,11 +109,19 @@ struct SubmoduleStateTests {
         }
         #expect(included?.reason == error?.reason)
         #expect(try await fixture.commitCount() == 3)
+        // It doesn't count as included: the header's checkbox shows nothing
+        // included, and no placeholder summary names it.
+        #expect(try !fixture.file("lib").isIncludedInCommit)
+        #expect(fixture.changes.visibleIncludeAll == false)
+        #expect(fixture.commit.summaryPlaceholder == nil)
 
         // With another change, that one is committed and the submodule left.
         try fixture.write("notes.txt", "notes\n")
         await fixture.refresh()
         fixture.changes.setIncludeAll(true)
+        #expect(fixture.changes.workingDirectory.files.filter(\.isIncludedInCommit).map(\.path) == ["notes.txt"])
+        #expect(fixture.changes.visibleIncludeAll == true)
+        #expect(fixture.commit.summaryPlaceholder == "Create notes.txt")
         _ = try await fixture.commitIncluded("Notes")
         #expect(try await fixture.commitCount() == 4)
         #expect(fixture.paths == ["lib"])

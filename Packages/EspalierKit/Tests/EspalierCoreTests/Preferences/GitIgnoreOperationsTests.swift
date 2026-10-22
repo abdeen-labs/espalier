@@ -155,6 +155,37 @@ struct GitIgnoreOperationsTests {
         await fixture.app.idle()
     }
 
+    @Test("returns the tracked files it ignored, whose changes still show, and not the files no rule matches")
+    func reportsTrackedFiles() async throws {
+        let fixture = try await makeSelectedRepository { local in
+            try await commitFile(local, "notes.md", "notes\n")
+            try await commitFile(local, "config.json", "{}\n")
+            try await commitFile(local, "main.swift", "print(1)\n")
+        }
+        try fixture.write("notes.md", "more notes\n")
+        try fixture.write("config.json", "{ \"a\": 1 }\n")
+        try fixture.write("main.swift", "print(2)\n")
+        try fixture.write("debug.log", "log\n")
+        await fixture.model.refresh(.status, reason: .user)
+        func files(_ paths: String...) throws -> [WorkingDirectoryFileChange] {
+            try paths.map { path in
+                try #require(fixture.model.changes.workingDirectory.files.first { $0.path == path })
+            }
+        }
+
+        // Files by name: the tracked one stays in the list, the untracked
+        // one leaves it.
+        let named = try await fixture.model.ignore(.files(["config.json", "debug.log"]), of: try files("config.json", "debug.log"))
+        #expect(named == ["config.json"])
+        #expect(changedPaths(fixture).sorted() == [".gitignore", "config.json", "main.swift", "notes.md"])
+
+        // A pattern: only the tracked files it matches.
+        let matched = try await fixture.model.ignore(.patterns(["*.md"]), of: try files("notes.md", "main.swift"))
+        #expect(matched == ["notes.md"])
+        #expect(try await fixture.model.ignore(.patterns(["*.yml"]), of: []).isEmpty)
+        await fixture.app.idle()
+    }
+
     @Test("with core.autocrlf and core.safecrlf, every line ends in CRLF and no blank lines pile up")
     func crlf() async throws {
         let fixture = try await makeSelectedRepository { local in

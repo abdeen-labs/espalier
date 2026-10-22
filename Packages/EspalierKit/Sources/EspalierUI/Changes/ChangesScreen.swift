@@ -267,7 +267,7 @@ struct ChangesDetail: View {
                 MultipleSelectionContent(
                     title: MultipleSelectionContent.title(count: count, numberFormat: context.app.preferences.numberFormat),
                     canChangeInclusion: !controller.isCommitting && !controller.isRebaseConflicts,
-                    canDiscard: !controller.isCommitting
+                    canDiscard: !controller.isCommitting && controller.canDiscard(controller.selectedFiles)
                 ),
                 onInclude: { changes.setIncluded(controller.selectedIDs, true) },
                 onExclude: { changes.setIncluded(controller.selectedIDs, false) },

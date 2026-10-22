@@ -59,6 +59,12 @@ nonisolated public struct FileMenuItem: Sendable, Hashable {
 
 /// The context menu of the changed files a click applies to.
 nonisolated public enum FileContextMenuContent {
+    /// Whether `files` can be discarded: while a rebase waits on conflicts,
+    /// only untracked files, which the rebase leaves alone, can be.
+    public static func canDiscard(_ files: [WorkingDirectoryFileChange], isRebaseConflicts: Bool) -> Bool {
+        !isRebaseConflicts || files.allSatisfy { $0.status.kind == .untracked }
+    }
+
     /// The items for `files` (the selection when the clicked file is in it,
     /// else the clicked file), in this order:
     ///
@@ -98,7 +104,7 @@ nonisolated public enum FileContextMenuContent {
 
         if isRebaseConflicts {
             var items: [FileMenuItem] = []
-            if first.status.kind == .untracked {
+            if canDiscard([first], isRebaseConflicts: isRebaseConflicts) {
                 items += [discardItem(count: 1, asksFirst: asksBeforeDiscarding, numberFormat: numberFormat), .separator]
             }
             return items + copyOne + [.separator] + openItems

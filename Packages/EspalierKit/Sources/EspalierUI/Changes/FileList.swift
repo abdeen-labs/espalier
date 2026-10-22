@@ -83,6 +83,7 @@ struct FileList: View {
                 owner: owner,
                 deleteTitle: controller.discardTitle(count: max(controller.selectedIDs.count, 1)),
                 delete: { controller.discard(controller.selectedFiles) },
+                canDelete: { controller.canDiscard(controller.selectedFiles) },
                 copyPath: { controller.copy(controller.absolutePaths(controller.selectedFiles)) },
                 hasFocus: { [weak table] in table?.hasKeyboardFocus ?? false }
             ),
@@ -1009,9 +1010,12 @@ struct ChangesController {
         case .discard:
             discard(isRebaseConflicts ? [first] : files)
         case .ignore(let action):
+            let numberFormat = context.app.preferences.numberFormat
             Task {
                 await context.presenter.perform { _ throws(OperationError) in
-                    try await repository.ignore(action)
+                    try await repository.ignore(action, of: files)
+                } outcome: { stillTracked in
+                    Self.stillTrackedMessage(stillTracked, numberFormat: numberFormat).map { Toast($0, systemImage: "info.circle.fill") }
                 }
             }
         case .include:
@@ -1049,11 +1053,33 @@ struct ChangesController {
         ConflictFileRowActions.make(for: row, repository: repository, context: context)
     }
 
+    // MARK: Ignoring
+
+    /// What the toast says after ignoring files git still tracks, whose
+    /// changes still show ("README.md is still tracked, so its changes still
+    /// show."); nil for none.
+    static func stillTrackedMessage(_ paths: [String], numberFormat: NumberFormat) -> String? {
+        switch paths.count {
+        case 0:
+            return nil
+        case 1:
+            return "\(POSIXPath.basename(paths[0])) is still tracked, so its changes still show."
+        default:
+            return "\(formatNumber(Double(paths.count), numberFormat)) files are still tracked, so their changes still show."
+        }
+    }
+
     // MARK: Discarding
 
-    /// Discards the files' changes through the presenter (which asks).
+    /// Whether `files` can be discarded (`FileContextMenuContent.canDiscard`).
+    func canDiscard(_ files: [WorkingDirectoryFileChange]) -> Bool {
+        !files.isEmpty && FileContextMenuContent.canDiscard(files, isRebaseConflicts: isRebaseConflicts)
+    }
+
+    /// Discards the files' changes through the presenter (which asks), when
+    /// they can be discarded.
     func discard(_ files: [WorkingDirectoryFileChange]) {
-        guard !files.isEmpty else {
+        guard canDiscard(files) else {
             return
         }
         Task {

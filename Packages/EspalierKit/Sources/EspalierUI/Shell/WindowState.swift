@@ -14,6 +14,9 @@ public struct FocusedSelection {
     /// The Delete item's title ("Discard Changes…", "Delete Branch…").
     public var deleteTitle: String?
     public var delete: (@MainActor () -> Void)?
+    /// Whether Delete can act on the selection now. Nil: whenever there's
+    /// `delete`.
+    public var canDelete: (@MainActor () -> Bool)?
     public var copyPath: (@MainActor () -> Void)?
     /// Whether the list has keyboard focus now: a list stays its window's
     /// first responder while another window (a popover's) is key and gets
@@ -24,19 +27,22 @@ public struct FocusedSelection {
         owner: String,
         deleteTitle: String? = nil,
         delete: (@MainActor () -> Void)? = nil,
+        canDelete: (@MainActor () -> Bool)? = nil,
         copyPath: (@MainActor () -> Void)? = nil,
         hasFocus: (@MainActor () -> Bool)? = nil
     ) {
         self.owner = owner
         self.deleteTitle = deleteTitle
         self.delete = delete
+        self.canDelete = canDelete
         self.copyPath = copyPath
         self.hasFocus = hasFocus
     }
 
-    /// Delete's action while the list has keyboard focus.
+    /// Delete's action while the list has keyboard focus and Delete can act
+    /// on its selection.
     @MainActor var deleteNow: (@MainActor () -> Void)? {
-        hasFocus?() == false ? nil : delete
+        hasFocus?() == false || canDelete?() == false ? nil : delete
     }
 
     /// Copy Path's action while the list has keyboard focus.

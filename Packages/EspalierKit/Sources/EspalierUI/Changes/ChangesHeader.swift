@@ -58,8 +58,8 @@ nonisolated public struct ChangesHeaderContent: Sendable, Equatable {
 
 extension ChangesHeaderContent {
     /// The header for a repository's changes. The checkbox can't change
-    /// without files, while a commit runs, or while a rebase waits on
-    /// conflicts.
+    /// without files it can include, while a commit runs, or while a rebase
+    /// waits on conflicts.
     @MainActor
     public static func make(_ repository: RepositoryModel, numberFormat: NumberFormat) -> ChangesHeaderContent {
         let changes = repository.changes
@@ -69,12 +69,12 @@ extension ChangesHeaderContent {
         if case .rebase? = repository.operations.conflictState {
             isRebaseConflicts = true
         }
-        let includedCount = files.count { $0.selection.getSelectionType() != .none }
+        let includedCount = files.count(where: \.isIncludedInCommit)
         return ChangesHeaderContent(
             title: title(fileCount: files.count, visibleCount: changes.visibleFiles.count, numberFormat: numberFormat),
             included: files.isEmpty ? "" : included(count: includedCount, numberFormat: numberFormat),
             includeAll: changes.visibleIncludeAll,
-            isIncludeAllEnabled: !files.isEmpty && !isCommitting && !isRebaseConflicts,
+            isIncludeAllEnabled: files.contains { !$0.isUncommittableSubmodule } && !isCommitting && !isRebaseConflicts,
             filter: FilterMenuContent(filter: changes.filter, visibleFiles: changes.visibleFiles, numberFormat: numberFormat),
             repository: ObjectIdentifier(repository)
         )

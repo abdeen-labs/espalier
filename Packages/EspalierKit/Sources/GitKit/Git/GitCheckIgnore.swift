@@ -13,7 +13,8 @@ private let pathspecVariables: [String: String?] = [
 /// The paths among `paths` that git ignores: an ignore rule (a
 /// `.gitignore`, `.git/info/exclude`, `core.excludesFile`) matches them,
 /// and they aren't tracked. A tracked file is never ignored, whatever
-/// matches it.
+/// matches it, unless `includingTracked` (`--no-index`): then the paths an
+/// ignore rule matches, tracked or not.
 ///
 /// Runs one `git check-ignore --stdin -z`, which needn't find the paths on
 /// disk: a deleted file in an ignored directory is still ignored. A
@@ -29,7 +30,7 @@ private let pathspecVariables: [String: String?] = [
 /// - Returns: The ignored ones, spelled as given.
 /// - Throws: When git fails, as it does for a path inside a submodule,
 ///   beyond a symbolic link, or outside the working directory.
-public func getIgnoredPaths(_ repository: Repository, _ paths: [String]) async throws -> Set<ExactString> {
+public func getIgnoredPaths(_ repository: Repository, _ paths: [String], includingTracked: Bool = false) async throws -> Set<ExactString> {
     guard !paths.isEmpty else {
         return []
     }
@@ -40,7 +41,7 @@ public func getIgnoredPaths(_ repository: Repository, _ paths: [String]) async t
         input.append(0)
     }
     let result = try await git(
-        ["check-ignore", "--stdin", "-z"],
+        ["check-ignore", "--stdin", "-z"] + (includingTracked ? ["--no-index"] : []),
         repository.path,
         "getIgnoredPaths",
         options: GitExecutionOptions(

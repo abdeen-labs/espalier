@@ -143,12 +143,9 @@ public final class CommitModel: RepositoryFeature {
             throw OperationError(.precondition("The repository is no longer in the list."), operation: .commit)
         }
         // A submodule with only uncommitted changes inside it shows as
-        // excluded whatever its selection (Include All selects it), and git
-        // has nothing to commit for it: committing it would fail with "no
-        // changes added to commit".
-        let files = repository.changes.workingDirectory.files.filter {
-            $0.selection.getSelectionType() != .none && !$0.isUncommittableSubmodule
-        }
+        // excluded whatever its selection, and git has nothing to commit for
+        // it: committing it would fail with "no changes added to commit".
+        let files = repository.changes.workingDirectory.files.filter(\.isIncludedInCommit)
         let context = try await checkGates(files, in: repository, confirmed: confirmed)
         try await checkFileGates(files, in: repository, confirmed: confirmed)
 
