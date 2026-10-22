@@ -19,119 +19,125 @@ import Testing
 import TestSupport
 @testable import EspalierUI
 
-// Each window's toolbar is another of the main toolbar's family: one
-// window's goes before the next is made.
-@Suite("Main window", .captures, .offline, .serialized, .hangGuard(minutes: 5)) @MainActor
-struct MainWindowCaptures {
-    private let area = "MainWindow"
+/// The suites whose windows have the main toolbar, run one test at a time.
+/// Toolbars with one identifier are a family: AppKit inserts an item added
+/// to one into the others too, and throws when they don't match. So one
+/// window's toolbar goes before the next is made, across these suites.
+@Suite(.serialized) enum MainToolbarWindows {}
 
-    /// Draws `context`'s window in each appearance, once its diff (when
-    /// `showsDiff`) has rows and it has stopped changing.
-    private func captureWindow(_ context: WindowContext, named name: String, showsDiff: Bool) async {
-        FlatWindowChrome.install()
-        // A fixed name in the location control, not the folder's.
-        if let repository = context.repository {
-            context.app.setAlias("weather", for: repository.id)
-        }
-        for appearance in CaptureAppearance.allCases {
-            var stage: MainWindowStage? = autoreleasepool { MainWindowStage(context, appearance: appearance) }
-            await stage?.settle { !showsDiff || stage?.views(DiffTableView.self).contains { $0.numberOfRows > 0 } == true }
-            let image = stage?.image
-            autoreleasepool {
-                stage?.close()
-                stage = nil
+extension MainToolbarWindows {
+    @Suite("Main window", .captures, .offline, .hangGuard(minutes: 5)) @MainActor
+    struct MainWindowCaptures {
+        private let area = "MainWindow"
+
+        /// Draws `context`'s window in each appearance, once its diff (when
+        /// `showsDiff`) has rows and it has stopped changing.
+        private func captureWindow(_ context: WindowContext, named name: String, showsDiff: Bool) async {
+            FlatWindowChrome.install()
+            // A fixed name in the location control, not the folder's.
+            if let repository = context.repository {
+                context.app.setAlias("weather", for: repository.id)
             }
-            if let image {
-                capture(named: name, area: area, appearances: [appearance]) { _ in image }
+            for appearance in CaptureAppearance.allCases {
+                var stage: MainWindowStage? = autoreleasepool { MainWindowStage(context, appearance: appearance) }
+                await stage?.settle { !showsDiff || stage?.views(DiffTableView.self).contains { $0.numberOfRows > 0 } == true }
+                let image = stage?.image
+                autoreleasepool {
+                    stage?.close()
+                    stage = nil
+                }
+                if let image {
+                    capture(named: name, area: area, appearances: [appearance]) { _ in image }
+                }
+                // The window's toolbar leaves the family once it's released.
+                await Task.yield()
             }
-            // The window's toolbar leaves the family once it's released.
-            await Task.yield()
         }
-    }
 
-    @Test("History: every local branch's graph, and HEAD's commit with its diff")
-    func history() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await MainWindowFixture.history()
-            await fixture.show(.history)
-            fixture.context.state.columnVisibility = .all
-            await captureWindow(fixture.context, named: "history", showsDiff: true)
-            await fixture.settle()
+        @Test("History: every local branch's graph, and HEAD's commit with its diff")
+        func history() async throws {
+            try await withIsolatedGitConfig { _ in
+                let fixture = try await MainWindowFixture.history()
+                await fixture.show(.history)
+                fixture.context.state.columnVisibility = .all
+                await captureWindow(fixture.context, named: "history", showsDiff: true)
+                await fixture.settle()
+            }
         }
-    }
 
-    @Test("History with Commit Info")
-    func historyInspector() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await MainWindowFixture.history()
-            await fixture.show(.history)
-            fixture.context.state.columnVisibility = .all
-            fixture.context.state.isInspectorPresented = true
-            await captureWindow(fixture.context, named: "history-inspector", showsDiff: true)
-            await fixture.settle()
+        @Test("History with Commit Info")
+        func historyInspector() async throws {
+            try await withIsolatedGitConfig { _ in
+                let fixture = try await MainWindowFixture.history()
+                await fixture.show(.history)
+                fixture.context.state.columnVisibility = .all
+                fixture.context.state.isInspectorPresented = true
+                await captureWindow(fixture.context, named: "history-inspector", showsDiff: true)
+                await fixture.settle()
+            }
         }
-    }
 
-    @Test("History with the sidebar hidden, Changes | History in the toolbar")
-    func historySidebarHidden() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await MainWindowFixture.history()
-            await fixture.show(.history)
-            await captureWindow(fixture.context, named: "history-sidebar-hidden", showsDiff: true)
-            await fixture.settle()
+        @Test("History with the sidebar hidden, Changes | History in the toolbar")
+        func historySidebarHidden() async throws {
+            try await withIsolatedGitConfig { _ in
+                let fixture = try await MainWindowFixture.history()
+                await fixture.show(.history)
+                await captureWindow(fixture.context, named: "history-sidebar-hidden", showsDiff: true)
+                await fixture.settle()
+            }
         }
-    }
 
-    @Test("History beside the icons style's rail")
-    func historyRail() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await MainWindowFixture.history()
-            fixture.app.preferences.sidebarStyle = .icons
-            await fixture.show(.history)
-            await captureWindow(fixture.context, named: "history-rail", showsDiff: true)
-            await fixture.settle()
+        @Test("History beside the icons style's rail")
+        func historyRail() async throws {
+            try await withIsolatedGitConfig { _ in
+                let fixture = try await MainWindowFixture.history()
+                fixture.app.preferences.sidebarStyle = .icons
+                await fixture.show(.history)
+                await captureWindow(fixture.context, named: "history-rail", showsDiff: true)
+                await fixture.settle()
+            }
         }
-    }
 
-    @Test("History with Commit Info beside the icons style's rail")
-    func historyRailInspector() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await MainWindowFixture.history()
-            fixture.app.preferences.sidebarStyle = .icons
-            await fixture.show(.history)
-            fixture.context.state.isInspectorPresented = true
-            await captureWindow(fixture.context, named: "history-rail-inspector", showsDiff: true)
-            await fixture.settle()
+        @Test("History with Commit Info beside the icons style's rail")
+        func historyRailInspector() async throws {
+            try await withIsolatedGitConfig { _ in
+                let fixture = try await MainWindowFixture.history()
+                fixture.app.preferences.sidebarStyle = .icons
+                await fixture.show(.history)
+                fixture.context.state.isInspectorPresented = true
+                await captureWindow(fixture.context, named: "history-rail-inspector", showsDiff: true)
+                await fixture.settle()
+            }
         }
-    }
 
-    @Test("the rail's Branches and Tags popovers, a branch selected", arguments: [RailSection.branches, .tags])
-    func railPopover(_ section: RailSection) async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await MainWindowFixture.history()
-            fixture.app.preferences.sidebarStyle = .icons
-            await fixture.show(.branch(ref: "refs/heads/fix/crash"))
-            let context = fixture.context
-            let repository = fixture.repository
-            await captureSettled({
-                PopoverCardView(model: PopoverCardModel {
-                    AnyView(RailSectionPopover(section: section, repository: repository).windowEnvironment(context))
-                })
-                .fixedSize()
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            }, named: "rail-\(section.rawValue)", area: area, size: CGSize(width: 340, height: 360), untilStill: true)
-            await fixture.settle()
+        @Test("the rail's Branches and Tags popovers, a branch selected", arguments: [RailSection.branches, .tags])
+        func railPopover(_ section: RailSection) async throws {
+            try await withIsolatedGitConfig { _ in
+                let fixture = try await MainWindowFixture.history()
+                fixture.app.preferences.sidebarStyle = .icons
+                await fixture.show(.branch(ref: "refs/heads/fix/crash"))
+                let context = fixture.context
+                let repository = fixture.repository
+                await captureSettled({
+                    PopoverCardView(model: PopoverCardModel {
+                        AnyView(RailSectionPopover(section: section, repository: repository).windowEnvironment(context))
+                    })
+                    .fixedSize()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                }, named: "rail-\(section.rawValue)", area: area, size: CGSize(width: 340, height: 360), untilStill: true)
+                await fixture.settle()
+            }
         }
-    }
 
-    @Test("a merge's conflicts in Changes, with the operation panel")
-    func changesConflicts() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await MainWindowFixture.make(try await setupConflictedRepo())
-            fixture.context.state.select(.changes, in: fixture.repository.id)
-            await fixture.settle()
-            await captureWindow(fixture.context, named: "changes-conflicts", showsDiff: false)
-            await fixture.settle()
+        @Test("a merge's conflicts in Changes, with the operation panel")
+        func changesConflicts() async throws {
+            try await withIsolatedGitConfig { _ in
+                let fixture = try await MainWindowFixture.make(try await setupConflictedRepo())
+                fixture.context.state.select(.changes, in: fixture.repository.id)
+                await fixture.settle()
+                await captureWindow(fixture.context, named: "changes-conflicts", showsDiff: false)
+                await fixture.settle()
+            }
         }
     }
 }

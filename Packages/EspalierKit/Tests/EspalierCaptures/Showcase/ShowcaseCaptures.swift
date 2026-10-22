@@ -16,75 +16,78 @@ import Testing
 import TestSupport
 @testable import EspalierUI
 
-@Suite("Showcase", .captures, .offline, .serialized, .hangGuard(minutes: 5)) @MainActor
-struct ShowcaseCaptures {
-    private let area = "Showcase"
+// Its window has the main toolbar, so it's one of MainToolbarWindows.
+extension MainToolbarWindows {
+    @Suite("Showcase", .captures, .offline, .hangGuard(minutes: 5)) @MainActor
+    struct ShowcaseCaptures {
+        private let area = "Showcase"
 
-    @Test("History: Harbor's graph, and the offline cache commit's diff")
-    func history() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await MainWindowFixture.make(try await Harbor.make())
-            await fixture.show(.history)
-            fixture.context.state.columnVisibility = .all
-            await fixture.selectCommittedFile("Harbor/TideStore.swift")
-            await captureWindow(fixture, named: "history", showsDiff: true)
+        @Test("History: Harbor's graph, and the offline cache commit's diff")
+        func history() async throws {
+            try await withIsolatedGitConfig { _ in
+                let fixture = try await MainWindowFixture.make(try await Harbor.make())
+                await fixture.show(.history)
+                fixture.context.state.columnVisibility = .all
+                await fixture.selectCommittedFile("Harbor/TideStore.swift")
+                await captureWindow(fixture, named: "history", showsDiff: true)
+            }
         }
-    }
 
-    @Test("Changes: three files changed, TideView.swift's diff, and a summary written")
-    func changes() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await MainWindowFixture.make(try await Harbor.make())
-            fixture.context.state.columnVisibility = .all
-            fixture.context.state.select(.changes, in: fixture.repository.id)
+        @Test("Changes: three files changed, TideView.swift's diff, and a summary written")
+        func changes() async throws {
+            try await withIsolatedGitConfig { _ in
+                let fixture = try await MainWindowFixture.make(try await Harbor.make())
+                fixture.context.state.columnVisibility = .all
+                fixture.context.state.select(.changes, in: fixture.repository.id)
+                await fixture.settle()
+                if let file = fixture.repository.changes.workingDirectory.files.first(where: { $0.path == "Harbor/TideView.swift" }) {
+                    fixture.repository.changes.select(fileIDs: [file.id])
+                }
+                var draft = CommitDraft()
+                draft.summary = "Show the tide height next to each time"
+                draft.description = "Heights use the units of the user's locale."
+                fixture.repository.commit.draft = draft
+                await fixture.settle()
+                await captureWindow(fixture, named: "changes", showsDiff: true)
+            }
+        }
+
+        /// A Mac window's shape, with room for the diff's lines.
+        private static let size = CGSize(width: 1_440, height: 900)
+
+        /// Draws the fixture's window in each appearance, its diff in color and
+        /// unwrapped, once the diff (when `showsDiff`) has colored rows and the
+        /// window has stopped changing.
+        private func captureWindow(_ fixture: MainWindowFixture, named name: String, showsDiff: Bool) async {
+            FlatWindowChrome.install()
+            // A fixed name in the location control, not the folder's.
+            fixture.app.setAlias("harbor", for: fixture.repository.id)
+            fixture.app.preferences.wrapDiffLines = false
             await fixture.settle()
-            if let file = fixture.repository.changes.workingDirectory.files.first(where: { $0.path == "Harbor/TideView.swift" }) {
-                fixture.repository.changes.select(fileIDs: [file.id])
+            for appearance in CaptureAppearance.allCases {
+                var stage: MainWindowStage? = autoreleasepool {
+                    MainWindowStage(fixture.context, appearance: appearance, size: Self.size, highlighter: TreeSitterHighlighter())
+                }
+                // The diff shows its rows first and its colors once the
+                // highlighter is done.
+                await stage?.settle {
+                    !showsDiff || stage?.views(DiffTableView.self).contains {
+                        $0.numberOfRows > 0 && $0.controller?.shownContent?.tokens.isEmpty == false
+                    } == true
+                }
+                let image = stage?.image
+                autoreleasepool {
+                    stage?.close()
+                    stage = nil
+                }
+                if let image {
+                    capture(named: name, area: area, appearances: [appearance]) { _ in image }
+                }
+                // The window's toolbar leaves the family once it's released.
+                await Task.yield()
             }
-            var draft = CommitDraft()
-            draft.summary = "Show the tide height next to each time"
-            draft.description = "Heights use the units of the user's locale."
-            fixture.repository.commit.draft = draft
             await fixture.settle()
-            await captureWindow(fixture, named: "changes", showsDiff: true)
         }
-    }
-
-    /// A Mac window's shape, with room for the diff's lines.
-    private static let size = CGSize(width: 1_440, height: 900)
-
-    /// Draws the fixture's window in each appearance, its diff in color and
-    /// unwrapped, once the diff (when `showsDiff`) has colored rows and the
-    /// window has stopped changing.
-    private func captureWindow(_ fixture: MainWindowFixture, named name: String, showsDiff: Bool) async {
-        FlatWindowChrome.install()
-        // A fixed name in the location control, not the folder's.
-        fixture.app.setAlias("harbor", for: fixture.repository.id)
-        fixture.app.preferences.wrapDiffLines = false
-        await fixture.settle()
-        for appearance in CaptureAppearance.allCases {
-            var stage: MainWindowStage? = autoreleasepool {
-                MainWindowStage(fixture.context, appearance: appearance, size: Self.size, highlighter: TreeSitterHighlighter())
-            }
-            // The diff shows its rows first and its colors once the
-            // highlighter is done.
-            await stage?.settle {
-                !showsDiff || stage?.views(DiffTableView.self).contains {
-                    $0.numberOfRows > 0 && $0.controller?.shownContent?.tokens.isEmpty == false
-                } == true
-            }
-            let image = stage?.image
-            autoreleasepool {
-                stage?.close()
-                stage = nil
-            }
-            if let image {
-                capture(named: name, area: area, appearances: [appearance]) { _ in image }
-            }
-            // The window's toolbar leaves the family once it's released.
-            await Task.yield()
-        }
-        await fixture.settle()
     }
 }
 
