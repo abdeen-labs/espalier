@@ -75,7 +75,7 @@ struct BranchGroupingTests {
     }
 
     @Test("the current branch shows as the refresh has it, and leads the recent branches while the branch list doesn't have it yet")
-    func currentBranch() {
+    func currentBranchAsRefreshed() {
         let refreshed = Branch(name: otherBranch.name, upstream: nil, tip: BranchTip(sha: "4b825dc"), type: .local, ref: otherBranch.ref)
         let shown = groupBranches(defaultBranch, refreshed, allBranches, recentBranches, forkRemoteNames: [])
         #expect(shown.map(\.identifier) == [.defaultBranch, .recent, .other])
