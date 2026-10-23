@@ -1,6 +1,6 @@
 // Small views the repository sheets share: a folder field with Choose…, a
 // call to action (a symbol, a line, and a button), and the sign-in call to
-// action.
+// action, whose new account the sheet chooses.
 
 import AppKit
 import EspalierCore
@@ -28,27 +28,37 @@ struct FolderField: View {
     }
 }
 
-/// "Sign in to your GitHub.com account to access your repositories."
-/// [Sign In…] (the call to action Clone and Publish show for a server
-/// without an account).
-struct RepositorySignInPrompt: View {
-    /// Whether it's for GitHub Enterprise rather than GitHub.com.
-    let isEnterprise: Bool
-    /// The server to sign in to: nil for GitHub.com.
-    let endpoint: String?
+/// "Sign in to your GitHub account to access your repositories." [Sign
+/// In…], and Sign In to GitHub Enterprise…: what Clone and Publish show
+/// without an account. The sign-in sheet shows on top, and the account
+/// signed in to goes to `onSignIn`, for the sheet to choose it.
+struct AccountsSignInPrompt: View {
+    var onSignIn: (Account) -> Void
     @Environment(WindowContext.self) private var context
 
-    /// The text for a server.
-    static func message(forEnterprise isEnterprise: Bool) -> String {
-        isEnterprise
-            ? "Sign in to your GitHub Enterprise account to access your repositories."
-            : "Sign in to your GitHub.com account to access your repositories."
+    var body: some View {
+        SheetCallToAction(systemImage: "person.crop.circle", message: "Sign in to your GitHub account to access your repositories.") {
+            VStack(spacing: Metrics.insetSmall) {
+                Button("Sign In…") {
+                    signIn(nil)
+                }
+                .buttonStyle(.quiet)
+                Button("Sign In to GitHub Enterprise…") {
+                    signIn(SignInRequest.enterpriseEndpoint)
+                }
+                .buttonStyle(.textLink)
+            }
+        }
     }
 
-    var body: some View {
-        SheetCallToAction(systemImage: "person.crop.circle", message: Self.message(forEnterprise: isEnterprise)) {
-            ActionButton(.signIn(endpoint: endpoint, then: nil), title: "Sign In…")
-                .buttonStyle(.quiet)
+    private func signIn(_ endpoint: String?) {
+        let onSignIn = onSignIn
+        context.modals.presentSheet(id: SignInSheet.sheetID) {
+            SignInSheet(request: SignInRequest(endpoint: endpoint)) { account in
+                if let account {
+                    onSignIn(account)
+                }
+            }
         }
     }
 }

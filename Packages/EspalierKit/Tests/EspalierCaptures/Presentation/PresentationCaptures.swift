@@ -1,6 +1,7 @@
 // What Espalier draws as sheets, through the same mappings the hosts use:
-// the compact confirmations (with and without the extra choice, and Delete
-// Branch with an upstream of another name than the branch's), the
+// the compact confirmations (with and without the extra choice, Delete
+// Branch with an upstream of another name than the branch's, and Sign Out
+// with repositories assigned to the account), the
 // decision, the editor question, the prompts (a secret, a username and
 // password, a failed hook's output), git's raw output (one line and a few,
 // with a note and a recovery) and output longer than the terminal, the
@@ -16,7 +17,7 @@ import Testing
 
 @Suite("Presentation", .captures) @MainActor
 struct PresentationCaptures {
-    @Test("the compact confirmation sheets", arguments: ["removeRepository", "deleteBranch-remote"])
+    @Test("the compact confirmation sheets", arguments: ["removeRepository", "deleteBranch-remote", "signOutAccount"])
     func confirmation(name: String) throws {
         let confirmation = try #require(UIFixtures.confirmations.first { $0.name == name }?.confirmation)
         guard case .compactSheet(let compact) = confirmation.presentation(Capture.numberFormat) else {

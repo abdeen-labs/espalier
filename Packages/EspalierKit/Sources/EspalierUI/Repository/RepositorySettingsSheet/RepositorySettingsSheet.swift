@@ -1,9 +1,10 @@
-// Repository Settings (⌥⌘,): Remote, Ignored Files, Git Config, and Fork
-// Behavior for forks; one Save that applies what changed in order (the
-// remote's URL, the .gitignore, the fork's target, the author) and lists
-// what failed, staying open then. Each write is a state-layer intent:
-// `setRemoteURL`, `saveGitIgnore`, `setForkContributionTarget`, and
-// `saveGitAuthor`.
+// Repository Settings (⌥⌘,): Remote (with the account of a GitHub
+// repository), Ignored Files, Git Config, and Fork Behavior for forks; one
+// Save that applies what changed in order (the account, the remote's URL,
+// the .gitignore, the fork's target, the author) and lists what failed,
+// staying open then. Each write is a state-layer intent:
+// `updateRepositoryAccount`, `setRemoteURL`, `saveGitIgnore`,
+// `setForkContributionTarget`, and `saveGitAuthor`.
 
 import EspalierCore
 import GitHubKit
@@ -41,6 +42,10 @@ final class RepositorySettingsModel {
     /// opened.
     let remote: Remote?
     var remoteURL: String
+
+    /// The login of the account chosen for the repository (nil: none), as
+    /// it was when the sheet opened until another is chosen.
+    var accountLogin: String?
 
     // MARK: Ignored files
 
@@ -91,7 +96,35 @@ final class RepositorySettingsModel {
         let remote = repository.gitState.remotes.currentRemote
         self.remote = remote
         remoteURL = remote?.url ?? ""
+        accountLogin = repository.record.accountLogin
         forkTarget = getForkContributionTarget(repository.record)
+    }
+
+    /// The API endpoint of the repository's GitHub repository, if it has
+    /// one: then it has an account to choose.
+    var endpoint: String? {
+        repository.record.gitHubRepository?.endpoint
+    }
+
+    /// The accounts signed in to the repository's server.
+    var accountChoices: [Account] {
+        endpoint.map { app.accounts.accounts(onEndpoint: $0) } ?? []
+    }
+
+    /// The account the repository has, when it isn't signed in: it's
+    /// listed, and can't be chosen again.
+    var signedOutLogin: String? {
+        guard let login = repository.record.accountLogin, let endpoint,
+              app.accounts.account(AccountIdentity(endpoint: endpoint, login: login)) == nil
+        else {
+            return nil
+        }
+        return login
+    }
+
+    /// Whether another account than the repository's was chosen.
+    var accountHasChanged: Bool {
+        endpoint != nil && !isSameLogin(accountLogin, repository.record.accountLogin)
     }
 
     /// The panes: Fork Behavior only for forks.
@@ -99,10 +132,13 @@ final class RepositorySettingsModel {
         isRepositoryWithForkedGitHubRepository(repository.record) ? RepositorySettingsPane.allCases : [.remote, .ignoredFiles, .gitConfig]
     }
 
-    /// The account of the repository's server, whose addresses the author
+    /// The account chosen for the repository, whose addresses the author
     /// form offers.
     var account: Account? {
-        app.accounts.account(for: repository.record)
+        guard let endpoint, let accountLogin else {
+            return nil
+        }
+        return app.accounts.account(AccountIdentity(endpoint: endpoint, login: accountLogin))
     }
 
     /// Whether the author's name stops Save.
@@ -179,6 +215,14 @@ final class RepositorySettingsModel {
         isSaving = true
         defer { isSaving = false }
         var errors: [String] = []
+
+        if accountHasChanged {
+            do throws(OperationError) {
+                try await app.updateRepositoryAccount(repository.id, login: accountLogin)
+            } catch {
+                errors.append("Couldn't change the account: \(error.message)")
+            }
+        }
 
         if let remote {
             do throws(OperationError) {
@@ -277,7 +321,16 @@ struct RepositorySettingsForm: View {
             Group {
                 switch model.pane {
                 case .remote:
-                    RemotePane(remote: model.remote, url: $model.remoteURL, publish: publish)
+                    RemotePane(
+                        remote: model.remote,
+                        url: $model.remoteURL,
+                        account: model.endpoint == nil ? nil : RemotePaneAccount(
+                            accounts: model.accountChoices,
+                            signedOutLogin: model.signedOutLogin,
+                            login: $model.accountLogin
+                        ),
+                        publish: publish
+                    )
                 case .ignoredFiles:
                     IgnoredFilesPane(text: Binding(get: { model.ignoreText ?? "" }, set: { model.ignoreText = $0 }), isLoaded: model.isLoaded)
                         .frame(height: Metrics.Sheet.listHeight)

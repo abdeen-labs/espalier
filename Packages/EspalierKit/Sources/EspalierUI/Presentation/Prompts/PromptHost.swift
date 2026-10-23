@@ -48,6 +48,11 @@ enum PromptPresentation {
                 }))
             })
 
+        case .repositoryAccount(let request):
+            return .sheet(.repositoryAccount(request) { identity in
+                finish(identity.map { .repositoryAccount($0) })
+            })
+
         case .hookFailed(let hookName, let terminalOutput):
             return .sheet(.hookFailed(hookName: hookName, terminalOutput: terminalOutput) { answer in
                 finish(.hookFailure(answer == .ignore ? .ignore : .abort))
@@ -63,6 +68,7 @@ enum PromptSheet {
     case password(username: String, onAnswer: (SecretPromptAnswer?) -> Void)
     case genericAuthentication(endpoint: String, username: String?, onAnswer: (GenericAuthAnswer?) -> Void)
     case signIn(endpoint: String, onFinish: (Account?) -> Void)
+    case repositoryAccount(RepositoryAccountRequest, onAnswer: (AccountIdentity?) -> Void)
     case hookFailed(hookName: String, terminalOutput: String, onAnswer: (HookFailedPrompt.Answer) -> Void)
 
     /// The sheet's view.
@@ -77,6 +83,8 @@ enum PromptSheet {
             AnyView(GenericAuthPrompt(endpoint: endpoint, username: username, onAnswer: onAnswer))
         case .signIn(let endpoint, let onFinish):
             AnyView(SignInSheet(request: SignInRequest(endpoint: endpoint, reason: .gitRequestedCredentials(url: endpoint)), onFinish: onFinish))
+        case .repositoryAccount(let request, let onAnswer):
+            AnyView(RepositoryAccountPrompt(request: request, onAnswer: onAnswer))
         case .hookFailed(let hookName, let terminalOutput, let onAnswer):
             AnyView(HookFailedPrompt(hookName: hookName, terminalOutput: terminalOutput, onAnswer: onAnswer))
         }

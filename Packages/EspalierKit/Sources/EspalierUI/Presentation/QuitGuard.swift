@@ -151,5 +151,6 @@ extension OperationKind {
         .setGlobalGitConfig: "updating your Git settings",
         .setRepositoryGitConfig: "updating the repository's Git settings",
         .signOut: "signing out",
+        .assignAccount: "choosing an account",
     ]
 }

@@ -46,6 +46,7 @@ enum UIFixtures {
 
     static let confirmations: [(name: String, confirmation: Confirmation)] = [
         ("removeRepository", .removeRepository(name: "espalier", path: "/Users/joe/Developer/espalier")),
+        ("signOutAccount", .signOutAccount(login: "joe", server: "GitHub.com", repositoryCount: 3)),
         ("discardChanges-one", .discardChanges(["README.md"])),
         ("discardChanges", .discardChanges(files)),
         ("discardChanges-many", .discardChanges(manyFiles)),

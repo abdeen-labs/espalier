@@ -76,7 +76,7 @@ public struct ComposerCompletions {
         }
         let gitHub = repository.gitHub
         let endpoint = gitHubRepository.endpoint
-        let login = app.accounts.account(forEndpoint: endpoint)?.login
+        let login = app.accounts.account(for: repository.record, on: endpoint)?.login
         return ComposerCompletions(
             users: { [weak gitHub] query in
                 guard let gitHub else {

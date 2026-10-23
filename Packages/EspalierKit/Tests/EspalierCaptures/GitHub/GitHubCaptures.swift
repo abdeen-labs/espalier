@@ -1,6 +1,8 @@
 // The GitHub sheets and panes: the sign-in sheet's code, the Enterprise
 // address with an error, and success; Settings ▸ Accounts signed in to
-// GitHub.com and Enterprise, and with a token the keychain won't give; push
+// GitHub.com and Enterprise, with several accounts on GitHub.com and on
+// Enterprise hosts (one signed out), and with a token the keychain won't
+// give; the question about a repository's account; push
 // protection with several secrets; the fork sheet's question and settings;
 // and a review's sheet.
 
@@ -69,11 +71,36 @@ struct GitHubCaptures {
         await app.idle()
     }
 
+    @Test("Settings ▸ Accounts: two GitHub.com accounts, and Enterprise accounts grouped by host, one signed out")
+    func accountsByHost() async throws {
+        let harness = try AppHarness()
+        let work = AccountCaptureFixtures.secondDotCom
+        let app = try await AccountCaptureFixtures.app(
+            harness,
+            signedIn: [GitHubCaptureFixtures.octocat, work, AccountCaptureFixtures.enterprise, AccountCaptureFixtures.secondEnterprise]
+        )
+        var content = AccountsContent(accounts: app.accounts, notes: [])
+        let signedOut = Account(
+            login: "joe-admin",
+            endpoint: AccountCaptureFixtures.enterprise.endpoint,
+            token: "",
+            emails: [],
+            avatarURL: "",
+            id: 43,
+            name: ""
+        )
+        if let index = content.enterprise.firstIndex(where: { $0.host == "ghe.example.com" }) {
+            content.enterprise[index].invalidated = [AccountRowContent(signedOut)]
+        }
+        capture(accountsWindow(content), named: "accounts-byHost", area: area)
+        await app.idle()
+    }
+
     @Test("Settings ▸ Accounts: GitHub.com's token unreadable in the keychain, signed in to Enterprise")
     func accountsUnreadable() {
         let content = AccountsContent(
-            unreadableDotCom: AccountRowContent(GitHubCaptureFixtures.octocat),
-            enterprise: [AccountRowContent(AccountCaptureFixtures.enterprise)]
+            dotCom: AccountsHostContent(host: "github.com", unreadable: [AccountRowContent(GitHubCaptureFixtures.octocat)]),
+            enterprise: [AccountsHostContent(host: "ghe.example.com", accounts: [AccountRowContent(AccountCaptureFixtures.enterprise)])]
         )
         capture(accountsWindow(content), named: "accounts-unreadable", area: area)
     }
@@ -81,11 +108,38 @@ struct GitHubCaptures {
     /// The Accounts pane in the Settings window's layout, as the Settings
     /// captures draw their panes.
     private func accountsWindow(_ content: AccountsContent) -> some View {
-        let actions = AccountsActions(signIn: { _ in }, signOut: { _ in }, tryAgain: {}, remove: { _ in }, open: { _ in })
+        let actions = AccountsActions(signIn: { _, _ in }, signOut: { _ in }, tryAgain: {}, remove: { _ in }, open: { _ in })
         return SettingsLayout(selection: .constant(.accounts)) {
             AccountsForm(content: content, actions: actions)
         }
         .frame(width: Metrics.SettingsWindow.width)
+    }
+
+    // MARK: A repository's account
+
+    @Test("the question about a repository's account: two accounts to choose from, and its account signed out")
+    func repositoryAccount() {
+        let work = AccountCaptureFixtures.secondDotCom
+        let actions = RepositoryAccountActions(cancel: {}, use: { _ in }, signIn: { _ in }, chooseAnother: {})
+        let accounts = [GitHubCaptureFixtures.octocat, work]
+        let choose = RepositoryAccountContent(
+            request: RepositoryAccountRequest(repositoryName: "espalier", endpoint: getDotComAPIEndpoint()),
+            accounts: accounts
+        )
+        capture(
+            RepositoryAccountForm(content: choose, selection: .constant(work.identity), actions: actions),
+            named: "repositoryAccount-choose",
+            area: area
+        )
+        let signedOut = RepositoryAccountContent(
+            request: RepositoryAccountRequest(repositoryName: "espalier", endpoint: getDotComAPIEndpoint(), signedOutLogin: "joe"),
+            accounts: accounts
+        )
+        capture(
+            RepositoryAccountForm(content: signedOut, selection: .constant(nil), actions: actions),
+            named: "repositoryAccount-signInAgain",
+            area: area
+        )
     }
 
     // MARK: Push protection

@@ -1,7 +1,8 @@
 // Get Started, the window with no repositories, modelled on Xcode's welcome
 // window: a heading, three actions, the account's repositories on the right
-// when signed in (with the account picker for two or more accounts), and
-// "Clone <owner/name>", which opens Clone on URL with the repository.
+// when signed in (with the account picker, by host, for two or more
+// accounts), and "Clone <owner/name>", which opens Clone on URL with the
+// repository.
 // Folders dropped on the window add repositories (MainWindow).
 
 import EspalierCore
@@ -12,15 +13,15 @@ import SwiftUI
 /// Get Started.
 public struct GetStartedView: View {
     @Environment(WindowContext.self) private var context
-    @State private var accountKey: AccountKey?
+    @State private var accountIdentity: AccountIdentity?
     @State private var filter = ""
     @State private var selection: CloneableRepositoryListItem.ID?
 
     public init() {}
 
     public var body: some View {
-        let accounts = context.app.accounts.accounts
-        let account = accounts.first { AccountKey($0) == accountKey } ?? accounts.first
+        let accounts = groupAccountsForPicker(context.app.accounts.accounts).flatMap(\.accounts)
+        let account = accounts.first { $0.identity == accountIdentity } ?? accounts.first
         HStack(alignment: .top, spacing: Metrics.insetLarge * 2) {
             GetStartedActions(
                 clone: { context.actions.perform(.cloneRepository(url: nil)) },
@@ -31,17 +32,13 @@ public struct GetStartedView: View {
             if let account {
                 VStack(alignment: .leading, spacing: Metrics.insetSmall) {
                     if accounts.count > 1 {
-                        CapsulePopUp("Account", selection: Binding(
-                            get: { AccountKey(account) },
-                            set: { key in
-                                accountKey = key
+                        AccountPicker(accounts: accounts, selection: Binding(
+                            get: { account.identity },
+                            set: { identity in
+                                accountIdentity = identity
                                 selection = nil
                             }
-                        ), title: "@\(account.login) – \(account.friendlyEndpoint)") {
-                            for account in accounts {
-                                MenuChoice("@\(account.login) – \(account.friendlyEndpoint)", value: AccountKey(account))
-                            }
-                        }
+                        ))
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     AccountRepositoryList(account: account, filter: $filter, selection: $selection) { item in

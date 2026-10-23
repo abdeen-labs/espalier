@@ -1,8 +1,11 @@
-// Publish Repository: GitHub.com and GitHub Enterprise (segments only when
-// both accounts exist; Enterprise first only without a GitHub.com account),
-// the sign-in call to action without an account, Name with "Will be created
-// as <name>" when it's sanitized, Description (from .git/description), "Keep
-// this code private" (on), and Organization when the account has any.
+// Publish Repository: the account, from every signed-in account by host
+// (GitHub.com's first, then each GitHub Enterprise host's); it starts on the
+// repository's assigned account when it's signed in, else on the only
+// account, else on none, and Publish waits for one. Without an account, the
+// sign-in call to action, whose new account is chosen. Then Name with "Will
+// be created as <name>" when it's sanitized, Description (from
+// .git/description), "Keep this code private" (on), and Organization when the
+// account has any; another account forgets the organization chosen.
 // Publishing is `publishRepository`; GitHub's errors show in the sheet.
 
 import EspalierCore
@@ -10,38 +13,21 @@ import GitHubKit
 import GitKit
 import SwiftUI
 
-/// Where a repository is published: a segment of the sheet.
-nonisolated enum PublishDestination: String, CaseIterable, Sendable, Identifiable {
-    case gitHub, enterprise
-
-    var id: String {
-        rawValue
-    }
-
-    var title: String {
-        switch self {
-        case .gitHub: "GitHub.com"
-        case .enterprise: "GitHub Enterprise"
-        }
-    }
-}
-
 /// The Publish sheet's state.
 @MainActor @Observable
 final class PublishRepositorySheetModel {
     @ObservationIgnored let repository: RepositoryModel
     @ObservationIgnored let app: AppModel
-    var destination: PublishDestination
     var name: String
     var description = ""
     var isPrivate = true
     /// The organization's ID, or nil for the account itself.
     var organizationID: Int?
-    /// The chosen Enterprise account, among two or more.
-    var enterpriseAccount: AccountKey?
+    /// The account chosen, if any.
+    private(set) var chosenAccount: AccountIdentity?
     private(set) var organizations: [APIOrganization] = []
     /// The account the organizations are for.
-    private(set) var organizationsAccount: AccountKey?
+    private(set) var organizationsAccount: AccountIdentity?
     private(set) var isPublishing = false
     /// GitHub's error, or another reason publishing failed.
     var problem: String?
@@ -50,33 +36,37 @@ final class PublishRepositorySheetModel {
         self.repository = repository
         self.app = app
         name = repository.record.name
-        let hasDotCom = app.accounts.accounts.contains { isDotCom($0.endpoint) }
-        let hasEnterprise = app.accounts.accounts.contains { !isDotCom($0.endpoint) }
-        destination = !hasDotCom && hasEnterprise ? .enterprise : .gitHub
-    }
-
-    /// The segments: shown only when both kinds of account exist.
-    var destinations: [PublishDestination] {
-        let hasDotCom = app.accounts.accounts.contains { isDotCom($0.endpoint) }
-        let hasEnterprise = app.accounts.accounts.contains { !isDotCom($0.endpoint) }
-        return hasDotCom && hasEnterprise ? PublishDestination.allCases : []
-    }
-
-    func accounts(for destination: PublishDestination) -> [Account] {
-        switch destination {
-        case .gitHub: app.accounts.accounts.filter { isDotCom($0.endpoint) }
-        case .enterprise: app.accounts.accounts.filter { !isDotCom($0.endpoint) }
+        let accounts = app.accounts.accounts
+        if let assigned = app.accounts.account(for: repository.record) {
+            chosenAccount = assigned.identity
+        } else if accounts.count == 1 {
+            chosenAccount = accounts[0].identity
         }
     }
 
-    /// The account to publish with: GitHub.com's, or the chosen Enterprise
-    /// one (only the Enterprise choice is stored).
+    /// The signed-in accounts, as the pop-up lists them.
+    var accounts: [Account] {
+        groupAccountsForPicker(app.accounts.accounts).flatMap(\.accounts)
+    }
+
+    /// The account to publish with: the one chosen, while it's signed in;
+    /// else the only one signed in.
     var account: Account? {
-        let accounts = accounts(for: destination)
-        if destination == .enterprise, let key = enterpriseAccount, let chosen = accounts.first(where: { AccountKey($0) == key }) {
+        let accounts = accounts
+        if let chosenAccount, let chosen = accounts.first(where: { $0.identity == chosenAccount }) {
             return chosen
         }
-        return accounts.first
+        return accounts.count == 1 ? accounts[0] : nil
+    }
+
+    /// Chooses the account to publish with. The organization chosen was the
+    /// other account's, and goes.
+    func chooseAccount(_ identity: AccountIdentity?) {
+        guard identity != account?.identity else {
+            return
+        }
+        chosenAccount = identity
+        organizationID = nil
     }
 
     /// The name the repository gets on GitHub.
@@ -84,8 +74,9 @@ final class PublishRepositorySheetModel {
         sanitizedRepositoryName(name)
     }
 
+    /// The organization chosen, when it's the account's.
     var organization: APIOrganization? {
-        guard let organizationID, organizationsAccount == account.map(AccountKey.init) else {
+        guard let organizationID, organizationsAccount == account?.identity else {
             return nil
         }
         return organizations.first { $0.id == organizationID }
@@ -95,8 +86,7 @@ final class PublishRepositorySheetModel {
         account != nil && !sanitizedName.isEmpty && !isPublishing
     }
 
-    /// Loads the description and the account's organizations (the
-    /// organizations load again when the account changes).
+    /// Loads the description.
     func loadDescription() async {
         let loaded = await repository.sync.publishDescription()
         if description.isEmpty {
@@ -104,19 +94,26 @@ final class PublishRepositorySheetModel {
         }
     }
 
+    /// Loads the account's organizations (again when the account changes);
+    /// an answer for an account no longer chosen is dropped.
     func loadOrganizations() async {
         guard let account else {
             organizations = []
             organizationsAccount = nil
+            organizationID = nil
             return
         }
-        let key = AccountKey(account)
+        let identity = account.identity
+        if organizationsAccount != identity {
+            organizations = []
+            organizationsAccount = nil
+        }
         let loaded = await repository.sync.publishOrganizations(for: account)
-        guard self.account.map(AccountKey.init) == key else {
+        guard self.account?.identity == identity else {
             return
         }
         organizations = loaded
-        organizationsAccount = key
+        organizationsAccount = identity
         if let organizationID, !loaded.contains(where: { $0.id == organizationID }) {
             self.organizationID = nil
         }
@@ -163,7 +160,7 @@ struct PublishRepositorySheet: View {
             .task {
                 await model.loadDescription()
             }
-            .task(id: model.account.map(AccountKey.init)) {
+            .task(id: model.account?.identity) {
                 await model.loadOrganizations()
             }
     }
@@ -195,27 +192,19 @@ struct PublishRepositoryForm: View {
 
     var body: some View {
         SheetScaffold("Publish Repository") {
-            if !model.destinations.isEmpty {
-                // The destinations' tabs, centered, as a tab view's.
-                CapsuleSegmentedControl(
-                    "Destination",
-                    selection: $model.destination,
-                    segments: model.destinations.map { CapsuleSegment($0.title, value: $0) }
-                )
-                .frame(maxWidth: .infinity)
-            }
-
-            if let account = model.account {
-                fields(for: account)
+            if model.accounts.isEmpty {
+                AccountsSignInPrompt { account in
+                    model.chooseAccount(account.identity)
+                }
             } else {
-                RepositorySignInPrompt(isEnterprise: model.destination == .enterprise, endpoint: nil)
+                fields
             }
 
             if let problem = model.problem {
                 FieldMessage(problem, kind: .error)
             }
         } buttons: {
-            if model.account != nil {
+            if !model.accounts.isEmpty {
                 SheetButtons(
                     "Publish Repository",
                     isConfirmDisabled: !model.canPublish,
@@ -233,33 +222,19 @@ struct PublishRepositoryForm: View {
         .disabled(model.isPublishing)
     }
 
-    /// The fields, the same rows for either destination, so switching
-    /// destinations never resizes the sheet (the values crossfade, 0.15 s):
-    /// Account shows whoever publishes and is a choice only among two or
-    /// more Enterprise accounts; Organization is there before the
-    /// organizations load, and without any, showing None.
-    @ViewBuilder
-    private func fields(for account: Account) -> some View {
+    /// The fields: Account, from every signed-in account; Organization is
+    /// there before the organizations load, and without any, showing None.
+    private var fields: some View {
         Form {
             // The labels in the form's column; the fields are capsules, and
             // the pop-ups as wide as they are.
-            let accounts = model.accounts(for: model.destination)
             LabeledContent("Account") {
-                CapsulePopUp("Account", selection: Binding(
-                    get: { AccountKey(account) },
-                    set: { key in
-                        if model.destination == .enterprise {
-                            model.enterpriseAccount = key
-                        }
-                    }
-                ), title: "@\(account.login) – \(account.friendlyEndpoint)") {
-                    for account in accounts {
-                        MenuChoice("@\(account.login) – \(account.friendlyEndpoint)", value: AccountKey(account))
-                    }
-                }
+                AccountPicker(accounts: model.accounts, selection: Binding(
+                    get: { model.account?.identity },
+                    set: { model.chooseAccount($0) }
+                ))
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .disabled(model.destination != .enterprise || accounts.count < 2)
             LabeledContent("Name") {
                 TextField("Name", text: $model.name)
                     .labelsHidden()
@@ -286,7 +261,6 @@ struct PublishRepositoryForm: View {
         }
         .formStyle(.columns)
         .textFieldStyle(.capsule)
-        .motion(Motion.leave, value: model.destination)
     }
 
     /// The organization pop-up's title: the chosen organization's login, or
