@@ -138,6 +138,16 @@ public final class WorktreesModel: RepositoryFeature {
         worktree.type == .linked && !worktree.isLocked
     }
 
+    /// Whether the worktree's folder is gone, looked at now rather than at
+    /// the last refresh: git keeps the worktree, and counts its branch as
+    /// checked out, until it's removed. A locked worktree isn't missing:
+    /// locking keeps one whose folder is on a drive that isn't connected. (A
+    /// folder that's there without its `.git` file is one git lists as
+    /// prunable too, but won't remove, so it isn't missing here.)
+    public nonisolated func isMissing(_ worktree: WorktreeEntry) -> Bool {
+        worktree.type == .linked && !worktree.isLocked && !itemExists(atPath: worktree.path)
+    }
+
     // MARK: Adding
 
     /// The folder new worktrees go in unless the user picks another: the

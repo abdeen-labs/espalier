@@ -1,6 +1,7 @@
 // Worktrees against real repositories: the list and its rules, adding for
 // new, existing, and remote branches, switching with the state it seeds,
 // removing (the current worktree, a failure and the forced deletion),
+// missing worktrees (what's missing, removing one, one whose folder is back),
 // renaming and moving, repositories in the list that are worktrees too,
 // and a folder that isn't a full path.
 
@@ -498,6 +499,88 @@ struct WorktreesModelTests {
         #expect(preconditionText(deleteStale) == preconditionText(deleteLocked))
         #expect(FileManager.default.fileExists(atPath: linked.path))
         await fixture.app.idle()
+    }
+
+    // MARK: Missing worktrees
+
+    @Test("a worktree whose folder is gone is missing, also before a refresh notices; a locked one isn't")
+    func missing() async throws {
+        let fixture = try await WorktreeFixture()
+        let linked = try await fixture.addLinked()
+        let locked = try await fixture.addLinked("locked-tree", branch: "master~1")
+        try await runGit(["worktree", "lock", locked.path], fixture.main)
+        await fixture.model.refresh(.full, reason: .user)
+        let worktrees = fixture.model.worktrees
+        let main = try #require(worktrees.main)
+        #expect(!worktrees.isMissing(main))
+        #expect(!worktrees.isMissing(linked))
+
+        try FileManager.default.removeItem(atPath: linked.path)
+        try FileManager.default.removeItem(atPath: locked.path)
+        // The entry is the last refresh's, from before the folder went.
+        #expect(!linked.isPrunable)
+        #expect(worktrees.isMissing(linked))
+        #expect(!worktrees.isMissing(try fixture.entry(at: locked.path)))
+
+        await fixture.model.refresh(.full, reason: .user)
+        #expect(try fixture.entry(at: linked.path).isPrunable)
+        #expect(worktrees.isMissing(try fixture.entry(at: linked.path)))
+        #expect(!worktrees.isMissing(try fixture.entry(at: locked.path)))
+        await fixture.app.idle()
+    }
+
+    @Test("removing a missing worktree asks whatever the setting says, then removes git's record of it")
+    func removeMissing() async throws {
+        let fixture = try await WorktreeFixture()
+        let linked = try await fixture.addLinked()
+        let worktrees = fixture.model.worktrees
+        fixture.app.preferences.confirmWorktreeRemoval = false
+        try FileManager.default.removeItem(atPath: linked.path)
+
+        let error = await #expect(throws: OperationError.self) {
+            try await worktrees.remove(linked)
+        }
+        guard case .confirmationRequired(let confirmation)? = error?.reason else {
+            Issue.record("Expected a confirmation, got \(String(describing: error))")
+            return
+        }
+        #expect(confirmation.kind == .removeMissingWorktree)
+        #expect(try await listWorktrees(fixture.main).count == 2)
+
+        try await worktrees.remove(linked, confirmed: [.removeMissingWorktree])
+        #expect(try await listWorktrees(fixture.main).count == 1)
+        await fixture.app.idle()
+        #expect(worktrees.entries.count == 1)
+        #expect(fixture.model.record.path == fixture.main.path)
+    }
+
+    @Test("a missing worktree whose folder is back when its removal runs is left in place, not deleted")
+    func removeMissingThatCameBack() async throws {
+        let fixture = try await WorktreeFixture()
+        let linked = try await fixture.addLinked()
+        let worktrees = fixture.model.worktrees
+        let away = POSIXPath.join(try createTempDirectory(), "away")
+        try FileManager.default.moveItem(atPath: linked.path, toPath: away)
+
+        let error = await #expect(throws: OperationError.self) {
+            try await worktrees.remove(linked)
+        }
+        guard case .confirmationRequired(let confirmation)? = error?.reason else {
+            Issue.record("Expected a confirmation, got \(String(describing: error))")
+            return
+        }
+        #expect(confirmation.kind == .removeMissingWorktree)
+
+        // The folder comes back between the question and the answer.
+        try FileManager.default.moveItem(atPath: away, toPath: linked.path)
+        let back = await #expect(throws: OperationError.self) {
+            try await worktrees.remove(linked, confirmed: [.removeMissingWorktree])
+        }
+        #expect(preconditionText(back) != nil)
+        #expect(FileManager.default.fileExists(atPath: POSIXPath.join(linked.path, ".git")))
+        #expect(try await listWorktrees(fixture.main).count == 2)
+        await fixture.app.idle()
+        #expect(worktrees.entries.count == 2)
     }
 
     // MARK: Renaming and moving

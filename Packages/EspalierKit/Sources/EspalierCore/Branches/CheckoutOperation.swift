@@ -99,6 +99,10 @@ extension BranchesModel {
     ///
     /// - The current branch is already checked out: nothing runs.
     /// - A branch checked out in another worktree switches to that worktree.
+    ///   When that worktree's folder is gone, it asks
+    ///   (`confirmationRequired(.removeMissingWorktree)`) before the other
+    ///   questions, then removes the worktree as the checkout starts; if the
+    ///   folder is back by then, it switches to the worktree after all.
     /// - On a detached HEAD, an unborn branch, or a protected branch, changes
     ///   always move to the new branch.
     /// - With the "ask" strategy and changes: `decisionRequired`, answered
@@ -141,14 +145,29 @@ extension BranchesModel {
 
         // If the branch is checked out in another worktree, switch to that
         // worktree instead of checking out the branch in the current
-        // worktree.
+        // worktree. Git counts a branch held by a worktree whose folder is
+        // gone as still checked out, so that worktree has to be removed
+        // before the branch can be checked out here.
         let currentWorkingDirectory = repository.watchedPaths?.workingDirectory ?? realPath(repository.record.path)
-        if let worktree = state.worktrees.first(where: { worktree in
+        let holder = state.worktrees.first { worktree in
             worktree.branch.map { JSCompat.strictEquals($0, branch.ref) } == true
                 && !JSCompat.strictEquals(realPath(worktree.path), currentWorkingDirectory)
-        }) {
-            try await repository.worktrees.switchToWorktree(worktree)
-            return .switchedToWorktree(worktree)
+        }
+        let missingWorktree = holder.flatMap { repository.worktrees.isMissing($0) ? $0 : nil }
+        if let holder, missingWorktree == nil {
+            try await repository.worktrees.switchToWorktree(holder)
+            return .switchedToWorktree(holder)
+        }
+        if let missingWorktree, !confirmed.contains(.removeMissingWorktree) {
+            throw OperationError(
+                .confirmationRequired(.removeMissingWorktree(
+                    name: getWorktreeDisplayName(missingWorktree),
+                    path: missingWorktree.path,
+                    branch: branch.name
+                )),
+                operation: .checkoutBranch,
+                repositoryID: repository.id
+            )
         }
 
         var strategy = explicit ?? app.preferences.uncommittedChangesStrategy
@@ -180,8 +199,11 @@ extension BranchesModel {
         let currentTip = state.tip
         let currentRemote = state.remotes.currentRemote
         let finalStrategy = strategy
-        try await repository.perform(descriptor) { ctx in
+        let worktreeBack: WorktreeEntry? = try await repository.perform(descriptor) { ctx in
             try await self.requireNoOperationOnDisk(.checkoutBranch, retry: retry, in: ctx)
+            if missingWorktree != nil, let back = try await repository.worktrees.removeMissingWorktree(holding: branch.ref, in: ctx) {
+                return back
+            }
             switch finalStrategy {
             case .stashOnCurrentBranch:
                 try await self.checkoutAndLeaveChanges(
@@ -202,6 +224,11 @@ extension BranchesModel {
                 description: "Checking out",
                 target: branch.name
             )))
+            return nil
+        }
+        if let worktreeBack {
+            try await repository.worktrees.switchToWorktree(worktreeBack)
+            return .switchedToWorktree(worktreeBack)
         }
 
         // After a successful checkout: make sure changes are visible, back in

@@ -1,5 +1,5 @@
 // Checking out a branch that's checked out in another worktree switches
-// here.
+// here, or, when that worktree's folder is gone, removes the worktree first.
 
 import EspalierSupport
 import Foundation
@@ -92,6 +92,29 @@ extension WorktreesModel {
             logger.info("Switched a repository to another worktree")
         }
         app.select(.repository(result.id))
+    }
+
+    /// Before checking out the branch `ref`: removes the other worktree that
+    /// has it checked out when that worktree's folder is gone (`git worktree
+    /// remove`), as git refuses the checkout until then. Returns that
+    /// worktree instead, untouched, when its folder is back, for the caller
+    /// to switch to; nil when nothing holds the branch now, or once the
+    /// worktree is removed. Assumes the local lane is held.
+    func removeMissingWorktree(holding ref: String, in ctx: OperationContext) async throws -> WorktreeEntry? {
+        let current = realPath(ctx.repository.path)
+        let worktrees = try await listWorktrees(ctx.repository)
+        guard let holder = worktrees.first(where: { worktree in
+            worktree.branch.map { JSCompat.strictEquals($0, ref) } == true
+                && !JSCompat.strictEquals(realPath(worktree.path), current)
+        }) else {
+            return nil
+        }
+        if itemExists(atPath: holder.path) {
+            return holder
+        }
+        try await removeWorktree(ctx.repository.path, holder.path, false)
+        logger.info("Removed a worktree whose folder was gone to check out its branch")
+        return nil
     }
 
     /// The error for a repository that left the list while an intent ran.

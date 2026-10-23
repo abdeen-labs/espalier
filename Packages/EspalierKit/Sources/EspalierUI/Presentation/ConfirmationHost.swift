@@ -1,4 +1,4 @@
-// How each of the state layer's 25 confirmations is shown. The copy is the
+// How each of the state layer's 26 confirmations is shown. The copy is the
 // state layer's (`Confirmation`); this file decides alert or compact sheet,
 // button roles, severity, lists, and the checkbox. Remove Repository and
 // Delete Branch are Espalier's compact sheets: their option is Espalier's
@@ -126,7 +126,7 @@ extension Confirmation {
     private var isDestructive: Bool {
         switch kind {
         case .discardChanges, .discardAllChanges, .discardLines, .discardStash, .overwriteCommitMessage,
-             .removeWorktree, .abortWithResolvedConflicts, .deleteBranch, .deleteRemoteBranch, .deleteTag,
+             .removeWorktree, .removeMissingWorktree, .abortWithResolvedConflicts, .deleteBranch, .deleteRemoteBranch, .deleteTag,
              .removeRepository, .leaveCommitsBehind, .replaceCommandLineTool:
             true
         default:

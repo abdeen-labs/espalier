@@ -101,7 +101,7 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
         if let repository = app.selectedRepository, repository.isUsable,
            repository.worktrees.isListVisible || repository.id == revealed {
             let model = repository.worktrees
-            worktrees = WorktreeRowContent.rows(model.entries, currentPath: model.current?.path, filter: filter)
+            worktrees = WorktreeRowContent.rows(model.entries, currentPath: model.current?.path, filter: filter, isMissing: model.isMissing)
         }
         return RepositoryPopoverContent(worktrees: worktrees, groups: groups, hasRepositories: !all.isEmpty)
     }

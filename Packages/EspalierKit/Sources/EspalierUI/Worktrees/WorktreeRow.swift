@@ -2,9 +2,10 @@
 //
 // A worktree's row in the repository popover: its folder's name (the
 // window's worktree semibold) with its branch or short SHA, locked ones
-// locked, and Rename…, Copy Worktree Name, Copy Worktree Path, Show in
-// Finder, and Delete… (neither for the main worktree or a locked one). A
-// click switches the window to the worktree.
+// locked, one whose folder is gone with a missing repository's glyph, and
+// Rename…, Copy Worktree Name, Copy Worktree Path, Show in Finder, and
+// Delete… (neither for the main worktree or a locked one). A click switches
+// the window to the worktree, or offers to remove a missing one.
 
 import EspalierCore
 import EspalierSupport
@@ -23,6 +24,8 @@ nonisolated struct WorktreeRowContent: Sendable, Equatable, Identifiable {
     /// The window is at this worktree.
     var isCurrent: Bool
     var isLocked: Bool
+    /// The worktree's folder is gone (`WorktreesModel.isMissing(_:)`).
+    var isMissing: Bool
 
     var id: String {
         path
@@ -33,16 +36,20 @@ nonisolated struct WorktreeRowContent: Sendable, Equatable, Identifiable {
         POSIXPath.basename(path)
     }
 
-    /// The tooltip: the folder, and why it can't be renamed or deleted.
+    /// The tooltip: the folder, and why it can't be renamed or deleted, or
+    /// that it's gone.
     var tooltip: String {
         if isLocked {
             return "\(path)\nThis worktree is locked."
+        }
+        if isMissing {
+            return "\(path)\nThis worktree's folder no longer exists."
         }
         return path
     }
 
     /// What VoiceOver reads: "espalier-feature, feature/login, current,
-    /// locked".
+    /// locked", or "…, missing".
     var accessibilityLabel: String {
         var parts = [name]
         if !detail.isEmpty {
@@ -57,19 +64,23 @@ nonisolated struct WorktreeRowContent: Sendable, Equatable, Identifiable {
         if isLocked {
             parts.append("locked")
         }
+        if isMissing {
+            parts.append("missing")
+        }
         return parts.joined(separator: ", ")
     }
 
-    init(path: String, detail: String, isDetached: Bool = false, isMain: Bool, isCurrent: Bool, isLocked: Bool) {
+    init(path: String, detail: String, isDetached: Bool = false, isMain: Bool, isCurrent: Bool, isLocked: Bool, isMissing: Bool = false) {
         self.path = path
         self.detail = detail
         self.isDetached = isDetached
         self.isMain = isMain
         self.isCurrent = isCurrent
         self.isLocked = isLocked
+        self.isMissing = isMissing
     }
 
-    init(_ worktree: WorktreeEntry, isCurrent: Bool) {
+    init(_ worktree: WorktreeEntry, isCurrent: Bool, isMissing: Bool) {
         self.init(
             path: worktree.path,
             detail: getWorktreeDescription(worktree),
@@ -77,15 +88,22 @@ nonisolated struct WorktreeRowContent: Sendable, Equatable, Identifiable {
             isDetached: worktree.branch?.isEmpty ?? true,
             isMain: worktree.type == .main,
             isCurrent: isCurrent,
-            isLocked: worktree.isLocked
+            isLocked: worktree.isLocked,
+            isMissing: isMissing
         )
     }
 
     /// The rows for `worktrees` (the main one first, as git lists them),
     /// those whose name or branch `filter` matches as it matches the
     /// repositories (`FuzzyQuery`); all of them for an empty filter.
-    static func rows(_ worktrees: [WorktreeEntry], currentPath: String?, filter: String) -> [WorktreeRowContent] {
-        let rows = worktrees.map { WorktreeRowContent($0, isCurrent: $0.path == currentPath) }
+    /// `isMissing` says which worktrees' folders are gone.
+    static func rows(
+        _ worktrees: [WorktreeEntry],
+        currentPath: String?,
+        filter: String,
+        isMissing: (WorktreeEntry) -> Bool = { _ in false }
+    ) -> [WorktreeRowContent] {
+        let rows = worktrees.map { WorktreeRowContent($0, isCurrent: $0.path == currentPath, isMissing: isMissing($0)) }
         guard let query = FuzzyQuery(filter) else {
             return rows
         }
@@ -93,15 +111,15 @@ nonisolated struct WorktreeRowContent: Sendable, Equatable, Identifiable {
     }
 }
 
-/// One worktree: its symbol, its name, a lock, and its branch or SHA (in
-/// the code font).
+/// One worktree: its symbol (a missing repository's when its folder is
+/// gone), its name, a lock, and its branch or SHA (in the code font).
 struct WorktreeRow: View {
     let content: WorktreeRowContent
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
-            Image(systemName: "rectangle.stack")
-                .foregroundStyle(.text2)
+            Image(systemName: content.isMissing ? "questionmark.folder" : "rectangle.stack")
+                .foregroundStyle(content.isMissing ? .text3 : .text2)
                 // In line with the repositories' glyphs.
                 .frame(width: Metrics.Sidebar.glyphSize)
                 .accessibilityHidden(true)

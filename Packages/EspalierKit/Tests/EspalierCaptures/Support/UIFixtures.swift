@@ -67,6 +67,8 @@ enum UIFixtures {
         ("commitConflictMarkers", .commitConflictMarkers(["Sources/App/RepositoryLoader.swift"])),
         ("overwriteCommitMessage", .overwriteCommitMessage()),
         ("removeWorktree", .removeWorktree(name: "feature-login", path: "/Users/joe/Developer/espalier-feature-login")),
+        ("removeMissingWorktree", .removeMissingWorktree(name: "feature-login", path: "/Users/joe/Developer/espalier-feature-login")),
+        ("removeMissingWorktree-checkout", .removeMissingWorktree(name: "feature-login", path: "/Users/joe/Developer/espalier-feature-login", branch: "feature/login")),
         ("abortWithResolvedConflicts", .abortWithResolvedConflicts(operation: "Rebase")),
         ("deleteBranch", .deleteBranch("feature/login", existsOnRemote: false)),
         ("deleteBranch-remote", .deleteBranch("feature/login", existsOnRemote: true)),

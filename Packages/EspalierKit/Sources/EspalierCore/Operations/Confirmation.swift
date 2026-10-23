@@ -9,7 +9,7 @@ public enum ConfirmationKind: String, Sendable, Hashable, CaseIterable {
     case removeRepository, discardChanges, discardAllChanges, discardLines, discardStash, checkoutCommit, leaveCommitsBehind
     case forcePush, rewritePublishedCommits, undoCommitWithChanges, resetToCommit, resetWithChanges
     case commitFilteredChanges, commitWithUnknownCoAuthors, commitOversizedFiles, commitConflictMarkers
-    case overwriteCommitMessage, removeWorktree, abortWithResolvedConflicts, deleteBranch, deleteRemoteBranch, deleteTag
+    case overwriteCommitMessage, removeWorktree, removeMissingWorktree, abortWithResolvedConflicts, deleteBranch, deleteRemoteBranch, deleteTag
     case replaceCommandLineTool
     case checkoutLinkedBranch, checkoutLinkedPullRequest
 }
@@ -301,6 +301,28 @@ extension Confirmation {
             title: "Delete Worktree?",
             message: "Are you sure you want to delete the worktree \(name)?",
             confirmButton: "Delete"
+        )
+    }
+
+    /// Removing a worktree whose folder is gone, which always asks: from the
+    /// worktree list, or, with `branch`, before checking out the branch it
+    /// holds (git counts that branch as checked out until the worktree goes).
+    public static func removeMissingWorktree(name: String, path: String, branch: String? = nil) -> Confirmation {
+        if let branch {
+            return Confirmation(
+                kind: .removeMissingWorktree,
+                details: .worktree(name: name, path: path),
+                title: "Remove Missing Worktree?",
+                message: "\(branch) is checked out in the worktree \(name), whose folder no longer exists. Removing the worktree lets you check out \(branch) here.",
+                confirmButton: "Remove and Check Out"
+            )
+        }
+        return Confirmation(
+            kind: .removeMissingWorktree,
+            details: .worktree(name: name, path: path),
+            title: "Remove Missing Worktree?",
+            message: "The folder for the worktree \(name) no longer exists.",
+            confirmButton: "Remove"
         )
     }
 
