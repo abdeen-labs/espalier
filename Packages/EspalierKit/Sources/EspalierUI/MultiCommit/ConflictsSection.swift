@@ -24,13 +24,16 @@ nonisolated public struct ConflictsSectionContent: Sendable, Equatable {
     }
 
     /// The section for the working directory's files: an operation's
-    /// conflicts, with its manual resolutions and branches, or a stash
-    /// restore's (no sides to pick); counts in `numberFormat`.
+    /// conflicts, with its manual resolutions, branches, and the files
+    /// whose last side chosen for one conflict Undo can put back
+    /// (`undoablePaths`), or a stash restore's (no sides to pick); counts
+    /// in `numberFormat`.
     public static func make(
         files: [WorkingDirectoryFileChange],
         manualResolutions: [String: ManualConflictResolution],
         branches: ConflictBranches?,
         offersSides: Bool,
+        undoablePaths: Set<ExactString> = [],
         numberFormat: NumberFormat
     ) -> ConflictsSectionContent {
         ConflictsSectionContent(rows: files.compactMap { file in
@@ -39,6 +42,7 @@ nonisolated public struct ConflictsSectionContent: Sendable, Equatable {
                 manualResolution: manualResolutions[file.path],
                 branches: branches,
                 offersSides: offersSides,
+                canUndoConflictSide: undoablePaths.contains(ExactString(file.path)),
                 numberFormat: numberFormat
             )
         })
@@ -56,6 +60,7 @@ nonisolated public struct ConflictsSectionContent: Sendable, Equatable {
                 manualResolutions: conflictState.manualResolutions,
                 branches: operations.conflictBranches,
                 offersSides: true,
+                undoablePaths: operations.pathsWithUndoableConflictSides,
                 numberFormat: numberFormat
             )
         }

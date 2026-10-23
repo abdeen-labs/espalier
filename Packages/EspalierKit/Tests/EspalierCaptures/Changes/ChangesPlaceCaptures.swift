@@ -3,9 +3,11 @@
 // README.md partly included (also
 // under Included in Commit), the search typed hiding the selected file,
 // filtered to nothing, no changes with Suggestions and stashes on the
-// branch, a merge's conflicts with the operation panel and the merge's
-// commit form, and a rebase's conflicts with the panel and the conflicted
-// file's band (light and dark).
+// branch, a merge's conflicts with the operation panel, the conflicted
+// file's conflicts as blocks, and the merge's message, then resolved by
+// one block's side (the panel's Commit Merge, the band's Undo), and a
+// rebase's conflicts with the panel and the conflicted file's band and
+// blocks (light and dark).
 
 import AppKit
 @testable import EspalierCore
@@ -92,13 +94,21 @@ struct ChangesPlaceCaptures {
         }
     }
 
-    @Test("a merge's conflicts in the list, its panel, the conflicted file's band, and the merge's commit form")
+    @Test("a merge's conflicts in the list, its panel, the conflicted file's band and blocks, and the merge's message; then resolved by a block's side")
     func conflicts() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await ChangesCaptureRepository.make(try await setupConflictedRepo())
-            fixture.repository.changes.select(fileIDs: [try fixture.file("foo").id])
+            let changes = fixture.repository.changes
+            changes.select(fileIDs: [try fixture.file("foo").id])
             await fixture.settle()
             await capturePlace(fixture, named: "place-conflicts")
+
+            // One side of the file's one conflict: the merge can be
+            // committed from the panel, and the band offers Undo.
+            let text = try #require(changes.conflictedFileText)
+            try await fixture.repository.operations.chooseConflictSide(.ours, conflict: 0, inFile: "foo", shown: text)
+            await fixture.settle()
+            await capturePlace(fixture, named: "place-conflicts-resolved")
             await fixture.app.idle()
         }
     }

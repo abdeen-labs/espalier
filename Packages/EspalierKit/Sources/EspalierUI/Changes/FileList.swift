@@ -1034,6 +1034,13 @@ struct ChangesController {
             context.actions.perform(.openWithDefaultProgram(path: absolutePath(first)))
         case .resolve(let resolution):
             repository.operations.setManualResolution(resolution, forPath: first.path)
+        case .undoConflictSide:
+            let operations = repository.operations
+            Task {
+                await context.presenter.perform { _ throws(OperationError) in
+                    try await operations.undoConflictSide(forPath: first.path)
+                }
+            }
         }
     }
 

@@ -2,8 +2,9 @@
 // titled window draws it offscreen: History with HEAD's commit and its
 // diff, History with Commit Info, History with the sidebar hidden (Changes
 // | History in the toolbar), History beside the icons style's rail, with
-// and without Commit Info, and a merge's conflicts in Changes; and the
-// rail's Branches and Tags popovers.
+// and without Commit Info, and a merge's conflicts in Changes (the
+// conflicted file's conflicts as blocks); and the rail's Branches and Tags
+// popovers.
 // The window stays up while its split view, toolbar, and diff finish, so
 // it's drawn in the run's look: `--look islands-lagoon` shows the panes as
 // cards on the backdrop.
@@ -129,13 +130,16 @@ extension MainToolbarWindows {
             }
         }
 
-        @Test("a merge's conflicts in Changes, with the operation panel")
+        @Test("a merge's conflicts in Changes, with the operation panel, and the conflicted file's conflicts as blocks")
         func changesConflicts() async throws {
             try await withIsolatedGitConfig { _ in
                 let fixture = try await MainWindowFixture.make(try await setupConflictedRepo())
                 fixture.context.state.select(.changes, in: fixture.repository.id)
+                let changes = fixture.repository.changes
+                let file = try #require(changes.workingDirectory.files.first { $0.path == "foo" })
+                changes.select(fileIDs: [file.id])
                 await fixture.settle()
-                await captureWindow(fixture.context, named: "changes-conflicts", showsDiff: false)
+                await captureWindow(fixture.context, named: "changes-conflicts", showsDiff: true)
                 await fixture.settle()
             }
         }

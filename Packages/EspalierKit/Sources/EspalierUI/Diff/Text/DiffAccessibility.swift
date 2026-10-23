@@ -1,8 +1,10 @@
 // VoiceOver in the diff. Each row is one element with a label that reads the
 // line, what happened to it, and whether the commit includes it. In Changes,
 // rows offer actions to include or exclude the line or its block and to
-// discard it; hunk headers offer their expansions. Rotors move between
-// changes, hunks, and conflict markers.
+// discard it; hunk headers offer their expansions. A conflicted file drawn
+// as blocks reads each block's header as its side and conflict, with its
+// Use <branch>'s Version action, and each line with its side. Rotors move
+// between changes, hunks, and conflict markers (or conflicts).
 
 import AppKit
 import EspalierCore
@@ -20,6 +22,8 @@ extension DiffTableController {
             return hunkLabel(document.hunks[Int(documentRow.hunk)])
         case .noNewline:
             return "No newline at end of file"
+        case .conflictHeader:
+            return document.conflictHeader(ofRow: row).map(conflictHeaderLabel)
         case .context, .added, .deleted, .modified:
             var parts: [String] = []
             if document.isSplit, documentRow.kind != .context {
@@ -51,6 +55,8 @@ extension DiffTableController {
         }
         if documentLine.conflict == .marker {
             label = "Conflict marker. " + label
+        } else if let conflict = documentLine.conflict, let blocks = shownContent?.conflicts, document.isWorkingFile {
+            label = "\(blocks.name(conflict)). " + label
         }
         if let included = isIncluded(line: line) {
             label += included ? " Included in commit." : " Not included in commit."
@@ -59,6 +65,15 @@ extension DiffTableController {
             label += " No newline at end of file."
         }
         return label
+    }
+
+    /// "main, conflict 1 of 2: 3 lines." (the common ancestor's block is
+    /// "Base").
+    private func conflictHeaderLabel(_ header: DocumentConflictHeader) -> String {
+        let name = shownContent?.conflicts?.name(header.side) ?? ConflictBlocks.baseName
+        let total = Set(document.conflictHeaders.map(\.conflict)).count
+        let lines = header.lineCount == 1 ? "1 line" : "\(formatCount(header.lineCount, numberFormat)) lines"
+        return "\(name), conflict \(formatCount(header.conflict + 1, numberFormat)) of \(formatCount(total, numberFormat)): \(lines)."
     }
 
     /// "Hunk, lines 10 to 18: 3 added, 1 deleted."
@@ -87,6 +102,21 @@ extension DiffTableController {
         }
         let documentRow = document.rows[row]
         var actions: [NSAccessibilityCustomAction] = []
+
+        if documentRow.kind == .conflictHeader {
+            let header = Int(documentRow.block)
+            guard canChooseConflictSide(header: header), let title = shownContent?.conflicts?.side(document.conflictHeaders[header].side)?.buttonTitle else {
+                return actions
+            }
+            actions.append(NSAccessibilityCustomAction(name: title) { [weak self] in
+                guard let self, self.canChooseConflictSide(header: header) else {
+                    return false
+                }
+                self.chooseConflictSide(header: header)
+                return true
+            })
+            return actions
+        }
 
         if documentRow.kind == .hunk {
             let hunk = document.hunks[Int(documentRow.hunk)]
@@ -157,7 +187,10 @@ extension DiffTableController {
             NSAccessibilityCustomRotor(label: "Hunks", itemSearchDelegate: rotorDelegate(.hunks)),
         ]
         if !document.conflictMarkerRows.isEmpty {
-            rotors.append(NSAccessibilityCustomRotor(label: "Conflict Markers", itemSearchDelegate: rotorDelegate(.conflictMarkers)))
+            rotors.append(NSAccessibilityCustomRotor(
+                label: document.isWorkingFile ? "Conflicts" : "Conflict Markers",
+                itemSearchDelegate: rotorDelegate(.conflictMarkers)
+            ))
         }
         return rotors
     }

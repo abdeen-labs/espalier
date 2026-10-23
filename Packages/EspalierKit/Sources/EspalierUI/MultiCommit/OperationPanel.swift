@@ -2,11 +2,14 @@
 //
 // The operation panel: a bar across the top of Changes while an operation
 // runs, waits on conflicts, or a stash restore conflicted, with the
-// operation, the commit it stopped at and the resolved count (or its
-// progress), how to resolve while conflicts wait, Resolve with AI, and
-// Abort (quiet). What finishes the
-// operation is in the commit form's place (OperationSlot.swift): Commit
-// Merge under the merge's message, or Continue.
+// operation, one line under it (the commit it stopped at and the files
+// resolved, or its progress), Resolve with AI and Abort (quiet) while files
+// need the user, and, once every file is resolved, the step that finishes
+// the operation as its one prominent button: Commit Merge (committing the
+// message in the commit form's place, OperationSlot.swift), or Continue
+// <Operation>, with "Untracked files will be excluded" on a line of its own
+// for a rebase. A stash restore's conflicts have no sides to take: its panel
+// says how to resolve them.
 
 import AIKit
 import EspalierCore
@@ -14,15 +17,14 @@ import EspalierSupport
 import GitKit
 import SwiftUI
 
-/// What the operation panel shows, and what the commit form's place needs
-/// to finish the operation.
+/// What the operation panel shows, and what finishing the operation needs.
 nonisolated public struct OperationPanelContent: Sendable, Equatable {
     /// The panel's state.
     public enum State: Sendable, Equatable {
         /// An operation runs: "Commit 2 of 5 · summary", and its progress.
         case running(detail: String?, progress: Double?)
-        /// Waiting on conflicts: "1 of 2 conflicted files has been
-        /// resolved."; nil without conflicted files.
+        /// Waiting on conflicts: "1 of 3 files resolved"; nil without
+        /// conflicted files.
         case conflicts(summary: String?)
         /// A rebase git was interrupted between commits.
         case interrupted(message: String)
@@ -36,15 +38,18 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
     public var state: State
     /// "Abort Rebase"; nil when there's nothing to abort.
     public var abortTitle: String?
-    /// "Continue Rebase", "Commit Merge": the commit form's button while the
-    /// operation waits; nil when there's nothing to continue.
-    public var continueTitle: String?
+    /// What finishes the operation: committing a merge, or continuing;
+    /// nil when there's nothing to continue.
+    public var finish: CommitButtonContent.Kind?
     public var canContinue: Bool
     /// Continue's tooltip while it's disabled.
     public var continueHelp: String?
-    /// Whether "Untracked files will be excluded" shows under Continue (a
+    /// Whether "Untracked files will be excluded" shows with Continue (a
     /// rebase with untracked files).
     public var notesUntrackedFiles: Bool
+    /// Whether the operation is being finished (a merge committed, a rebase
+    /// continued).
+    public var isContinuing: Bool
     /// Whether Resolve with AI shows (AI is on and files need the user).
     public var showsResolveWithAI: Bool
     /// Whether it can start now (no round runs).
@@ -56,17 +61,19 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
     /// Which commit a rebase or cherry-pick stopped at: "Stopped at commit
     /// 2 of 4", first on the line under the title.
     public var stoppedAt: String?
-    /// How to resolve, on a line of its own while conflicts wait.
+    /// How to resolve a stash restore's conflicts, on a line of its own
+    /// while they wait.
     public var howTo: String?
 
     public init(
         title: String,
         state: State,
         abortTitle: String? = nil,
-        continueTitle: String? = nil,
+        finish: CommitButtonContent.Kind? = nil,
         canContinue: Bool = false,
         continueHelp: String? = nil,
         notesUntrackedFiles: Bool = false,
+        isContinuing: Bool = false,
         showsResolveWithAI: Bool = false,
         canResolveWithAI: Bool = false,
         isResolved: Bool = false,
@@ -77,10 +84,11 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         self.title = title
         self.state = state
         self.abortTitle = abortTitle
-        self.continueTitle = continueTitle
+        self.finish = finish
         self.canContinue = canContinue
         self.continueHelp = continueHelp
         self.notesUntrackedFiles = notesUntrackedFiles
+        self.isContinuing = isContinuing
         self.showsResolveWithAI = showsResolveWithAI
         self.canResolveWithAI = canResolveWithAI
         self.isResolved = isResolved
@@ -89,13 +97,38 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         self.howTo = howTo
     }
 
-    /// How to resolve an operation's conflicts: in the files, or by taking
-    /// one side's version.
-    public static let howToResolve = "Open each file in your editor or Terminal, or use one side's version. Espalier picks up changes as you save."
-
     /// How to resolve a stash restore's conflicts, which have no sides to
     /// take.
     public static let howToResolveStash = "Open each file in your editor or Terminal. Espalier picks up changes as you save."
+
+    /// "Commit Merge" or "Continue Rebase"; nil when there's nothing to
+    /// continue.
+    public var continueTitle: String? {
+        finish.map { CommitButtonContent(kind: $0, fileCount: 0, branch: nil, isEnabled: true).title }
+    }
+
+    /// The panel's prominent button, once it finishes the operation: every
+    /// conflicted file resolved (or a rebase interrupted between commits).
+    /// Working while the operation is being finished, disabled with why
+    /// while it can't be (a merge's summary is empty). Nil before.
+    public var finishButton: CommitButtonContent? {
+        guard let finish else {
+            return nil
+        }
+        switch state {
+        case .conflicts where isResolved, .interrupted:
+            return CommitButtonContent(
+                kind: finish,
+                fileCount: 0,
+                branch: nil,
+                isCommitting: isContinuing,
+                isEnabled: canContinue && !isContinuing,
+                disabledReason: isContinuing ? nil : continueHelp
+            )
+        case .running, .conflicts, .stashConflicts, .unsupported:
+            return nil
+        }
+    }
 
     /// Continue's tooltip while files need the user.
     public static let continueDisabledHelp = "Resolve all conflicts before continuing"
@@ -104,9 +137,9 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
     /// button's).
     public static let summaryRequiredHelp = "Enter a summary to commit"
 
-    /// "2 conflicted files", "1 of 2 conflicted files has been resolved.",
-    /// or "All conflicted files have been resolved."; nil without conflicted
-    /// files.
+    /// "2 conflicted files" before any is resolved, "1 of 3 files
+    /// resolved", then "1 file resolved" or "All 3 files resolved"; nil
+    /// without conflicted files.
     public static func summary(resolved: Int, total: Int, numberFormat: NumberFormat) -> String? {
         if total == 0 {
             return nil
@@ -115,9 +148,9 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
             return total == 1 ? "1 conflicted file" : "\(formatCount(total, numberFormat)) conflicted files"
         }
         if resolved >= total {
-            return "All conflicted files have been resolved."
+            return total == 1 ? "1 file resolved" : "All \(formatCount(total, numberFormat)) files resolved"
         }
-        return "\(formatCount(resolved, numberFormat)) of \(formatCount(total, numberFormat)) conflicted files \(resolved == 1 ? "has" : "have") been resolved."
+        return "\(formatCount(resolved, numberFormat)) of \(formatCount(total, numberFormat)) files resolved"
     }
 
     /// The operation's display name ("Rebase", "Cherry-pick", "Revert").
@@ -180,15 +213,15 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
             title: title,
             state: .conflicts(summary: summary(resolved: resolved, total: total, numberFormat: numberFormat)),
             abortTitle: "Abort \(operation)",
-            continueTitle: isMerge ? "Commit Merge" : "Continue \(operation)",
+            finish: isMerge ? .merge : .continueOperation(name: operation),
             canContinue: unresolved == 0 && !isContinuing && !lacksSummary,
             continueHelp: unresolved > 0 ? continueDisabledHelp : (lacksSummary ? summaryRequiredHelp : nil),
             notesUntrackedFiles: isRebaseFamily && hasUntrackedFiles,
+            isContinuing: isContinuing,
             showsResolveWithAI: showsResolveWithAI && unresolved > 0,
             canResolveWithAI: canResolveWithAI,
             isResolved: unresolved == 0,
-            stoppedAt: stoppedAt,
-            howTo: unresolved > 0 ? howToResolve : nil
+            stoppedAt: stoppedAt
         )
     }
 
@@ -202,6 +235,7 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         let unmerged = files.filter { $0.status.kind == .conflicted }
         let unresolvedCount = operations.unresolvedFiles.count
         let hasUntracked = files.contains { $0.status.kind == .untracked }
+        let isContinuing = OperationSlotContent.isContinuing(repository)
 
         if let current = operations.current {
             let name = name(of: current)
@@ -213,8 +247,9 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
                     title: "\(name) interrupted",
                     state: .interrupted(message: current.interruptedMessage),
                     abortTitle: "Abort \(name)",
-                    continueTitle: "Continue \(name)",
-                    canContinue: operations.canContinue
+                    finish: .continueOperation(name: name),
+                    canContinue: operations.canContinue && !isContinuing,
+                    isContinuing: isContinuing
                 )
             case .conflicted:
                 let isRebaseFamily = current.kind == .rebase || current.kind == .squash || current.kind == .reorder
@@ -224,7 +259,7 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
                     resolved: max(unmerged.count - unresolvedCount, 0),
                     total: unmerged.count,
                     unresolved: unresolvedCount,
-                    isContinuing: false,
+                    isContinuing: isContinuing,
                     hasUntrackedFiles: hasUntracked,
                     isRebaseFamily: isRebaseFamily,
                     showsResolveWithAI: aiEnabled,
@@ -244,7 +279,7 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
                 resolved: max(unmerged.count - unresolvedCount, 0),
                 total: unmerged.count,
                 unresolved: unresolvedCount,
-                isContinuing: false,
+                isContinuing: isContinuing,
                 hasUntrackedFiles: hasUntracked,
                 isRebaseFamily: isRebase,
                 showsResolveWithAI: aiEnabled,
@@ -345,6 +380,7 @@ public struct OperationPanel: View {
                 content: content,
                 aiError: AIConflictFlow.state(in: context).startError(for: repository.id),
                 onAbort: abort,
+                onContinue: continueOperation,
                 onOpenTerminal: { context.actions.perform(.openInTerminal(path: nil)) },
                 onResolveWithAI: { AIConflictFlow.start(in: context, repository: repository) }
             )
@@ -372,25 +408,52 @@ public struct OperationPanel: View {
             await MultiCommitActions.abortOperation(in: context, repository: repository)
         }
     }
+
+    /// Commit Merge (with the message in the commit form's place), or
+    /// Continue <Operation>.
+    private func continueOperation() {
+        let repository = repository
+        Task { [weak context] in
+            guard let context else {
+                return
+            }
+            await MultiCommitActions.continueOperation(in: context, repository: repository)
+        }
+    }
 }
 
-/// The bar's look, value-driven: the state's glyph, the title and the lines
-/// under it, a running operation's progress, and the buttons.
+/// The bar's look, value-driven: the state's glyph, the title and the line
+/// under it (and a stash restore's how-to, or Continue's note), a running
+/// operation's progress, and the buttons.
 struct OperationPanelView: View {
     let content: OperationPanelContent
     var aiError: String?
     var onAbort: () -> Void = {}
+    var onContinue: () -> Void = {}
     var onOpenTerminal: () -> Void = {}
     var onResolveWithAI: () -> Void = {}
     @Environment(\.motion) private var motion
 
     var body: some View {
-        StatusBar(tone: tone, title: content.title, subtitle: subtitle, help: subtitleHelp, detail: content.howTo) {
+        StatusBar(tone: tone, title: content.title, subtitle: subtitle, help: subtitleHelp, detail: detail) {
             glyph
         } trailing: {
             progress
             buttons
         }
+    }
+
+    /// The line under the subtitle: how to resolve a stash restore's
+    /// conflicts, or "Untracked files will be excluded" with a rebase's
+    /// Continue.
+    private var detail: String? {
+        if let howTo = content.howTo {
+            return howTo
+        }
+        if content.finishButton != nil, content.notesUntrackedFiles {
+            return OperationSlotContent.untrackedFilesNote
+        }
+        return nil
     }
 
     /// Neutral while work runs, the add color once nothing's left to
@@ -484,6 +547,38 @@ struct OperationPanelView: View {
             Button(abortTitle, action: onAbort)
                 .buttonStyle(.quiet)
         }
+        if let finish = content.finishButton {
+            OperationFinishButton(content: finish, action: onContinue)
+        }
+    }
+}
+
+/// The step that finishes the operation, the panel's one prominent button:
+/// Commit Merge or Continue <Operation>, disabled with why while it can't
+/// run; "Committing Merge…" with the arc while it runs, legible rather than
+/// faded.
+struct OperationFinishButton: View {
+    let content: CommitButtonContent
+    let action: () -> Void
+
+    var body: some View {
+        Group {
+            if content.isCommitting {
+                HStack(spacing: Metrics.insetSmall) {
+                    ArcProgress(.small, tint: Palette.buttonText)
+                    Text(content.title)
+                }
+                .capsuleChrome(.prominent)
+                .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits(.isButton)
+            } else {
+                Button(content.title, action: action)
+                    .buttonStyle(.prominent)
+                    .disabled(!content.isEnabled)
+            }
+        }
+        .tooltip(content.isEnabled || content.isCommitting ? nil : content.disabledReason)
+        .accessibilityLabel(content.title)
     }
 }
 

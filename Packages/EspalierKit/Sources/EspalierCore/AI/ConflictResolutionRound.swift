@@ -176,9 +176,9 @@ public struct ConflictResolutionFailure: Sendable, Equatable {
 public enum ConflictResolutionChoice: Sendable, Hashable {
     /// The model's resolution ("Use the model's suggestion").
     case model
-    /// The current side ("Use current file from <ours>").
+    /// Our side ("Use <ours>'s Version").
     case ours
-    /// The incoming side ("Use incoming file from <theirs>").
+    /// Their side ("Use <theirs>'s Version").
     case theirs
 }
 

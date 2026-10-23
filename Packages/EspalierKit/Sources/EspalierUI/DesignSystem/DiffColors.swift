@@ -1,5 +1,7 @@
 // The diff's colors. Line and word tints are the theme's add and delete
-// colors with alpha; Increase Contrast multiplies them by 1.6.
+// colors with alpha; a conflict block's, its branch's color (as the graph
+// draws it in the theme) with alpha. Increase Contrast multiplies them by
+// 1.6.
 
 import AppKit
 import SwiftUI
@@ -130,6 +132,24 @@ public enum DiffColors {
     public static let base = SystemTone.gray.tint(light: 0.09, dark: 0.12)
     /// Their side of a conflict: the theme's (Classic's orange).
     public static var theirs: NSColor { Theme.current.diff.theirs }
+
+    /// A conflict block's lines, in a conflicted file drawn as blocks: its
+    /// branch's color at 8% (10% in dark).
+    public static func conflictBlockLine(_ branch: NSColor) -> NSColor {
+        Palette.tint(branch, light: 0.08, dark: 0.10)
+    }
+
+    /// A conflict block's header: its branch's color at 15% (20% in dark),
+    /// a step stronger than its lines.
+    public static func conflictBlockHeader(_ branch: NSColor) -> NSColor {
+        Palette.tint(branch, light: 0.15, dark: 0.20)
+    }
+
+    /// The common ancestor's block header: neutral, a step stronger than
+    /// its lines (`base`).
+    public static let baseBlockHeader = SystemTone.gray.tint(light: 0.15, dark: 0.20)
+    /// The common ancestor's block header's name: quieter than a branch's.
+    public static var baseBlockName: NSColor { Palette.text2 }
 
     /// The checkerboard behind transparent images.
     public static var checkerboard: NSColor { Palette.field }

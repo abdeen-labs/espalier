@@ -229,6 +229,17 @@ public enum AppKitTypography {
         sans(.body, weight: weight)
     }
 
+    /// A small capsule button's title that AppKit draws (a conflict block's
+    /// button): 12, in the theme's quiet button weight, as `smallButton`.
+    public static var smallButton: NSFont {
+        sans(.callout, weight: NSFont.Weight(Theme.current.buttonWeights.quiet))
+    }
+
+    /// A conflict block's name: 12, semibold.
+    public static var conflictBlockName: NSFont {
+        sans(.callout, weight: .semibold)
+    }
+
     /// Ref tags: the mono at 10, semibold.
     public static var refCapsule: NSFont {
         mono(size: 10, weight: .semibold)
@@ -358,6 +369,23 @@ private struct LookFontModifier: ViewModifier {
             if let font {
                 current = font
             }
+        }
+    }
+}
+
+extension NSFont.Weight {
+    /// The AppKit weight of a SwiftUI one.
+    nonisolated init(_ weight: Font.Weight) {
+        switch weight {
+        case .ultraLight: self = .ultraLight
+        case .thin: self = .thin
+        case .light: self = .light
+        case .medium: self = .medium
+        case .semibold: self = .semibold
+        case .bold: self = .bold
+        case .heavy: self = .heavy
+        case .black: self = .black
+        default: self = .regular
         }
     }
 }

@@ -5,6 +5,9 @@
 // one stays on screen. When lines don't wrap, the table is as wide as the
 // longest line needs, so the scroll view shows its horizontal scroller and
 // scrolls sideways; rows draw at the visible part, only their text moved.
+// A conflicted file drawn as blocks (`ConflictBlocks`) has a header atop
+// each block whose Use <branch>'s Version button, clicked, asks for that
+// side of that conflict; the buttons wait until the file shows again.
 
 import AppKit
 import EspalierCore
@@ -37,6 +40,9 @@ struct DiffTableContent {
     var tokensGeneration: Int
     /// False while the next diff loads: input is ignored.
     var isInteractive: Bool
+    /// A conflicted file to draw as blocks, in place of the diff (always
+    /// unified).
+    var conflicts: ConflictBlocks?
 
     init(
         fileID: String,
@@ -51,7 +57,8 @@ struct DiffTableContent {
         staging: StagingState? = nil,
         tokens: FileTokens = .none,
         tokensGeneration: Int = 0,
-        isInteractive: Bool = true
+        isInteractive: Bool = true,
+        conflicts: ConflictBlocks? = nil
     ) {
         self.fileID = fileID
         self.diff = diff
@@ -66,6 +73,7 @@ struct DiffTableContent {
         self.tokens = tokens
         self.tokensGeneration = tokensGeneration
         self.isInteractive = isInteractive
+        self.conflicts = conflicts
     }
 
     /// What the document is built from.
@@ -73,10 +81,11 @@ struct DiffTableContent {
         DiffDocumentInput(
             hunks: diff.hunks,
             maxLineNumber: diff.maxLineNumber,
-            isSplit: isSplit,
+            isSplit: isSplit && conflicts == nil,
             canExpand: canExpand,
             tabSize: tabSize,
-            detectsConflictMarkers: detectsConflictMarkers
+            detectsConflictMarkers: detectsConflictMarkers,
+            conflictFile: conflicts?.file
         )
     }
 
@@ -84,6 +93,7 @@ struct DiffTableContent {
     func needsNewDocument(comparedTo other: DiffTableContent) -> Bool {
         fileID != other.fileID || isSplit != other.isSplit || tabSize != other.tabSize
             || canExpand != other.canExpand || detectsConflictMarkers != other.detectsConflictMarkers
+            || conflicts?.file != other.conflicts?.file
             || !textDiffEquals(diff, other.diff)
     }
 }
@@ -100,6 +110,10 @@ struct DiffTableActions {
     var didPaint: @MainActor (String) -> Void = { _ in }
     /// Staging lines, in Changes.
     var staging: StagingActions?
+    /// A conflict block's button: keeps one side (ours or theirs) of the
+    /// conflict at an index in the file as shown; returns whether it was
+    /// kept.
+    var chooseConflictSide: (@MainActor (ConflictedFileText, Int, ManualConflictResolution) async -> Bool)?
 }
 
 
@@ -174,6 +188,18 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     private(set) var hoveredLine: (row: Int, column: DiffColumn)?
     /// The hunk header button the pointer is over.
     private(set) var hoveredButton: (hunk: Int, button: DiffHunkButton)?
+    /// The conflict block button the pointer is over, by its header's
+    /// index.
+    private(set) var hoveredConflictButton: Int?
+    /// The conflict block button pressed, while the pointer stays on it.
+    private(set) var pressedConflictButton: Int?
+    /// The conflict block button clicked last, while its side is kept and
+    /// the file shows again: the buttons wait.
+    private(set) var pendingConflictChoice: Int?
+    /// Conflict block buttons' title widths, by title.
+    private var conflictButtonTitleWidths: [String: CGFloat] = [:]
+    /// The side being kept for the button clicked last.
+    private var conflictChoiceTask: Task<Void, Never>?
     /// A drag down the gutter: the original diff's indexes from and to,
     /// and whether it includes or excludes them.
     private(set) var gutterDrag: (column: DiffColumn, from: Int, to: Int, include: Bool)?
@@ -200,7 +226,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         scrollView = UnbouncedScrollView(frame: CGRect(x: 0, y: 0, width: 600, height: 400))
         geometry = DiffRowGeometry(
             width: 600, isSplit: false, showsStaging: false, digits: 3,
-            font: DiffFontMetrics(fontSize: Metrics.Diff.codeFontSize)
+            font: DiffFontMetrics(fontSize: Metrics.Diff.codeFontSize),
+            oneNumber: false
         )
         super.init()
 
@@ -294,6 +321,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             return
         }
         // The document is current: settings that don't shape rows.
+        let conflictsChanged = shown.conflicts != content.conflicts
         let stagingShapeChanged = (shown.staging != nil) != (content.staging != nil)
         let stagingChanged = shown.staging != content.staging
         // Lines included or left out: the rows on screen whose number
@@ -315,7 +343,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             textCache.reset()
         }
         if shown.tokensGeneration != content.tokensGeneration || stagingChanged
-            || shown.hasExpandedLines != content.hasExpandedLines || fontChanged || stagingShapeChanged {
+            || shown.hasExpandedLines != content.hasExpandedLines || fontChanged || stagingShapeChanged || conflictsChanged {
             redrawVisibleRows()
         }
         if shown.wrapsLines != content.wrapsLines {
@@ -353,7 +381,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         let switchesLayout = shownContent.map { $0.isSplit != content.isSplit } ?? false
         let canInsert = shownContent.map { $0.wrapsLines == content.wrapsLines && (($0.staging == nil) == (content.staging == nil)) } ?? false
         let expansion = animates && !switchesLayout && canInsert ? Self.expansion(from: self.document, to: document) : nil
-        let hovers = hoveredBlock != nil || hoveredLine != nil || hoveredButton != nil
+        let hovers = hoveredBlock != nil || hoveredLine != nil || hoveredButton != nil || hoveredConflictButton != nil
 
         self.document = document
         shownContent = content
@@ -365,6 +393,9 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         hoveredBlock = nil
         hoveredLine = nil
         hoveredButton = nil
+        hoveredConflictButton = nil
+        pressedConflictButton = nil
+        pendingConflictChoice = nil
         gutterDrag = nil
         if isNewFile {
             textSelection = nil
@@ -476,7 +507,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             isSplit: document.isSplit,
             showsStaging: shownContent?.staging != nil,
             digits: document.lineNumberDigits,
-            font: font
+            font: font,
+            oneNumber: document.isWorkingFile
         )
         layoutWidth = width
         lineLayouts.removeAll()
@@ -537,6 +569,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         tableView.backgroundColor = Palette.background
         scrollView.backgroundColor = Palette.background
         textCache.reset()
+        conflictButtonTitleWidths.removeAll()
         relayout(force: true, reload: true)
     }
 
@@ -583,7 +616,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             isSplit: document.isSplit,
             showsStaging: content?.staging != nil,
             digits: document.lineNumberDigits,
-            font: font
+            font: font,
+            oneNumber: document.isWorkingFile
         )
         let columnsChanged = newGeometry.columnsPerLine(.before) != geometry.columnsPerLine(.before)
             || newGeometry.columnsPerLine(.after) != geometry.columnsPerLine(.after)
@@ -626,6 +660,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             switch row.kind {
             case .hunk, .noNewline:
                 continue
+            case .conflictHeader:
+                heights[index] = DiffTableMetrics.conflictHeaderHeight(lineHeight: lineHeight)
             case .context, .added, .deleted, .modified:
                 var lines = 1
                 if document.isSplit {
@@ -900,9 +936,13 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     }
 
     /// The rows the pointer's hover draws on: a block (its handle and
-    /// numbers), a line's numbers, a hunk header's button.
-    private func hoverRows(block: Int?, line: Int?, buttonHunk: Int?) -> [Int] {
+    /// numbers), a line's numbers, a hunk header's button, a conflict
+    /// block's button.
+    private func hoverRows(block: Int?, line: Int?, buttonHunk: Int?, conflictHeader: Int? = nil) -> [Int] {
         var rows: [Int] = []
+        if let conflictHeader, document.conflictHeaders.indices.contains(conflictHeader) {
+            rows.append(document.conflictHeaders[conflictHeader].row)
+        }
         if let block, document.blocks.indices.contains(block) {
             rows.append(contentsOf: document.blocks[block].rows)
         }
@@ -990,6 +1030,14 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         // Rows draw from the pane's left edge, however far the table is
         // scrolled sideways.
         let x = point.x - textScrollX
+        if documentRow.kind == .conflictHeader {
+            let header = Int(documentRow.block)
+            if let button = conflictButtonRect(ofRow: row, rowHeight: rect.height),
+               button.contains(CGPoint(x: x, y: point.y - rect.minY)) {
+                return .conflictButton(header: header)
+            }
+            return .conflictHeader(header: header)
+        }
         if documentRow.kind == .hunk {
             let hunk = Int(documentRow.hunk)
             let documentHunk = document.hunks[hunk]
@@ -1082,6 +1130,13 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         case .expansion(let hunk, let button):
             expand(hunk: hunk, button: button)
             return .none
+        case .conflictButton(let header):
+            guard canChooseConflictSide(header: header) else {
+                return .none
+            }
+            pressedConflictButton = header
+            redrawVisibleRows()
+            return .conflictButton(header)
         case .hunkCheckbox(let hunk):
             guard !isBuilding, let range = document.hunks[hunk].changedDiffLines else {
                 return .none
@@ -1145,7 +1200,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
                 textSelection = DiffTextSelection(column: column, anchor: position, head: position)
             }
             return .text(column)
-        case .hunkHeader, .none:
+        case .hunkHeader, .conflictHeader, .none:
             tableView.window?.makeFirstResponder(tableView)
             textSelection = nil
             return .none
@@ -1192,13 +1247,30 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             }
             selection.head = position
             textSelection = selection
+        case .conflictButton(let header):
+            // Pressed while the pointer stays on the button.
+            let pressed: Int? = hit(at: point) == .conflictButton(header: header) ? header : nil
+            if pressed != pressedConflictButton {
+                pressedConflictButton = pressed
+                redrawVisibleRows()
+            }
         case .none:
             break
         }
     }
 
-    /// The mouse went up: a gutter drag applies its lines.
+    /// The mouse went up: a gutter drag applies its lines; a conflict
+    /// block's button, still pressed, keeps its side.
     func mouseUp(drag: DiffDrag) {
+        if case .conflictButton(let header) = drag {
+            let isPressed = pressedConflictButton == header
+            pressedConflictButton = nil
+            redrawVisibleRows()
+            if isPressed {
+                chooseConflictSide(header: header)
+            }
+            return
+        }
         guard case .gutter = drag, let gutterDrag else {
             return
         }
@@ -1217,6 +1289,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         var block: Int?
         var line: (row: Int, column: DiffColumn)?
         var button: (hunk: Int, button: DiffHunkButton)?
+        var conflictButton: Int?
         var tooltip: String?
         if let point {
             switch hit(at: point) {
@@ -1227,6 +1300,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             case .expansion(let hunk, let kind):
                 button = (hunk, kind)
                 tooltip = kind.title
+            case .conflictButton(let header):
+                conflictButton = header
             default:
                 break
             }
@@ -1237,20 +1312,24 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
         let changed = block != hoveredBlock || line?.row != hoveredLine?.row || line?.column != hoveredLine?.column
             || button?.hunk != hoveredButton?.hunk || button?.button != hoveredButton?.button
-        // The gutter's and a hunk button's hover fade out over 0.15 s and
-        // in over 0.08 s.
+            || conflictButton != hoveredConflictButton
+        // The gutter's and a button's hover fade out over 0.15 s and in
+        // over 0.08 s.
         let fadesHover = changed && Motion.animates(tableView)
-        let leaving = fadesHover ? hoverRows(block: hoveredBlock, line: hoveredLine?.row, buttonHunk: hoveredButton?.hunk) : []
+        let leaving = fadesHover
+            ? hoverRows(block: hoveredBlock, line: hoveredLine?.row, buttonHunk: hoveredButton?.hunk, conflictHeader: hoveredConflictButton)
+            : []
         hoveredBlock = block
         hoveredLine = line
         hoveredButton = button
+        hoveredConflictButton = conflictButton
         tableView.setTooltip(tooltip)
         if changed {
             redrawVisibleRows()
         }
         if fadesHover {
             crossfade(rows: leaving, duration: Motion.hoverOut)
-            crossfade(rows: hoverRows(block: block, line: line?.row, buttonHunk: button?.hunk), duration: Motion.hoverIn)
+            crossfade(rows: hoverRows(block: block, line: line?.row, buttonHunk: button?.hunk, conflictHeader: conflictButton), duration: Motion.hoverIn)
         }
     }
 
@@ -1270,6 +1349,81 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             return true
         }
         return false
+    }
+
+    // MARK: Conflict blocks
+
+    /// Where a conflict block header's button is in its row (from the
+    /// pane's left edge, the row's top): a small capsule at the trailing
+    /// edge, centered; nil for a header without one.
+    func conflictButtonRect(ofRow row: Int, rowHeight: CGFloat) -> CGRect? {
+        guard let header = document.conflictHeader(ofRow: row),
+              let title = shownContent?.conflicts?.side(header.side)?.buttonTitle
+        else {
+            return nil
+        }
+        let width = conflictButtonTitleWidth(title) + 2 * Metrics.ControlHeight.horizontalPadding(for: .small)
+        let height = Metrics.ControlHeight.small
+        return CGRect(
+            x: (geometry.width - DiffTableMetrics.trailingInset - width).rounded(),
+            y: ((rowHeight - height) / 2).rounded(),
+            width: width,
+            height: height
+        )
+    }
+
+    /// A conflict block button's title width, measured once per title.
+    private func conflictButtonTitleWidth(_ title: String) -> CGFloat {
+        if let width = conflictButtonTitleWidths[title] {
+            return width
+        }
+        let width = ceil(NSAttributedString(string: title, attributes: [.font: AppKitTypography.smallButton]).size().width)
+        conflictButtonTitleWidths[title] = width
+        return width
+    }
+
+    /// Whether a conflict block's button takes a click now: the diff shown
+    /// is the file's, its rows are built, and no other side is being kept.
+    func canChooseConflictSide(header: Int) -> Bool {
+        guard shownContent?.isInteractive == true, !isBuilding, pendingConflictChoice == nil,
+              actions.chooseConflictSide != nil, document.conflictHeaders.indices.contains(header)
+        else {
+            return false
+        }
+        let side = document.conflictHeaders[header].side
+        return shownContent?.conflicts?.side(side)?.buttonTitle != nil
+    }
+
+    /// Keeps the side of a conflict block's header (its button): the
+    /// buttons wait until the file shows again, or the choice fails.
+    func chooseConflictSide(header: Int) {
+        guard canChooseConflictSide(header: header), let file = shownContent?.conflicts?.file,
+              let choose = actions.chooseConflictSide
+        else {
+            return
+        }
+        let documentHeader = document.conflictHeaders[header]
+        let side: ManualConflictResolution
+        switch documentHeader.side {
+        case .ours: side = .ours
+        case .theirs: side = .theirs
+        case .base, .marker: return
+        }
+        pendingConflictChoice = header
+        redrawVisibleRows()
+        conflictChoiceTask = Task { [weak self] in
+            let chosen = await choose(file, documentHeader.conflict, side)
+            guard let self, !chosen, self.pendingConflictChoice == header else {
+                return
+            }
+            self.pendingConflictChoice = nil
+            self.redrawVisibleRows()
+        }
+    }
+
+    /// Waits for the side being kept, if any (for tests).
+    func conflictChoiceIdle() async {
+        await conflictChoiceTask?.value
     }
 
     // MARK: Expansion
@@ -1560,7 +1714,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             return discardMenu(.block(containing: document.blocks[block].diffLines.lowerBound), generation: staging.diffGeneration)
         case .expansion, .hunkHeader, .hunkCheckbox:
             return expansionMenuAction().map { $0.menuContent }
-        case .text, .inertGutter, .none:
+        case .text, .inertGutter, .conflictButton, .conflictHeader, .none:
             return textMenu()
         }
     }
@@ -1640,4 +1794,6 @@ enum DiffDrag: Equatable {
     case gutter
     /// Selecting text on a side.
     case text(DiffColumn)
+    /// Pressing a conflict block's button (its header's index).
+    case conflictButton(Int)
 }

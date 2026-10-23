@@ -641,8 +641,9 @@ nonisolated public struct AIResolutionRow: Sendable, Equatable, Identifiable {
     public var path: String
     /// Why the file is resolved this way, or what went wrong.
     public var explanation: String?
-    /// The menu's label: "The Model", "Current", "Incoming", "Keep file",
-    /// "Delete file", or "Choose a resolution".
+    /// The menu's label: "The Model", a side's branch ("main", else
+    /// "Current" or "Incoming"), "Keep file", "Delete file", or "Choose a
+    /// resolution".
     public var choiceLabel: String
     public var options: [Option]
     /// The file has no conflicts left (resolved in an editor).
@@ -847,7 +848,9 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
                 let deletes = (deletedSide == .ours) == (choice == .ours)
                 choiceLabel = deletes ? "Delete file" : "Keep file"
             } else {
-                choiceLabel = choice == .ours ? "Current" : "Incoming"
+                choiceLabel = choice == .ours
+                    ? ConflictFileRowContent.sideName(ours, side: .ours)
+                    : ConflictFileRowContent.sideName(theirs, side: .theirs)
             }
         }
 
@@ -884,7 +887,9 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
         return nil
     }
 
-    /// The side choices' labels.
+    /// The side choices' labels: keeping or deleting a file one side
+    /// deleted, else "Use main's Version" ("Use Current Version" for a side
+    /// without a branch).
     static func sideLabels(deletedSide: ManualConflictResolution?, ours: String?, theirs: String?) -> (ours: String, theirs: String) {
         switch deletedSide {
         case .ours?:
@@ -899,8 +904,8 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
             )
         case nil:
             return (
-                ours.map { "Use current file from \($0)" } ?? "Use current file",
-                theirs.map { "Use incoming file from \($0)" } ?? "Use incoming file"
+                ConflictFileRowContent.versionTitle(ours, side: .ours),
+                ConflictFileRowContent.versionTitle(theirs, side: .theirs)
             )
         }
     }

@@ -2,11 +2,11 @@
 // (calcSearchTokens, enumerateColumnContents)
 //
 // What find matches in the diff. The searchable text is every line's
-// content, row by row (hunk headers and missing-newline notes excluded); a
-// split diff's rows contribute their old side, then their new side, so
-// context lines count on both sides. Matching is literal and ignores case,
-// and matches don't overlap: each search goes on from the end of the last
-// match.
+// content, row by row (hunk headers, missing-newline notes, and conflict
+// block headers excluded); a split diff's rows contribute their old side,
+// then their new side, so context lines count on both sides. Matching is
+// literal and ignores case, and matches don't overlap: each search goes on
+// from the end of the last match.
 
 import Foundation
 

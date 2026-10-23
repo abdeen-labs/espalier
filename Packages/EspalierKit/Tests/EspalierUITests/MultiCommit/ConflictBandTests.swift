@@ -1,5 +1,6 @@
-// The band above a conflicted file's diff picks a side, and clears it with
-// Undo, as the file's menu in the Changes list does.
+// The band above a conflicted file's diff (whose conflicts aren't drawn as
+// blocks) picks a side for the whole file, and clears it with Undo, as the
+// file's menu in the Changes list does.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -26,7 +27,7 @@ struct ConflictBandTests {
             @MainActor func button(_ kind: ConflictFileAction.Kind) throws -> ConflictFileAction {
                 let row = try row()
                 let actions = ConflictFileRowActions.make(for: row, repository: repository, context: fixture.context)
-                return try #require(row.bandActions(actions).first { $0.kind == kind })
+                return try #require(row.bandActions(actions, includesSides: true).first { $0.kind == kind })
             }
             #expect(operations.unresolvedFiles.map(\.path) == ["foo"])
 

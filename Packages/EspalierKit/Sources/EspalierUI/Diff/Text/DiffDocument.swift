@@ -5,6 +5,12 @@
 // rows, the hunks with their expansion and checkbox ranges, the change
 // blocks the gutter handle toggles, and the conflict markers. Intra-line
 // ranges are computed later, per visible row.
+//
+// A conflicted file drawn as blocks is built from its text instead
+// (`ConflictedFileText`): its lines numbered as the file's, and each
+// conflict as a header and lines per side (ours, the common ancestor's,
+// theirs), its markers left out; markers that make no whole conflict stay
+// as lines, tinted as markers.
 
 import Foundation
 import GitKit
@@ -24,14 +30,25 @@ nonisolated struct DiffDocumentInput: Sendable {
     var tabSize: Int
     /// Find conflict markers (a conflicted file's diff against HEAD).
     var detectsConflictMarkers: Bool
+    /// A conflicted file to draw as blocks, in place of the hunks.
+    var conflictFile: ConflictedFileText?
 
-    init(hunks: [DiffHunk], maxLineNumber: Int, isSplit: Bool, canExpand: Bool = false, tabSize: Int = 4, detectsConflictMarkers: Bool = false) {
+    init(
+        hunks: [DiffHunk],
+        maxLineNumber: Int,
+        isSplit: Bool,
+        canExpand: Bool = false,
+        tabSize: Int = 4,
+        detectsConflictMarkers: Bool = false,
+        conflictFile: ConflictedFileText? = nil
+    ) {
         self.hunks = hunks
         self.maxLineNumber = maxLineNumber
         self.isSplit = isSplit
         self.canExpand = canExpand
         self.tabSize = max(tabSize, 1)
         self.detectsConflictMarkers = detectsConflictMarkers
+        self.conflictFile = conflictFile
     }
 }
 
@@ -41,8 +58,14 @@ nonisolated struct DiffDocument: Sendable {
     let rows: [DocumentRow]
     let hunks: [DocumentHunk]
     let blocks: [DocumentBlock]
-    /// The rows of conflict markers, in order.
+    /// The rows of conflict markers, in order; in a conflicted file drawn
+    /// as blocks, each conflict's first header.
     let conflictMarkerRows: [Int]
+    /// A conflicted file's block headers, in order (none for a diff).
+    let conflictHeaders: [DocumentConflictHeader]
+    /// Whether the rows are a conflicted file's text with its conflicts as
+    /// blocks, not a diff: each line has one number, the file's.
+    let isWorkingFile: Bool
     let isSplit: Bool
     let tabSize: Int
     /// The number of digits the gutter makes room for (at least 3).
@@ -54,6 +77,20 @@ nonisolated struct DiffDocument: Sendable {
     /// Builds the document. Call it off the main actor: it's linear in the
     /// diff's lines, about a millisecond per 10,000 in a release build.
     init(input: DiffDocumentInput) {
+        if let file = input.conflictFile {
+            let built = Self.conflictRows(file, tabSize: input.tabSize)
+            self.lines = built.lines
+            self.rows = built.rows
+            self.hunks = []
+            self.blocks = []
+            self.conflictMarkerRows = built.conflictRows
+            self.conflictHeaders = built.headers
+            self.isWorkingFile = true
+            self.isSplit = false
+            self.tabSize = input.tabSize
+            self.lineNumberDigits = max(getNumberOfDigits(built.lastLine), 3)
+            return
+        }
         var lines: [DocumentLine] = []
         var rows: [DocumentRow] = []
         var hunks: [DocumentHunk] = []
@@ -221,14 +258,94 @@ nonisolated struct DiffDocument: Sendable {
         self.hunks = hunks
         self.blocks = blocks
         self.conflictMarkerRows = conflictMarkerRows.sorted()
+        conflictHeaders = []
+        isWorkingFile = false
         isSplit = input.isSplit
         tabSize = input.tabSize
         lineNumberDigits = max(getNumberOfDigits(input.maxLineNumber), 3)
     }
 
+    /// The rows of a conflicted file drawn as blocks: its lines, numbered
+    /// as the file's, and per conflict a header and lines for each side,
+    /// its markers left out.
+    private static func conflictRows(
+        _ file: ConflictedFileText,
+        tabSize: Int
+    ) -> (lines: [DocumentLine], rows: [DocumentRow], headers: [DocumentConflictHeader], conflictRows: [Int], lastLine: Int) {
+        var lines: [DocumentLine] = []
+        var rows: [DocumentRow] = []
+        var headers: [DocumentConflictHeader] = []
+        var conflictRows: [Int] = []
+        // The file's last line, which may lack its newline.
+        var lastLine = 0
+        for segment in file.segments {
+            switch segment {
+            case .lines(let run):
+                lastLine = max(lastLine, run.firstLine + run.count - 1)
+            case .conflict(let conflict):
+                // The closing marker's line.
+                lastLine = max(lastLine, conflict.theirs.firstLine + conflict.theirs.count)
+            }
+        }
+        let lacksFinalNewline = file.lacksFinalNewline
+
+        func appendLines(_ run: ConflictedFileText.Lines, region: ConflictRegion?) {
+            for (offset, content) in file.text(of: run).enumerated() {
+                let number = run.firstLine + offset
+                let text = " " + content
+                lines.append(DocumentLine(
+                    text: text,
+                    type: .context,
+                    oldNumber: 0,
+                    newNumber: number,
+                    diffLineNumber: -1,
+                    info: LineTextInfo(text, skippingFirstScalar: true, tabSize: tabSize),
+                    noTrailingNewLine: lacksFinalNewline && number == lastLine,
+                    partner: -1,
+                    conflict: region ?? (file.strayMarkerLines.contains(number) ? .marker : nil)
+                ))
+                let row = DocumentRow(kind: .context, before: Int32(lines.count - 1), after: Int32(lines.count - 1), hunk: -1, block: -1)
+                rows.append(row)
+                appendNoNewlineRow(after: row, lines: lines, to: &rows)
+            }
+        }
+
+        func appendHeader(conflict: Int, side: ConflictRegion, lines run: ConflictedFileText.Lines) {
+            headers.append(DocumentConflictHeader(row: rows.count, conflict: conflict, side: side, lineCount: run.count))
+            rows.append(DocumentRow(kind: .conflictHeader, before: -1, after: -1, hunk: -1, block: Int32(headers.count - 1)))
+            appendLines(run, region: side)
+        }
+
+        var conflictIndex = 0
+        for segment in file.segments {
+            switch segment {
+            case .lines(let run):
+                appendLines(run, region: nil)
+            case .conflict(let conflict):
+                conflictRows.append(rows.count)
+                appendHeader(conflict: conflictIndex, side: .ours, lines: conflict.ours)
+                if let base = conflict.base {
+                    appendHeader(conflict: conflictIndex, side: .base, lines: base)
+                }
+                appendHeader(conflict: conflictIndex, side: .theirs, lines: conflict.theirs)
+                conflictIndex += 1
+            }
+        }
+        return (lines, rows, headers, conflictRows, lastLine)
+    }
+
     /// The number of rows.
     var rowCount: Int {
         rows.count
+    }
+
+    /// The conflict block header a row is, if it's one.
+    func conflictHeader(ofRow row: Int) -> DocumentConflictHeader? {
+        guard rows.indices.contains(row), rows[row].kind == .conflictHeader else {
+            return nil
+        }
+        let index = Int(rows[row].block)
+        return conflictHeaders.indices.contains(index) ? conflictHeaders[index] : nil
     }
 
     /// The hunk a row is in.
@@ -287,15 +404,15 @@ nonisolated struct DiffDocument: Sendable {
     }
 
     /// The first row at or after `row` that a line cursor can stop on (a
-    /// line, not a hunk header or a missing-newline note), searching
-    /// backwards when `forward` is false.
+    /// line, not a hunk header, a missing-newline note, or a conflict
+    /// block's header), searching backwards when `forward` is false.
     func cursorRow(from row: Int, forward: Bool) -> Int? {
         var row = row
         while rows.indices.contains(row) {
             switch rows[row].kind {
             case .context, .added, .deleted, .modified:
                 return row
-            case .hunk, .noNewline:
+            case .hunk, .noNewline, .conflictHeader:
                 row += forward ? 1 : -1
             }
         }

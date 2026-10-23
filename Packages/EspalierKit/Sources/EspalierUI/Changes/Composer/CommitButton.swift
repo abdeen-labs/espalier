@@ -1,6 +1,7 @@
-// The commit form's button: Commit (with the files and the branch), Commit
-// Merge while a merge waits, or Continue while a rebase, cherry-pick, or
-// revert does; its labels, when it's enabled, and its tooltips.
+// The commit button: Commit (with the files and the branch) in the commit
+// form; Commit Merge while a merge waits, or Continue while a rebase,
+// cherry-pick, or revert does, for the operation panel's button; its
+// labels, when it's enabled, and its tooltips.
 
 import EspalierCore
 import GitKit
@@ -163,8 +164,8 @@ public struct CommitButton: View {
         .accessibilityLabel(content.title)
     }
 
-    /// ⌘↩, which Commit Changes runs: it presses Commit, Commit Merge, or
-    /// Continue, whichever shows.
+    /// ⌘↩, which Commit Changes runs: it presses Commit, or runs Commit
+    /// Merge or Continue while an operation waits.
     private var shortcutSymbols: String? {
         ActionKind.commitChanges.shortcut?.symbols
     }

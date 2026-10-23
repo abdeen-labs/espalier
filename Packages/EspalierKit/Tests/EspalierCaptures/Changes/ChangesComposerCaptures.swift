@@ -1,6 +1,7 @@
 // The composer's layouts, one capture each: idle, a long branch in the
-// commit button at the narrowest column, a merge's message and Continue for
-// a rebase, the summary's and the description's focus tint, the last
+// commit button at the narrowest column, a merge's message (committed by the
+// operation panel's button), the summary's and the description's focus
+// tint, the last
 // commit, committing, a hook running and its output, a warning that stops
 // the commit and one that can be bypassed, the model's failure, co-authors
 // with the author's warning and message rules. Then the sparkle's states,
@@ -37,32 +38,17 @@ struct ChangesComposerCaptures {
         capture(view, named: "commit-button-long-branch", area: area)
     }
 
-    @Test("a merge's message with Commit Merge, and Continue for a rebase")
-    func operations() {
+    @Test("a merge's message, without a button: the operation panel's Commit Merge commits it")
+    func merge() {
         let merge = ComposerContent(
             author: values.author,
             showsCommitOptions: false,
-            button: CommitButtonContent(kind: .merge, fileCount: 0, branch: nil, isEnabled: true)
+            button: CommitButtonContent(kind: .merge, fileCount: 0, branch: nil, isEnabled: true),
+            showsButton: false
         )
         capture(
             values.composer(merge, draft: CommitDraft(summary: "Merge branch 'feature/login'", description: "* feature/login:\n  Add the login screen")),
             named: "composer-merge",
-            area: area
-        )
-        let rebase = OperationSlotContent(
-            kind: .continueOperation,
-            button: CommitButtonContent(
-                kind: .continueOperation(name: "Rebase"),
-                fileCount: 0,
-                branch: nil,
-                isEnabled: false,
-                disabledReason: OperationPanelContent.continueDisabledHelp
-            ),
-            notesUntrackedFiles: true
-        )
-        capture(
-            ContinueOperationView(content: rebase).frame(width: Metrics.Column.changesFileList.ideal),
-            named: "composer-continue",
             area: area
         )
     }

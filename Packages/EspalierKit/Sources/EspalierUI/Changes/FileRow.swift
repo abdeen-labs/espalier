@@ -1,9 +1,10 @@
 // A changed file's row in the Changes list: its checkbox (included,
 // excluded, or partly), its status badge, its name and folder, a rename's
 // old path, and the lines it adds and removes ("+10 −2"). A conflicted
-// file's row has the warning (or, resolved, the check) for its badge, and
-// at its end what's left to resolve and the conflict's buttons. A stash's
-// files use the same row without the checkbox.
+// file's row has its badge (the check once resolved), and at its end what's
+// left to resolve, in the modified color while it needs the user, and the
+// conflict's buttons. A stash's files use the same row without the
+// checkbox.
 
 import AppKit
 import EspalierCore
@@ -211,7 +212,8 @@ enum FileRowMetrics {
 /// badge, the name, then a rename's source and the folder in tertiary
 /// text (which give way first), and the line counts at the trailing edge
 /// in SF Mono; for a conflicted file, its state and buttons at the
-/// trailing edge instead. AppKit, so a table of 50,000 files configures
+/// trailing edge instead, and the check in the badge's place once it's
+/// resolved. AppKit, so a table of 50,000 files configures
 /// only the rows on screen.
 final class FileRowView: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("Espalier.FileRow")
@@ -222,8 +224,7 @@ final class FileRowView: NSTableCellView {
     private let directoryLabel = FileRowView.label(font: AppKitTypography.secondary, color: Palette.text3)
     private let countsLabel = FileRowView.label(font: AppKitTypography.count(), color: Palette.text3)
     private let glyph = StatusGlyphView()
-    /// A conflicted file's warning, or its check once resolved, in the
-    /// badge's place.
+    /// A resolved conflicted file's check, in the badge's place.
     private let conflictGlyph = NSImageView()
     /// A conflicted file's state: "3 conflicts", "Manual conflict".
     private let conflictLabel = FileRowView.label(font: AppKitTypography.secondary, color: Palette.text3)
@@ -339,8 +340,9 @@ final class FileRowView: NSTableCellView {
         needsLayout = true
     }
 
-    /// Shows a conflicted file's glyph, state, and buttons in place of the
-    /// badge and the counts, or hides them.
+    /// Shows a conflicted file's state and buttons in place of the counts,
+    /// and the check in the badge's place once it's resolved; or hides
+    /// them.
     private func showConflict(_ conflict: ConflictFileRowContent?) {
         guard let conflict else {
             glyph.isHidden = false
@@ -349,13 +351,14 @@ final class FileRowView: NSTableCellView {
             conflictButtons?.isHidden = true
             return
         }
-        glyph.isHidden = true
-        conflictGlyph.isHidden = false
-        conflictGlyph.image = NSImage(
-            systemSymbolName: conflict.isUnresolved ? "exclamationmark.triangle.fill" : "checkmark.circle.fill",
-            accessibilityDescription: nil
-        )
-        conflictGlyph.contentTintColor = conflict.isUnresolved ? Palette.warningMark : Palette.success
+        // The badge while it needs the user: the operation panel has the
+        // warning.
+        glyph.isHidden = !conflict.isUnresolved
+        conflictGlyph.isHidden = conflict.isUnresolved
+        if !conflict.isUnresolved {
+            conflictGlyph.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
+            conflictGlyph.contentTintColor = Palette.success
+        }
         Self.set(conflictLabel, conflict.status)
         conflictLabel.textColor = conflict.isUnresolved ? Palette.warning : Palette.text3
         conflictLabel.setTooltip(conflict.status)

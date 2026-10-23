@@ -62,16 +62,13 @@ struct SheetComponentCaptures {
     @Test("the status bar: waiting on the user, ready, and running")
     func statusBar() {
         let view = VStack(spacing: 0) {
-            StatusBar(tone: .attention, title: "Resolve conflicts before Rebase", subtitle: Text("1 of 3 conflicted files has been resolved.")) {
+            StatusBar(tone: .attention, title: "Resolve conflicts before Rebase", subtitle: Text("1 of 3 files resolved")) {
                 WarningGlyph()
             } trailing: {
                 Button("Abort Rebase") {}
                     .buttonStyle(.quiet)
-                Button("Continue Rebase") {}
-                    .buttonStyle(.prominent)
-                    .disabled(true)
             }
-            StatusBar(tone: .ready, title: "All conflicts resolved", subtitle: Text("All conflicted files have been resolved.")) {
+            StatusBar(tone: .ready, title: "All conflicts resolved", subtitle: Text("All 3 files resolved")) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(Color(espalier: Palette.success))
             } trailing: {

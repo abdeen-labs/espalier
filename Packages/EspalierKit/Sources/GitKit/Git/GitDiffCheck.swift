@@ -87,3 +87,37 @@ func getConflictMarkerLines(_ repositoryPath: String) async throws -> [ExactStri
 
     return files
 }
+
+/// The line numbers of the conflict markers git finds in the working tree's
+/// `path`, in order: the markers of the size its `conflict-marker-size`
+/// attribute sets, on the lines it changed. The path is a literal pathspec.
+public func getConflictMarkerLines(_ repository: Repository, path: String) async throws -> [Int] {
+    let result = try await git(
+        ["diff", "--check", "--", literalPathspec(path)],
+        repository.path,
+        "getConflictMarkerLines",
+        options: GitExecutionOptions(successExitCodes: [0, 2])
+    )
+    let stdout = result.stdout
+    let range = NSRange(stdout.startIndex..<stdout.endIndex, in: stdout)
+    // One pathspec, one file: every marker reported is its.
+    return conflictMarkerLinePattern.matches(in: stdout, range: range).compactMap { match in
+        Range(match.range(at: 2), in: stdout).flatMap { Int(String(stdout.unicodeScalars[$0])) }
+    }
+}
+
+/// The working tree's `path` divided by its conflict markers
+/// (`ConflictedFileText`): read before and after git finds the markers, so
+/// the markers are the bytes'. Nil when it can't be read, or changed
+/// meanwhile.
+public func getConflictedFileText(_ repository: Repository, path: String) async throws -> ConflictedFileText? {
+    let url = URL(exactFilePath: POSIXPath.join(repository.path, path))
+    guard let before = try? Data(contentsOf: url) else {
+        return nil
+    }
+    let markerLines = try await getConflictMarkerLines(repository, path: path)
+    guard let after = try? Data(contentsOf: url), after == before else {
+        return nil
+    }
+    return ConflictedFileText(after, markerLines: markerLines)
+}

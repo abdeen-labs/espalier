@@ -128,6 +128,69 @@ enum DiffCaptureFixtures {
         textDiff(conflictWithBasePatch)
     }
 
+    /// A conflicted file's text with one conflict and the common
+    /// ancestor's lines (`diff3`), as `conflictWithBasePatch` shows it.
+    static let conflictWithBaseText = """
+    let name = "espalier"
+    <<<<<<< HEAD
+    let timeout = 30
+    ||||||| base
+    let timeout = 10
+    =======
+    let timeout = 60
+    >>>>>>> feature/longer-timeout
+    let retries = 3
+    let verbose = false
+
+    """
+
+    /// A conflicted file's text with two conflicts, the second with the
+    /// common ancestor's lines.
+    static let twoConflictsText = """
+    struct RepositoryLoader {
+    <<<<<<< HEAD
+        let retries = 3
+        let backoff: Duration = .seconds(2)
+    =======
+        let retries = 5
+    >>>>>>> main
+        let path: String
+
+        func load() throws -> Repository {
+    <<<<<<< HEAD
+            guard let tip = repo.tip else { return .empty }
+    ||||||| base
+            let tip = repo.tip!
+    =======
+            let tip = try repo.requireTip()
+    >>>>>>> main
+            return Repository(path: path, tip: tip)
+        }
+    }
+
+    """
+
+    /// `text` divided at its seven-character markers, as git reports them.
+    static func conflictedText(_ text: String) -> ConflictedFileText {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        let markers = lines.enumerated().compactMap { index, line -> Int? in
+            ["<<<<<<<", "|||||||", "=======", ">>>>>>>"].contains { line.hasPrefix($0) } ? index + 1 : nil
+        }
+        return ConflictedFileText(Data(text.utf8), markerLines: markers)
+    }
+
+    /// The blocks of a merge of `main` into `feature/login` (the current
+    /// branch, in the accent; `main` the default branch, in the trunk's
+    /// color), with their buttons.
+    @MainActor
+    static func blocks(_ text: String) -> ConflictBlocks {
+        ConflictBlocks(
+            file: conflictedText(text),
+            ours: ConflictBlocks.Side(name: "feature/login", color: Palette.accent, buttonTitle: "Use feature/login's Version"),
+            theirs: ConflictBlocks.Side(name: "main", color: TrackPalette.trunk, buttonTitle: "Use main's Version")
+        )
+    }
+
     /// A last line without a newline, changed to have one.
     static let noNewlinePatch = """
     diff --git a/notes.txt b/notes.txt

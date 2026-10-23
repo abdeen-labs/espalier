@@ -6,7 +6,12 @@
 // for one left out), the "+" and "−" markers, intra-line ranges, find's
 // matches, the text selection, and the text with syntax colors, faded on a
 // line left out. Hunk headers are `hunk` rows: the expansion buttons in the
-// numbers' gutter, the checkbox, and git's header line in the code font.
+// numbers' gutter, the checkbox, and git's header line in the code font. A
+// conflicted file drawn as blocks tints each block's lines with its
+// branch's color, under a header row in a stronger tint: the side's name in
+// its color, and its Use <branch>'s Version button, a small quiet capsule
+// at the trailing edge (the common ancestor's block is neutral, without
+// one).
 // Text is drawn with Core Text at monospace columns: runs of printable
 // ASCII as one line, other characters glyph by glyph at their columns, so
 // wide and fallback glyphs never shift the columns hit-testing assumes.
@@ -112,11 +117,13 @@ struct DiffRowRenderer {
             drawHunk(documentRow)
         case .noNewline:
             drawNoNewline(documentRow)
+        case .conflictHeader:
+            drawConflictHeader()
         case .context, .added, .deleted, .modified:
             drawLines(documentRow)
         }
         drawCursor()
-        if documentRow.kind != .hunk {
+        if documentRow.kind != .hunk, documentRow.kind != .conflictHeader {
             drawDivider()
             drawHandle(documentRow)
         }
@@ -175,9 +182,18 @@ struct DiffRowRenderer {
     }
 
     /// The fill behind a line: added or deleted, faint when left out; a
-    /// conflicted file's regions instead.
+    /// conflicted file's regions instead (in blocks, each side's branch's
+    /// color).
     private func tint(for line: DocumentLine, included: Bool?) -> NSColor? {
         if let conflict = line.conflict {
+            if let blocks = controller.shownContent?.conflicts, document.isWorkingFile {
+                switch conflict {
+                case .marker: return DiffColors.conflictMarker
+                case .ours: return DiffColors.conflictBlockLine(blocks.ours.color)
+                case .base: return DiffColors.base
+                case .theirs: return DiffColors.conflictBlockLine(blocks.theirs.color)
+                }
+            }
             switch conflict {
             case .marker: return DiffColors.conflictMarker
             case .ours: return DiffColors.ours
@@ -318,6 +334,98 @@ struct DiffRowRenderer {
 
     private var shownStaging: StagingState? {
         controller.shownContent?.staging
+    }
+
+    // MARK: Conflict blocks
+
+    /// A conflict block's header: its side's tint across the row (the
+    /// numbers' gutter too), the side's name in its branch's color at the
+    /// code's left edge, and its button at the trailing edge.
+    private func drawConflictHeader() {
+        guard let header = document.conflictHeader(ofRow: row), let blocks = controller.shownContent?.conflicts else {
+            return
+        }
+        let side = blocks.side(header.side)
+        (side.map { DiffColors.conflictBlockHeader($0.color) } ?? DiffColors.baseBlockHeader).setFill()
+        bounds.fill(using: .sourceOver)
+
+        let button = controller.conflictButtonRect(ofRow: row, rowHeight: bounds.height)
+        let nameStart = geometry.before.text.lowerBound
+        let nameEnd = (button.map { $0.minX - DiffTableMetrics.conflictHeaderSpacing } ?? geometry.width - DiffTableMetrics.trailingInset)
+        if nameEnd > nameStart {
+            let nameFont = AppKitTypography.conflictBlockName
+            let name = NSAttributedString(string: blocks.name(header.side), attributes: [
+                .font: nameFont,
+                Self.foregroundKey: (side?.color ?? DiffColors.baseBlockName).cgColor,
+            ])
+            context.saveGState()
+            context.clip(to: CGRect(x: nameStart, y: 0, width: nameEnd - nameStart, height: bounds.height))
+            drawLine(CTLineCreateWithAttributedString(name), x: nameStart, baseline: centeredBaseline(of: nameFont, in: bounds.height))
+            context.restoreGState()
+        }
+        if let button, let title = side?.buttonTitle {
+            drawConflictButton(title, in: button, headerIndex: Int(document.rows[row].block))
+        }
+    }
+
+    /// A conflict block's button: a small quiet capsule (the theme's quiet
+    /// control fill, with the quiet ring and small shadow where the theme
+    /// raises quiet controls), washed while hovered and more while
+    /// pressed, faded while the buttons wait.
+    private func drawConflictButton(_ title: String, in rect: CGRect, headerIndex: Int) {
+        let isEnabled = controller.shownContent?.isInteractive == true && controller.pendingConflictChoice == nil
+        let radius = rect.height / 2
+        let capsule = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        let theme = Theme.current
+        let isDark = AppearanceVariant.of(NSAppearance.currentDrawing()).isDark
+        context.saveGState()
+        if !isEnabled {
+            context.setAlpha(Palette.disabledOpacity)
+        }
+        context.beginTransparencyLayer(auxiliaryInfo: nil)
+        NSGraphicsContext.saveGraphicsState()
+        if theme.quietControlIsRaised, let shadowColor = Elevation.quiet.shadowColor {
+            let shadow = NSShadow()
+            shadow.shadowColor = shadowColor
+            shadow.shadowBlurRadius = Elevation.quiet.blur(dark: isDark) / 2
+            shadow.shadowOffset = NSSize(width: 0, height: -Elevation.quiet.offset(dark: isDark))
+            shadow.set()
+        }
+        theme.quietControl.setFill()
+        capsule.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        if theme.quietControlIsRaised, let ring = Elevation.quiet.ring {
+            let outline = NSBezierPath(roundedRect: rect.insetBy(dx: -0.5, dy: -0.5), xRadius: radius + 0.5, yRadius: radius + 0.5)
+            outline.lineWidth = 1
+            ring.setStroke()
+            outline.stroke()
+        }
+        if isEnabled {
+            let isPressed = controller.pressedConflictButton == headerIndex
+            let isHovered = controller.hoveredConflictButton == headerIndex
+            if isPressed || isHovered {
+                Palette.hover.setFill()
+                capsule.fill()
+                if isPressed {
+                    capsule.fill()
+                }
+            }
+        }
+        let font = AppKitTypography.smallButton
+        let label = NSAttributedString(string: title, attributes: [.font: font, Self.foregroundKey: Palette.text.cgColor])
+        let line = CTLineCreateWithAttributedString(label)
+        let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+        context.saveGState()
+        context.clip(to: rect)
+        drawLine(line, x: (rect.midX - width / 2).rounded(), baseline: rect.minY + centeredBaseline(of: font, in: rect.height))
+        context.restoreGState()
+        context.endTransparencyLayer()
+        context.restoreGState()
+    }
+
+    /// The baseline that centers `font`'s ascent and descent in a height.
+    private func centeredBaseline(of font: NSFont, in height: CGFloat) -> CGFloat {
+        ((height - (font.ascender - font.descender)) / 2 + font.ascender).rounded()
     }
 
     // MARK: Missing newlines

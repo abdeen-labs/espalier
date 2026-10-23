@@ -1,11 +1,12 @@
 // The Changes place: the Changes column (the header, the changed files,
 // conflicted ones with their state and buttons, the "Stashed Changes" row,
-// and the composer, which commits a waiting merge, or Continue while a
-// rebase, cherry-pick, or revert waits) under the operation panel while an
-// operation runs or waits on conflicts, and on the right the selected
-// file's diff, several files' actions, or "No Local Changes" and
-// Suggestions when there are no changes. The toolbar's search field is the
-// list's filter text.
+// and the composer, which holds a waiting merge's message, and nothing
+// while a rebase, cherry-pick, or revert waits) under the operation panel
+// while an operation runs or waits on conflicts (its prominent button
+// finishes the operation), and on the right the selected file's diff (a
+// conflicted file's conflicts as blocks), several files' actions, or "No
+// Local Changes" and Suggestions when there are no changes. The toolbar's
+// search field is the list's filter text.
 
 import EspalierCore
 import GitKit
@@ -69,9 +70,9 @@ public struct ChangesScreen: View {
 /// The Changes column: the header, the files, and the composer; without
 /// changes, the header ("0 changed files") over the empty list. The
 /// footer's bars (the hidden-changes note, the Stashed Changes row, the
-/// amend banner, the composer or Continue) grow in over 0.22 s and leave
-/// over 0.15 s, the files moving with them: the motion is set here, over
-/// the whole column, so the list above moves too.
+/// amend banner, the composer) grow in over 0.22 s and leave over 0.15 s,
+/// the files moving with them: the motion is set here, over the whole
+/// column, so the list above moves too.
 struct ChangesColumn: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
@@ -121,13 +122,12 @@ struct ChangesFooterLayout: Equatable {
     enum Bottom: Equatable {
         /// The composer, for the user's commit.
         case composer
-        /// The composer with the merge's message, for Commit Merge.
+        /// The composer with the merge's message, which the operation
+        /// panel's Commit Merge commits.
         case merge
-        /// Continue, for a rebase, cherry-pick, or revert waiting on the
-        /// user.
-        case continueOperation
-        /// Nothing: an operation runs, a stash restore conflicted, or only
-        /// git can finish what's in progress.
+        /// Nothing: an operation runs, a rebase, cherry-pick, or revert
+        /// waits on the user (the operation panel continues it), a stash
+        /// restore conflicted, or only git can finish what's in progress.
         case none
     }
 
@@ -150,7 +150,7 @@ struct ChangesFooterLayout: Equatable {
         case .merge?:
             bottom = .merge
         case .continueOperation?:
-            bottom = .continueOperation
+            bottom = .none
         case nil:
             let hasOperation = OperationCapsuleContent.make(repository) != nil && showsOperationPanel != false
             bottom = hasOperation ? .none : .composer
@@ -189,8 +189,8 @@ enum ChangesHeaderMenu {
 }
 
 /// Under the files: the hidden-changes note, the "Stashed Changes" row, and
-/// the composer (Commit Merge's too) or Continue. Each comes and goes as a
-/// bar does (the column sets the motion); the composer stays from a merge's
+/// the composer (the merge's message too). Each comes and goes as a bar
+/// does (the column sets the motion); the composer stays from a merge's
 /// conflicts through its commit, its fields and button changing in place.
 struct ChangesFooter: View {
     let repository: RepositoryModel
@@ -226,12 +226,6 @@ struct ChangesFooter: View {
                 VStack(spacing: 0) {
                     Hairline()
                     Composer(repository: repository)
-                }
-                .barTransition()
-            case .continueOperation:
-                VStack(spacing: 0) {
-                    Hairline()
-                    ContinueOperation(repository: repository)
                 }
                 .barTransition()
             case .none:
@@ -283,7 +277,8 @@ struct ChangesDetail: View {
                 changes.diff,
                 file: DiffFileInfo(file),
                 context: isConflicted ? .conflict : .changes,
-                staging: DiffStaging(changes: changes)
+                staging: DiffStaging(changes: changes),
+                conflictedText: isConflicted ? changes.conflictedFileText : nil
             )
         case .none:
             PlaceholderNote("Select a file to see its changes")

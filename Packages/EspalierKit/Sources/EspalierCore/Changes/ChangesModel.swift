@@ -35,6 +35,10 @@ public final class ChangesModel: RepositoryFeature {
     /// can't be included or excluded then: their indexes are the full
     /// diff's.
     public private(set) var diffHidesWhitespace = false
+    /// The text of `diffFileID`'s file divided by its conflict markers,
+    /// loaded with its diff while it's conflicted with markers left; nil
+    /// otherwise.
+    public private(set) var conflictedFileText: ConflictedFileText?
     /// The file list filter. The selection follows it
     /// (`selectListedFiles`).
     public var filter = FileListFilter() {
@@ -275,6 +279,7 @@ public final class ChangesModel: RepositoryFeature {
         diff = .idle
         diffFileID = nil
         diffHidesWhitespace = false
+        conflictedFileText = nil
         setFullDiff(nil)
         diffIsTextConverted = false
         fullDiffSelectableLines = []
@@ -290,6 +295,9 @@ public final class ChangesModel: RepositoryFeature {
         }
         if diffFileID != nil {
             diffFileID = nil
+        }
+        if conflictedFileText != nil {
+            conflictedFileText = nil
         }
         setFullDiff(nil)
         fullDiffSelectableLines = []
@@ -307,6 +315,9 @@ public final class ChangesModel: RepositoryFeature {
         } else {
             diff = .loading(previous: nil)
             setFullDiff(nil)
+            if conflictedFileText != nil {
+                conflictedFileText = nil
+            }
             if diffHidesWhitespace != hidesWhitespace {
                 diffHidesWhitespace = hidesWhitespace
             }
@@ -333,6 +344,9 @@ public final class ChangesModel: RepositoryFeature {
             changed = selection != file.selection
         }
         diff = .loaded(loaded.shown)
+        if conflictedFileText != loaded.conflictedText {
+            conflictedFileText = loaded.conflictedText
+        }
         setFullDiff(loaded.full)
         fullDiffSelectableLines = loaded.selectableLines
         if diffIsTextConverted != loaded.isTextConverted {
@@ -351,6 +365,9 @@ public final class ChangesModel: RepositoryFeature {
     /// Records a failed diff load.
     func diffDidFail(_ error: OperationError) {
         diff = .failed(error)
+        if conflictedFileText != nil {
+            conflictedFileText = nil
+        }
         setFullDiff(nil)
         fullDiffSelectableLines = []
     }

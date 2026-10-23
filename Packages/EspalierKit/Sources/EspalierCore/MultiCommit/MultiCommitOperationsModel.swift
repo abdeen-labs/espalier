@@ -41,6 +41,10 @@ public final class MultiCommitOperationsModel: RepositoryFeature {
     /// (`getMergeCommitMessage`, split as a commit's), or an empty one when
     /// git has none.
     public internal(set) var defaultMergeMessage: MergeMessage?
+    /// The sides chosen for single conflicts, by path, oldest first: what
+    /// Undo puts back (ConflictSideChoices.swift). Kept while their file
+    /// stays conflicted in the same round of the same operation.
+    var conflictSideChoices: [ExactString: [ConflictSideChoice]] = [:]
 
     @ObservationIgnored weak var repository: RepositoryModel?
 
@@ -132,7 +136,9 @@ public final class MultiCommitOperationsModel: RepositoryFeature {
 
     /// Resolves a conflicted file by taking one side, or clears the choice.
     /// Nothing changes on disk until the operation continues, which checks out
-    /// the chosen side and stages it. Does nothing without conflicts.
+    /// the chosen side and stages it. Does nothing without conflicts. (One
+    /// side for one conflict changes the file at once:
+    /// `chooseConflictSide(_:conflict:inFile:shown:)`.)
     public func setManualResolution(_ resolution: ManualConflictResolution?, forPath path: String) {
         guard let conflictState else {
             return
@@ -541,6 +547,9 @@ public final class MultiCommitOperationsModel: RepositoryFeature {
         if update.applied.contains(.refs) {
             forgetMovedRewrites()
         }
+        if update.applied.contains(.status) {
+            pruneConflictSideChoices()
+        }
     }
 
     func repositoryPathDidChange(keepingSharedState: Bool) {
@@ -555,6 +564,7 @@ public final class MultiCommitOperationsModel: RepositoryFeature {
         mergeMessage = nil
         defaultMergeMessage = nil
         mergeMessageLoads.cancel()
+        conflictSideChoices = [:]
     }
 }
 

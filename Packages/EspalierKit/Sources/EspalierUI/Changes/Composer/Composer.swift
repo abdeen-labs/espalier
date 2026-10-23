@@ -9,9 +9,9 @@
 // gates.
 //
 // While a merge waits on its conflicts, the form shows the merge's message
-// (git's, which the user may edit) and its button is Commit Merge; the
-// user's draft is set aside, untouched, and shows again once the merge
-// ends.
+// (git's, which the user may edit) without a button: the operation panel's
+// Commit Merge, and ⌘↩, commit the merge with it. The user's draft is set
+// aside, untouched, and shows again once the merge ends.
 
 import AIKit
 import EspalierCore
@@ -45,6 +45,9 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
     public var options: CommitOptionsContent
     public var hook: HookActivityContent?
     public var button: CommitButtonContent
+    /// Whether the commit button shows (not for a merge's message, which
+    /// the operation panel commits).
+    public var showsButton: Bool
     /// A commit or a generation runs: the fields can't change.
     public var isReadOnly: Bool
     public var isGenerating: Bool
@@ -70,6 +73,7 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
         options: CommitOptionsContent = CommitOptionsContent(),
         hook: HookActivityContent? = nil,
         button: CommitButtonContent,
+        showsButton: Bool = true,
         isReadOnly: Bool = false,
         isGenerating: Bool = false,
         isSpellCheckingEnabled: Bool = true,
@@ -91,6 +95,7 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
         self.options = options
         self.hook = hook
         self.button = button
+        self.showsButton = showsButton
         self.isReadOnly = isReadOnly
         self.isGenerating = isGenerating
         self.isSpellCheckingEnabled = isSpellCheckingEnabled
@@ -258,9 +263,10 @@ extension ComposerContent {
     }
 
     /// The composer while a merge waits on its conflicts: the merge's
-    /// message in the fields (`Composer.draft(for:)`), the author, and
-    /// Commit Merge; no AI, co-authors, options, last commit, or warnings.
-    /// The fields can't change while the merge is committed.
+    /// message in the fields (`Composer.draft(for:)`), the author, and a
+    /// running hook; no button (the operation panel's Commit Merge commits
+    /// it), AI, co-authors, options, last commit, or warnings. The fields
+    /// can't change while the merge is committed.
     @MainActor
     static func merge(_ repository: RepositoryModel, app: AppModel, actions: WindowActions?, button: CommitButtonContent) -> ComposerContent {
         let isCommitting = button.isCommitting
@@ -278,6 +284,7 @@ extension ComposerContent {
             showsCommitOptions: false,
             hook: hook,
             button: button,
+            showsButton: false,
             isReadOnly: isCommitting,
             isSpellCheckingEnabled: app.preferences.commitSpellcheckEnabled,
             canOpenRepositorySettings: actions?.canPerform(.repositorySettings) ?? false
@@ -373,7 +380,9 @@ public struct ComposerView: View {
             if let hook = content.hook {
                 HookActivityView(hook, output: hookOutput, onStop: actions.stopHook)
             }
-            CommitButton(content.button, action: actions.commit)
+            if content.showsButton {
+                CommitButton(content.button, action: actions.commit)
+            }
             if let lastCommit = content.lastCommit {
                 // Grows in after a commit over 0.22 s and leaves over 0.15
                 // s (Changes' column sets the motion).
@@ -685,7 +694,7 @@ struct AIFailureLine: View {
 
 /// The composer for a repository: its content from the models, its actions
 /// through the window. While a merge waits on its conflicts it edits the
-/// merge's message, and its button commits the merge.
+/// merge's message, which the operation panel's Commit Merge commits.
 struct Composer: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context

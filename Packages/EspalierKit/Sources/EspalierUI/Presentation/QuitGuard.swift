@@ -120,6 +120,8 @@ extension OperationKind {
         .abortRevert: "a revert",
         .undoMultiCommitOperation: "an undo",
         .applyConflictResolutions: "resolving conflicts",
+        .chooseConflictSide: "resolving conflicts",
+        .undoConflictSide: "resolving conflicts",
         .fetch: "a fetch",
         .fetchRefspec: "a fetch",
         .pull: "a pull",

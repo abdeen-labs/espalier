@@ -35,11 +35,22 @@ struct LoadedDiffs: Sendable, Equatable {
     /// comparing two selections of a 10,000,000-line diff takes seconds. Nil
     /// without a file.
     let carried: (base: DiffSelection, carried: DiffSelection, changed: Bool)?
+    /// A conflicted file with markers left, divided by them
+    /// (`ConflictedFileText`); nil for other files, and when it couldn't be
+    /// read.
+    let conflictedText: ConflictedFileText?
 
-    init(shown: Diff, full: Diff, isTextConverted: Bool = false, for file: WorkingDirectoryFileChange? = nil) {
+    init(
+        shown: Diff,
+        full: Diff,
+        isTextConverted: Bool = false,
+        conflictedText: ConflictedFileText? = nil,
+        for file: WorkingDirectoryFileChange? = nil
+    ) {
         self.shown = shown
         self.full = full
         self.isTextConverted = isTextConverted
+        self.conflictedText = conflictedText
         let lines = EspalierCore.selectableLines(in: full)
         selectableLines = lines
         carried = file.map { file in
@@ -50,10 +61,12 @@ struct LoadedDiffs: Sendable, Equatable {
 
     static func == (lhs: LoadedDiffs, rhs: LoadedDiffs) -> Bool {
         lhs.shown == rhs.shown && lhs.full == rhs.full && lhs.isTextConverted == rhs.isTextConverted
+            && lhs.conflictedText == rhs.conflictedText
     }
 }
 
-/// Loads a working directory file's diff: the one to show and the full one.
+/// Loads a working directory file's diff: the one to show and the full one,
+/// and a conflicted file's text divided by its markers.
 @concurrent
 func loadWorkingDirectoryDiffs(
     _ repository: Repository,
@@ -61,13 +74,29 @@ func loadWorkingDirectoryDiffs(
     hidesWhitespace: Bool
 ) async throws -> LoadedDiffs {
     async let isTextConverted = file.status.submoduleStatus == nil ? GitKit.isTextConverted(repository, file.path) : false
+    async let conflictedText = loadConflictedFileText(repository, file)
     guard hidesWhitespace else {
         let diff = try await getWorkingDirectoryDiff(repository, file)
-        return LoadedDiffs(shown: diff, full: diff, isTextConverted: await isTextConverted, for: file)
+        return LoadedDiffs(shown: diff, full: diff, isTextConverted: await isTextConverted, conflictedText: await conflictedText, for: file)
     }
     async let shown = getWorkingDirectoryDiff(repository, file, hideWhitespaceInDiff: true)
     async let full = getWorkingDirectoryDiff(repository, file)
-    return try await LoadedDiffs(shown: shown, full: full, isTextConverted: isTextConverted, for: file)
+    return try await LoadedDiffs(shown: shown, full: full, isTextConverted: isTextConverted, conflictedText: conflictedText, for: file)
+}
+
+/// A conflicted file's text divided by its markers, for a file with markers
+/// left; nil for other files, and when it can't be read.
+@concurrent
+private func loadConflictedFileText(_ repository: Repository, _ file: WorkingDirectoryFileChange) async -> ConflictedFileText? {
+    guard case .conflicted(.conflictsWithMarkers(_, let markerCount, _, _)) = file.status, markerCount > 0 else {
+        return nil
+    }
+    do {
+        return try await getConflictedFileText(repository, path: file.path)
+    } catch {
+        logger.error("Could not read the conflicted file's markers: \(error.localizedDescription, privacy: .private)")
+        return nil
+    }
 }
 
 /// The text of a text diff, large or not.

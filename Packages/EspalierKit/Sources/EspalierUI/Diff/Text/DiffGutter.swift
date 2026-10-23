@@ -1,6 +1,7 @@
 // The diff table's geometry, as desktop lays its rows out. A row runs from
-// the left: the line numbers (old and new unified; one per half split),
-// which stage lines, the "+" or "−" marker, then the text. While lines can
+// the left: the line numbers (old and new unified; one per half split; the
+// file's alone for a conflicted file drawn as blocks), which stage lines,
+// the "+" or "−" marker, then the text. While lines can
 // be staged, the handle (a bar beside each changed line showing whether the
 // commit includes it, which toggles the line's block) runs down the left
 // edge unified; split, it runs between the halves, and the old half turns
@@ -132,9 +133,12 @@ struct DiffRowGeometry: Sendable, Equatable {
     let hunkText: CGFloat
     let font: DiffFontMetrics
 
-    /// - Parameter digits: The digits line numbers make room for (the
-    ///   document's `lineNumberDigits`, at least 3).
-    init(width: CGFloat, isSplit: Bool, showsStaging: Bool, digits: Int, font: DiffFontMetrics) {
+    /// - Parameters:
+    ///   - digits: The digits line numbers make room for (the document's
+    ///     `lineNumberDigits`, at least 3).
+    ///   - oneNumber: Unified rows show one number, the new file's (a
+    ///     conflicted file drawn as blocks).
+    init(width: CGFloat, isSplit: Bool, showsStaging: Bool, digits: Int, font: DiffFontMetrics, oneNumber: Bool = false) {
         self.width = width
         self.isSplit = isSplit
         self.font = font
@@ -190,7 +194,7 @@ struct DiffRowGeometry: Sendable, Equatable {
                 handle = 0...DiffTableMetrics.handleWidth
                 start = DiffTableMetrics.handleWidth
             }
-            before = half(from: start, to: width, numbers: (true, true))
+            before = half(from: start, to: width, numbers: (!oneNumber, true))
             hunkGutter = before.gutter
         }
         self.handle = handle
@@ -275,6 +279,11 @@ nonisolated enum DiffHit: Sendable, Equatable {
     case expansion(hunk: Int, kind: DiffHunkButton)
     /// A hunk header, elsewhere.
     case hunkHeader(hunk: Int)
+    /// A conflict block header's Use <branch>'s Version button (the
+    /// header's index in the document's `conflictHeaders`).
+    case conflictButton(header: Int)
+    /// A conflict block's header, elsewhere.
+    case conflictHeader(header: Int)
     /// Nothing (a missing-newline note, or below the last row).
     case none
 }

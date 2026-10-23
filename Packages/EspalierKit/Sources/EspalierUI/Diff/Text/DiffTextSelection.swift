@@ -60,14 +60,15 @@ nonisolated struct DiffTextSelection: Sendable, Equatable {
 
 nonisolated extension DiffDocument {
     /// The line whose text a row shows on a side: unified rows show one
-    /// line; hunk headers and missing-newline notes have no selectable text.
+    /// line; hunk headers, missing-newline notes, and conflict block headers
+    /// have no selectable text.
     func textLine(ofRow row: Int, column: DiffColumn) -> Int? {
         guard rows.indices.contains(row) else {
             return nil
         }
         let documentRow = rows[row]
         switch documentRow.kind {
-        case .hunk, .noNewline:
+        case .hunk, .noNewline, .conflictHeader:
             return nil
         case .context, .added, .deleted, .modified:
             return isSplit ? documentRow.line(column) : documentRow.unifiedLine

@@ -1,6 +1,6 @@
 // The context menus of the Changes list and its header: their items and
 // their order, which items a rebase's conflicts leave, a conflicted file's
-// sides to pick, and when items are disabled. `gitIgnoreMenuItems(for:)`
+// sides to pick and its Undo, and when items are disabled. `gitIgnoreMenuItems(for:)`
 // builds the ignore items; `FileMenuItem.menuContent(_:run:)` makes them a
 // menu's content, which the list's AppKit menu is built from.
 
@@ -22,6 +22,9 @@ nonisolated public enum FileMenuCommand: Sendable, Hashable {
     case openWithDefaultProgram
     /// Picks a conflicted file's side, or (nil) undoes the choice.
     case resolve(ManualConflictResolution?)
+    /// Puts a conflicted file back as it was before the last side chosen
+    /// for one of its conflicts.
+    case undoConflictSide
 }
 
 /// An item of a changed file's context menu.
@@ -127,10 +130,10 @@ nonisolated public enum FileContextMenuContent {
         return items + [.separator] + openItems
     }
 
-    /// A conflicted file's sides to pick while it needs the user, or Undo
-    /// once one was picked, as its row's buttons offer them, after a
-    /// separator; none when there's nothing to pick (a stash restore's
-    /// conflicts, a file resolved in the editor).
+    /// A conflicted file's sides to pick while it needs the user, and Undo
+    /// while there's a choice to take back, as its row's buttons offer
+    /// them, after a separator; none when there's nothing to pick or undo
+    /// (a stash restore's conflicts, a file resolved in the editor).
     public static func conflictItems(for conflict: ConflictFileRowContent) -> [FileMenuItem] {
         var items: [FileMenuItem] = []
         if conflict.isUnresolved {
@@ -140,8 +143,14 @@ nonisolated public enum FileContextMenuContent {
             if let theirsLabel = conflict.theirsLabel {
                 items.append(FileMenuItem(theirsLabel, .resolve(.theirs)))
             }
-        } else if case .resolved(isUndoable: true) = conflict.state {
+        }
+        switch conflict.undo {
+        case .side?:
             items.append(FileMenuItem("Undo", .resolve(nil)))
+        case .conflictSide?:
+            items.append(FileMenuItem("Undo", .undoConflictSide))
+        case nil:
+            break
         }
         return items.isEmpty ? [] : [.separator] + items
     }

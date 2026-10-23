@@ -1,6 +1,6 @@
-// The Changes place's menu actions: Commit Changes (⌘↩, which presses Commit
-// Merge or Continue in the commit form's place while an operation waits on
-// the user, and is titled as they are), Generate Commit
+// The Changes place's menu actions: Commit Changes (⌘↩, which runs Commit
+// Merge or Continue, the operation panel's button, while an operation waits
+// on the user, and is titled as they are), Generate Commit
 // Message (⌥⌘G, gone while AI is off), Go to Commit Message (⌘J), Amend Last
 // Commit, Undo Commit…, and Discard All Changes…, plus the Debug menu's
 // Changes Apply benchmark. Each runs what the composer's controls run,
@@ -17,9 +17,9 @@ enum ChangesActions {
             guard let context, context.state.place == .changes, let controller = controller(context) else {
                 return false
             }
-            // ⌘↩ presses the button the commit form's place shows, in
-            // Changes: Commit Merge or Continue while an operation waits on
-            // the user, else Commit, and nothing while an operation runs.
+            // ⌘↩ in Changes: Commit Merge or Continue (the operation
+            // panel's button) while an operation waits on the user, else
+            // Commit, and nothing while an operation runs.
             if let slot = OperationSlotContent.make(controller.repository) {
                 return slot.button.isEnabled
             }

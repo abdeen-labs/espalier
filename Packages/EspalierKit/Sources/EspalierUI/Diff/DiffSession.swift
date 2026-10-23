@@ -5,7 +5,8 @@
 // (`DiffContentsLoader`), which add the bottom hunk that expands the end of
 // the file, enable the expansion buttons, and feed syntax highlighting,
 // whose tokens arrive later still. The first paint never waits for the
-// contents.
+// contents. A conflicted file drawn as blocks shows the whole working file,
+// so its whole new contents are highlighted.
 
 import EspalierCore
 import EspalierSupport
@@ -41,6 +42,16 @@ final class DiffSession {
     private(set) var tokensGeneration = 0
     /// "Show Diff" was clicked for this large diff.
     var forceShowLargeDiff = false
+    /// Whether every line of the new contents is highlighted, not just the
+    /// diff's: a conflicted file drawn as blocks shows the whole working
+    /// file.
+    var highlightsWholeNewFile = false {
+        didSet {
+            if highlightsWholeNewFile != oldValue {
+                highlight()
+            }
+        }
+    }
     /// The image diff shown, decoded once.
     private(set) var images: (diff: ImageDiff, content: ImageDiffContent)?
 
@@ -262,8 +273,15 @@ final class DiffSession {
         let tabSize = tabSize
         let path = file.path
         let oldPath = file.oldPath ?? file.path
+        // Small enough to expand is small enough to highlight whole.
+        let wholeNewFile = highlightsWholeNewFile && contents.canBeExpanded
         highlightTask = Task { [weak self] in
-            let tokens = await highlightContents(contents, path: path, oldPath: oldPath, hunks: diff.hunks, tabSize: tabSize, highlighter: highlighter)
+            let tokens: FileTokens
+            if wholeNewFile {
+                tokens = await highlightNewFile(contents, path: path, tabSize: tabSize, highlighter: highlighter)
+            } else {
+                tokens = await highlightContents(contents, path: path, oldPath: oldPath, hunks: diff.hunks, tabSize: tabSize, highlighter: highlighter)
+            }
             guard !Task.isCancelled, let self, self.fileID == fileID,
                   let current = self.source, let source, textDiffEquals(current, source)
             else {

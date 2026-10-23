@@ -15,6 +15,9 @@ public enum OperationKind: String, Sendable, Hashable, CaseIterable {
 
     // Other multi-commit operations and conflict resolution.
     case squash, reorder, revert, continueRevert, abortRevert, undoMultiCommitOperation, applyConflictResolutions
+    /// Keeping one side of one conflict in a conflicted file, and putting
+    /// the file back as it was before (ConflictSideChoices.swift).
+    case chooseConflictSide, undoConflictSide
 
     // Remotes.
     case fetch, pull, push, publishBranch, publishRepository, fetchRefspec, setRemoteURL, convertToFork

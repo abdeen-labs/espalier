@@ -2,7 +2,12 @@
 //
 // The diff's container: the header, a conflicted file's band in Changes
 // (ConflictBand.swift), then the text table, an image diff, or the binary,
-// submodule, large, unrenderable, empty, or conflicted state.
+// submodule, large, unrenderable, empty, or conflicted state. A conflicted
+// file whose markers make whole conflicts, while an operation waits on
+// them, shows as the working file with each conflict as blocks
+// (ConflictBlocks.swift) in place of its diff; their headers' buttons keep
+// one side of one conflict, and the band leaves the whole file's sides to
+// the file's row.
 // The previous diff stays while the next loads, with a spinner after
 // 150 ms; the header's counts and the file's actions wait for the file's
 // own diff. A text diff has the find bar over its top trailing corner while
@@ -98,6 +103,9 @@ public struct DiffContainer: View {
     private let file: DiffFileInfo?
     private let context: DiffContext
     private let staging: DiffStaging?
+    /// A conflicted file's text divided by its markers
+    /// (`changes.conflictedFileText`), for its blocks.
+    private let conflictedText: ConflictedFileText?
 
     @Environment(WindowContext.self) private var window: WindowContext?
     @Environment(\.syntaxHighlighter) private var environmentHighlighter
@@ -111,11 +119,20 @@ public struct DiffContainer: View {
     ///   - file: The file the diff is of.
     ///   - context: Where the diff shows.
     ///   - staging: Line staging, in Changes.
-    public init(_ diff: Loadable<Diff, OperationError>, file: DiffFileInfo?, context: DiffContext, staging: DiffStaging? = nil) {
+    ///   - conflictedText: A conflicted file's text divided by its markers,
+    ///     in Changes: its conflicts show as blocks.
+    public init(
+        _ diff: Loadable<Diff, OperationError>,
+        file: DiffFileInfo?,
+        context: DiffContext,
+        staging: DiffStaging? = nil,
+        conflictedText: ConflictedFileText? = nil
+    ) {
         self.diff = diff
         self.file = file
         self.context = context
         self.staging = staging
+        self.conflictedText = conflictedText
     }
 
     public var body: some View {
@@ -145,6 +162,9 @@ public struct DiffContainer: View {
                 return
             }
             session.diffDidChange(diff.value, file: file, repository: window?.repository)
+        }
+        .onChange(of: conflictBlocks != nil, initial: true) { _, showsBlocks in
+            session.highlightsWholeNewFile = showsBlocks
         }
     }
 
@@ -194,7 +214,7 @@ public struct DiffContainer: View {
             wrapsLines: settings.wrapsLines,
             expansion: nil
         )
-        if let (text, isLarge) = textDiff {
+        if let (text, isLarge) = textDiff, conflictBlocks == nil {
             content.expansion = Self.expansion(
                 session.displayDiff(for: text, isLarge: isLarge),
                 canExpand: session.canExpand(text, isLarge: isLarge),
@@ -240,12 +260,25 @@ public struct DiffContainer: View {
     // MARK: A conflicted file
 
     /// A conflicted file's band in Changes: its state, and its sides to
-    /// pick.
+    /// pick while its conflicts aren't drawn as blocks.
     @ViewBuilder
     private var conflictBand: some View {
         if context == .conflict, let window, let repository = window.repository, let row = shownFile.flatMap(conflictRow) {
-            ConflictBand(content: row, actions: .make(for: row, repository: repository, context: window))
+            ConflictBand(content: row, actions: .make(for: row, repository: repository, context: window), includesSides: conflictBlocks == nil)
         }
+    }
+
+    /// The shown conflicted file's conflicts as blocks, in Changes: an
+    /// operation's conflicts in a file whose markers make whole conflicts.
+    /// Nil for the rest (binary, deleted, without markers, a stash
+    /// restore's), and while the previous file's diff shows.
+    private var conflictBlocks: ConflictBlocks? {
+        guard context == .conflict, showsFilesDiff, let conflictedText, let window, let repository = window.repository,
+              let row = shownFile.flatMap(conflictRow)
+        else {
+            return nil
+        }
+        return ConflictBlocks.make(conflictedText, row: row, repository: repository)
     }
 
     // MARK: Content
@@ -353,6 +386,7 @@ public struct DiffContainer: View {
         } else {
             let shown = session.displayDiff(for: text, isLarge: isLarge)
             let stagingState = stagingEnabled ? staging?.state : nil
+            let blocks = conflictBlocks
             VStack(spacing: 0) {
                 DiffMessages(warnings: DiffContentsWarning.warnings(for: shown))
                 DiffTextView(
@@ -364,12 +398,13 @@ public struct DiffContainer: View {
                         tabSize: settings.tabSize,
                         fontSize: settings.fontSize,
                         detectsConflictMarkers: isConflict,
-                        canExpand: session.canExpand(text, isLarge: isLarge),
-                        hasExpandedLines: session.hasExpandedLines,
+                        canExpand: blocks == nil && session.canExpand(text, isLarge: isLarge),
+                        hasExpandedLines: blocks == nil && session.hasExpandedLines,
                         staging: stagingState,
                         tokens: session.tokens,
                         tokensGeneration: session.tokensGeneration,
-                        isInteractive: isInteractive
+                        isInteractive: isInteractive,
+                        conflicts: blocks
                     ),
                     actions: tableActions,
                     find: find
@@ -404,8 +439,26 @@ public struct DiffContainer: View {
                         try await changes.discardLines(lines, inDiff: generation, confirmed: answers.confirmed)
                     }
                 }
-            }) : nil
+            }) : nil,
+            chooseConflictSide: chooseConflictSide
         )
+    }
+
+    /// A conflict block's button: keeps one side of one conflict of the
+    /// shown file, as the table showed it, through the window's presenter.
+    private var chooseConflictSide: (@MainActor (ConflictedFileText, Int, ManualConflictResolution) async -> Bool)? {
+        guard context == .conflict, let window, let repository = window.repository, let path = shownFile?.path else {
+            return nil
+        }
+        return { [weak window] text, index, side in
+            guard let window else {
+                return false
+            }
+            let chosen: Void? = await window.presenter.perform { _ throws(OperationError) in
+                try await repository.operations.chooseConflictSide(side, conflict: index, inFile: path, shown: text)
+            }
+            return chosen != nil
+        }
     }
 
     // MARK: Helpers

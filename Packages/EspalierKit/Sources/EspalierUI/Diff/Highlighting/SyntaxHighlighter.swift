@@ -206,6 +206,21 @@ nonisolated func highlightContents(
     return result
 }
 
+/// Highlights every line of the file's new contents (a conflicted file
+/// drawn as blocks shows the whole working file), off the main actor.
+nonisolated func highlightNewFile(
+    _ contents: DiffFileContents,
+    path: String,
+    tabSize: Int,
+    highlighter: any SyntaxHighlighter
+) async -> FileTokens {
+    guard !contents.newLines.isEmpty else {
+        return .none
+    }
+    let request = HighlightRequest(lines: contents.newLines, path: path, tabSize: tabSize, lineFilter: Set(contents.newLines.indices))
+    return FileTokens(newTokens: await highlighter.tokens(for: request))
+}
+
 /// The app's syntax highlighter, which diffs use unless the environment
 /// sets another (`EnvironmentValues.syntaxHighlighter`). Nil until a
 /// highlighter is installed at launch.

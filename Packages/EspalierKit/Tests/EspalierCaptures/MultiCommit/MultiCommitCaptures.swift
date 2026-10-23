@@ -127,38 +127,50 @@ struct MultiCommitCaptures {
 
     // MARK: The band above a conflicted file's diff
 
-    /// The band's states: a merge's markers, with an editor and without, a
-    /// rebase's whose base isn't a branch, a binary file, a file deleted on
-    /// one side, a stash restore's (no sides), a side chosen, and resolved.
-    private static let bandRows: [(name: String, row: ConflictFileRowContent, hasEditor: Bool)] = [
+    /// The band's states: a merge's markers drawn as blocks (their sides on
+    /// the blocks), with an editor and without, and after a side was chosen
+    /// for one conflict (Undo); markers that aren't (their sides here); a
+    /// binary file and a file deleted on one side (their sides here); a
+    /// stash restore's (no sides); a side chosen for the whole file; a
+    /// file resolved by its conflicts' sides (Undo); and resolved.
+    private static let bandRows: [(name: String, row: ConflictFileRowContent, hasEditor: Bool, includesSides: Bool)] = [
         ("markers", ConflictFileRowContent(
             path: "Sources/App/RepositoryLoader.swift", state: .markers(conflicts: 3), status: "3 conflicts",
             oursLabel: "Use the modified file from main", theirsLabel: "Use the modified file from feature/login",
             oursVersionTitle: "Use main's Version", theirsVersionTitle: "Use feature/login's Version"
-        ), true),
+        ), true, false),
         ("markers-noEditor", ConflictFileRowContent(
             path: "Sources/App/RepositoryLoader.swift", state: .markers(conflicts: 1), status: "1 conflict",
             oursLabel: "Use the modified file from main", theirsLabel: "Use the modified file from feature/login",
             oursVersionTitle: "Use main's Version", theirsVersionTitle: "Use feature/login's Version"
-        ), false),
-        ("markers-unnamed", ConflictFileRowContent(
+        ), false, false),
+        ("markers-undo", ConflictFileRowContent(
+            path: "Sources/App/RepositoryLoader.swift", state: .markers(conflicts: 2), status: "2 conflicts",
+            oursLabel: "Use the modified file from main", theirsLabel: "Use the modified file from feature/login",
+            oursVersionTitle: "Use main's Version", theirsVersionTitle: "Use feature/login's Version",
+            undo: .conflictSide
+        ), true, false),
+        ("markers-sides", ConflictFileRowContent(
             path: "Sources/App/RepositoryLoader.swift", state: .markers(conflicts: 2), status: "2 conflicts",
             oursLabel: "Use the modified file", theirsLabel: "Use the modified file from feature/login",
             oursVersionTitle: "Use Current Version", theirsVersionTitle: "Use feature/login's Version"
-        ), true),
+        ), true, true),
         ("binary", ConflictFileRowContent(
             path: "Assets/logo.png", state: .manual, status: "Manual conflict",
             oursLabel: "Use the modified file from main", theirsLabel: "Use the modified file from feature/login",
             oursVersionTitle: "Use main's Version", theirsVersionTitle: "Use feature/login's Version"
-        ), true),
+        ), true, true),
         ("deleted", ConflictFileRowContent(
             path: "Sources/Legacy/Loader.swift", state: .manual, status: "File does not exist on feature/login.",
             oursLabel: "Use the modified file from main", theirsLabel: "Do not include this file on feature/login",
             oursVersionTitle: "Use main's Version", theirsVersionTitle: "Use feature/login's Version"
-        ), true),
-        ("restore", ConflictFileRowContent(path: "README.md", state: .markers(conflicts: 1), status: "1 conflict"), true),
-        ("chosen", ConflictFileRowContent(path: "Assets/icon.png", state: .resolved(isUndoable: true), status: "Using the modified file from main"), true),
-        ("resolved", ConflictFileRowContent(path: "README.md", state: .resolved(isUndoable: false), status: "No conflicts remaining"), true),
+        ), true, true),
+        ("restore", ConflictFileRowContent(path: "README.md", state: .markers(conflicts: 1), status: "1 conflict"), true, true),
+        ("chosen", ConflictFileRowContent(path: "Assets/icon.png", state: .resolved(isUndoable: true), status: "Using the modified file from main"), true, true),
+        ("resolved-undo", ConflictFileRowContent(
+            path: "README.md", state: .resolved(isUndoable: true), status: "No conflicts remaining", undo: .conflictSide
+        ), true, false),
+        ("resolved", ConflictFileRowContent(path: "README.md", state: .resolved(isUndoable: false), status: "No conflicts remaining"), true, true),
     ]
 
     @Test("the band above a conflicted file's diff: each state, at the diff's default width and its narrowest")
@@ -167,7 +179,7 @@ struct MultiCommitCaptures {
             let actions = ConflictFileRowActions(editorName: "Visual Studio Code", isEditorAvailable: band.hasEditor)
             for (suffix, width) in [("", CGFloat(640)), ("-narrow", Metrics.Column.diffMinimum)] {
                 capture(
-                    ConflictBand(content: band.row, actions: actions).frame(width: width),
+                    ConflictBand(content: band.row, actions: actions, includesSides: band.includesSides).frame(width: width),
                     named: "band-\(band.name)\(suffix)", area: area
                 )
             }
@@ -176,7 +188,7 @@ struct MultiCommitCaptures {
 
     // MARK: The operation panel
 
-    @Test("the operation panel: running, a rebase's conflicts stopped at a commit and resolved, a merge's, no conflicted files, AI's error, a stash restore's, and interrupted")
+    @Test("the operation panel: running; a rebase's conflicts stopped at a commit, and resolved (Continue, with the untracked files' note); a merge's, and resolved (Commit Merge: enabled, without a summary, committing); no conflicted files; AI's error; a stash restore's; and interrupted")
     func panel() {
         let panels: [(name: String, content: OperationPanelContent, aiError: String?)] = [
             ("running", OperationPanelContent(
@@ -192,6 +204,29 @@ struct MultiCommitCaptures {
                 operation: "Rebase", isMerge: false, resolved: 3, total: 3, unresolved: 0, isContinuing: false,
                 hasUntrackedFiles: false, isRebaseFamily: true, showsResolveWithAI: true, canResolveWithAI: true,
                 step: OperationStep(position: 2, total: 4), numberFormat: Capture.numberFormat
+            ), nil),
+            ("conflicts-resolved-untracked", .conflicts(
+                operation: "Rebase", isMerge: false, resolved: 1, total: 1, unresolved: 0, isContinuing: false,
+                hasUntrackedFiles: true, isRebaseFamily: true, showsResolveWithAI: true, canResolveWithAI: true,
+                numberFormat: Capture.numberFormat
+            ), nil),
+            ("conflicts-merge-resolved", .conflicts(
+                operation: "Merge", isMerge: true, resolved: 2, total: 2, unresolved: 0, isContinuing: false,
+                hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: true, canResolveWithAI: true,
+                mergeMessage: MergeMessage(summary: "Merge branch 'feature/login'", description: ""),
+                numberFormat: Capture.numberFormat
+            ), nil),
+            ("conflicts-merge-resolved-noSummary", .conflicts(
+                operation: "Merge", isMerge: true, resolved: 2, total: 2, unresolved: 0, isContinuing: false,
+                hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: true, canResolveWithAI: true,
+                mergeMessage: MergeMessage(summary: "", description: ""),
+                numberFormat: Capture.numberFormat
+            ), nil),
+            ("conflicts-merge-committing", .conflicts(
+                operation: "Merge", isMerge: true, resolved: 2, total: 2, unresolved: 0, isContinuing: true,
+                hasUntrackedFiles: false, isRebaseFamily: false, showsResolveWithAI: true, canResolveWithAI: true,
+                mergeMessage: MergeMessage(summary: "Merge branch 'feature/login'", description: ""),
+                numberFormat: Capture.numberFormat
             ), nil),
             ("conflicts-none", .conflicts(
                 operation: "Merge", isMerge: true, resolved: 0, total: 0, unresolved: 0, isContinuing: false,
@@ -220,7 +255,7 @@ struct MultiCommitCaptures {
                 title: "Rebase interrupted",
                 state: .interrupted(message: "Rebasing feature/login was interrupted. Continue or abort the rebase."),
                 abortTitle: "Abort Rebase",
-                continueTitle: "Continue Rebase",
+                finish: .continueOperation(name: "Rebase"),
                 canContinue: true
             ), nil),
         ]
@@ -285,8 +320,8 @@ struct MultiCommitCaptures {
         if model {
             options.append(.init(title: "Use the model's suggestion", choice: .model, isChecked: checked == .model))
         }
-        options.append(.init(title: "Use current file from main", choice: .ours, isChecked: checked == .ours))
-        options.append(.init(title: "Use incoming file from feature/login", choice: .theirs, isChecked: checked == .theirs))
+        options.append(.init(title: "Use main's Version", choice: .ours, isChecked: checked == .ours))
+        options.append(.init(title: "Use feature/login's Version", choice: .theirs, isChecked: checked == .theirs))
         return options
     }
 
@@ -333,7 +368,7 @@ struct MultiCommitCaptures {
                 AIResolutionRow(
                     path: "Sources/App/EmptyState.swift",
                     explanation: "Using changes from main",
-                    choiceLabel: "Current",
+                    choiceLabel: "main",
                     options: options(model: true, checked: .ours),
                     isResolved: false
                 ),

@@ -1,8 +1,8 @@
 // Ported in part from desktop/app/src/ui/multi-commit-operation/dialog/copilot-conflicts-changes.tsx
 //
 // The AI conflict sheet's Changes tab, a read-only diff of what each
-// conflicted file would become (the model's resolution, or the side chosen)
-// against the file on disk with its conflict markers
+// conflicted file would become (the model's resolution, or the side chosen,
+// named by its branch) against the file on disk with its conflict markers
 // (`resolutionDiff(forPath:hidesWhitespace:)`): the files on the left, the
 // diff (`DiffContainer`) on the right.
 
@@ -80,11 +80,14 @@ struct AIResolutionChanges: View {
         }
     }
 
+    /// The model's suggestion, or the side chosen: its branch, else
+    /// "Current" or "Incoming".
     private func choiceLabel(for path: String) -> String {
-        switch repository.ai.resolutionChoice(forPath: path) {
+        let branches = repository.operations.conflictBranches
+        return switch repository.ai.resolutionChoice(forPath: path) {
         case .model: "The model's suggestion"
-        case .ours: "Current"
-        case .theirs: "Incoming"
+        case .ours: ConflictFileRowContent.sideName(branches?.ours, side: .ours)
+        case .theirs: ConflictFileRowContent.sideName(branches?.theirs, side: .theirs)
         }
     }
 

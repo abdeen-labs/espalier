@@ -1,10 +1,11 @@
 // The diff table: unified and split, included and excluded lines with
 // tinted numbers and the handle, wrapping with a hanging indent, unwrapped
 // lines scrolled sideways, intra-line ranges, hunk headers with their
-// expansion buttons and checkbox, a missing newline, a conflicted file,
-// find's matches, text selection, the line cursor, and hover (syntax
-// color is DiffHighlightCaptures'). Unified, split, staging, find, and
-// selection in light and dark, the rest in light.
+// expansion buttons and checkbox, a missing newline, a conflicted file's
+// conflicts as blocks (one with the common ancestor's lines; two, a button
+// hovered), find's matches, text selection, the line cursor, and hover
+// (syntax color is DiffHighlightCaptures'). Unified, split, staging, find,
+// selection, and the conflict blocks in light and dark, the rest in light.
 
 import AppKit
 import EspalierCore
@@ -97,13 +98,41 @@ struct DiffTableCaptures {
         await capture("table-no-newline", size: CGSize(width: 520, height: 120), DiffTableContent(fileID: "a", diff: DiffCaptureFixtures.noNewline))
     }
 
-    @Test("conflict markers, and ours, the common ancestor's, and theirs between them")
+    @Test("a conflict as blocks: ours, the common ancestor's, and theirs, each under its header, the markers left out")
     func conflict() async {
         await capture(
             "table-conflict",
-            size: CGSize(width: 520, height: 240),
-            DiffTableContent(fileID: "a", diff: DiffCaptureFixtures.conflictWithBase, detectsConflictMarkers: true)
+            size: CGSize(width: 560, height: 300),
+            appearances: CaptureAppearance.allCases,
+            DiffTableContent(
+                fileID: "a",
+                diff: DiffCaptureFixtures.conflictWithBase,
+                detectsConflictMarkers: true,
+                conflicts: DiffCaptureFixtures.blocks(DiffCaptureFixtures.conflictWithBaseText)
+            )
         )
+    }
+
+    @Test("a file's two conflicts as blocks, the second with the common ancestor's lines; a button hovered")
+    func twoConflicts() async {
+        await capture(
+            "table-conflict-two",
+            size: CGSize(width: 720, height: 560),
+            appearances: CaptureAppearance.allCases,
+            DiffTableContent(
+                fileID: "a",
+                diff: DiffCaptureFixtures.conflictWithBase,
+                detectsConflictMarkers: true,
+                conflicts: DiffCaptureFixtures.blocks(DiffCaptureFixtures.twoConflictsText)
+            )
+        ) { scene in
+            // The first block's button, under the pointer.
+            let header = scene.controller.document.conflictHeaders[0]
+            let rect = scene.controller.tableView.rect(ofRow: header.row)
+            if let button = scene.controller.conflictButtonRect(ofRow: header.row, rowHeight: rect.height) {
+                scene.controller.mouseMoved(to: CGPoint(x: button.midX, y: rect.minY + button.midY))
+            }
+        }
     }
 
     @Test("find's matches on context, deleted, and added lines; the current one, on an added line, stronger")

@@ -1,7 +1,9 @@
 // Ported in part from desktop/app/src/ui/diff/diff-helpers.tsx
 //
 // The rows of the diff table. A row names the lines it shows by index into
-// the document's lines, so a 100,000-line document is two flat arrays.
+// the document's lines, so a 100,000-line document is two flat arrays. A
+// conflicted file drawn as blocks has the file's lines and a header row
+// atop each conflict's block per side.
 
 import GitKit
 
@@ -66,7 +68,8 @@ nonisolated struct DocumentLine: Sendable {
 
 /// Where a line of a conflicted file is.
 nonisolated enum ConflictRegion: Sendable, Hashable {
-    /// A conflict marker: `<<<<<<<`, `|||||||`, `=======`, or `>>>>>>>`.
+    /// A conflict marker: `<<<<<<<`, `|||||||`, `=======`, or `>>>>>>>` (in
+    /// a file drawn as blocks, one that makes no whole conflict).
     case marker
     /// Our side, between `<<<<<<<` and `|||||||` or `=======`.
     case ours
@@ -93,6 +96,10 @@ nonisolated struct DocumentRow: Sendable, Equatable {
         case modified
         /// "No newline at end of file" under the line it applies to.
         case noNewline
+        /// A conflict block's header, in a conflicted file drawn as blocks:
+        /// its side's name and button (`block` is its index in the
+        /// document's `conflictHeaders`).
+        case conflictHeader
     }
 
     var kind: Kind
@@ -148,6 +155,18 @@ nonisolated struct DocumentHunk: Sendable, Equatable {
     var changedDiffLines: ClosedRange<Int>?
     /// The dummy hunk at the bottom, which only expands the diff down.
     var isBottomDummy: Bool
+}
+
+/// A conflict block's header, in a conflicted file drawn as blocks.
+nonisolated struct DocumentConflictHeader: Sendable, Equatable {
+    /// The header's row.
+    var row: Int
+    /// The conflict, in the file's conflicts.
+    var conflict: Int
+    /// The block's side: ours, the common ancestor's, or theirs.
+    var side: ConflictRegion
+    /// The block's lines.
+    var lineCount: Int
 }
 
 /// A run of consecutive added and deleted lines: what a gutter handle
