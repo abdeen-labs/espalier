@@ -214,6 +214,11 @@ struct DugiteGitProcessFastTests {
                 may have crashed in this repository earlier:
                 remove the file manually to continue.
                 """, expected: .lockFileAlreadyExists)),
+            NamedCase("can parse git 2.56's lock file exists error", (output: """
+                fatal: Unable to create '/path/to/repo/.git/index.lock': File exists.
+
+                Another git process seems to be running in this repository, or the lock file may be stale
+                """, expected: .lockFileAlreadyExists)),
             NamedCase("can parse the previous not found repository error", (output: "fatal: Not a git repository (or any of the parent directories): .git", expected: .notAGitRepository)),
             NamedCase("can parse the current found repository error", (output: "fatal: not a git repository (or any of the parent directories): .git", expected: .notAGitRepository)),
             NamedCase("can parse the no merge to abort error", (output: "fatal: There is no merge to abort (MERGE_HEAD missing).\n", expected: .noMergeToAbort)),

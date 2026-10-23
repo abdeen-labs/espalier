@@ -180,8 +180,8 @@ private let errorPrefixRe = try! NSRegularExpression(pattern: "^error: ", option
 ///     staged first, so the stash takes them along.
 /// - Returns: true when an entry was created, false when there were no local
 ///   changes to save.
-/// - Throws: `GitError` when git fails, including when it exits with code 1
-///   without creating an entry (for example on an unborn branch).
+/// - Throws: `GitError` when git fails without creating an entry (for
+///   example on an unborn branch).
 @discardableResult
 public func createDesktopStashEntry(
     _ repository: Repository,
@@ -202,12 +202,13 @@ public func createDesktopStashEntry(
     let result: GitResult
     do {
         result = try await git(args, repository.path, "createStashEntry")
-    } catch let error as GitError where error.result.exitCode == 1 {
-        // An exit code of 1 for `git stash push` without lines beginning
-        // with "error: " doesn't mean a stash was created: on an unborn
-        // branch git exits with 1 and "You do not have the initial commit
-        // yet" without creating one. Whether refs/stash moved tells for
-        // certain.
+    } catch let error as GitError where error.result.exitCode == 1 || error.result.exitCode == 128 {
+        // `git stash push` can fail after it created the entry (resetting
+        // the working directory, say), with an exit code of 1, or 128 from
+        // git 2.56 on. Without lines beginning with "error: " that still
+        // doesn't mean a stash was created: on an unborn branch git fails
+        // the same way with "You do not have the initial commit yet"
+        // without creating one. Whether refs/stash moved tells for certain.
 
         // search for any line starting with `error:` -  /m here to ensure this is
         // applied to each line, without needing to split the text
@@ -381,12 +382,13 @@ private func applyStashCommit(_ repository: Repository, _ entry: StashEntry, _ n
         // couldn't apply it at all).
         logger.info("[\(name, privacy: .public)] a stash was applied with conflicts (exit code \(error.result.exitCode))")
         return false
-    } catch let error as GitError where error.result.exitCode == 1
+    } catch let error as GitError where (error.result.exitCode == 1 || error.result.exitCode == 128)
         && JSCompat.includes(error.result.stderr, "untracked working tree files would be overwritten by merge")
     {
         // A file the entry adds (an untracked file it stashed, staged first)
         // is untracked in the working directory again. Git refused before
-        // changing anything; `DugiteError` has no case for it.
+        // changing anything, exiting with 1, or 128 from git 2.56 on;
+        // `DugiteError` has no case for it.
         throw StashFilesInTheWayError(files: parseFilesToBeOverwritten(error.result.stderr))
     }
 }

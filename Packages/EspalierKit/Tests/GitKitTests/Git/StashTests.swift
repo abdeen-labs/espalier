@@ -576,7 +576,7 @@ struct StashTests {
             #expect(try await getStashes(repository).stashEntryCount == 0)
         }
 
-        // git exits with 1 here without "error:" lines, which isn't a stash.
+        // git fails here without "error:" lines, which isn't a stash.
         @Test("throws on an unborn branch, where git can't stash")
         func unborn() async throws {
             let repository = try setupEmptyRepository()
@@ -588,7 +588,6 @@ struct StashTests {
                 try await createDesktopStashEntry(repository, "master", files)
             }
 
-            #expect(error?.result.exitCode == 1)
             #expect(error?.message.contains("You do not have the initial commit yet") == true)
             #expect(try await getStashes(repository).stashEntryCount == 0)
             #expect(try read(file) == "not committed yet")
@@ -615,7 +614,7 @@ struct StashTests {
             let readme = POSIXPath.join(repository.path, "README.md")
             try appendFile(readme, "change")
             // Once refs/stash is updated, lock the index, so the reset that
-            // follows fails with only "fatal:" lines and git exits with 1.
+            // follows fails with only "fatal:" lines.
             let lock = POSIXPath.join(repository.path, ".git", "index.lock")
             let hook = POSIXPath.join(repository.path, ".git", "hooks", "reference-transaction")
             try FileManager.default.createDirectory(atPath: POSIXPath.dirname(hook), withIntermediateDirectories: true)
