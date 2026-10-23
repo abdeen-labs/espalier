@@ -128,36 +128,34 @@ struct HistoryHeader: View {
     }
 }
 
-/// A branch's name in History's headers: the branch symbol, then the name
-/// (13 semibold), its middle cut when it's long; and under the name, when
-/// given, a caption in secondary text ("Compared with main"), cut the same
-/// way.
+/// A branch's name in History's headers, on one line: the branch symbol,
+/// then the name (13 semibold), its middle cut when it's long; and after
+/// it, when given, a caption in secondary text ("compared with main"),
+/// which is cut first.
 struct BranchNameLabel: View {
     let name: String
     var caption: String? = nil
 
     var body: some View {
-        // With a caption, the symbol sits on the name's baseline.
-        HStack(alignment: caption == nil ? .center : .firstTextBaseline, spacing: Metrics.grid) {
+        HStack(alignment: .firstTextBaseline, spacing: Metrics.grid) {
             Image(systemName: "arrow.trianglehead.branch")
                 .imageScale(.small)
                 .foregroundStyle(.text3)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(name)
-                    .font(Typography.row.weight(.semibold))
-                    .foregroundStyle(.text)
+            Text(name)
+                .font(Typography.row.weight(.semibold))
+                .foregroundStyle(.text)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                // The caption gives way first.
+                .layoutPriority(1)
+            if let caption {
+                Text(caption)
+                    .font(Typography.secondary)
+                    .foregroundStyle(.text2)
                     .lineLimit(1)
-                    .truncationMode(.middle)
-                if let caption {
-                    Text(caption)
-                        .font(Typography.secondary)
-                        .foregroundStyle(.text2)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
             }
         }
-        .tooltip([name, caption].compactMap(\.self).joined(separator: "\n"))
+        .tooltip([name, caption].compactMap(\.self).joined(separator: " "))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([name, caption].compactMap(\.self).joined(separator: ", "))
     }

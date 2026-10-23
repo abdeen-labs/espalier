@@ -110,12 +110,18 @@ struct HistoryViewCaptures {
             header(.history, nil, canCompare: false)
         }
         capture(views.frame(width: width), named: "branchHeader", area: area)
-        // In the simple list's narrow column the views go under the name; a
-        // long current branch's name cuts the caption.
+        // In the simple list's narrow column the views go under the name,
+        // across the header; a long current branch's name cuts the caption;
+        // a count of 0 is quieter; a detached HEAD's name alone lines up
+        // with the list too.
         let narrow = VStack(spacing: 0) {
             header(.history, nil, canCompare: true)
             Divider()
             header(.history, nil, canCompare: true, comparedWith: "feature/hourly-forecast-for-the-whole-week")
+            Divider()
+            header(.compare(.ahead), nil, canCompare: true, behind: 0, ahead: 4)
+            Divider()
+            header(.history, nil, canCompare: false)
         }
         capture(narrow.frame(width: Metrics.Column.simpleList.min), named: "branchHeader-narrow", area: area)
     }

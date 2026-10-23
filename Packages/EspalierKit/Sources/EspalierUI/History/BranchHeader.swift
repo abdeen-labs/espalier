@@ -1,10 +1,11 @@
-// The header of another branch's place: the branch's name with "Compared
-// with <current branch>" under it, and what the list shows, History | Ahead |
-// Behind, counted from the branch's side, beside them. History is the
-// branch's own history; Ahead lists the commits the branch has that the
-// current branch doesn't (with the merge call to action), Behind the current
-// branch's own. On a detached HEAD there's nothing to compare with, so only
-// the name shows.
+// The header of another branch's place, lined up with the list: the
+// branch's name and "compared with <current branch>" on one line, and what
+// the list shows, History | Ahead 3 | Behind 2, counted from the branch's
+// side, beside them, or under them across the header where they don't fit.
+// History is the branch's own history; Ahead lists the commits the branch
+// has that the current branch doesn't (with the merge call to action),
+// Behind the current branch's own. On a detached HEAD there's nothing to
+// compare with, so only the name shows.
 
 import EspalierCore
 import GitKit
@@ -31,28 +32,16 @@ nonisolated struct BranchHeaderContent: Sendable, Equatable {
         comparedWith != nil
     }
 
-    /// "Compared with main", under the name; nil with nothing to compare
+    /// "compared with main", after the name; nil with nothing to compare
     /// with.
     var caption: String? {
-        comparedWith.map { "Compared with \($0)" }
-    }
-
-    /// The branch's own commits (the current branch is `behind` it):
-    /// "Ahead (3)", or "Ahead" until it's counted.
-    var branchAheadTitle: String {
-        behind.map { "Ahead (\(formatCount($0, numberFormat)))" } ?? "Ahead"
-    }
-
-    /// The current branch's own commits (it's `ahead` of the branch):
-    /// "Behind (2)", or "Behind" until it's counted.
-    var branchBehindTitle: String {
-        ahead.map { "Behind (\(formatCount($0, numberFormat)))" } ?? "Behind"
+        comparedWith.map { "compared with \($0)" }
     }
 }
 
 /// A branch's header: its name and what it's compared with, the views, and
-/// the call to action. The views sit beside the name when they fit, else
-/// under it.
+/// the call to action, lined up with the list. The views sit beside the
+/// name when they fit, else under it, across the header.
 struct BranchHeader: View {
     let content: BranchHeaderContent
     var setView: (BranchView) -> Void = { _ in }
@@ -64,13 +53,13 @@ struct BranchHeader: View {
                 HStack(spacing: Metrics.HistoryHeader.spacing) {
                     BranchNameLabel(name: content.branchName, caption: content.caption)
                     Spacer(minLength: Metrics.insetSmall)
-                    views
+                    views(fillsWidth: false)
                 }
                 .frame(height: Metrics.HistoryHeader.height)
                 VStack(alignment: .leading, spacing: 0) {
                     BranchNameLabel(name: content.branchName, caption: content.caption)
                         .frame(height: Metrics.HistoryHeader.height)
-                    views
+                    views(fillsWidth: true)
                         .padding(.bottom, Metrics.insetSmall)
                 }
             }
@@ -79,22 +68,45 @@ struct BranchHeader: View {
                     .padding(.bottom, Metrics.insetMedium)
             }
         }
+        // Lined up with the list, however little the header holds.
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Metrics.HistoryHeader.horizontalPadding)
     }
 
+    /// History | Ahead 3 | Behind 2, as wide as its labels, or across the
+    /// header.
     @ViewBuilder
-    private var views: some View {
+    private func views(fillsWidth: Bool) -> some View {
         if content.canCompare {
-            CapsuleSegmentedControl(
+            let control = CapsuleSegmentedControl(
                 "Show",
                 selection: Binding(get: { content.view }, set: { setView($0) }),
                 segments: [
                     CapsuleSegment("History", value: BranchView.history),
-                    CapsuleSegment(content.branchAheadTitle, value: BranchView.compare(.behind)),
-                    CapsuleSegment(content.branchBehindTitle, value: BranchView.compare(.ahead)),
-                ]
+                    countedSegment("Ahead", count: content.behind, value: .compare(.behind)),
+                    countedSegment("Behind", count: content.ahead, value: .compare(.ahead)),
+                ],
+                fillsWidth: fillsWidth
             )
-            .fixedSize()
+            if fillsWidth {
+                control
+            } else {
+                control.fixedSize()
+            }
+        }
+    }
+
+    /// A segment with its count after the title, once it's counted: in the
+    /// regular weight beside the title's, and quieter when it's 0.
+    private func countedSegment(_ title: String, count: Int?, value: BranchView) -> CapsuleSegment<BranchView> {
+        let formatted = count.map { formatCount($0, content.numberFormat) }
+        return CapsuleSegment(title, value: value, accessibilityTitle: formatted.map { "\(title), \($0)" }) {
+            if let formatted {
+                Text(formatted)
+                    .font(Typography.secondary)
+                    .monospacedDigit()
+                    .foregroundStyle(count == 0 ? Color.text3 : .text2)
+            }
         }
     }
 }

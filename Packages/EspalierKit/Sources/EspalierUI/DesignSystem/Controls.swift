@@ -216,19 +216,26 @@ public struct CapsuleSegment<Value: Hashable>: Identifiable {
     public let systemImage: String?
     /// What follows the title (Changes' count).
     let accessory: AnyView?
+    /// What VoiceOver reads for the segment: the title, or what the
+    /// accessory adds to it ("Ahead, 3").
+    let accessibilityTitle: String
 
     public init(_ title: String, systemImage: String? = nil, value: Value) {
         self.title = title
         self.systemImage = systemImage
         self.value = value
         accessory = nil
+        accessibilityTitle = title
     }
 
-    public init(_ title: String, systemImage: String? = nil, value: Value, @ViewBuilder accessory: () -> some View) {
+    /// - Parameter accessibilityTitle: What VoiceOver reads; the title when
+    ///   nil.
+    public init(_ title: String, systemImage: String? = nil, value: Value, accessibilityTitle: String? = nil, @ViewBuilder accessory: () -> some View) {
         self.title = title
         self.systemImage = systemImage
         self.value = value
         self.accessory = AnyView(accessory())
+        self.accessibilityTitle = accessibilityTitle ?? title
     }
 
     public var id: Value { value }
@@ -238,27 +245,34 @@ public struct CapsuleSegment<Value: Hashable>: Identifiable {
 /// track 28 high with the selected segment raised on a quiet capsule (or
 /// the theme's segment selection). The
 /// raised capsule slides to a new choice over 0.22 s, the labels' colors
-/// crossfading with it. It takes focus only with keyboard navigation on
-/// (System Settings › Keyboard), and then shows a capsule field's ring; the
-/// left and right arrows move the selection. VoiceOver sees a segmented
-/// control.
+/// crossfading with it. It's as wide as its labels, or, filling its width,
+/// as wide as it's offered, its segments sharing it equally. It takes focus
+/// only with keyboard navigation on (System Settings › Keyboard), and then
+/// shows a capsule field's ring; the left and right arrows move the
+/// selection. VoiceOver sees a segmented control.
 public struct CapsuleSegmentedControl<Value: Hashable>: View {
     private let label: String
     private let segments: [CapsuleSegment<Value>]
+    private let fillsWidth: Bool
     @Binding private var selection: Value
     @Environment(\.isEnabled) private var isEnabled
     @FocusState private var isFocused: Bool
     @Namespace private var namespace
 
-    /// - Parameter label: What VoiceOver calls the control.
-    public init(_ label: String, selection: Binding<Value>, segments: [CapsuleSegment<Value>]) {
+    /// - Parameters:
+    ///   - label: What VoiceOver calls the control.
+    ///   - fillsWidth: Whether it takes the width it's offered, its
+    ///     segments sharing it equally.
+    public init(_ label: String, selection: Binding<Value>, segments: [CapsuleSegment<Value>], fillsWidth: Bool = false) {
         self.label = label
         _selection = selection
         self.segments = segments
+        self.fillsWidth = fillsWidth
     }
 
     public var body: some View {
-        HStack(spacing: 2) {
+        let layout = fillsWidth ? AnyLayout(FillingSegmentsLayout(spacing: 2)) : AnyLayout(HStackLayout(spacing: 2))
+        layout {
             ForEach(segments) { segment in
                 let isSelected = segment.value == selection
                 HStack(spacing: 5) {
@@ -272,8 +286,10 @@ public struct CapsuleSegmentedControl<Value: Hashable>: View {
                 .font(Typography.smallButton)
                 .foregroundStyle(isSelected ? Color.text : .text2)
                 .lineLimit(1)
-                .padding(.horizontal, 12)
-                .frame(maxHeight: .infinity)
+                // Filling its width, the segments share what's left over,
+                // so they need less of their own.
+                .padding(.horizontal, fillsWidth ? 8 : 12)
+                .frame(maxWidth: fillsWidth ? .infinity : nil, maxHeight: .infinity)
                 .background {
                     if isSelected {
                         SegmentSelection()
@@ -306,7 +322,7 @@ public struct CapsuleSegmentedControl<Value: Hashable>: View {
         .accessibilityRepresentation {
             Picker(label, selection: $selection) {
                 ForEach(segments) { segment in
-                    Text(segment.title).tag(segment.value)
+                    Text(segment.accessibilityTitle).tag(segment.value)
                 }
             }
             .pickerStyle(.segmented)
@@ -323,6 +339,49 @@ public struct CapsuleSegmentedControl<Value: Hashable>: View {
         }
         selection = segments[next].value
         return .handled
+    }
+}
+
+/// A segmented control's segments across the width offered: equal widths
+/// when the widest fits in an equal share, else each its own width and an
+/// equal share of what's left; where even their own widths don't fit, each
+/// gives up the same part of its width.
+private struct FillingSegmentsLayout: Layout {
+    let spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let natural = sizes.reduce(0) { $0 + $1.width } + totalSpacing(subviews)
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? natural
+        return CGSize(width: width, height: proposal.height ?? sizes.map(\.height).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard !subviews.isEmpty else {
+            return
+        }
+        let ideals = subviews.map { $0.sizeThatFits(.unspecified).width }
+        let available = max(bounds.width - totalSpacing(subviews), 0)
+        let total = ideals.reduce(0, +)
+        let share = available / CGFloat(subviews.count)
+        let widths: [CGFloat]
+        if ideals.allSatisfy({ $0 <= share }) {
+            widths = ideals.map { _ in share }
+        } else if total <= available {
+            let extra = (available - total) / CGFloat(subviews.count)
+            widths = ideals.map { $0 + extra }
+        } else {
+            widths = ideals.map { total > 0 ? $0 * available / total : share }
+        }
+        var x = bounds.minX
+        for (subview, width) in zip(subviews, widths) {
+            subview.place(at: CGPoint(x: x, y: bounds.minY), proposal: ProposedViewSize(width: width, height: bounds.height))
+            x += width + spacing
+        }
+    }
+
+    private func totalSpacing(_ subviews: Subviews) -> CGFloat {
+        spacing * CGFloat(max(subviews.count - 1, 0))
     }
 }
 
