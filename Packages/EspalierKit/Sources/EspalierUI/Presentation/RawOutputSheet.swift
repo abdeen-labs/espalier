@@ -100,7 +100,8 @@ nonisolated public struct RawOutputContent: Sendable, Equatable {
 }
 
 /// An error whose message is git's raw output: the title, the output with
-/// Copy, the recoveries, and Close.
+/// Copy (`CopyButton`, which shows a check after a copy), the recoveries,
+/// and Close.
 public struct RawOutputSheet: View {
     private let content: RawOutputContent
     private let onRecovery: (Int) -> Void
@@ -122,11 +123,19 @@ public struct RawOutputSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         } buttons: {
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(content.output, forType: .string)
-            } label: {
-                Label("Copy", systemImage: "doc.on.doc")
+            // Its symbol turns into a check for a moment after a copy.
+            CopyButton(content.output) { systemImage in
+                Label {
+                    Text("Copy")
+                } icon: {
+                    // The copy symbol's room, whichever shows, so the
+                    // button keeps its width.
+                    ZStack {
+                        Image(systemName: "doc.on.doc")
+                            .hidden()
+                        Image(systemName: systemImage)
+                    }
+                }
             }
             .buttonStyle(.quiet)
             Spacer()

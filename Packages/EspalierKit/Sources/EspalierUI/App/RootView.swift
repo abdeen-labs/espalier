@@ -1,7 +1,9 @@
 // The main window's root. It shows launching, a launch failure, the welcome
 // flow, or the main window, and gives the window its context, presenter
-// hosts, and menus' focused value.
+// hosts, and menus' focused value. The welcome flow and the main window
+// crossfade over 0.22 s, the window's toolbar with them.
 
+import AppKit
 import EspalierCore
 import GitKit
 import SwiftUI
@@ -68,16 +70,36 @@ struct WindowRoot: View {
                 onWindowContext(context)
                 MoveToApplicationsPrompt.presentIfNeeded(in: context)
             }
+            .onChange(of: showsWelcome) {
+                context.modals.window?.crossfadeContents(Motion.arrive)
+            }
+    }
+
+    /// Whether the welcome flow fills the window.
+    private var showsWelcome: Bool {
+        let app = context.app
+        return app.loadState == .ready && !app.preferences.hasShownWelcomeFlow
     }
 
     @ViewBuilder
     private var content: some View {
-        let app = context.app
-        if app.loadState == .ready, !app.preferences.hasShownWelcomeFlow {
+        if showsWelcome {
             // The welcome flow fills the window.
             WelcomeView()
         } else {
             MainWindow()
         }
+    }
+}
+
+extension NSWindow {
+    /// Crossfades the window's next change of contents, its title bar and
+    /// toolbar included, over `duration` on the curve, when motion runs in
+    /// it.
+    func crossfadeContents(_ duration: TimeInterval) {
+        guard let contentView, Motion.animates(contentView) else {
+            return
+        }
+        Motion.crossfade(contentView.superview?.layer ?? contentView.layer, duration: duration)
     }
 }

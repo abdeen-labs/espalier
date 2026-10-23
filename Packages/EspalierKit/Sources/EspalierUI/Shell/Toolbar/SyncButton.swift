@@ -406,7 +406,9 @@ nonisolated public enum SyncMenuItem: Sendable, Equatable {
 /// Force Push) or a background failure, a chevron opens its menu. While a
 /// push, pull, or fetch runs, the button keeps its capsule, words, and
 /// width, the arc turns or fills in its symbol's place, and it takes no
-/// clicks. Nothing while the repository's state loads.
+/// clicks. Nothing while the repository's state loads. A new action in the
+/// same capsule (Push to Pull) crossfades its title and replaces its
+/// symbol over 0.2 s, and the background failure's badge fades in and out.
 public struct SyncButtonView: View {
     private let state: SyncButtonState
     private let onPrimary: () -> Void
@@ -416,6 +418,7 @@ public struct SyncButtonView: View {
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
     @Environment(\.numberFormat) private var numberFormat
+    @Environment(\.motion) private var motion
 
     /// How far left of the button's trailing edge the capsules of a
     /// crossfade can reach: more than the widest capsule.
@@ -450,6 +453,24 @@ public struct SyncButtonView: View {
         Look(kind: state.isProminent ? .prominent : .quiet, hasMenu: state.hasMenu, isBusy: state.isInProgress)
     }
 
+    /// What the capsule says and its symbol: a change of it in the same
+    /// look crossfades the title, replaces the symbol, and fades the badge
+    /// over 0.2 s.
+    private struct Face: Hashable {
+        var title: String
+        var systemImage: String?
+        var isBadged: Bool
+    }
+
+    private var face: Face {
+        Face(title: state.title, systemImage: state.systemImage, isBadged: state.backgroundFailure != nil)
+    }
+
+    /// A fade where motion runs; none otherwise.
+    private var fade: AnyTransition {
+        motion.animates ? .opacity : .identity
+    }
+
     public var body: some View {
         // Nothing while the repository's state loads; the button then shows
         // at once, with no crossfade.
@@ -467,10 +488,11 @@ public struct SyncButtonView: View {
                         Color.clear
                         capsule
                             .id(look)
-                            .transition(.opacity)
+                            .transition(fade)
                     }
                     .frame(width: Self.crossfadeReach, alignment: .trailing)
                     .motion(Motion.kindChange, value: look)
+                    .motion(Motion.kindChange, value: face)
                 }
         }
     }
@@ -500,6 +522,9 @@ public struct SyncButtonView: View {
         } else {
             control(look, detail: detail)
                 .disabled(!state.isEnabled)
+                // It turns off and on at once (a detached HEAD), its words
+                // with it.
+                .transaction(value: state.isEnabled) { $0.animation = nil }
                 .tooltip(detail)
         }
     }
@@ -549,6 +574,7 @@ public struct SyncButtonView: View {
             symbol(color: symbolColor, drawsArc: drawsArc)
             Text(state.title)
                 .lineLimit(1)
+                .contentTransition(motion.animates ? .opacity : .identity)
             if let counts = state.countsText(numberFormat) {
                 // The counts roll to a new value over 0.2 s (a commit adds
                 // one to push).
@@ -557,7 +583,7 @@ public struct SyncButtonView: View {
                     .opacity(0.9)
                     .lineLimit(1)
                     .fixedSize()
-                    .contentTransition(.numericText())
+                    .contentTransition(motion.animates ? .numericText() : .identity)
                     .motion(Motion.kindChange, value: counts)
             }
         }
@@ -594,14 +620,20 @@ public struct SyncButtonView: View {
         }
     }
 
-    @ViewBuilder
+    /// The symbol, or with the badge; the two crossfade in one place, and
+    /// a new symbol replaces the last.
     private func symbolImage(_ systemImage: String, color: NSColor) -> some View {
-        if state.backgroundFailure != nil {
-            Image(nsImage: BadgedSymbol.image(systemName: systemImage, pointSize: 12, color: color))
-        } else {
-            Image(systemName: systemImage)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color(nsColor: color))
+        ZStack {
+            if state.backgroundFailure != nil {
+                Image(nsImage: BadgedSymbol.image(systemName: systemImage, pointSize: 12, color: color))
+                    .transition(fade)
+            } else {
+                Image(systemName: systemImage)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(nsColor: color))
+                    .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
+                    .transition(fade)
+            }
         }
     }
 }
@@ -687,6 +719,7 @@ public struct SyncButtonGroup: View {
     @State private var shownWidth: CGFloat?
     /// The last state that wasn't progress or loading.
     @State private var settled: Settled?
+    @Environment(\.motion) private var motion
 
     /// A state the group showed, and what it belonged to.
     private struct Settled: Equatable {
@@ -723,7 +756,7 @@ public struct SyncButtonGroup: View {
                 if shown.showsStop {
                     SyncStopButton(title: shown.stopTitle, action: onStop)
                         .controlSize(.large)
-                        .transition(.opacity)
+                        .transition(motion.animates ? AnyTransition.opacity : .identity)
                 } else {
                     LastFetchedLabel(lastFetched: Self.lastFetched(shown, settled: settledHere))
                 }

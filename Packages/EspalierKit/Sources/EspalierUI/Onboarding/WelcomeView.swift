@@ -3,7 +3,8 @@
 // and to GitHub Enterprise, "New to GitHub? Create your free account.", and
 // Skip This Step, which goes on to Configure Git, whose Finish ends the flow
 // (`endWelcomeFlow()`). Signing in goes through the sign-in sheet; once it
-// signs in, Configure Git follows.
+// signs in, Configure Git follows. One step crossfades into the next over
+// 0.22 s.
 
 import EspalierCore
 import GitHubKit
@@ -101,11 +102,11 @@ public struct WelcomeView: View {
                         signInToEnterprise: { signIn(WelcomeFlow.enterpriseSignIn, flow: flow) },
                         skip: { animate { flow.skip() } }
                     )
-                    .transition(.opacity)
+                    .transition(stepTransition)
                 case .configureGit:
                     if let configureGit = flow.configureGit {
                         ConfigureGitStep(model: configureGit, back: { animate { flow.back() } })
-                            .transition(.opacity)
+                            .transition(stepTransition)
                     }
                 }
             } else {
@@ -132,6 +133,11 @@ public struct WelcomeView: View {
                 animate { flow.signInFinished(account) }
             }
         }
+    }
+
+    /// One step crossfades into the next where motion runs; none otherwise.
+    private var stepTransition: AnyTransition {
+        motion.animates ? .opacity : .identity
     }
 
     private func animate(_ change: () -> Void) {

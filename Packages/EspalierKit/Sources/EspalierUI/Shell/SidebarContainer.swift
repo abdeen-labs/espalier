@@ -17,6 +17,14 @@
 // (the list's own selection drawing is off before it first draws:
 // `SidebarListStyler`). Selected branch, tag, stash, and pull request rows
 // take the selected weight too (`isSidebarRowSelected`).
+//
+// A section's rows ease in and out as its chevron turns; a collapsed
+// section's count and the Changes count roll to a new value over 0.2 s, and
+// the Changes count and its warning fade in and out; the hover wash and a
+// drop target's fill fade; a header button's press eases back. Selection is
+// instant, as are the filter's changes, a switch of repository (and the
+// sections catching up with it), and a repository's first load
+// (`sidebarMotionScope`).
 
 import AppKit
 import EspalierCore
@@ -54,6 +62,7 @@ struct SidebarContainer: View {
         }
         .sidebarListStyle()
         .unbouncedList()
+        .sidebarMotionScope([selected?.id, shown?.id], loading: selected)
         .environment(\.sidebarSelection, selection.wrappedValue)
         .contextMenuCard(forSelectionType: SidebarPlace.self, selection: selection.wrappedValue.map { [$0] } ?? []) { [context] places in
             SidebarContextMenu.content(places: Self.actionable(places, isHolding: isHolding), context: context)
@@ -278,22 +287,35 @@ nonisolated struct ChangesPlaceRowContent: Sendable, Hashable {
 }
 
 /// The Changes row: its count in SF Mono, or a warning while conflicts
-/// exist.
+/// exist. The count rolls to a new value, and the count and the warning
+/// fade in and out, over 0.2 s.
 struct ChangesPlaceRow: View {
     let content: ChangesPlaceRowContent
     var isSelected = false
+    @Environment(\.motion) private var motion
 
     var body: some View {
+        let fade = motion.animates ? AnyTransition.opacity : .identity
         SidebarRowLabel("Changes", systemImage: "plus.forwardslash.minus", isSelected: isSelected) {
-            if content.hasConflicts {
-                WarningGlyph()
-                    .tooltip("Conflicts")
-            } else if let badge = content.badge {
-                Text(badge)
-                    .font(Typography.count)
-                    .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
+            if content.hasConflicts || content.badge != nil {
+                // The count and the warning crossfade in place.
+                ZStack(alignment: .trailing) {
+                    if content.hasConflicts {
+                        WarningGlyph()
+                            .tooltip("Conflicts")
+                            .transition(fade)
+                    } else if let badge = content.badge {
+                        Text(badge)
+                            .font(Typography.count)
+                            .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
+                            .contentTransition(motion.animates ? .numericText(value: Double(content.changedFileCount)) : .identity)
+                            .transition(fade)
+                    }
+                }
+                .transition(fade)
             }
         }
+        .motion(Motion.kindChange, value: content)
     }
 }
 
@@ -440,6 +462,15 @@ extension View {
             .background(Color(espalier: surface))
             .modifier(SidebarHoverProvider())
     }
+
+    /// Draws no motion below for the update in which `scope` (the
+    /// repositories shown) changes, nor until `repository` has loaded its
+    /// status, remotes, and refs, nor for the update in which it has: the
+    /// sidebar shows another repository, and a repository's first state, at
+    /// once, as navigation between repositories does.
+    func sidebarMotionScope(_ scope: some Hashable, loading repository: RepositoryModel?) -> some View {
+        modifier(SidebarMotionScope(scope: AnyHashable(scope), hasLoaded: repository?.gitState.hasLoadedRemoteState == true))
+    }
 }
 
 /// Gives the list's rows their shared hover state.
@@ -448,6 +479,26 @@ private struct SidebarHoverProvider: ViewModifier {
 
     func body(content: Content) -> some View {
         content.environment(hover)
+    }
+}
+
+/// Turns motion off below while the repository loads, and for the update
+/// in which the scope changes or the loading ends (`sidebarMotionScope`).
+private struct SidebarMotionScope: ViewModifier {
+    let scope: AnyHashable
+    let hasLoaded: Bool
+    @Environment(\.motionSuppressed) private var isSuppressed
+
+    func body(content: Content) -> some View {
+        content
+            .motionScope(AnyHashable(Key(scope: scope, hasLoaded: hasLoaded)))
+            .environment(\.motionSuppressed, isSuppressed || !hasLoaded)
+    }
+
+    /// The scope and whether it has loaded: either changing is a new scope.
+    private struct Key: Hashable {
+        let scope: AnyHashable
+        let hasLoaded: Bool
     }
 }
 
@@ -788,12 +839,16 @@ extension EnvironmentValues {
 /// always before the label, as the list's own chevron is before a
 /// disclosure row's symbol, and the label has the section's count while
 /// it's collapsed ("TAGS 3"), so a collapsed section doesn't read as empty.
-/// Without a chevron, the label lines up with the rows' symbols.
+/// Without a chevron, the label lines up with the rows' symbols. The count
+/// fades in and out as the chevron turns, and rolls to a new value over 0.2
+/// s as the section's rows change; the filter's changes draw at once.
 struct SidebarSectionHeader<Accessory: View>: View {
     private let title: String
     private let count: Int?
     private let accessory: Accessory
     @Environment(\.sidebarSectionExpansion) private var expansion
+    @Environment(\.motion) private var motion
+    @Environment(WindowContext.self) private var context: WindowContext?
 
     /// - Parameter count: The section's rows, which the label shows while
     ///   the section is collapsed; nil shows none.
@@ -810,6 +865,9 @@ struct SidebarSectionHeader<Accessory: View>: View {
                     SidebarSectionChevron(title: title, isExpanded: expansion)
                 }
                 SectionLabel(title, count: expansion?.wrappedValue == false ? count : nil)
+                    .contentTransition(motion.animates ? .numericText() : .identity)
+                    .transaction(value: context?.state.sidebarFilter) { $0.animation = nil }
+                    .motion(Motion.kindChange, value: count)
             }
             Spacer(minLength: Metrics.grid)
             accessory
@@ -889,6 +947,7 @@ private struct SidebarHeaderButtonBody<Label: View>: View {
             .frame(width: Metrics.Sidebar.glyphSize, height: Metrics.Sidebar.glyphSize)
             .contentShape(Rectangle())
             .opacity(isPressed ? 0.6 : 1)
+            .pressMotion(isPressed)
             .focusRing(isFocused, in: RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .continuous), outset: 0)
     }
 }

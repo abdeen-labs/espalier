@@ -20,6 +20,13 @@
 // square with the row radius, the hover wash under the pointer and on the
 // icon whose popover is open, and the selected one in the sidebar's
 // selection with its symbol in the selection's color.
+//
+// The hover wash fades. Changes' count rolls to a new value over 0.2 s, and
+// its capsule and the warning fade in and out. A section's icon fades in
+// over 0.22 s as the repository gains the section (a first stash), the
+// icons below moving down with it, and fades out over 0.15 s as it loses
+// it. Selection is instant, as are a switch of repository and its first
+// load (`sidebarMotionScope`).
 
 import AppKit
 import EspalierCore
@@ -132,8 +139,10 @@ struct SidebarRail: View {
     @Environment(WindowContext.self) private var context
 
     var body: some View {
+        let shown = repository
+        let sections = shown.map { RailSection.shown(in: $0, accounts: context.app.accounts) } ?? []
         VStack(spacing: Metrics.Rail.spacing) {
-            if let repository {
+            if let repository = shown {
                 let place = context.state.place
                 ChangesRailButton(content: ChangesPlaceRowContent(repository), isSelected: place == .changes) {
                     context.select(.changes)
@@ -149,11 +158,18 @@ struct SidebarRail: View {
                 Hairline()
                     .frame(width: Metrics.Rail.dividerWidth)
                     .padding(.vertical, Metrics.Rail.spacing)
-                ForEach(RailSection.shown(in: repository, accounts: context.app.accounts)) { section in
+                ForEach(sections) { section in
                     RailSectionButton(section: section, repository: repository)
+                        .barTransition()
                 }
             }
         }
+        // A section's icon comes and goes as a bar does, the icons below
+        // moving with it; Branches is always there.
+        .barMotion(sections.contains(.pullRequests))
+        .barMotion(sections.contains(.tags))
+        .barMotion(sections.contains(.stashes))
+        .sidebarMotionScope(shown?.id, loading: shown)
         .padding(.top, Metrics.Rail.topInset)
         .frame(width: Metrics.Rail.width)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -177,12 +193,16 @@ struct SidebarRail: View {
 }
 
 /// Changes' icon, with its count or a warning at its top trailing corner.
+/// The count rolls to a new value, and its capsule and the warning fade in
+/// and out, over 0.2 s.
 private struct ChangesRailButton: View {
     let content: ChangesPlaceRowContent
     let isSelected: Bool
     let action: () -> Void
+    @Environment(\.motion) private var motion
 
     var body: some View {
+        let fade = motion.animates ? AnyTransition.opacity : .identity
         RailButton(
             "Changes",
             systemImage: "plus.forwardslash.minus",
@@ -194,15 +214,19 @@ private struct ChangesRailButton: View {
             if content.hasConflicts {
                 WarningGlyph()
                     .font(.system(size: 10))
+                    .transition(fade)
             } else if let badge = content.badge {
                 Text(badge)
                     .font(Typography.tinyCount)
                     .foregroundStyle(.text2)
+                    .contentTransition(motion.animates ? .numericText(value: Double(content.changedFileCount)) : .identity)
                     .padding(.horizontal, 4)
                     .frame(minWidth: 16, minHeight: 16)
                     .surface(.quiet, elevation: .quiet)
+                    .transition(fade)
             }
         }
+        .motion(Motion.kindChange, value: content)
     }
 
     /// What VoiceOver hears after "Changes".
@@ -309,6 +333,9 @@ struct RailButton<Badge: View>: View {
                         SidebarSelectionFill()
                     }
                 }
+                // Selection draws at once, though the click that makes it
+                // also ends a press, whose release eases.
+                .transaction(value: isSelected) { $0.animation = nil }
                 .contentShape(shape)
         }
         .buttonStyle(.bare(.rounded(Metrics.Radius.row)))

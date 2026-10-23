@@ -231,14 +231,7 @@ public struct LocationControlView: View {
                     .accessibilityHidden(true)
                 LocationSegment(action: onBranch) {
                     HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
-                        if case .checkingOut(_, _, let progress) = state.branch {
-                            // It turns until git reports how far it has got.
-                            ArcProgress(.mini, value: progress > 0 ? progress : nil)
-                        } else {
-                            Image(systemName: state.branchSystemImage)
-                                .font(Typography.row)
-                                .foregroundStyle(branchSymbolColor)
-                        }
+                        branchSymbol
                         branchText(branchTitle)
                             .lineLimit(1)
                             .opacity(branchOpacity)
@@ -266,6 +259,26 @@ public struct LocationControlView: View {
         .padding(.horizontal, Metrics.grid)
         .frame(height: Metrics.ControlHeight.toolbar)
         .quietControlSurface()
+    }
+
+    /// The branch's symbol, or the arc while checking out. The arc gives
+    /// way to the symbol with a crossfade over 0.15 s as the checkout ends.
+    private var branchSymbol: some View {
+        let progress: Double? = if case .checkingOut(_, _, let value) = state.branch { value } else { nil }
+        let fade = motion.animates ? AnyTransition.opacity : .identity
+        return ZStack {
+            if let progress {
+                // It turns until git reports how far it has got.
+                ArcProgress(.mini, value: progress > 0 ? progress : nil)
+                    .transition(fade)
+            } else {
+                Image(systemName: state.branchSystemImage)
+                    .font(Typography.row)
+                    .foregroundStyle(branchSymbolColor)
+                    .transition(fade)
+            }
+        }
+        .motion(Motion.leave, value: progress == nil)
     }
 
     /// The branch segment's title as one text: a detached HEAD's SHA in the

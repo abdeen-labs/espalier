@@ -111,7 +111,8 @@ public struct GenericAuthAnswer: Equatable {
 }
 
 /// "Authentication Failed": a username (when git doesn't know it) and a
-/// password or token.
+/// password or token, with a button that shows or hides it, its eye
+/// replaced as it does.
 public struct GenericAuthPrompt: View {
     private let endpoint: String
     private let knownUsername: String?
@@ -119,6 +120,7 @@ public struct GenericAuthPrompt: View {
     @State private var username = ""
     @State private var password = ""
     @State private var showsPassword = false
+    @Environment(\.motion) private var motion
 
     public init(endpoint: String, username: String?, onAnswer: @escaping (GenericAuthAnswer?) -> Void) {
         self.endpoint = endpoint
@@ -150,7 +152,11 @@ public struct GenericAuthPrompt: View {
                             Button {
                                 showsPassword.toggle()
                             } label: {
+                                // The eye replaces itself over 0.15 s; the
+                                // field switches at once.
                                 Label(showsPassword ? "Hide Password" : "Show Password", systemImage: showsPassword ? "eye.slash" : "eye")
+                                    .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
+                                    .motion(Motion.leave, value: showsPassword)
                             }
                             .buttonStyle(.icon)
                             .tooltip(showsPassword ? "Hide Password" : "Show Password")

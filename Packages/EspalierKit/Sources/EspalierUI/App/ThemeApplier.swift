@@ -2,7 +2,7 @@
 // popovers, menus, and alerts take the application's appearance unless they
 // set their own, so they all follow the theme;
 // System leaves the application's appearance unset, so they follow the
-// Mac's.
+// Mac's. The app's windows crossfade into a new theme over 0.15 s.
 
 import AppKit
 import EspalierCore
@@ -51,6 +51,11 @@ final class ThemeApplier {
         let appearance = theme.appearance
         guard target.appearance?.name != appearance?.name else {
             return
+        }
+        if let application = target as? NSApplication {
+            for window in application.windows {
+                window.crossfadeContents(Motion.leave)
+            }
         }
         target.appearance = appearance
     }

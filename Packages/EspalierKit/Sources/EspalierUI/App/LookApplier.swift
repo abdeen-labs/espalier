@@ -3,8 +3,8 @@
 // SwiftUI views that read a theme's color or font draw again by themselves;
 // AppKit views and the controllers of AppKit tables are told
 // (`Look.didChange`), and every view of every window lays out and draws
-// again. Menus, popovers, and tooltips take the new look the next time they
-// open.
+// again, crossfading into the new look over 0.15 s. Menus, popovers, and
+// tooltips take the new look the next time they open.
 
 import AppKit
 import EspalierCore
@@ -69,12 +69,16 @@ final class LookApplier {
         guard center.look != look else {
             return
         }
+        let windows = center === LookCenter.shared ? NSApp?.windows ?? [] : []
+        for window in windows {
+            window.crossfadeContents(Motion.leave)
+        }
         center.look = look
         guard center === LookCenter.shared else {
             return
         }
         NotificationCenter.default.post(name: Look.didChange, object: nil)
-        for window in NSApp?.windows ?? [] {
+        for window in windows {
             if let frame = window.contentView?.superview ?? window.contentView {
                 refresh(frame)
             }

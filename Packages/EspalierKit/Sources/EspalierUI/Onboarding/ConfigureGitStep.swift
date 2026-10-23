@@ -11,6 +11,11 @@
 // noreply one; a name git would reject can't be saved; and a write that
 // fails for another reason than the lock file is shown, the flow ending
 // anyway so it never traps anyone.
+//
+// Choosing where the author comes from crossfades its rows over 0.15 s,
+// what's below moving with them; the lock file's banner grows in over
+// 0.22 s and leaves over 0.15 s, the step moving with it; and the spinner
+// fades in over 0.22 s as saving starts and out over 0.15 s.
 
 import EspalierCore
 import EspalierSupport
@@ -259,6 +264,7 @@ struct ExampleCommitRow: View {
 struct ConfigureGitStep: View {
     @Bindable var model: ConfigureGitModel
     var back: @MainActor () -> Void = {}
+    @Environment(\.motion) private var motion
 
     var body: some View {
         VStack(spacing: Metrics.Welcome.sectionSpacing) {
@@ -284,11 +290,12 @@ struct ConfigureGitStep: View {
                         RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
                             .fill(Color(espalier: StatusBarTone.attention.fill))
                     )
+                    .barTransition()
                 }
                 Form {
                     if model.account != nil {
                         LabeledContent("Author") {
-                            RadioList("Author", selection: $model.source, choices: [
+                            RadioList("Author", selection: $model.source.animation(motion.animation(Motion.leave)), choices: [
                                 ChoiceListItem(model.accountChoiceTitle, value: ConfigureGitModel.Source.account),
                                 ChoiceListItem("Configure manually", value: ConfigureGitModel.Source.manual),
                             ])
@@ -308,10 +315,16 @@ struct ConfigureGitStep: View {
             .frame(width: Metrics.Welcome.formWidth)
 
             HStack(spacing: Metrics.insetSmall) {
-                if model.isSaving {
-                    ArcProgress(.small)
-                        .accessibilityLabel("Saving")
+                // The spinner fades in a stack of its own, so Finish turns
+                // off and on at once.
+                ZStack {
+                    if model.isSaving {
+                        ArcProgress(.small)
+                            .accessibilityLabel("Saving")
+                            .transition(motion.animates ? AnyTransition.opacity : .identity)
+                    }
                 }
+                .animation(motion.animation(model.isSaving ? Motion.arrive : Motion.leave), value: model.isSaving)
                 Spacer()
                 Button("Back", action: back)
                     .buttonStyle(.secondary)
@@ -322,11 +335,14 @@ struct ConfigureGitStep: View {
                 .buttonStyle(.prominent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(!model.canFinish)
+                // It turns off and on at once, whatever moves with it.
+                .transaction(value: model.canFinish) { $0.animation = nil }
             }
             .controlSize(.large)
             .frame(width: Metrics.Welcome.formWidth)
         }
         .padding(Metrics.insetLarge * 2)
+        .barMotion(model.lockFile != nil)
         .task {
             await model.load()
         }

@@ -97,8 +97,7 @@ enum ShellActions {
             }
             let state = context.state
             let isHidden = context.isSidebarHidden
-            let animates = Motion.allows(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, isSuppressed: false)
-            withAnimation(animates ? Motion.animation(Motion.arrive) : nil) {
+            withMotion(windowMotion(context), Motion.arrive) {
                 switch context.sidebarStyle {
                 case .hidden:
                     state.columnVisibility = isHidden ? .all : .detailOnly
@@ -115,8 +114,12 @@ enum ShellActions {
             }
             switch context.sidebarStyle {
             case .hidden:
-                context.state.columnVisibility = .all
+                // A hidden column slides in as Toggle Sidebar shows it.
+                withMotion(windowMotion(context), Motion.arrive) {
+                    context.state.columnVisibility = .all
+                }
             case .icons:
+                // At once: the popover opens on the rail's icon.
                 guard let repository = context.repository, repository.isUsable,
                       let section = RailSection.shown(in: repository, accounts: context.app.accounts).first else {
                     return
@@ -134,7 +137,13 @@ enum ShellActions {
         }, isChecked: { [weak context] _ in
             context?.state.isInspectorPresented ?? false
         }) { [weak context] _ in
-            context?.state.isInspectorPresented.toggle()
+            guard let context else {
+                return
+            }
+            // Commit Info's column slides in and out as the sidebar's does.
+            withMotion(windowMotion(context), Motion.arrive) {
+                context.state.isInspectorPresented.toggle()
+            }
         }
         // ⌘T and ⌘B open their popovers, and close them while they're
         // open, as desktop's foldouts do.
@@ -152,6 +161,12 @@ enum ShellActions {
         }) { [weak context] _ in
             context?.state.isBranchPopoverPresented.toggle()
         }
+    }
+
+    /// Whether motion runs in the window: it's on screen and Reduce Motion
+    /// is off.
+    private static func windowMotion(_ context: WindowContext) -> MotionPolicy {
+        MotionPolicy(isSuppressed: !Motion.animates(context.modals.window?.contentView))
     }
 
     // MARK: Sync

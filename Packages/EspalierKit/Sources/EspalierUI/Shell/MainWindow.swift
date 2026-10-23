@@ -8,7 +8,8 @@
 // hidden style a two-column `NavigationSplitView`, the sidebar's column
 // hidden as the window opens; in the icons style the rail at the detail
 // area's leading edge (SidebarRail.swift) and no column, so nothing at the
-// window's edge drags out.
+// window's edge drags out. The sidebar's column, the rail, and Commit Info's
+// column slide in and out over 0.22 s as the user shows and hides them.
 
 import EspalierCore
 import GitKit
@@ -18,6 +19,7 @@ import UniformTypeIdentifiers
 /// The main window's content once the app has loaded.
 struct MainWindow: View {
     @Environment(WindowContext.self) private var context
+    @Environment(\.motion) private var motion
     /// Whether the rail was last hidden, for the next window.
     @AppStorage(WindowState.sidebarHiddenKey) private var isRailHidden = false
 
@@ -79,7 +81,7 @@ struct MainWindow: View {
         return HStack(spacing: 0) {
             if context.sidebarStyle == .icons, !state.isRailHidden {
                 SidebarRail()
-                    .transition(.move(edge: .leading))
+                    .transition(motion.animates ? AnyTransition.move(edge: .leading) : .identity)
             }
             DetailRouter()
                 .overlay(alignment: .bottom) {
