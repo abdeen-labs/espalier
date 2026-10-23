@@ -63,7 +63,9 @@ public struct BranchPopover: View {
             .frame(height: Metrics.BranchPicker.popoverListHeight)
             if let current = repository.gitState.tip.branch {
                 Hairline()
-                Group {
+                // The prompt and the merge button crossfade in place as the
+                // list turns into the pick and back.
+                ZStack {
                     if let method {
                         BranchPickPrompt(method: method, currentBranch: current.name) {
                             context.state.branchPopoverMethod = nil
@@ -72,6 +74,7 @@ public struct BranchPopover: View {
                         mergeButton(currentBranch: current.name)
                     }
                 }
+                .motion(Motion.leave, value: method)
                 .padding(.horizontal, Metrics.insetMedium)
                 .padding(.vertical, Metrics.insetSmall)
             }

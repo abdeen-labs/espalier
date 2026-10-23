@@ -51,7 +51,8 @@ nonisolated struct RenameWorktreeContent: Sendable, Equatable {
     }
 }
 
-/// The Rename Worktree form.
+/// The Rename Worktree form. While it renames, the spinner fades in beside
+/// the buttons.
 struct RenameWorktreeForm: View {
     let content: RenameWorktreeContent
     @Binding var name: String
@@ -75,10 +76,13 @@ struct RenameWorktreeForm: View {
                 }
             }
         } buttons: {
-            if content.isRenaming {
-                ArcProgress(.small)
-                    .accessibilityLabel("Renaming worktree")
+            ZStack {
+                if content.isRenaming {
+                    ArcProgress(.small)
+                        .accessibilityLabel("Renaming worktree")
+                }
             }
+            .motion(content.isRenaming ? Motion.arrive : Motion.leave, value: content.isRenaming)
             Spacer()
             Button("Cancel", role: .cancel, action: cancel)
                 .buttonStyle(.secondary)

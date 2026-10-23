@@ -88,11 +88,14 @@ extension SimpleListPresentation {
         avatarEndpoint = repository.record.gitHubRepository?.endpoint
         allowsDragging = repository.operations.current == nil && repository.operations.conflictState == nil
         decorations = repository.history.decorationsGeneration
+        let shown = repository.history.shownBranch
         railColors = SimpleRailColors(
             branchColors: BranchColors.of(repository),
             start: repository.history.simpleStart,
-            branch: repository.history.shownBranch
+            branch: shown
         )
+        currentBranch = repository.gitState.tip.branch?.ref
+        shownBranch = shown?.ref
     }
 }
 

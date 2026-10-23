@@ -128,6 +128,7 @@ public struct HistoryScreen: View {
     private let repository: RepositoryModel
     private let place: SidebarPlace
     @Environment(WindowContext.self) private var context
+    @Environment(\.motion) private var motion
 
     public init(repository: RepositoryModel, place: SidebarPlace) {
         self.repository = repository
@@ -146,7 +147,7 @@ public struct HistoryScreen: View {
                 HistoryDetailPane(repository: repository)
             }
             .id(kind)
-            .transition(.opacity)
+            .transition(motion.animates ? .opacity : .identity)
         }
         .motion(Motion.leave, value: kind)
         .onAppear {
@@ -334,6 +335,7 @@ struct HistoryListPane: View {
     let repository: RepositoryModel
     let place: SidebarPlace
     @Environment(WindowContext.self) private var context
+    @Environment(\.motion) private var motion
 
     var body: some View {
         let history = repository.history
@@ -356,17 +358,36 @@ struct HistoryListPane: View {
                 }
             }
             list(history: history, state: state, branch: branch)
+                // What the list shows changes at once; it moves with the
+                // bars above it.
+                .transition(.identity)
                 .overlay(alignment: .top) {
                     if let reorder = state.reorder {
                         KeyboardReorderHint(count: reorder.shas.count)
                             .padding(.top, Metrics.insetSmall)
+                            .transition(hintTransition)
                     }
                 }
         }
         .barMotion(state.notice?.place == place)
+        .barMotion(branch.map { BranchHeaderContainer.showsCallToAction(for: $0, repository: repository, state: state) } ?? false)
+        // Going to another place shows it at once.
+        .motionScope(AnyHashable(place))
         .background {
             SearchQueryBridge(history: history)
         }
+    }
+
+    /// The reorder hint, floating over the list, fades in settling from
+    /// 97% toward the list's top over 0.22 s, and fades out over 0.15 s.
+    private var hintTransition: AnyTransition {
+        guard motion.animates else {
+            return .identity
+        }
+        return .asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: Metrics.Popover.settleScale, anchor: .top)).animation(Motion.animation(Motion.arrive)),
+            removal: .opacity.animation(Motion.animation(Motion.leave))
+        )
     }
 
     @ViewBuilder

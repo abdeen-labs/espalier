@@ -347,7 +347,9 @@ struct AIConflictSheetHost: ViewModifier {
 // MARK: - The sheet
 
 /// The AI conflict sheet: the round's loading phase, its results, or its
-/// failure.
+/// failure. One phase crossfades into the next over 0.2 s: the results or
+/// the failure replacing the work, the work replacing the failure on Try
+/// Again.
 public struct AIConflictSheet: View {
     static let sheetID = "espalier.aiConflicts"
     /// The repository the sheet showing is for.
@@ -361,9 +363,25 @@ public struct AIConflictSheet: View {
         self.repository = repository
     }
 
+    /// The round's phase, which the crossfade follows.
+    private enum Phase: Equatable {
+        case idle, resolving, resolved, failed
+    }
+
+    private var phase: Phase {
+        switch repository.ai.conflictResolution {
+        case .idle: .idle
+        case .resolving: .resolving
+        case .resolved: .resolved
+        case .failed: .failed
+        }
+    }
+
     public var body: some View {
         let flow = AIConflictFlow.state(in: context)
-        Group {
+        // Stacked, so the phase leaving and the one arriving crossfade in
+        // place.
+        ZStack {
             switch repository.ai.conflictResolution {
             case .idle:
                 Color.clear
@@ -397,6 +415,7 @@ public struct AIConflictSheet: View {
                 )
             }
         }
+        .motion(Motion.kindChange, value: phase)
         .frame(minWidth: 760, idealWidth: 820, maxWidth: .infinity, minHeight: 560, idealHeight: 620, maxHeight: .infinity)
     }
 
@@ -520,11 +539,16 @@ nonisolated public struct AIConflictLoadingContent: Sendable, Equatable {
     }
 }
 
-/// The loading phase.
+/// The loading phase. As the model works, its phase crossfades and its count
+/// of files rolls over 0.2 s; each line of its reasoning fades in under the
+/// last over 0.22 s, the lines above moving up as the oldest leaves, and the
+/// first replaces the fallback in a crossfade. The fallback lines crossfade
+/// over 0.15 s.
 struct AIConflictLoadingView: View {
     let content: AIConflictLoadingContent
     var onStop: () -> Void
     var onAbort: () -> Void
+    @Environment(\.motion) private var motion
 
     init(content: AIConflictLoadingContent, onStop: @escaping () -> Void = {}, onAbort: @escaping () -> Void = {}) {
         self.content = content
@@ -551,26 +575,33 @@ struct AIConflictLoadingView: View {
                     Text(progress)
                         .font(Typography.secondaryCount)
                         .foregroundStyle(.text2)
+                        .contentTransition(motion.animates ? .numericText() : .identity)
                 }
             }
+            .motion(Motion.kindChange, value: content.phase)
+            .motion(Motion.kindChange, value: content.progress)
             Hairline()
-            VStack(alignment: .leading, spacing: Metrics.grid) {
+            // Stacked, so the fallback and the first line crossfade in place.
+            ZStack(alignment: .topLeading) {
                 if content.reasoning.isEmpty {
                     TimelineView(.periodic(from: .now, by: Self.fallbackInterval)) { timeline in
                         fallback(at: Int(timeline.date.timeIntervalSinceReferenceDate / Self.fallbackInterval))
                     }
                 } else {
-                    ForEach(Array(content.reasoning.enumerated()), id: \.offset) { index, line in
-                        Text(line)
-                            .font(Typography.secondary)
-                            .foregroundStyle(index == content.reasoning.count - 1 ? Color.text : Color.text2)
-                            .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: Metrics.grid) {
+                        ForEach(reasoningLines) { line in
+                            Text(line.text)
+                                .font(Typography.secondary)
+                                .foregroundStyle(line.isLatest ? Color.text : Color.text2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.updatesFrequently)
+            .motion(Motion.arrive, value: content.reasoning)
             HStack(spacing: Metrics.insetSmall) {
                 Spacer()
                 Button(action: onStop) {
@@ -589,9 +620,41 @@ struct AIConflictLoadingView: View {
     private func fallback(at tick: Int) -> some View {
         let lines = content.fallbackLines
         let line = lines.isEmpty ? "" : lines[((tick % lines.count) + lines.count) % lines.count]
-        return Text(line)
-            .font(Typography.secondary)
-            .foregroundStyle(.text2)
+        // A line of its own for each text, stacked, so the next one
+        // crossfades in place.
+        return ZStack(alignment: .topLeading) {
+            Text(line)
+                .font(Typography.secondary)
+                .foregroundStyle(.text2)
+                .id(ExactString(line))
+        }
+        .motion(Motion.leave, value: ExactString(line))
+    }
+
+    /// A line of the model's reasoning, keyed by its text and how many lines
+    /// before it say the same, so it keeps its place as lines arrive and
+    /// leave.
+    private struct ReasoningLine: Identifiable {
+        struct ID: Hashable {
+            let text: ExactString
+            let occurrence: Int
+        }
+
+        let id: ID
+        let text: String
+        /// The newest line, in the primary color.
+        let isLatest: Bool
+    }
+
+    private var reasoningLines: [ReasoningLine] {
+        var occurrences: [ExactString: Int] = [:]
+        let lines = content.reasoning
+        return lines.enumerated().map { index, line in
+            let text = ExactString(line)
+            let occurrence = occurrences[text, default: 0]
+            occurrences[text] = occurrence + 1
+            return ReasoningLine(id: ReasoningLine.ID(text: text, occurrence: occurrence), text: line, isLatest: index == lines.count - 1)
+        }
     }
 }
 
@@ -911,7 +974,11 @@ nonisolated public struct AIConflictResultsContent: Sendable, Equatable {
     }
 }
 
-/// The results phase: Summary and Changes, the files, and Continue.
+/// The results phase: Summary and Changes, the files, and Continue. The
+/// failed files' bar and an error grow in over 0.22 s and leave over 0.15 s,
+/// the tab above giving them room; a choice made for a file eases over 0.2
+/// s, and files moving between the sections after Try Again over 0.22 s,
+/// their counts rolling.
 struct AIConflictResultsView: View {
     let content: AIConflictResultsContent
     /// Whose files the rows act on.
@@ -920,6 +987,7 @@ struct AIConflictResultsView: View {
     @State private var tab = Tab.summary
     @Environment(WindowContext.self) private var context
     @Environment(\.numberFormat) private var numberFormat
+    @Environment(\.motion) private var motion
 
     init(content: AIConflictResultsContent, repository: RepositoryModel, alwaysUseAI: Binding<Bool>) {
         self.content = content
@@ -946,20 +1014,24 @@ struct AIConflictResultsView: View {
             ZStack {
                 tabContent
                     .id(tab)
-                    .transition(.opacity)
+                    .transition(motion.animates ? AnyTransition.opacity : .identity)
             }
             .motion(Motion.leave, value: tab)
             if !content.failed.isEmpty {
                 failedBar
+                    .barTransition()
             }
             if let error = content.error {
                 Text(error)
                     .font(Typography.subheadline)
                     .foregroundStyle(Color(espalier: Palette.error))
                     .fixedSize(horizontal: false, vertical: true)
+                    .barTransition()
             }
             footer
         }
+        .barMotion(!content.failed.isEmpty)
+        .barMotion(content.error != nil)
         .padding(Metrics.Sheet.padding)
         .background(Color(espalier: Palette.background))
     }
@@ -996,37 +1068,51 @@ struct AIConflictResultsView: View {
                 fileSection(header: content.failedHeader(numberFormat), systemImage: "xmark.octagon", rows: content.failed)
             }
         }
+        // Set over the whole tab, so the rows below a row that changes
+        // move with it: files moving between the sections over 0.22 s, a
+        // choice made or a file resolved over 0.2 s.
+        .motion(Motion.arrive, value: [content.conflicted.map(\.path), content.skipped.map(\.path), content.failed.map(\.path)])
+        .motion(Motion.kindChange, value: [content.conflicted, content.skipped, content.failed])
     }
 
     /// The failed files' count and Try Again, or the retry's progress, below
-    /// both tabs, on the attention tint.
+    /// both tabs, on the attention tint. The retry starting and ending
+    /// crossfades over 0.2 s, and the counts roll.
     private var failedBar: some View {
         HStack(spacing: Metrics.insetSmall) {
             Label {
                 Text(content.failedStatus(numberFormat))
                     .foregroundStyle(.text)
+                    .contentTransition(motion.animates ? .numericText() : .identity)
             } icon: {
                 Image(systemName: "xmark.octagon.fill")
                     .foregroundStyle(Color(espalier: Palette.error))
             }
             .font(Typography.secondary)
             Spacer()
-            if let progress = content.retryProgress {
-                ArcProgress(.small)
-                Text(progress)
-                    .font(Typography.secondary)
-                    .foregroundStyle(.text2)
-                Button("Stop") {
-                    repository.ai.stopResolvingConflicts()
+            // Stacked, so Try Again and the retry's progress crossfade in
+            // place.
+            ZStack(alignment: .trailing) {
+                if let progress = content.retryProgress {
+                    HStack(spacing: Metrics.insetSmall) {
+                        ArcProgress(.small)
+                        Text(progress)
+                            .font(Typography.secondary)
+                            .foregroundStyle(.text2)
+                            .contentTransition(motion.animates ? .numericText() : .identity)
+                        Button("Stop") {
+                            repository.ai.stopResolvingConflicts()
+                        }
+                        .buttonStyle(.quiet)
+                        .controlSize(.small)
+                    }
+                } else {
+                    Button("Try Again") {
+                        AIConflictFlow.retry(in: context, repository: repository)
+                    }
+                    .buttonStyle(.quiet)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.quiet)
-                .controlSize(.small)
-            } else {
-                Button("Try Again") {
-                    AIConflictFlow.retry(in: context, repository: repository)
-                }
-                .buttonStyle(.quiet)
-                .controlSize(.small)
             }
         }
         .padding(.leading, Metrics.insetMedium)
@@ -1036,6 +1122,8 @@ struct AIConflictResultsView: View {
             Color(nsColor: StatusBarTone.attention.fill),
             in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
         )
+        .motion(Motion.kindChange, value: content.retryProgress)
+        .motion(Motion.kindChange, value: content.failed.count)
     }
 
     private func fileSection(header: String, systemImage: String, rows: [AIResolutionRow]) -> some View {
@@ -1043,6 +1131,7 @@ struct AIConflictResultsView: View {
             Label(header, systemImage: systemImage)
                 .font(Typography.heading)
                 .foregroundStyle(.text)
+                .contentTransition(motion.animates ? .numericText() : .identity)
             ForEach(rows) { row in
                 AIResolutionRowView(row: row, actions: rowActions(row))
             }
@@ -1100,7 +1189,8 @@ struct AIResolutionRowActions {
     var showInFinder: () -> Void = {}
 }
 
-/// A file in the results.
+/// A file in the results. Once it's resolved in an editor, the check
+/// crossfades in for its menus.
 struct AIResolutionRowView: View {
     let row: AIResolutionRow
     let actions: AIResolutionRowActions
@@ -1121,37 +1211,42 @@ struct AIResolutionRowView: View {
                 }
             }
             Spacer(minLength: Metrics.insetSmall)
-            if row.isResolved {
-                // In the file options button's place, centered as its
-                // symbol is.
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color(espalier: Palette.success))
-                    .frame(width: Metrics.ControlHeight.regular)
-                    .accessibilityLabel("Resolved")
-            } else {
-                PullDownButton("Resolution for \(row.path)", value: row.choiceLabel) { [row, actions] in
-                    for option in row.options {
-                        MenuToggle(option.title, isOn: option.isChecked) {
-                            actions.choose(option.choice)
+            // Stacked, so the menus and the check crossfade in place.
+            ZStack(alignment: .trailing) {
+                if row.isResolved {
+                    // In the file options button's place, centered as its
+                    // symbol is.
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color(espalier: Palette.success))
+                        .frame(width: Metrics.ControlHeight.regular)
+                        .accessibilityLabel("Resolved")
+                } else {
+                    HStack(spacing: Metrics.insetSmall) {
+                        PullDownButton("Resolution for \(row.path)", value: row.choiceLabel) { [row, actions] in
+                            for option in row.options {
+                                MenuToggle(option.title, isOn: option.isChecked) {
+                                    actions.choose(option.choice)
+                                }
+                            }
+                        } label: {
+                            MenuCapsuleLabel(row.choiceLabel)
                         }
+                        .buttonStyle(.quiet)
+                        .controlSize(.small)
+                        .fixedSize()
+                        PullDownButton("File Options") { [actions] in
+                            if let editorName = actions.editorName {
+                                MenuAction("Open in \(editorName)", action: actions.openInEditor)
+                            }
+                            MenuAction("Open with Default App", action: actions.openWithDefaultProgram)
+                            MenuAction("Show in Finder", action: actions.showInFinder)
+                        } label: {
+                            Label("File Options", systemImage: "ellipsis.circle")
+                        }
+                        .buttonStyle(.icon)
+                        .fixedSize()
                     }
-                } label: {
-                    MenuCapsuleLabel(row.choiceLabel)
                 }
-                .buttonStyle(.quiet)
-                .controlSize(.small)
-                .fixedSize()
-                PullDownButton("File Options") { [actions] in
-                    if let editorName = actions.editorName {
-                        MenuAction("Open in \(editorName)", action: actions.openInEditor)
-                    }
-                    MenuAction("Open with Default App", action: actions.openWithDefaultProgram)
-                    MenuAction("Show in Finder", action: actions.showInFinder)
-                } label: {
-                    Label("File Options", systemImage: "ellipsis.circle")
-                }
-                .buttonStyle(.icon)
-                .fixedSize()
             }
         }
         .padding(.vertical, Metrics.grid)

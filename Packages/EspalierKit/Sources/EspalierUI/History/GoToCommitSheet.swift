@@ -22,7 +22,9 @@ nonisolated enum GoToCommitStatus: Sendable, Equatable {
     }
 }
 
-/// The Go to Commit sheet's content.
+/// The Go to Commit sheet's content. Why a commit wasn't found fades in
+/// under the field over 0.22 s and out over 0.15 s, as does loading older
+/// commits beside the buttons.
 struct GoToCommitForm: View {
     @Binding var text: String
     let status: GoToCommitStatus?
@@ -49,14 +51,18 @@ struct GoToCommitForm: View {
                     }
                 if let message = status?.message {
                     FieldMessage(message, kind: status == .notInHistory ? .note : .error)
+                        .barTransition()
                 }
             }
         } buttons: {
             if status == .searching {
-                ArcProgress(.small)
-                Text("Loading older commits\u{2026}")
-                    .font(Typography.secondary)
-                    .foregroundStyle(.text3)
+                Group {
+                    ArcProgress(.small)
+                    Text("Loading older commits\u{2026}")
+                        .font(Typography.secondary)
+                        .foregroundStyle(.text3)
+                }
+                .barTransition()
             }
             SheetButtons(
                 "Go",

@@ -804,7 +804,8 @@ struct BranchesSectionRows: View {
                 systemImage: "arrow.trianglehead.branch",
                 count: content.otherCount,
                 isExpandedByDefault: true,
-                isFiltering: content.isFiltering
+                isFiltering: content.isFiltering,
+                scope: AnyHashable(ObjectIdentifier(repository))
             ) {
                 BranchNodeList(nodes: content.other, repository: repository, isFiltering: content.isFiltering)
             }
@@ -815,7 +816,8 @@ struct BranchesSectionRows: View {
                 title: BranchListLabels.remoteBranches,
                 systemImage: "network",
                 count: content.remoteCount,
-                isFiltering: content.isFiltering
+                isFiltering: content.isFiltering,
+                scope: AnyHashable(ObjectIdentifier(repository))
             ) {
                 ForEach(content.remotes) { remote in
                     BranchGroupDisclosure(
@@ -843,6 +845,9 @@ struct BranchSidebarRow: View {
     var body: some View {
         let place = SidebarPlace.branch(ref: content.ref)
         BranchRow(content, dotColor: Self.dotColor(content, in: repository))
+            // The sidebar showing another repository's branches changes
+            // the row at once.
+            .motionScope(AnyHashable(ObjectIdentifier(repository)))
             .sidebarRow(place, isDropTarget: isDropTarget)
             .tag(place)
             .commitDropTarget(.branch(name: content.name, isCurrent: content.isCurrent), repository: repository, isTargeted: $isDropTarget)
@@ -923,24 +928,28 @@ struct BranchNodeList: View {
 /// state change (made inside its animation when the label is clicked), so
 /// the list animates them in and out; the remembered expansion follows it
 /// once that change has drawn, and a change made elsewhere (another window)
-/// reaches the remembered one first.
+/// reaches the remembered one first. The count rolls over 0.2 s as it
+/// changes, unless the group shows another repository's branches.
 struct BranchGroupDisclosure<Content: View>: View {
     let title: String
     let systemImage: String
     let count: Int?
     let isFiltering: Bool
+    /// The repository whose branches the group shows: when it changes, the
+    /// count changes at once.
+    let scope: AnyHashable?
     let content: Content
     @AppStorage private var rememberedExpansion: Bool
     /// The expansion the group set, or nil before it sets one.
     @State private var chosenExpansion: Bool?
     @Environment(\.motion) private var motion
-    @Environment(\.numberFormat) private var numberFormat
 
     /// - Parameters:
     ///   - id: Names the remembered expansion (`sidebar.expanded.<id>`).
     ///   - count: The branches in the group, which its label shows while
     ///     it's closed; nil shows none.
     ///   - isExpandedByDefault: The expansion before the user changes it.
+    ///   - scope: The repository whose branches the group shows.
     init(
         id: String,
         title: String,
@@ -948,12 +957,14 @@ struct BranchGroupDisclosure<Content: View>: View {
         count: Int? = nil,
         isExpandedByDefault: Bool = false,
         isFiltering: Bool,
+        scope: AnyHashable? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.systemImage = systemImage
         self.count = count
         self.isFiltering = isFiltering
+        self.scope = scope
         self.content = content()
         _rememberedExpansion = AppStorage(wrappedValue: isExpandedByDefault, "sidebar.expanded.\(id)")
     }
@@ -1002,11 +1013,26 @@ struct BranchGroupDisclosure<Content: View>: View {
     private var labelContent: some View {
         SidebarRowLabel(title, systemImage: systemImage) {
             if let count, !isOpen {
-                Text(verbatim: formatCount(count, numberFormat))
-                    .font(Typography.count)
-                    .foregroundStyle(.sidebarRowCount(isSelected: false))
+                BranchGroupCount(count: count)
             }
         }
+        .motionScope(scope)
+    }
+}
+
+/// A closed group's count, rolling to a new value over 0.2 s (a fetch
+/// brings remote branches).
+private struct BranchGroupCount: View {
+    let count: Int
+    @Environment(\.motion) private var motion
+    @Environment(\.numberFormat) private var numberFormat
+
+    var body: some View {
+        Text(verbatim: formatCount(count, numberFormat))
+            .font(Typography.count)
+            .foregroundStyle(.sidebarRowCount(isSelected: false))
+            .contentTransition(motion.animates ? .numericText() : .identity)
+            .motion(Motion.kindChange, value: count)
     }
 }
 

@@ -201,16 +201,15 @@ final class GraphCellView: NSView, TooltipOwner {
             let pulse = CABasicAnimation(keyPath: "opacity")
             pulse.fromValue = 0
             pulse.toValue = 1
-            pulse.duration = Self.pulseDuration
+            pulse.duration = Motion.pulse
             pulse.autoreverses = true
             pulse.repeatCount = 2
-            pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            // Eased in and out, as a scroll is.
+            pulse.timingFunction = Motion.scrollTimingFunction
             outline.add(pulse, forKey: "pulse")
         }
     }
 
-    /// How long one half of a pulse takes.
-    static let pulseDuration: CFTimeInterval = 0.3
     /// How long the still outline shows under Reduce Motion.
     static let stillOutlineDuration: TimeInterval = 1.5
 

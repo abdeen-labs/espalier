@@ -393,6 +393,9 @@ struct BranchPickerList: View {
                 filterField
                 filterAccessory
             }
+            // An accessory leaving fades as the filter widens into its
+            // place, and fades in as the filter makes room again.
+            .motion(filterAccessory == nil ? Motion.leave : Motion.arrive, value: filterAccessory == nil)
             .padding(style == .popover ? Metrics.insetMedium : 0)
             if style == .popover {
                 Hairline()

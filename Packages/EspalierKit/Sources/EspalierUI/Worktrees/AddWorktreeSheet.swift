@@ -165,7 +165,8 @@ nonisolated struct AddWorktreeContent: Sendable, Equatable {
     }
 }
 
-/// The Add Worktree form.
+/// The Add Worktree form. While it creates the worktree, the spinner fades
+/// in beside the buttons.
 struct AddWorktreeForm: View {
     let content: AddWorktreeContent
     @Binding var name: String
@@ -216,10 +217,13 @@ struct AddWorktreeForm: View {
                     .textSelection(.enabled)
             }
         } buttons: {
-            if content.isCreating {
-                ArcProgress(.small)
-                    .accessibilityLabel("Creating worktree")
+            ZStack {
+                if content.isCreating {
+                    ArcProgress(.small)
+                        .accessibilityLabel("Creating worktree")
+                }
             }
+            .motion(content.isCreating ? Motion.arrive : Motion.leave, value: content.isCreating)
             Spacer()
             Button("Cancel", role: .cancel, action: cancel)
                 .buttonStyle(.secondary)

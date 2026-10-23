@@ -24,6 +24,9 @@ nonisolated struct HistoryHeaderContent: Sendable, Equatable {
     var scope: HistoryScope
     /// "1,204 commits", or "1,200+ commits" while older ones aren't loaded.
     var count: String
+    /// Whether `count` is the history's total, not the commits loaded so
+    /// far.
+    var countIsTotal = true
     /// The branch the simple list follows (nil on a detached HEAD).
     var branchName: String?
     /// The search's status, while there is a query.
@@ -73,11 +76,15 @@ struct HistoryHeader: View {
                         // Shown whole or not at all: a narrow list leaves
                         // the room to the scope.
                         ViewThatFits(in: .horizontal) {
-                            Text(content.count)
-                                .font(Typography.secondaryCount)
-                                .foregroundStyle(.text3)
-                                .lineLimit(1)
-                                .fixedSize()
+                            RollingCountText(
+                                text: content.count,
+                                isFinal: content.countIsTotal,
+                                subject: AnyHashable([AnyHashable(content.branchName), AnyHashable(content.scope)])
+                            )
+                            .font(Typography.secondaryCount)
+                            .foregroundStyle(.text3)
+                            .lineLimit(1)
+                            .fixedSize()
                             Color.clear
                                 .frame(width: 0, height: 0)
                         }
@@ -125,6 +132,29 @@ struct HistoryHeader: View {
         .controlSize(.small)
         .fixedSize()
         .tooltip("Which branches the history shows")
+    }
+}
+
+/// A count in History's headers. It rolls to a new value over 0.2 s while
+/// it counts what it counted when it last changed (`subject`: a commit
+/// made, undone, or merged); one that starts counting something else (a
+/// checkout's, another scope's), or isn't final yet (`isFinal`: commits
+/// still loading), changes at once, as does the first final one.
+struct RollingCountText: View {
+    let text: String
+    var isFinal = true
+    let subject: AnyHashable
+    @Environment(\.motion) private var motion
+    /// What the count shown counts, when it's final.
+    @State private var shownSubject: AnyHashable?
+
+    var body: some View {
+        Text(text)
+            .contentTransition(motion.animates ? .numericText() : .identity)
+            .animation(isFinal && shownSubject == subject ? motion.animation(Motion.kindChange) : nil, value: text)
+            .onChange(of: text, initial: true) {
+                shownSubject = isFinal ? subject : nil
+            }
     }
 }
 
@@ -179,6 +209,7 @@ struct HistoryHeaderContainer: View {
                     isComplete: history.isComplete,
                     numberFormat: numberFormat
                 ),
+                countIsTotal: history.totalCommitCount != nil || history.isComplete,
                 branchName: repository.gitState.tip.branch?.name,
                 search: history.search.map { HistorySearchStatusContent($0, history: history, numberFormat: numberFormat) }
             ),

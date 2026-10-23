@@ -99,10 +99,12 @@ struct HistorySearchActions {
     var goToCommit: (String) -> Void = { _ in }
 }
 
-/// The search's status and controls.
+/// The search's status and controls. Searching older commits starting and
+/// ending crossfade over 0.15 s.
 struct HistorySearchStatus: View {
     let content: HistorySearchStatusContent
     var actions = HistorySearchActions()
+    @Environment(\.motion) private var motion
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
@@ -141,15 +143,18 @@ struct HistorySearchStatus: View {
             }
             if content.canSearchOlder || content.commitID != nil {
                 HStack(spacing: Metrics.insetSmall) {
-                    if content.isSearchingOlder {
-                        ArcProgress(.small)
-                        Text("Searching older commits…")
-                            .font(Typography.meta)
-                            .foregroundStyle(.text3)
-                        Button("Stop", action: actions.stop)
-                    } else if content.canSearchOlder {
-                        Button("Search Older Commits", action: actions.searchOlder)
+                    Group {
+                        if content.isSearchingOlder {
+                            ArcProgress(.small)
+                            Text("Searching older commits…")
+                                .font(Typography.meta)
+                                .foregroundStyle(.text3)
+                            Button("Stop", action: actions.stop)
+                        } else if content.canSearchOlder {
+                            Button("Search Older Commits", action: actions.searchOlder)
+                        }
                     }
+                    .transition(motion.animates ? .opacity : .identity)
                     if let commitID = content.commitID, let short = content.shortCommitID {
                         Button("Go to Commit \(short)") {
                             actions.goToCommit(commitID)
@@ -159,6 +164,7 @@ struct HistorySearchStatus: View {
                 }
                 .buttonStyle(.quiet)
                 .controlSize(.small)
+                .motion(Motion.leave, value: content.isSearchingOlder)
             }
         }
     }

@@ -68,6 +68,9 @@ struct HistoryFileList: NSViewRepresentable {
     var actions = HistoryFilesActions()
     /// Focuses the list when it changes (Return in the commit list).
     var focusRequest = 0
+    /// Whether files arriving and departing animate (the working copy's,
+    /// which change as files do); a commit's files change at once.
+    var animatesChanges = false
 
     func makeCoordinator() -> HistoryFileListController {
         HistoryFileListController()
@@ -78,7 +81,7 @@ struct HistoryFileList: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        context.coordinator.update(files: files, selection: selection, actions: actions, focusRequest: focusRequest)
+        context.coordinator.update(files: files, selection: selection, actions: actions, focusRequest: focusRequest, animatesChanges: animatesChanges)
     }
 }
 
@@ -133,14 +136,39 @@ final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableV
     // MARK: Updating
 
     /// Shows `files` with `selection` selected, taking focus when
-    /// `focusRequest` changed since the last update.
-    func update(files: [HistoryFileContent], selection: String?, actions: HistoryFilesActions, focusRequest: Int) {
+    /// `focusRequest` changed since the last update. With
+    /// `animatesChanges`, files departing fade out as the rows below close
+    /// the gap and files arriving fade in, over 0.22 s, when that's a few
+    /// of a short list (`FileTableCoordinator.rowChange`); otherwise the
+    /// rows change at once.
+    func update(files: [HistoryFileContent], selection: String?, actions: HistoryFilesActions, focusRequest: Int, animatesChanges: Bool = false) {
         self.actions = actions
         self.selection = selection
         if files != self.files {
+            let old = self.files
             self.files = files
             isApplyingSelection = true
-            tableView.reloadData()
+            if animatesChanges, tableView.numberOfRows == old.count, Motion.animates(tableView),
+               let change = FileTableCoordinator.rowChange(from: old.map { ExactString($0.id) }, to: files.map { ExactString($0.id) }) {
+                Motion.run(Motion.arrive, in: tableView) { animates in
+                    tableView.beginUpdates()
+                    if !change.removed.isEmpty {
+                        tableView.removeRows(at: change.removed, withAnimation: animates ? .effectFade : [])
+                    }
+                    if !change.inserted.isEmpty {
+                        tableView.insertRows(at: change.inserted, withAnimation: animates ? .effectFade : [])
+                    }
+                    tableView.endUpdates()
+                }
+                // The files that stay show what they are now.
+                tableView.enumerateAvailableRowViews { rowView, row in
+                    if files.indices.contains(row), let cell = rowView.view(atColumn: 0) as? HistoryFileCellView {
+                        cell.configure(files[row])
+                    }
+                }
+            } else {
+                tableView.reloadData()
+            }
             isApplyingSelection = false
         }
         syncSelection(scrolls: true)

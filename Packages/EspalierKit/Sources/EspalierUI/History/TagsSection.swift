@@ -27,7 +27,8 @@ nonisolated struct TagRowContent: Sendable, Equatable, Identifiable {
     }
 }
 
-/// One tag.
+/// One tag. Its arrow fades out over 0.15 s once it's pushed, and in over
+/// 0.22 s for a tag made here.
 struct TagRow: View {
     let content: TagRowContent
 
@@ -38,6 +39,7 @@ struct TagRow: View {
                     .foregroundStyle(.sidebarText3)
                     .tooltip("This tag hasn't been pushed yet")
                     .accessibilityLabel("Not pushed")
+                    .barTransition()
             }
         }
     }

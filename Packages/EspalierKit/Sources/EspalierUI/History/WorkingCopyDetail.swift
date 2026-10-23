@@ -13,11 +13,13 @@ nonisolated struct WorkingCopyHeaderContent: Sendable, Equatable {
     var summary: WorkingCopySummary
 }
 
-/// The working copy's header: what changed, and Review Changes.
+/// The working copy's header: what changed, and Review Changes. As files
+/// change, the title crossfades and the count rolls over 0.2 s.
 struct WorkingCopyHeader: View {
     let content: WorkingCopyHeaderContent
     var reviewChanges: () -> Void = {}
     @Environment(\.numberFormat) private var numberFormat
+    @Environment(\.motion) private var motion
 
     var body: some View {
         HStack(alignment: .top, spacing: Metrics.insetSmall) {
@@ -25,18 +27,23 @@ struct WorkingCopyHeader: View {
                 Text(content.summary.title)
                     .font(Typography.commitSummary)
                     .foregroundStyle(content.summary.isDirty ? .text : .text3)
+                    .contentTransition(motion.animates ? .opacity : .identity)
                 if let detail = content.summary.detail(numberFormat) {
                     Label {
                         Text(detail)
+                            .contentTransition(motion.animates ? .numericText() : .identity)
                     } icon: {
                         if content.summary.conflictedFiles > 0 {
                             WarningGlyph()
+                                .transition(motion.animates ? .opacity : .identity)
                         }
                     }
                     .font(Typography.secondary)
                     .foregroundStyle(.text3)
+                    .transition(motion.animates ? .opacity : .identity)
                 }
             }
+            .motion(Motion.kindChange, value: content.summary)
             Spacer(minLength: Metrics.insetSmall)
             Button(action: reviewChanges) {
                 Text("Review Changes")
@@ -112,7 +119,8 @@ private struct WorkingCopyFiles: View {
                 actions: HistoryFilesActions(select: { id in
                     repository.changes.select(fileIDs: id.map { [$0] } ?? [])
                 }),
-                focusRequest: context.state.history.fileListFocusRequest
+                focusRequest: context.state.history.fileListFocusRequest,
+                animatesChanges: true
             )
         }
     }

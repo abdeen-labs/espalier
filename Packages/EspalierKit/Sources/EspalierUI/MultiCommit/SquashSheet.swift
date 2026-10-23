@@ -209,7 +209,7 @@ struct SquashMessageCard: View {
             if markedField == field {
                 shape
                     .fill(Color(espalier: Palette.accentFaint))
-                    .transition(.opacity)
+                    .transition(motion.animates ? AnyTransition.opacity : .identity)
             }
         }
         .animation(motion.animation(markedField == nil ? Motion.focusOut : Motion.leave), value: markedField)
@@ -218,13 +218,16 @@ struct SquashMessageCard: View {
     }
 }
 
-/// The co-authors as removable tokens.
+/// The co-authors as removable tokens. A removed one fades out while those
+/// below close the gap and the sheet settles to its new height, over 0.22
+/// s.
 struct FlowingCoAuthors: View {
     @Binding var coAuthors: [KnownAuthor]
+    @Environment(\.motion) private var motion
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.grid) {
-            ForEach(Array(coAuthors.enumerated()), id: \.offset) { index, author in
+            ForEach(coAuthors, id: \.coAuthorID) { author in
                 HStack(spacing: Metrics.insetSmall) {
                     IconCircle("person.fill", size: 22)
                     Text(author.name)
@@ -235,7 +238,12 @@ struct FlowingCoAuthors: View {
                         .truncationMode(.middle)
                     Spacer(minLength: Metrics.grid)
                     Button {
-                        coAuthors.remove(at: index)
+                        // By identity: a click on a row still fading out
+                        // removes nothing more.
+                        let id = author.coAuthorID
+                        withMotion(motion, Motion.arrive) {
+                            coAuthors.removeAll { $0.coAuthorID == id }
+                        }
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.text3)
@@ -247,5 +255,19 @@ struct FlowingCoAuthors: View {
                 .font(Typography.secondary)
             }
         }
+    }
+}
+
+/// A co-author's identity in the list: its name and email, compared
+/// exactly.
+nonisolated private struct CoAuthorID: Hashable {
+    let name: ExactString
+    let email: ExactString
+}
+
+extension KnownAuthor {
+    /// Its identity in the squash sheet's list of co-authors.
+    nonisolated fileprivate var coAuthorID: CoAuthorID {
+        CoAuthorID(name: ExactString(name), email: ExactString(email))
     }
 }

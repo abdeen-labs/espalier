@@ -179,24 +179,63 @@ nonisolated public struct BranchRowContent: Sendable, Equatable, Identifiable {
     }
 }
 
+/// What trails a branch row's name: its pull request and how it compares
+/// with its upstream.
+nonisolated struct BranchRowMarks: Equatable {
+    var pullRequest: BranchPullRequestBadge?
+    var tracking: BranchTracking
+
+    init(_ content: BranchRowContent) {
+        pullRequest = content.pullRequest
+        tracking = content.tracking
+    }
+
+    /// Whether changing from `old` animates: only a change to what the row
+    /// already showed (a commit adding to "↑1", a push clearing it, a pull
+    /// request's checks finishing). A comparison or checks loading, as for
+    /// a row scrolled into view, and a pull request arriving or leaving
+    /// show at once.
+    func animates(from old: BranchRowMarks) -> Bool {
+        if tracking != old.tracking, tracking == BranchTracking.none || old.tracking == BranchTracking.none {
+            return false
+        }
+        if pullRequest != old.pullRequest {
+            guard let pullRequest, let oldPullRequest = old.pullRequest,
+                  pullRequest.number == oldPullRequest.number,
+                  (pullRequest.checks == nil) == (oldPullRequest.checks == nil) else {
+                return false
+            }
+        }
+        return true
+    }
+}
+
 /// A branch's row: a dot in its branch color, its name (the current one
 /// semibold, a selected one medium), the pull request glyph, and its
 /// comparison with its upstream; its tooltip is its name, and says when
-/// it's the default branch.
+/// it's the default branch. A change to what the row already showed
+/// moves over 0.2 s (`BranchRowMarks.animates(from:)`): the counts roll,
+/// the glyphs fade in and out, the checks' symbol is replaced, and what's
+/// beside them slides.
 public struct BranchRow: View {
     private let content: BranchRowContent
     private let dotColor: NSColor?
+    /// The marks drawn last, which the next change is compared with.
+    @State private var drawnMarks: BranchRowMarks
     @Environment(\.isSidebarRowSelected) private var isSelected
     @Environment(\.numberFormat) private var numberFormat
+    @Environment(\.motion) private var motion
 
     /// - Parameter dotColor: The branch's color in the graph; nil for
     ///   `content.fallbackColor`.
     public init(_ content: BranchRowContent, dotColor: NSColor? = nil) {
         self.content = content
         self.dotColor = dotColor
+        _drawnMarks = State(initialValue: BranchRowMarks(content))
     }
 
     public var body: some View {
+        let marks = BranchRowMarks(content)
         HStack(spacing: Metrics.insetSmall) {
             Circle()
                 .fill(Color(nsColor: dotColor ?? content.fallbackColor))
@@ -218,6 +257,10 @@ public struct BranchRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
             .layoutPriority(0.5)
+            .animation(marks.animates(from: drawnMarks) ? motion.animation(Motion.kindChange) : nil, value: marks)
+            .onChange(of: marks) { _, marks in
+                drawnMarks = marks
+            }
         }
         .tooltip(content.tooltip)
         .accessibilityElement(children: .ignore)
@@ -230,11 +273,13 @@ public struct BranchRow: View {
 /// (`sidebarRowCount(isSelected:)`), in SF Mono; a dashed circle, "Not
 /// published" in its tooltip, for a branch that isn't published; a
 /// crossed-out cloud, with a tooltip, for a branch whose upstream is gone
-/// from its remote. Each takes one form whatever the row's width.
+/// from its remote. Each takes one form whatever the row's width. Where
+/// the row animates a change, the counts roll.
 struct BranchTrackingView: View {
     let tracking: BranchTracking
     @Environment(\.isSidebarRowSelected) private var isSelected
     @Environment(\.numberFormat) private var numberFormat
+    @Environment(\.motion) private var motion
 
     init(_ tracking: BranchTracking) {
         self.tracking = tracking
@@ -251,11 +296,13 @@ struct BranchTrackingView: View {
                         Text("↑\(BranchTracking.formatCompactCount(ahead, numberFormat))")
                             .font(Typography.aheadCount)
                             .foregroundStyle(.aheadText)
+                            .contentTransition(motion.animates ? .numericText() : .identity)
                     }
                     if behind > 0 {
                         Text("↓\(BranchTracking.formatCompactCount(behind, numberFormat))")
                             .font(Typography.secondaryCount)
                             .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
+                            .contentTransition(motion.animates ? .numericText() : .identity)
                     }
                 }
                 .lineLimit(1)
@@ -278,8 +325,10 @@ struct BranchTrackingView: View {
 }
 
 /// A pull request's glyph, drafts in a lighter tint, with its checks.
+/// Where the row animates a change, the checks' symbol is replaced.
 struct PullRequestBadgeGlyph: View {
     let badge: BranchPullRequestBadge
+    @Environment(\.motion) private var motion
 
     init(_ badge: BranchPullRequestBadge) {
         self.badge = badge
@@ -291,6 +340,7 @@ struct PullRequestBadgeGlyph: View {
                 .foregroundStyle(badge.isDraft ? Color.text3 : .text2)
             if let checks = badge.checks {
                 ChecksGlyph(checks)
+                    .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
             }
         }
         .font(Typography.secondary)

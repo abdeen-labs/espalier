@@ -96,6 +96,17 @@ nonisolated struct SimpleRowContent: Sendable, Equatable {
         kind == .mergedCommit
     }
 
+    /// Whether this is `old`'s row changed in place: the same commit with
+    /// other tags, unpushed arrow, or weight (HEAD moved). Not a row
+    /// reused for another commit, a merge expanding, nor a search dimming
+    /// it.
+    func changesInPlace(from old: SimpleRowContent) -> Bool {
+        guard !sha.isEmpty, sha == old.sha else {
+            return false
+        }
+        return tags != old.tags || isUnpushed != old.isUnpushed || isCurrentTip != old.isCurrentTip
+    }
+
     var avatarUser: AvatarUser {
         AvatarUser(email: authorEmail, avatarURL: nil, name: authorName, endpoint: avatarEndpoint)
     }
@@ -169,6 +180,8 @@ final class SimpleRowCellView: NSTableCellView {
         mergeSymbol.imageAlignment = .alignCenter
         mergeSymbol.wantsLayer = true
         unpushedArrow.setTooltip(CommitRowContent.notPushedTooltip)
+        // A loaded image fades in over the monogram, as in the graph.
+        avatarView.fadesIn = true
         disclosure.contentTintColor = Palette.text3
         disclosure.imageAlignment = .alignCenter
         for view in [railView, avatarView, mergeSymbol, summaryLabel, refsView, unpushedArrow, metaLabel, timeLabel, disclosure] {
@@ -192,15 +205,21 @@ final class SimpleRowCellView: NSTableCellView {
     // MARK: Configuring
 
     /// Shows `content` with `rail`, with avatars from `avatars` (monograms
-    /// when nil); `keepsDisclosureColumn` for a merge's commits.
+    /// when nil); `keepsDisclosureColumn` for a merge's commits. When
+    /// `animatesChange` and the row's commit shows something else now, the
+    /// row crossfades to it over 0.15 s.
     func configure(
         _ content: SimpleRowContent,
         rail: SimpleRail,
         keepsDisclosureColumn: Bool,
         avatars: (any AvatarLoading)?,
         monograms: MonogramCache,
-        scale: CGFloat
+        scale: CGFloat,
+        animatesChange: Bool = false
     ) {
+        if animatesChange, content.changesInPlace(from: self.content), Motion.animates(self) {
+            Motion.crossfade(layer, duration: Motion.leave)
+        }
         railView.rail = rail
         if keepsDisclosureColumn != self.keepsDisclosureColumn {
             self.keepsDisclosureColumn = keepsDisclosureColumn

@@ -125,6 +125,24 @@ nonisolated public struct CommitRowContent: Sendable, Equatable {
         summary.isEmpty ? CommitRowContent.emptySummary : summary
     }
 
+    /// Whether this is `old`'s row changed in place: the same commit with
+    /// other refs, unpushed arrow, or weight (HEAD moved), or the working
+    /// copy with other changes. Not a row reused for another commit, nor a
+    /// search dimming it.
+    func changesInPlace(from old: CommitRowContent) -> Bool {
+        switch (old.kind, kind) {
+        case (.workingCopy(let oldSummary), .workingCopy(let summary)):
+            return oldSummary != summary
+        case (.commit, .commit):
+            guard let sha, sha == old.sha else {
+                return false
+            }
+            return refs != old.refs || unpushedTooltip != old.unpushedTooltip || isCurrentTip != old.isCurrentTip
+        default:
+            return false
+        }
+    }
+
     /// The short ID the row ends with.
     public var shortSHA: String {
         sha.map(shortenSHA) ?? ""
@@ -298,8 +316,13 @@ final class CommitRowCellView: NSTableCellView {
 
     // MARK: Configuring
 
-    /// Shows `content` with the graph's `drawing`, styled by `style`.
-    func configure(_ content: CommitRowContent, drawing: GraphRowDrawing, emphasis: GraphEmphasis, style: GraphRowStyle) {
+    /// Shows `content` with the graph's `drawing`, styled by `style`. When
+    /// `animatesChange` and the row's commit (or the working copy) shows
+    /// something else now, the row crossfades to it over 0.15 s.
+    func configure(_ content: CommitRowContent, drawing: GraphRowDrawing, emphasis: GraphEmphasis, style: GraphRowStyle, animatesChange: Bool = false) {
+        if animatesChange, content.changesInPlace(from: self.content), Motion.animates(self) {
+            Motion.crossfade(layer, duration: Motion.leave)
+        }
         if graphView.geometry != style.geometry {
             graphView.geometry = style.geometry
             needsLayout = true

@@ -70,33 +70,48 @@ struct MergeCallToAction: View {
     }
 }
 
-/// The status line: its symbol and message.
+/// The status line: its symbol and message. When git has checked, the arc
+/// crossfades to what it found and the message to what it says, over
+/// 0.15 s.
 struct MergeStatusLine: View {
     let status: MergeStatus?
     let message: String?
+    @Environment(\.motion) private var motion
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
             if let status {
                 MergeStatusIcon(status: status)
                     .frame(width: Metrics.symbolWidth)
+                    .transition(motion.animates ? .opacity : .identity)
             }
             Text(message ?? " ")
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)
                 .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(motion.animates ? .opacity : .identity)
                 .accessibilityAddTraits(.updatesFrequently)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .motion(Motion.leave, value: status)
+        .motion(Motion.leave, value: message)
     }
 }
 
 /// The status line's symbol: the arc while checking, then a check, a
-/// warning, a cross, or a question mark.
+/// warning, a cross, or a question mark, each crossfading to the next.
 struct MergeStatusIcon: View {
     let status: MergeStatus
+    @Environment(\.motion) private var motion
 
     var body: some View {
+        symbol
+            .id(status)
+            .transition(motion.animates ? .opacity : .identity)
+    }
+
+    @ViewBuilder
+    private var symbol: some View {
         switch status {
         case .loading:
             // The arc's center on the middle of the line's cap height,

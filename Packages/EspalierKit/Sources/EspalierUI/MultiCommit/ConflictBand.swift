@@ -9,17 +9,22 @@
 // (ConflictFileRow.swift). Where the band is narrow, the buttons go under
 // the state.
 
+import EspalierSupport
 import SwiftUI
 
 /// The band above a conflicted file's diff, tinted as the operation panel
 /// is: the modified color while the file needs the user, the add color once
-/// it doesn't.
+/// it doesn't. As the file's state changes (a conflict resolved, a side
+/// picked or taken back), the tint eases over 0.22 s and the rest over 0.2
+/// s: the count of conflicts rolls, the state and the buttons crossfade.
+/// Another file's band shows at once, as a selection does.
 struct ConflictBand: View {
     let content: ConflictFileRowContent
     let actions: ConflictFileRowActions
     /// Whether the band offers the whole file's sides: not when the diff
     /// draws the file's conflicts as blocks.
     var includesSides = true
+    @Environment(\.motion) private var motion
 
     var body: some View {
         let buttons = content.bandActions(actions, includesSides: includesSides)
@@ -57,6 +62,10 @@ struct ConflictBand: View {
             Hairline()
         }
         .accessibilityElement(children: .contain)
+        .motion(Motion.kindChange, value: content)
+        // A band of its own for each file, so showing another file's
+        // state animates nothing.
+        .id(ExactString(content.path))
     }
 
     /// The modified color while the file needs the user, the add color once
@@ -66,25 +75,29 @@ struct ConflictBand: View {
     }
 
     /// The file's state: in the modified color while it needs the user
-    /// (the operation panel has the warning), after the check once
-    /// resolved.
-    @ViewBuilder
+    /// (the operation panel has the warning), its count rolling, after the
+    /// check once resolved.
     private var state: some View {
-        if content.isUnresolved {
-            Text(content.status)
-                .font(Typography.secondary)
-                .foregroundStyle(Color(espalier: Palette.warning))
-                .fixedSize(horizontal: false, vertical: true)
-        } else {
-            Label {
+        // Stacked, so the one leaving and the one arriving crossfade in
+        // place.
+        ZStack(alignment: .leading) {
+            if content.isUnresolved {
                 Text(content.status)
+                    .font(Typography.secondary)
+                    .foregroundStyle(Color(espalier: Palette.warning))
                     .fixedSize(horizontal: false, vertical: true)
-            } icon: {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color(espalier: Palette.success))
-                    .accessibilityHidden(true)
+                    .contentTransition(motion.animates ? .numericText() : .identity)
+            } else {
+                Label {
+                    Text(content.status)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color(espalier: Palette.success))
+                        .accessibilityHidden(true)
+                }
+                .font(Typography.secondary)
             }
-            .font(Typography.secondary)
         }
     }
 

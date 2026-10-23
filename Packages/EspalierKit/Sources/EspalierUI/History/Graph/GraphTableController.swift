@@ -195,7 +195,8 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// Shows `source`'s rows with `presentation`, `selection` selected, and
     /// a keyboard reorder's insertion point, applying only what changed.
     func update(source: HistoryModel, presentation: GraphPresentation, selection: GraphSelection, reorderInsertionRow: Int?) {
-        if self.source !== source {
+        let isSameSource = self.source === source
+        if !isSameSource {
             // Another repository's history: from the top.
             self.source = source
             appliedGeneration = nil
@@ -206,6 +207,13 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             beginFirstPage()
         }
         let presentationChanged = presentation != self.presentation
+        // A row whose commit shows other refs or marks now crossfades to
+        // them, except after a checkout, whose rows change at once.
+        animatesRowChanges = isSameSource && !Self.isCheckout(from: self.presentation, to: presentation)
+            && !isLiveScrolling && Motion.animates(tableView)
+        defer {
+            animatesRowChanges = false
+        }
         self.presentation = presentation
         let reloaded = applyGraphChange()
         // After the rows: a page can bring a branch's commit, whose line
@@ -218,6 +226,20 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         syncSelection(selection)
         setReorderInsertionRow(reorderInsertionRow)
         recordAnchor()
+    }
+
+    /// Whether the rows configured now crossfade a change of what their
+    /// commit shows (`CommitRowCellView.configure`): set while an update
+    /// applies.
+    private var animatesRowChanges = false
+    /// The presentation when every row last reloaded.
+    private var reloadedPresentation = GraphPresentation()
+
+    /// Whether HEAD moved to another branch, or to another commit while
+    /// detached, between two presentations.
+    static func isCheckout(from old: GraphPresentation, to new: GraphPresentation) -> Bool {
+        old.currentBranch != new.currentBranch || old.isDetached != new.isDetached
+            || (new.isDetached && old.headSHA != new.headSHA)
     }
 
     /// Applies the history's last change: a reload, or appended pages.
@@ -282,12 +304,23 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         let anchor = isNewSource ? Anchor(sha: nil, offset: 0, isAtTop: true) : shownAnchor
         let wasNewSource = isNewSource
         isNewSource = false
+        let isCheckout = Self.isCheckout(from: reloadedPresentation, to: presentation)
+        reloadedPresentation = presentation
         // A commit made while the top shows slides in under the working
-        // copy.
-        if !wasNewSource, anchor?.isAtTop == true, let added = commitsAddedUnderWorkingCopy(graph) {
-            slideIn(added, graph: graph)
-            return
+        // copy, and one undone slides out; the rows after a checkout show
+        // at once.
+        if !wasNewSource, !isCheckout, anchor?.isAtTop == true {
+            if let added = commitsAddedUnderWorkingCopy(graph) {
+                slideIn(added, graph: graph)
+                return
+            }
+            if let removed = commitsRemovedUnderWorkingCopy(graph) {
+                slideOut(removed, graph: graph)
+                return
+            }
         }
+        // Every row is made again: none crossfades.
+        animatesRowChanges = false
         shownRowCount = graph.count
         shownStableRowCount = graph.stableRowCount
         if !noteLanes(graph.laneCount), lanesSeen == 1 {
@@ -307,7 +340,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// that was first under it, when that's a few (a commit, an amend's
     /// replacement): nil otherwise.
     private func commitsAddedUnderWorkingCopy(_ graph: CommitGraphLayout) -> Int? {
-        guard graph.hasUncommittedWorkRow, let source, let first = shownFirstCommitSHA, let row = source.row(of: first) else {
+        guard graph.hasUncommittedWorkRow, let source, let first = shownTopCommitSHAs.first, let row = source.row(of: first) else {
             return nil
         }
         let added = row - 1
@@ -340,8 +373,47 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         reconfigureVisibleRows()
     }
 
-    /// The commit in the first commit row, as last shown.
-    private var shownFirstCommitSHA: String?
+    /// How many of the commits that were first under the working copy are
+    /// gone, the rest now first under it, when that's a few (a commit
+    /// undone): nil otherwise.
+    private func commitsRemovedUnderWorkingCopy(_ graph: CommitGraphLayout) -> Int? {
+        guard graph.hasUncommittedWorkRow, shownTopFirstRow == 1, let source,
+              let first = source.commit(atRow: 1)?.sha, let removed = shownTopCommitSHAs.firstIndex(of: first),
+              (1...3).contains(removed), graph.count >= shownRowCount - removed
+        else {
+            return nil
+        }
+        let gone = shownTopCommitSHAs[..<removed].allSatisfy { source.row(of: $0) == nil }
+        let kept = shownTopCommitSHAs[removed...].enumerated().allSatisfy { source.row(of: $1) == 1 + $0 }
+        return gone && kept ? removed : nil
+    }
+
+    /// Takes `removed` rows from under the working copy sliding up (0.22 s
+    /// on the motion curve; at once with Reduce Motion), adding at the end
+    /// the rows the history brought in their place, then redraws what's
+    /// visible.
+    private func slideOut(_ removed: Int, graph: CommitGraphLayout) {
+        let kept = shownRowCount - removed
+        shownRowCount = graph.count
+        shownStableRowCount = graph.stableRowCount
+        noteLanes(graph.laneCount)
+        isApplyingSelection = true
+        Motion.run(Motion.arrive, in: tableView) { animates in
+            tableView.beginUpdates()
+            tableView.removeRows(at: IndexSet(1..<(1 + removed)), withAnimation: animates ? .slideUp : [])
+            if graph.count > kept {
+                tableView.insertRows(at: IndexSet(kept..<graph.count), withAnimation: [])
+            }
+            tableView.endUpdates()
+        }
+        isApplyingSelection = false
+        reconfigureVisibleRows()
+    }
+
+    /// The commits in the first commit rows (at most four), and the first
+    /// one's row, as last shown.
+    private var shownTopCommitSHAs: [String] = []
+    private var shownTopFirstRow = 0
 
     /// Widens the column when rows need more lanes than seen so far.
     /// Returns whether the geometry changed.
@@ -373,9 +445,11 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     private func recordAnchor() {
         shownAnchor = captureAnchor()
         if let source, shownRowCount > 0 {
-            shownFirstCommitSHA = source.commit(atRow: CommitRows(source.graph).firstRow)?.sha
+            let first = CommitRows(source.graph).firstRow
+            shownTopFirstRow = first
+            shownTopCommitSHAs = (first..<min(first + 4, shownRowCount)).compactMap { source.commit(atRow: $0)?.sha }
         } else {
-            shownFirstCommitSHA = nil
+            shownTopCommitSHAs = []
         }
     }
 
@@ -505,7 +579,13 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
             return
         }
         style.avatars = avatarLoader
-        cell.configure(content(forRow: row), drawing: drawing(forRow: row, in: source), emphasis: emphasis(forRow: row), style: style)
+        cell.configure(
+            content(forRow: row),
+            drawing: drawing(forRow: row, in: source),
+            emphasis: emphasis(forRow: row),
+            style: style,
+            animatesChange: animatesRowChanges
+        )
     }
 
     /// Configures the visible rows again (presentation, emphasis, or
@@ -751,6 +831,16 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         }
         hoveredTrack = track
         outlinedRow = outline
+        // The lines' emphasis fades as hover does, row by row: in over
+        // 0.08 s, out over 0.15 s; at once while the list scrolls.
+        if !isLiveScrolling, Motion.animates(tableView) {
+            let duration = track == nil && outline == nil ? Motion.hoverOut : Motion.hoverIn
+            for row in Range(tableView.rows(in: tableView.visibleRect)) ?? 0..<0 {
+                if let cell = tableView.view(atColumn: 0, row: row, makeIfNecessary: false) as? CommitRowCellView {
+                    Motion.crossfade(cell.graphView.layer, duration: duration)
+                }
+            }
+        }
         reconfigureVisibleRows()
     }
 

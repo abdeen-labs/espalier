@@ -424,7 +424,10 @@ public struct OperationPanel: View {
 
 /// The bar's look, value-driven: the state's glyph, the title and the line
 /// under it (and a stash restore's how-to, or Continue's note), a running
-/// operation's progress, and the buttons.
+/// operation's progress, and the buttons. Its changes of state ease over
+/// 0.2 s: the count of files resolved rolls, the title changes, and buttons
+/// fade in and out while the others slide; a running operation's commit and
+/// progress change at once (its bar eases on its own).
 struct OperationPanelView: View {
     let content: OperationPanelContent
     var aiError: String?
@@ -432,6 +435,8 @@ struct OperationPanelView: View {
     var onContinue: () -> Void = {}
     var onOpenTerminal: () -> Void = {}
     var onResolveWithAI: () -> Void = {}
+    /// The title drawn last, which the next change is compared with.
+    @State private var drawnTitle: String?
     @Environment(\.motion) private var motion
 
     var body: some View {
@@ -441,6 +446,54 @@ struct OperationPanelView: View {
             progress
             buttons
         }
+        .contentTransition(textTransition)
+        .motion(Motion.kindChange, value: motionKey)
+        .onChange(of: content.title, initial: true) {
+            drawnTitle = content.title
+        }
+    }
+
+    /// How the bar's lines change: while it waits on conflicts under the
+    /// same title, their counts roll ("1 of 3 files resolved"); otherwise
+    /// (a new title, another state) they crossfade.
+    private var textTransition: ContentTransition {
+        guard motion.animates else {
+            return .identity
+        }
+        if case .conflicts = content.state, drawnTitle == content.title {
+            return .numericText()
+        }
+        return .opacity
+    }
+
+    /// What the bar's motion follows: the title, the state (a running
+    /// operation's as one, without its commit and progress), and which
+    /// buttons show.
+    private struct MotionKey: Equatable {
+        let title: String
+        let state: OperationPanelContent.State
+        let stoppedAt: String?
+        let showsResolveWithAI: Bool
+        let opensTerminal: Bool
+        let abortTitle: String?
+        let showsFinish: Bool
+    }
+
+    private var motionKey: MotionKey {
+        let state: OperationPanelContent.State = if case .running = content.state {
+            .running(detail: nil, progress: nil)
+        } else {
+            content.state
+        }
+        return MotionKey(
+            title: content.title,
+            state: state,
+            stoppedAt: content.stoppedAt,
+            showsResolveWithAI: content.showsResolveWithAI,
+            opensTerminal: content.opensTerminal,
+            abortTitle: content.abortTitle,
+            showsFinish: content.finishButton != nil
+        )
     }
 
     /// The line under the subtitle: how to resolve a stash restore's
@@ -556,29 +609,34 @@ struct OperationPanelView: View {
 /// The step that finishes the operation, the panel's one prominent button:
 /// Commit Merge or Continue <Operation>, disabled with why while it can't
 /// run; "Committing Merge…" with the arc while it runs, legible rather than
-/// faded.
+/// faded. The button and the working capsule crossfade in place over 0.2 s,
+/// the capsule easing to its width.
 struct OperationFinishButton: View {
     let content: CommitButtonContent
     let action: () -> Void
 
     var body: some View {
-        Group {
-            if content.isCommitting {
-                HStack(spacing: Metrics.insetSmall) {
-                    ArcProgress(.small, tint: Palette.buttonText)
-                    Text(content.title)
+        // Stacked, so the one leaving doesn't push the one arriving aside.
+        ZStack {
+            Group {
+                if content.isCommitting {
+                    HStack(spacing: Metrics.insetSmall) {
+                        ArcProgress(.small, tint: Palette.buttonText)
+                        Text(content.title)
+                    }
+                    .capsuleChrome(.prominent)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityAddTraits(.isButton)
+                } else {
+                    Button(content.title, action: action)
+                        .buttonStyle(.prominent)
+                        .disabled(!content.isEnabled)
                 }
-                .capsuleChrome(.prominent)
-                .accessibilityElement(children: .ignore)
-                .accessibilityAddTraits(.isButton)
-            } else {
-                Button(content.title, action: action)
-                    .buttonStyle(.prominent)
-                    .disabled(!content.isEnabled)
             }
+            .tooltip(content.isEnabled || content.isCommitting ? nil : content.disabledReason)
+            .accessibilityLabel(content.title)
         }
-        .tooltip(content.isEnabled || content.isCommitting ? nil : content.disabledReason)
-        .accessibilityLabel(content.title)
+        .motion(Motion.kindChange, value: content.isCommitting)
     }
 }
 

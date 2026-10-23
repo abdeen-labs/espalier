@@ -30,6 +30,10 @@ struct SimpleListPresentation: Equatable {
     var decorations: UInt64 = 0
     /// The rail's colors, and where the branch started.
     var railColors = SimpleRailColors()
+    /// HEAD's branch (its ref), and the other branch whose line shows (nil
+    /// for HEAD's): rows another checkout or line brings change at once.
+    var currentBranch: String?
+    var shownBranch: String?
 }
 
 /// What the simple list's table asks of the screen showing it.
@@ -229,24 +233,153 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
             self.history = history
             lastSelection = []
         }
+        let line = Line(presentation)
+        let previousLine = Line(self.presentation)
         self.presentation = presentation
         lastPresentation = (presentation, reorderInsertionRow)
         let generation = history.graphChange.reloadGeneration
-        if isNewHistory || generation != listGeneration {
+        let reloads = isNewHistory || generation != listGeneration
+        if reloads {
             forgetLoadingLines()
         }
         let newItems = shownItems(history.simpleOutline.items, history: history)
-        if isNewHistory || generation != listGeneration {
-            reload(newItems, toTop: isNewHistory)
+        let topSHAs = Self.topSHAs(of: history)
+        var slides = false
+        if reloads {
+            // A commit made or undone while the top shows slides in or
+            // out; another line, or the same after a checkout, shows at
+            // once.
+            if !isNewHistory, line == reloadedLine, tableView.visibleRect.minY <= 0,
+               let change = Self.topChange(from: items, oldTop: shownTopSHAs, to: newItems, newTop: topSHAs, isGone: { history.row(of: $0) == nil }) {
+                slide(change, to: newItems)
+                slides = true
+            } else {
+                reload(newItems, toTop: isNewHistory)
+            }
+            reloadedLine = line
         } else if newItems != items {
             apply(newItems)
         }
         listGeneration = generation
+        shownTopSHAs = topSHAs
+        // A row whose commit shows other tags or marks now crossfades to
+        // them, unless the rows reloaded or HEAD moved to another branch.
+        animatesRowChanges = !isNewHistory && line == previousLine && (slides || !reloads)
+            && !isLiveScrolling && Motion.animates(tableView)
         reconfigureVisibleRows()
+        animatesRowChanges = false
         updateFooter(history.isLoadingMore)
         syncSelection(selection)
         setReorderInsertionRow(reorderInsertionRow)
         prefetchIfNeeded()
+    }
+
+    /// HEAD's branch and the line shown, when the rows last reloaded.
+    private var reloadedLine: Line?
+    /// The line's first commits (at most four), as last shown.
+    private var shownTopSHAs: [String] = []
+    /// Whether the rows configured now crossfade a change of what their
+    /// commit shows (`SimpleRowCellView.configure`): set while an update
+    /// configures them.
+    private var animatesRowChanges = false
+
+    /// HEAD's branch and the line a presentation shows.
+    private struct Line: Equatable {
+        var currentBranch: String?
+        var shownBranch: String?
+
+        init(_ presentation: SimpleListPresentation) {
+            currentBranch = presentation.currentBranch
+            shownBranch = presentation.shownBranch
+        }
+    }
+
+    /// The SHAs of `history`'s first four commits of the line.
+    private static func topSHAs(of history: HistoryModel) -> [String] {
+        (0..<min(4, history.commitSHAs.count)).compactMap { history.commit(atRow: $0)?.sha }
+    }
+
+    /// Commits that arrived at the top of the list (a commit made) or left
+    /// it (a commit undone), the rows below staying as they were.
+    nonisolated struct TopChange: Equatable, Sendable {
+        var inserted = 0
+        var removed = 0
+    }
+
+    /// How the rows went from `old` to `new` when one to three commits of
+    /// the line arrived at its top or left it and every row below stayed
+    /// (an expanded merge's rows included): the line's first commits shown
+    /// before (`oldTop`) follow new ones in `newTop`, or the rest of them
+    /// come first, the ones before them gone from the history (`isGone`).
+    /// Nil for any other change.
+    static func topChange(
+        from old: [SimpleHistoryItem],
+        oldTop: [String],
+        to new: [SimpleHistoryItem],
+        newTop: [String],
+        isGone: (String) -> Bool
+    ) -> TopChange? {
+        guard let oldFirst = oldTop.first, let newFirst = newTop.first else {
+            return nil
+        }
+        /// The same row once the line's rows moved by `delta`.
+        func moved(_ item: SimpleHistoryItem, by delta: Int) -> SimpleHistoryItem {
+            switch item {
+            case .commit(let row): .commit(row: row + delta)
+            case .mergedCommit(let mergeRow, let index): .mergedCommit(mergeRow: mergeRow + delta, index: index)
+            case .mergedCommitsStatus(let mergeRow): .mergedCommitsStatus(mergeRow: mergeRow + delta)
+            }
+        }
+        /// Whether the first `count` rows of `items` are the line's first
+        /// commits, none of them an expanded merge.
+        func startsWithCommits(_ items: [SimpleHistoryItem], _ count: Int) -> Bool {
+            items.count > count && (0..<count).allSatisfy { items[$0] == .commit(row: $0) }
+        }
+        if let added = newTop.firstIndex(of: oldFirst), (1...3).contains(added) {
+            guard zip(oldTop, newTop[added...]).allSatisfy(==), !newTop[..<added].contains(where: oldTop.contains),
+                  startsWithCommits(new, added),
+                  zip(old, new.dropFirst(added)).allSatisfy({ moved($0, by: added) == $1 })
+            else {
+                return nil
+            }
+            return TopChange(inserted: added)
+        }
+        if let removed = oldTop.firstIndex(of: newFirst), (1...3).contains(removed) {
+            guard zip(oldTop[removed...], newTop).allSatisfy(==), oldTop[..<removed].allSatisfy(isGone),
+                  startsWithCommits(old, removed),
+                  zip(old.dropFirst(removed), new).allSatisfy({ moved($0, by: -removed) == $1 })
+            else {
+                return nil
+            }
+            return TopChange(removed: removed)
+        }
+        return nil
+    }
+
+    /// Takes `change`'s rows from the top sliding up and brings its rows
+    /// in sliding down (0.22 s on the motion curve; at once with Reduce
+    /// Motion), and at the end of the page adds or drops the rows the
+    /// history did, at once.
+    private func slide(_ change: TopChange, to newItems: [SimpleHistoryItem]) {
+        let shown = items.count - change.removed + change.inserted
+        items = newItems
+        isApplyingSelection = true
+        Motion.run(Motion.arrive, in: tableView) { animates in
+            tableView.beginUpdates()
+            if change.removed > 0 {
+                tableView.removeRows(at: IndexSet(0..<change.removed), withAnimation: animates ? .slideUp : [])
+            }
+            if change.inserted > 0 {
+                tableView.insertRows(at: IndexSet(0..<change.inserted), withAnimation: animates ? .slideDown : [])
+            }
+            if newItems.count < shown {
+                tableView.removeRows(at: IndexSet(newItems.count..<shown), withAnimation: [])
+            } else if newItems.count > shown {
+                tableView.insertRows(at: IndexSet(shown..<newItems.count), withAnimation: [])
+            }
+            tableView.endUpdates()
+        }
+        isApplyingSelection = false
     }
 
     /// Replaces every row, keeping the commit at the top of the view where
@@ -645,7 +778,8 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
             keepsDisclosureColumn: display.keepsDisclosureColumn,
             avatars: avatarLoader,
             monograms: monograms,
-            scale: tableView.window?.backingScaleFactor ?? 2
+            scale: tableView.window?.backingScaleFactor ?? 2,
+            animatesChange: animatesRowChanges
         )
     }
 

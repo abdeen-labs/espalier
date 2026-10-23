@@ -34,6 +34,11 @@ struct CommitDetailView: View {
             .padding(.horizontal, Metrics.CommitDetail.horizontalPadding)
             .padding(.top, Metrics.CommitDetail.topPadding)
             .padding(.bottom, Metrics.CommitDetail.bottomPadding)
+            // A message expanding shows its lines as the header grows.
+            .clipped()
+            // Another commit, or the same one after a checkout, shows at
+            // once.
+            .motionScope(AnyHashable([selection.shas.first ?? "", repository.gitState.tip.branch?.ref ?? ""]))
             Hairline()
             SplitView(autosaveName: "Espalier.Split.commitFiles", leadingColumn: Metrics.Column.commitFileList) {
                 CommitFiles(repository: repository)

@@ -64,8 +64,11 @@ struct BranchHeader: View {
                 }
             }
             if let callToAction = content.callToAction {
+                // Grows in over 0.22 s and leaves over 0.15 s, the list
+                // moving with it (`HistoryListPane`).
                 MergeCallToAction(content: callToAction, actions: self.callToAction)
                     .padding(.bottom, Metrics.insetMedium)
+                    .barTransition()
             }
         }
         // Lined up with the list, however little the header holds.
@@ -97,12 +100,15 @@ struct BranchHeader: View {
     }
 
     /// A segment with its count after the title, once it's counted: in the
-    /// regular weight beside the title's, and quieter when it's 0.
+    /// regular weight beside the title's, and quieter when it's 0. A count
+    /// of the same two branches that changes (a commit, a merge) rolls to
+    /// its new value (`RollingCountText`).
     private func countedSegment(_ title: String, count: Int?, value: BranchView) -> CapsuleSegment<BranchView> {
         let formatted = count.map { formatCount($0, content.numberFormat) }
+        let branches = AnyHashable([content.branchName, content.comparedWith])
         return CapsuleSegment(title, value: value, accessibilityTitle: formatted.map { "\(title), \($0)" }) {
-            if let formatted {
-                Text(formatted)
+            if let count, let formatted {
+                RollingCountText(text: formatted, subject: branches)
                     .font(Typography.secondary)
                     .monospacedDigit()
                     .foregroundStyle(count == 0 ? Color.text3 : .text2)
@@ -127,7 +133,7 @@ struct BranchHeaderContainer: View {
         let state = context.state.history
         let current = repository.gitState.tip.branch
         let view = current == nil ? BranchView.history : state.view(forBranch: branch.ref)
-        let isShown = isComparisonShown
+        let isShown = Self.isComparisonShown(of: branch, history: history)
         let aheadBehind = isShown && !comparison.isLoading ? comparison.aheadBehind : counts(current: current)
         BranchHeader(
             content: BranchHeaderContent(
@@ -136,7 +142,8 @@ struct BranchHeaderContainer: View {
                 behind: aheadBehind?.behind,
                 ahead: aheadBehind?.ahead,
                 comparedWith: current?.name,
-                callToAction: view == .compare(.behind) && isShown ? MergeCallToActionContent(comparison: comparison) : nil,
+                callToAction: Self.showsCallToAction(for: branch, repository: repository, state: state)
+                    ? MergeCallToActionContent(comparison: comparison) : nil,
                 numberFormat: numberFormat
             ),
             setView: { view in
@@ -180,11 +187,18 @@ struct BranchHeaderContainer: View {
         return repository.branches.cachedAheadBehind(from: current.tip.sha, to: branch.tip.sha)
     }
 
-    /// Whether the comparison shown is this branch's.
-    private var isComparisonShown: Bool {
-        guard case .compare(let shown, _) = repository.history.mode else {
+    /// Whether the comparison shown is `branch`'s.
+    private static func isComparisonShown(of branch: Branch, history: HistoryModel) -> Bool {
+        guard case .compare(let shown, _) = history.mode else {
             return false
         }
         return shown.ref == branch.ref
+    }
+
+    /// Whether `branch`'s header shows the call to action: on Ahead, once
+    /// its comparison shows.
+    static func showsCallToAction(for branch: Branch, repository: RepositoryModel, state: HistoryWindowState) -> Bool {
+        repository.gitState.tip.branch != nil && state.view(forBranch: branch.ref) == .compare(.behind)
+            && isComparisonShown(of: branch, history: repository.history)
     }
 }

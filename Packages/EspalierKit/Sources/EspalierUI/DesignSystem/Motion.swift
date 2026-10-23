@@ -63,6 +63,9 @@ public enum Motion {
     /// bounce.
     nonisolated public static let sidebarNudgeBack: TimeInterval = 0.35
     nonisolated public static let sidebarNudgeBounce: CGFloat = 0.3
+    /// Half of a pulse marking the commit a jump landed on: the outline
+    /// fades in over this and back, twice, eased in and out.
+    nonisolated public static let pulse: TimeInterval = 0.3
 
     // MARK: The curve
 

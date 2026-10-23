@@ -94,12 +94,16 @@ extension Metrics {
 
 /// The selected commit's header: the title (15 semibold), the author and
 /// time with the short ID as a chip with a copy button, then the body, two
-/// lines until expanded.
+/// lines until expanded. Expanding grows the body over 0.22 s, and
+/// collapsing shrinks it over 0.15 s, what's below moving with it; a tag
+/// made or deleted on the commit fades in or out as the line makes room
+/// (`CommitDetailView` keeps another commit's header from animating).
 struct CommitHeader: View {
     let content: CommitHeaderContent
     /// The colors of the tags.
     var palette = TrackPalette.Resolved()
     @State private var isExpanded = false
+    @Environment(\.motion) private var motion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -119,7 +123,12 @@ struct CommitHeader: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onChange(of: content.sha) {
-            isExpanded = false
+            // Another commit shows collapsed at once, its chevron too.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isExpanded = false
+            }
         }
     }
 
@@ -137,6 +146,7 @@ struct CommitHeader: View {
             .foregroundStyle(.text3)
             if !content.tags.isEmpty {
                 RefCapsuleList(content.tags, palette: palette)
+                    .transition(motion.animates ? .opacity : .identity)
             }
             Spacer(minLength: Metrics.insetSmall)
             MonoChip(content.shortSHA, isSelectable: true) {
@@ -146,6 +156,7 @@ struct CommitHeader: View {
         }
         .font(Typography.secondary)
         .lineLimit(1)
+        .motion(Motion.arrive, value: content.tags)
     }
 
     private var description: some View {
@@ -159,7 +170,9 @@ struct CommitHeader: View {
                 .lineLimit(isExpanded ? nil : 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
-                isExpanded.toggle()
+                withMotion(motion, isExpanded ? Motion.leave : Motion.arrive) {
+                    isExpanded.toggle()
+                }
             } label: {
                 // The chevron turns over 0.15 s, as a disclosure's does.
                 Image(systemName: "chevron.down")

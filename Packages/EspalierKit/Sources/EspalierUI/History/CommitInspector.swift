@@ -86,7 +86,10 @@ extension Metrics {
     }
 }
 
-/// Commit Info for one commit: a row per fact, hairlines between.
+/// Commit Info for one commit: a row per fact, hairlines between. A branch
+/// made or deleted at the commit fades in or out of its row, the rows
+/// below moving with it (`CommitInspector` keeps another commit's info
+/// from animating).
 struct CommitInfoView: View {
     let content: CommitInfoContent
     /// The colors of the branches' tags.
@@ -94,6 +97,7 @@ struct CommitInfoView: View {
     var selectParent: (String) -> Void = { _ in }
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
+    @Environment(\.motion) private var motion
 
     var body: some View {
         ScrollView(.vertical) {
@@ -124,12 +128,16 @@ struct CommitInfoView: View {
                     }
                 }
                 if !content.branches.isEmpty {
-                    Hairline()
-                    row(content.branches.count == 1 ? "Branch" : "Branches") {
-                        ForEach(content.branches) { ref in
-                            RefCapsule(ref, palette: palette)
+                    Group {
+                        Hairline()
+                        row(content.branches.count == 1 ? "Branch" : "Branches") {
+                            ForEach(content.branches) { ref in
+                                RefCapsule(ref, palette: palette)
+                                    .transition(motion.animates ? .opacity : .identity)
+                            }
                         }
                     }
+                    .transition(motion.animates ? .opacity : .identity)
                 }
                 if !content.coAuthors.isEmpty {
                     Hairline()
@@ -153,6 +161,7 @@ struct CommitInfoView: View {
             }
             .padding(.horizontal, Metrics.insetLarge)
             .padding(.vertical, Metrics.grid)
+            .motion(Motion.arrive, value: content.branches)
             .unbouncedScrollContent()
         }
         .scrollBounceBehavior(.basedOnSize)
@@ -233,6 +242,9 @@ public struct CommitInspector: View {
                     await context.state.history.navigator.goToCommit(parent, in: history)
                 }
             }
+            // Another commit, or the same one after a checkout, shows at
+            // once.
+            .motionScope(AnyHashable([sha, repository.gitState.tip.branch?.ref ?? ""]))
         } else {
             PlaceholderNote("No commit selected")
         }
