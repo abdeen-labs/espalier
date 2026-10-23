@@ -144,6 +144,15 @@ struct FetchGate: Sendable {
     }
 }
 
+extension ManualScheduler {
+    /// The sleeps that started, but those of a network operation's stall
+    /// watch (`OperationStall`), which sleeps on the same scheduler while git
+    /// runs, if git takes long enough to get there.
+    var sleepsWithoutStallWatch: [Duration] {
+        sleeps.filter { $0 != .seconds(OperationStall.delay) }
+    }
+}
+
 /// Runs `body` with a git runtime whose hooks go through the real hooks
 /// proxy, as the app's do (a temporary trampoline server, the real
 /// espalier-askpass, and a stand-in login shell).
