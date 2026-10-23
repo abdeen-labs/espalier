@@ -16,15 +16,29 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.3] - 2026-10-22
+
 ### Added
 
 - Create pull requests in Espalier. Create Pull Request… opens a sheet with the base branch, a title, a description filled in from the repository's pull request template, and a draft option, instead of GitHub's form in the browser.
+- Stop a push, pull, fetch, or publish that hangs: after 10 seconds without progress, the sync button offers Stop. A pull can be stopped only while it fetches, so nothing is left half merged or rebased.
+- Undo a revert: reverting a commit selects the new commit and shows a notice with Undo, and Edit ▸ Undo Revert takes it back too.
+- Menu items and buttons that can't run say why in their tooltip, and asking for one anyway, such as checking out a branch during a merge, shows the reason.
+- ⌘↩ presses Commit Merge or Continue when it's enabled.
 
 ### Changed
 
 - A link that checks out a branch or pull request in a repository you already have asks first, naming the branch, the pull request, and any remote it adds for a fork.
 - Initialize Git LFS asks before replacing hooks the repository already has, and moves the old hooks to the Trash.
 - A new branch can't take an existing tag's name, and a new tag can't take a branch's.
+- Squash and reorder no longer offer drops below a merge, and Squash… and Reorder name the merge in the way before anything starts.
+- Pull says up front that it can't run while a merge, rebase, or cherry-pick is in progress.
+- Commit menu items act only where they apply: Cherry-pick…, Squash…, and Copy SHA where commits show, and Revert on the checked-out branch's commits.
+- When the selected files leave Changes after a discard, commit, or Ignore, the file in their place is selected, so the list stays where it was instead of going back to the top.
+- Clone and Add Worktree read a leading ~ in Local Path as your home folder, and point out a path that isn't a full path before you submit it.
+- When the selected worktree's folder is removed, a notice says so and names what the window shows instead.
+- Ignore File tells you when a file it ignored is still tracked, so its changes still show.
+- Notices that aren't a success show a gray symbol instead of a green one.
 
 ### Fixed
 
@@ -38,6 +52,15 @@ install the update.
 - Pull, Push, and Fetch could wait for a later full refresh before finishing.
 - A token in a remote's address no longer appears in Espalier's log.
 - Move to Applications handles an app name with accented characters.
+- While a rebase stops on conflicts, discarding several selected files or using Edit ▸ Delete no longer discards tracked files; only untracked files can be discarded then, as in a file's menu.
+- A submodule that can't be committed no longer counts toward the commit: the file count, the Commit button, and Include All leave it out.
+- Cancelling Clone while it looks up the repository no longer starts the clone anyway.
+- A link or command-line open that Espalier can't act on, such as a branch that doesn't exist or a pull request whose fork was deleted, says why instead of stopping silently.
+- Go ▸ Back, Forward, First Parent, Second Parent, and Child work in History's simple list, not just the graph, and Back and Forward stay within the repository you're in.
+- ⌘F in History focuses the commit search.
+- The toolbar search clears when you switch repositories.
+- Opening a file from a stash or a commit that isn't on disk beeps, instead of trying to open a missing path.
+- VoiceOver no longer announces "Pull complete" for a pull that stops on conflicts.
 
 ## [1.2.1] - 2026-10-18
 
@@ -82,7 +105,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.3...HEAD
+[1.3]: https://github.com/abdeen-labs/espalier/compare/v1.2.1...v1.3
 [1.2.1]: https://github.com/abdeen-labs/espalier/compare/v1.2...v1.2.1
 [1.2]: https://github.com/abdeen-labs/espalier/compare/v1.1...v1.2
 [1.1]: https://github.com/abdeen-labs/espalier/compare/v1.0...v1.1
