@@ -3,9 +3,12 @@
 // diff's find model, which the container's bar shows. The table draws the
 // matches (`DiffRowRenderer`), scrolls the current one into view clear of
 // the bar, and when the bar closes selects the current match and takes
-// focus.
+// focus. The highlights fade in as the bar opens and out as it closes, and
+// the current match's moves to the next one's as the user moves between
+// matches; typing searches at once.
 
 import AppKit
+import SwiftUI
 
 /// Edit ▸ Find's commands, by their menu items' tags (AppKit's find
 /// action numbers).
@@ -42,6 +45,7 @@ extension DiffTableController {
     }
 
     private func findDidChange(_ change: DiffFindChange) {
+        fadeFindHighlights(change)
         switch change {
         case .matches:
             redrawVisibleRows()
@@ -61,6 +65,29 @@ extension DiffTableController {
             }
             tableView.window?.makeFirstResponder(tableView)
             redrawVisibleRows()
+        }
+    }
+
+    /// The highlights' motion for `change`: as the bar opens or closes, the
+    /// pane crossfades over 0.22 s or 0.15 s; as the user moves to another
+    /// match, its row and the previous current match's crossfade over
+    /// 0.12 s. Nothing moves without matches, or where motion doesn't run.
+    private func fadeFindHighlights(_ change: DiffFindChange) {
+        let wasShown = findShowsHighlights
+        let previousRow = currentFindRow
+        findShowsHighlights = find.isShown
+        currentFindRow = find.isShown ? find.currentMatch?.row : nil
+        guard !find.matches.isEmpty, Motion.animates(tableView) else {
+            return
+        }
+        if wasShown != find.isShown {
+            Motion.crossfade(scrollView.layer, duration: find.isShown ? Motion.arrive : Motion.leave)
+        } else if change == .current(animated: true), let row = currentFindRow {
+            var rows = [row]
+            if let previousRow, previousRow != row {
+                rows.append(previousRow)
+            }
+            crossfade(rows: rows, duration: Motion.mark)
         }
     }
 
@@ -88,10 +115,15 @@ extension DiffTableController {
                 return
             }
             let origin = find.isShown ? nil : findOrigin
-            if command == .next {
-                find.findNext(from: origin)
-            } else {
-                find.findPrevious(from: origin)
+            // The bar's count rolls to the match moved to, as it does for
+            // the bar's own chevrons (`Motion.animates` covers Reduce
+            // Motion).
+            withMotion(MotionPolicy(isSuppressed: !Motion.animates(tableView)), Motion.kindChange) {
+                if command == .next {
+                    find.findNext(from: origin)
+                } else {
+                    find.findPrevious(from: origin)
+                }
             }
         case .useSelection:
             guard let selection = textSelection, !selection.isEmpty else {

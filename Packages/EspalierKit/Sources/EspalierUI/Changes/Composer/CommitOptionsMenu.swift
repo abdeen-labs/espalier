@@ -29,12 +29,13 @@ nonisolated public struct CommitOptionsContent: Sendable, Equatable {
 }
 
 /// The commit options: an icon button in the commit message card's footer,
-/// its circled ellipsis filling in the accent while an option is on, and
-/// its menu.
+/// its circled ellipsis filling in the accent while an option is on (a
+/// symbol replace), and its menu.
 public struct CommitOptionsMenu: View {
     private let content: CommitOptionsContent
     private let onToggleAmend: () -> Void
     private let onChange: (CommitOptions) -> Void
+    @Environment(\.motion) private var motion
 
     /// - Parameters:
     ///   - onToggleAmend: Starts or stops amending the last commit.
@@ -59,6 +60,8 @@ public struct CommitOptionsMenu: View {
             } icon: {
                 Image(systemName: content.isDefault ? "ellipsis.circle" : "ellipsis.circle.fill")
                     .foregroundStyle(content.isDefault ? AnyShapeStyle(.text2) : AnyShapeStyle(Color.accent))
+                    .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
+                    .motion(Motion.leave, value: content.isDefault)
             }
         }
         .buttonStyle(.icon)

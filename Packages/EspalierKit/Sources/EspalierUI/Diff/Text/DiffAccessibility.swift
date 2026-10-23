@@ -173,7 +173,7 @@ extension DiffTableController {
         if staging.canDiscard, let number = document.diffLines(ofRow: row).first,
            let title = self.actions.staging?.discardTitle(.line(number), staging.diffGeneration) {
             actions.append(NSAccessibilityCustomAction(name: title) { [weak self] in
-                self?.actions.staging?.discardLines(.line(number), staging.diffGeneration)
+                self?.discard(.line(number), generation: staging.diffGeneration)
                 return true
             })
         }

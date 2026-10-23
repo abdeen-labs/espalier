@@ -40,12 +40,14 @@ nonisolated public struct HookActivityContent: Sendable, Equatable {
     }
 }
 
-/// The hook line: its state, Show Output, and Stop.
+/// The hook line: its state, Show Output, and Stop. As the hook ends, its
+/// spinner crossfades into the check or the cross over 0.15 s.
 public struct HookActivityView: View {
     private let content: HookActivityContent
     private let output: TerminalOutputListener?
     private let onStop: () -> Void
     @State private var isShowingOutput = false
+    @Environment(\.motion) private var motion
 
     /// - Parameters:
     ///   - output: Subscribes to the commit's live terminal output.
@@ -107,21 +109,28 @@ public struct HookActivityView: View {
         .fixedSize()
     }
 
-    @ViewBuilder
     private var statusGlyph: some View {
-        switch content.status {
-        case .running:
-            ArcProgress(.mini)
-                .accessibilityHidden(true)
-        case .finished:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(Color(espalier: Palette.success))
-                .accessibilityHidden(true)
-        case .failed:
-            Image(systemName: "xmark.octagon.fill")
-                .foregroundStyle(Color(espalier: Palette.error))
-                .accessibilityHidden(true)
+        let fade: AnyTransition = motion.animates ? .opacity : .identity
+        // One over the other while they crossfade.
+        return ZStack {
+            switch content.status {
+            case .running:
+                ArcProgress(.mini)
+                    .accessibilityHidden(true)
+                    .transition(fade)
+            case .finished:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color(espalier: Palette.success))
+                    .accessibilityHidden(true)
+                    .transition(fade)
+            case .failed:
+                Image(systemName: "xmark.octagon.fill")
+                    .foregroundStyle(Color(espalier: Palette.error))
+                    .accessibilityHidden(true)
+                    .transition(fade)
+            }
         }
+        .motion(Motion.leave, value: content.status)
     }
 }
 

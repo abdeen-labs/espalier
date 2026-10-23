@@ -37,6 +37,7 @@ struct SummaryField: View {
     var focusBridge: ComposerFocusBridge?
     /// The summary's font.
     var font: NSFont = AppKitTypography.row
+    @Environment(\.motion) private var motion
 
     var body: some View {
         // The shimmer and the generated summary crossfade over 0.2 s.
@@ -44,7 +45,7 @@ struct SummaryField: View {
             if isGenerating {
                 GeneratingText()
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .transition(.opacity)
+                    .transition(motion.animates ? .opacity : .identity)
             } else {
                 SummaryTextField(
                     text: $summary,
@@ -59,7 +60,7 @@ struct SummaryField: View {
                     onEscape: onEscape,
                     focusBridge: focusBridge
                 )
-                .transition(.opacity)
+                .transition(motion.animates ? .opacity : .identity)
             }
         }
         .motion(Motion.kindChange, value: isGenerating)
@@ -119,20 +120,34 @@ struct SummaryTextField: NSViewRepresentable {
         context.coordinator.parent = self
         focusBridge?.summaryView = field
         field.focusBridge = focusBridge
-        apply(to: field)
+        apply(to: field, animated: context.environment.motion.animates)
     }
 
-    private func apply(to field: SummaryNSTextField) {
+    /// - Parameter animated: Whether a summary or placeholder set from
+    ///   outside the field (a commit clearing it, Undo or amending bringing
+    ///   a message back, one file naming the commit) crossfades in over 0.2
+    ///   s; typing sets none.
+    private func apply(to field: SummaryNSTextField, animated: Bool = false) {
         let editor = field.currentEditor() as? NSTextView
-        if field.stringValue != text, editor?.hasMarkedText() != true {
+        let setsText = field.stringValue != text && editor?.hasMarkedText() != true
+        let setsPlaceholder = field.placeholder != placeholder
+        let crossfades = animated && (setsText || setsPlaceholder) && Motion.animates(field)
+        if crossfades {
+            Motion.crossfade(field.layer, duration: Motion.kindChange)
+        }
+        if setsText {
             field.stringValue = text
         }
         if field.font != font {
             field.font = font
             field.applyPlaceholder()
         }
-        if field.placeholder != placeholder {
+        if setsPlaceholder {
             field.placeholder = placeholder
+        }
+        if crossfades {
+            // Drawn now, so the crossfade takes this change of contents.
+            field.displayIfNeeded()
         }
         if field.isEnabled != isEditable {
             field.isEnabled = isEditable

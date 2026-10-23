@@ -7,7 +7,8 @@
 // it, leaving the current match selected in the diff. While the field has
 // focus the bar takes ⌘F (selecting the query), ⌘G, and ⇧⌘G itself, before
 // the field could take Edit ▸ Find's commands. It fades in, settling from
-// 97%, over 0.22 s and fades out over 0.15 s.
+// 97%, over 0.22 s and fades out over 0.15 s; moving between matches rolls
+// the count over 0.2 s, and typing changes it at once.
 
 import AppKit
 import SwiftUI
@@ -38,12 +39,13 @@ struct DiffFindBar: View {
     @Bindable var find: DiffFindModel
     @FocusState private var isFocused: Bool
     @Environment(\.numberFormat) private var numberFormat
+    @Environment(\.motion) private var motion
 
     var body: some View {
         HStack(spacing: Metrics.DiffFind.spacing) {
             field
             Button {
-                find.findPrevious()
+                findPrevious()
             } label: {
                 chevron("Previous Match", systemImage: "chevron.up")
             }
@@ -51,7 +53,7 @@ struct DiffFindBar: View {
             .tooltip("Previous Match (⇧⌘G)")
             .disabled(find.matches.isEmpty)
             Button {
-                find.findNext()
+                findNext()
             } label: {
                 chevron("Next Match", systemImage: "chevron.down")
             }
@@ -92,9 +94,9 @@ struct DiffFindBar: View {
                 .focused($isFocused)
                 .onKeyPress(.return, phases: [.down, .repeat]) { press in
                     if press.modifiers.contains(.shift) {
-                        find.findPrevious()
+                        findPrevious()
                     } else {
-                        find.findNext()
+                        findNext()
                     }
                     return .handled
                 }
@@ -115,6 +117,7 @@ struct DiffFindBar: View {
                     .foregroundStyle(.text3)
                     .lineLimit(1)
                     .fixedSize()
+                    .contentTransition(motion.animates ? .numericText() : .identity)
                     .accessibilityLabel(find.countAccessibilityLabel(numberFormat) ?? count)
                     .accessibilityAddTraits(.updatesFrequently)
             }
@@ -138,6 +141,19 @@ struct DiffFindBar: View {
         }
     }
 
+    /// Moves to the next or previous match, the count rolling to it.
+    private func findNext() {
+        withMotion(motion, Motion.kindChange) {
+            find.findNext()
+        }
+    }
+
+    private func findPrevious() {
+        withMotion(motion, Motion.kindChange) {
+            find.findPrevious()
+        }
+    }
+
     private func chevron(_ title: String, systemImage: String) -> some View {
         Label {
             Text(title)
@@ -156,9 +172,9 @@ struct DiffFindBar: View {
             case .selectQuery:
                 NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
             case .next:
-                find.findNext()
+                findNext()
             case .previous:
-                find.findPrevious()
+                findPrevious()
             }
         }
         .frame(width: 0, height: 0)

@@ -314,6 +314,14 @@ final class FileRowView: NSTableCellView {
             return
         }
         let isSameFile = isSameRepository && (self.content.map { ExactString($0.id) == ExactString(content.id) } ?? false)
+        // The same conflicted file resolved, or brought back: its badge,
+        // state, and buttons crossfade over 0.15 s.
+        let crossfadesConflict = isSameFile
+            && Self.resolutionChanged(from: self.content?.conflict, to: content.conflict)
+            && Motion.animates(self)
+        if crossfadesConflict {
+            Motion.crossfade(layer, duration: Motion.leave)
+        }
         self.content = content
         let state = InclusionCheckbox.state(content.inclusion)
         if checkbox.isHidden == content.showsCheckbox {
@@ -338,6 +346,20 @@ final class FileRowView: NSTableCellView {
         setAccessibilityValue(content.showsCheckbox ? content.inclusionDescription : nil)
         setAccessibilityCustomActions(accessibilityActions(for: content))
         needsLayout = true
+        if crossfadesConflict {
+            // Laid out and drawn now, so the crossfade takes this change.
+            layoutSubtreeIfNeeded()
+            displayIfNeeded()
+        }
+    }
+
+    /// Whether a conflicted file went from needing the user to resolved, or
+    /// back.
+    static func resolutionChanged(from old: ConflictFileRowContent?, to new: ConflictFileRowContent?) -> Bool {
+        guard let old, let new else {
+            return false
+        }
+        return old.isUnresolved != new.isUnresolved
     }
 
     /// Shows a conflicted file's state and buttons in place of the counts,

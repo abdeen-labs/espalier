@@ -200,6 +200,12 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     private var conflictButtonTitleWidths: [String: CGFloat] = [:]
     /// The side being kept for the button clicked last.
     private var conflictChoiceTask: Task<Void, Never>?
+    /// The discard asked for from the gutter's menu, by its number, until
+    /// the file shows again without its lines or the discard is cancelled
+    /// or fails.
+    private var pendingDiscard: Int?
+    /// The discards asked for, for numbering the next.
+    private var discardRequests = 0
     /// A drag down the gutter: the original diff's indexes from and to,
     /// and whether it includes or excludes them.
     private(set) var gutterDrag: (column: DiffColumn, from: Int, to: Int, include: Bool)?
@@ -212,6 +218,11 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     /// Find in the diff: the container's model once attached
     /// (`attach(_:)`, DiffTableFind.swift).
     var find = DiffFindModel()
+    /// Whether find's matches were highlighted, and the current match's
+    /// row, as last drawn: their highlights fade as they change
+    /// (DiffTableFind.swift).
+    var findShowsHighlights = false
+    var currentFindRow: Int?
     /// The format VoiceOver hears counts in.
     var numberFormat = defaultNumberFormat
 
@@ -336,6 +347,11 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         if stagingChanged {
             hunkInclusions = fading.hunkInclusions
         }
+        // Wrap Lines swaps the rows' layout: the pane crossfades over
+        // 0.15 s, as Unified ↔ Split does.
+        if shown.wrapsLines != content.wrapsLines, Motion.animates(tableView) {
+            Motion.crossfade(scrollView.layer, duration: Motion.leave)
+        }
         if fontChanged || stagingShapeChanged || shown.wrapsLines != content.wrapsLines {
             relayout(force: true)
         }
@@ -370,17 +386,19 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
 
     /// Shows a new document. The same file's expanded lines crossfade in
     /// over 0.22 s (up to 100 lines, when the table can insert them rather
-    /// than reload); Unified ↔ Split crossfades over 0.15 s. A hover
-    /// showing moves to what's under the pointer in the new rows.
+    /// than reload); other changes the user made crossfade the pane
+    /// (`documentCrossfade`). A hover showing moves to what's under the
+    /// pointer in the new rows.
     private func install(_ document: DiffDocument, for content: DiffTableContent) {
         isBuilding = false
         let isNewFile = shownContent?.fileID != content.fileID
         let keepsScroll = !isNewFile
         let scrollOrigin = scrollView.contentView.bounds.origin
         let animates = !isNewFile && Motion.animates(tableView)
-        let switchesLayout = shownContent.map { $0.isSplit != content.isSplit } ?? false
+        let switchesLayout = shownContent.map { $0.isSplit != content.isSplit || $0.wrapsLines != content.wrapsLines } ?? false
         let canInsert = shownContent.map { $0.wrapsLines == content.wrapsLines && (($0.staging == nil) == (content.staging == nil)) } ?? false
         let expansion = animates && !switchesLayout && canInsert ? Self.expansion(from: self.document, to: document) : nil
+        let fade = animates ? documentCrossfade(to: content, switchesLayout: switchesLayout) : nil
         let hovers = hoveredBlock != nil || hoveredLine != nil || hoveredButton != nil || hoveredConflictButton != nil
 
         self.document = document
@@ -396,6 +414,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         hoveredConflictButton = nil
         pressedConflictButton = nil
         pendingConflictChoice = nil
+        pendingDiscard = nil
         gutterDrag = nil
         if isNewFile {
             textSelection = nil
@@ -408,8 +427,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         if let expansion {
             insertExpandedRows(expansion)
         } else {
-            if animates, switchesLayout {
-                Motion.crossfade(scrollView.layer, duration: Motion.leave)
+            if let fade {
+                Motion.crossfade(scrollView.layer, duration: fade)
             }
             relayout(force: true, reload: true)
         }
@@ -424,6 +443,33 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         if hovers {
             refreshHover()
         }
+    }
+
+    /// How long the pane crossfades to the same file's next document, for
+    /// a change the user made: Unified ↔ Split and Wrap Lines swap over
+    /// 0.15 s; a conflict's side kept arrives over 0.22 s as the file shows
+    /// again, and discarded lines leave over 0.15 s; lines expanded where
+    /// the table reloads (Expand Whole File) arrive over 0.22 s, and
+    /// collapsing them leaves over 0.15 s. Nil for the rest, which show at
+    /// once: the model reloading the diff (it isn't interactive meanwhile),
+    /// the file's contents arriving.
+    private func documentCrossfade(to content: DiffTableContent, switchesLayout: Bool) -> TimeInterval? {
+        guard let shown = shownContent else {
+            return nil
+        }
+        if switchesLayout {
+            return Motion.leave
+        }
+        if pendingConflictChoice != nil {
+            return Motion.arrive
+        }
+        if pendingDiscard != nil {
+            return Motion.leave
+        }
+        if shown.hasExpandedLines != content.hasExpandedLines, shown.isInteractive, content.isInteractive {
+            return content.hasExpandedLines ? Motion.arrive : Motion.leave
+        }
+        return nil
     }
 
     /// Waits for the document building, if any, to install (for tests).
@@ -925,7 +971,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
 
     /// Crossfades `rows`' next drawing over `duration` (a transition on
     /// each row's layer, only for rows on screen).
-    private func crossfade(rows: [Int], duration: TimeInterval) {
+    func crossfade(rows: [Int], duration: TimeInterval) {
         for row in rows {
             guard let view = tableView.rowView(atRow: row, makeIfNecessary: false) else {
                 continue
@@ -1248,11 +1294,15 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             selection.head = position
             textSelection = selection
         case .conflictButton(let header):
-            // Pressed while the pointer stays on the button.
+            // Pressed while the pointer stays on the button: the press
+            // shows at once and eases back as the pointer leaves.
             let pressed: Int? = hit(at: point) == .conflictButton(header: header) ? header : nil
             if pressed != pressedConflictButton {
                 pressedConflictButton = pressed
                 redrawVisibleRows()
+                if pressed == nil {
+                    easePressBack(conflictHeader: header)
+                }
             }
         case .none:
             break
@@ -1260,7 +1310,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     }
 
     /// The mouse went up: a gutter drag applies its lines; a conflict
-    /// block's button, still pressed, keeps its side.
+    /// block's button, still pressed, keeps its side (the buttons wait at
+    /// once), else its press eases back.
     func mouseUp(drag: DiffDrag) {
         if case .conflictButton(let header) = drag {
             let isPressed = pressedConflictButton == header
@@ -1268,6 +1319,9 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             redrawVisibleRows()
             if isPressed {
                 chooseConflictSide(header: header)
+                if pendingConflictChoice != header {
+                    easePressBack(conflictHeader: header)
+                }
             }
             return
         }
@@ -1419,6 +1473,15 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             self.pendingConflictChoice = nil
             self.redrawVisibleRows()
         }
+    }
+
+    /// A conflict block button's press eases back over 0.15 s (the
+    /// header's row crossfading), unless motion doesn't run.
+    private func easePressBack(conflictHeader header: Int) {
+        guard Motion.animates(tableView) else {
+            return
+        }
+        crossfade(rows: hoverRows(block: nil, line: nil, buttonHunk: nil, conflictHeader: header), duration: Motion.pressRelease)
     }
 
     /// Waits for the side being kept, if any (for tests).
@@ -1729,6 +1792,24 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         return CGPoint(x: textScrollX + geometry.before.text.lowerBound, y: rect.midY)
     }
 
+    /// Discards `lines` of the diff of `generation`, asking first; the file
+    /// shows again without them (`documentCrossfade`).
+    func discard(_ lines: DiffLines, generation: Int) {
+        guard let discardLines = actions.staging?.discardLines else {
+            return
+        }
+        discardRequests &+= 1
+        let request = discardRequests
+        pendingDiscard = request
+        Task { [weak self] in
+            let discarded = await discardLines(lines, generation)
+            guard let self, !discarded, self.pendingDiscard == request else {
+                return
+            }
+            self.pendingDiscard = nil
+        }
+    }
+
     /// The menu discarding `lines` of the diff of `generation`.
     private func discardMenu(_ lines: DiffLines, generation: Int) -> MenuContent? {
         guard let title = actions.staging?.discardTitle(lines, generation) else {
@@ -1736,7 +1817,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         }
         return MenuContent {
             MenuAction(title) { [weak self] in
-                self?.actions.staging?.discardLines(lines, generation)
+                self?.discard(lines, generation: generation)
             }
         }
     }

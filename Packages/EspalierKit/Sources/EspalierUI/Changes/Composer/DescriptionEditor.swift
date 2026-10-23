@@ -99,10 +99,14 @@ struct DescriptionEditor: NSViewRepresentable {
         }
         focusBridge?.descriptionView = textView
         textView.focusBridge = focusBridge
-        apply(to: textView)
+        apply(to: textView, animated: context.environment.motion.animates)
     }
 
-    private func apply(to textView: ComposerTextView) {
+    /// - Parameter animated: Whether a description set from outside the
+    ///   editor (a commit clearing it, Undo or amending bringing a message
+    ///   back, a generated message) crossfades in over 0.2 s; typing sets
+    ///   none.
+    private func apply(to textView: ComposerTextView, animated: Bool = false) {
         // The look's font and color.
         if textView.font != Self.font {
             textView.font = Self.font
@@ -111,8 +115,19 @@ struct DescriptionEditor: NSViewRepresentable {
             textView.textColor = textColor
         }
         if textView.string != text, !textView.hasMarkedText() {
+            let scrollView = textView.enclosingScrollView
+            let crossfades = animated && Motion.animates(scrollView)
+            if crossfades {
+                Motion.crossfade(scrollView?.layer, duration: Motion.kindChange)
+            }
             textView.string = text
             textView.needsDisplay = true
+            if crossfades {
+                // Drawn now, so the crossfade takes this change of
+                // contents.
+                scrollView?.layoutSubtreeIfNeeded()
+                scrollView?.displayIfNeeded()
+            }
         }
         if textView.placeholder != placeholder {
             textView.placeholder = placeholder

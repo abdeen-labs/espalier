@@ -21,7 +21,10 @@ private final class StagingRecorder {
             setLines: { [weak self] _, _, generation in self?.generations.append(generation) },
             toggleLines: { [weak self] _, generation in self?.generations.append(generation) },
             discardTitle: { _, _ in "Discard" },
-            discardLines: { [weak self] _, generation in self?.generations.append(generation) },
+            discardLines: { [weak self] _, generation in
+                self?.generations.append(generation)
+                return false
+            },
             showWhitespaceChanges: {}
         )
     }

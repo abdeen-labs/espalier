@@ -83,13 +83,17 @@ struct CoAuthorsField: View {
     var completions: ComposerCompletions = .none
     /// Told when the field takes focus and loses it.
     var focusBridge: ComposerFocusBridge?
+    @Environment(\.motion) private var motion
 
     var body: some View {
+        // A token added fades in and one removed fades out, over 0.22 s and
+        // 0.15 s, while the others and the field move to their places.
         CoAuthorsLayout(spacing: Metrics.grid, minimumFieldWidth: Metrics.Composer.coAuthorFieldMinimumWidth) {
-            ForEach(Array(authors.enumerated()), id: \.offset) { index, author in
-                CoAuthorTokenView(AuthorToken(author), isEditable: isEditable) {
-                    remove(at: index)
+            ForEach(Array(zip(Self.tokenIDs(authors), authors.indices)), id: \.0) { id, index in
+                CoAuthorTokenView(AuthorToken(authors[index]), isEditable: isEditable) {
+                    remove(id)
                 }
+                .transition(motion.animates ? .opacity : .identity)
             }
             CoAuthorEntry(authors: $authors, isEditable: isEditable, completions: completions, focusBridge: focusBridge)
         }
@@ -97,11 +101,27 @@ struct CoAuthorsField: View {
         .accessibilityLabel("Co-Authors")
     }
 
-    private func remove(at index: Int) {
-        guard authors.indices.contains(index) else {
+    /// Removes the token `id` names: by its identity, not its place, so a
+    /// click on a token still fading out removes nothing else.
+    private func remove(_ id: String) {
+        guard let index = Self.tokenIDs(authors).firstIndex(of: id) else {
             return
         }
-        authors.remove(at: index)
+        withMotion(motion, Motion.leave) {
+            _ = authors.remove(at: index)
+        }
+    }
+
+    /// Each token's identity, so it keeps its place as others come and go:
+    /// its text, numbered among the tokens with the same text.
+    static func tokenIDs(_ authors: [Author]) -> [String] {
+        var seen: [String: Int] = [:]
+        return authors.map { author in
+            let text = AuthorToken.displayText(author)
+            let number = seen[text, default: 0]
+            seen[text] = number + 1
+            return "\(number) \(text)"
+        }
     }
 }
 
@@ -112,6 +132,7 @@ struct CoAuthorTokenView: View {
     let token: AuthorToken
     var isEditable = true
     var onRemove: () -> Void = {}
+    @Environment(\.motion) private var motion
 
     init(_ token: AuthorToken, isEditable: Bool = true, onRemove: @escaping () -> Void = {}) {
         self.token = token
@@ -125,6 +146,7 @@ struct CoAuthorTokenView: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(Color(espalier: Palette.warningMark))
                     .imageScale(.small)
+                    .transition(motion.animates ? .opacity : .identity)
             }
             Text(token.displayText)
                 .foregroundStyle(token.isNotFound ? AnyShapeStyle(Color(espalier: Palette.warning)) : AnyShapeStyle(.text))
@@ -132,6 +154,7 @@ struct CoAuthorTokenView: View {
                 .truncationMode(.middle)
             if token.isSearching {
                 ArcProgress(.mini)
+                    .transition(motion.animates ? .opacity : .identity)
             }
             if isEditable {
                 Button(action: onRemove) {
@@ -258,6 +281,7 @@ struct CoAuthorEntry: NSViewRepresentable {
         field.setAccessibilityLabel("Add Co-Author")
         field.focusBridge = focusBridge
         context.coordinator.field = field
+        context.coordinator.motion = context.environment.motion
         apply(to: field)
         return field
     }
@@ -265,6 +289,7 @@ struct CoAuthorEntry: NSViewRepresentable {
     func updateNSView(_ field: CoAuthorsTextField, context: Context) {
         context.coordinator.parent = self
         context.coordinator.list.numberFormat = context.environment.numberFormat
+        context.coordinator.motion = context.environment.motion
         field.focusBridge = focusBridge
         apply(to: field)
     }
@@ -301,6 +326,8 @@ struct CoAuthorEntry: NSViewRepresentable {
         /// Set while a user is put in the field: the change looks nothing
         /// up.
         private var isAccepting = false
+        /// Whether the tokens move as they come and go.
+        var motion = MotionPolicy()
 
         init(_ parent: CoAuthorEntry) {
             self.parent = parent
@@ -321,23 +348,28 @@ struct CoAuthorEntry: NSViewRepresentable {
         }
 
         /// Adds the co-author `text` names, looking up an unknown login.
+        /// Its token fades in over 0.22 s as the field moves along.
         func commit(_ text: String) {
             guard let author = AuthorToken.author(forTyped: text) else {
                 return
             }
-            parent.authors.append(author)
+            withMotion(motion, Motion.arrive) {
+                parent.authors.append(author)
+            }
             if case .unknown(let unknown) = author {
                 lookUp(unknown.username)
             }
         }
 
         /// Removes the last co-author (Delete in the empty field), and says
-        /// whether there was one.
+        /// whether there was one. Its token fades out over 0.15 s.
         func removeLast() -> Bool {
             guard !parent.authors.isEmpty else {
                 return false
             }
-            parent.authors.removeLast()
+            withMotion(motion, Motion.leave) {
+                _ = parent.authors.removeLast()
+            }
             return true
         }
 
@@ -482,6 +514,8 @@ struct CoAuthorEntry: NSViewRepresentable {
             }
         }
 
+        /// The token's spinner fades out over 0.15 s, the warning fading in
+        /// for a login not found, as the tokens after it move.
         private func resolve(_ login: String, to known: KnownAuthor?) {
             var changed = false
             let authors = parent.authors.map { author -> Author in
@@ -492,7 +526,9 @@ struct CoAuthorEntry: NSViewRepresentable {
                 return known.map(Author.known) ?? .unknown(UnknownAuthor(username: login, state: .error))
             }
             if changed {
-                parent.authors = authors
+                withMotion(motion, Motion.leave) {
+                    parent.authors = authors
+                }
             }
         }
     }

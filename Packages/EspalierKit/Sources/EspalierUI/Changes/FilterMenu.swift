@@ -99,6 +99,7 @@ public struct FilterMenu: View {
     private let content: FilterMenuContent
     private let onChange: (FileListFilter) -> Void
     private let onClear: () -> Void
+    @Environment(\.motion) private var motion
 
     /// - Parameters:
     ///   - onChange: Applies the filter with an option turned on or off.
@@ -124,12 +125,15 @@ public struct FilterMenu: View {
                 MenuAction("Clear Filters", action: onClear)
             }
         } label: {
-            // While options are on, the symbol fills in the accent.
+            // While options are on, the symbol fills in the accent (a
+            // symbol replace).
             Label {
                 Text("Filter Options")
             } icon: {
                 Image(systemName: content.systemImage)
                     .foregroundStyle(content.activeOptionCount > 0 ? AnyShapeStyle(Color.accent) : AnyShapeStyle(.text2))
+                    .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
+                    .motion(Motion.leave, value: content.activeOptionCount > 0)
             }
         }
         .buttonStyle(.icon)

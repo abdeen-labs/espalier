@@ -54,8 +54,9 @@ struct StagingActions {
     var toggleLines: @MainActor (DiffLines, _ generation: Int) -> Void
     /// The title of the action that discards lines, if they can be.
     var discardTitle: @MainActor (DiffLines, _ generation: Int) -> String?
-    /// Discards lines (asking first, through the presenter).
-    var discardLines: @MainActor (DiffLines, _ generation: Int) -> Void
+    /// Discards lines (asking first, through the presenter); returns
+    /// whether they were discarded.
+    var discardLines: @MainActor (DiffLines, _ generation: Int) async -> Bool
     /// Shows whitespace changes again (the hint's Yes).
     var showWhitespaceChanges: @MainActor () -> Void
 }
@@ -73,8 +74,9 @@ extension DiffStaging {
     }
 
     /// The gestures' effects. `discard` runs a discard through the window's
-    /// presenter (so it asks first and shows errors).
-    func actions(discard: @escaping @MainActor (ChangesModel, DiffLines, Int) -> Void) -> StagingActions {
+    /// presenter (so it asks first and shows errors), and returns whether
+    /// the lines were discarded.
+    func actions(discard: @escaping @MainActor (ChangesModel, DiffLines, Int) async -> Bool) -> StagingActions {
         StagingActions(
             setLines: { [weak changes] lines, included, generation in
                 changes?.setLines(lines, included: included, inDiff: generation)
@@ -87,9 +89,9 @@ extension DiffStaging {
             },
             discardLines: { [weak changes] lines, generation in
                 guard let changes else {
-                    return
+                    return false
                 }
-                discard(changes, lines, generation)
+                return await discard(changes, lines, generation)
             },
             showWhitespaceChanges: { [weak changes] in
                 changes?.setHidesWhitespace(false)

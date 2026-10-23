@@ -11,7 +11,8 @@
 // The previous diff stays while the next loads, with a spinner after
 // 150 ms; the header's counts and the file's actions wait for the file's
 // own diff. A text diff has the find bar over its top trailing corner while
-// find is open (DiffFindBar.swift).
+// find is open (DiffFindBar.swift). Show Diff crossfades a large diff in
+// over its message.
 
 import AppKit
 import EspalierCore
@@ -143,14 +144,18 @@ public struct DiffContainer: View {
                 Hairline()
             }
             conflictBand
-            content(settings: settings)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay {
-                    if diff.isLoading {
-                        DelayedProgressView(delay: Timing.diffOverlayDelay)
-                            .allowsHitTesting(false)
-                    }
+            // Stacked, so a view that replaces another (Show Diff) crossfades
+            // with it in place.
+            ZStack {
+                content(settings: settings)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay {
+                if diff.isLoading {
+                    DelayedProgressView(delay: Timing.diffOverlayDelay)
+                        .allowsHitTesting(false)
                 }
+            }
         }
         .background(Color(nsColor: Palette.background))
         .onChange(of: DiffViewIdentity(fileID: file?.id, diff: DiffIdentity(diff.value), isLoading: diff.isLoading), initial: true) {
@@ -183,6 +188,9 @@ public struct DiffContainer: View {
                 DiffOptionsMenu(content: optionsContent(settings: settings), actions: optionsActions)
             }
         )
+        // Another file's counts show at once, even when its diff arrives
+        // with it.
+        .motionScope(file.id)
     }
 
     private func headerContent(_ file: DiffFileInfo) -> DiffHeaderContent {
@@ -349,7 +357,12 @@ public struct DiffContainer: View {
             if session.forceShowLargeDiff {
                 textContent(TextDiff(large), isLarge: true, settings: settings, isInteractive: isInteractive)
             } else {
-                LargeDiffView { session.forceShowLargeDiff = true }
+                // The diff crossfades in over the message over 0.15 s.
+                LargeDiffView {
+                    withMotion(motion, Motion.leave) {
+                        session.forceShowLargeDiff = true
+                    }
+                }
             }
         case .binary:
             BinaryDiffView(open: openWithDefaultApp)
@@ -432,13 +445,12 @@ public struct DiffContainer: View {
             didPaint: { fileID in session.didPaint(fileID) },
             staging: stagingEnabled ? staging?.actions(discard: { changes, lines, generation in
                 guard let window else {
-                    return
+                    return false
                 }
-                Task {
-                    await window.presenter.perform { answers throws(OperationError) in
-                        try await changes.discardLines(lines, inDiff: generation, confirmed: answers.confirmed)
-                    }
+                let discarded: Void? = await window.presenter.perform { answers throws(OperationError) in
+                    try await changes.discardLines(lines, inDiff: generation, confirmed: answers.confirmed)
                 }
+                return discarded != nil
             }) : nil,
             chooseConflictSide: chooseConflictSide
         )
@@ -729,6 +741,9 @@ struct ConflictedFileMessage: View {
             description: description,
             tint: Color(espalier: Palette.warningMark)
         )
+        // A side picked from the band: the description fades to the
+        // file's new state.
+        .motion(description == nil ? Motion.leave : Motion.arrive, value: description)
     }
 
     /// To choose a side while one can be picked (the band's buttons, the

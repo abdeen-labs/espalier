@@ -110,11 +110,14 @@ nonisolated public struct SparkleModelChoice: Sendable, Equatable, Identifiable 
 /// The sparkle button, first in the commit message card's footer: an icon
 /// button whose sparkles are neutral, like the footer's other symbols, and
 /// take the accent while a message is generated (a spinner, a stop on
-/// hover) and while the message it generated is unedited.
+/// hover) and while the message it generated is unedited. The sparkles and
+/// the spinner crossfade over 0.2 s as a generation starts and ends; the
+/// spinner and the stop crossfade as hover fades.
 public struct SparkleButton: View {
     private let state: SparkleState
     private let action: () -> Void
     @State private var isHovering = false
+    @Environment(\.motion) private var motion
 
     public init(_ state: SparkleState, action: @escaping () -> Void = {}) {
         self.state = state
@@ -138,22 +141,32 @@ public struct SparkleButton: View {
         }
     }
 
-    @ViewBuilder
     private var icon: some View {
-        switch state {
-        case .generating:
-            if isHovering {
-                Image(systemName: "stop.fill")
+        let fade: AnyTransition = motion.animates ? .opacity : .identity
+        // One over the other while they crossfade. Editing a generated
+        // message takes the accent away at once.
+        return ZStack {
+            switch state {
+            case .generating:
+                if isHovering {
+                    Image(systemName: "stop.fill")
+                        .foregroundStyle(Color.accent)
+                        .imageScale(.small)
+                        .transition(fade)
+                } else {
+                    ArcProgress(.mini, tint: Palette.accent)
+                        .transition(fade)
+                }
+            case .generated:
+                Image(systemName: "sparkles")
                     .foregroundStyle(Color.accent)
-                    .imageScale(.small)
-            } else {
-                ArcProgress(.mini, tint: Palette.accent)
+                    .transition(fade)
+            default:
+                Image(systemName: "sparkles")
+                    .transition(fade)
             }
-        case .generated:
-            Image(systemName: "sparkles")
-                .foregroundStyle(Color.accent)
-        default:
-            Image(systemName: "sparkles")
         }
+        .motion(Motion.kindChange, value: state == .generating)
+        .hoverMotion(isHovering)
     }
 }

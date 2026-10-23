@@ -107,10 +107,13 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
 
 /// The commit button: the full-width prominent capsule, 34 high, with its
 /// shortcut on the right. A long branch name gives way in the middle, so
-/// the button never grows past its column; the count changes at once.
+/// the button never grows past its column; the count changes at once. The
+/// button and its working capsule (the arc and "Committing…") crossfade
+/// over 0.2 s as work starts and ends.
 public struct CommitButton: View {
     private let content: CommitButtonContent
     private let action: () -> Void
+    @Environment(\.motion) private var motion
 
     public init(_ content: CommitButtonContent, action: @escaping () -> Void = {}) {
         self.content = content
@@ -118,7 +121,11 @@ public struct CommitButton: View {
     }
 
     public var body: some View {
-        Group {
+        // The crossfade carries its own motion, so the button moves as the
+        // composer around it does.
+        let fade: AnyTransition = motion.animates ? .opacity.animation(Motion.animation(Motion.kindChange)) : .identity
+        // One over the other while they crossfade.
+        ZStack {
             if content.isCommitting || content.isGenerating {
                 // While it works, the capsule stays legible rather than
                 // fading as a disabled button does (as the sync button).
@@ -130,6 +137,9 @@ public struct CommitButton: View {
                 .capsuleChrome(.prominent)
                 .accessibilityElement(children: .ignore)
                 .accessibilityAddTraits(.isButton)
+                .tooltip(content.help)
+                .accessibilityLabel(content.title)
+                .transition(fade)
             } else {
                 Button(action: action) {
                     if let symbols = shortcutSymbols {
@@ -157,11 +167,12 @@ public struct CommitButton: View {
                 }
                 .buttonStyle(.prominent)
                 .disabled(!content.isEnabled)
+                .tooltip(content.help)
+                .accessibilityLabel(content.title)
+                .transition(fade)
             }
         }
         .controlSize(.extraLarge)
-        .tooltip(content.help)
-        .accessibilityLabel(content.title)
     }
 
     /// ⌘↩, which Commit Changes runs: it presses Commit, or runs Commit

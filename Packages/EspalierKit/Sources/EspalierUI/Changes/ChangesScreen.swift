@@ -9,6 +9,7 @@
 // search field is the list's filter text.
 
 import EspalierCore
+import EspalierSupport
 import GitKit
 import SwiftUI
 
@@ -70,9 +71,12 @@ public struct ChangesScreen: View {
 /// The Changes column: the header, the files, and the composer; without
 /// changes, the header ("0 changed files") over the empty list. The
 /// footer's bars (the hidden-changes note, the Stashed Changes row, the
-/// amend banner, the composer) grow in over 0.22 s and leave over 0.15 s,
-/// the files moving with them: the motion is set here, over the whole
-/// column, so the list above moves too.
+/// amend banner, the composer, and the composer's AI failure and hook
+/// lines) grow in over 0.22 s and leave over 0.15 s, the files moving with
+/// them, and the composer eases to the size of a generated message over
+/// 0.2 s: the motion is set here, over the whole column, so the list above
+/// moves too. Where several change at once, the motion listed first (the
+/// inner one) wins.
 struct ChangesColumn: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
@@ -82,7 +86,12 @@ struct ChangesColumn: View {
     var body: some View {
         let hasFiles = !repository.changes.workingDirectory.files.isEmpty
         let controller = ChangesController(context: context, repository: repository)
-        let footer = ChangesFooterLayout.make(repository, showsOperationPanel: showsOperationPanel)
+        let footer = ChangesFooterLayout.make(
+            repository,
+            showsOperationPanel: showsOperationPanel,
+            app: context.app,
+            aiFailure: ChangesWindowState.of(context).aiFailures[repository.id]
+        )
         FileList(repository: repository)
         .safeAreaBar(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
@@ -105,6 +114,7 @@ struct ChangesColumn: View {
         .safeAreaBar(edge: .bottom, spacing: 0) {
             ChangesFooter(repository: repository, layout: footer)
         }
+        .barMotion(footer.showsAIFailure)
         .barMotion(footer.showsHiddenNote)
         .barMotion(footer.stashCount > 0)
         .barMotion(footer.isAmending)
@@ -113,6 +123,21 @@ struct ChangesColumn: View {
         // took every file: committing everything shows the empty state
         // with no motion.
         .animation(hasFiles ? motion.animation(footer.showsLastCommit ? Motion.arrive : Motion.leave) : nil, value: footer.showsLastCommit)
+        // Switching branches changes what's below at once.
+        .animation(nil, value: footer.branch)
+        // Another commit in the Last Commit row (a commit after the one it
+        // showed, or Undo bringing back the one before): the row
+        // crossfades and the composer clears or fills over 0.22 s, as the
+        // first commit's landing moves; none with the empty state.
+        .animation(hasFiles ? motion.animation(Motion.arrive) : nil, value: footer.lastCommit)
+        // The hook line leaves as the commit lands, under the Last Commit
+        // row's motion (set inside, so it wins), or none with the empty
+        // state.
+        .barMotion(footer.showsHook)
+        // A generated message arriving: the composer takes its size over
+        // 0.2 s as the shimmer gives way to it. Starting a generation moves
+        // nothing (the shimmer and the button crossfade on their own).
+        .animation(footer.isGenerating ? nil : motion.animation(Motion.kindChange), value: footer.isGenerating)
     }
 }
 
@@ -139,12 +164,30 @@ struct ChangesFooterLayout: Equatable {
     var isAmending: Bool
     /// The composer's Last Commit row (Undo), after a commit.
     var showsLastCommit: Bool
+    /// The commit the Last Commit row shows, while it shows.
+    var lastCommit: String?
+    /// The branch the composer commits to.
+    var branch: ExactString?
+    /// The composer's line saying a generation failed.
+    var showsAIFailure = false
+    /// The composer's hook line, while a commit runs a hook.
+    var showsHook = false
+    /// A commit message is being generated.
+    var isGenerating = false
 
     /// The footer for `repository`; a fast operation never takes the
     /// composer away (the operation panel's 300 ms rule, which Changes
     /// passes as `showsOperationPanel`).
+    ///
+    /// - Parameter aiFailure: The window's last generation failure for
+    ///   `repository`.
     @MainActor
-    static func make(_ repository: RepositoryModel, showsOperationPanel: Bool?) -> ChangesFooterLayout {
+    static func make(
+        _ repository: RepositoryModel,
+        showsOperationPanel: Bool?,
+        app: AppModel,
+        aiFailure: OperationError? = nil
+    ) -> ChangesFooterLayout {
         let bottom: Bottom
         switch OperationSlotContent.make(repository)?.kind {
         case .merge?:
@@ -159,12 +202,31 @@ struct ChangesFooterLayout: Equatable {
         // shows.
         let commit = repository.commit
         let hasLastCommit = commit.mostRecentLocalCommit.map { $0.sha == commit.undoableCommitSHA } ?? false
+        // `ComposerContent.make`'s rules for the AI failure and hook lines,
+        // without making what they show.
+        let generation = repository.ai.commitMessageGeneration
+        var hasGenerationFailure = aiFailure != nil
+        if case .failed = generation {
+            hasGenerationFailure = true
+        }
+        let operation = repository.localOperation
+        let hasHook = switch bottom {
+        case .composer: operation?.kind == .commit && operation?.hook != nil
+        case .merge: OperationSlotContent.isContinuing(repository) && operation?.hook != nil
+        case .none: false
+        }
+        let showsLastCommit = bottom == .composer && hasLastCommit
         return ChangesFooterLayout(
             showsHiddenNote: !repository.changes.includedFilesHiddenByFilter.isEmpty,
             stashCount: repository.stash.currentEntries.count,
             bottom: bottom,
             isAmending: bottom == .composer && commit.amending != nil,
-            showsLastCommit: bottom == .composer && hasLastCommit
+            showsLastCommit: showsLastCommit,
+            lastCommit: showsLastCommit ? commit.mostRecentLocalCommit?.sha : nil,
+            branch: repository.gitState.tip.composerBranchName.map(ExactString.init),
+            showsAIFailure: bottom == .composer && app.ai.isEnabled && hasGenerationFailure,
+            showsHook: hasHook,
+            isGenerating: bottom == .composer && generation == .generating
         )
     }
 }
@@ -239,6 +301,7 @@ struct ChangesFooter: View {
 struct ChangesDetail: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
+    @Environment(\.motion) private var motion
 
     var body: some View {
         let changes = repository.changes
@@ -251,7 +314,11 @@ struct ChangesDetail: View {
                     context.actions.perform(action.actionID)
                 },
                 onChoosePullRequestAction: { choice in
-                    context.app.preferences.pullRequestSuggestedNextAction = choice
+                    // Preview ↔ Create: the button's label and width, and
+                    // the line above, change over 0.2 s.
+                    withMotion(motion, Motion.kindChange) {
+                        context.app.preferences.pullRequestSuggestedNextAction = choice
+                    }
                 },
                 onOpenIntegrationSettings: {
                     context.actions.perform(.openSettings(.integrations))

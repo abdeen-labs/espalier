@@ -372,13 +372,19 @@ public struct ComposerView: View {
             }
             card
             if let failure = content.aiFailure {
+                // Grows in over 0.22 s and leaves over 0.15 s (Changes'
+                // column sets the motion).
                 AIFailureLine(failure, onTryAgain: actions.generate, onOpenSettings: actions.openAISettings)
+                    .barTransition()
             }
             if let warning = content.warning {
                 CommitWarningView(warning, onLink: actions.openLink)
             }
             if let hook = content.hook {
+                // Grows in over 0.22 s and leaves with the commit (Changes'
+                // column sets the motion).
                 HookActivityView(hook, output: hookOutput, onStop: actions.stopHook)
+                    .barTransition()
             }
             if content.showsButton {
                 CommitButton(content.button, action: actions.commit)
@@ -516,7 +522,7 @@ public struct ComposerView: View {
             if markedField == field {
                 UnevenRoundedRectangle(topLeadingRadius: corner, topTrailingRadius: corner, style: .continuous)
                     .fill(Color(espalier: Palette.accentFaint))
-                    .transition(.opacity)
+                    .transition(motion.animates ? .opacity : .identity)
             }
         }
         .animation(motion.animation(markedField == nil ? Motion.focusOut : Motion.leave), value: markedField)
@@ -539,13 +545,15 @@ public struct ComposerView: View {
                     }
                 }
             if content.showsCoAuthorsToggle {
-                // On, the symbol fills in the accent.
+                // On, the symbol fills in the accent: a symbol replace, on
+                // the field's motion (`coAuthorsBinding`).
                 Toggle(isOn: coAuthorsBinding) {
                     Label {
                         Text("Co-Authors")
                     } icon: {
                         Image(systemName: draft.showCoAuthoredBy ? "person.2.fill" : "person.2")
                             .foregroundStyle(draft.showCoAuthoredBy ? AnyShapeStyle(Color.accent) : AnyShapeStyle(.text2))
+                            .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
                     }
                 }
                 .toggleStyle(.button)

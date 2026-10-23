@@ -1,7 +1,8 @@
 // The diff's header: the file name and folder, a rename's "old → new"
 // line, the added and removed line counts, Open in <Editor>, and the
 // options menu. Unified and Split are in the options menu (and the View
-// menu); an image diff's modes are above its images.
+// menu); an image diff's modes are above its images. The counts roll over
+// 0.2 s as the same file's diff reloads; another file's show at once.
 
 import EspalierCore
 import GitKit
@@ -36,6 +37,7 @@ struct DiffHeader<Options: View>: View {
     let content: DiffHeaderContent
     var openInEditor: @MainActor () -> Void = {}
     @ViewBuilder var options: () -> Options
+    @Environment(\.motion) private var motion
 
     /// The row's height on one line.
     static var height: CGFloat {
@@ -99,6 +101,8 @@ struct DiffHeader<Options: View>: View {
     private var stats: some View {
         if let added = content.addedLines, let deleted = content.deletedLines, added + deleted > 0 {
             HistoryLineCounts(added: added, deleted: deleted)
+                .contentTransition(motion.animates ? .numericText() : .identity)
+                .motion(Motion.kindChange, value: [added, deleted])
                 .padding(.trailing, Metrics.grid)
         }
     }

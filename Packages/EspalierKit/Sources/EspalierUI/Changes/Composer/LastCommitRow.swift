@@ -45,17 +45,34 @@ extension LastCommitContent {
     }
 }
 
-/// "Committed 2 minutes ago", the summary, and Undo.
+/// "Committed 2 minutes ago", the summary, and Undo. Another commit's row
+/// crossfades in (Changes' column sets the motion).
 public struct LastCommitRow: View {
     private let content: LastCommitContent
     private let onUndo: () -> Void
+    @Environment(\.motion) private var motion
 
     public init(_ content: LastCommitContent, onUndo: @escaping () -> Void = {}) {
         self.content = content
         self.onUndo = onUndo
     }
 
+    /// Which commit the row is for, as far as it shows.
+    private struct Shown: Hashable {
+        var summary: String
+        var date: Date
+    }
+
     public var body: some View {
+        // One over the other while they crossfade.
+        ZStack {
+            row
+                .id(Shown(summary: content.summary, date: content.date))
+                .transition(motion.animates ? .opacity : .identity)
+        }
+    }
+
+    private var row: some View {
         HStack(spacing: Metrics.insetSmall) {
             VStack(alignment: .leading, spacing: Metrics.grid / 2) {
                 CommittedDateText(date: content.date)

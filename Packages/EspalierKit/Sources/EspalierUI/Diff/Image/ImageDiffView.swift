@@ -4,7 +4,8 @@
 // Swipe, Onion Skin, Difference; the `image-diff-type` preference, also in
 // the View menu), an added or deleted one in a single pane, a conflicted one
 // as a message (`ConflictedFileMessage`). Images sit on a checkerboard so
-// transparency shows.
+// transparency shows. Choosing another mode crossfades the images over
+// 0.15 s.
 
 import AppKit
 import GitKit
@@ -80,16 +81,21 @@ struct ImageDiffView: View {
                     )
                     .fixedSize()
                     .padding(.top, Metrics.insetLarge)
-                    switch mode {
-                    case .twoUp:
-                        TwoUpView(previous: previous, current: current)
-                    case .swipe:
-                        SwipeView(previous: previous, current: current)
-                    case .onionSkin:
-                        OnionSkinView(previous: previous, current: current)
-                    case .difference:
-                        DifferenceView(previous: previous, current: current)
+                    // Stacked, so the mode left and the mode chosen
+                    // crossfade in place.
+                    ZStack {
+                        switch mode {
+                        case .twoUp:
+                            TwoUpView(previous: previous, current: current)
+                        case .swipe:
+                            SwipeView(previous: previous, current: current)
+                        case .onionSkin:
+                            OnionSkinView(previous: previous, current: current)
+                        case .difference:
+                            DifferenceView(previous: previous, current: current)
+                        }
                     }
+                    .motion(Motion.leave, value: mode)
                 }
             } else if let current = content.current, status == .new || status == .untracked {
                 SingleImagePane(title: "Added", image: current)
