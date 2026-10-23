@@ -12,6 +12,7 @@ public enum ConfirmationKind: String, Sendable, Hashable, CaseIterable {
     case overwriteCommitMessage, removeWorktree, removeMissingWorktree, abortWithResolvedConflicts, deleteBranch, deleteRemoteBranch, deleteTag
     case replaceCommandLineTool
     case checkoutLinkedBranch, checkoutLinkedPullRequest
+    case signOutAccount
 }
 
 /// What's at the command line tool's path that installing would replace
@@ -74,6 +75,9 @@ public struct Confirmation: Sendable, Equatable {
         /// and the remote added for the pull request's fork, when the
         /// repository has none for it.
         case linkedPullRequest(repository: String, number: Int, title: String, forkRemote: Remote?)
+        /// The account to sign out of, and how many repositories are
+        /// assigned to it.
+        case account(login: String, server: String, repositoryCount: Int)
     }
 }
 
@@ -81,6 +85,23 @@ public struct Confirmation: Sendable, Equatable {
 private let maxItemsToList = 10
 
 extension Confirmation {
+    /// Signing out of an account repositories are assigned to: their
+    /// assignments are kept, for signing in again, or cleared (the
+    /// option).
+    ///
+    /// - Parameter server: The account's server, as `friendlyEndpoint`
+    ///   names it.
+    public static func signOutAccount(login: String, server: String, repositoryCount: Int) -> Confirmation {
+        let assigned = repositoryCount == 1 ? "1 repository is" : "\(repositoryCount) repositories are"
+        return Confirmation(
+            kind: .signOutAccount,
+            details: .account(login: login, server: server, repositoryCount: repositoryCount),
+            title: "Sign Out of @\(login)?",
+            message: "\(assigned) assigned to @\(login) on \(server). They'll use it again when you sign back in, unless you clear their assignments.",
+            confirmButton: "Sign Out"
+        )
+    }
+
     /// Removing a repository from the list.
     public static func removeRepository(name: String, path: String) -> Confirmation {
         Confirmation(

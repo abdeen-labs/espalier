@@ -233,8 +233,8 @@ struct DeviceFlowSignInTests {
         await settle(app, harness)
     }
 
-    @Test("replaces the signed-in account only once the new sign-in succeeds")
-    func replacesAccountAfterSuccess() async throws {
+    @Test("adds another account on the server once the new sign-in succeeds, keeping the one signed in")
+    func addsAccountAfterSuccess() async throws {
         let harness = try AppHarness()
         try await harness.store(dotComAccount(login: "octocat", token: "gho_octocat"))
         harness.mockUser("octocat", id: 1)
@@ -244,22 +244,52 @@ struct DeviceFlowSignInTests {
         harness.mockTokenRequests([oauthError("access_denied")])
 
         signIn.beginDotComSignIn()
-        #expect(signIn.state?.kind == .existingAccountWarning)
+        #expect(signIn.state?.kind == .authentication)
         await signIn.authenticate()
 
         #expect(signIn.state?.error == .accessDenied)
         #expect(signIn.state?.loading == false)
         #expect(app.accounts.accounts.map(\.login) == ["octocat"])
-        #expect(try harness.secrets.secret(service: "Espalier - https://api.github.com", account: "octocat") == "gho_octocat")
 
         harness.mockTokenRequests([grantedToken("gho_monalisa")])
         harness.mockUser("monalisa", id: 7)
         await signIn.authenticate()
 
         #expect(signIn.state?.kind == .success)
-        #expect(app.accounts.accounts.map(\.login) == ["monalisa"])
-        #expect(try harness.secrets.secret(service: "Espalier - https://api.github.com", account: "octocat") == nil)
+        #expect(app.accounts.accounts.map(\.login) == ["octocat", "monalisa"])
+        #expect(try harness.secrets.secret(service: "Espalier - https://api.github.com", account: "octocat") == "gho_octocat")
+        #expect(try harness.secrets.secret(service: "Espalier - https://api.github.com", account: "monalisa") == "gho_monalisa")
         #expect(harness.gitHub.requests("POST", "/login/device/code").count == 2)
+        await settle(app, harness)
+    }
+
+    @Test("signing in again to one account refuses a code another account authorized, and keeps the accounts as they were")
+    func refusesAnotherAccount() async throws {
+        let harness = try AppHarness()
+        try await harness.store(dotComAccount(login: "octocat", token: "gho_octocat"))
+        harness.mockUser("octocat", id: 1)
+        let (app, _) = await immediateApp(harness)
+        let signIn = app.accounts.signIn
+        harness.mockDeviceCode()
+        harness.mockTokenRequests([grantedToken("gho_monalisa")])
+        let results = SignInResults()
+
+        // The browser is signed in to monalisa.
+        harness.mockUser("monalisa", id: 7)
+        await signIn.beginSignIn(endpoint: dotComEndpoint, login: "OctoCat", results.callback)
+
+        #expect(signIn.state?.error == .wrongAccount(expected: "OctoCat", actual: "monalisa", host: "github.com"))
+        #expect(results.results.isEmpty)
+        #expect(app.accounts.accounts.map(\.login) == ["octocat"])
+        #expect(try harness.secrets.secret(service: "Espalier - https://api.github.com", account: "monalisa") == nil)
+
+        // The right account, ignoring case.
+        harness.mockTokenRequests([grantedToken("gho_again")])
+        harness.mockUser("octocat", id: 1)
+        await signIn.authenticate()
+
+        #expect(results.kinds == ["success"])
+        #expect(app.accounts.accounts.map(\.token) == ["gho_again"])
         await settle(app, harness)
     }
 
@@ -516,7 +546,7 @@ struct DeviceFlowSignInTests {
         await settle(app, harness)
     }
 
-    @Test("signs in again to GitHub.com through the existing-account step")
+    @Test("signs in again to GitHub.com, asking for a code at once")
     func recoversDotCom() async throws {
         let harness = try AppHarness()
         try await harness.store(dotComAccount())

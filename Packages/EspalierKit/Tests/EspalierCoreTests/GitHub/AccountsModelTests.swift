@@ -108,7 +108,7 @@ struct AccountsModelTests {
         // An account that can't be refreshed keeps its details.
         #expect(app.accounts.accounts.last == enterpriseAccount())
         #expect(app.accounts.lastRefreshed == harness.scheduler.now)
-        #expect(app.accounts.account(forEndpoint: enterpriseEndpoint)?.login == "enterprise-user")
+        #expect(app.accounts.accounts(onEndpoint: enterpriseEndpoint).map(\.login) == ["enterprise-user"])
         #expect(app.accounts.invalidatedAccounts.isEmpty)
         #expect(app.accounts.issues.isEmpty)
         await settle(app, harness)
@@ -312,8 +312,8 @@ struct AccountsModelTests {
         // Git gets no credentials from it, and is told why.
         let provider = AccountsTrampolineProvider(store, runtime: harness.gitHub.runtime)
         #expect(await provider.getAll().isEmpty)
-        #expect(await provider.unreadableAccountMessage(endpoint: "https://api.github.com") != nil)
-        #expect(await provider.unreadableAccountMessage(endpoint: "https://ghe.example.com/api/v3") == nil)
+        #expect(await provider.unreadableAccountMessage(endpoint: "https://api.github.com", login: nil) != nil)
+        #expect(await provider.unreadableAccountMessage(endpoint: "https://ghe.example.com/api/v3", login: nil) == nil)
 
         // Trying again while the keychain is still locked changes nothing.
         await app.accounts.retryUnreadableAccounts()
@@ -325,7 +325,7 @@ struct AccountsModelTests {
         #expect(app.accounts.unreadableAccounts.isEmpty)
         #expect(app.accounts.accounts.map(\.token) == ["gho_secret"])
         #expect(await provider.getAll().map(\.token) == ["gho_secret"])
-        #expect(await provider.unreadableAccountMessage(endpoint: "https://api.github.com") == nil)
+        #expect(await provider.unreadableAccountMessage(endpoint: "https://api.github.com", login: nil) == nil)
         await settle(app, harness)
     }
 

@@ -118,7 +118,17 @@ extension RepositoryGitHubModel {
         guard let target = getNonForkGitHubRepository(repository.record) else {
             throw OperationError(.precondition("Only repositories on GitHub can have pull requests."), operation: .createPullRequest, repositoryID: repository.id)
         }
-        guard app.accounts.account(forEndpoint: target.endpoint) != nil else {
+        // Without an account on the server, the pull request is created on
+        // GitHub's form. A repository whose account isn't signed in, or that
+        // has none while accounts are signed in to its server, asks for one.
+        var hasAccount = app.accounts.account(for: repository.record, on: target.endpoint) != nil
+        if !hasAccount, repository.record.accountLogin != nil || !app.accounts.accounts(onEndpoint: target.endpoint).isEmpty {
+            guard let account = await app.ensureRepositoryAccount(repository.id), account.endpoint == target.endpoint else {
+                throw OperationError(.cancelled(.userCancelled), operation: .createPullRequest, repositoryID: repository.id)
+            }
+            hasAccount = true
+        }
+        guard hasAccount else {
             switch try await createPullRequest(base: base, choice: choice) {
             case .opened(let url): return .openedInBrowser(url)
             case .choiceRequired(let step): return .choiceRequired(step)
@@ -219,7 +229,7 @@ extension RepositoryGitHubModel {
         guard let gitHubRepository = repository.record.gitHubRepository, let target = getNonForkGitHubRepository(repository.record) else {
             throw OperationError(.precondition("Only repositories on GitHub can have pull requests."), operation: .createPullRequest, repositoryID: id)
         }
-        guard let account = app.accounts.account(forEndpoint: target.endpoint) else {
+        guard let account = app.accounts.account(for: repository.record, on: target.endpoint) else {
             throw OperationError(
                 .precondition("Sign in to \(getHTMLURL(target.endpoint)) to create pull requests."),
                 operation: .createPullRequest,
@@ -261,7 +271,7 @@ extension RepositoryGitHubModel {
         if let listed = openPullRequests.first(where: { $0.pullRequestNumber == created.number }) {
             return listed
         }
-        if let model = repository.app?.background.pullRequests.store.model(for: created, endpoint: target.endpoint) {
+        if let model = repository.app?.background.pullRequests.store.model(for: created, in: target) {
             return model
         }
         // GitHub's answer without its repositories: the ones it was created

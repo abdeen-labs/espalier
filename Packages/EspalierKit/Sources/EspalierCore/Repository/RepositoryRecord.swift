@@ -40,8 +40,17 @@ public struct RepositoryRecord: Sendable, Hashable, Identifiable {
     public var isMissing: Bool
 
     /// The GitHub repository this one is associated with, with its parent
-    /// chain resolved.
+    /// chain resolved. Its row is the one scoped to `accountLogin`, so
+    /// what one account was allowed to see never shows for another.
     public var gitHubRepository: GitHubRepository?
+
+    /// The login of the account assigned to the repository, or nil when
+    /// none is. With the GitHub repository's endpoint it picks the
+    /// credentials for API calls and HTTPS git (`accountIdentity`). It's
+    /// filled in once from the account then signed in to the endpoint, and
+    /// otherwise changes only when the user picks another account. It isn't
+    /// the commit author.
+    public var accountLogin: String?
 
     public var workflowPreferences: WorkflowPreferences
 
@@ -77,6 +86,7 @@ public struct RepositoryRecord: Sendable, Hashable, Identifiable {
         alias: String? = nil,
         isMissing: Bool = false,
         gitHubRepository: GitHubRepository? = nil,
+        accountLogin: String? = nil,
         workflowPreferences: WorkflowPreferences = WorkflowPreferences(),
         isTutorialRepository: Bool = false,
         tagsToPush: [String] = [],
@@ -92,6 +102,7 @@ public struct RepositoryRecord: Sendable, Hashable, Identifiable {
         self.alias = alias
         self.isMissing = isMissing
         self.gitHubRepository = gitHubRepository
+        self.accountLogin = accountLogin
         self.workflowPreferences = workflowPreferences
         self.isTutorialRepository = isTutorialRepository
         self.tagsToPush = tagsToPush
@@ -113,6 +124,12 @@ public struct RepositoryRecord: Sendable, Hashable, Identifiable {
     /// The name the list shows: the alias, or else `name`.
     public var displayName: String {
         alias ?? name
+    }
+
+    /// The identity of the assigned account: the GitHub repository's
+    /// endpoint and `accountLogin`. Nil without either.
+    public var accountIdentity: AccountIdentity? {
+        getRepositoryAccountIdentity(gitHubRepository, login: accountLogin)
     }
 
     /// The resolved path to the .git directory for this repository.

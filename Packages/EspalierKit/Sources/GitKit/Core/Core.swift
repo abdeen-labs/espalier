@@ -94,6 +94,17 @@ public struct GitExecutionOptions: Sendable {
     /// This affects error handling and UI such as credential prompts.
     public var isBackgroundTask: Bool
 
+    /// The account to authenticate with when the credential helper can't
+    /// find the repository at the command's path: only for a repository
+    /// that isn't in the list yet, such as one being cloned.
+    ///
+    /// Don't give it merely because an account is available: a repository
+    /// in the list uses its assigned account, which the credential helper
+    /// always prefers. It's used only when its endpoint is the one git asks
+    /// credentials for, and only while it's signed in, with its current
+    /// token.
+    public var fallbackAccount: GitFallbackAccount?
+
     /// Hooks to run through the hooks proxy, so they execute in the user's
     /// login shell environment and report progress.
     public var interceptHooks: [String]?
@@ -115,6 +126,7 @@ public struct GitExecutionOptions: Sendable {
         expectedErrors: Set<DugiteError> = [],
         trackLFSProgress: Bool = false,
         isBackgroundTask: Bool = false,
+        fallbackAccount: GitFallbackAccount? = nil,
         interceptHooks: [String]? = nil,
         onHookProgress: (@Sendable (HookProgress) -> Void)? = nil,
         onHookFailure: (@Sendable (String, TerminalOutput) async -> HookFailureResolution)? = nil,
@@ -129,6 +141,7 @@ public struct GitExecutionOptions: Sendable {
         self.expectedErrors = expectedErrors
         self.trackLFSProgress = trackLFSProgress
         self.isBackgroundTask = isBackgroundTask
+        self.fallbackAccount = fallbackAccount
         self.interceptHooks = interceptHooks
         self.onHookProgress = onHookProgress
         self.onHookFailure = onHookFailure
@@ -282,7 +295,13 @@ public func git(
     let opts = configured
 
     return try await withHooksEnv(path: path, options: opts, runtime: runtime) { hooksEnv in
-        try await withTrampolineEnv(path: path, isBackgroundTask: opts.isBackgroundTask, customEnv: hooksEnv, runtime: runtime) { trampolineEnv in
+        try await withTrampolineEnv(
+            path: path,
+            isBackgroundTask: opts.isBackgroundTask,
+            fallbackAccount: opts.fallbackAccount,
+            customEnv: hooksEnv,
+            runtime: runtime
+        ) { trampolineEnv in
             // The arguments as the log and the signpost show them: without
             // the credentials a URL typed as `https://user:token@host` has.
             let loggedArguments = args.map(withoutURLCredentials).joined(separator: " ")
@@ -601,6 +620,22 @@ public func parseCommitSHA(_ result: GitResult) -> String {
 
 // MARK: - Hooks and trampoline seams
 
+/// An account for the credential helper to use when it can't find the
+/// repository at a command's path (`GitExecutionOptions.fallbackAccount`):
+/// its API endpoint and login, never its token, which the helper takes from
+/// the signed-in account.
+public struct GitFallbackAccount: Sendable, Hashable {
+    /// The account's API endpoint (`https://api.github.com`).
+    public let endpoint: String
+    /// The account's login.
+    public let login: String
+
+    public init(endpoint: String, login: String) {
+        self.endpoint = endpoint
+        self.login = login
+    }
+}
+
 /// The environment that lets git call back into the app for credentials and
 /// SSH prompts. The app implements this with its askpass server; see
 /// `GitRuntime.trampoline`.
@@ -608,6 +643,7 @@ public protocol GitTrampoline: Sendable {
     func withTrampolineEnv<T: Sendable>(
         path: String,
         isBackgroundTask: Bool,
+        fallbackAccount: GitFallbackAccount?,
         customEnv: [String: String?]?,
         _ operation: @Sendable ([String: String?]) async throws -> T
     ) async throws -> T
@@ -640,6 +676,7 @@ func withHooksEnv<T: Sendable>(
 func withTrampolineEnv<T: Sendable>(
     path: String,
     isBackgroundTask: Bool,
+    fallbackAccount: GitFallbackAccount?,
     customEnv: [String: String?]?,
     runtime: GitRuntime,
     _ operation: @Sendable ([String: String?]) async throws -> T
@@ -648,6 +685,7 @@ func withTrampolineEnv<T: Sendable>(
         return try await trampoline.withTrampolineEnv(
             path: path,
             isBackgroundTask: isBackgroundTask,
+            fallbackAccount: fallbackAccount,
             customEnv: customEnv,
             operation
         )

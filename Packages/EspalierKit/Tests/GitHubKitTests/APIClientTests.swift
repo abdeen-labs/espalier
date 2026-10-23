@@ -38,8 +38,7 @@ struct APIClientTests {
             #expect(getEndpointForRepository("https://octocorp.ghe.com/team/project") == "https://api.octocorp.ghe.com/")
 
             let enterprise = try EndpointConfiguration.enterprise(address: "github.mycompany.com", clientID: "client")
-            let account = Account(login: "a", endpoint: enterprise.endpoint, token: "t", emails: [], avatarURL: "", id: 1, name: "")
-            #expect(getAccountForEndpoint([account], getEndpointForRepository("https://github.mycompany.com/team/project")) == account)
+            #expect(getEndpointForRepository("https://github.mycompany.com/team/project") == enterprise.endpoint)
         }
 
         @Test("classifies endpoints")
@@ -58,14 +57,45 @@ struct APIClientTests {
             #expect(!isGist("https://github.com/"))
         }
 
-        @Test("finds the account for a GitHub repository")
+        @Test("finds the account assigned to a GitHub repository, by its endpoint and login")
         func accountForRepository() {
-            let dotCom = Account(login: "a", endpoint: getDotComAPIEndpoint(), token: "t", emails: [], avatarURL: "", id: 1, name: "")
-            let enterprise = Account(login: "b", endpoint: "https://ghe.io/api/v3", token: "t", emails: [], avatarURL: "", id: 2, name: "")
+            let dotCom = Account(login: "b", endpoint: getDotComAPIEndpoint(), token: "t", emails: [], avatarURL: "", id: 1, name: "")
+            let enterprise = Account(login: "a", endpoint: "https://ghe.io/api/v3", token: "t", emails: [], avatarURL: "", id: 2, name: "")
+            let otherEnterprise = Account(login: "b", endpoint: "https://ghe.io/api/v3", token: "t", emails: [], avatarURL: "", id: 3, name: "")
+            let accounts = [dotCom, enterprise, otherEnterprise]
             let repository = gitHubRepoFixture(owner: "o", name: "r", endpoint: "https://ghe.io/api/v3")
 
-            #expect(getAccountForRepository([dotCom, enterprise], repository) == enterprise)
-            #expect(getAccountForRepository([dotCom, enterprise], nil) == nil)
+            #expect(getAccountForRepository(accounts, repository, login: "b") == otherEnterprise)
+            #expect(getAccountForRepository(accounts, repository, login: "A") == enterprise)
+            // Unassigned, assigned to an account that isn't signed in, or not
+            // on GitHub: no account, never another on the same endpoint.
+            #expect(getAccountForRepository(accounts, repository, login: nil) == nil)
+            #expect(getAccountForRepository(accounts, repository, login: "c") == nil)
+            #expect(getAccountForRepository(accounts, nil, login: "a") == nil)
+        }
+
+        @Test("tells an account that can't see a repository from one whose access can't be checked")
+        func fetchRepositoryIfAccessible() async throws {
+            let mock = MockGitHub()
+            mock.on("GET", "/repos/octocat/hello", respond: .json(encoding: APIFullRepository(
+                repository: createMockAPIRepository(name: "hello", owner: createMockAPIIdentity(login: "octocat")),
+                parent: nil,
+                permissions: APIRepositoryPermissions(admin: false, push: true, pull: true)
+            )))
+            mock.on("GET", "/repos/octocat/hidden", respond: .json(["message": "Not Found"], status: 404))
+            mock.on("GET", "/repos/octocat/saml", respond: .json(["message": "Resource protected by organization SAML enforcement."], status: 403))
+            mock.on("GET", "/repos/octocat/offline", respond: .networkError(.notConnectedToInternet))
+            let account = Account(login: "octocat", endpoint: getDotComAPIEndpoint(), token: "t", emails: [], avatarURL: "", id: 1, name: "")
+            let api = API.fromAccount(account, runtime: mock.runtime)
+
+            #expect(try await api.fetchRepositoryIfAccessible(owner: "octocat", name: "hello")?.name == "hello")
+            #expect(try await api.fetchRepositoryIfAccessible(owner: "octocat", name: "hidden") == nil)
+            await #expect(throws: (any Error).self) {
+                try await api.fetchRepositoryIfAccessible(owner: "octocat", name: "saml")
+            }
+            await #expect(throws: (any Error).self) {
+                try await api.fetchRepositoryIfAccessible(owner: "octocat", name: "offline")
+            }
         }
 
         @Test("links to the page where the user revokes the OAuth app")

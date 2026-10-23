@@ -131,7 +131,7 @@ public func clone(
     }
     args += ["clone", "--recursive"]
 
-    var opts = GitExecutionOptions(env: env)
+    var opts = GitExecutionOptions(env: env, fallbackAccount: options.fallbackAccount)
 
     if let progressCallback {
         args.append("--progress")

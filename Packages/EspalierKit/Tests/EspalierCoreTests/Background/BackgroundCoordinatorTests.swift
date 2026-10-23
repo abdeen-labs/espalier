@@ -22,7 +22,10 @@ struct BackgroundCoordinatorTests {
     private func add(gitHub: Bool, to app: AppModel) async throws -> RepositoryID {
         let id = try #require(try await app.addRepositories([try setupEmptyRepository().path]).added.first)
         if gitHub {
-            app.updateRecord(id) { $0.gitHubRepository = ModelFixtures.gitHubRepository() }
+            app.updateRecord(id) { record in
+                record.gitHubRepository = ModelFixtures.gitHubRepository()
+                record.accountLogin = "octocat"
+            }
         }
         return id
     }

@@ -158,7 +158,7 @@ struct ForkOperationTests {
             try await commitFile(local, "a.txt", "a\n")
             try await prepare(local)
         }
-        fixture.associate(parentGitHubRepository)
+        fixture.associate(parentGitHubRepository, accountLogin: testAccount.login)
         let forkRemote = try await makeBareRemote(from: fixture.remote)
         try writeScript(
             POSIXPath.join(fixture.remote.path, "hooks", "pre-receive"),
@@ -341,10 +341,10 @@ struct ForkOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("creating a fork forks through the API under the account, then converts", .hangGuard(minutes: 5))
+    @Test("creating a fork forks through the API under the repository's account, then converts, keeping the account", .hangGuard(minutes: 5))
     func createsFork() async throws {
         let fixture = try await makeSelectedRepository()
-        fixture.associate(parentGitHubRepository)
+        fixture.associate(parentGitHubRepository, accountLogin: testAccount.login)
         try await fixture.harness.signIn([testAccount], to: fixture.app)
         fixture.harness.gitHub.on("POST", "/repos/octocat/app/forks", respond: .json(encoding: fork, status: 202))
 
@@ -353,13 +353,14 @@ struct ForkOperationTests {
         #expect(fixture.harness.gitHub.requests("POST", "/repos/octocat/app/forks").count == 1)
         #expect(try await remoteURLs(fixture.local)["origin"] == "https://github.com/mona/app.git")
         #expect(fixture.model.record.gitHubRepository?.fullName == "mona/app")
+        #expect(fixture.model.record.accountLogin == testAccount.login)
         await fixture.app.idle()
     }
 
     @Test("a fork GitHub refuses leaves the repository as it was", .hangGuard(minutes: 5))
     func forkRefused() async throws {
         let fixture = try await makeSelectedRepository()
-        fixture.associate(parentGitHubRepository)
+        fixture.associate(parentGitHubRepository, accountLogin: testAccount.login)
         try await fixture.harness.signIn([testAccount], to: fixture.app)
         fixture.harness.gitHub.on("POST", "/repos/octocat/app/forks", respond: .json(.object([
             "message": .string("Forking is disabled"),
@@ -379,7 +380,7 @@ struct ForkOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("creating a fork needs a GitHub repository and an account")
+    @Test("creating a fork needs a GitHub repository and its account signed in, never another on the host")
     func createForkPreconditions() async throws {
         let fixture = try await makeSelectedRepository()
         var error = await #expect(throws: OperationError.self) {
@@ -392,7 +393,14 @@ struct ForkOperationTests {
             try await fixture.model.sync.createFork()
         }
         #expect(preconditionMessage(error) != nil)
-        #expect(fixture.harness.gitHub.requests.isEmpty)
+
+        // An account on the host that isn't the repository's.
+        try await fixture.harness.signIn([testAccount], to: fixture.app)
+        error = await #expect(throws: OperationError.self) {
+            try await fixture.model.sync.createFork()
+        }
+        #expect(preconditionMessage(error) != nil)
+        #expect(fixture.harness.gitHub.requests("POST", "/repos/octocat/app/forks").isEmpty)
         await fixture.app.idle()
     }
 

@@ -80,6 +80,11 @@ public final class CommitStatusSubscription {
 /// subscribed refs are refreshed every 3 minutes, each at most once a
 /// minute (GitHub's responses are cached for 60 seconds). At most 6 refs
 /// load at a time; 250 refs stay cached.
+///
+/// Checks load with the repository's assigned account, never another: what
+/// one account loaded is dropped when the repository gets another, or the
+/// account signs out (`accountDidChange()`), and a load that finishes after
+/// that is dropped too.
 @MainActor @Observable
 public final class CommitStatusStore {
     /// The interval between background updates for active commit status
@@ -128,6 +133,8 @@ public final class CommitStatusStore {
     @ObservationIgnored private var loop: PeriodicLoop?
     @ObservationIgnored private var isObservingActivation = false
     @ObservationIgnored private var idleWaiters: [CheckedContinuation<Void, Never>] = []
+    /// The account the cached checks were loaded with.
+    @ObservationIgnored private var cacheAccount: AccountIdentity?
 
     @ObservationIgnored weak var repository: RepositoryModel?
 
@@ -279,13 +286,44 @@ public final class CommitStatusStore {
         }
     }
 
+    /// The repository's assigned account, when it's signed in and on
+    /// `endpoint`.
+    private func account(on endpoint: String) -> Account? {
+        guard let repository, let app = repository.app else {
+            return nil
+        }
+        return app.accounts.account(for: repository.record, on: endpoint)
+    }
+
+    /// The repository's account changed, or the signed-in accounts did: the
+    /// checks another account loaded go, the views see none until they load
+    /// again with the account the repository has now.
+    func accountDidChange() {
+        let current = repository.flatMap { repository in repository.app?.accounts.account(for: repository.record)?.identity }
+        guard current != cacheAccount else {
+            return
+        }
+        cacheAccount = current
+        if !loadedKeys.isEmpty || !checksByKey.isEmpty {
+            checksByKey = [:]
+            loadedKeys = []
+            loadedBranchNames = [:]
+        }
+        fetchedAt = [:]
+        cacheOrder = []
+        if !subscriptions.isEmpty {
+            queueRefresh()
+        }
+    }
+
     private func refreshSubscription(_ key: CheckRunsKey) async {
         // Make sure it's still a valid subscription that someone might care
         // about before fetching.
-        guard let subscription = subscriptions[key], let repository, let app = repository.app,
-              let account = app.accounts.account(forEndpoint: key.endpoint)
-        else {
+        guard let subscription = subscriptions[key], let account = account(on: key.endpoint), let repository else {
             return
+        }
+        if cacheAccount != account.identity {
+            accountDidChange()
         }
         let environment = repository.environment
         let api = API.fromAccount(account, runtime: environment.gitHub)
@@ -314,6 +352,11 @@ public final class CommitStatusStore {
             checks = await actionWorkflowChecks(checks, key: key, branchName: branchName, account: account, environment: environment)
         }
 
+        // Checks loaded with an account the repository no longer has (or
+        // that signed out) are dropped.
+        guard self.account(on: key.endpoint)?.identity == account.identity, cacheAccount == account.identity else {
+            return
+        }
         store(createCombinedCheckFromChecks(checks), for: key, branchName: branchName)
     }
 
@@ -492,9 +535,7 @@ public final class CommitStatusStore {
     /// check suites. Then the checks GitHub reruns show as in progress until
     /// the next refresh.
     func rerun(_ checkRuns: [RefCheck], failedOnly: Bool, key: CheckRunsKey) async -> CheckRerunResult {
-        guard let repository, let app = repository.app,
-              let account = app.accounts.account(forEndpoint: key.endpoint)
-        else {
+        guard let repository, let account = account(on: key.endpoint) else {
             return CheckRerunResult(accepted: [], refused: checkRuns, reasons: [
                 "Sign in to \(getHTMLURL(key.endpoint)) to re-run checks.",
             ])
@@ -572,7 +613,7 @@ public final class CommitStatusStore {
             return EspalierCore.rerunPlan(checkRuns, failedOnly: failedOnly, checkSuites: [], now: Date())
         }
         let now = repository.environment.scheduler.now
-        guard let account = repository.app?.accounts.account(forEndpoint: key.endpoint) else {
+        guard let account = account(on: key.endpoint) else {
             return EspalierCore.rerunPlan(checkRuns, failedOnly: failedOnly, checkSuites: [], now: now)
         }
         let api = API.fromAccount(account, runtime: repository.environment.gitHub)

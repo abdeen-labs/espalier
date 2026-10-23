@@ -796,12 +796,15 @@ extension RepositoryGitHubModel {
     private func cacheRulesets(_ api: API, owner: String, name: String) async {
         // ultimate goal here is to fetch all rulesets that apply to the repo
         // so they're already cached when needed later on
+        // Rulesets loaded for a GitHub repository (or account) the
+        // repository no longer has aren't kept.
+        let key = pullRequestsKey
         guard let slimRulesets = await api.fetchAllRepoRulesets(owner: owner, name: name), !slimRulesets.isEmpty else {
             return
         }
         for id in slimRulesets.map(\.id) where cachedRepoRulesets[id] == nil {
             // check the cache and don't re-query any that are already in there
-            if let ruleset = await api.fetchRepoRuleset(owner: owner, name: name, id: id) {
+            if let ruleset = await api.fetchRepoRuleset(owner: owner, name: name, id: id), pullRequestsKey == key {
                 cachedRepoRulesets[ruleset.id] = ruleset
             }
         }

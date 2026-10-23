@@ -292,7 +292,10 @@ struct RepositoryIndicatorUpdaterTests {
         try await harness.signIn([testAccount], to: app)
         harness.gitHub.on("GET", "/repos/octocat/app", respond: pushedRepository(pushedAt: Date().addingTimeInterval(-600)))
         let model = try await add(local, to: app)
-        app.updateRecord(model.id) { $0.gitHubRepository = ModelFixtures.gitHubRepository() }
+        app.updateRecord(model.id) {
+            $0.gitHubRepository = ModelFixtures.gitHubRepository()
+            $0.accountLogin = testAccount.login
+        }
 
         await updater.refreshNow()
 
@@ -316,7 +319,10 @@ struct RepositoryIndicatorUpdaterTests {
         try await harness.signIn([testAccount], to: app)
         harness.gitHub.on("GET", "/repos/octocat/app", respond: pushedRepository(pushedAt: Date().addingTimeInterval(-7200)))
         let model = try await add(local, to: app)
-        app.updateRecord(model.id) { $0.gitHubRepository = ModelFixtures.gitHubRepository() }
+        app.updateRecord(model.id) {
+            $0.gitHubRepository = ModelFixtures.gitHubRepository()
+            $0.accountLogin = testAccount.login
+        }
 
         await updater.refreshNow()
         #expect(app.indicators[model.id] == RepositoryIndicator(aheadBehind: AheadBehind(ahead: 0, behind: 0), changedFilesCount: 0))
@@ -423,7 +429,10 @@ struct InferLastPushTests {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
         let id = try #require(try await app.addRepositories([local.path]).added.first)
-        app.updateRecord(id) { $0.gitHubRepository = ModelFixtures.gitHubRepository() }
+        app.updateRecord(id) {
+            $0.gitHubRepository = ModelFixtures.gitHubRepository()
+            $0.accountLogin = testAccount.login
+        }
         try await harness.signIn([testAccount], to: app)
         return (harness, app, try #require(app.repository(id)))
     }
@@ -459,7 +468,7 @@ struct InferLastPushTests {
         await app.idle()
     }
 
-    @Test("asks the server the current remote is on, with its account (desktop asked the repository's)")
+    @Test("asks only the repository's account, so not about a current remote on another server")
     func currentRemoteOnAnotherServer() async throws {
         let enterprise = Account(
             login: "joe",
@@ -477,16 +486,18 @@ struct InferLastPushTests {
         let id = try #require(try await app.addRepositories([local.path]).added.first)
         app.updateRecord(id) {
             $0.gitHubRepository = ModelFixtures.gitHubRepository(owner: "team", name: "tool", endpoint: enterprise.endpoint)
+            $0.accountLogin = enterprise.login
         }
         try await harness.signIn([testAccount, enterprise], to: app)
         harness.gitHub.on("GET", "/repos/someone/fork", respond: pushed("someone", "fork", at: "2026-01-02T03:04:05Z"))
+        harness.gitHub.on("GET", "/api/v3/repos/team/tool", respond: pushed("team", "tool", at: "2026-01-02T03:04:05.250Z"))
 
         let date = await app.inferLastPushForRepository(try #require(app.repository(id)))
-        #expect(date == Date(timeIntervalSince1970: 1_767_323_045))
-        let request = try #require(harness.gitHub.requests("GET", "/repos/someone/fork").first)
-        #expect(request.url.host() == "api.github.com")
-        #expect(request.header("Authorization") == "Bearer token")
-        #expect(harness.gitHub.requests("GET", "/api/v3/repos/someone/fork").isEmpty)
+        #expect(date == Date(timeIntervalSince1970: 1_767_323_045.25))
+        #expect(harness.gitHub.requests("GET", "/repos/someone/fork").isEmpty)
+        let request = try #require(harness.gitHub.requests("GET", "/api/v3/repos/team/tool").first)
+        #expect(request.url.host() == "ghe.example.com")
+        #expect(request.header("Authorization") == "Bearer enterprise-token")
         await app.idle()
     }
 
@@ -496,7 +507,7 @@ struct InferLastPushTests {
         harness.gitHub.on("GET", "/repos/octocat/app", respond: .status(500))
         #expect(await app.inferLastPushForRepository(model) == nil)
 
-        try await app.accounts.signOut(testAccount)
+        try await app.accounts.signOut(testAccount, confirmed: [.signOutAccount])
         #expect(await app.inferLastPushForRepository(model) == nil)
         #expect(harness.gitHub.requests("GET", "/repos/octocat/app").count == 1)
         await app.idle()

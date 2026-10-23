@@ -88,11 +88,12 @@ public enum AppBootstrap {
         guard let helperPath = bundle.path(forAuxiliaryExecutable: "espalier-askpass") else {
             throw AppBootstrapError.askpassHelperMissing
         }
+        let trampolineAccounts = AccountsTrampolineProvider(accountsStore, runtime: gitHub)
         let trampoline = TrampolineEnvironment(
             server: server,
             helperPath: helperPath,
             prompter: prompts,
-            accounts: AccountsTrampolineProvider(accountsStore, runtime: gitHub),
+            accounts: trampolineAccounts,
             secrets: secrets,
             defaults: defaults,
             appVersion: appVersion
@@ -138,8 +139,9 @@ public enum AppBootstrap {
             skew: AppEnvironment.liveSkew
         )
 
-        // 7. The model.
+        // 7. The model, which the credential helper finds repositories in.
         let model = AppModel(environment: environment)
+        trampolineAccounts.attach(to: model)
         let activity = ApplicationActivityMonitor(model: model)
         let launched = LaunchedApp(model: model, activity: activity, server: server, tokenRegistration: tokenRegistration)
         await model.load()

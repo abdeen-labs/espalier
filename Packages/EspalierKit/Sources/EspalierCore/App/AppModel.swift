@@ -107,6 +107,10 @@ public final class AppModel {
     @ObservationIgnored var documentRevision: UInt64 = 0
     @ObservationIgnored var isSaveScheduled = false
     @ObservationIgnored var saveTasks: [Task<Void, Never>] = []
+    /// The questions about a repository's account being asked, by
+    /// repository (RepositoryAccounts.swift): asking again joins the one
+    /// already asked.
+    @ObservationIgnored var repositoryAccountPrompts: [RepositoryID: Task<Account?, Never>] = [:]
 
     public init(environment: AppEnvironment) {
         self.environment = environment

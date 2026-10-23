@@ -286,7 +286,7 @@ final class PullRequestStore {
             entries[key] = entry
             return
         }
-        entry.pullRequests = models(entry.records, endpoint: entry.identity.endpoint, updatingRows: updatingRows)
+        entry.pullRequests = models(entry.records, endpoint: entry.identity.endpoint, accountLogin: accountScope(of: key), updatingRows: updatingRows)
         entries[key] = entry
         write(entry, for: key)
         notifyRepositories(key, entry.pullRequests, fromGitHub: true)
@@ -319,7 +319,7 @@ final class PullRequestStore {
                     entry.records[pullRequest.number] = pullRequest
                 }
                 entry.lastUpdated = file.lastUpdated
-                entry.pullRequests = self.models(entry.records, endpoint: identity.endpoint, updatingRows: false)
+                entry.pullRequests = self.models(entry.records, endpoint: identity.endpoint, accountLogin: self.accountScope(of: key), updatingRows: false)
             }
             self.entries[key] = entry
             if !entry.pullRequests.isEmpty {
@@ -353,9 +353,18 @@ final class PullRequestStore {
 
     // MARK: Models
 
+    /// The account a GitHub repository row's data belongs to: the pull
+    /// requests' repositories are that account's rows.
+    private func accountScope(of key: Int) -> String {
+        app?.gitHubRepositories[key]?.accountLogin ?? ""
+    }
+
     /// A pull request GitHub returned on its own (a link's, a
     /// notification's), as a model; nil without a base or head repository.
-    func model(for apiPullRequest: APIPullRequest, endpoint: String) -> PullRequest? {
+    /// Its repositories are the rows of the account of `context`, the
+    /// repository it was asked about.
+    func model(for apiPullRequest: APIPullRequest, in context: GitHubRepository) -> PullRequest? {
+        let endpoint = context.endpoint
         guard let base = apiPullRequest.base.repo, let head = apiPullRequest.head.repo else {
             return nil
         }
@@ -371,7 +380,7 @@ final class PullRequestStore {
             authorAvatarURL: apiPullRequest.user.flatMap { $0.avatarURL.isEmpty ? nil : $0.avatarURL },
             draft: apiPullRequest.draft ?? false
         )
-        return models([record.number: record], endpoint: endpoint, updatingRows: false).first
+        return models([record.number: record], endpoint: endpoint, accountLogin: accountScope(of: context.dbID), updatingRows: false).first
     }
 
     /// The pull requests as models, newest first. Their repositories are
@@ -379,13 +388,13 @@ final class PullRequestStore {
     /// `updatingRows`), else built from the API's data without a row: forks
     /// nobody added aren't put in the list's table (its document would drop
     /// them on save).
-    private func models(_ records: [Int: CachedPullRequest], endpoint: String, updatingRows: Bool) -> [PullRequest] {
+    private func models(_ records: [Int: CachedPullRequest], endpoint: String, accountLogin: String, updatingRows: Bool) -> [PullRequest] {
         var repositories: [String: GitHubRepository] = [:]
         func repository(_ apiRepository: APIRepository) -> GitHubRepository {
             if let known = repositories[apiRepository.cloneURL] {
                 return known
             }
-            let resolved = gitHubRepository(apiRepository, endpoint: endpoint, updatingRows: updatingRows)
+            let resolved = gitHubRepository(apiRepository, endpoint: endpoint, accountLogin: accountLogin, updatingRows: updatingRows)
             repositories[apiRepository.cloneURL] = resolved
             return resolved
         }
@@ -405,10 +414,17 @@ final class PullRequestStore {
         }
     }
 
-    private func gitHubRepository(_ apiRepository: APIRepository, endpoint: String, updatingRows: Bool) -> GitHubRepository {
-        if let app, let row = app.gitHubRepositories.row(endpoint: endpoint, ownerLogin: apiRepository.owner.login, name: apiRepository.name) {
+    /// The row of `accountLogin` for a pull request's repository, when the
+    /// list has one (a fork's and its parent's are the same account's).
+    private func gitHubRepository(_ apiRepository: APIRepository, endpoint: String, accountLogin: String, updatingRows: Bool) -> GitHubRepository {
+        if let app, let row = app.gitHubRepositories.row(
+            endpoint: endpoint,
+            ownerLogin: apiRepository.owner.login,
+            name: apiRepository.name,
+            accountLogin: accountLogin
+        ) {
             if updatingRows {
-                return app.upsertGitHubRepositoryLight(endpoint, apiRepository)
+                return app.upsertGitHubRepositoryLight(endpoint, apiRepository, accountLogin: accountLogin)
             }
             if let repository = app.gitHubRepositories.gitHubRepository(withID: row.id) {
                 return repository

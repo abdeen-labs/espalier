@@ -35,7 +35,7 @@ struct BackgroundFetcherTests {
         }
     }
 
-    /// A GitHub repository (with `gitHub`) with a bare `origin`, refreshed
+    /// A GitHub repository (with `gitHub`, assigned `testAccount`) with a bare `origin`, refreshed
     /// but not selected, so the app's own fetcher doesn't run; a fetcher of
     /// the test's own on a clock set to now (`FETCH_HEAD`'s dates are real).
     private func makeFixture(skew: Duration = .seconds(7), gitHub: Bool = true) async throws -> Fixture {
@@ -44,7 +44,10 @@ struct BackgroundFetcherTests {
         let app = await harness.loadedApp()
         let id = try #require(try await app.addRepositories([local.path]).added.first)
         if gitHub {
-            app.updateRecord(id) { $0.gitHubRepository = ModelFixtures.gitHubRepository() }
+            app.updateRecord(id) { record in
+                record.gitHubRepository = ModelFixtures.gitHubRepository()
+                record.accountLogin = testAccount.login
+            }
         }
         let model = try #require(app.repository(id))
         await model.refresh(.full, reason: .user)

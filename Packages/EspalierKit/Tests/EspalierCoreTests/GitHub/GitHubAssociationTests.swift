@@ -1,8 +1,8 @@
 // The GitHub association (`repositoryWithRefreshedGitHubRepository` and
-// the GitHub repository upserts) against a mock GitHub: matching an
-// account, the API's row with permissions and the fork's parent, the
-// skeleton row when GitHub can't be reached, rewriting origin after a
-// rename, and refreshing after signing in.
+// the GitHub repository upserts) against a mock GitHub: the account that can
+// see an added repository, the API's row with permissions and the fork's
+// parent, the skeleton row when GitHub can't be reached, rewriting origin
+// after a rename, a remote that moves to another host, and signing in.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -60,6 +60,7 @@ struct GitHubAssociationTests {
         #expect(gitHubRepository.permissions == .admin)
         #expect(gitHubRepository.parent == nil)
         #expect(app.record(id)?.name == "hello")
+        #expect(app.record(id)?.accountLogin == "octocat")
         #expect(app.accounts.account(for: try #require(app.record(id)))?.login == "octocat")
 
         let request = try #require(harness.gitHub.requests("GET", "/repos/octocat/hello").first)
@@ -69,6 +70,7 @@ struct GitHubAssociationTests {
         await app.idle()
         let relaunched = await harness.loadedAppWithAccounts()
         #expect(relaunched.record(id)?.gitHubRepository == gitHubRepository)
+        #expect(relaunched.record(id)?.accountLogin == "octocat")
         await settle(relaunched, harness)
         await settle(app, harness)
     }
@@ -125,7 +127,7 @@ struct GitHubAssociationTests {
         await settle(app, harness)
     }
 
-    @Test("keeps a skeleton row when GitHub can't be reached")
+    @Test("keeps a skeleton row, without an account, when the account's access can't be checked")
     func skeletonRow() async throws {
         let harness = try await harness()
         harness.gitHub.on("GET", "/repos/octocat/hello", respond: .networkError(.notConnectedToInternet))
@@ -141,7 +143,9 @@ struct GitHubAssociationTests {
         #expect(skeleton.cloneURL == nil)
         #expect(skeleton.isPrivate == nil)
         #expect(skeleton.permissions == nil)
-        #expect(app.accounts.account(for: try #require(app.record(id))) != nil)
+        // An account whose access couldn't be checked isn't assigned.
+        #expect(app.record(id)?.accountLogin == nil)
+        #expect(app.accounts.account(for: try #require(app.record(id))) == nil)
         await settle(app, harness)
     }
 
@@ -165,7 +169,7 @@ struct GitHubAssociationTests {
         await settle(app, harness)
     }
 
-    @Test("stores a skeleton row when the remote moved to another server and GitHub can't be reached")
+    @Test("a remote moved to another server clears the account, and associates the repository there without one")
     func skeletonAfterEndpointChange() async throws {
         let harness = try await harness(accounts: [dotComAccount(), enterpriseAccount()])
         harness.gitHub.on("GET", "/api/v3/repos/team/tool", respond: .json(encoding: apiFullRepository(
@@ -187,6 +191,10 @@ struct GitHubAssociationTests {
         #expect(skeleton.endpoint == dotComEndpoint)
         #expect(skeleton.fullName == "team/tool")
         #expect(skeleton.htmlURL == nil)
+        // The Enterprise account isn't GitHub.com's: the repository has none
+        // there until one is chosen.
+        #expect(app.record(id)?.accountLogin == nil)
+        #expect(harness.gitHub.requests("GET", "/repos/team/tool").isEmpty)
         // The remote isn't touched without the API's clone URL.
         #expect(try await runGit(["remote", "get-url", "origin"], local) == "https://github.com/team/tool.git\n")
         await settle(app, harness)
@@ -211,15 +219,43 @@ struct GitHubAssociationTests {
         #expect(app.record(id)?.gitHubRepository?.permissions == .admin)
         #expect(harness.gitHub.requests("GET", "/repos/octocat/hello").count == 2)
 
-        // Permissions that grant nothing map to none, so the stored ones stay.
+        // Permissions the API sends are the account's, even when they grant
+        // nothing.
         await app.repositoryWithRefreshedGitHubRepository(id)
         #expect(harness.gitHub.requests("GET", "/repos/octocat/hello").count == 3)
-        #expect(app.record(id)?.gitHubRepository?.permissions == .admin)
+        #expect(app.record(id)?.gitHubRepository?.permissions == nil)
         await settle(app, harness)
     }
 
-    @Test("never clears an association, and asks nothing without a matching account")
-    func neverClears() async throws {
+    @Test("a remote on another host clears the association and the account; asks nothing without the repository's account")
+    func clearsOnAnotherHost() async throws {
+        let harness = try await harness()
+        harness.gitHub.on("GET", "/repos/octocat/hello", respond: .json(encoding: apiFullRepository()))
+        let app = await harness.loadedAppWithAccounts()
+        let local = try await repository(origin: "https://github.com/octocat/hello.git")
+        let id = try await add(local, to: app)
+        #expect(app.record(id)?.accountLogin == "octocat")
+
+        try await runGit(["remote", "set-url", "origin", "https://gitlab.com/octocat/hello.git"], local)
+        await app.repositoryWithRefreshedGitHubRepository(id)
+        #expect(app.record(id)?.gitHubRepository == nil)
+        #expect(app.record(id)?.accountLogin == nil)
+
+        try await app.accounts.signOut(try #require(app.accounts.accounts.first))
+        try await runGit(["remote", "set-url", "origin", "https://github.com/octocat/hello.git"], local)
+        await app.repositoryWithRefreshedGitHubRepository(id)
+        await app.accounts.idle()
+
+        // Back on GitHub.com, without an account.
+        #expect(app.record(id)?.gitHubRepository?.fullName == "octocat/hello")
+        #expect(app.record(id)?.gitHubRepository?.htmlURL == nil)
+        #expect(app.record(id)?.accountLogin == nil)
+        #expect(harness.gitHub.requests("GET", "/repos/octocat/hello").count == 1)
+        await settle(app, harness)
+    }
+
+    @Test("a remote that isn't a GitHub-style URL leaves the association as it is")
+    func keepsForPathRemote() async throws {
         let harness = try await harness()
         harness.gitHub.on("GET", "/repos/octocat/hello", respond: .json(encoding: apiFullRepository()))
         let app = await harness.loadedAppWithAccounts()
@@ -227,17 +263,11 @@ struct GitHubAssociationTests {
         let id = try await add(local, to: app)
         let associated = try #require(app.record(id)?.gitHubRepository)
 
-        try await runGit(["remote", "set-url", "origin", "https://gitlab.com/octocat/hello.git"], local)
+        try await runGit(["remote", "set-url", "origin", "/Volumes/Backup/hello.git"], local)
         await app.repositoryWithRefreshedGitHubRepository(id)
-        #expect(app.record(id)?.gitHubRepository == associated)
-
-        try await app.accounts.signOut(try #require(app.accounts.accounts.first))
-        try await runGit(["remote", "set-url", "origin", "https://github.com/octocat/hello.git"], local)
-        await app.repositoryWithRefreshedGitHubRepository(id)
-        await app.accounts.idle()
 
         #expect(app.record(id)?.gitHubRepository == associated)
-        #expect(harness.gitHub.requests("GET", "/repos/octocat/hello").count == 1)
+        #expect(app.record(id)?.accountLogin == "octocat")
         await settle(app, harness)
     }
 
@@ -310,25 +340,29 @@ struct GitHubAssociationTests {
         await settle(app, harness)
     }
 
-    @Test("associates the selected repository once its account signs in")
-    func associatesAfterSignIn() async throws {
+    @Test("a GitHub.com repository is associated without an account, and signing in assigns it none")
+    func signingInAssignsNothing() async throws {
         let harness = try await harness(accounts: [])
         harness.gitHub.on("GET", "/repos/octocat/hello", respond: .json(encoding: apiFullRepository()))
         let app = await harness.loadedAppWithAccounts()
         let model = try await harness.addAndSelect(try await repository(origin: "https://github.com/octocat/hello.git"), to: app)
         await app.accounts.idle()
-        #expect(model.record.gitHubRepository == nil)
+        #expect(model.record.gitHubRepository?.fullName == "octocat/hello")
+        #expect(model.record.accountLogin == nil)
 
         try await app.accounts.add(dotComAccount())
         await app.accounts.idle()
 
-        // Signing in refreshes repositories without an association too.
+        // Signing in refreshes the selected repository, which still has no
+        // account, so GitHub isn't asked about it.
         #expect(model.record.gitHubRepository?.fullName == "octocat/hello")
-        #expect(app.record(model.id)?.gitHubRepository?.permissions == .write)
+        #expect(model.record.accountLogin == nil)
+        #expect(app.accounts.account(for: model.record) == nil)
+        #expect(harness.gitHub.requests("GET", "/repos/octocat/hello").isEmpty)
         await settle(app, harness)
     }
 
-    @Test("refreshes before a network operation only without a matching account")
+    @Test("refreshes before a network operation only without the repository's account")
     func withRefreshedGitHubRepository() async throws {
         let harness = try await harness()
         harness.gitHub.on("GET", "/repos/octocat/hello", respond: .json(encoding: apiFullRepository()))
@@ -344,9 +378,13 @@ struct GitHubAssociationTests {
             GitHubRepository(name: "hello", owner: Owner(login: "octocat", endpoint: enterpriseEndpoint, id: nil), dbID: 99),
             for: id
         )
+        #expect(app.record(id)?.accountLogin == nil)
         let refreshed = await app.withRefreshedGitHubRepository(id)
-        #expect(harness.gitHub.requests("GET", "/repos/octocat/hello").count == 2)
+        // Back on GitHub.com, where the remote is, without an account: the
+        // endpoint changed, so the account went with it.
+        #expect(harness.gitHub.requests("GET", "/repos/octocat/hello").count == 1)
         #expect(refreshed?.gitHubRepository?.endpoint == dotComEndpoint)
+        #expect(refreshed?.accountLogin == nil)
         await settle(app, harness)
     }
 

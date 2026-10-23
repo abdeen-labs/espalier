@@ -314,7 +314,7 @@ final class NotificationsPoller {
     func pollInterval() async -> Duration {
         guard let repository = model?.repository, let app = repository.app,
               let contributing = getContributingRepository(repository.record),
-              let account = app.accounts.account(forEndpoint: contributing.endpoint)
+              let account = app.accounts.account(for: repository.record, on: contributing.endpoint)
         else {
             return Self.interval
         }
@@ -330,7 +330,7 @@ final class NotificationsPoller {
               app.preferences.highSignalNotificationsEnabled,
               repository.record.gitHubRepository != nil,
               let contributing = getContributingRepository(repository.record),
-              let account = app.accounts.account(forEndpoint: contributing.endpoint)
+              let account = app.accounts.account(for: repository.record, on: contributing.endpoint)
         else {
             return false
         }

@@ -403,6 +403,61 @@ struct CloneCoordinatorTests {
         let result = try await app.clones.clone(CloneRequest(url: "git@github.com:octocat/hello.git", path: try cloneDestination()))
         #expect(result.isFork)
         #expect(app.record(result.repositoryID)?.gitHubRepository?.parent?.owner.login == "upstream")
+        #expect(app.record(result.repositoryID)?.accountLogin == "octocat")
         await settle(app, harness)
+    }
+
+    // MARK: The clone's account
+
+    private let octocat = dotComAccount()
+    private let hubot = dotComAccount(login: "hubot", id: 2, token: "gho_hubot_token")
+
+    /// A harness that serves `upstream` over SSH, with octocat and hubot
+    /// signed in to GitHub.com, and `GET /repos/octocat/hello` answered for
+    /// the logins in `visibleTo` (a 404 for anyone else).
+    private func accountsHarness(serving upstream: Repository, visibleTo logins: Set<String>) async throws -> AppHarness {
+        let harness = try AppHarness(git: gitRuntime(adding: try sshServing(upstream)))
+        try await harness.store(octocat, hubot)
+        harness.mockUsers([octocat, hubot])
+        let tokens = ["Bearer \(octocat.token)": octocat.login, "Bearer \(hubot.token)": hubot.login]
+        harness.gitHub.on("GET", "/repos/octocat/hello") { request in
+            guard let login = tokens[request.header("Authorization") ?? ""], logins.contains(login) else {
+                return .json(["message": "Not Found"], status: 404)
+            }
+            return .json(encoding: apiFullRepository(owner: "octocat", name: "hello"))
+        }
+        return harness
+    }
+
+    @Test("a clone is assigned the one account on its server that can see the repository, without asking")
+    func assignsTheAccountThatCanSee() async throws {
+        let harness = try await accountsHarness(serving: try await makeCloneSource(), visibleTo: ["hubot"])
+        let app = await harness.loadedAppWithAccounts()
+
+        let result = try await app.clones.clone(CloneRequest(url: "git@github.com:octocat/hello.git", path: try cloneDestination()))
+
+        let record = try #require(app.record(result.repositoryID))
+        #expect(record.accountLogin == "hubot")
+        #expect(app.accounts.account(for: record)?.identity == hubot.identity)
+        #expect(record.gitHubRepository?.fullName == "octocat/hello")
+        #expect(harness.prompts.history.isEmpty)
+        await settle(app, harness)
+    }
+
+    @Test("a clone from an account's list is assigned that account, and no other account is asked about the repository")
+    func assignsThePickedAccount() async throws {
+        let harness = try await accountsHarness(serving: try await makeCloneSource(), visibleTo: ["octocat", "hubot"])
+        let app = await harness.loadedAppWithAccounts()
+
+        let result = try await app.clones.clone(CloneRequest(
+            url: "git@github.com:octocat/hello.git",
+            path: try cloneDestination(),
+            account: octocat.identity
+        ))
+
+        #expect(app.record(result.repositoryID)?.accountLogin == "octocat")
+        await settle(app, harness)
+        #expect(!harness.gitHub.requests("GET", "/repos/octocat/hello").contains { $0.header("Authorization") == "Bearer \(hubot.token)" })
+        #expect(harness.prompts.history.isEmpty)
     }
 }

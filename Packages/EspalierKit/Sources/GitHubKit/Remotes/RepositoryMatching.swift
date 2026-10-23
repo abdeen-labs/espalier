@@ -2,6 +2,9 @@
 
 import EspalierSupport
 import Foundation
+import os
+
+private let log = Log.logger(category: "repository-matching")
 
 // GitKit owns the remote model and GitHubKit can't depend on GitKit, so these
 // functions take a remote's URL.
@@ -27,19 +30,225 @@ public struct MatchedGitHubRepository: Sendable, Hashable {
 
 /// Try to use the list of users and a remote URL to guess a GitHub repository.
 public func matchGitHubRepository(_ accounts: [Account], _ remote: String) -> MatchedGitHubRepository? {
-    for account in accounts {
-        let htmlURL = getHTMLURL(account.endpoint)
-        let server = RemoteServer(htmlURL: htmlURL)
-        let parsedRemote = parseRemote(remote)
+    guard let parsedRemote = parseRemote(remote),
+          let account = accounts.first(where: { remoteMatchesEndpoint(parsedRemote, $0.endpoint) })
+    else {
+        return nil
+    }
+    return MatchedGitHubRepository(name: parsedRemote.name, owner: parsedRemote.owner, account: account)
+}
 
-        if let parsedRemote, let server {
-            if RemoteServer(parsedRemote).matches(server) {
-                return MatchedGitHubRepository(name: parsedRemote.name, owner: parsedRemote.owner, account: account)
-            }
-        }
+/// A match that isn't scoped to any account: for a remote on a GitHub host
+/// when no account was chosen, so its GitHub repository isn't tied to an
+/// arbitrary signed-in login.
+public func toAnonymousMatch(endpoint: String, owner: String, name: String) -> MatchedGitHubRepository {
+    let account = Account(login: "", endpoint: endpoint, token: "", emails: [], avatarURL: "", id: -1, name: "")
+    return MatchedGitHubRepository(name: name, owner: owner, account: account)
+}
+
+/// Whether a remote is hosted on the API endpoint `endpoint`: an HTTPS
+/// remote on its web site's host and port, an SSH remote on its host name
+/// (`RemoteServer`).
+public func remoteMatchesEndpoint(_ remote: GitRemoteURL, _ endpoint: String) -> Bool {
+    guard let server = RemoteServer(htmlURL: getHTMLURL(endpoint)) else {
+        return false
+    }
+    return RemoteServer(remote).matches(server)
+}
+
+/// The API endpoint a remote is hosted on.
+///
+/// The first of `candidates` the remote matches (`remoteMatchesEndpoint`),
+/// so an SSH remote finds a server whose web site is on another port; else
+/// the endpoint of the remote's own host. Nil when the remote has no host.
+public func getEndpointForRemote(_ remote: GitRemoteURL, candidates: [String]) -> String? {
+    if let known = candidates.first(where: { remoteMatchesEndpoint(remote, $0) }) {
+        return known
+    }
+    let server = RemoteServer(remote)
+    guard !server.hostname.isEmpty else {
+        return nil
+    }
+    let host = server.port.map { "\(server.hostname):\($0)" } ?? server.hostname
+    return getAPIEndpoint("https://\(host)")
+}
+
+// MARK: Accounts with access
+
+/// What to associate a repository with once an account was chosen for its
+/// remote: the match, and the repository as the API returned it when the
+/// account's access was checked. Without an API repository (the account was
+/// picked in the Clone sheet, or the remote is a wiki), it loads on the
+/// next refresh.
+public struct RemoteRepositoryAssignment: Sendable {
+    public let match: MatchedGitHubRepository
+    public let apiRepository: APIFullRepository?
+
+    public init(match: MatchedGitHubRepository, apiRepository: APIFullRepository? = nil) {
+        self.match = match
+        self.apiRepository = apiRepository
     }
 
-    return nil
+    public var account: Account {
+        match.account
+    }
+}
+
+/// Looks a repository up with an account: nil when the account can't see
+/// it (a 404); throws when its access can't be checked.
+public typealias RepositoryAccessLookup = @Sendable (_ account: Account, _ owner: String, _ name: String) async throws -> APIFullRepository?
+
+/// `API.fetchRepositoryIfAccessible` through `runtime`.
+public func lookupRepositoryAccess(runtime: GitHubRuntime) -> RepositoryAccessLookup {
+    { account, owner, name in
+        try await API.fromAccount(account, runtime: runtime).fetchRepositoryIfAccessible(owner: owner, name: name)
+    }
+}
+
+/// Checks whether `account` can see the repository at `remote`: nil when
+/// the remote isn't on the account's server or the account can't see it.
+/// A wiki's access is its repository's, and it gets no API repository.
+///
+/// - Throws: When the access can't be checked (`RepositoryAccessLookup`).
+public func probeRemoteRepositoryAccount(
+    _ account: Account,
+    _ remote: String,
+    lookup: RepositoryAccessLookup
+) async throws -> RemoteRepositoryAssignment? {
+    guard let match = matchGitHubRepository([account], remote) else {
+        return nil
+    }
+    // The API doesn't know about wikis, so check access to the wiki's
+    // repository instead.
+    if let wikiOf = wikiRepositoryName(match.name) {
+        return try await lookup(account, match.owner, wikiOf) == nil ? nil : RemoteRepositoryAssignment(match: match)
+    }
+    guard let apiRepository = try await lookup(account, match.owner, match.name) else {
+        return nil
+    }
+    return RemoteRepositoryAssignment(match: match, apiRepository: apiRepository)
+}
+
+/// The repository a wiki's name (`name.wiki`, any case) belongs to.
+private func wikiRepositoryName(_ name: String) -> String? {
+    guard name.count > 5, JSCompat.endsWith(JSCompat.toLowerCase(name), ".wiki") else {
+        return nil
+    }
+    return String(name.dropLast(5))
+}
+
+/// What choosing an account for a remote came to.
+public enum RemoteAccountChoice: Sendable {
+    /// The account to assign, with what its check found.
+    case assigned(RemoteRepositoryAssignment)
+    /// No signed-in account on the remote's server can see the repository
+    /// (each was checked: a 404), or none is signed in to it.
+    case noAccess
+    /// No account was found to see the repository, and the access of some
+    /// couldn't be checked: nothing is known to lack access.
+    case undecided
+    /// The user cancelled choosing.
+    case cancelled
+}
+
+/// Asks the user which of several accounts to use for a repository.
+///
+/// Gets the match (the repository's owner and name, on the server of the
+/// first account offered) and the accounts to offer; returns the chosen
+/// one (perhaps one signed in meanwhile), or nil when the user cancels.
+public typealias RemoteAccountChooser = @Sendable (_ match: MatchedGitHubRepository, _ accounts: [Account]) async -> Account?
+
+/// Checks every account on the remote's server for access, then chooses
+/// among them.
+///
+/// Only a 404 means an account can't see the repository. An account whose
+/// access can't be checked (a SAML 403, a rate limit, a network error) is
+/// logged and left undecided: not taken to lack access, and never a reason
+/// to settle on another account. So the only account with access is
+/// assigned on its own only when every other account on the server was
+/// checked; otherwise the user picks among the accounts with access and
+/// those left undecided. Without an account that can see it and none left
+/// undecided, it's `noAccess`; with only undecided ones, `undecided`.
+///
+/// An account the user picks that wasn't checked (one signed in from the
+/// chooser) or was left undecided is checked before it's accepted.
+///
+/// - Throws: When the account the user picks can't see the repository, or
+///   its access can't be checked.
+public func chooseAccountForRemoteRepository(
+    _ accounts: [Account],
+    _ remote: String,
+    lookup: @escaping RepositoryAccessLookup,
+    choose: RemoteAccountChooser
+) async throws -> RemoteAccountChoice {
+    enum Probe: Sendable {
+        case accessible(RemoteRepositoryAssignment)
+        case noAccess
+        case undecided(MatchedGitHubRepository)
+    }
+    let probes = await withTaskGroup(of: (Int, Probe?).self) { group in
+        for (index, account) in accounts.enumerated() {
+            guard let match = matchGitHubRepository([account], remote) else {
+                // Not on the remote's server.
+                continue
+            }
+            group.addTask {
+                do {
+                    guard let assignment = try await probeRemoteRepositoryAccount(account, remote, lookup: lookup) else {
+                        return (index, .noAccess)
+                    }
+                    return (index, .accessible(assignment))
+                } catch {
+                    log.warning("Couldn't check repository access for @\(account.login, privacy: .public) (\(account.endpoint, privacy: .public)): \(String(describing: error), privacy: .public)")
+                    return (index, .undecided(match))
+                }
+            }
+        }
+        var results: [(Int, Probe)] = []
+        for await (index, probe) in group {
+            if let probe {
+                results.append((index, probe))
+            }
+        }
+        return results.sorted { $0.0 < $1.0 }.map(\.1)
+    }
+
+    let accessible = probes.compactMap { probe -> RemoteRepositoryAssignment? in
+        if case .accessible(let assignment) = probe {
+            return assignment
+        }
+        return nil
+    }
+    let undecided = probes.compactMap { probe -> MatchedGitHubRepository? in
+        if case .undecided(let match) = probe {
+            return match
+        }
+        return nil
+    }
+
+    if accessible.count == 1, undecided.isEmpty {
+        return .assigned(accessible[0])
+    }
+    guard let first = accessible.first?.match ?? undecided.first else {
+        return .noAccess
+    }
+    if accessible.isEmpty {
+        return .undecided
+    }
+
+    let offered = accessible.map(\.account) + undecided.map(\.account)
+    guard let selected = await choose(first, offered) else {
+        return .cancelled
+    }
+    if let assignment = accessible.first(where: { $0.account.identity == selected.identity }) {
+        return .assigned(assignment)
+    }
+    // An account signed in from the chooser, or one left undecided, is
+    // checked before it's used.
+    guard let assignment = try await probeRemoteRepositoryAccount(selected, remote, lookup: lookup) else {
+        throw GitHubError("The account @\(selected.login) can't access \(first.owner)/\(first.name).")
+    }
+    return .assigned(assignment)
 }
 
 /// Find an existing repository associated with this path

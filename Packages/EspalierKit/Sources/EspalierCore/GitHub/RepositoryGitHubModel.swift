@@ -41,7 +41,7 @@ public final class RepositoryGitHubModel: RepositoryFeature {
 
     /// The GitHub repository whose pull requests are shown
     /// (`GitHubRepository.dbID`), to notice a new association.
-    @ObservationIgnored private var pullRequestsKey: Int?
+    @ObservationIgnored private(set) var pullRequestsKey: Int?
     /// The tip the last refresh notification saw, to notice a new branch.
     @ObservationIgnored private var lastSeenTip: Tip = .unknown
     /// Bumped by every protection refresh and by `clearBranchProtection()`,
@@ -156,7 +156,7 @@ public final class RepositoryGitHubModel: RepositoryFeature {
         }
         guard let repository, let app = repository.app, let store,
               let gitHubRepository = getNonForkGitHubRepository(repository.record),
-              let account = app.accounts.account(forEndpoint: gitHubRepository.endpoint)
+              let account = app.accounts.account(for: repository.record, on: gitHubRepository.endpoint)
         else {
             return nil
         }
@@ -168,7 +168,7 @@ public final class RepositoryGitHubModel: RepositoryFeature {
         ) else {
             return nil
         }
-        return store.model(for: apiPullRequest, endpoint: gitHubRepository.endpoint)
+        return store.model(for: apiPullRequest, in: gitHubRepository)
     }
 
     /// The current branch's pull request on GitHub ("View Pull Request on
@@ -259,7 +259,7 @@ public final class RepositoryGitHubModel: RepositoryFeature {
 
         guard let repository, let app = repository.app,
               let contributing = getContributingRepository(repository.record),
-              let account = app.accounts.account(forEndpoint: contributing.endpoint)
+              let account = app.accounts.account(for: repository.record, on: contributing.endpoint)
         else {
             return nil
         }
@@ -345,7 +345,7 @@ public final class RepositoryGitHubModel: RepositoryFeature {
     /// with an account.
     func refreshAutocompletion() {
         guard let repository, let app = repository.app, let gitHubRepository = getNonForkGitHubRepository(repository.record),
-              app.accounts.account(forEndpoint: gitHubRepository.endpoint) != nil
+              app.accounts.account(for: repository.record, on: gitHubRepository.endpoint) != nil
         else {
             return
         }
@@ -399,9 +399,10 @@ public final class RepositoryGitHubModel: RepositoryFeature {
         lastSeenTip = .unknown
     }
 
-    /// Notices a new association (a first sign-in, a fork's target): forgets
-    /// the old GitHub repository's pull requests and rulesets. Returns
-    /// whether the GitHub repository changed.
+    /// Notices a new association (a fork's target, another account, whose
+    /// row is its own): forgets the old GitHub repository's pull requests,
+    /// rulesets, and protection, and drops loads still running for it.
+    /// Returns whether the GitHub repository changed.
     @discardableResult
     func syncGitHubRepository() -> Bool {
         guard let repository else {
@@ -411,8 +412,13 @@ public final class RepositoryGitHubModel: RepositoryFeature {
         guard key != pullRequestsKey else {
             return false
         }
+        let hadKey = pullRequestsKey != nil
         pullRequestsKey = key
         cachedRepoRulesets = [:]
+        if hadKey {
+            clearBranchProtection()
+        }
+        commitStatuses.accountDidChange()
         if !openPullRequests.isEmpty {
             openPullRequests = []
         }
@@ -423,6 +429,28 @@ public final class RepositoryGitHubModel: RepositoryFeature {
             currentPullRequest = nil
         }
         return true
+    }
+
+    /// The repository was assigned another account, or none: what its old
+    /// account loaded goes (its GitHub repository is the new account's row,
+    /// so its pull requests are that row's), and so do its checks and the
+    /// current branch's protection; the selected repository loads its new
+    /// row's cached pull requests.
+    func accountDidChange() {
+        commitStatuses.accountDidChange()
+        clearBranchProtection()
+        if syncGitHubRepository() {
+            gitHubRepositoryDidChange()
+        }
+        notifications.stop()
+        notifications.update()
+    }
+
+    /// The signed-in accounts changed: checks loaded with an account that's
+    /// gone are dropped, and notifications start or stop.
+    func signedInAccountsDidChange() {
+        commitStatuses.accountDidChange()
+        notifications.update()
     }
 
     /// Loads the new GitHub repository's data, for the selected repository.

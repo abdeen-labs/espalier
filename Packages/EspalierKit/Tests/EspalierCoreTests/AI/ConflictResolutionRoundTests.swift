@@ -82,7 +82,10 @@ struct ConflictResolutionRoundTests {
         }
         try fixture.addProvider()
         fixture.server.answer { conflictResolutionReply(for: $0) }
-        fixture.app.updateRecord(fixture.model.id) { $0.gitHubRepository = gitHubRepoFixture(owner: "octocat", name: "hello") }
+        fixture.app.updateRecord(fixture.model.id) { record in
+            record.gitHubRepository = gitHubRepoFixture(owner: "octocat", name: "hello")
+            record.accountLogin = "octocat"
+        }
         await fixture.settle()
         // Pull request 12 is in the cache of open pull requests.
         fixture.harness.gitHub.on("GET", "/repos/octocat/hello/pulls", respond: .json(encoding: [

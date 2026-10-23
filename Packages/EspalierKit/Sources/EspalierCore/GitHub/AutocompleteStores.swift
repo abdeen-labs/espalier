@@ -227,7 +227,7 @@ public final class IssuesStore {
     private func refreshIssues() async {
         guard let model, let repository = model.repository, let app = repository.app,
               let gitHubRepository = getNonForkGitHubRepository(repository.record),
-              let account = app.accounts.account(forEndpoint: gitHubRepository.endpoint)
+              let account = app.accounts.account(for: repository.record, on: gitHubRepository.endpoint)
         else {
             return
         }
@@ -356,7 +356,7 @@ public final class GitHubUserStore {
     public func user(byLogin login: String) async -> MentionableUser? {
         guard let model, let repository = model.repository, let app = repository.app,
               let gitHubRepository = getNonForkGitHubRepository(repository.record),
-              let account = app.accounts.account(forEndpoint: gitHubRepository.endpoint)
+              let account = app.accounts.account(for: repository.record, on: gitHubRepository.endpoint)
         else {
             return nil
         }
@@ -425,7 +425,7 @@ public final class GitHubUserStore {
     private func update() async {
         guard let model, let repository = model.repository, let app = repository.app,
               let gitHubRepository = getNonForkGitHubRepository(repository.record),
-              let account = app.accounts.account(forEndpoint: gitHubRepository.endpoint)
+              let account = app.accounts.account(for: repository.record, on: gitHubRepository.endpoint)
         else {
             return
         }

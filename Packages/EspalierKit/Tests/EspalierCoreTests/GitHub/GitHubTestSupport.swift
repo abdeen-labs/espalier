@@ -79,6 +79,19 @@ extension AppHarness {
         gitHub.on("GET", "\(prefix)/user/emails", respond: .json(encoding: [createMockAPIEmail("\(login)@example.com")]))
     }
 
+    /// Answers `/user` and `/user/emails` for each of `accounts` (on
+    /// GitHub.com) by its token, so the launch refresh renames none of them.
+    func mockUsers(_ accounts: [Account]) {
+        let byToken = Dictionary(uniqueKeysWithValues: accounts.map { ("Bearer \($0.token)", $0) })
+        gitHub.on("GET", "/user") { request in
+            guard let account = byToken[request.header("Authorization") ?? ""] else {
+                return .json(["message": "Not Found"], status: 404)
+            }
+            return .json(encoding: createMockAPIFullIdentity(id: account.id, login: account.login))
+        }
+        gitHub.on("GET", "/user/emails", respond: .json(encoding: [createMockAPIEmail()]))
+    }
+
     /// Answers the device code request with `userCode`.
     func mockDeviceCode(userCode: String = "WDJB-MJHT", verificationURI: String = "https://github.com/login/device", expiresIn: Int = 900) {
         gitHub.on("POST", "/login/device/code", respond: .json([

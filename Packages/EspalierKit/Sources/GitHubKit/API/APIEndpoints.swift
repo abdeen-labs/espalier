@@ -66,8 +66,8 @@ public func fetchUser(
 /// https://octocorp.ghe.com/my-team/my-project -> https://api.octocorp.ghe.com/
 ///
 /// For any other host, this returns the endpoint sign-in stores for that
-/// host (`.../api/v3`, or the `api.` subdomain on ghe.com), so
-/// `getAccountForEndpoint` finds the account.
+/// host (`.../api/v3`, or the `api.` subdomain on ghe.com), so it compares
+/// equal to the endpoints of the accounts signed in to it.
 public func getEndpointForRepository(_ url: String) -> String {
     let parsed = ParsedURL(url)
     if parsed.hostname == "github.com" {
@@ -127,11 +127,6 @@ public func getAPIEndpoint(_ endpoint: String) -> String {
 /// Get github.com's API endpoint.
 public func getDotComAPIEndpoint() -> String {
     "https://api.github.com"
-}
-
-/// Get the account for the endpoint.
-public func getAccountForEndpoint(_ accounts: [Account], _ endpoint: String) -> Account? {
-    accounts.first { $0.endpoint == endpoint }
 }
 
 func tryUpdateEndpointVersionFromResponse(_ endpoint: String, _ response: HTTPResponse, runtime: GitHubRuntime) {

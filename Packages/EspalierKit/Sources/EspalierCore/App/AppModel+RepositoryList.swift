@@ -39,6 +39,14 @@ public struct AddRepositoriesResult: Sendable, Equatable {
         "This folder is a bare repository, which Espalier doesn't support."
 }
 
+/// The account a repository being added gets.
+enum AddedRepositoryAccount: Sendable {
+    /// The one that can see it, or the one the user picks.
+    case choose
+    /// The one a clone used (nil: none), without asking.
+    case cloned(RemoteRepositoryAssignment?)
+}
+
 /// The message when moving a repository to the Trash fails.
 let moveRepositoryToTrashFailedMessage =
     "Couldn't move the repository to the Trash.\n\nThe folder or one of its files may be open in another app."
@@ -57,12 +65,19 @@ extension AppModel {
     /// - Anything else, bare repositories included, is an invalid path, with
     ///   `invalidRepoPathsMessage(_:)`.
     ///
-    /// Each added repository loads its remotes, then its GitHub association
-    /// and whether it uses Git LFS are looked up together.
+    /// Each added repository loads its remotes, then its account and GitHub
+    /// association (`associateAddedRepository`) and whether it uses Git
+    /// LFS are looked up together.
     public func addRepositories(_ paths: [String]) async throws(OperationError) -> AddRepositoriesResult {
+        try await addRepositories(paths, account: .choose)
+    }
+
+    /// `addRepositories(_:)`, with the account for the added repositories:
+    /// a clone's comes from cloning.
+    func addRepositories(_ paths: [String], account: AddedRepositoryAccount) async throws(OperationError) -> AddRepositoriesResult {
         var result = AddRepositoriesResult()
         for path in paths {
-            _ = await addRepository(at: path, into: &result)
+            _ = await addRepository(at: path, into: &result, account: account)
         }
         if !result.invalidPaths.isEmpty {
             result.invalidPathsMessage = invalidRepoPathsMessage(result.invalidPaths)
@@ -72,7 +87,11 @@ extension AppModel {
 
     /// Adds the repository at `path` to `result`, and returns it, unless the
     /// path is invalid.
-    func addRepository(at path: String, into result: inout AddRepositoriesResult) async -> RepositoryID? {
+    func addRepository(
+        at path: String,
+        into result: inout AddRepositoriesResult,
+        account: AddedRepositoryAccount = .choose
+    ) async -> RepositoryID? {
         switch await repositoryType(path) {
         case .unsafe(let unsafePath):
             if let existing = matchExistingRepository(path) {
@@ -129,7 +148,9 @@ extension AppModel {
             async let usingLFS = environment.withRuntimes {
                 (try? await isUsingLFS(gitRepository)) ?? false
             }
-            await refreshGitHubAssociation(record.id)
+            await accounts.track {
+                await self.associateAddedRepository(record.id, account: account)
+            }
             let isUsingLFS = await usingLFS
 
             guard self.record(record.id) != nil else {
@@ -151,6 +172,40 @@ extension AppModel {
         case .missing:
             result.invalidPaths.append(path)
             return nil
+        }
+    }
+
+    /// Gives a repository just added its account and GitHub association:
+    /// the account a clone used, else the only signed-in account on its
+    /// remote's server that can see it, or the one the user picks when
+    /// several might (`chooseAccount(forRemote:)`). Without one, a remote on
+    /// a signed-in account's server is associated without an account.
+    private func associateAddedRepository(_ id: RepositoryID, account: AddedRepositoryAccount) async {
+        guard let record = record(id), let remote = await defaultRemote(of: record) else {
+            return
+        }
+        var assignment: RemoteRepositoryAssignment?
+        switch account {
+        case .cloned(let cloned):
+            assignment = cloned
+        case .choose:
+            do {
+                if case .assigned(let chosen) = try await chooseAccount(forRemote: remote.url) {
+                    assignment = chosen
+                }
+            } catch {
+                // Added without an account rather than left half-added.
+                logger.error("Couldn't choose the account of an added repository: \(String(describing: error), privacy: .public)")
+            }
+        }
+        guard self.record(id) != nil else {
+            return
+        }
+        if let assignment {
+            associate(id, with: assignment)
+        } else if let match = GitHubKit.matchGitHubRepository(accounts.accounts, remote.url) {
+            let anonymous = toAnonymousMatch(endpoint: match.account.endpoint, owner: match.owner, name: match.name)
+            setGitHubRepository(upsertGitHubRepositoryFromMatch(anonymous), for: id, accountLogin: nil)
         }
     }
 

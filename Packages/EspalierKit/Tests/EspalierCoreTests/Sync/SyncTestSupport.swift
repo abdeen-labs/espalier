@@ -78,15 +78,21 @@ extension SelectedRepository {
     /// Associates the repository with a GitHub repository, storing its rows
     /// (with its parent's) as an association does. After selection, so the
     /// background services (which start only on selection) don't.
-    func associate(_ gitHubRepository: GitHubRepository = ModelFixtures.gitHubRepository()) {
+    ///
+    /// - Parameter accountLogin: The account assigned to the repository, nil
+    ///   for none; its rows are that account's.
+    func associate(_ gitHubRepository: GitHubRepository = ModelFixtures.gitHubRepository(), accountLogin: String? = nil) {
         app.updateGitHubRepositories { table in
             var next: GitHubRepository? = gitHubRepository
             while let repository = next {
-                table.update(StoredGitHubRepository(repository))
+                table.update(StoredGitHubRepository(repository, accountLogin: accountLogin ?? ""))
                 next = repository.parent
             }
         }
-        app.updateRecord(model.id) { $0.gitHubRepository = gitHubRepository }
+        app.updateRecord(model.id) { record in
+            record.gitHubRepository = gitHubRepository
+            record.accountLogin = accountLogin
+        }
     }
 
     /// The commit `branch` points at in `origin`, or nil.

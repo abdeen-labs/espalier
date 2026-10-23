@@ -295,7 +295,7 @@ struct PushOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("pushing to a GitHub repository without write access offers a fork when an account matches", .hangGuard(minutes: 5))
+    @Test("pushing to a GitHub repository without write access offers a fork when its account is signed in", .hangGuard(minutes: 5))
     func insufficientPermissions() async throws {
         let fixture = try await makeSelectedRepository { local in
             try await commitFile(local, "a.txt", "a\n")
@@ -305,7 +305,7 @@ struct PushOperationTests {
             POSIXPath.join(fixture.remote.path, "hooks", "pre-receive"),
             "#!/bin/sh\necho 'fatal: Authentication failed' >&2\nexit 1\n"
         )
-        fixture.associate(ModelFixtures.gitHubRepository(owner: "octocat", name: "app", permissions: .read))
+        fixture.associate(ModelFixtures.gitHubRepository(owner: "octocat", name: "app", permissions: .read), accountLogin: testAccount.login)
 
         var error = await #expect(throws: OperationError.self) {
             try await fixture.model.sync.push()
