@@ -6,7 +6,7 @@
 
 import SwiftUI
 
-/// A group's label in a grouped list ("Recent Branches", an owner): the
+/// A group's label in a grouped list ("Other Branches", an owner): the
 /// uppercase section label, in line with its rows' content, and what trails
 /// it (a worktree list's New Worktree…). Put the list's row inset around
 /// it, as around its rows.

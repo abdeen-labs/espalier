@@ -10,19 +10,19 @@ struct BranchGroupingTests {
     let branchTip = BranchTip(sha: "300acef")
 
     var currentBranch: Branch {
-        Branch(name: "master", upstream: nil, tip: branchTip, type: .local, ref: "")
+        Branch(name: "master", upstream: nil, tip: branchTip, type: .local, ref: "refs/heads/master")
     }
 
     var defaultBranch: Branch {
-        Branch(name: "master", upstream: nil, tip: branchTip, type: .local, ref: "")
+        Branch(name: "master", upstream: nil, tip: branchTip, type: .local, ref: "refs/heads/master")
     }
 
     var recentBranches: [Branch] {
-        [Branch(name: "some-recent-branch", upstream: nil, tip: branchTip, type: .local, ref: "")]
+        [Branch(name: "some-recent-branch", upstream: nil, tip: branchTip, type: .local, ref: "refs/heads/some-recent-branch")]
     }
 
     var otherBranch: Branch {
-        Branch(name: "other-branch", upstream: nil, tip: branchTip, type: .local, ref: "")
+        Branch(name: "other-branch", upstream: nil, tip: branchTip, type: .local, ref: "refs/heads/other-branch")
     }
 
     var allBranches: [Branch] {
@@ -72,5 +72,28 @@ struct BranchGroupingTests {
         #expect(groups.map(\.identifier) == [.defaultBranch, .recent, .other])
         #expect(groups[1].branches == recentBranches)
         #expect(groups[2].branches == [otherBranch, userRemoteBranch])
+    }
+
+    @Test("the current branch shows as the refresh has it, and leads the recent branches while the branch list doesn't have it yet")
+    func currentBranch() {
+        let refreshed = Branch(name: otherBranch.name, upstream: nil, tip: BranchTip(sha: "4b825dc"), type: .local, ref: otherBranch.ref)
+        let shown = groupBranches(defaultBranch, refreshed, allBranches, recentBranches, forkRemoteNames: [])
+        #expect(shown.map(\.identifier) == [.defaultBranch, .recent, .other])
+        #expect(shown[2].branches == [refreshed])
+
+        let created = Branch(name: "just-created", upstream: nil, tip: branchTip, type: .local, ref: "refs/heads/just-created")
+        let leading = groupBranches(defaultBranch, created, allBranches, recentBranches, forkRemoteNames: [])
+        #expect(leading[1].branches == [created] + recentBranches)
+        #expect(leading[2].branches == [otherBranch])
+    }
+
+    @Test("a branch shows once by its ref: a local branch named like a remote one shows beside it")
+    func refsIdentifyBranches() {
+        let local = Branch(name: "origin/topic", upstream: nil, tip: branchTip, type: .local, ref: "refs/heads/origin/topic")
+        let remote = Branch(name: "origin/topic", upstream: nil, tip: branchTip, type: .remote, ref: "refs/remotes/origin/topic")
+        let groups = groupBranches(nil, nil, [local, remote, local], [local], forkRemoteNames: [])
+        #expect(groups.map(\.identifier) == [.recent, .other])
+        #expect(groups[0].branches == [local])
+        #expect(groups[1].branches == [remote])
     }
 }

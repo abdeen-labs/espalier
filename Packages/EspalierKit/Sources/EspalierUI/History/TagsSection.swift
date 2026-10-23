@@ -1,6 +1,7 @@
 // The sidebar's Tags section: the repository's tags, newest version first,
-// collapsed by default; a tag created here waits to be pushed with an
-// arrow. Selecting one shows the history focused on its commit.
+// collapsed by default, their count in its header while it's collapsed; a
+// tag created here waits to be pushed with an arrow. Selecting one shows
+// the history focused on its commit.
 
 import AppKit
 import EspalierCore
@@ -67,7 +68,7 @@ public struct TagsSection: View {
                         .tag(SidebarPlace.tag(name: row.name))
                 }
             } header: {
-                SidebarSectionHeader("Tags")
+                SidebarSectionHeader("Tags", count: rows.count)
             }
         }
     }

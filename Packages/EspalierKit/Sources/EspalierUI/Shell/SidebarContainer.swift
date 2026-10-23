@@ -8,8 +8,10 @@
 // (`SidebarSectionsHold`).
 //
 // The sidebar is flat: the `sidebar` color with a hairline on its trailing
-// edge, the theme's section labels (no counts), rows 28 high with the row
-// radius, and the selected item in the theme's sidebar selection
+// edge, the theme's section labels after their chevrons (a collapsed
+// section's with its count), rows 28 high with the row radius, hairline
+// dividers between groups of a section's rows, and the selected item in the
+// theme's sidebar selection
 // (`Palette.sidebarSelection`), its title in the selected weight
 // (`SidebarRowFont`) and its symbol in the theme's selection symbol color
 // (the list's own selection drawing is off before it first draws:
@@ -352,6 +354,20 @@ struct SidebarRowLabel<Trailing: View>: View {
     }
 }
 
+/// A quiet divider between groups of a section's rows (the branches that
+/// lead the Branches section, and its Other and Remote Branches): a hairline
+/// across the rows' content, in a short row of its own that takes no hover
+/// or selection.
+struct SidebarDivider: View {
+    var body: some View {
+        Hairline()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Metrics.grid)
+            .selectionDisabled()
+            .accessibilityHidden(true)
+    }
+}
+
 /// A sidebar row title's weight: bold while the row is selected in a theme
 /// whose selection is bold (`Theme.sidebarSelectionIsBold`); semibold for
 /// the current branch and its pull request; medium while the row is
@@ -387,6 +403,12 @@ final class SidebarHover {
 extension Metrics.Sidebar {
     /// The column a row's symbol or dot sits in, so titles line up.
     public static let symbolWidth: CGFloat = 16
+    /// The list's disclosure column, before a disclosure row's symbol: a
+    /// section header's chevron sits in it, so the label after it lines up
+    /// with the rows' symbols.
+    public static let disclosureWidth: CGFloat = 11
+    /// The part of the disclosure column a chevron is centered in.
+    public static let disclosureChevronWidth: CGFloat = 8
 }
 
 extension View {
@@ -677,10 +699,11 @@ struct SidebarListStyler: NSViewRepresentable {
 
 /// A sidebar section whose expansion is remembered (UI state, not a
 /// setting), or always expanded where sections don't collapse
-/// (`sidebarSectionsCollapse`). Its header's chevron expands and collapses it
-/// (`SidebarSectionHeader`), not the list's: on hover, the list's takes the
-/// header's trailing edge, where the header's buttons are, and narrows the
-/// header, which moves them.
+/// (`sidebarSectionsCollapse`). Its header's chevron, before its label,
+/// expands and collapses it, and the label has the section's count while
+/// it's collapsed (`SidebarSectionHeader`); the list's own chevron isn't
+/// used: on hover, it takes the header's trailing edge, where the header's
+/// buttons are, and narrows the header, which moves them.
 ///
 /// The rows follow the expansion the chevron sets, a state change it makes
 /// inside its animation, so the list animates them in and out; the
@@ -750,7 +773,7 @@ public struct SidebarSection<Content: View, Header: View>: View {
 
 extension EnvironmentValues {
     /// Whether `SidebarSection`s collapse: in a rail's popover, which holds
-    /// one section, they're always expanded, with no chevron.
+    /// one section, they're always expanded, with no chevron or count.
     @Entry var sidebarSectionsCollapse = true
     /// The expansion of the `SidebarSection` whose header this is, which
     /// the header's chevron toggles.
@@ -760,50 +783,56 @@ extension EnvironmentValues {
     @Entry var isInSidebarSectionHeader = false
 }
 
-/// A section's header: the uppercase label, with no count, and what
-/// trails it (New Branch's plus). In a `SidebarSection`, a chevron shows
-/// while the pointer is on the header, just before what trails it, in the
-/// space the label leaves, so nothing in the header moves.
+/// A section's header: the theme's section label and what trails it (New
+/// Branch's plus). In a `SidebarSection` that collapses, a chevron is
+/// always before the label, as the list's own chevron is before a
+/// disclosure row's symbol, and the label has the section's count while
+/// it's collapsed ("TAGS 3"), so a collapsed section doesn't read as empty.
+/// Without a chevron, the label lines up with the rows' symbols.
 struct SidebarSectionHeader<Accessory: View>: View {
     private let title: String
+    private let count: Int?
     private let accessory: Accessory
     @Environment(\.sidebarSectionExpansion) private var expansion
-    @State private var isHovered = false
 
-    init(_ title: String, @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
+    /// - Parameter count: The section's rows, which the label shows while
+    ///   the section is collapsed; nil shows none.
+    init(_ title: String, count: Int? = nil, @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
         self.title = title
+        self.count = count
         self.accessory = accessory()
     }
 
     var body: some View {
         HStack(spacing: Metrics.grid) {
-            SectionLabel(title)
-            Spacer(minLength: Metrics.grid)
-            if let expansion {
-                SidebarSectionChevron(title: title, isExpanded: expansion, isHeaderHovered: isHovered)
+            HStack(spacing: 0) {
+                if let expansion {
+                    SidebarSectionChevron(title: title, isExpanded: expansion)
+                }
+                SectionLabel(title, count: expansion?.wrappedValue == false ? count : nil)
             }
+            Spacer(minLength: Metrics.grid)
             accessory
                 .font(Typography.subheadline.weight(.semibold))
                 .foregroundStyle(.sidebarText3)
                 .environment(\.isInSidebarSectionHeader, true)
         }
-        // Aligned with the rows' symbols and their trailing counts.
-        .padding(.leading, Metrics.grid)
+        // The chevron in the list's disclosure column, else the label
+        // aligned with the rows' symbols; what trails it, with their
+        // trailing counts.
+        .padding(.leading, expansion == nil ? Metrics.grid : 0)
         .padding(.trailing, Metrics.Sidebar.rowInset)
         .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
     }
 }
 
 /// A section header's chevron: right while the section is collapsed, down
-/// while it's expanded, turning between them. It shows while the pointer is
-/// on the header or it has keyboard focus.
+/// while it's expanded, turning between them, in the list's disclosure
+/// column (`Metrics.Sidebar.disclosureWidth`) before the label.
 private struct SidebarSectionChevron: View {
     let title: String
     @Binding var isExpanded: Bool
-    let isHeaderHovered: Bool
     @Environment(\.motion) private var motion
-    @FocusState private var isFocused: Bool
 
     var body: some View {
         Button {
@@ -811,24 +840,21 @@ private struct SidebarSectionChevron: View {
                 isExpanded.toggle()
             }
         } label: {
-            // The list's own chevron's size and weight. Hidden by color,
-            // not opacity, so VoiceOver still finds it.
+            // The list's own chevron's size and weight, centered where the
+            // list centers its chevrons.
             Image(systemName: "chevron.right")
                 .font(Typography.row.weight(.semibold))
                 .imageScale(.small)
-                .foregroundStyle(isShown ? Color.sidebarText3 : Color.clear)
+                .foregroundStyle(.sidebarText3)
                 .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 .motion(Motion.leave, value: isExpanded)
-                .hoverMotion(isShown)
+                .frame(width: Metrics.Sidebar.disclosureChevronWidth, height: Metrics.Sidebar.glyphSize)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(SidebarHeaderButtonStyle())
-        .focused($isFocused)
+        .buttonStyle(.bare(.rounded(Metrics.Radius.small)))
+        .frame(width: Metrics.Sidebar.disclosureWidth, alignment: .leading)
         .tooltip(isExpanded ? "Collapse" : "Expand")
         .accessibilityLabel(isExpanded ? "Collapse \(title)" : "Expand \(title)")
-    }
-
-    private var isShown: Bool {
-        isHeaderHovered || isFocused
     }
 }
 

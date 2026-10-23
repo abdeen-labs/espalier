@@ -3,13 +3,14 @@
 // button; the search field; the segmented control; chips, key caps, status
 // badges, and icon circles; the arc and the progress
 // bar; the slider; links; flat surfaces; and the window's pieces, the
-// sidebar and the toolbar.
+// sidebar (and a section collapsed and expanded) and the toolbar.
 
 import AppKit
 import EspalierCore
 import GitKit
 import SwiftUI
 import Testing
+import TestSupport
 @testable import EspalierUI
 
 @Suite("Components", .captures) @MainActor
@@ -269,25 +270,40 @@ struct ComponentCaptures {
 
     // MARK: The window's pieces
 
-    /// A sidebar from its value-driven rows.
-    private func sidebar(selection: SidebarPlace?) -> some View {
-        List {
+    /// A sidebar from its value-driven rows, its sections' expansions in
+    /// `defaults`: the default branch first, then the recent ones, and after
+    /// a divider Other Branches, closed, with its count; Tags collapsed, as
+    /// it first shows, with its count.
+    private func sidebar(selection: SidebarPlace?, defaults: UserDefaults) -> some View {
+        let palette = TrackPalette.Resolved()
+        return List {
             PlacesSectionRows(changes: ChangesPlaceRowContent(changedFileCount: 7, hasConflicts: false), selection: selection)
-            Section {
-                BranchRow(BranchRowContent(ref: "refs/heads/feature/hourly-forecast", name: "feature/hourly-forecast", isCurrent: true, tracking: .aheadBehind(ahead: 1, behind: 0)))
-                    .sidebarRow(.branch(ref: "refs/heads/feature/hourly-forecast"))
+            SidebarSection(id: "branches") {
                 BranchRow(BranchRowContent(ref: "refs/heads/main", name: "main", tracking: .aheadBehind(ahead: 0, behind: 0), isDefault: true))
                     .sidebarRow(.branch(ref: "refs/heads/main"))
-                BranchRow(BranchRowContent(ref: "refs/heads/fix/locale-units", name: "fix/locale-units"), dotColor: TrackPalette.Resolved().color(forTrack: 1))
+                BranchRow(BranchRowContent(ref: "refs/heads/feature/hourly-forecast", name: "feature/hourly-forecast", isCurrent: true, tracking: .aheadBehind(ahead: 1, behind: 0)))
+                    .sidebarRow(.branch(ref: "refs/heads/feature/hourly-forecast"))
+                BranchRow(BranchRowContent(ref: "refs/heads/fix/locale-units", name: "fix/locale-units", tracking: .notPublished), dotColor: palette.color(forTrack: 1))
                     .sidebarRow(.branch(ref: "refs/heads/fix/locale-units"))
-                BranchRow(BranchRowContent(ref: "refs/heads/spike/widget-intents", name: "spike/widget-intents", tracking: .aheadBehind(ahead: 0, behind: 11)), dotColor: TrackPalette.Resolved().color(forTrack: 2))
-                    .sidebarRow(.branch(ref: "refs/heads/spike/widget-intents"))
+                SidebarDivider()
+                BranchGroupDisclosure(
+                    id: "branches.other",
+                    title: BranchListLabels.otherBranches,
+                    systemImage: "arrow.trianglehead.branch",
+                    count: 2,
+                    isFiltering: false
+                ) {
+                    BranchRow(BranchRowContent(ref: "refs/heads/radar-tiles", name: "radar-tiles", tracking: .aheadBehind(ahead: 0, behind: 11)), dotColor: palette.color(forTrack: 2))
+                        .sidebarRow(.branch(ref: "refs/heads/radar-tiles"))
+                    BranchRow(BranchRowContent(ref: "refs/heads/release-2.4", name: "release-2.4"), dotColor: palette.color(forTrack: 3))
+                        .sidebarRow(.branch(ref: "refs/heads/release-2.4"))
+                }
             } header: {
-                SidebarSectionHeader("Branches") {
+                SidebarSectionHeader("Branches", count: 5) {
                     Image(systemName: "plus")
                 }
             }
-            Section {
+            SidebarSection(id: "pullRequests") {
                 PullRequestRow(content: PullRequestRowContent(number: 216, title: "Hourly forecast in the widget", author: "maya", created: minutesAgo(90), checks: .success))
                     .sidebarRow(.pullRequest(number: 216))
                 PullRequestRow(content: PullRequestRowContent(number: 217, title: "Cache forecasts for 10 minutes", author: "leo", created: minutesAgo(40), checks: .pending))
@@ -295,32 +311,73 @@ struct ComponentCaptures {
                 PullRequestRow(content: PullRequestRowContent(number: 211, title: "Air quality index card", author: "sam", created: minutesAgo(400), isDraft: true))
                     .sidebarRow(.pullRequest(number: 211))
             } header: {
-                SidebarSectionHeader("Pull Requests")
+                SidebarSectionHeader("Pull Requests", count: 3)
             }
-            Section {
-                TagRow(content: TagRowContent(name: "v2.4.0", isWaitingToBePushed: true))
-                    .sidebarRow(.tag(name: "v2.4.0"))
+            SidebarSection(id: "tags", isExpandedByDefault: false) {
+                ForEach(Self.tags) { row in
+                    TagRow(content: row)
+                        .sidebarRow(.tag(name: row.name))
+                }
             } header: {
-                SidebarSectionHeader("Tags")
+                SidebarSectionHeader("Tags", count: Self.tags.count)
             }
-            Section {
+            SidebarSection(id: "stashes") {
                 StashRow(content: StashRowContent(sha: "a1b2c3d", branch: "main", message: "On main: !!Espalier<main>", fileCount: 3))
                     .sidebarRow(.stash(sha: "a1b2c3d"))
             } header: {
-                SidebarSectionHeader("Stashes")
+                SidebarSectionHeader("Stashes", count: 1)
             }
         }
         .sidebarListStyle()
         .environment(\.sidebarSelection, selection)
+        .defaultAppStorage(defaults)
         .overlay(alignment: .trailing) {
             Hairline(.vertical)
         }
         .frame(width: Metrics.Column.sidebar.ideal, height: 560)
     }
 
-    @Test("the sidebar: places, branches in their colors, pull requests, tags, and stashes")
-    func sidebar() {
-        capture(sidebar(selection: .changes), named: "sidebar", area: area)
+    /// The tags of the sidebar's Tags section, the newest version first.
+    private static let tags = TagRowContent.rows(tags: ["v2.2.0", "v2.3.0", "v2.4.0"], tagsToPush: ["v2.4.0"], filter: "")
+
+    @Test("the sidebar: places, branches in their colors, pull requests, tags collapsed with their count, and stashes")
+    func sidebar() throws {
+        let defaults = try TemporaryDefaults()
+        defer { defaults.remove() }
+        capture(sidebar(selection: .changes, defaults: defaults.defaults), named: "sidebar", area: area)
+    }
+
+    /// A sidebar list holding the Tags section, its expansion in
+    /// `defaults`.
+    private func tagsSection(defaults: UserDefaults) -> some View {
+        List {
+            SidebarSection(id: "tags", isExpandedByDefault: false) {
+                ForEach(Self.tags) { row in
+                    TagRow(content: row)
+                        .sidebarRow(.tag(name: row.name))
+                }
+            } header: {
+                SidebarSectionHeader("Tags", count: Self.tags.count)
+            }
+        }
+        .sidebarListStyle()
+        .defaultAppStorage(defaults)
+        .frame(width: Metrics.Column.sidebar.ideal, height: 150)
+    }
+
+    @Test("a collapsed section: Tags as it first shows, its count after its label, then expanded, without the count")
+    func collapsedSection() throws {
+        let collapsed = try TemporaryDefaults()
+        defer { collapsed.remove() }
+        let expanded = try TemporaryDefaults()
+        defer { expanded.remove() }
+        expanded.defaults.set(true, forKey: "sidebar.expanded.tags")
+        let view = HStack(alignment: .top, spacing: 0) {
+            tagsSection(defaults: collapsed.defaults)
+            Hairline(.vertical)
+            tagsSection(defaults: expanded.defaults)
+        }
+        capture(view, named: "sidebar-tags", area: area)
     }
 
     @Test("the toolbar: the location control, the search field, the last fetch, the sync button, and the overflow menu")

@@ -1,8 +1,10 @@
 // A branch's row in the sidebar's Branches section: the name (the current
-// branch's semibold, the one way it's marked), the branch's pull request,
-// and how it compares with its upstream ("↑2 ↓3", not published, or its
-// upstream gone). Value-driven: `BranchRowContent` is built from the models
-// by `BranchesSectionContent`.
+// branch's semibold, the one way it's marked; the default branch's dot is
+// the trunk's color, Classic's teal, and its tooltip says it's the
+// default), the branch's pull request, and how it compares with its
+// upstream ("↑2 ↓3", a dashed circle for not published, or its upstream
+// gone), in the same form on every row. Value-driven: `BranchRowContent`
+// is built from the models by `BranchesSectionContent`.
 
 import EspalierCore
 import GitHubKit
@@ -146,12 +148,26 @@ nonisolated public struct BranchRowContent: Sendable, Equatable, Identifiable {
         ref
     }
 
+    /// The row's tooltip: the name, and that it's the default branch.
+    public var tooltip: String {
+        Self.tooltip(forBranch: name, isDefault: isDefault)
+    }
+
+    /// A branch row's tooltip, in the sidebar and the branch picker:
+    /// "main (default branch)", or the name.
+    static func tooltip(forBranch name: String, isDefault: Bool) -> String {
+        isDefault ? "\(name) (default branch)" : name
+    }
+
     /// The row as VoiceOver reads it: the name, then what the trailing
     /// glyphs say, counts in `numberFormat`.
     public func accessibilityLabel(_ numberFormat: NumberFormat) -> String {
         var parts = [name]
         if isCurrent {
             parts.append("current branch")
+        }
+        if isDefault {
+            parts.append("default branch")
         }
         if let pullRequest {
             parts.append(pullRequest.tooltip)
@@ -165,7 +181,8 @@ nonisolated public struct BranchRowContent: Sendable, Equatable, Identifiable {
 
 /// A branch's row: a dot in its branch color, its name (the current one
 /// semibold, a selected one medium), the pull request glyph, and its
-/// comparison with its upstream.
+/// comparison with its upstream; its tooltip is its name, and says when
+/// it's the default branch.
 public struct BranchRow: View {
     private let content: BranchRowContent
     private let dotColor: NSColor?
@@ -200,10 +217,9 @@ public struct BranchRow: View {
                 BranchTrackingView(content.tracking)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
-            // "Not published" gets all the room the name leaves.
             .layoutPriority(0.5)
         }
-        .tooltip(content.name)
+        .tooltip(content.tooltip)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(content.accessibilityLabel(numberFormat))
     }
@@ -211,9 +227,10 @@ public struct BranchRow: View {
 
 /// The trailing comparison: "↑2" in the theme's ahead color (Classic's
 /// accent) and "↓3" as the sidebar's counts are
-/// (`sidebarRowCount(isSelected:)`), in SF Mono; a dashed circle and "Not
-/// published" for a branch that isn't published; a crossed-out cloud, with
-/// a tooltip, for a branch whose upstream is gone from its remote.
+/// (`sidebarRowCount(isSelected:)`), in SF Mono; a dashed circle, "Not
+/// published" in its tooltip, for a branch that isn't published; a
+/// crossed-out cloud, with a tooltip, for a branch whose upstream is gone
+/// from its remote. Each takes one form whatever the row's width.
 struct BranchTrackingView: View {
     let tracking: BranchTracking
     @Environment(\.isSidebarRowSelected) private var isSelected
@@ -246,19 +263,11 @@ struct BranchTrackingView: View {
                 .tooltip(tracking.description(numberFormat))
             }
         case .notPublished:
-            // The words give way to the name in a narrow row.
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Metrics.grid) {
-                    Image(systemName: "circle.dashed")
-                    Text(tracking.description(numberFormat) ?? "")
-                }
-                .fixedSize()
-                Image(systemName: "circle.dashed")
-                    .tooltip(tracking.description(numberFormat))
-            }
-            .font(Typography.secondary)
-            .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
-            .lineLimit(1)
+            Image(systemName: "circle.dashed")
+                .font(Typography.secondary)
+                .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
+                .tooltip(tracking.description(numberFormat))
+                .accessibilityLabel(tracking.description(numberFormat) ?? "")
         case .upstreamGone:
             Image(systemName: "icloud.slash")
                 .font(Typography.secondary)

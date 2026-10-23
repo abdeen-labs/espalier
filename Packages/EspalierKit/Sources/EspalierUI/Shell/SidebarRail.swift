@@ -98,8 +98,8 @@ enum RailSection: String, CaseIterable, Identifiable, Sendable {
 
     /// About how many rows the section's list has (its header's included),
     /// for its popover's height until the list has measured itself: Branches
-    /// counts its groups' rows but the remote branches', whose group starts
-    /// collapsed.
+    /// counts its leading rows, the divider, and Other Branches' rows, but
+    /// the remote branches', whose group starts collapsed.
     @MainActor
     func estimatedRowCount(in repository: RepositoryModel, filter: String) -> Int {
         switch self {
@@ -108,8 +108,9 @@ enum RailSection: String, CaseIterable, Identifiable, Sendable {
             var rows = 1
             rows += content.detachedSHA == nil ? 0 : 1
             rows += content.unbornBranch == nil ? 0 : 1
-            rows += content.defaultBranch == nil ? 0 : 2
-            rows += content.recent.isEmpty ? 0 : content.recent.count + 1
+            rows += content.defaultBranch == nil ? 0 : 1
+            rows += content.recent.count
+            rows += content.dividesGroups ? 1 : 0
             rows += content.other.isEmpty ? 0 : content.other.count + 1
             rows += content.remotes.isEmpty ? 0 : 1
             return rows

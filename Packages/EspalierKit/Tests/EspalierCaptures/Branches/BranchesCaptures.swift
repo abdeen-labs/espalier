@@ -106,7 +106,9 @@ struct BranchesCaptures {
     }
 
     /// The section in a sidebar list, as the window shows it, with
-    /// onboarding selected (its row in the neutral wash, its name medium).
+    /// onboarding selected (its row in the neutral wash, its name medium):
+    /// main first, then the recent branches, and after a divider Other
+    /// Branches and Remote Branches.
     private func section(
         _ content: BranchesSectionContent,
         fixture: OperationsCaptureRepository,
@@ -118,7 +120,7 @@ struct BranchesCaptures {
             SidebarSection(id: "branches") {
                 BranchesSectionRows(content: content, repository: fixture.repository)
             } header: {
-                BranchesSectionHeader(prunedBranches: prunedBranches)
+                BranchesSectionHeader(prunedBranches: prunedBranches, count: content.branchCount)
             }
         }
         .sidebarListStyle()
@@ -128,7 +130,7 @@ struct BranchesCaptures {
         .windowEnvironment(fixture.context)
     }
 
-    @Test("the section: as it first shows (Remote Branches and the folders collapsed), then open, with a branch selected")
+    @Test("the section: as it first shows (Remote Branches, with its count, and the folders collapsed), then open, with a branch selected")
     func section() async throws {
         try await withIsolatedGitConfig { _ in
             let inputs = Self.sectionInputs()
@@ -257,12 +259,15 @@ struct BranchesCaptures {
         capture(view, named: "picker-compared", area: area)
     }
 
-    @Test("the branch popover, in its card: the picker with the current branch highlighted, New Branch…, and Choose a branch to merge into")
+    @Test("the branch popover, in its card: the picker grouped as the sidebar, the current branch highlighted, New Branch…, and Choose a branch to merge into")
     func popover() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await OperationsCaptureRepository.make { local in
                 try await runGit(["branch", "feature/login"], local)
                 try await runGit(["branch", "fix/crash"], local)
+                // feature/login is recent: it follows main, unlabeled.
+                try await runGit(["checkout", "-q", "feature/login"], local)
+                try await runGit(["checkout", "-q", "main"], local)
             }
             // The picker loads its tips' dates as it shows; loaded first,
             // they come from the cache.

@@ -41,7 +41,11 @@ public struct PullRequestsSection: View {
                     }
                 }
             } header: {
-                PullRequestsHeader(isLoading: gitHub.isLoadingPullRequests) {
+                // No count while the first load hasn't found any yet.
+                PullRequestsHeader(
+                    isLoading: gitHub.isLoadingPullRequests,
+                    count: pullRequests.isEmpty && gitHub.isLoadingPullRequests ? nil : pullRequests.count
+                ) {
                     Task {
                         await gitHub.refreshPullRequests()
                     }
@@ -72,14 +76,17 @@ public struct PullRequestsSection: View {
     }
 }
 
-/// The section's header: its name, a spinner while the pull requests
-/// refresh, and Refresh Pull Requests in its menu.
+/// The section's header: its name (and its count while it's collapsed), a
+/// spinner while the pull requests refresh, and Refresh Pull Requests in
+/// its menu.
 struct PullRequestsHeader: View {
     let isLoading: Bool
+    /// The pull requests the section lists.
+    var count: Int?
     let refresh: () -> Void
 
     var body: some View {
-        SidebarSectionHeader("Pull Requests") {
+        SidebarSectionHeader("Pull Requests", count: count) {
             if isLoading {
                 DelayedSpinner()
             }

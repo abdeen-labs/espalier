@@ -102,7 +102,7 @@ public struct StashesSection: View {
                         .tag(SidebarPlace.stash(sha: row.sha))
                 }
             } header: {
-                SidebarSectionHeader("Stashes")
+                SidebarSectionHeader("Stashes", count: rows.count)
                     // Counts the entries not counted yet whenever the list
                     // changes (on the header: it's there once, expanded or
                     // not).

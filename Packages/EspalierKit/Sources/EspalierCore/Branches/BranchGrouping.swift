@@ -1,4 +1,7 @@
-// Ported from desktop/app/src/ui/branches/group-branches.ts
+// Ported in part from desktop/app/src/ui/branches/group-branches.ts
+//
+// The groups every branch list shows (the sidebar's Branches section and the
+// branch picker), so they group alike.
 
 import EspalierSupport
 import GitKit
@@ -25,12 +28,20 @@ public struct BranchGroup: Sendable, Equatable, Identifiable {
     }
 }
 
-/// Groups the branches for the branch list: the default branch, if any; the
-/// recent branches other than the default, if any; and every other branch
-/// (always, possibly empty), without the remote branches of Espalier's fork
-/// remotes (`forkRemoteNames`).
+/// Groups the branches for the branch lists: the default branch, if any;
+/// the recently checked out branches (the first `recentBranchesLimit` of
+/// `recentBranches`) other than the default, if any; and every other
+/// branch, local and remote, in `allBranches`' order (always, possibly
+/// empty). Each branch shows once, by its ref, in the first group it's in;
+/// the remote branches of Espalier's fork remotes (`forkRemoteNames`) are
+/// left out.
 ///
-/// - Parameter currentBranch: Unused.
+/// The current branch shows as `currentBranch` has it (the refresh's, whose
+/// tip may be newer than the branch list's); one the branch list doesn't
+/// have yet leads the recent branches, which it's the latest of.
+///
+/// - Parameter currentBranch: The checked-out branch; nil leaves the
+///   branches as listed.
 public func groupBranches(
     _ defaultBranch: Branch?,
     _ currentBranch: Branch?,
@@ -38,30 +49,33 @@ public func groupBranches(
     _ recentBranches: [Branch],
     forkRemoteNames: Set<ExactString>
 ) -> [BranchGroup] {
-    var groups: [BranchGroup] = []
-
-    if let defaultBranch {
-        groups.append(BranchGroup(identifier: .defaultBranch, branches: [defaultBranch]))
-    }
-
-    var recentBranchNames: Set<ExactString> = []
-    let defaultBranchName = defaultBranch?.name
-    let recentBranchesWithoutDefault = recentBranches.filter { branch in
-        defaultBranchName.map { !JSCompat.strictEquals(branch.name, $0) } ?? true
-    }
-    if !recentBranchesWithoutDefault.isEmpty {
-        for branch in recentBranchesWithoutDefault {
-            recentBranchNames.insert(ExactString(branch.name))
+    let currentRef = currentBranch.map { ExactString($0.ref) }
+    var shown = Set<ExactString>(minimumCapacity: allBranches.count + recentBranches.count + 2)
+    /// The branch to show for `listed`, or nil when it's hidden or shown
+    /// already.
+    func take(_ listed: Branch) -> Branch? {
+        guard !listed.isForkRemoteBranch(forkRemoteNames) else {
+            return nil
         }
-        groups.append(BranchGroup(identifier: .recent, branches: recentBranchesWithoutDefault))
+        let ref = ExactString(listed.ref)
+        guard shown.insert(ref).inserted else {
+            return nil
+        }
+        return ref == currentRef ? currentBranch ?? listed : listed
     }
 
-    let remainingBranches = allBranches.filter { branch in
-        (defaultBranchName.map { !JSCompat.strictEquals(branch.name, $0) } ?? true)
-            && !recentBranchNames.contains(ExactString(branch.name))
-            && !branch.isForkRemoteBranch(forkRemoteNames)
+    var groups: [BranchGroup] = []
+    if let defaultBranch, let shownDefault = take(defaultBranch) {
+        groups.append(BranchGroup(identifier: .defaultBranch, branches: [shownDefault]))
     }
-    groups.append(BranchGroup(identifier: .other, branches: remainingBranches))
-
+    var recent = recentBranches.prefix(recentBranchesLimit).compactMap(take)
+    let others = allBranches.compactMap(take)
+    if let currentBranch, let currentRef, !shown.contains(currentRef), let current = take(currentBranch) {
+        recent.insert(current, at: 0)
+    }
+    if !recent.isEmpty {
+        groups.append(BranchGroup(identifier: .recent, branches: recent))
+    }
+    groups.append(BranchGroup(identifier: .other, branches: others))
     return groups
 }

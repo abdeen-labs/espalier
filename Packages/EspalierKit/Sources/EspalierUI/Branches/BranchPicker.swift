@@ -1,7 +1,10 @@
 // Ported in part from desktop/app/src/ui/branches/branch-list.tsx
 //
 // The branch popover, the Cherry-pick sheet, Compare to Branch, Create Pull
-// Request, and Preview Pull Request's base-branch picker use the picker.
+// Request, and Preview Pull Request's base-branch picker use the picker. It
+// groups the branches as the sidebar's Branches section does
+// (`groupBranches`): the default branch first and the recent branches next,
+// with no label, then Other Branches and Remote Branches.
 
 import EspalierCore
 import EspalierSupport
@@ -12,14 +15,30 @@ import SwiftUI
 
 /// The branch list's groups, filtered.
 nonisolated public struct BranchPickerContent: Sendable, Equatable {
-    /// A group: "Default Branch", "Recent Branches", "Other Branches", or
-    /// "Remote Branches".
+    /// A group: the default branch, the recent branches, the other local
+    /// branches, or the remote branches.
     public struct Group: Sendable, Equatable, Identifiable {
-        public var title: String
+        /// Which of the groups, in the list's order.
+        public enum Kind: Sendable, Hashable {
+            case defaultBranch, recent, other, remote
+        }
+
+        public var kind: Kind
         public var branches: [Branch]
 
-        public var id: String {
-            title
+        /// The group's label: "Other Branches" or "Remote Branches"; nil
+        /// for the default and recent branches, which lead the list
+        /// without one, as in the sidebar.
+        public var title: String? {
+            switch kind {
+            case .defaultBranch, .recent: nil
+            case .other: BranchListLabels.otherBranches
+            case .remote: BranchListLabels.remoteBranches
+            }
+        }
+
+        public var id: Kind {
+            kind
         }
     }
 
@@ -37,15 +56,20 @@ nonisolated public struct BranchPickerContent: Sendable, Equatable {
         groups.flatMap(\.branches)
     }
 
-    /// The groups for `filter`, with the remote branches in their own group
-    /// at the end, without the branches of Espalier's fork remotes
-    /// (`forkRemoteNames`). With `candidates`, only those branches are listed: the
-    /// default and recent branches among them in their groups, the others
-    /// after.
+    /// The groups for `filter`, as `groupBranches` groups them, with the
+    /// remote branches in their own group at the end, without the branches
+    /// of Espalier's fork remotes (`forkRemoteNames`). With `candidates`,
+    /// only those branches are listed: the default and recent branches
+    /// among them in their groups, the others after.
+    ///
+    /// - Parameter currentBranch: The checked-out branch, as the refresh
+    ///   has it, which leads the recent branches while the branch list
+    ///   doesn't have it yet; nil with `candidates`.
     public static func make(
         branches: [Branch],
         defaultBranch: Branch?,
         recentBranches: [Branch],
+        currentBranch: Branch? = nil,
         forkRemoteNames: Set<ExactString>,
         includesRemoteBranches: Bool,
         filter: String,
@@ -62,16 +86,17 @@ nonisolated public struct BranchPickerContent: Sendable, Equatable {
         }
         let filter = filter.trimmingCharacters(in: .whitespaces)
         var groups: [Group] = []
-        for group in groupBranches(defaultBranch, nil, branches, recentBranches, forkRemoteNames: forkRemoteNames) {
+        let current = candidates == nil ? currentBranch : nil
+        for group in groupBranches(defaultBranch, current, branches, recentBranches, forkRemoteNames: forkRemoteNames) {
             switch group.identifier {
             case .defaultBranch:
-                groups.append(Group(title: "Default Branch", branches: group.branches.filter { includesRemoteBranches || $0.type == .local }))
+                groups.append(Group(kind: .defaultBranch, branches: group.branches.filter { includesRemoteBranches || $0.type == .local }))
             case .recent:
-                groups.append(Group(title: "Recent Branches", branches: group.branches.filter { includesRemoteBranches || $0.type == .local }))
+                groups.append(Group(kind: .recent, branches: group.branches.filter { includesRemoteBranches || $0.type == .local }))
             case .other:
-                groups.append(Group(title: "Other Branches", branches: group.branches.filter { $0.type == .local }))
+                groups.append(Group(kind: .other, branches: group.branches.filter { $0.type == .local }))
                 if includesRemoteBranches {
-                    groups.append(Group(title: "Remote Branches", branches: group.branches.filter { $0.type == .remote }))
+                    groups.append(Group(kind: .remote, branches: group.branches.filter { $0.type == .remote }))
                 }
             }
         }
@@ -81,7 +106,7 @@ nonisolated public struct BranchPickerContent: Sendable, Equatable {
                     BranchFilter.score(branch.name, filter).map { ($0, index, branch) }
                 }
                 let ordered = scored.sorted { $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index }
-                return Group(title: group.title, branches: ordered.map(\.branch))
+                return Group(kind: group.kind, branches: ordered.map(\.branch))
             }
         }
         return BranchPickerContent(groups: groups.filter { !$0.branches.isEmpty }, filter: filter)
@@ -172,8 +197,9 @@ nonisolated enum BranchFilter {
 
 // MARK: - The picker
 
-/// A filterable list of a repository's branches, grouped Default Branch,
-/// Recent Branches, Other Branches, then Remote Branches.
+/// A filterable list of a repository's branches, grouped as the sidebar
+/// groups them: the default branch and the recent branches, then Other
+/// Branches and Remote Branches.
 public struct BranchPicker: View {
     private let repository: RepositoryModel
     @Binding private var selection: Branch?
@@ -244,6 +270,7 @@ public struct BranchPicker: View {
                 branches: state.branches.all,
                 defaultBranch: state.branches.defaultBranch,
                 recentBranches: state.branches.recent,
+                currentBranch: state.tip.branch,
                 forkRemoteNames: state.remotes.forkRemoteNames,
                 includesRemoteBranches: includesRemoteBranches,
                 filter: filter,
@@ -305,9 +332,10 @@ nonisolated public enum BranchPickerStyle: Sendable, Equatable {
     case embedded
 }
 
-/// The picker's look, value-driven: the filter field, the grouped list,
-/// and the empty state. Rows draw their own selection in the soft accent
-/// (the list's own selection drawing is off).
+/// The picker's look, value-driven: the filter field, the grouped list (the
+/// default and recent branches unlabeled at its top, each later group under
+/// its label), and the empty state. Rows draw their own selection in the
+/// soft accent (the list's own selection drawing is off).
 struct BranchPickerList: View {
     let content: BranchPickerContent
     let currentBranch: String?
@@ -416,17 +444,28 @@ struct BranchPickerList: View {
     /// A branch's row, with how the current branch compares with it where
     /// the list shows that.
     @ViewBuilder
-    private func row(_ branch: Branch) -> some View {
+    private func row(_ branch: Branch, in group: BranchPickerContent.Group) -> some View {
+        let isDefault = group.kind == .defaultBranch
         if let comparison, branch.name != currentBranch {
-            ComparedBranchPickerRow(branch: branch, date: dates[branch.tip.sha], comparison: comparison, dotColor: dotColor?(branch))
+            ComparedBranchPickerRow(branch: branch, isDefault: isDefault, date: dates[branch.tip.sha], comparison: comparison, dotColor: dotColor?(branch))
         } else {
             BranchPickerRow(
                 branch: branch,
                 isCurrent: branch.name == currentBranch,
+                isDefault: isDefault,
                 date: dates[branch.tip.sha],
                 dotColor: dotColor?(branch)
             )
         }
+    }
+
+    /// The list's first branch when no label is above it (the default or a
+    /// recent branch), which has the list's inset above it.
+    private var firstUnlabeledRef: String? {
+        guard let first = content.groups.first, first.title == nil else {
+            return nil
+        }
+        return first.branches.first?.ref
     }
 
     /// The popover's rows, as a menu's: a click activates a branch, the
@@ -438,13 +477,17 @@ struct BranchPickerList: View {
             OverflowScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(content.groups) { group in
-                        ListGroupLabel(group.title)
-                            .padding(.horizontal, Metrics.ListRow.inset)
+                        if let title = group.title {
+                            ListGroupLabel(title)
+                                .padding(.horizontal, Metrics.ListRow.inset)
+                        }
                         ForEach(group.branches, id: \.ref) { branch in
-                            popoverRow(branch)
+                            popoverRow(branch, in: group)
                         }
                     }
                 }
+                // A label brings its own room above it.
+                .padding(.top, firstUnlabeledRef == nil ? 0 : Metrics.ListRow.inset)
                 .padding(.bottom, Metrics.ListRow.inset)
             }
             .onChange(of: selection?.ref) {
@@ -463,12 +506,12 @@ struct BranchPickerList: View {
         }
     }
 
-    private func popoverRow(_ branch: Branch) -> some View {
+    private func popoverRow(_ branch: Branch, in group: BranchPickerContent.Group) -> some View {
         let isHighlighted = branch.ref == selection?.ref
         return Button {
             onActivate?(branch)
         } label: {
-            row(branch)
+            row(branch, in: group)
                 .selectableRow(isSelected: isHighlighted)
         }
         .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
@@ -497,16 +540,18 @@ struct BranchPickerList: View {
                 ForEach(content.groups) { group in
                     // The group's label is a row of its own, not a section
                     // header: a plain list's floating header draws a line.
-                    ListGroupLabel(group.title)
-                        .listRowInsets(EdgeInsets(top: 0, leading: Metrics.ListRow.inset, bottom: 0, trailing: Metrics.ListRow.inset))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+                    if let title = group.title {
+                        ListGroupLabel(title)
+                            .listRowInsets(EdgeInsets(top: 0, leading: Metrics.ListRow.inset, bottom: 0, trailing: Metrics.ListRow.inset))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    }
                     ForEach(group.branches, id: \.ref) { branch in
-                        row(branch)
+                        row(branch, in: group)
                             .selectableRow(isSelected: branch.ref == selection?.ref)
                             .tag(branch.ref)
                             .id(branch.ref)
-                            .listRowInsets(EdgeInsets(top: 1, leading: Metrics.ListRow.inset, bottom: 1, trailing: Metrics.ListRow.inset))
+                            .listRowInsets(Metrics.ListRow.insets(isFirst: branch.ref == firstUnlabeledRef))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                     }
@@ -589,10 +634,12 @@ private struct EmbeddedListChrome: ViewModifier {
 
 /// A branch in the picker: its dot, its name (the current one semibold),
 /// how the current branch compares with it (Compare's list), and the date
-/// of its last commit.
+/// of its last commit; its tooltip is its name, and says when it's the
+/// default branch, as the sidebar's row does.
 struct BranchPickerRow: View {
     let branch: Branch
     let isCurrent: Bool
+    var isDefault = false
     let date: Date?
     var counts: BranchComparisonCounts?
     /// The dot's color; nil uses its color by name.
@@ -610,7 +657,7 @@ struct BranchPickerRow: View {
                 .foregroundStyle(.text)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .accessibilityLabel(isCurrent ? "\(branch.name), current branch" : branch.name)
+                .accessibilityLabel(accessibilityName)
             Spacer(minLength: Metrics.insetSmall)
             if let counts {
                 Text(counts.text(numberFormat))
@@ -628,7 +675,20 @@ struct BranchPickerRow: View {
                     .lineLimit(1)
             }
         }
-        .tooltip(branch.name)
+        .tooltip(BranchRowContent.tooltip(forBranch: branch.name, isDefault: isDefault))
+    }
+
+    /// The name as VoiceOver reads it: "main, current branch, default
+    /// branch".
+    private var accessibilityName: String {
+        var parts = [branch.name]
+        if isCurrent {
+            parts.append("current branch")
+        }
+        if isDefault {
+            parts.append("default branch")
+        }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -698,6 +758,7 @@ struct BranchComparison {
 /// its count before git runs.
 struct ComparedBranchPickerRow: View {
     let branch: Branch
+    var isDefault = false
     let date: Date?
     let comparison: BranchComparison
     var dotColor: NSColor?
@@ -709,6 +770,7 @@ struct ComparedBranchPickerRow: View {
         BranchPickerRow(
             branch: branch,
             isCurrent: false,
+            isDefault: isDefault,
             date: date,
             counts: aheadBehind.map { BranchComparisonCounts($0, currentBranch: comparison.currentBranch) },
             dotColor: dotColor
