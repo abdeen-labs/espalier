@@ -11,8 +11,8 @@ import os
 
 private let logger = Log.logger(category: "history")
 
-/// How another branch's commits come into the current branch: Compare's
-/// call to action and the Integrate sheet.
+/// How another branch's commits come into the current branch: the choices
+/// of the call to action on a branch's Ahead.
 public enum CompareMethod: String, Sendable, Hashable, CaseIterable, Identifiable {
     case merge
     case squashMerge
@@ -25,8 +25,8 @@ public enum CompareMethod: String, Sendable, Hashable, CaseIterable, Identifiabl
     /// The option's label.
     public var label: String {
         switch self {
-        case .merge: "Create a merge commit"
-        case .squashMerge: "Squash and merge"
+        case .merge: "Create a Merge Commit"
+        case .squashMerge: "Squash and Merge"
         case .rebase: "Rebase"
         }
     }
@@ -185,7 +185,7 @@ public final class CompareModel {
 
     /// Whether `method` can start: there are commits to bring in, and a
     /// rebase's preview is clean, or a merge's check allows it
-    /// (`MergePreview.canStart`, the merge sheet's rule).
+    /// (`MergePreview.canStart`).
     public var canStart: Bool {
         if commitCount <= 0 {
             return false

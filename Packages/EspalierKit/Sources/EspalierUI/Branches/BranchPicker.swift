@@ -1,7 +1,7 @@
 // Ported in part from desktop/app/src/ui/branches/branch-list.tsx
 //
-// The branch popover, the Integrate and Cherry-pick sheets, Go to Commit,
-// and Preview Pull Request's base-branch picker use the picker.
+// The branch popover, the Cherry-pick sheet, Compare to Branch, Create Pull
+// Request, and Preview Pull Request's base-branch picker use the picker.
 
 import EspalierCore
 import EspalierSupport

@@ -41,7 +41,7 @@ struct HistoryScreenCaptures {
         }
     }
 
-    @Test("a branch's place: its history with its tip selected, then Compare to Branch's Behind, with a commit main doesn't have")
+    @Test("a branch's place, compared with main: its history with its tip selected, then Compare to Branch's Behind, with a commit main doesn't have")
     func branch() async throws {
         try await withIsolatedGitConfig { _ in
             let fixture = try await makeHistoryPlaceFixture()

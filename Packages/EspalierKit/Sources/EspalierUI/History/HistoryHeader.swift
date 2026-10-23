@@ -129,24 +129,37 @@ struct HistoryHeader: View {
 }
 
 /// A branch's name in History's headers: the branch symbol, then the name
-/// (13 semibold), its middle cut when it's long.
+/// (13 semibold), its middle cut when it's long; and under the name, when
+/// given, a caption in secondary text ("Compared with main"), cut the same
+/// way.
 struct BranchNameLabel: View {
     let name: String
+    var caption: String? = nil
 
     var body: some View {
-        HStack(spacing: Metrics.grid) {
+        // With a caption, the symbol sits on the name's baseline.
+        HStack(alignment: caption == nil ? .center : .firstTextBaseline, spacing: Metrics.grid) {
             Image(systemName: "arrow.trianglehead.branch")
                 .imageScale(.small)
                 .foregroundStyle(.text3)
-            Text(name)
-                .font(Typography.row.weight(.semibold))
-                .foregroundStyle(.text)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(name)
+                    .font(Typography.row.weight(.semibold))
+                    .foregroundStyle(.text)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let caption {
+                    Text(caption)
+                        .font(Typography.secondary)
+                        .foregroundStyle(.text2)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
         }
-        .tooltip(name)
+        .tooltip([name, caption].compactMap(\.self).joined(separator: "\n"))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(name)
+        .accessibilityLabel([name, caption].compactMap(\.self).joined(separator: ", "))
     }
 }
 

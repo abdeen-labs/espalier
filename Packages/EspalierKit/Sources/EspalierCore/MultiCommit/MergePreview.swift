@@ -1,8 +1,7 @@
 // Ported in part from desktop/app/src/ui/multi-commit-operation/choose-branch/merge-choose-branch-dialog.tsx
 //
-// What merging a branch into the current one would do, for the status
-// lines of the merge sheet and Compare, before anything runs, and when the
-// merge can start. Read-only.
+// What merging a branch into the current one would do, before anything
+// runs, and when the merge can start. Read-only.
 
 import EspalierSupport
 import Foundation
@@ -27,9 +26,9 @@ public struct MergePreview: Sendable, Equatable {
         self.commitCount = commitCount
     }
 
-    /// Whether a merge or squash merge can start, in Compare and the merge
-    /// sheet: git has checked, the branch brings in commits, and the
-    /// histories are related. Conflicts don't stop it, and neither does a
+    /// Whether a merge or squash merge can start, in Compare: git has
+    /// checked, the branch brings in commits, and the histories are
+    /// related. Conflicts don't stop it, and neither does a
     /// check git couldn't make (no status) or commits it couldn't count.
     public var canStart: Bool {
         switch status {

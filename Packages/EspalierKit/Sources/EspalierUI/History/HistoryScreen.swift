@@ -3,6 +3,8 @@
 // widths are the simple list's or the graph's. A branch's place shows its
 // history focused on its tip; another branch's place can also compare it with
 // the current branch (Ahead and Behind, counted from the branch's side).
+// Merges, squash merges, and rebases start on Ahead, which they show with
+// their method chosen (`HistoryPlaces.showComparison(of:method:in:)`).
 
 import AppKit
 import EspalierCore
@@ -22,6 +24,10 @@ nonisolated enum BranchView: Hashable, Sendable {
 nonisolated struct BranchViewChoice: Equatable, Sendable {
     var ref: String
     var view: BranchView
+    /// The method the call to action starts with, when a merge's, squash
+    /// and merge's, or rebase's entry point asked for one: entering the
+    /// comparison chooses it, once.
+    var method: CompareMethod? = nil
 }
 
 /// Why the commit a place focuses on isn't in the list, and what shows it.
@@ -97,6 +103,16 @@ final class HistoryWindowState {
             return .history
         }
         return branchView.view
+    }
+
+    /// The method an entry point asked the place of the branch `ref` to
+    /// start its call to action with, forgotten as it's taken.
+    func takeMethod(forBranch ref: String) -> CompareMethod? {
+        guard let branchView, branchView.ref == ref, let method = branchView.method else {
+            return nil
+        }
+        self.branchView?.method = nil
+        return method
     }
 }
 
@@ -202,6 +218,12 @@ enum HistoryPlaces {
             history.showBranch(ref: ref)
             switch state.view(forBranch: ref) {
             case .compare(let direction) where repository.gitState.tip.branch != nil:
+                // The method a merge's entry point asked for, chosen before
+                // the comparison begins (which keeps it), so the call to
+                // action shows it from the start.
+                if let method = state.takeMethod(forBranch: ref) {
+                    history.comparison.method = method
+                }
                 // Coming back to the comparison shown keeps it; the model
                 // compares again when a tip moves.
                 if case .compare(let shown, let shownDirection) = history.mode, shown.ref == branch.ref,
@@ -238,10 +260,19 @@ enum HistoryPlaces {
     }
 
     /// Shows `branch`'s place comparing it with the current branch (Ahead):
-    /// Compare to Branch.
-    static func showComparison(of branch: Branch, in context: WindowContext) {
-        context.state.history.branchView = BranchViewChoice(ref: branch.ref, view: .compare(.behind))
-        context.select(.branch(ref: branch.ref))
+    /// Compare to Branch, and with `method` chosen in the call to action,
+    /// every merge, squash and merge, and rebase's entry point. Entering
+    /// the place chooses the method; a place already showing Ahead, which
+    /// isn't entered again, chooses it at once.
+    static func showComparison(of branch: Branch, method: CompareMethod? = nil, in context: WindowContext) {
+        let state = context.state.history
+        let place = SidebarPlace.branch(ref: branch.ref)
+        let isShown = context.state.place == place && state.view(forBranch: branch.ref) == .compare(.behind)
+        if isShown, let method {
+            context.repository?.history.comparison.method = method
+        }
+        state.branchView = BranchViewChoice(ref: branch.ref, view: .compare(.behind), method: isShown ? nil : method)
+        context.select(place)
     }
 
     /// Compares the current branch with `branch` in `direction`; a failure

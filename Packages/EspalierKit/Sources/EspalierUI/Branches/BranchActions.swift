@@ -2,8 +2,10 @@
 // checkout. Every intent runs through the window's presenter, so the Switch
 // Branch decision, the stash and delete confirmations, and errors show the
 // same way everywhere; outcomes are toasts (OperationOutcomes.swift). The
-// sheets: New Branch, Rename Branch, Delete Branch for a branch with a pull
-// request, and the Integrate sheet.
+// sheets: New Branch, Rename Branch, and Delete Branch for a branch with a
+// pull request. Merge, Squash and Merge, and Rebase show the other branch's
+// Ahead with that method chosen, where its call to action starts it; without
+// a branch, the branch popover picks one first.
 
 import AppKit
 import EspalierCore
@@ -284,7 +286,7 @@ enum BranchActions {
             guard case .mergeIntoCurrentBranch(let name) = action, let context else {
                 return
             }
-            IntegrateBranchSheet.present(.merge, branch: name, in: context)
+            showIntegration(.merge, branch: name, in: context)
         }
 
         actions.register(.squashAndMergeIntoCurrentBranch, isEnabled: { [weak context] action in
@@ -296,7 +298,7 @@ enum BranchActions {
             guard case .squashAndMergeIntoCurrentBranch(let name) = action, let context else {
                 return
             }
-            IntegrateBranchSheet.present(.squashMerge, branch: name, in: context)
+            showIntegration(.squashMerge, branch: name, in: context)
         }
 
         actions.register(.rebaseCurrentBranch, isEnabled: { [weak context] action in
@@ -308,8 +310,37 @@ enum BranchActions {
             guard case .rebaseCurrentBranch(let name) = action, let context else {
                 return
             }
-            IntegrateBranchSheet.present(.rebase, branch: name, in: context)
+            showIntegration(.rebase, branch: name, in: context)
         }
+    }
+
+    /// The action that brings the branch `name` (a name or a full ref) into
+    /// the current one by `method`; nil asks for the branch first.
+    static func integrationAction(_ method: CompareMethod, branch name: String?) -> ActionID {
+        switch method {
+        case .merge: .mergeIntoCurrentBranch(branch: name)
+        case .squashMerge: .squashAndMergeIntoCurrentBranch(branch: name)
+        case .rebase: .rebaseCurrentBranch(onto: name)
+        }
+    }
+
+    /// Shows the place of the branch `name` (a name or a full ref) with
+    /// Ahead selected and `method` chosen in its call to action, which
+    /// starts it. Without a name, the branch popover opens as a picker for
+    /// `method`, and picking a branch shows its place.
+    private static func showIntegration(_ method: CompareMethod, branch name: String?, in context: WindowContext) {
+        guard let repository = context.repository else {
+            return
+        }
+        guard let name else {
+            context.state.branchPopoverMethod = method
+            context.state.isBranchPopoverPresented = true
+            return
+        }
+        guard let branch = HistoryCommits.branch(named: name, in: repository) else {
+            return
+        }
+        HistoryPlaces.showComparison(of: branch, method: method, in: context)
     }
 
     /// Whether a branch can come into the current one: HEAD is on a branch,
@@ -328,8 +359,8 @@ enum BranchActions {
     }
 
     /// Merges, squash merges, or rebases onto `branch` through the
-    /// presenter, with the outcome's toast.
-    static func integrate(_ method: IntegrateMethod, branch: Branch, in context: WindowContext) async {
+    /// presenter, with the outcome's toast: Update from <default>.
+    static func integrate(_ method: CompareMethod, branch: Branch, in context: WindowContext) async {
         guard let repository = context.repository else {
             return
         }

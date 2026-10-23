@@ -1,5 +1,5 @@
-// What merging a branch would do, for the merge sheet's status line, and
-// when the merge can start (MergePreview.swift).
+// What merging a branch would do, and when the merge can start
+// (MergePreview.swift).
 
 @testable import EspalierCore
 import EspalierCoreTestSupport

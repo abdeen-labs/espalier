@@ -1,9 +1,10 @@
 // History's views, one capture per layout: the header and search, a
-// branch's header and Compare's call to action, a place's notice, a
-// commit's header and files, a range and its reachability, commits that
-// aren't adjacent, the working copy, Commit Info, the tag and Go to Commit
-// sheets, keyboard reorder's hint, tag rows, and the image a drag of
-// commits shows. Leaf views take values, so these need no repository.
+// branch's header with its call to action and the call to action's split
+// button, a place's notice, a commit's header and files, a range and its
+// reachability, commits that aren't adjacent, the working copy, Commit
+// Info, the tag and Go to Commit sheets, keyboard reorder's hint, tag rows,
+// and the image a drag of commits shows. Leaf views take values, so these
+// need no repository.
 
 import AppKit
 @testable import EspalierCore
@@ -67,15 +68,22 @@ struct HistoryViewCaptures {
 
     // MARK: A branch's place
 
-    @Test("a branch's header: History, Behind with each status of the call to action, Ahead, and on a detached HEAD")
+    @Test("a branch's header, compared with main: History, Behind with each status of the call to action, Ahead, and on a detached HEAD")
     func branchHeader() {
-        func header(_ view: BranchView, _ cta: MergeCallToActionContent?, canCompare: Bool, behind: Int = 3, ahead: Int = 2) -> some View {
+        func header(
+            _ view: BranchView,
+            _ cta: MergeCallToActionContent?,
+            canCompare: Bool,
+            comparedWith: String = "main",
+            behind: Int = 3,
+            ahead: Int = 2
+        ) -> some View {
             BranchHeader(content: BranchHeaderContent(
                 branchName: "feature/login",
                 view: view,
                 behind: behind,
                 ahead: ahead,
-                canCompare: canCompare,
+                comparedWith: canCompare ? comparedWith : nil,
                 callToAction: cta,
                 numberFormat: Capture.numberFormat
             ))
@@ -102,8 +110,28 @@ struct HistoryViewCaptures {
             header(.history, nil, canCompare: false)
         }
         capture(views.frame(width: width), named: "branchHeader", area: area)
-        // In the simple list's narrow column the views go under the name.
-        capture(header(.history, nil, canCompare: true).frame(width: Metrics.Column.simpleList.min), named: "branchHeader-narrow", area: area)
+        // In the simple list's narrow column the views go under the name; a
+        // long current branch's name cuts the caption.
+        let narrow = VStack(spacing: 0) {
+            header(.history, nil, canCompare: true)
+            Divider()
+            header(.history, nil, canCompare: true, comparedWith: "feature/hourly-forecast-for-the-whole-week")
+        }
+        capture(narrow.frame(width: Metrics.Column.simpleList.min), named: "branchHeader-narrow", area: area)
+    }
+
+    @Test("the call to action's split button: each method, ready to start, and not (the menu still switches the method)")
+    func mergeButton() {
+        let view = VStack(alignment: .trailing, spacing: Metrics.insetMedium) {
+            ForEach(CompareMethod.allCases) { method in
+                HStack(spacing: Metrics.insetMedium) {
+                    MergeMethodButton(method: .constant(method), canStart: true, start: {})
+                    MergeMethodButton(method: .constant(method), canStart: false, start: {})
+                }
+            }
+        }
+        .padding(Metrics.insetLarge)
+        capture(view, named: "mergeButton", area: area)
     }
 
     @Test("a place's notice: a tag off the simple list's line, and a branch outside the graph's scope")

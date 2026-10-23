@@ -1,9 +1,8 @@
 // The operations' sheets, the conflicted files' rows, the band above a
 // conflicted file's diff, the operation panel, and the AI conflict sheet,
 // one capture per layout. Leaf views take
-// values; the Integrate and Cherry-pick sheets and the AI gate popover use
-// a repository with a remote, the AI sheet's Changes tab a merge's
-// conflict.
+// values; the Cherry-pick sheet and the AI gate popover use a repository
+// with a remote, the AI sheet's Changes tab a merge's conflict.
 
 import AIKit
 import AppKit
@@ -26,59 +25,13 @@ struct MultiCommitCaptures {
     /// The Changes place's width beside the sidebar, where the operation's
     /// bar shows.
     private let placeWidth = Metrics.Window.defaultWidth - Metrics.Column.sidebar.ideal
-    /// The Integrate sheet's content width.
-    private let sheetContentWidth = Metrics.Sheet.standardWidth - 2 * (Metrics.insetLarge + Metrics.grid)
     /// The AI conflict sheet's ideal size.
     private let aiSheetSize = CGSize(width: 820, height: 620)
 
-    // MARK: Integrate
-
-    @Test("the Integrate sheet's status lines: merging and rebasing, each outcome")
-    func integrateStatus() {
-        let ahead = [CommitOneLine(sha: "a", summary: "One"), CommitOneLine(sha: "b", summary: "Two")]
-        let behind = [CommitOneLine(sha: "c", summary: "Three"), CommitOneLine(sha: "d", summary: "Four"), CommitOneLine(sha: "e", summary: "Five")]
-        let statuses: [IntegrateStatus] = [
-            .merge(current: "main", branch: "feature/login", preview: nil, numberFormat: Capture.numberFormat),
-            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .clean, commitCount: 3), numberFormat: Capture.numberFormat),
-            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .clean, commitCount: 0), numberFormat: Capture.numberFormat),
-            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .conflicts(conflictedFiles: 2), commitCount: 3), numberFormat: Capture.numberFormat),
-            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: .conflicts(conflictedFiles: 2), commitCount: nil), numberFormat: Capture.numberFormat),
-            .merge(current: "main", branch: "unrelated", preview: MergePreview(status: .invalid, commitCount: 0), numberFormat: Capture.numberFormat),
-            .merge(current: "main", branch: "feature/login", preview: MergePreview(status: nil, commitCount: 3), numberFormat: Capture.numberFormat),
-            .rebase(current: "feature/login", base: "main", preview: .loading, numberFormat: Capture.numberFormat),
-            .rebase(current: "feature/login", base: "main", preview: .clean(commitsAhead: ahead, commitsBehind: behind), numberFormat: Capture.numberFormat),
-            .rebase(current: "feature/login", base: "main", preview: .clean(commitsAhead: [], commitsBehind: behind), numberFormat: Capture.numberFormat),
-            .rebase(current: "feature/login", base: "main", preview: .clean(commitsAhead: ahead, commitsBehind: []), numberFormat: Capture.numberFormat),
-            .rebase(current: "feature/login", base: "main", preview: .conflicts, numberFormat: Capture.numberFormat),
-            .rebase(current: "feature/login", base: "unrelated", preview: .invalid, numberFormat: Capture.numberFormat),
-        ]
-        let view = VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-            ForEach(Array(statuses.enumerated()), id: \.offset) { _, status in
-                IntegrateStatusLine(status: status)
-                Divider()
-            }
-        }
-        .padding(Metrics.insetLarge)
-        .frame(width: sheetContentWidth + 2 * Metrics.insetLarge)
-        capture(view, named: "integrate-status", area: area)
-    }
-
-    @Test("the split button: each method, ready to start, and not (the menu still switches the method)")
-    func integrateButton() {
-        let view = VStack(alignment: .trailing, spacing: Metrics.insetMedium) {
-            ForEach(IntegrateMethod.allCases) { method in
-                HStack(spacing: Metrics.insetMedium) {
-                    IntegrateMethodButton(method: .constant(method), canStart: true, help: nil, start: {})
-                    IntegrateMethodButton(method: .constant(method), canStart: false, help: nil, start: {})
-                }
-            }
-        }
-        .padding(Metrics.insetLarge)
-        capture(view, named: "integrate-button", area: area)
-    }
+    // MARK: Cherry-pick and squash
 
     /// A repository on `main` with two other branches, their tips' dates
-    /// loaded (the sheets' pickers load them as they show; loaded first,
+    /// loaded (the sheet's picker loads them as it shows; loaded first,
     /// they come from the cache).
     private func branchesFixture() async throws -> OperationsCaptureRepository {
         let fixture = try await OperationsCaptureRepository.make { local in
@@ -91,22 +44,6 @@ struct MultiCommitCaptures {
         _ = await fixture.repository.branches.tipDates(for: fixture.repository.gitState.branches.all)
         return fixture
     }
-
-    @Test("the Integrate sheet: merging, while it checks whether Git can merge automatically")
-    func integrateSheet() async throws {
-        try await withIsolatedGitConfig { _ in
-            let fixture = try await branchesFixture()
-            let feature = try fixture.branch("feature/login")
-            let sheet = IntegrateBranchSheet(repository: fixture.repository, method: .merge, initialBranch: feature, onStart: { _, _ in })
-                .windowEnvironment(fixture.context)
-            // Drawn as it opens: the preview is the sheet's own load, which
-            // nothing outside it can wait for.
-            capture(sheet, named: "integrate-merge", area: area)
-            await fixture.settle()
-        }
-    }
-
-    // MARK: Cherry-pick and squash
 
     @Test("the cherry-pick target sheet")
     func cherryPickTarget() async throws {

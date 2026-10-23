@@ -66,8 +66,8 @@ struct MenuCaptures {
     func choiceWithSubtitles() {
         capture(card(MenuContent {
             MenuPicker(selection: .constant(1)) {
-                MenuChoice("Create a merge commit", value: 0, subtitle: "The commits from feature will be added to main via a merge commit.")
-                MenuChoice("Squash and merge", value: 1, subtitle: "The 3 commits in feature will be combined into one commit in main.")
+                MenuChoice("Create a Merge Commit", value: 0, subtitle: "The commits from feature will be added to main via a merge commit.")
+                MenuChoice("Squash and Merge", value: 1, subtitle: "The 3 commits in feature will be combined into one commit in main.")
                 MenuChoice("Rebase", value: 2, subtitle: "The 3 commits in feature will be rebased and added to main.")
             }
         }), named: "choiceSubtitles", area: area)
@@ -171,7 +171,7 @@ struct MenuCaptures {
             }
             .frame(width: Metrics.SettingsWindow.controlWidth)
             SplitCapsuleButton(.prominent, menuLabel: "Merge Options", action: {}) {
-                Text("Squash and merge")
+                Text("Squash and Merge")
             } menu: {
                 MenuAction("Rebase") {}
             }

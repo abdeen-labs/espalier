@@ -104,9 +104,9 @@ struct SheetComponentCaptures {
     func capsuleMenus() {
         let view = HStack(spacing: Metrics.insetMedium) {
             PullDownButton("Merge Options") {
-                MenuAction("Create a merge commit") {}
+                MenuAction("Create a Merge Commit") {}
             } label: {
-                MenuCapsuleLabel("Create a merge commit")
+                MenuCapsuleLabel("Create a Merge Commit")
             }
             .buttonStyle(.quiet)
             .fixedSize()

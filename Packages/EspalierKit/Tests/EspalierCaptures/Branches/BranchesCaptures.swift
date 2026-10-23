@@ -276,6 +276,26 @@ struct BranchesCaptures {
         }
     }
 
+    @Test("the branch popover picking a branch to merge into feature/login: the other branches, the default one highlighted, and the prompt with Cancel")
+    func popoverMerge() async throws {
+        try await withIsolatedGitConfig { _ in
+            let fixture = try await OperationsCaptureRepository.make { local in
+                try await runGit(["branch", "fix/crash"], local)
+                try await runGit(["checkout", "-q", "-b", "feature/login"], local)
+            }
+            _ = await fixture.repository.branches.tipDates(for: fixture.repository.gitState.branches.all)
+            // Merge into Current Branch… opens the popover as the merge's
+            // picker.
+            fixture.context.state.branchPopoverMethod = .merge
+            let card = PopoverCardView(model: PopoverCardModel {
+                AnyView(BranchPopover(repository: fixture.repository).windowEnvironment(fixture.context))
+            })
+            await LoadedCapture.capture(card, named: "popover-merge", area: area) { _ in
+                await fixture.settle()
+            }
+        }
+    }
+
     @Test("the branch popover's context menu, for a branch other than the current one")
     func popoverMenu() async throws {
         try await withIsolatedGitConfig { _ in

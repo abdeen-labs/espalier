@@ -1,9 +1,10 @@
-// The header of another branch's place: the branch's name and what the list
-// shows, History | Ahead | Behind, counted from the branch's side, beside its
-// name. History is the branch's own history; Ahead lists the commits the
-// branch has that the current branch doesn't (with the merge call to
-// action), Behind the current branch's own. On a detached HEAD there's
-// nothing to compare with, so only the name shows.
+// The header of another branch's place: the branch's name with "Compared
+// with <current branch>" under it, and what the list shows, History | Ahead |
+// Behind, counted from the branch's side, beside them. History is the
+// branch's own history; Ahead lists the commits the branch has that the
+// current branch doesn't (with the merge call to action), Behind the current
+// branch's own. On a detached HEAD there's nothing to compare with, so only
+// the name shows.
 
 import EspalierCore
 import GitKit
@@ -17,12 +18,24 @@ nonisolated struct BranchHeaderContent: Sendable, Equatable {
     /// and the current branch has that it doesn't, once counted.
     var behind: Int?
     var ahead: Int?
-    /// Whether HEAD is on a branch to compare with.
-    var canCompare: Bool
+    /// The branch the counts compare with: the current branch; nil on a
+    /// detached HEAD, where there's nothing to compare with.
+    var comparedWith: String?
     /// The merge call to action, on Ahead.
     var callToAction: MergeCallToActionContent?
     /// The format the counts show in.
     var numberFormat: NumberFormat
+
+    /// Whether HEAD is on a branch to compare with.
+    var canCompare: Bool {
+        comparedWith != nil
+    }
+
+    /// "Compared with main", under the name; nil with nothing to compare
+    /// with.
+    var caption: String? {
+        comparedWith.map { "Compared with \($0)" }
+    }
 
     /// The branch's own commits (the current branch is `behind` it):
     /// "Ahead (3)", or "Ahead" until it's counted.
@@ -37,8 +50,9 @@ nonisolated struct BranchHeaderContent: Sendable, Equatable {
     }
 }
 
-/// A branch's header: its name, the views, and the call to action. The
-/// views sit beside the name when they fit, else under it.
+/// A branch's header: its name and what it's compared with, the views, and
+/// the call to action. The views sit beside the name when they fit, else
+/// under it.
 struct BranchHeader: View {
     let content: BranchHeaderContent
     var setView: (BranchView) -> Void = { _ in }
@@ -48,13 +62,13 @@ struct BranchHeader: View {
         VStack(alignment: .leading, spacing: 0) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: Metrics.HistoryHeader.spacing) {
-                    BranchNameLabel(name: content.branchName)
+                    BranchNameLabel(name: content.branchName, caption: content.caption)
                     Spacer(minLength: Metrics.insetSmall)
                     views
                 }
                 .frame(height: Metrics.HistoryHeader.height)
                 VStack(alignment: .leading, spacing: 0) {
-                    BranchNameLabel(name: content.branchName)
+                    BranchNameLabel(name: content.branchName, caption: content.caption)
                         .frame(height: Metrics.HistoryHeader.height)
                     views
                         .padding(.bottom, Metrics.insetSmall)
@@ -109,7 +123,7 @@ struct BranchHeaderContainer: View {
                 view: view,
                 behind: aheadBehind?.behind,
                 ahead: aheadBehind?.ahead,
-                canCompare: current != nil,
+                comparedWith: current?.name,
                 callToAction: view == .compare(.behind) && isShown ? MergeCallToActionContent(comparison: comparison) : nil,
                 numberFormat: numberFormat
             ),

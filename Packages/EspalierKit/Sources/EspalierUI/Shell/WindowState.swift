@@ -80,7 +80,19 @@ public final class WindowState {
     public var isSidebarFilterFocused = false
     /// The location control's popovers (⌘T, ⌘B).
     public var isRepositoryPopoverPresented = false
-    public var isBranchPopoverPresented = false
+    public var isBranchPopoverPresented = false {
+        didSet {
+            // Closing the popover ends a pick for a merge.
+            if !isBranchPopoverPresented, branchPopoverMethod != nil {
+                branchPopoverMethod = nil
+            }
+        }
+    }
+    /// What the branch popover's list picks a branch for, while it picks
+    /// one to merge into the current branch, squash and merge, or rebase
+    /// the current branch onto (Merge into Current Branch…); nil while it
+    /// switches branches.
+    var branchPopoverMethod: CompareMethod?
     /// The focused list's selection.
     public var focusedSelection: FocusedSelection?
     /// The pull request a link showed: its place shows this one for its
