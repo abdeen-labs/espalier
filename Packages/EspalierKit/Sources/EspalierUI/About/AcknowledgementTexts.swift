@@ -455,7 +455,7 @@ nonisolated enum AcknowledgementTexts {
         different licenses.  See those LICENSE files for details.
         """
 
-    /// From git-credential-manager/LICENSE at v2.9.0 (its release ships only NOTICE).
+    /// From git-credential-manager/LICENSE at v2.9.1 (its release ships only NOTICE).
     static let gitCredentialManager = """
         Git Credential Manager
         Copyright \u{a9} GitHub, Inc. and contributors
@@ -481,7 +481,7 @@ nonisolated enum AcknowledgementTexts {
         SOFTWARE
         """
 
-    /// From the NOTICE file Git Credential Manager 2.9.0 ships with (Vendor/git/libexec/git-core/NOTICE).
+    /// From the NOTICE file Git Credential Manager 2.9.1 ships with (Vendor/git/libexec/git-core/NOTICE).
     static let gitCredentialManagerNotice = """
         NOTICES AND INFORMATION
         Do Not Translate or Localize

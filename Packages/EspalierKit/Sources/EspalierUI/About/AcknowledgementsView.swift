@@ -33,7 +33,7 @@ nonisolated struct Acknowledgement: Sendable, Equatable, Identifiable {
     var text: String
     var group: Group
 
-    /// "Version 2.53.0 · MIT License".
+    /// "Version 2.56.0 · MIT License".
     var subtitle: String {
         [version.map { "Version \($0)" }, license].compactMap(\.self).joined(separator: " · ")
     }
@@ -44,8 +44,8 @@ extension Acknowledgement {
     static let all: [Acknowledgement] = basedOn + bundled + syntax + fonts
 
     /// The bundled git's release (scripts/git-version, its build's tag).
-    static let gitVersion = "2.53.0"
-    static let bundledGitTag = "v2.53.0-4"
+    static let gitVersion = "2.56.0"
+    static let bundledGitTag = "v2.56.0-1"
 
     static let basedOn: [Acknowledgement] = [
         Acknowledgement(
@@ -84,7 +84,7 @@ extension Acknowledgement {
         Acknowledgement(
             id: "git-lfs",
             name: "Git LFS",
-            version: "3.7.1",
+            version: "3.8.1",
             license: "MIT License",
             url: URL(string: "https://github.com/git-lfs/git-lfs")!,
             note: nil,
@@ -94,7 +94,7 @@ extension Acknowledgement {
         Acknowledgement(
             id: "git-credential-manager",
             name: "Git Credential Manager",
-            version: "2.9.0",
+            version: "2.9.1",
             license: "MIT License",
             url: URL(string: "https://github.com/git-ecosystem/git-credential-manager")!,
             note: "Git Credential Manager's license is followed by the notices it ships with.",
