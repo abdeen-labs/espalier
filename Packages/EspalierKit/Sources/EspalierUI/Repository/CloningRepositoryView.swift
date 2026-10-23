@@ -41,6 +41,7 @@ nonisolated struct CloningContent: Sendable, Equatable {
 struct CloningForm: View {
     let content: CloningContent
     var cancel: () -> Void = {}
+    @Environment(\.motion) private var motion
 
     var body: some View {
         VStack(spacing: Metrics.insetMedium) {
@@ -54,11 +55,15 @@ struct CloningForm: View {
             // A segment sweeps until git reports how far it has got.
             CapsuleProgressBar(value: content.progress > 0 ? content.progress : nil)
                 .accessibilityLabel("Cloning \(content.name)")
+            // The line crossfades (0.15 s) as the clone moves on to
+            // cancelling or adding; git's lines replace each other at once.
             Text(statusLine)
                 .font(Typography.meta)
                 .foregroundStyle(.text3)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .contentTransition(motion.animates ? .opacity : .identity)
+                .motion(Motion.leave, value: content.phase)
                 .frame(maxWidth: .infinity)
             Button(content.phase == .cancelling ? "Cancelling…" : "Cancel Clone", action: cancel)
                 .buttonStyle(.secondary)
@@ -92,5 +97,7 @@ public struct CloningRepositoryView: View {
         CloningForm(content: CloningContent(clone)) {
             context.app.clones.cancel(clone.id)
         }
+        // Another clone's view shows at once.
+        .motionScope(AnyHashable(clone.id))
     }
 }

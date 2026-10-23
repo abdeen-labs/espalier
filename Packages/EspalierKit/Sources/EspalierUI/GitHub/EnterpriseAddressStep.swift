@@ -15,6 +15,7 @@ struct EnterpriseAddressStep: View {
     @State private var address: String
     @State private var clientID: String
     @FocusState private var focusedField: Field?
+    @Environment(\.motion) private var motion
 
     private enum Field {
         case address, clientID
@@ -54,14 +55,21 @@ struct EnterpriseAddressStep: View {
                 .foregroundStyle(.text3)
                 .fixedSize(horizontal: false, vertical: true)
             if let error = content.error {
+                // Fades in over 0.22 s and out over 0.15 s. It comes with
+                // the fields enabling again, which draws at once, so the
+                // buttons below shift at once too.
                 SignInInlineError(message: error)
+                    .barTransition()
             }
             HStack(spacing: Metrics.insetSmall) {
+                // The check's progress fades in and out over 0.15 s.
                 if content.isChecking {
                     ArcProgress(.small)
+                        .transition(checkingTransition)
                     Text("Checking the server…")
                         .font(Typography.secondary)
                         .foregroundStyle(.text2)
+                        .transition(checkingTransition)
                 }
                 Spacer()
                 Button("Cancel", role: .cancel, action: cancel)
@@ -79,6 +87,12 @@ struct EnterpriseAddressStep: View {
         .onAppear {
             focusedField = content.address.isEmpty ? .address : .clientID
         }
+    }
+
+    /// The check's progress coming and going: a fade of its own, so the
+    /// fields and buttons it disables and enables change at once.
+    private var checkingTransition: AnyTransition {
+        motion.animates ? AnyTransition.opacity.animation(Motion.animation(Motion.leave)) : .identity
     }
 
     /// "Your administrator can register an OAuth app with device flow

@@ -242,6 +242,7 @@ struct CreateRepositoryForm: View {
     var create: () -> Void = {}
     var addInstead: () -> Void = {}
     @FocusState private var isNameFocused: Bool
+    @Environment(\.motion) private var motion
 
     /// Where submodules are explained (git's book).
     static let submodulesURL = URL(string: "https://git-scm.com/book/en/v2/Git-Tools-Submodules")!
@@ -268,17 +269,32 @@ struct CreateRepositoryForm: View {
                 if let note = model.existingFilesNote {
                     FieldMessage(note, kind: .note)
                 }
-                Toggle("Initialize this repository with a README", isOn: $model.createsReadme)
-                    .toggleStyle(.checkboxMark)
+                Toggle("Initialize this repository with a README", isOn: Binding {
+                    model.createsReadme
+                } set: { createsReadme in
+                    let exists = model.currentDestination.readmeExists
+                    choose(warningWasShown: model.createsReadme && exists, isShown: createsReadme && exists) {
+                        model.createsReadme = createsReadme
+                    }
+                })
+                .toggleStyle(.checkboxMark)
                 if model.createsReadme, model.currentDestination.readmeExists {
                     FieldMessage(
                         "This folder already has a README.md file, which will be overwritten.",
                         kind: .warning
                     )
+                    .transition(motion.animates ? .opacity : .identity)
                 }
                 // The pop-ups as wide as the fields.
                 LabeledContent("Git Ignore") {
-                    CapsulePopUp("Git Ignore", selection: $model.gitIgnore, title: model.gitIgnore ?? "None") {
+                    CapsulePopUp("Git Ignore", selection: Binding {
+                        model.gitIgnore
+                    } set: { gitIgnore in
+                        let exists = model.currentDestination.gitIgnoreExists
+                        choose(warningWasShown: model.gitIgnore != nil && exists, isShown: gitIgnore != nil && exists) {
+                            model.gitIgnore = gitIgnore
+                        }
+                    }, title: model.gitIgnore ?? "None") {
                         MenuChoice("None", value: String?.none)
                         MenuDivider()
                         for name in RepositoryTemplates.gitIgnoreNames {
@@ -292,9 +308,17 @@ struct CreateRepositoryForm: View {
                         "This folder already has a .gitignore file, which will be overwritten.",
                         kind: .warning
                     )
+                    .transition(motion.animates ? .opacity : .identity)
                 }
                 LabeledContent("License") {
-                    CapsulePopUp("License", selection: $model.license, title: model.license ?? "None") {
+                    CapsulePopUp("License", selection: Binding {
+                        model.license
+                    } set: { license in
+                        let exists = model.currentDestination.licenseExists
+                        choose(warningWasShown: model.license != nil && exists, isShown: license != nil && exists) {
+                            model.license = license
+                        }
+                    }, title: model.license ?? "None") {
                         MenuChoice("None", value: String?.none)
                         for license in RepositoryTemplates.featuredLicenses {
                             MenuChoice(license.name, value: Optional(license.name))
@@ -311,13 +335,18 @@ struct CreateRepositoryForm: View {
                         "This folder already has a LICENSE file, which will be overwritten.",
                         kind: .warning
                     )
+                    .transition(motion.animates ? .opacity : .identity)
                 }
             }
             .formStyle(.columns)
             .textFieldStyle(.capsule)
 
             if let problem = model.problem {
+                // Fades in over 0.22 s and out over 0.15 s. It comes with
+                // the form enabling again, which draws at once, so the
+                // buttons below move at once too.
                 FieldMessage(problem, kind: .error)
+                    .barTransition()
             }
             if let fullPath = model.fullPath, !model.currentDestination.isRepository {
                 Text("The repository will be created at \(Text(fullPath).font(Typography.sha)).")
@@ -336,6 +365,19 @@ struct CreateRepositoryForm: View {
         }
         .onAppear {
             isNameFocused = true
+        }
+    }
+
+    /// Applies a choice that can show the warning under it (the README, Git
+    /// Ignore, or License over a file the folder has): a warning it shows
+    /// grows in over 0.22 s and one it hides leaves over 0.15 s, the rows
+    /// below moving with it. Any other change, and the warnings the path
+    /// shows as it's typed, show at once.
+    private func choose(warningWasShown wasShown: Bool, isShown: Bool, _ change: () -> Void) {
+        if wasShown == isShown {
+            change()
+        } else {
+            withMotion(motion, isShown ? Motion.arrive : Motion.leave, change)
         }
     }
 

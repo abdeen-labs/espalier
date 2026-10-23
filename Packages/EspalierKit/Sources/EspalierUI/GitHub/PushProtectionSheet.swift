@@ -191,11 +191,14 @@ struct PushProtectionView: View {
     ]
 }
 
-/// A secret: its title, Bypass… or Bypassed, and its locations.
+/// A secret: its title, Bypass… or Bypassed, and its locations. Bypass…
+/// crossfades into Bypassed over 0.15 s; the other locations grow in over
+/// 0.22 s and leave over 0.15 s, what's below moving with them.
 private struct DetectedSecretRow: View {
     let secret: DetectedSecretContent
     let actions: PushProtectionActions
     @State private var showsMoreLocations = false
+    @Environment(\.motion) private var motion
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.Sheet.groupSpacing) {
@@ -208,14 +211,21 @@ private struct DetectedSecretRow: View {
                     .foregroundStyle(.text)
                     .textSelection(.enabled)
                 Spacer(minLength: Metrics.insetSmall)
-                bypass
+                ZStack(alignment: .trailing) {
+                    bypass
+                        .id(secret.isBypassed)
+                        .transition(motion.animates ? .opacity : .identity)
+                }
+                .motion(Motion.leave, value: secret.isBypassed)
             }
             if let first = secret.locations.first {
                 HStack(spacing: Metrics.insetSmall) {
                     SecretLocationView(location: first, copy: actions.copy)
                     if secret.locations.count > 1 {
                         Button {
-                            showsMoreLocations.toggle()
+                            withMotion(motion, showsMoreLocations ? Motion.leave : Motion.arrive) {
+                                showsMoreLocations.toggle()
+                            }
                         } label: {
                             Label(showsMoreLocations ? "Show Fewer Locations" : "Show More Locations", systemImage: "ellipsis.circle")
                         }
@@ -227,6 +237,7 @@ private struct DetectedSecretRow: View {
                 if showsMoreLocations {
                     ForEach(Array(secret.locations.dropFirst().enumerated()), id: \.offset) { _, location in
                         SecretLocationView(location: location, copy: actions.copy)
+                            .transition(motion.animates ? .opacity : .identity)
                     }
                 }
             }

@@ -386,6 +386,7 @@ struct SignInActions {
 struct SignInView: View {
     let content: SignInContent
     let actions: SignInActions
+    @Environment(\.motion) private var motion
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.Sheet.spacing) {
@@ -408,7 +409,7 @@ struct SignInView: View {
                     step
                 }
                 .id(content.step.kind)
-                .transition(.opacity)
+                .transition(motion.animates ? .opacity : .identity)
             }
             .motion(Motion.arrive, value: content.step.kind)
         }
@@ -429,7 +430,11 @@ struct SignInView: View {
                 .foregroundStyle(.text2)
                 .fixedSize(horizontal: false, vertical: true)
             if let error {
+                // Fades in over 0.22 s and out over 0.15 s. It comes with
+                // Continue enabling again, which draws at once, so the
+                // buttons below shift at once too.
                 SignInInlineError(message: error)
+                    .barTransition()
             }
             buttons {
                 Button("Continue", action: actions.continueSignIn)
@@ -530,10 +535,9 @@ private struct SignInCodeStep: View {
                     .textSelection(.enabled)
                     .accessibilityLabel("Code: \(code.userCode.map(String.init).joined(separator: " "))")
                 Spacer()
-                Button {
-                    actions.copyCode(code.userCode)
-                } label: {
-                    Label("Copy Code", systemImage: "doc.on.doc")
+                // Its symbol turns into a check for a moment after a copy.
+                CopyButton(code.userCode, copy: actions.copyCode) { systemImage in
+                    Label("Copy Code", systemImage: systemImage)
                 }
                 .buttonStyle(.quiet)
                 .controlSize(.small)

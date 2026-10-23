@@ -400,6 +400,7 @@ struct GitPaneContent: View {
     @State private var settings: GitSettingsModel
     /// The branch name field's focus (the author's fields keep their own).
     @FocusState private var focus: Field?
+    @Environment(\.motion) private var motion
 
     /// A field the user commits.
     enum Field: Hashable {
@@ -425,6 +426,7 @@ struct GitPaneContent: View {
                         .settingsButton()
                     }
                 }
+                .barTransition()
             }
 
             SettingsSection("Author") {
@@ -485,7 +487,7 @@ struct GitPaneContent: View {
                             FieldMessage(message.text, kind: message.isError ? .error : .warning)
                         }
                     }
-                    .barTransition()
+                    .settingsTransition()
                 }
             }
 
@@ -522,12 +524,13 @@ struct GitPaneContent: View {
                 }
             }
         }
-        // Rows a choice shows (the branch name for Other, the cache for
-        // the shell's variables, the email field for Other) grow in over
-        // 0.22 s and leave over 0.15 s, the rows below moving with them.
-        .barMotion(settings.branchChoice == .other)
+        // A lock file in the way, and the cache for the shell's variables,
+        // grow in over 0.22 s and leave over 0.15 s, the rows below moving
+        // with them. The email field and the branch name for Other move
+        // with the choices that show them (`choose`), so loading the
+        // configuration shows them at once.
+        .barMotion(settings.lockFile != nil)
         .barMotion(preferences.hooksEnvEnabled)
-        .barMotion(settings.showsEmailField)
         .task {
             await settings.load()
         }
@@ -547,8 +550,10 @@ struct GitPaneContent: View {
             settings.emailChoice
         } set: { choice in
             // The pop-up shows the choice at once; writing takes a moment.
-            settings.emailChoice = choice
             let settings = settings
+            choose(wasShown: settings.showsEmailField, isShown: !settings.showsEmailPopUp || choice == .other) {
+                settings.emailChoice = choice
+            }
             Task { await settings.selectEmail(choice) }
         }
     }
@@ -557,9 +562,23 @@ struct GitPaneContent: View {
         Binding {
             settings.branchChoice
         } set: { choice in
-            settings.branchChoice = choice
             let settings = settings
+            choose(wasShown: settings.branchChoice == .other, isShown: choice == .other) {
+                settings.branchChoice = choice
+            }
             Task { await settings.selectBranch(choice) }
+        }
+    }
+
+    /// Applies a choice that can show or hide a field under it (the email
+    /// or the branch name for Other): a field it shows grows in over 0.22 s
+    /// and one it hides leaves over 0.15 s, the rows below moving with it.
+    /// Any other choice applies at once.
+    private func choose(wasShown: Bool, isShown: Bool, _ change: () -> Void) {
+        if wasShown == isShown {
+            change()
+        } else {
+            withMotion(motion, isShown ? Motion.arrive : Motion.leave, change)
         }
     }
 

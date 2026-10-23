@@ -329,6 +329,7 @@ struct CloneForm: View {
     @Bindable var model: CloneSheetModel
     var cancel: () -> Void = {}
     var clone: () -> Void = {}
+    @Environment(\.motion) private var motion
 
     var body: some View {
         SheetScaffold("Clone a Repository") {
@@ -353,7 +354,7 @@ struct CloneForm: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .id(model.source)
-            .transition(.opacity)
+            .transition(motion.animates ? .opacity : .identity)
             .frame(height: Metrics.Sheet.cloneSourceHeight)
             .motion(Motion.leave, value: model.source)
         } buttons: {

@@ -110,15 +110,12 @@ struct ThemeCardPicker: View {
                 .frame(height: Metrics.ThemePicker.previewHeight)
                 .clipShape(shape)
                 .overlay(shape.strokeBorder(.line, lineWidth: 1))
+                // A color or background chosen for the theme recolors its
+                // preview over 0.15 s.
+                .motion(Motion.leave, value: colors[theme])
+                .motion(Motion.leave, value: backgrounds[theme])
                 .overlay {
-                    if isSelected {
-                        shape
-                            .inset(by: -Metrics.FocusRing.outset)
-                            .strokeBorder(
-                                Color.accent.opacity(isFocused ? 1 : Metrics.FocusRing.opacity),
-                                lineWidth: Metrics.FocusRing.lineWidth
-                            )
-                    }
+                    SelectionRing(isSelected: isSelected, isFocused: isFocused, shape: shape)
                 }
             Text(theme.title)
                 .font(isSelected ? Typography.secondary.weight(.semibold) : Typography.secondary)
@@ -243,6 +240,7 @@ struct SwatchPicker<Value: Hashable>: View {
     private let title: (Value) -> String
     private let fill: (Value) -> NSColor
     @FocusState private var isFocused: Bool
+    @Environment(\.motion) private var motion
 
     init(_ label: String, values: [Value], selection: Binding<Value>, title: @escaping (Value) -> String, fill: @escaping (Value) -> NSColor) {
         self.label = label
@@ -285,18 +283,11 @@ struct SwatchPicker<Value: Hashable>: View {
             .overlay(Circle().strokeBorder(.line, lineWidth: 1))
             .frame(width: Metrics.ThemePicker.swatchSize, height: Metrics.ThemePicker.swatchSize)
             .overlay {
-                if isSelected {
-                    Circle()
-                        .inset(by: -Metrics.FocusRing.outset)
-                        .strokeBorder(
-                            Color.accent.opacity(isFocused ? 1 : Metrics.FocusRing.opacity),
-                            lineWidth: Metrics.FocusRing.lineWidth
-                        )
-                }
+                SelectionRing(isSelected: isSelected, isFocused: isFocused, shape: Circle())
             }
             .contentShape(Circle())
             .onTapGesture {
-                selection = value
+                choose(value)
             }
             .tooltip(title(value))
     }
@@ -307,8 +298,52 @@ struct SwatchPicker<Value: Hashable>: View {
         }
         let next = index + offset
         if values.indices.contains(next) {
-            selection = values[next]
+            choose(values[next])
         }
         return .handled
+    }
+
+    /// Picks `value`: what the choice changes in the pane (the row's name
+    /// for it, the background swatches' colors) crossfades over 0.15 s with
+    /// the ring. The swatches a theme change brings show at once.
+    private func choose(_ value: Value) {
+        withMotion(motion, Motion.leave) {
+            selection = value
+        }
+    }
+}
+
+/// The ring around the chosen card or swatch, drawn as the focus ring is:
+/// it fades in settling from 1.04× to its size, and fades out, over 0.15 s,
+/// so a new choice crossfades it from one to the other.
+private struct SelectionRing<RingShape: InsettableShape>: View {
+    let isSelected: Bool
+    let isFocused: Bool
+    let shape: RingShape
+    @Environment(\.motion) private var motion
+
+    var body: some View {
+        ZStack {
+            if isSelected {
+                shape
+                    .inset(by: -Metrics.FocusRing.outset)
+                    .strokeBorder(
+                        Color.accent.opacity(isFocused ? 1 : Metrics.FocusRing.opacity),
+                        lineWidth: Metrics.FocusRing.lineWidth
+                    )
+                    .transition(transition)
+            }
+        }
+        .motion(Motion.leave, value: isSelected)
+    }
+
+    private var transition: AnyTransition {
+        guard motion.animates else {
+            return .identity
+        }
+        return .asymmetric(
+            insertion: .scale(scale: Motion.focusRingScale).combined(with: .opacity),
+            removal: .opacity
+        )
     }
 }

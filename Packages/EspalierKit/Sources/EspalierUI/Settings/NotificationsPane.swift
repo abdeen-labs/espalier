@@ -202,6 +202,7 @@ final class NotificationSettings {
 /// The Notifications pane: the switch, and the system's permission.
 struct NotificationsPaneContent: View {
     @State private var settings: NotificationSettings
+    @Environment(\.motion) private var motion
 
     init(settings: NotificationSettings) {
         _settings = State(initialValue: settings)
@@ -224,12 +225,19 @@ struct NotificationsPaneContent: View {
                         }
                         .settingsButton()
                     }
-                    .barTransition()
+                    // The permission changing while the line shows (the
+                    // system's prompt answered, or changed in System
+                    // Settings) crossfades the line and its button to the
+                    // new one over 0.15 s.
+                    .contentTransition(motion.animates ? .opacity : .identity)
+                    .motion(Motion.leave, value: line)
+                    // It grows in and leaves with the switch (`isEnabled`);
+                    // when the permission is read as the pane appears, it
+                    // shows at once.
+                    .settingsTransition()
                 }
             }
         }
-        // The status line grows in over 0.22 s and leaves over 0.15 s.
-        .barMotion(settings.statusLine != nil)
         .task {
             await settings.refresh()
         }
@@ -242,8 +250,12 @@ struct NotificationsPaneContent: View {
         Binding {
             settings.preferences.highSignalNotificationsEnabled
         } set: { enabled in
-            // The setting changes at once; asking takes a moment.
-            settings.preferences.highSignalNotificationsEnabled = enabled
+            // The setting changes at once; asking takes a moment. The
+            // status line grows in over 0.22 s as it turns on and leaves
+            // over 0.15 s as it turns off, the rows below moving with it.
+            withMotion(motion, enabled ? Motion.arrive : Motion.leave) {
+                settings.preferences.highSignalNotificationsEnabled = enabled
+            }
             if enabled {
                 Task { await settings.requestIfNotDetermined() }
             }

@@ -108,6 +108,7 @@ struct BypassReasonView: View {
     let isBypassing: Bool
     let cancel: () -> Void
     let bypass: () -> Void
+    @Environment(\.motion) private var motion
 
     var body: some View {
         SheetScaffold("Bypass Push Protection", message: "Why are you bypassing this \(secretDescription)?") {
@@ -119,7 +120,10 @@ struct BypassReasonView: View {
             .disabled(isBypassing)
         } buttons: {
             if isBypassing {
+                // Fades in and out over 0.15 s on its own, so what it
+                // disables and enables changes at once.
                 ArcProgress(.small)
+                    .transition(motion.animates ? AnyTransition.opacity.animation(Motion.animation(Motion.leave)) : .identity)
             }
             Spacer()
             // Exposing a secret is never the default.

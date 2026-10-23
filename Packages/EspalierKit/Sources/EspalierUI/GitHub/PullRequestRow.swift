@@ -76,18 +76,22 @@ nonisolated struct PullRequestRowContent: Sendable, Equatable {
 
 /// A pull request in the sidebar: its checks (or the pull request symbol,
 /// in the accent while selected), its number, its title (the current
-/// branch's semibold, a selected one medium), and Draft for a draft.
+/// branch's semibold, a selected one medium), and Draft for a draft. The
+/// checks changing state replace their glyph's symbol over 0.15 s.
 struct PullRequestRow: View {
     let content: PullRequestRowContent
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
     @Environment(\.isSidebarRowSelected) private var isSelected
+    @Environment(\.motion) private var motion
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
             Group {
                 if let checks = content.checks {
                     ChecksGlyph(checks)
+                        .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
+                        .motion(Motion.leave, value: checks)
                         .tooltip(content.checksTooltip)
                 } else {
                     Image(systemName: PullRequestGlyph.systemImage)

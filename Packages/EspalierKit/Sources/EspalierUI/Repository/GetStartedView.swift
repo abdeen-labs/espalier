@@ -62,8 +62,13 @@ public struct GetStartedView: View {
                     }
                 }
                 .frame(maxWidth: Metrics.GetStarted.listWidth)
+                .barTransition()
             }
         }
+        // The account's repositories fade in over 0.22 s as an account
+        // signs in, the actions moving aside for them, and fade out over
+        // 0.15 s as the last one signs out.
+        .barMotion(account != nil)
         .padding(Metrics.insetLarge * 2)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

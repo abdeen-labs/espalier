@@ -193,7 +193,9 @@ struct GitAuthorForm: View {
                         onCommit(.email)
                     }
                 }
-                .barTransition()
+                // Fades with the motion of the owner's choice of Other;
+                // loading the author shows it at once.
+                .settingsTransition()
         }
     }
 

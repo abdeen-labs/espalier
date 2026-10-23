@@ -145,30 +145,35 @@ private struct MarkdownTable: View {
 }
 
 /// An image: loaded by the window's image loader, a placeholder while it
-/// loads, and a link to it when it can't be shown.
+/// loads, and a link to it when it can't be shown. What the network brings
+/// (the image, or the link when it fails) crossfades with the placeholder
+/// over 0.15 s, as an avatar does; a cached image shows at once.
 struct MarkdownImageView: View {
     /// Large screenshots are downsampled to this many pixels wide.
     static let maximumPixels = 2_400
 
     let image: MarkdownImage
     @Environment(\.avatarLoader) private var loader
+    @Environment(\.motion) private var motion
     @State private var loaded: CGImage?
     @State private var failed = false
     /// How many times the network came back after it failed.
     @State private var retries = 0
 
     var body: some View {
-        Group {
+        ZStack(alignment: .topLeading) {
             if let loaded {
                 Image(loaded, scale: 1, label: Text(image.alt))
                     .resizable()
                     .scaledToFit()
                     .frame(maxWidth: image.width ?? CGFloat(loaded.width), alignment: .leading)
+                    .transition(motion.animates ? .opacity : .identity)
             } else if remote == nil || failed {
                 TextLink(destination: image.url) {
                     Label(image.alt.isEmpty ? image.url.lastPathComponent : image.alt, systemImage: "photo")
                 }
                 .tooltip(image.url.absoluteString)
+                .transition(motion.animates ? .opacity : .identity)
             } else {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(Color(espalier: Palette.field))
@@ -178,6 +183,7 @@ struct MarkdownImageView: View {
                             .foregroundStyle(.text3)
                     }
                     .accessibilityLabel(image.alt.isEmpty ? "Image" : image.alt)
+                    .transition(motion.animates ? .opacity : .identity)
             }
         }
         .task(id: ImageKey(url: image.url, retries: retries)) {
@@ -192,8 +198,10 @@ struct MarkdownImageView: View {
             guard !Task.isCancelled else {
                 return
             }
-            loaded = result
-            failed = result == nil
+            withMotion(motion, Motion.leave) {
+                loaded = result
+                failed = result == nil
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: GitHubAvatarLoader.networkDidReturn)) { _ in
             // The network came back: a failed image tries again.

@@ -107,6 +107,7 @@ struct CloneableRepositoryListView: View {
     var refresh: () -> Void = {}
     /// Double-click or Return on a repository.
     var activate: (CloneableRepositoryListItem) -> Void = { _ in }
+    @Environment(\.motion) private var motion
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
@@ -114,11 +115,18 @@ struct CloneableRepositoryListView: View {
                 TextField("Filter", text: $filter, prompt: Text("Filter your repositories").fieldPrompt())
                     .textFieldStyle(.capsule(systemImage: "magnifyingglass"))
                 Button(action: refresh) {
-                    if content.isLoading {
-                        ArcProgress(.small)
-                    } else {
-                        Label("Refresh the list of repositories", systemImage: "arrow.clockwise")
+                    // Refresh's arc and its symbol crossfade (0.15 s) as a
+                    // load starts and ends.
+                    ZStack {
+                        if content.isLoading {
+                            ArcProgress(.small)
+                                .transition(motion.animates ? .opacity : .identity)
+                        } else {
+                            Label("Refresh the list of repositories", systemImage: "arrow.clockwise")
+                                .transition(motion.animates ? .opacity : .identity)
+                        }
                     }
+                    .motion(Motion.leave, value: content.isLoading)
                 }
                 .buttonStyle(.icon)
                 .disabled(content.isLoading)

@@ -40,6 +40,9 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
     var groups: [Group]
     /// Whether there's no repository at all (before filtering).
     var hasRepositories: Bool
+    /// Whether the selected repository's worktrees are listed (before
+    /// filtering).
+    var showsWorktrees = false
 
     /// Every row, in order: the worktrees, then the groups'.
     var rowIDs: [RepositoryPopoverRowID] {
@@ -98,12 +101,14 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
         }
 
         var worktrees: [WorktreeRowContent] = []
+        var showsWorktrees = false
         if let repository = app.selectedRepository, repository.isUsable,
            repository.worktrees.isListVisible || repository.id == revealed {
             let model = repository.worktrees
             worktrees = WorktreeRowContent.rows(model.entries, currentPath: model.current?.path, filter: filter)
+            showsWorktrees = true
         }
-        return RepositoryPopoverContent(worktrees: worktrees, groups: groups, hasRepositories: !all.isEmpty)
+        return RepositoryPopoverContent(worktrees: worktrees, groups: groups, hasRepositories: !all.isEmpty, showsWorktrees: showsWorktrees)
     }
 }
 
@@ -184,6 +189,7 @@ struct RepositoryPopoverView: View {
     /// filter leaves fewer rows.
     @State private var unfilteredHeight: CGFloat?
     @Environment(WindowContext.self) private var context: WindowContext?
+    @Environment(\.motion) private var motion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -249,26 +255,31 @@ struct RepositoryPopoverView: View {
             OverflowScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if !content.worktrees.isEmpty {
-                        ListGroupLabel("Worktrees") {
-                            if let newWorktree {
-                                Button(action: newWorktree) {
-                                    Image(systemName: "plus")
-                                }
-                                .buttonStyle(SidebarHeaderButtonStyle())
-                                .tooltip(ActionKind.newWorktree.title)
-                                .accessibilityLabel(ActionKind.newWorktree.title)
-                            }
-                        }
-                        .padding(.horizontal, Metrics.ListRow.inset)
-                        ForEach(content.worktrees) { worktree in
-                            row(.worktree(path: worktree.path)) {
-                                WorktreeRow(content: worktree)
-                            } menu: { [context] in
-                                if let context {
-                                    WorktreeContextMenu.content(worktree, context: context)
+                        Group {
+                            ListGroupLabel("Worktrees") {
+                                if let newWorktree {
+                                    Button(action: newWorktree) {
+                                        Image(systemName: "plus")
+                                    }
+                                    .buttonStyle(SidebarHeaderButtonStyle())
+                                    .tooltip(ActionKind.newWorktree.title)
+                                    .accessibilityLabel(ActionKind.newWorktree.title)
                                 }
                             }
+                            .padding(.horizontal, Metrics.ListRow.inset)
+                            ForEach(content.worktrees) { worktree in
+                                row(.worktree(path: worktree.path)) {
+                                    WorktreeRow(content: worktree)
+                                } menu: { [context] in
+                                    if let context {
+                                        WorktreeContextMenu.content(worktree, context: context)
+                                    }
+                                }
+                            }
                         }
+                        // Not the bar transition: the filter shows and hides
+                        // the section at once.
+                        .transition(motion.animates ? .opacity : .identity)
                     }
                     ForEach(content.groups) { group in
                         ListGroupLabel(group.title)
@@ -285,6 +296,10 @@ struct RepositoryPopoverView: View {
                     }
                 }
                 .padding(.bottom, Metrics.ListRow.inset)
+                // The worktrees fade in over 0.22 s as Show Worktrees (or a
+                // second worktree) lists them, the repositories moving down,
+                // and fade out over 0.15 s.
+                .barMotion(content.showsWorktrees)
             }
             .onChange(of: highlighted) {
                 if let highlighted, highlighted != hovered {

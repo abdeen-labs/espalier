@@ -61,6 +61,7 @@ struct ModelSheet: View {
     /// while this sheet closes adds nothing.
     @State private var didSave = false
     @Environment(\.dismissModal) private var dismiss
+    @Environment(\.motion) private var motion
 
     init(editor: ModelEditor, onSave: @escaping (BYOKModel) -> Void) {
         _editor = State(initialValue: editor)
@@ -104,10 +105,25 @@ struct ModelSheet: View {
 
             if let problem = editor.problem {
                 FieldMessage(problem, kind: .error)
+                    .settingsTransition()
             }
         } buttons: {
             SheetButtons(editor.saveTitle, cancel: { dismiss() }) {
-                guard !didSave, let model = editor.save() else {
+                guard !didSave else {
+                    return
+                }
+                // Why the model can't be saved grows in over 0.22 s, the
+                // buttons moving with it; from then on it follows the
+                // fields at once.
+                let saved: BYOKModel?
+                if editor.problem == nil {
+                    saved = withMotion(motion, Motion.arrive) {
+                        editor.save()
+                    }
+                } else {
+                    saved = editor.save()
+                }
+                guard let model = saved else {
                     return
                 }
                 didSave = true

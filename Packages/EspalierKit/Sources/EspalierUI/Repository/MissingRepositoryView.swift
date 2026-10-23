@@ -57,6 +57,7 @@ struct MissingRepositoryForm: View {
     var trust: () -> Void = {}
     var remove: () -> Void = {}
     var checkAgain: () -> Void = {}
+    @Environment(\.motion) private var motion
 
     /// The symbol: a folder with a question mark, or a shield.
     private var systemImage: String {
@@ -87,7 +88,10 @@ struct MissingRepositoryForm: View {
                         .buttonStyle(.prominent)
                 case .unsafe:
                     if isWorking {
+                        // Fades in and out over 0.15 s on its own, so the
+                        // button it disables changes at once.
                         ArcProgress(.small)
+                            .transition(motion.animates ? AnyTransition.opacity.animation(Motion.animation(Motion.leave)) : .identity)
                     }
                     Button("Remove", action: remove)
                         .buttonStyle(.quiet)

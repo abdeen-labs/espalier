@@ -256,10 +256,12 @@ struct RepositoryRowIcon: View {
 }
 
 /// The changed files count and the ahead and behind counts, with their
-/// tooltips.
+/// tooltips. A count that changes while the list shows rolls to its new
+/// value over 0.2 s.
 struct RepositoryStatusIndicators: View {
     let content: RepositoryRowContent
     @Environment(\.numberFormat) private var numberFormat
+    @Environment(\.motion) private var motion
 
     var body: some View {
         if content.showsStatus {
@@ -268,9 +270,11 @@ struct RepositoryStatusIndicators: View {
                     Text(verbatim: content.changedFileCount > 999 ? "999+" : formatCount(content.changedFileCount, numberFormat))
                         .font(Typography.tinyCount)
                         .foregroundStyle(.text2)
+                        .contentTransition(motion.animates ? .numericText() : .identity)
                         .padding(.horizontal, Metrics.grid + 1)
                         .padding(.vertical, 1)
                         .background(Capsule(style: .circular).fill(.field))
+                        .motion(Motion.kindChange, value: content.changedFileCount)
                         .tooltip(RepositoryRowContent.changesTooltip)
                 }
                 if let tooltip = content.aheadBehindTooltip(numberFormat) {
@@ -279,11 +283,15 @@ struct RepositoryStatusIndicators: View {
                             Text(verbatim: "↑\(formatCount(content.ahead, numberFormat))")
                                 .font(Typography.aheadCount)
                                 .foregroundStyle(.aheadText)
+                                .contentTransition(motion.animates ? .numericText() : .identity)
+                                .motion(Motion.kindChange, value: content.ahead)
                         }
                         if content.behind > 0 {
                             Text(verbatim: "↓\(formatCount(content.behind, numberFormat))")
                                 .font(Typography.secondaryCount)
                                 .foregroundStyle(.text3)
+                                .contentTransition(motion.animates ? .numericText() : .identity)
+                                .motion(Motion.kindChange, value: content.behind)
                         }
                     }
                     .tooltip(tooltip)

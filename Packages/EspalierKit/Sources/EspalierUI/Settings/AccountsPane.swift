@@ -239,14 +239,17 @@ struct AccountsForm: View {
                         }
                         .settingsButton()
                     }
+                    .settingsTransition()
                 } else if let account = content.unreadableDotCom {
                     UnreadableAccountRow(account: account, actions: actions)
+                        .settingsTransition()
                 } else if let account = content.invalidatedDotCom {
                     InvalidatedAccountRow(account: account) {
                         actions.signIn(account.endpoint)
                     } remove: {
                         actions.remove(account.endpoint)
                     }
+                    .settingsTransition()
                 } else {
                     SignInCallToAction(
                         text: "Sign in to your GitHub.com account to access your repositories.",
@@ -254,9 +257,11 @@ struct AccountsForm: View {
                     ) {
                         actions.signIn(nil)
                     }
+                    .settingsTransition()
                 }
                 if let note = content.note(for: getDotComAPIEndpoint()) {
                     SignedOutNoteView(note: note, open: actions.open)
+                        .settingsTransition()
                 }
             }
 
@@ -268,9 +273,11 @@ struct AccountsForm: View {
                         }
                         .settingsButton()
                     }
+                    .settingsTransition()
                 }
                 ForEach(content.unreadableEnterprise) { account in
                     UnreadableAccountRow(account: account, actions: actions)
+                        .settingsTransition()
                 }
                 ForEach(content.invalidatedEnterprise) { account in
                     InvalidatedAccountRow(account: account) {
@@ -278,9 +285,11 @@ struct AccountsForm: View {
                     } remove: {
                         actions.remove(account.endpoint)
                     }
+                    .settingsTransition()
                 }
                 ForEach(content.enterpriseNotes) { note in
                     SignedOutNoteView(note: note, open: actions.open)
+                        .settingsTransition()
                 }
                 if content.showsEnterpriseCallToAction {
                     SignInCallToAction(
@@ -289,6 +298,7 @@ struct AccountsForm: View {
                     ) {
                         actions.signIn(SignInRequest.enterpriseEndpoint)
                     }
+                    .settingsTransition()
                 } else {
                     SettingsButtonRow {
                         Button("Add GitHub Enterprise Account…") {
@@ -296,9 +306,16 @@ struct AccountsForm: View {
                         }
                         .settingsButton()
                     }
+                    .settingsTransition()
                 }
             }
         }
+        // An account signing in or out (or signed out because its token
+        // stopped working), one removed, and the note Sign Out leaves: the
+        // rows they bring or take away fade over 0.22 s, crossfading where
+        // one takes another's place, the rows below making room or closing
+        // the gap.
+        .motion(Motion.arrive, value: content)
     }
 }
 

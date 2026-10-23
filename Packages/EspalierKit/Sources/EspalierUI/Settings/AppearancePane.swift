@@ -90,6 +90,7 @@ enum AppearanceSettings {
 struct AppearanceForm: View {
     @Bindable var preferences: Preferences
     let openAppearanceSettings: () -> Void
+    @Environment(\.motion) private var motion
 
     var body: some View {
         SettingsPage {
@@ -115,12 +116,16 @@ struct AppearanceForm: View {
                             Theme.named(preferences.designTheme, color: color).accent
                         }
                     }
+                    // The chosen color's name, and the background's below,
+                    // crossfade with the swatch's motion.
+                    .contentTransition(motion.animates ? .opacity : .identity)
                 }
                 SettingsRow("Background", description: preferences.designThemeBackground.title) {
                     SwatchPicker("Background", values: preferences.designTheme.backgrounds, selection: $preferences.designThemeBackground, title: \.title) { tint in
                         Theme.named(preferences.designTheme, color: preferences.designThemeColor, background: tint).backgroundSwatch
                     }
                 }
+                .contentTransition(motion.animates ? .opacity : .identity)
                 SettingsRow("Appearance", labelsControl: true) {
                     CapsuleSegmentedControl("Appearance", selection: $preferences.theme, segments: AppearanceSettings.themes)
                         .fixedSize()
@@ -217,6 +222,7 @@ struct AppearanceForm: View {
                     CapsuleSegmentedControl("Style", selection: $preferences.sidebarStyle, segments: AppearanceSettings.sidebarStyles)
                         .fixedSize()
                 }
+                .contentTransition(motion.animates ? .opacity : .identity)
                 SettingsToggleRow(
                     "Always show worktree list",
                     description: "Shows Worktrees in the sidebar even when a repository has just one.",
@@ -224,6 +230,9 @@ struct AppearanceForm: View {
                 )
             }
         }
+        // What a sidebar style does crossfades to the chosen one's over
+        // 0.15 s, the rows below moving with its height.
+        .motion(Motion.leave, value: preferences.sidebarStyle)
     }
 
     private static func title(_ format: DateFormatPattern) -> String {

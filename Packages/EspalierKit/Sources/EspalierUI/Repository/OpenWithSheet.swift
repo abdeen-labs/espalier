@@ -118,6 +118,7 @@ struct OpenWithForm: View {
                     FolderField(label: "Path", path: $model.customPath, prompt: "Path to executable") {
                         choosePath()
                     }
+                    .barTransition()
                     if !model.customPath.isEmpty, let error = model.currentValidation?.pathError {
                         FieldMessage(error, kind: .error)
                     }
@@ -125,6 +126,7 @@ struct OpenWithForm: View {
                         TextField("Arguments", text: $model.customArguments, prompt: Text("Command line arguments").fieldPrompt())
                             .labelsHidden()
                     }
+                    .barTransition()
                     if let error = model.currentValidation?.argumentsError {
                         FieldMessage(error, kind: .error)
                     }
@@ -135,6 +137,10 @@ struct OpenWithForm: View {
         } buttons: {
             SheetButtons("Open", isConfirmDisabled: !model.canOpen, cancel: cancel, confirm: open)
         }
+        // The custom editor's fields grow in over 0.22 s and leave over 0.15
+        // s, the buttons moving with them; their checks, as they're typed,
+        // show at once.
+        .barMotion(model.choice == .configure)
         .task(id: [model.customPath, model.customArguments]) {
             await model.validate()
         }

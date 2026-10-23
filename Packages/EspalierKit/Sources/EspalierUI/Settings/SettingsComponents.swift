@@ -2,8 +2,8 @@
 // the pane's header; sections with an uppercase label; flat rows split by
 // hairlines, each with its title and an optional description on the left
 // and its control on the right; rows for a message or for buttons alone;
-// the "Local" badge; and a row's "⋯" menu. Messages under a control are
-// `FieldMessage`s, as in sheets.
+// the "Local" badge; a row's "⋯" menu; and the fade of what a change shows
+// or hides. Messages under a control are `FieldMessage`s, as in sheets.
 
 import EspalierCore
 import SwiftUI
@@ -298,6 +298,24 @@ extension View {
         AtLeastIdealWidth(minimum: Metrics.SettingsWindow.controlWidth) {
             self
         }
+    }
+
+    /// A row, message, or section that a change brings or takes away: it
+    /// fades with the motion of that change (a choice made with
+    /// `withMotion`, a list keyed with `motion(_:value:)`) and has none of
+    /// its own, unlike `barTransition()`, so what a load shows appears at
+    /// once. No transition where motion doesn't run.
+    func settingsTransition() -> some View {
+        modifier(SettingsTransition())
+    }
+}
+
+/// `settingsTransition()`: a fade, where motion runs.
+private struct SettingsTransition: ViewModifier {
+    @Environment(\.motion) private var motion
+
+    func body(content: Content) -> some View {
+        content.transition(motion.animates ? .opacity : .identity)
     }
 }
 

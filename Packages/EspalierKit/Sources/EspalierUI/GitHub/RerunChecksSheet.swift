@@ -220,7 +220,11 @@ struct RerunChecksView: View {
                     .font(Typography.secondary)
                 }
                 if let failure = content.failure {
+                    // Fades in over 0.22 s and out over 0.15 s. It comes
+                    // with the button enabling again, which draws at once,
+                    // so the buttons below shift at once too.
                     SignInInlineError(message: failure)
+                        .barTransition()
                 }
             }
         } buttons: {

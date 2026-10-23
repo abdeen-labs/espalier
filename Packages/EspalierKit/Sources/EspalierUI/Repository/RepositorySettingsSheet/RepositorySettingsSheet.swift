@@ -260,6 +260,7 @@ struct RepositorySettingsForm: View {
     var cancel: () -> Void = {}
     var save: () -> Void = {}
     var publish: () -> Void = {}
+    @Environment(\.motion) private var motion
 
     var body: some View {
         SheetScaffold("Repository Settings", width: Metrics.Sheet.terminalWidth) {
@@ -291,12 +292,16 @@ struct RepositorySettingsForm: View {
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .id(model.pane)
-            .transition(.opacity)
+            .transition(motion.animates ? .opacity : .identity)
             .frame(minHeight: Metrics.Sheet.listHeight, alignment: .top)
             .motion(Motion.leave, value: model.pane)
 
+            // What failed fades in over 0.22 s and out over 0.15 s. It
+            // comes with the form enabling again, which draws at once, so
+            // the buttons below move at once too.
             ForEach(model.errors, id: \.self) { error in
                 FieldMessage(error, kind: .error)
+                    .barTransition()
             }
         } buttons: {
             SheetButtons(

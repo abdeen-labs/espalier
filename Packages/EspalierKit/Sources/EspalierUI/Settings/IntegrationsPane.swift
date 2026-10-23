@@ -256,6 +256,7 @@ struct IntegrationsForm: View {
                 }
                 if let custom = content.editor.custom, content.editor.selection == .custom {
                     CustomIntegrationSummary(integration: custom)
+                        .barTransition()
                 }
                 if content.showsNoEditorsHint {
                     SettingsMessageRow {
@@ -287,6 +288,7 @@ struct IntegrationsForm: View {
                 }
                 if let custom = content.shell.custom, content.shell.selection == .custom {
                     CustomIntegrationSummary(integration: custom)
+                        .barTransition()
                 }
             }
 
@@ -305,6 +307,11 @@ struct IntegrationsForm: View {
                 )
             }
         }
+        // The custom editor's or shell's command grows in over 0.22 s as
+        // it's chosen (or saved in its sheet) and leaves over 0.15 s as
+        // another is, the rows below moving with it.
+        .barMotion(content.editor.custom != nil && content.editor.selection == .custom)
+        .barMotion(content.shell.custom != nil && content.shell.selection == .custom)
     }
 }
 

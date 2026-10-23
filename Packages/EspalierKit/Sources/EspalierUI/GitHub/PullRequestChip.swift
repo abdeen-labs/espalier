@@ -43,6 +43,9 @@ public struct PullRequestChip: View {
                 isPopoverPresented.toggle()
             } label: {
                 PullRequestChipLabel(content: content)
+                    // Another pull request (another branch or repository)
+                    // shows at once.
+                    .motionScope(AnyHashable(MotionKey(repository: ObjectIdentifier(repository), number: pullRequest.pullRequestNumber)))
             }
             .buttonStyle(.quiet)
             .tooltip(content.tooltip)
@@ -57,12 +60,20 @@ public struct PullRequestChip: View {
             }
         }
     }
+
+    /// The pull request shown, in its repository: the scope of the label's
+    /// motion.
+    private struct MotionKey: Hashable {
+        let repository: ObjectIdentifier
+        let number: Int
+    }
 }
 
 /// The chip's label: the pull request symbol, its number, and its checks'
-/// glyph.
+/// glyph, whose symbol is replaced over 0.15 s as the checks change state.
 struct PullRequestChipLabel: View {
     let content: PullRequestChipContent
+    @Environment(\.motion) private var motion
 
     var body: some View {
         HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
@@ -73,6 +84,8 @@ struct PullRequestChipLabel: View {
                 .font(Typography.count)
             if let checks = content.checks {
                 ChecksGlyph(checks)
+                    .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
+                    .motion(Motion.leave, value: checks)
             }
         }
     }

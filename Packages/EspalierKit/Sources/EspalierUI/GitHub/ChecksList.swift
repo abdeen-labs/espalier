@@ -75,13 +75,18 @@ nonisolated func checksTooltipText(_ check: CombinedRefCheck) -> String {
     "Checks: \(getCombinedCheckAdjective(check))"
 }
 
-/// A check's or a step's glyph.
+/// A check's or a step's glyph. A check or step changing state while it
+/// shows (queued to running, running to passed) replaces its symbol over
+/// 0.15 s.
 struct CheckGlyph: View {
     let kind: CheckGlyphKind
+    @Environment(\.motion) private var motion
 
     var body: some View {
         Image(systemName: kind.systemImage)
             .foregroundStyle(Color(espalier: Palette.checks(kind.tone)))
+            .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
+            .motion(Motion.leave, value: kind)
             .accessibilityLabel(kind.adjective)
     }
 }
@@ -278,16 +283,20 @@ struct ChecksListActions {
 // MARK: Views
 
 /// The checks' summary: the state's glyph (progress while loading), the
-/// title, the summary line, and Re-run (not with no checks).
+/// title, the summary line, and Re-run (not with no checks). The overall
+/// state changing while it shows replaces the glyph's symbol over 0.15 s.
 struct ChecksHeader: View {
     let content: ChecksContent
     let actions: ChecksListActions
+    @Environment(\.motion) private var motion
 
     var body: some View {
         HStack(alignment: .top, spacing: Metrics.insetSmall) {
             Group {
                 if let overall = content.overall {
                     ChecksGlyph(overall)
+                        .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
+                        .motion(Motion.leave, value: overall)
                 } else if content.isLoading {
                     ArcProgress(.small)
                 }
@@ -354,12 +363,16 @@ struct ChecksRerunButton: View {
     }
 }
 
-/// The checks, grouped, each expanding to its steps.
+/// The checks, grouped, each expanding to its steps. A check the user opens
+/// grows its steps in over 0.22 s and one they close lets them go over
+/// 0.15 s, the checks below moving with them; the first failed check opens
+/// at once.
 struct ChecksList: View {
     let content: ChecksContent
     let actions: ChecksListActions
     @State private var expanded: Int?
     @State private var hasUserToggled = false
+    @Environment(\.motion) private var motion
 
     var body: some View {
         Group {
@@ -384,8 +397,11 @@ struct ChecksList: View {
                                 check: check,
                                 isExpanded: expandedID == check.id,
                                 toggle: {
-                                    hasUserToggled = true
-                                    expanded = expandedID == check.id ? -1 : check.id
+                                    let closes = expandedID == check.id
+                                    withMotion(motion, closes ? Motion.leave : Motion.arrive) {
+                                        hasUserToggled = true
+                                        expanded = closes ? -1 : check.id
+                                    }
                                 },
                                 actions: actions
                             )
@@ -419,12 +435,14 @@ struct ChecksStandBy: View {
     }
 }
 
-/// A check: its glyph, name, and description; open, its steps.
+/// A check: its glyph, name, and description; open, its steps, which fade
+/// in and out with the motion of the click that opened or closed them.
 private struct CheckRunRow: View {
     let check: CheckRunContent
     let isExpanded: Bool
     let toggle: () -> Void
     let actions: ChecksListActions
+    @Environment(\.motion) private var motion
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.grid) {
@@ -457,6 +475,7 @@ private struct CheckRunRow: View {
             if isExpanded {
                 CheckStepsView(check: check, actions: actions)
                     .padding(.leading, Metrics.insetLarge + Metrics.grid)
+                    .transition(motion.animates ? .opacity : .identity)
             }
         }
         .padding(.vertical, 2)
@@ -523,7 +542,7 @@ private struct CheckStepsView: View {
 
 /// A step: its glyph, name, and duration. A step with a page opens it on a
 /// click, the row taking the hover wash and showing ↗ while the pointer is
-/// on it.
+/// on it, both fading as hover does.
 private struct CheckStepRow: View {
     let step: CheckStepContent
     let open: (URL) -> Void
@@ -568,6 +587,7 @@ private struct CheckStepRow: View {
                 .font(Typography.subheadline)
                 .foregroundStyle(.text3)
                 .opacity(showsLink ? 1 : 0)
+                .hoverMotion(showsLink)
                 .accessibilityHidden(true)
         }
         .contentShape(Rectangle())

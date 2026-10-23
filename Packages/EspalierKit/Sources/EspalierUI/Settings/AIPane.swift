@@ -172,6 +172,7 @@ struct AIForm: View {
                         SettingsMessageRow {
                             SettingsNote("Add a provider to use your own API keys with OpenAI-compatible endpoints, Azure, Anthropic, or local providers like Ollama.")
                         }
+                        .settingsTransition()
                     }
                     ForEach(ai.providers, id: \.id) { provider in
                         ProviderRow(
@@ -182,6 +183,7 @@ struct AIForm: View {
                                 Task { await actions?.removeProvider(provider) }
                             }
                         )
+                        .settingsTransition()
                     }
                     SettingsButtonRow {
                         Button("Add Provider…") {
@@ -195,16 +197,19 @@ struct AIForm: View {
                 SettingsSection("Models") {
                     if ai.hasModels {
                         ModelPicker("Commit messages", feature: .commitMessageGeneration, ai: ai)
+                            .settingsTransition()
                         ModelPicker(
                             "Conflict resolution",
                             description: "Model changes apply to future conflict resolutions.",
                             feature: .conflictResolution,
                             ai: ai
                         )
+                        .settingsTransition()
                     } else {
                         SettingsMessageRow {
                             SettingsNote("Add a provider with at least one model to choose the models AI features use.")
                         }
+                        .settingsTransition()
                     }
                     SettingsToggleRow("Always use AI when conflicts are detected", isOn: $preferences.alwaysUseAIForConflictResolution)
                 }
@@ -219,6 +224,7 @@ struct AIForm: View {
                         SettingsMessageRow {
                             SettingsNote("You haven't allowed any provider to receive your data.")
                         }
+                        .settingsTransition()
                     }
                     ForEach(groups) { group in
                         SettingsRow(group.provider.name, description: "\(group.featuresTitle) · \(group.host)") {
@@ -228,6 +234,7 @@ struct AIForm: View {
                             .settingsButton()
                             .accessibilityLabel("Revoke \(group.provider.name)")
                         }
+                        .settingsTransition()
                     }
                 }
                 .barTransition()
@@ -236,6 +243,11 @@ struct AIForm: View {
         // Turning AI on shows its sections, growing in over 0.22 s (and
         // leaving over 0.15 s).
         .barMotion(preferences.aiFeaturesEnabled)
+        // A provider added, edited, or removed, and a consent given or
+        // revoked: the rows they bring or take away fade over 0.22 s, the
+        // rows below making room or closing the gap.
+        .motion(Motion.arrive, value: ai.providers)
+        .motion(Motion.arrive, value: ai.consents)
     }
 }
 

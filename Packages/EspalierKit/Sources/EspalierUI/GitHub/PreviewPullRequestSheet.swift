@@ -291,20 +291,29 @@ extension Metrics.Sheet {
     public static let previewPullRequestMinimumSize = CGSize(width: 760, height: 480)
 }
 
-/// The footer: whether it merges cleanly, then the buttons.
+/// The footer: whether it merges cleanly, then the buttons. The merge
+/// check's progress and line crossfade into its result over 0.15 s.
 struct PreviewPullRequestFooter: View {
     let content: PreviewPullRequestContent
     let cancel: () -> Void
     let create: () -> Void
+    @Environment(\.motion) private var motion
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
             if let title = content.mergeTitle {
-                mergeGlyph
+                ZStack {
+                    mergeGlyph
+                        .id(content.mergeKind)
+                        .transition(motion.animates ? .opacity : .identity)
+                }
+                .motion(Motion.leave, value: content.mergeKind)
                 Text("\(Text(title).fontWeight(.semibold).foregroundStyle(.text)) \(content.mergeMessage ?? "")")
                     .font(Typography.secondary)
                     .foregroundStyle(.text2)
                     .lineLimit(2)
+                    .contentTransition(motion.animates ? .opacity : .identity)
+                    .motion(Motion.leave, value: content.mergeKind)
             }
             Spacer(minLength: Metrics.insetMedium)
             SheetButtons(content.buttonTitle, isConfirmDisabled: !content.canCreate, confirmHelp: content.buttonHelp, cancel: cancel, confirm: create)

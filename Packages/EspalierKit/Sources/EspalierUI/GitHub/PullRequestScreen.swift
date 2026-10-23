@@ -229,6 +229,9 @@ struct PullRequestOverview: View {
             context.app.integrations.openInBrowser(url)
             return .handled
         })
+        // Choosing another pull request shows its overview at once: the
+        // place is kept, so its checks' glyphs would otherwise animate.
+        .motionScope(AnyHashable(MotionKey(repository: ObjectIdentifier(repository), number: pullRequest.pullRequestNumber)))
         .task(id: PullRequestKey(number: pullRequest.pullRequestNumber, branchName: branchName)) {
             await gitHub.watchChecks(for: pullRequest, branchName: branchName)
         }
@@ -273,6 +276,13 @@ struct PullRequestOverview: View {
     private struct PullRequestKey: Hashable {
         let number: Int
         let branchName: String
+    }
+
+    /// The pull request shown, in its repository: the scope of the
+    /// overview's motion.
+    private struct MotionKey: Hashable {
+        let repository: ObjectIdentifier
+        let number: Int
     }
 
     private struct DescriptionKey: Hashable {

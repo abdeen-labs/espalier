@@ -212,7 +212,11 @@ struct PublishRepositoryForm: View {
             }
 
             if let problem = model.problem {
+                // Fades in over 0.22 s and out over 0.15 s. It comes with
+                // the form enabling again, which draws at once, so the
+                // buttons below move at once too.
                 FieldMessage(problem, kind: .error)
+                    .barTransition()
             }
         } buttons: {
             if model.account != nil {

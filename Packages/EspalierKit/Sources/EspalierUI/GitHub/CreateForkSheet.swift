@@ -19,6 +19,17 @@ nonisolated enum CreateForkStep: Sendable, Equatable {
     case failed(message: String, repositoryURL: URL?)
     /// How the fork is used: its parent's name, its own, and the choice.
     case settings(parent: String, fork: String, target: ForkContributionTarget)
+
+    /// Which step, without what it shows: moving to another one
+    /// crossfades.
+    var kind: Int {
+        switch self {
+        case .question: 0
+        case .forking: 1
+        case .failed: 2
+        case .settings: 3
+        }
+    }
 }
 
 /// Offers to fork a repository the account can't push to.
@@ -168,81 +179,99 @@ struct CreateForkView: View {
     let fork: () -> Void
     let open: (URL) -> Void
     let finish: () -> Void
+    @Environment(\.motion) private var motion
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetMedium) {
-            switch step {
-            case .question(let message, let forkName):
-                title(stepTitle)
-                Text(message)
-                    .foregroundStyle(.text2)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let forkName {
-                    Text("Do you want to create a fork of this repository at **\(forkName)** to continue?")
-                        .foregroundStyle(.text2)
-                        .fixedSize(horizontal: false, vertical: true)
+            // One step crossfades into the next over 0.22 s, the title
+            // with it when it changes, as the sign-in sheet's steps do.
+            title(stepTitle)
+                .contentTransition(motion.animates ? .opacity : .identity)
+            ZStack(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: Metrics.insetMedium) {
+                    stepContent
                 }
-                buttons {
-                    Button("Cancel", role: .cancel, action: cancel)
-                        .buttonStyle(.secondary)
-                        .keyboardShortcut(.cancelAction)
-                    Button("Fork This Repository", action: fork)
-                        .buttonStyle(.prominent)
-                        .keyboardShortcut(.defaultAction)
-                }
-
-            case .forking(let forkName):
-                title(stepTitle)
-                HStack(spacing: Metrics.insetSmall) {
-                    ArcProgress(.small)
-                    Text(forkName.map { "Creating your fork \($0)…" } ?? "Creating your fork…")
-                        .foregroundStyle(.text2)
-                }
-                buttons {
-                    Button("Cancel", role: .cancel, action: cancel)
-                        .buttonStyle(.secondary)
-                        .disabled(true)
-                    Button("Fork This Repository", action: fork)
-                        .buttonStyle(.prominent)
-                        .disabled(true)
-                }
-
-            case .failed(let message, let repositoryURL):
-                title(stepTitle)
-                SignInInlineError(message: message)
-                if let repositoryURL {
-                    Button("Create the Fork on GitHub") {
-                        open(repositoryURL)
-                    }
-                    .buttonStyle(.textLink)
-                }
-                buttons {
-                    SheetDismissButton("Close", action: cancel)
-                }
-
-            case .settings(let parent, let fork, let selected):
-                title(stepTitle)
-                Text("This repository is a fork. How do you plan to use it?")
-                    .foregroundStyle(.text2)
-                    .fixedSize(horizontal: false, vertical: true)
-                ForkTargetPicker(
-                    content: ForkSettingsContent(parent: parent, fork: fork, target: selected),
-                    target: $target,
-                    parentTitle: "To contribute to the parent project",
-                    label: "This repository is a fork. How do you plan to use it?"
-                )
-                ForkTargetDescription(repository: selected == .parent ? parent : fork)
-                buttons {
-                    Button("Continue", action: finish)
-                        .buttonStyle(.prominent)
-                        .keyboardShortcut(.defaultAction)
-                }
+                .id(step.kind)
+                .transition(motion.animates ? .opacity : .identity)
             }
         }
+        .motion(Motion.arrive, value: step.kind)
         .padding(Metrics.Sheet.padding)
         .frame(width: Metrics.Sheet.standardWidth, alignment: .leading)
         .background(Color(espalier: Palette.background))
         .modalTitle(stepTitle)
+    }
+
+    /// The step under the title.
+    @ViewBuilder
+    private var stepContent: some View {
+        switch step {
+        case .question(let message, let forkName):
+            Text(message)
+                .foregroundStyle(.text2)
+                .fixedSize(horizontal: false, vertical: true)
+            if let forkName {
+                Text("Do you want to create a fork of this repository at **\(forkName)** to continue?")
+                    .foregroundStyle(.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            buttons {
+                Button("Cancel", role: .cancel, action: cancel)
+                    .buttonStyle(.secondary)
+                    .keyboardShortcut(.cancelAction)
+                Button("Fork This Repository", action: fork)
+                    .buttonStyle(.prominent)
+                    .keyboardShortcut(.defaultAction)
+            }
+
+        case .forking(let forkName):
+            HStack(spacing: Metrics.insetSmall) {
+                ArcProgress(.small)
+                Text(forkName.map { "Creating your fork \($0)…" } ?? "Creating your fork…")
+                    .foregroundStyle(.text2)
+            }
+            buttons {
+                Button("Cancel", role: .cancel, action: cancel)
+                    .buttonStyle(.secondary)
+                    .disabled(true)
+                Button("Fork This Repository", action: fork)
+                    .buttonStyle(.prominent)
+                    .disabled(true)
+            }
+
+        case .failed(let message, let repositoryURL):
+            SignInInlineError(message: message)
+            if let repositoryURL {
+                Button("Create the Fork on GitHub") {
+                    open(repositoryURL)
+                }
+                .buttonStyle(.textLink)
+            }
+            buttons {
+                SheetDismissButton("Close", action: cancel)
+            }
+
+        case .settings(let parent, let fork, let selected):
+            Text("This repository is a fork. How do you plan to use it?")
+                .foregroundStyle(.text2)
+                .fixedSize(horizontal: false, vertical: true)
+            ForkTargetPicker(
+                content: ForkSettingsContent(parent: parent, fork: fork, target: selected),
+                target: $target,
+                parentTitle: "To contribute to the parent project",
+                label: "This repository is a fork. How do you plan to use it?"
+            )
+            // What the choice means crossfades (0.15 s) to the other
+            // repository's.
+            ForkTargetDescription(repository: selected == .parent ? parent : fork)
+                .contentTransition(motion.animates ? .opacity : .identity)
+                .motion(Motion.leave, value: selected)
+            buttons {
+                Button("Continue", action: finish)
+                    .buttonStyle(.prominent)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
     }
 
     /// The step's title, which also names the sheet for VoiceOver.

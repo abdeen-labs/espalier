@@ -11,6 +11,7 @@ import SwiftUI
 /// The Git Config pane.
 struct GitConfigPane: View {
     @Bindable var model: RepositorySettingsModel
+    @Environment(\.motion) private var motion
 
     var body: some View {
         Form {
@@ -38,7 +39,16 @@ struct GitConfigPane: View {
                     emailSelection: Binding {
                         model.authorEmailSelection
                     } set: { selection in
-                        model.selectAuthorEmail(selection)
+                        // Other's field grows in over 0.22 s and leaves
+                        // over 0.15 s, the rows below moving with it.
+                        let showsField = selection == .other
+                        guard showsField != (model.authorEmailSelection == .other) else {
+                            model.selectAuthorEmail(selection)
+                            return
+                        }
+                        withMotion(motion, showsField ? Motion.arrive : Motion.leave) {
+                            model.selectAuthorEmail(selection)
+                        }
                     },
                     otherEmail: $model.authorEmail,
                     emailChoices: model.authorEmailChoices,

@@ -77,18 +77,20 @@ public struct PullRequestsSection: View {
 }
 
 /// The section's header: its name (and its count while it's collapsed), a
-/// spinner while the pull requests refresh, and Refresh Pull Requests in
-/// its menu.
+/// spinner while the pull requests refresh, which fades out over 0.15 s
+/// when they're done, and Refresh Pull Requests in its menu.
 struct PullRequestsHeader: View {
     let isLoading: Bool
     /// The pull requests the section lists.
     var count: Int?
     let refresh: () -> Void
+    @Environment(\.motion) private var motion
 
     var body: some View {
         SidebarSectionHeader("Pull Requests", count: count) {
             if isLoading {
                 DelayedSpinner()
+                    .transition(motion.animates ? AnyTransition.opacity.animation(Motion.animation(Motion.leave)) : .identity)
             }
         }
         .contextMenuCard { [refresh] in
@@ -98,20 +100,24 @@ struct PullRequestsHeader: View {
 }
 
 /// A small spinner that appears only after a delay, so a quick refresh
-/// shows nothing.
+/// shows nothing; it fades in over 0.15 s.
 struct DelayedSpinner: View {
     @State private var isVisible = false
+    @Environment(\.motion) private var motion
 
     var body: some View {
         Group {
             if isVisible {
                 ArcProgress(.mini)
                     .accessibilityLabel("Loading")
+                    .transition(motion.animates ? .opacity : .identity)
             }
         }
         .task {
             try? await Task.sleep(for: Timing.spinnerDelay)
-            isVisible = true
+            withMotion(motion, Motion.leave) {
+                isVisible = true
+            }
         }
     }
 }
@@ -127,6 +133,9 @@ private struct PullRequestSidebarRow: View {
 
     var body: some View {
         PullRequestRow(content: PullRequestRowContent(pullRequest, in: repository))
+            // Another repository's pull request of the same number shows
+            // at once.
+            .motionScope(AnyHashable(ObjectIdentifier(repository)))
             .sidebarRow(.pullRequest(number: pullRequest.pullRequestNumber), isDropTarget: isDropTarget)
             .task(id: pullRequest.pullRequestNumber) {
                 await repository.gitHub.watchChecks(for: pullRequest)

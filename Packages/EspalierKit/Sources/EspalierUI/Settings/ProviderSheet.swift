@@ -205,6 +205,7 @@ struct ProviderSheet: View {
     @State private var editor: ProviderEditor
     @Environment(WindowContext.self) private var context: WindowContext?
     @Environment(\.dismissModal) private var dismiss
+    @Environment(\.motion) private var motion
 
     init(editor: ProviderEditor) {
         _editor = State(initialValue: editor)
@@ -239,12 +240,14 @@ struct ProviderSheet: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .barTransition()
                 }
                 if editor.form.type == .azure {
                     LabeledContent("Azure API Version") {
                         TextField("Azure API Version", text: $editor.form.azureApiVersion, prompt: Text("2024-10-21").fieldPrompt())
                             .labelsHidden()
                     }
+                    .barTransition()
                 }
                 LabeledContent("Request Timeout") {
                     HStack(spacing: Metrics.insetSmall) {
@@ -270,12 +273,14 @@ struct ProviderSheet: View {
                     } label: {
                         EmptyView()
                     }
+                    .barTransition()
                 } else {
                     let secretLabel = editor.form.authKind == .bearer ? "Bearer Token" : "API Key"
                     LabeledContent(secretLabel) {
                         SecureField(secretLabel, text: $editor.form.secret, prompt: Text(editor.keepsStoredSecret ? "Unchanged" : "Required").fieldPrompt())
                             .labelsHidden()
                     }
+                    .barTransition()
                 }
             }
             .formStyle(.columns)
@@ -288,13 +293,17 @@ struct ProviderSheet: View {
                     .padding(.bottom, Metrics.SettingsWindow.descriptionSpacing)
                 if editor.form.models.isEmpty {
                     Hairline()
+                        .settingsTransition()
                     SettingsMessageRow {
                         SettingsNote("No models yet. Add at least one to use this provider.")
                     }
+                    .settingsTransition()
                 }
                 ForEach(Array(editor.form.models.enumerated()), id: \.offset) { index, model in
                     Hairline()
+                        .settingsTransition()
                     ModelRow(model: model, edit: { editModel(at: index) }, remove: { editor.removeModel(at: index) })
+                        .settingsTransition()
                 }
                 Hairline()
                 SettingsButtonRow {
@@ -307,9 +316,19 @@ struct ProviderSheet: View {
 
             if let problem = editor.problem {
                 FieldMessage(problem, kind: .error)
+                    .settingsTransition()
             }
         } buttons: {
             SheetButtons(editor.saveTitle, cancel: { dismiss() }) {
+                // Why the provider can't be saved grows in over 0.22 s, the
+                // buttons moving with it; from then on it follows the
+                // fields at once. (Saving checks the fields again, finding
+                // the same.)
+                if editor.problem == nil {
+                    withMotion(motion, Motion.arrive) {
+                        _ = editor.validate()
+                    }
+                }
                 let presenter = context?.presenter
                 Task {
                     if await editor.save(presenter: presenter) {
@@ -318,6 +337,12 @@ struct ProviderSheet: View {
                 }
             }
         }
+        // The rows the type and the authentication show (API Format, Azure
+        // API Version, the key or the note that none is sent) grow in over
+        // 0.22 s and leave over 0.15 s, the rows below moving with them.
+        .barMotion(editor.form.type != .anthropic)
+        .barMotion(editor.form.type == .azure)
+        .barMotion(editor.form.authKind == .none)
     }
 
     /// Opens the model sheet over this one, for the model at `index` or a
@@ -327,12 +352,17 @@ struct ProviderSheet: View {
             return
         }
         let editor = editor
+        let motion = motion
         modals.presentSheet(id: ModelSheet.sheetID) {
             ModelSheet(editor: editor.modelEditor(for: index)) { model in
                 if let index {
                     editor.replaceModel(at: index, with: model)
                 } else {
-                    editor.addModel(model)
+                    // A model added fades in over 0.22 s, the buttons below
+                    // making room.
+                    withMotion(motion, Motion.arrive) {
+                        editor.addModel(model)
+                    }
                 }
             }
         }
