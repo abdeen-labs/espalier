@@ -22,6 +22,9 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
     }
 
     public var kind: Kind
+    /// Committing with AI (`CommitMode.assisted`): the selected changes
+    /// split into commits.
+    public var isAssisted: Bool
     /// Amending the last commit rather than making a new one.
     public var isAmending: Bool
     /// The files the commit includes (in full or in part).
@@ -40,6 +43,7 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
 
     public init(
         kind: Kind = .commit,
+        isAssisted: Bool = false,
         isAmending: Bool = false,
         fileCount: Int,
         branch: String?,
@@ -50,6 +54,7 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
         numberFormat: NumberFormat = defaultNumberFormat
     ) {
         self.kind = kind
+        self.isAssisted = isAssisted
         self.isAmending = isAmending
         self.fileCount = fileCount
         self.branch = branch
@@ -78,11 +83,15 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
         if isAmending {
             return (isCommitting ? "Amending Last Commit…" : "Amend Last Commit", nil, "")
         }
+        if isAssisted, isCommitting {
+            return ("Committing with AI…", nil, "")
+        }
         var words = [isCommitting ? "Committing" : "Commit"]
         if fileCount > 0 {
             words.append("\(formatNumber(Double(fileCount), numberFormat)) \(fileCount == 1 ? "File" : "Files")")
         }
-        let trail = isCommitting ? "…" : ""
+        // An empty commit asks no model.
+        let trail = isCommitting ? "…" : isAssisted && fileCount > 0 ? " with AI" : ""
         guard let branch else {
             return (words.joined(separator: " "), nil, trail)
         }

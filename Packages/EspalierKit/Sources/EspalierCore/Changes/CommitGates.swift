@@ -66,6 +66,19 @@ extension CommitModel {
             throw OperationError(.precondition(message), operation: .commit, repositoryID: repository.id, gitContext: .commit)
         }
 
+        try checkCoAuthorAndFilterGates(in: repository, confirmed: confirmed)
+
+        return CommitContext(
+            summary: summaryOrPlaceholder,
+            description: draft.description,
+            amend: amending != nil,
+            trailers: coAuthorTrailers(in: repository)
+        )
+    }
+
+    /// Gates 2 and 3: co-authors who weren't found, and included files the
+    /// filter hides. Assisted commits ask them too.
+    func checkCoAuthorAndFilterGates(in repository: RepositoryModel, confirmed: Set<ConfirmationKind>) throws(OperationError) {
         // Co-authors count only while the co-author field shows.
         if draft.showCoAuthoredBy, !confirmed.contains(.commitWithUnknownCoAuthors) {
             let unknown = draft.coAuthors.compactMap { author -> String? in
@@ -92,13 +105,6 @@ extension CommitModel {
                 )
             }
         }
-
-        return CommitContext(
-            summary: summaryOrPlaceholder,
-            description: draft.description,
-            amend: amending != nil,
-            trailers: coAuthorTrailers(in: repository)
-        )
     }
 
     /// The gates that look at the files, after the others, in order:
@@ -148,7 +154,7 @@ extension CommitModel {
 
     /// `Co-Authored-By` trailers for the known co-authors, in GitHub
     /// repositories (the only ones with the field).
-    private func coAuthorTrailers(in repository: RepositoryModel) -> [Trailer] {
+    func coAuthorTrailers(in repository: RepositoryModel) -> [Trailer] {
         guard draft.showCoAuthoredBy, repository.record.gitHubRepository != nil else {
             return []
         }

@@ -83,6 +83,21 @@ public final class CommitModel: RepositoryFeature {
     /// MostRecentLocalCommit.swift loads it after refreshes.
     public internal(set) var mostRecentLocalCommit: Commit?
 
+    /// How the next commit is made: from the draft, or planned with AI
+    /// (AssistedCommit.swift). Remembered per repository; the draft stays
+    /// as it is in either.
+    public internal(set) var mode: CommitMode = .manual
+    /// Whether assisted commits are pushed once they're made. Remembered per
+    /// repository.
+    public internal(set) var pushesAfterAssistedCommits = false
+    /// The assisted commit run.
+    public internal(set) var assisted: AssistedCommitState = .idle
+    /// The recovery to try again after an assisted commit couldn't undo all
+    /// of itself (`assisted` is `.recoveryNeeded`).
+    @ObservationIgnored var assistedRecovery: AssistedCommitTransaction?
+    /// Tells one run's progress from another's.
+    @ObservationIgnored var assistedRunID: UInt64 = 0
+
     /// The message the user was writing when amending started, set aside
     /// while the amended commit's message is in the draft; it comes back
     /// when amending stops or the amend is committed.
@@ -98,6 +113,7 @@ public final class CommitModel: RepositoryFeature {
 
     func attach(to repository: RepositoryModel) {
         self.repository = repository
+        loadAssistedCommitPreferences()
     }
 
     /// Whether quitting would lose a commit message the user wrote: the
