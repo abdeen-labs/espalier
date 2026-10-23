@@ -19,6 +19,7 @@ public struct CapsulePopUp<Value: Hashable>: View {
     private let fittingTitles: [String]
     private let items: () -> MenuContent
     @Binding private var selection: Value
+    @Environment(\.motion) private var motion
 
     /// - Parameters:
     ///   - label: What VoiceOver calls the pop-up ("Email").
@@ -53,8 +54,12 @@ public struct CapsulePopUp<Value: Hashable>: View {
                             .hidden()
                             .accessibilityHidden(true)
                     }
+                    // A new choice's title crossfades in as the menu
+                    // fades out.
                     Text(title)
                         .truncationMode(.tail)
+                        .contentTransition(motion.animates ? .opacity : .identity)
+                        .motion(Motion.leave, value: title)
                 }
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)

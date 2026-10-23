@@ -91,10 +91,10 @@ struct CapsuleSwitchDrawing: View {
                 .frame(width: size.knob, height: size.knob)
                 .shadow(color: .black.opacity(size.knobShadowOpacity), radius: size.knobShadowRadius, y: size.knobShadowOffset)
                 .padding(size.knobInset)
-            if isPressed {
-                Capsule(style: .circular)
-                    .fill(.black.opacity(size.pressedOpacity))
-            }
+            // A press darkens the track at once and eases back.
+            Capsule(style: .circular)
+                .fill(.black.opacity(isPressed ? size.pressedOpacity : 0))
+                .pressMotion(isPressed)
         }
         // The knob slides and the track's color crossfades over 0.22 s.
         .motion(Motion.arrive, value: isOn)

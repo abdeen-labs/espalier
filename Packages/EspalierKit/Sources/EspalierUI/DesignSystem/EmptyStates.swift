@@ -24,11 +24,12 @@ public struct PlaceholderNote: View {
 
 /// A spinner (`ArcProgress`), centered in the space it's given, that
 /// appears only after a delay (300 ms by default), so work that finishes
-/// quickly shows nothing.
+/// quickly shows nothing; it fades in over 0.22 s.
 public struct DelayedProgressView: View {
     private let size: Metrics.Progress.ArcSize
     private let delay: Duration
     @State private var isVisible = false
+    @Environment(\.motion) private var motion
 
     /// - Parameter size: Large alone in a pane, small in a row.
     public init(_ size: Metrics.Progress.ArcSize = .large, delay: Duration = Timing.spinnerDelay) {
@@ -37,9 +38,10 @@ public struct DelayedProgressView: View {
     }
 
     public var body: some View {
-        Group {
+        ZStack {
             if isVisible {
                 ArcProgress(size)
+                    .transition(motion.animates ? .opacity : .identity)
             } else {
                 Color.clear
             }
@@ -47,7 +49,9 @@ public struct DelayedProgressView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
             try? await Task.sleep(for: delay)
-            isVisible = true
+            withMotion(motion, Motion.arrive) {
+                isVisible = true
+            }
         }
     }
 }

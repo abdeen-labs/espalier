@@ -5,10 +5,13 @@
 // text, the title (the error color for a destructive item) with an
 // optional subtitle under it, and a chevron for a submenu. The highlighted
 // row, under the pointer or the keyboard, is the soft accent in its
-// rounded shape, its text staying primary; disabled rows fade, are never
-// highlighted, and show why as their tooltip when they say. Section headers look like the app's section labels;
+// rounded shape, its text staying primary; it fades from row to row under
+// the pointer, as hover does, and moves at once with the keyboard. Disabled
+// rows fade, are never highlighted, and show why as their tooltip when
+// they say. Section headers look like the app's section labels;
 // dividers are hairlines inset from the card's edges. A menu taller than
-// the screen scrolls, never past its ends. The card fades and grows very
+// the screen scrolls, never past its ends, its rows fading out toward an
+// end with more past it as that end comes in. The card fades and grows very
 // slightly from its anchor as it opens, except under Reduce Motion and
 // offscreen.
 
@@ -63,6 +66,9 @@ final class MenuLevel {
     let minimumWidth: CGFloat
     /// The highlighted row, by ID.
     var highlighted: Int?
+    /// Whether the pointer moves the highlight now: it fades from row to
+    /// row, as hover does; the keyboard moves it at once.
+    var highlightFollowsPointer = false
     /// The row whose submenu is open.
     var openSubmenu: Int?
     /// The card's height when it scrolls; nil when everything fits.
@@ -186,6 +192,7 @@ struct MenuCard: View {
 private struct MenuRowView: View {
     let row: MenuRow
     let level: MenuLevel
+    @Environment(\.motion) private var motion
 
     var body: some View {
         switch row.kind {
@@ -273,7 +280,8 @@ private struct MenuRowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-                .fill(isHighlighted ? AnyShapeStyle(.accentSoft) : AnyShapeStyle(.clear))
+                .fill(isHighlighted ? Color.accentSoft : Color.clear)
+                .animation(level.highlightFollowsPointer ? motion.hover(isHighlighted) : nil, value: isHighlighted)
         )
         .opacity(item.isEnabled ? 1 : Palette.disabledOpacity)
         .tooltip(item.isEnabled ? nil : item.tooltip)
@@ -294,7 +302,8 @@ struct MenuScrollEdges: Equatable {
 }
 
 /// A scrolling menu's (or suggestion list's) mask: its rows fade out toward
-/// an end with more rows past it.
+/// an end with more rows past it, the fade growing in over 0.15 s as the
+/// rows leave that end and going as they come back to it.
 struct MenuScrollFade: View {
     let edges: MenuScrollEdges
 
@@ -306,6 +315,7 @@ struct MenuScrollFade: View {
             LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
                 .frame(height: edges.bottom ? Metrics.Menu.scrollFadeHeight : 0)
         }
+        .motion(Motion.leave, value: edges)
     }
 }
 

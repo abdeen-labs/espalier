@@ -13,7 +13,10 @@ public struct CapsuleStepper: View {
     private let decrement: () -> Void
     private let increment: () -> Void
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.motion) private var motion
     @FocusState private var isFocused: Bool
+    /// Whether the last step went down: the value rolls down with it.
+    @State private var steppedDown = false
 
     /// - Parameters:
     ///   - label: What VoiceOver calls the stepper ("Text Size").
@@ -38,17 +41,22 @@ public struct CapsuleStepper: View {
 
     public var body: some View {
         HStack(spacing: 0) {
-            StepperHalf(systemImage: "minus", canStep: canDecrement, action: decrement)
-            // The value rolls as the user steps it (0.2 s).
+            StepperHalf(systemImage: "minus", canStep: canDecrement) {
+                stepDown()
+            }
+            // The value rolls as the user steps it (0.2 s), down for minus
+            // and up for plus.
             Text(value)
                 .font(Typography.count)
                 .foregroundStyle(.text)
                 .monospacedDigit()
                 .lineLimit(1)
-                .contentTransition(.numericText())
+                .contentTransition(motion.animates ? .numericText(countsDown: steppedDown) : .identity)
                 .motion(Motion.kindChange, value: value)
                 .frame(minWidth: Metrics.CapsuleStepper.valueWidth)
-            StepperHalf(systemImage: "plus", canStep: canIncrement, action: increment)
+            StepperHalf(systemImage: "plus", canStep: canIncrement) {
+                stepUp()
+            }
         }
         .frame(height: Metrics.ControlHeight.regular)
         .background(Capsule(style: .circular).fill(.field))
@@ -61,13 +69,15 @@ public struct CapsuleStepper: View {
         .focused($isFocused)
         .focusEffectDisabled()
         .onKeyPress(.upArrow) {
-            step(canIncrement, increment)
+            step(canIncrement) { stepUp() }
         }
         .onKeyPress(.downArrow) {
-            step(canDecrement, decrement)
+            step(canDecrement) { stepDown() }
         }
         .accessibilityRepresentation {
-            Stepper(label, onIncrement: canIncrement ? increment : nil, onDecrement: canDecrement ? decrement : nil)
+            let onIncrement: (() -> Void)? = canIncrement ? { stepUp() } : nil
+            let onDecrement: (() -> Void)? = canDecrement ? { stepDown() } : nil
+            Stepper(label, onIncrement: onIncrement, onDecrement: onDecrement)
                 .accessibilityValue(value)
         }
     }
@@ -80,6 +90,16 @@ public struct CapsuleStepper: View {
             action()
         }
         return .handled
+    }
+
+    private func stepUp() {
+        steppedDown = false
+        increment()
+    }
+
+    private func stepDown() {
+        steppedDown = true
+        decrement()
     }
 }
 

@@ -264,6 +264,7 @@ public final class CheckboxButton: NSButton {
 public struct CheckboxMark: View {
     private let state: CheckboxState
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.motion) private var motion
 
     public init(_ state: CheckboxState) {
         self.state = state
@@ -278,7 +279,7 @@ public struct CheckboxMark: View {
             shape.fill(state == .off ? Color(espalier: Palette.background) : Color.accent)
             if state == .off {
                 shape.strokeBorder(.line2, lineWidth: 1)
-                    .transition(.opacity)
+                    .transition(motion.animates ? .opacity : .identity)
             } else {
                 Path { path in
                     let points = CheckboxDrawing.markPoints(state).map { CGPoint(x: $0.x * size, y: $0.y * size) }
@@ -286,7 +287,7 @@ public struct CheckboxMark: View {
                 }
                 .stroke(Color(nsColor: Theme.current.onAccent), style: StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round))
                 .id(state)
-                .transition(.scale(scale: 0.6).combined(with: .opacity))
+                .transition(motion.animates ? .scale(scale: 0.6).combined(with: .opacity) : .identity)
             }
         }
         .motion(Motion.leave, value: state)
@@ -370,10 +371,10 @@ private struct CheckboxToggleButtonBody<Label: View>: View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.Checkbox.titleSpacing) {
             CheckboxMark(state)
                 .overlay {
-                    if isPressed {
-                        RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .circular)
-                            .fill(.black.opacity(Metrics.Checkbox.pressedOpacity))
-                    }
+                    // A press darkens the box at once and eases back.
+                    RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .circular)
+                        .fill(.black.opacity(isPressed ? Metrics.Checkbox.pressedOpacity : 0))
+                        .pressMotion(isPressed)
                 }
                 .focusRing(isFocused, in: RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .circular))
                 .alignmentGuide(.firstTextBaseline) { dimensions in

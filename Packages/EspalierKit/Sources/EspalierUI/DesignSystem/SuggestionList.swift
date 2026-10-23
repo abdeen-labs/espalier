@@ -1,6 +1,7 @@
 // A list of suggestions under a text field or the word being typed, in
 // Espalier's menu card: rows 24 high, each a suggestion with an optional
-// detail after it in tertiary text, the highlighted one the soft accent. It
+// detail after it in tertiary text, the highlighted one the soft accent,
+// which fades from row to row under the pointer, as a menu's does. It
 // shows in an `AnchoredPanel` that takes clicks but never keys, so focus
 // stays in the text: ↑ and ↓ move the highlight, Return or Tab accepts it,
 // Escape closes the list, and typing goes on in the text, whose owner shows
@@ -37,6 +38,9 @@ struct Suggestion: Equatable, Identifiable {
 final class SuggestionListModel {
     var suggestions: [Suggestion] = []
     var highlighted = 0
+    /// Whether the pointer moved the highlight last: it fades from row to
+    /// row, as hover does; the keyboard and typing move it at once.
+    var highlightFollowsPointer = false
     /// The card is at least this wide (a field's capsule).
     var minimumWidth: CGFloat = 0
     /// The rows' frames in the card's root coordinates (its shadow margin
@@ -112,6 +116,7 @@ final class SuggestionList {
         self.stillApplies = stillApplies
         let wasOpen = isOpen
         let highlightedTitle = wasOpen && model.suggestions.indices.contains(model.highlighted) ? model.suggestions[model.highlighted].title : nil
+        model.highlightFollowsPointer = false
         model.suggestions = suggestions
         model.minimumWidth = minimumWidth
         model.highlighted = highlightedTitle.flatMap { title in suggestions.firstIndex { $0.title == title } } ?? 0
@@ -254,7 +259,7 @@ final class SuggestionList {
             return event.window === window ? handleKey(event, in: textView) : .passed
         case .mouseMoved:
             if let row = row(atScreen: MenuSession.screenLocation(of: event)) {
-                highlight(row)
+                highlight(row, byPointer: true)
             }
             return .passed
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
@@ -287,9 +292,9 @@ final class SuggestionList {
         }
         switch event.keyCode {
         case KeyCode.downArrow:
-            highlight(min(model.highlighted + 1, model.suggestions.count - 1))
+            highlight(min(model.highlighted + 1, model.suggestions.count - 1), byPointer: false)
         case KeyCode.upArrow:
-            highlight(max(model.highlighted - 1, 0))
+            highlight(max(model.highlighted - 1, 0), byPointer: false)
         case KeyCode.returnKey, KeyCode.enter, KeyCode.tab:
             accept(model.highlighted)
         case KeyCode.escape:
@@ -301,9 +306,15 @@ final class SuggestionList {
     }
 
     /// Highlights `row`, telling VoiceOver the suggestion it shows.
-    private func highlight(_ row: Int) {
+    ///
+    /// - Parameter byPointer: The pointer moved it, and it fades there; the
+    ///   keyboard's moves it at once.
+    private func highlight(_ row: Int, byPointer: Bool) {
         guard model.suggestions.indices.contains(row), row != model.highlighted else {
             return
+        }
+        if model.highlightFollowsPointer != byPointer {
+            model.highlightFollowsPointer = byPointer
         }
         model.highlighted = row
         let suggestion = model.suggestions[row]
@@ -446,7 +457,7 @@ struct SuggestionListCard: View {
     private var rows: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(model.suggestions.enumerated()), id: \.offset) { index, suggestion in
-                SuggestionListRow(suggestion: suggestion, isHighlighted: index == model.highlighted)
+                SuggestionListRow(suggestion: suggestion, isHighlighted: index == model.highlighted, highlightFades: model.highlightFollowsPointer)
                     .id(index)
                     .background {
                         GeometryReader { proxy in
@@ -464,6 +475,10 @@ struct SuggestionListCard: View {
 private struct SuggestionListRow: View {
     let suggestion: Suggestion
     let isHighlighted: Bool
+    /// The highlight fades in and out, as hover does, rather than moving
+    /// at once: the pointer moves it.
+    let highlightFades: Bool
+    @Environment(\.motion) private var motion
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.Suggestions.detailSpacing) {
@@ -487,7 +502,8 @@ private struct SuggestionListRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-                .fill(isHighlighted ? AnyShapeStyle(.accentSoft) : AnyShapeStyle(.clear))
+                .fill(isHighlighted ? Color.accentSoft : Color.clear)
+                .animation(highlightFades ? motion.hover(isHighlighted) : nil, value: isHighlighted)
         )
     }
 }

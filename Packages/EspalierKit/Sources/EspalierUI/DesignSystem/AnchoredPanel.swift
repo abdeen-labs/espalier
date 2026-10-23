@@ -165,6 +165,7 @@ public final class AnchoredPanel: NSPanel {
         Self.openPanels.removeAll { $0.panel == nil || $0.panel === self }
         Self.openPanels.append(WeakPanel(panel: self))
         observe(parent)
+        ignoresMouseEvents = interaction == .none
         if parent.isVisible {
             alphaValue = 1
             if interaction == .none {
@@ -245,7 +246,8 @@ public final class AnchoredPanel: NSPanel {
     }
 
     /// Closes the panel, fading it out over `Motion.leave` where motion
-    /// runs.
+    /// runs. A panel fading out takes no clicks: they go to what's under
+    /// it.
     public func close(reason: CloseReason, animated: Bool = true) {
         guard isOpen, !isClosing else {
             return
@@ -262,9 +264,11 @@ public final class AnchoredPanel: NSPanel {
             parent?.removeChildWindow(self)
             orderOut(nil)
             contentView = nil
+            ignoresMouseEvents = interaction == .none
             isClosing = false
         }
         if animated, isVisible, Motion.animates(parent?.contentView) {
+            ignoresMouseEvents = true
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = Motion.leave
                 context.timingFunction = Motion.timingFunction

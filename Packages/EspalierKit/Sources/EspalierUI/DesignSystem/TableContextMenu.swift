@@ -2,7 +2,8 @@
 // a SwiftUI list's row does (`contextTargetRing(_:)`): a thin accent ring
 // in the row's rounded shape. The table marks the row as its menu opens
 // (`ContextMenuContentProviding.markContextMenuTarget(at:)`) and unmarks
-// it as the menu closes; its row views draw the ring.
+// it as the menu closes; its row views draw the ring, which crossfades in
+// and out with the menu where motion runs.
 
 import AppKit
 
@@ -52,7 +53,24 @@ final class TableContextMenuTarget {
             return
         }
         for changed in Set([oldRow, newRow].compactMap { $0 }) where changed < table.numberOfRows {
-            (table.rowView(atRow: changed, makeIfNecessary: false) as? ContextMenuTargetRowView)?.isContextMenuTarget = changed == newRow
+            guard let rowView = table.rowView(atRow: changed, makeIfNecessary: false) as? ContextMenuTargetRowView else {
+                continue
+            }
+            let isTarget = changed == newRow
+            guard rowView.isContextMenuTarget != isTarget else {
+                continue
+            }
+            // The ring crossfades in as the menu does, and out as it
+            // closes.
+            let fades = Motion.animates(rowView)
+            if fades {
+                Motion.crossfade(rowView.layer, duration: isTarget ? Motion.menuArrive : Motion.leave)
+            }
+            rowView.isContextMenuTarget = isTarget
+            if fades {
+                // Drawn now, so the crossfade takes this change of contents.
+                rowView.displayIfNeeded()
+            }
         }
     }
 }

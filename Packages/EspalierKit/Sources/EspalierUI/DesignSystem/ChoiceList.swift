@@ -82,13 +82,17 @@ public struct ChoiceList<Value: Hashable>: View {
                 }
                 .padding(.horizontal, Metrics.ChoiceList.horizontalPadding)
                 .padding(.vertical, Metrics.ChoiceList.verticalPadding)
+                // The row's tint and edge crossfade with its mark, over
+                // 0.15 s.
                 .background(
                     RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-                        .fill(isSelected ? AnyShapeStyle(.accentSoft) : AnyShapeStyle(.clear))
+                        .fill(isSelected ? Color.accentSoft : Color.clear)
+                        .motion(Motion.leave, value: isSelected)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-                        .strokeBorder(isSelected ? AnyShapeStyle(Color.accent.opacity(0.35)) : AnyShapeStyle(.line), lineWidth: 1)
+                        .strokeBorder(isSelected ? Color.accent.opacity(0.35) : Color.line, lineWidth: 1)
+                        .motion(Motion.leave, value: isSelected)
                 )
                 .focusRing(isFocused && isSelected, in: RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
@@ -139,6 +143,7 @@ public struct ChoiceList<Value: Hashable>: View {
 /// color (`onAccent`) when chosen, else a `line2` ring on the quiet fill.
 public struct RadioMark: View {
     private let isSelected: Bool
+    @Environment(\.motion) private var motion
 
     public init(isSelected: Bool) {
         self.isSelected = isSelected
@@ -154,11 +159,11 @@ public struct RadioMark: View {
                 Circle()
                     .fill(Color(nsColor: Theme.current.onAccent))
                     .frame(width: Metrics.ChoiceList.dotSize, height: Metrics.ChoiceList.dotSize)
-                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+                    .transition(motion.animates ? .scale(scale: 0.6).combined(with: .opacity) : .identity)
             } else {
                 Circle()
                     .strokeBorder(.line2, lineWidth: 1)
-                    .transition(.opacity)
+                    .transition(motion.animates ? .opacity : .identity)
             }
         }
         .motion(Motion.leave, value: isSelected)

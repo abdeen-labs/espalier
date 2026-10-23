@@ -102,7 +102,7 @@ final class MenuSession {
         root.container.announceOpened()
     }
 
-    /// Closes the menu and its submenus.
+    /// Closes the menu and its submenus, which fade out together.
     func close(animated: Bool = true) {
         guard isOpen else {
             return
@@ -113,7 +113,7 @@ final class MenuSession {
         let root = levels.first
         for level in levels.reversed() {
             level.panel.onClose = nil
-            level.panel.close(reason: .closed, animated: animated && level === root)
+            level.panel.close(reason: .closed, animated: animated)
         }
         root?.container.announceClosed()
         levels = []
@@ -152,14 +152,17 @@ final class MenuSession {
         }
         switch event.type {
         case .keyDown:
+            highlightFollowsPointer(false)
             handleKey(event)
             return .consumed
         case .keyUp:
             return .consumed
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
+            highlightFollowsPointer(true)
             pointerMoved(to: Self.screenLocation(of: event))
             return .consumed
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+            highlightFollowsPointer(true)
             return mouseDown(event)
         case .leftMouseUp, .rightMouseUp, .otherMouseUp:
             return mouseUp(event)
@@ -167,6 +170,14 @@ final class MenuSession {
             return hit(Self.screenLocation(of: event)) == nil ? .consumed : .passed
         default:
             return .passed
+        }
+    }
+
+    /// Tells the cards whether the pointer moves their highlights now (they
+    /// fade from row to row) or the keyboard does (they move at once).
+    private func highlightFollowsPointer(_ followsPointer: Bool) {
+        for level in levels where level.level.highlightFollowsPointer != followsPointer {
+            level.level.highlightFollowsPointer = followsPointer
         }
     }
 
@@ -371,7 +382,7 @@ final class MenuSession {
         child.container.announceOpened()
     }
 
-    /// Closes the submenus past level `index`.
+    /// Closes the submenus past level `index`, fading them out.
     private func closeLevels(after index: Int) {
         guard index + 1 < levels.count else {
             return
@@ -379,7 +390,7 @@ final class MenuSession {
         while levels.count > index + 1 {
             let level = levels.removeLast()
             level.panel.onClose = nil
-            level.panel.close(reason: .closed, animated: false)
+            level.panel.close(reason: .closed)
         }
         levels[index].level.openSubmenu = nil
     }
@@ -575,9 +586,25 @@ final class MenuLevelWindow {
         level.growthAnchor = switch panel.openedEdge {
         case .above: .bottomLeading
         case .leading: .topTrailing
+        case .point: Self.growthAnchor(of: cardFrame, at: screenAnchor.origin)
         default: .topLeading
         }
         container.layoutSubtreeIfNeeded()
+    }
+
+    /// The corner of `card` (on screen) at `point`, the pointer a context
+    /// menu opened at: the card opens below and after it, or above or
+    /// before it near the screen's edges, and grows from there.
+    static func growthAnchor(of card: CGRect, at point: CGPoint) -> UnitPoint {
+        // Screen coordinates: y grows upward.
+        let isAbove = card.midY > point.y
+        let isBefore = card.midX < point.x
+        switch (isAbove, isBefore) {
+        case (false, false): return .topLeading
+        case (false, true): return .topTrailing
+        case (true, false): return .bottomLeading
+        case (true, true): return .bottomTrailing
+        }
     }
 
     /// The card's rect on screen, its shadow margin left out.

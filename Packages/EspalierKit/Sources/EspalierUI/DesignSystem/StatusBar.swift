@@ -2,7 +2,8 @@
 // (56 high, taller for a third line; tinted with the modified color at 7%).
 // The operation panel uses it; its tone follows the state: modified for
 // conflicts and anything waiting on the user, add once they're resolved,
-// neutral while work runs.
+// neutral while work runs. A change of tone crossfades the fill and the
+// lines' words over 0.22 s.
 
 import AppKit
 import SwiftUI
@@ -40,6 +41,7 @@ public struct StatusBar<Glyph: View, Trailing: View>: View {
     private let detail: String?
     private let glyph: Glyph
     private let trailing: Trailing
+    @Environment(\.motion) private var motion
 
     /// - Parameters:
     ///   - subtitle: The line under the title, one line, truncated.
@@ -69,18 +71,23 @@ public struct StatusBar<Glyph: View, Trailing: View>: View {
             HStack(spacing: Metrics.StatusBar.spacing) {
                 glyph
                     .frame(width: Metrics.StatusBar.glyphWidth)
+                // As the tone changes, the lines' new words crossfade in
+                // with the fill; other changes (a step of the work, a file
+                // resolved) show at once.
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .font(Typography.statusBarTitle)
                         .foregroundStyle(.text)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        .motion(Motion.arrive, value: tone)
                     if let subtitle {
                         subtitle
                             .font(Typography.meta)
                             .foregroundStyle(.text2)
                             .lineLimit(1)
                             .truncationMode(.tail)
+                            .motion(Motion.arrive, value: tone)
                             .tooltip(help)
                     }
                     if let detail {
@@ -89,9 +96,11 @@ public struct StatusBar<Glyph: View, Trailing: View>: View {
                             .foregroundStyle(.text2)
                             .lineLimit(1)
                             .truncationMode(.tail)
+                            .motion(Motion.arrive, value: tone)
                             .tooltip(detail)
                     }
                 }
+                .contentTransition(motion.animates ? .opacity : .identity)
                 .padding(.vertical, Metrics.insetSmall)
                 .layoutPriority(1)
                 Spacer(minLength: Metrics.insetSmall)

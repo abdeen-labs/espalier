@@ -36,10 +36,10 @@ struct FocusRing<RingShape: InsettableShape>: View {
                 shape
                     .inset(by: -outset)
                     .strokeBorder(Color.accent.opacity(Metrics.FocusRing.opacity), lineWidth: Metrics.FocusRing.lineWidth)
-                    .transition(.asymmetric(
+                    .transition(motion.animates ? .asymmetric(
                         insertion: .scale(scale: Motion.focusRingScale).combined(with: .opacity),
                         removal: .opacity
-                    ))
+                    ) : .identity)
             }
         }
         .animation(motion.animation(isFocused ? Motion.leave : Motion.focusOut), value: isFocused)

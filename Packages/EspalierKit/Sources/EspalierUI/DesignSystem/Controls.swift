@@ -64,6 +64,7 @@ public struct CapsuleSearchField: View {
     @State private var focusRequests = 0
     @Environment(\.controlSize) private var controlSize
     @Environment(\.searchFieldIsRaised) private var isRaised
+    @Environment(\.motion) private var motion
 
     /// - Parameters:
     ///   - focusRequest: Set to true to focus the field; the field sets it
@@ -186,11 +187,11 @@ public struct CapsuleSearchField: View {
             }
             .buttonStyle(.bare(.circle))
             .accessibilityLabel("Clear")
-            .transition(.opacity)
+            .transition(motion.animates ? .opacity : .identity)
         case .keyCap:
             if let keyCap {
                 KeyCap(keyCap)
-                    .transition(.opacity)
+                    .transition(motion.animates ? .opacity : .identity)
             }
         case .none:
             EmptyView()
@@ -445,11 +446,13 @@ public struct MonoChip<Accessory: View>: View {
 /// A symbol in a soft circle: the action list's rows, a sheet's call to
 /// action, the cloning and push protection states, History's banners, and
 /// small headings and lists (the AI conflict sheet's phase, a squash's
-/// co-authors, a submodule's diff).
+/// co-authors, a submodule's diff). A new symbol replaces the old one, its
+/// tint crossfading with it, over 0.15 s.
 public struct IconCircle: View {
     private let systemImage: String
     private let size: CGFloat
     private let tint: Color?
+    @Environment(\.motion) private var motion
 
     /// - Parameter tint: The symbol's color on its own 9% wash; nil for
     ///   secondary text on the `field` fill.
@@ -463,8 +466,11 @@ public struct IconCircle: View {
         Image(systemName: systemImage)
             .font(.system(size: size * 0.5))
             .foregroundStyle(tint ?? .text2)
+            // A symbol replace plays whatever the transaction says.
+            .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
             .frame(width: size, height: size)
             .background(Circle().fill(tint.map { $0.opacity(0.12) } ?? .field))
+            .motion(Motion.leave, value: systemImage)
     }
 }
 
@@ -474,7 +480,8 @@ public struct IconCircle: View {
 /// color, neutral gray as the arc is. The fill eases to each new value over
 /// 0.15 s. While how far the work has got isn't known, a segment sweeps
 /// across the track, eased in and out every 1.4 s; where motion doesn't run
-/// it stays still in the middle.
+/// it stays still in the middle. The sweep and the fill crossfade as how
+/// far the work has got becomes known, or stops being.
 public struct CapsuleProgressBar: View {
     private let value: Double?
     private let tint: NSColor
@@ -501,14 +508,17 @@ public struct CapsuleProgressBar: View {
                         .frame(width: max(proxy.size.height, proxy.size.width * value))
                         .opacity(value > 0 ? 1 : 0)
                         .motion(Motion.leave, value: value)
+                        .transition(motion.animates ? .opacity : .identity)
                 } else if motion.animates {
                     TimelineView(.animation) { context in
                         segment(color, width: proxy.size.width, position: Self.sweep(at: context.date))
                     }
+                    .transition(motion.animates ? .opacity : .identity)
                 } else {
                     segment(color, width: proxy.size.width, position: 0.5)
                 }
             }
+            .motion(Motion.leave, value: value == nil)
             .clipShape(Capsule(style: .circular))
         }
         .frame(height: Metrics.Progress.barHeight)

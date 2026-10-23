@@ -2,8 +2,9 @@
 // one; a list's `contextMenuCard(forSelectionType:selection:menu:primaryAction:)`
 // gives its rows one, as desktop does: on the selection when the row
 // clicked is in it, otherwise on that row alone, which shows a ring in the
-// accent while the menu is open (`contextMenuRow(_:)` marks the rows). The
-// list keeps its primary action, double-click and Return.
+// accent while the menu is open, fading in and out with the menu
+// (`contextMenuRow(_:)` marks the rows). The list keeps its primary action,
+// double-click and Return.
 //
 // Each such view puts a `ContextMenuRegionView` behind itself. A
 // right-click or Control-click opens the menu of the innermost region
@@ -55,12 +56,27 @@ extension View {
     /// row's rounded shape.
     public func contextTargetRing(_ isTarget: Bool) -> some View {
         overlay {
+            ContextTargetRing(isTarget: isTarget)
+        }
+    }
+}
+
+/// A context menu target's ring: it fades in as the menu opens and out as
+/// the menu closes, with the menu.
+private struct ContextTargetRing: View {
+    let isTarget: Bool
+    @Environment(\.motion) private var motion
+
+    var body: some View {
+        ZStack {
             if isTarget {
                 RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
                     .strokeBorder(Color.accent, lineWidth: Metrics.Menu.contextTargetLineWidth)
-                    .allowsHitTesting(false)
+                    .transition(motion.animates ? .opacity : .identity)
             }
         }
+        .animation(motion.animation(isTarget ? Motion.menuArrive : Motion.leave), value: isTarget)
+        .allowsHitTesting(false)
     }
 }
 

@@ -32,7 +32,7 @@ public struct Avatar: View {
                 Image(decorative: image, scale: scale)
                     .resizable()
                     .interpolation(.high)
-                    .transition(.opacity)
+                    .transition(motion.animates ? .opacity : .identity)
             }
         }
         .frame(width: size, height: size)

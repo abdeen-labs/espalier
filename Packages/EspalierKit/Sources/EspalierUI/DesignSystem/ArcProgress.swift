@@ -29,20 +29,25 @@ public struct ArcProgress: View {
     }
 
     public var body: some View {
-        Group {
+        // The turning arc and the filling one crossfade as how far the work
+        // has got becomes known, or stops being.
+        ZStack {
             if let value {
                 // The arc eases to each new value over 0.15 s, as the
                 // progress bar's fill does.
                 ring(arc: value, turn: 0)
                     .motion(Motion.leave, value: value)
+                    .transition(motion.animates ? .opacity : .identity)
             } else if motion.animates {
                 TimelineView(.animation) { context in
                     ring(arc: size.arc, turn: Self.turn(at: context.date))
                 }
+                .transition(motion.animates ? .opacity : .identity)
             } else {
                 ring(arc: size.arc, turn: 0)
             }
         }
+        .motion(Motion.leave, value: value == nil)
         .frame(width: size.side, height: size.side)
         // VoiceOver hears the system's busy or progress indicator.
         .accessibilityRepresentation {
