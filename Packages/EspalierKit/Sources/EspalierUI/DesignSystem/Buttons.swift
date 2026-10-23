@@ -205,6 +205,8 @@ struct CapsuleLabelStyle: LabelStyle {
 /// The main action can take a keyboard shortcut (Return, as a sheet's
 /// default button). Each part takes keyboard focus: the main action shows
 /// the ring around the whole capsule, the chevron a ring around itself.
+/// Pressing the main action darkens the capsule at once and eases back, as
+/// a capsule button's press does.
 public struct SplitCapsuleButton<Label: View>: View {
     /// The part with keyboard focus.
     private enum Part: Hashable {
@@ -220,6 +222,7 @@ public struct SplitCapsuleButton<Label: View>: View {
     @Environment(\.controlSize) private var controlSize
     @Environment(\.isEnabled) private var isEnabled
     @State private var isHovered = false
+    @State private var isPressed = false
     @State private var isChevronHovered = false
     @State private var isMenuOpen = false
     @FocusState private var focusedPart: Part?
@@ -248,7 +251,7 @@ public struct SplitCapsuleButton<Label: View>: View {
     }
 
     public var body: some View {
-        let appearance = CapsuleButtonAppearance(kind: kind, controlSize: controlSize, isHovered: isHovered, isEnabled: isEnabled)
+        let appearance = CapsuleButtonAppearance(kind: kind, controlSize: controlSize, isPressed: isPressed, isHovered: isHovered, isEnabled: isEnabled)
         HStack(spacing: 0) {
             Button(action: action) {
                 label
@@ -258,7 +261,7 @@ public struct SplitCapsuleButton<Label: View>: View {
                     .frame(maxHeight: .infinity)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SplitCapsuleMainStyle(isPressed: $isPressed))
             .focusEffectDisabled()
             .focused($focusedPart, equals: .main)
             .keyboardShortcut(shortcut)
@@ -297,6 +300,7 @@ public struct SplitCapsuleButton<Label: View>: View {
         .motion(Motion.kindChange, value: kind)
         .overlay(
             Capsule(style: .circular).fill(appearance.stateOverlay)
+                .pressMotion(isPressed)
                 .hoverMotion(isHovered)
                 .allowsHitTesting(false)
         )
@@ -309,6 +313,19 @@ public struct SplitCapsuleButton<Label: View>: View {
         )
         .opacity(appearance.opacity)
         .focusRing(focusedPart == .main, in: Capsule(style: .circular))
+    }
+}
+
+/// The split button's main part: its label as it is, telling the capsule
+/// while it's pressed, which darkens the whole capsule.
+private struct SplitCapsuleMainStyle: ButtonStyle {
+    @Binding var isPressed: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .onChange(of: configuration.isPressed, initial: true) { _, isPressed in
+                self.isPressed = isPressed
+            }
     }
 }
 

@@ -1,7 +1,9 @@
 // The Changes list's header: the include-all checkbox with the file count,
 // what the commit includes, and the filter options; "0 changed files" over
 // an empty list. `ChangesModel.visibleIncludeAll` decides the checkbox.
-// Counts change at once.
+// As files change or are included, the title crossfades to its new count
+// and the included count rolls, over 0.2 s; the filter's changes show at
+// once.
 
 import AppKit
 import EspalierCore
@@ -20,8 +22,11 @@ nonisolated public struct ChangesHeaderContent: Sendable, Equatable {
     public var includeAll: Bool?
     public var isIncludeAllEnabled: Bool
     public var filter: FilterMenuContent
-    /// The repository the header is for: its checkbox animates only within
-    /// one (choosing another repository is instant).
+    /// Every changed file, shown or not: the title crossfades as it
+    /// changes, and changes at once with the filter.
+    public var fileCount: Int
+    /// The repository the header is for: its checkbox and title animate
+    /// only within one (choosing another repository is instant).
     public var repository: ObjectIdentifier?
 
     public init(
@@ -30,6 +35,7 @@ nonisolated public struct ChangesHeaderContent: Sendable, Equatable {
         includeAll: Bool?,
         isIncludeAllEnabled: Bool,
         filter: FilterMenuContent,
+        fileCount: Int = 0,
         repository: ObjectIdentifier? = nil
     ) {
         self.title = title
@@ -37,6 +43,7 @@ nonisolated public struct ChangesHeaderContent: Sendable, Equatable {
         self.includeAll = includeAll
         self.isIncludeAllEnabled = isIncludeAllEnabled
         self.filter = filter
+        self.fileCount = fileCount
         self.repository = repository
     }
 
@@ -76,6 +83,7 @@ extension ChangesHeaderContent {
             includeAll: changes.visibleIncludeAll,
             isIncludeAllEnabled: files.contains { !$0.isUncommittableSubmodule } && !isCommitting && !isRebaseConflicts,
             filter: FilterMenuContent(filter: changes.filter, visibleFiles: changes.visibleFiles, numberFormat: numberFormat),
+            fileCount: files.count,
             repository: ObjectIdentifier(repository)
         )
     }
@@ -87,6 +95,7 @@ public struct ChangesHeader: View {
     private let onIncludeAll: (Bool) -> Void
     private let onFilterChange: (FileListFilter) -> Void
     private let onClearFilters: () -> Void
+    @Environment(\.motion) private var motion
 
     /// - Parameters:
     ///   - onIncludeAll: Includes (true) or excludes every file shown.
@@ -111,6 +120,7 @@ public struct ChangesHeader: View {
                 isEnabled: content.isIncludeAllEnabled,
                 title: content.title,
                 titleFont: Self.titleFont,
+                titleCount: content.fileCount,
                 scope: content.repository,
                 onChange: onIncludeAll
             )
@@ -119,10 +129,13 @@ public struct ChangesHeader: View {
             .accessibilityValue(content.title)
             .layoutPriority(1)
             if !content.included.isEmpty {
+                // The count rolls as checkboxes and files change it (0.2 s).
                 Text(content.included)
                     .font(Typography.secondary)
                     .foregroundStyle(.text3)
                     .lineLimit(1)
+                    .contentTransition(motion.animates ? .numericText() : .identity)
+                    .motion(Motion.kindChange, value: content.included)
             }
             Spacer(minLength: Metrics.insetSmall)
             FilterMenu(content.filter, onChange: onFilterChange, onClear: onClearFilters)

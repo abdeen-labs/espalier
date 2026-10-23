@@ -107,9 +107,9 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
 
 /// The commit button: the full-width prominent capsule, 34 high, with its
 /// shortcut on the right. A long branch name gives way in the middle, so
-/// the button never grows past its column; the count changes at once. The
-/// button and its working capsule (the arc and "Committing…") crossfade
-/// over 0.2 s as work starts and ends.
+/// the button never grows past its column; the count rolls over 0.2 s as
+/// files are included or leave. The button and its working capsule (the arc
+/// and "Committing…") crossfade over 0.2 s as work starts and ends.
 public struct CommitButton: View {
     private let content: CommitButtonContent
     private let action: () -> Void
@@ -190,29 +190,32 @@ public struct CommitButton: View {
     }
 
     /// The title: the words keep their room and the branch gives way, in
-    /// the middle.
-    @ViewBuilder
+    /// the middle. Its count rolls to a new one.
     private var label: some View {
         let parts = content.titleParts
-        if let branch = parts.branch {
-            HStack(spacing: 0) {
-                Text(parts.lead)
-                    .layoutPriority(2)
-                // The space leads the branch's text: a trailing one would
-                // be trimmed.
-                Text(verbatim: " " + branch)
-                    .fontWeight(.bold)
-                    .truncationMode(.middle)
-                    .layoutPriority(1)
-                if !parts.trail.isEmpty {
-                    Text(parts.trail)
+        return Group {
+            if let branch = parts.branch {
+                HStack(spacing: 0) {
+                    Text(parts.lead)
                         .layoutPriority(2)
+                    // The space leads the branch's text: a trailing one
+                    // would be trimmed.
+                    Text(verbatim: " " + branch)
+                        .fontWeight(.bold)
+                        .truncationMode(.middle)
+                        .layoutPriority(1)
+                    if !parts.trail.isEmpty {
+                        Text(parts.trail)
+                            .layoutPriority(2)
+                    }
                 }
-            }
-            .lineLimit(1)
-        } else {
-            Text(parts.lead + parts.trail)
                 .lineLimit(1)
+            } else {
+                Text(parts.lead + parts.trail)
+                    .lineLimit(1)
+            }
         }
+        .contentTransition(motion.animates ? .numericText() : .identity)
+        .motion(Motion.kindChange, value: content.fileCount)
     }
 }

@@ -711,8 +711,7 @@ final class StatusGlyphView: NSView {
 
 /// A checkbox that can be mixed, as a partly included file's is: Espalier's
 /// `CheckboxButton`, since a SwiftUI toggle can't show a mixed state for
-/// one value. Its title is part of it (a click on the title toggles too),
-/// and changes at once.
+/// one value. Its title is part of it (a click on the title toggles too).
 ///
 /// Clicking it includes everything unless everything is included, as
 /// clicking a mixed checkbox turns it on.
@@ -723,9 +722,13 @@ struct InclusionCheckbox: NSViewRepresentable {
     var title = ""
     /// The title's font; the row font when nil.
     var titleFont: NSFont?
-    /// What the checkbox is for (the repository): its state animates only
-    /// while this stays the same, so choosing another repository shows its
-    /// state at once.
+    /// The count the title shows, when it has one: a new count crossfades
+    /// the title over 0.2 s; a title changing otherwise (a filter typed)
+    /// changes at once.
+    var titleCount: Int?
+    /// What the checkbox is for (the repository): its state and title
+    /// animate only while this stays the same, so choosing another
+    /// repository shows them at once.
     var scope: ObjectIdentifier?
     var onChange: (Bool) -> Void
 
@@ -740,6 +743,7 @@ struct InclusionCheckbox: NSViewRepresentable {
         button.setContentHuggingPriority(.required, for: .horizontal)
         button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         apply(to: button, isEnabled: isEnabled && context.environment.isEnabled)
+        context.coordinator.shownTitleCount = titleCount
         context.coordinator.shownScope = scope
         return button
     }
@@ -748,6 +752,11 @@ struct InclusionCheckbox: NSViewRepresentable {
         let coordinator = context.coordinator
         coordinator.parent = self
         let isSameScope = coordinator.shownScope == scope
+        if isSameScope, button.title != title, let titleCount, let shown = coordinator.shownTitleCount, shown != titleCount,
+           Motion.animates(button) {
+            Motion.crossfade(button.layer, duration: Motion.kindChange)
+        }
+        coordinator.shownTitleCount = titleCount
         coordinator.shownScope = scope
         apply(to: button, isEnabled: isEnabled && context.environment.isEnabled, animated: isSameScope)
     }
@@ -784,7 +793,8 @@ struct InclusionCheckbox: NSViewRepresentable {
 
     final class Coordinator: NSObject {
         var parent: InclusionCheckbox
-        /// The scope the checkbox showed last.
+        /// The title's count and the scope the checkbox showed last.
+        var shownTitleCount: Int?
         var shownScope: ObjectIdentifier?
 
         init(_ parent: InclusionCheckbox) {
