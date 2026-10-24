@@ -16,6 +16,12 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.4.1] - 2026-10-24
+
+### Changed
+
+- The repository list is easier to scan. Each owner's repositories sit under the owner's avatar and name, the names line up in one column, and a private repository's lock is a small mark after its name. In Recent, each repository shows its owner's avatar, and a name you have in more than one place stays on one line, with its owner beside it.
+
 ## [1.4] - 2026-10-24
 
 ### Added
@@ -127,7 +133,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.4...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/abdeen-labs/espalier/compare/v1.4...v1.4.1
 [1.4]: https://github.com/abdeen-labs/espalier/compare/v1.3...v1.4
 [1.3]: https://github.com/abdeen-labs/espalier/compare/v1.2.1...v1.3
 [1.2.1]: https://github.com/abdeen-labs/espalier/compare/v1.2...v1.2.1
