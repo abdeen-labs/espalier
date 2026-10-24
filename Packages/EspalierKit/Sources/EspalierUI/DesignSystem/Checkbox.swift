@@ -129,6 +129,23 @@ public final class CheckboxButton: NSButton {
     /// Space between the box and the title.
     static let titleSpacing = Metrics.Checkbox.titleSpacing
 
+    /// Whether the button draws its title. Without it, the title still
+    /// sizes the button, takes its clicks, and names it to VoiceOver, and
+    /// its owner draws it in its place (`titleRect(height:in:)`).
+    public var drawsTitle = true {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    /// Where a title `titleHeight` high draws in a button of `size`: after
+    /// the box, centered vertically, on whole points.
+    public static func titleRect(height titleHeight: CGFloat, in size: CGSize) -> CGRect {
+        let x = CheckboxDrawing.size + titleSpacing
+        let height = ceil(titleHeight)
+        return CGRect(x: x, y: ((size.height - height) / 2).rounded(), width: max(size.width - x, 0), height: height)
+    }
+
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setButtonType(.switch)
@@ -237,12 +254,10 @@ public final class CheckboxButton: NSButton {
 
     public override func draw(_ dirtyRect: NSRect) {
         CheckboxDrawing.draw(CheckboxState(state), in: boxRect, isEnabled: isEnabled, isPressed: isHighlighted, flipped: true)
-        guard let title = drawnTitle else {
+        guard drawsTitle, let title = drawnTitle else {
             return
         }
-        let x = boxRect.maxX + Self.titleSpacing
-        let height = ceil(title.size().height)
-        let rect = CGRect(x: x, y: ((bounds.height - height) / 2).rounded(), width: max(bounds.width - x, 0), height: height)
+        let rect = Self.titleRect(height: title.size().height, in: bounds.size)
         let shown = NSMutableAttributedString(attributedString: title)
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail

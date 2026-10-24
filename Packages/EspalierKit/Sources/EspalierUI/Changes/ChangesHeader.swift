@@ -1,9 +1,8 @@
 // The Changes list's header: the include-all checkbox with the file count,
 // what the commit includes, and the filter options; "0 changed files" over
 // an empty list. `ChangesModel.visibleIncludeAll` decides the checkbox.
-// As files change or are included, the title crossfades to its new count
-// and the included count rolls, over 0.2 s; the filter's changes show at
-// once.
+// As files change or are included, the title's and the included counts
+// roll over 0.2 s; the filter's changes show at once.
 
 import AppKit
 import EspalierCore
@@ -22,11 +21,11 @@ nonisolated public struct ChangesHeaderContent: Sendable, Equatable {
     public var includeAll: Bool?
     public var isIncludeAllEnabled: Bool
     public var filter: FilterMenuContent
-    /// Every changed file, shown or not: the title crossfades as it
+    /// Every changed file, shown or not: the title's count rolls as it
     /// changes, and changes at once with the filter.
     public var fileCount: Int
-    /// The repository the header is for: its checkbox and title animate
-    /// only within one (choosing another repository is instant).
+    /// The repository the header is for: its checkbox animates only within
+    /// one (choosing another repository is instant).
     public var repository: ObjectIdentifier?
 
     public init(
@@ -120,10 +119,13 @@ public struct ChangesHeader: View {
                 isEnabled: content.isIncludeAllEnabled,
                 title: content.title,
                 titleFont: Self.titleFont,
-                titleCount: content.fileCount,
+                drawsTitle: false,
                 scope: content.repository,
                 onChange: onIncludeAll
             )
+            .overlay {
+                ChangesHeaderTitle(title: content.title, fileCount: content.fileCount)
+            }
             .disabled(!content.isIncludeAllEnabled)
             .accessibilityLabel("Include all changed files")
             .accessibilityValue(content.title)
@@ -148,5 +150,38 @@ public struct ChangesHeader: View {
     /// The count's font: the row font, semibold.
     static var titleFont: NSFont {
         AppKitTypography.row(weight: .semibold)
+    }
+}
+
+/// The header's title, drawn where the checkbox would draw it; the checkbox
+/// keeps it for its size, its clicks, and VoiceOver. A new count of files
+/// rolls over 0.2 s; the filter's changes show at once, whatever moves
+/// around the title, and so does the title turning off and on.
+private struct ChangesHeaderTitle: View {
+    let title: String
+    let fileCount: Int
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.motion) private var motion
+
+    var body: some View {
+        let font = ChangesHeader.titleFont
+        let height = NSAttributedString(string: title, attributes: [.font: font]).size().height
+        GeometryReader { proxy in
+            let rect = CheckboxButton.titleRect(height: height, in: proxy.size)
+            Text(title)
+                .font(Font(font as CTFont))
+                .foregroundStyle(.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .contentTransition(motion.animates ? .numericText() : .identity)
+                .animation(motion.animation(Motion.kindChange), value: fileCount)
+                .transaction(value: title) { $0.animation = nil }
+                .frame(width: rect.width, height: rect.height, alignment: .topLeading)
+                .offset(x: rect.minX, y: rect.minY)
+                .opacity(isEnabled ? 1 : Palette.disabledOpacity)
+                .transaction(value: isEnabled) { $0.animation = nil }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
