@@ -16,6 +16,28 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.4] - 2026-10-24
+
+### Added
+
+- Commit with AI. The commit form's Manual | Assisted switch, remembered for each repository, has the AI provider you use for commit messages split the selected changes into commits by what they do, then makes them one at a time, running your hooks. You can cancel it partway, a run that fails or is canceled takes back only the commits it made, and your files are never rewritten. Push After Committing pushes the new commits.
+- Sign in to more than one GitHub account on the same server, and choose the account each repository uses in Clone, Publish, Repository Settings ▸ Remote, or the repository's Account menu. Pull requests, checks, notifications, and HTTPS pushes and pulls use that account. Repositories you already have keep the account they used.
+- A conflicted file in Changes shows each conflict as its two sides, headed by their branches' names. A side's button, such as Use main's Version, keeps that side of the conflict, and Undo puts the file back.
+- Espalier moves as things change: menus, sheets, the sidebar, Changes, History, and the diff ease and fade, and counts roll, instead of jumping. With Reduce Motion on, they change at once.
+
+### Changed
+
+- Merging and rebasing start from the branch. Merge into Current Branch…, Squash and Merge into Current Branch…, and Rebase Current Branch… pick a branch and show its Ahead commits with the method chosen, ready to start. They replace the Integrate sheet.
+- A branch's header says what it's compared with ("fix/crash compared with main") and lines up with the list.
+- Branches in the sidebar starts with the default branch, then your recent branches, with Other Branches and Remote Branches below. A collapsed section shows how many items it holds, and the branch picker groups branches the same way.
+- During a merge, rebase, or cherry-pick, the operation panel shows Commit Merge or Continue from the start, enabled once every file is resolved, and counts the files resolved.
+- A rebase names both its sides by their branches, also when it was started outside Espalier.
+- Espalier now includes Git 2.56.0, Git LFS 3.8.1, and Git Credential Manager 2.9.1.
+
+### Fixed
+
+- Checking out a branch whose worktree's folder was deleted no longer fails: Espalier offers to remove the missing worktree and check the branch out here. The worktree list marks a missing worktree, instead of switching to a folder that isn't there.
+
 ## [1.3] - 2026-10-22
 
 ### Added
@@ -105,7 +127,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.3...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.4...HEAD
+[1.4]: https://github.com/abdeen-labs/espalier/compare/v1.3...v1.4
 [1.3]: https://github.com/abdeen-labs/espalier/compare/v1.2.1...v1.3
 [1.2.1]: https://github.com/abdeen-labs/espalier/compare/v1.2...v1.2.1
 [1.2]: https://github.com/abdeen-labs/espalier/compare/v1.1...v1.2
