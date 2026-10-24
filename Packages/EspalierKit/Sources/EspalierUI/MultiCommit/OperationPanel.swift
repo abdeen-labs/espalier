@@ -24,7 +24,7 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         /// An operation runs: "Commit 2 of 5 · summary", and its progress.
         case running(detail: String?, progress: Double?)
         /// Waiting on conflicts: "1 of 3 files resolved"; nil without
-        /// conflicted files.
+        /// conflicted files and once they're all resolved.
         case conflicts(summary: String?)
         /// A rebase git was interrupted between commits.
         case interrupted(message: String)
@@ -137,18 +137,15 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
     /// button's).
     public static let summaryRequiredHelp = "Enter a summary to commit"
 
-    /// "2 conflicted files" before any is resolved, "1 of 3 files
-    /// resolved", then "1 file resolved" or "All 3 files resolved"; nil
-    /// without conflicted files.
+    /// "2 conflicted files" before any is resolved, then "1 of 3 files
+    /// resolved"; nil without conflicted files, and once every one is
+    /// resolved, which the title says ("All conflicts resolved").
     public static func summary(resolved: Int, total: Int, numberFormat: NumberFormat) -> String? {
-        if total == 0 {
+        if total == 0 || resolved >= total {
             return nil
         }
         if resolved == 0 {
             return total == 1 ? "1 conflicted file" : "\(formatCount(total, numberFormat)) conflicted files"
-        }
-        if resolved >= total {
-            return total == 1 ? "1 file resolved" : "All \(formatCount(total, numberFormat)) files resolved"
         }
         return "\(formatCount(resolved, numberFormat)) of \(formatCount(total, numberFormat)) files resolved"
     }

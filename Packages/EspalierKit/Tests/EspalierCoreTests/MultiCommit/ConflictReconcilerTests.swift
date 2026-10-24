@@ -134,7 +134,7 @@ struct ConflictReconcilerTests {
         await fixture.app.idle()
     }
 
-    @Test("rebuilds a rebase started elsewhere, with its commits")
+    @Test("rebuilds a rebase started elsewhere, with its commits, its base named by the branch at the commit it rebases onto")
     func rebuildsRebase() async throws {
         let repository = try await createRebaseTestRepository("base-branch", "feature-branch")
         try await runGit(["checkout", "-q", "feature-branch"], repository)
@@ -152,7 +152,7 @@ struct ConflictReconcilerTests {
             return
         }
         #expect(commits.map(\.summary) == ["Feature Branch!"])
-        #expect(model.operations.conflictBranches == ConflictBranches(ours: nil, theirs: "feature-branch"))
+        #expect(model.operations.conflictBranches == ConflictBranches(ours: "base-branch", theirs: "feature-branch"))
         #expect(model.gitState.inProgress.map { if case .rebase = $0 { true } else { false } } == true)
         await app.idle()
     }

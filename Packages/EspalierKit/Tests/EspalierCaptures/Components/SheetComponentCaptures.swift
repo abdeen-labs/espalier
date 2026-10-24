@@ -68,7 +68,7 @@ struct SheetComponentCaptures {
                 Button("Abort Rebase") {}
                     .buttonStyle(.quiet)
             }
-            StatusBar(tone: .ready, title: "All conflicts resolved", subtitle: Text("All 3 files resolved")) {
+            StatusBar(tone: .ready, title: "All conflicts resolved", subtitle: Text("Stopped at commit 2 of 4")) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(Color(espalier: Palette.success))
             } trailing: {
