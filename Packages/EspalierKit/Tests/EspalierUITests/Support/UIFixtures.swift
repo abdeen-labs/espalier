@@ -36,6 +36,7 @@ enum UIFixtures {
 
     static let confirmations: [(name: String, confirmation: Confirmation)] = [
         ("removeRepository", .removeRepository(name: "espalier", path: "/Users/joe/Developer/espalier")),
+        ("signOutAccount", .signOutAccount(login: "joe", server: "GitHub.com", repositoryCount: 3)),
         ("discardChanges-one", .discardChanges(["README.md"])),
         ("discardChanges", .discardChanges(files)),
         ("discardChanges-many", .discardChanges(manyFiles)),
@@ -57,6 +58,8 @@ enum UIFixtures {
         ("commitConflictMarkers", .commitConflictMarkers(["Sources/App/RepositoryLoader.swift"])),
         ("overwriteCommitMessage", .overwriteCommitMessage()),
         ("removeWorktree", .removeWorktree(name: "feature-login", path: "/Users/joe/Developer/espalier-feature-login")),
+        ("removeMissingWorktree", .removeMissingWorktree(name: "feature-login", path: "/Users/joe/Developer/espalier-feature-login")),
+        ("removeMissingWorktree-checkout", .removeMissingWorktree(name: "feature-login", path: "/Users/joe/Developer/espalier-feature-login", branch: "feature/login")),
         ("abortWithResolvedConflicts", .abortWithResolvedConflicts(operation: "Rebase")),
         ("deleteBranch", .deleteBranch("feature/login", existsOnRemote: false)),
         ("deleteBranch-remote", .deleteBranch("feature/login", existsOnRemote: true)),

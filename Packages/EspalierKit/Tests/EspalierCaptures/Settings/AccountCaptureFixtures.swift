@@ -24,6 +24,17 @@ enum AccountCaptureFixtures {
         name: "Joe Bloggs"
     )
 
+    /// A second GitHub.com account, for work.
+    static let secondDotCom = Account(
+        login: "joe-work",
+        endpoint: getDotComAPIEndpoint(),
+        token: "",
+        emails: [],
+        avatarURL: "",
+        id: 1235,
+        name: "Joe Bloggs"
+    )
+
     /// A GitHub Enterprise account.
     static let enterprise = Account(
         login: "jbloggs",

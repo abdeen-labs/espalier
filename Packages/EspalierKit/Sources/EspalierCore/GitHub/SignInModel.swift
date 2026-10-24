@@ -15,9 +15,6 @@ private let logger = Log.logger(category: "sign-in")
 public enum SignInStep: String, Sendable, Hashable {
     /// The enterprise server's address and its OAuth app's client ID.
     case endpointEntry
-    /// An account is already signed in to the server; a successful sign-in
-    /// replaces it.
-    case existingAccountWarning
     /// Signing in with a code: ready to ask for one, or waiting for the user
     /// to enter it.
     case authentication
@@ -73,6 +70,9 @@ public enum SignInError: Error, Sendable, Equatable, CustomStringConvertible {
     case deviceFlow(DeviceFlowError)
     /// The user couldn't be loaded once the code was authorized.
     case userNotLoaded
+    /// Signing in again to one account, the code was authorized by another
+    /// (the browser was signed in to it): nothing was signed in.
+    case wrongAccount(expected: String, actual: String, host: String)
     /// The token couldn't be stored in the keychain.
     case tokenNotStored(String)
     /// Anything else.
@@ -101,6 +101,8 @@ public enum SignInError: Error, Sendable, Equatable, CustomStringConvertible {
             error.message
         case .userNotLoaded:
             "Couldn't load the account you signed in with."
+        case .wrongAccount(let expected, let actual, let host):
+            "You authorized Espalier as @\(actual). Sign in to \(host) as @\(expected) in your browser, then get a new code."
         case .tokenNotStored(let message), .other(let message):
             message
         }
@@ -114,7 +116,6 @@ public enum SignInError: Error, Sendable, Equatable, CustomStringConvertible {
 /// Accounts in states carry no token.
 public enum SignInState: Sendable, Equatable {
     case endpointEntry(EndpointEntry)
-    case existingAccountWarning(ExistingAccountWarning)
     case authentication(Authentication)
     case success(Success)
 
@@ -131,17 +132,6 @@ public enum SignInState: Sendable, Equatable {
         public var loading: Bool
     }
 
-    /// Already signed in to the server: signing in replaces the account once
-    /// the new sign-in succeeds.
-    public struct ExistingAccountWarning: Sendable, Equatable {
-        /// The account signed in to the server now.
-        public let existingAccount: Account
-        /// The server and OAuth app to sign in with.
-        public let configuration: EndpointConfiguration
-        public var error: SignInError?
-        public var loading: Bool
-    }
-
     /// Signing in with a code.
     public struct Authentication: Sendable, Equatable {
         /// The server and OAuth app to sign in with.
@@ -149,6 +139,10 @@ public enum SignInState: Sendable, Equatable {
         /// Git asked to sign in to a GitHub Enterprise Server the user hasn't
         /// signed in to: confirm the address before continuing.
         public let isUnrecognizedEnterpriseServer: Bool
+        /// Signing in again to this account (one signed out, or a
+        /// repository's): another account authorizing the code isn't
+        /// signed in.
+        public var expectedLogin: String?
         /// While waiting for the user: the code to enter.
         public var code: SignInCode?
         public var error: SignInError?
@@ -165,7 +159,6 @@ public enum SignInState: Sendable, Equatable {
     public var kind: SignInStep {
         switch self {
         case .endpointEntry: .endpointEntry
-        case .existingAccountWarning: .existingAccountWarning
         case .authentication: .authentication
         case .success: .success
         }
@@ -175,7 +168,6 @@ public enum SignInState: Sendable, Equatable {
     public var error: SignInError? {
         switch self {
         case .endpointEntry(let state): state.error
-        case .existingAccountWarning(let state): state.error
         case .authentication(let state): state.error
         case .success: nil
         }
@@ -185,7 +177,6 @@ public enum SignInState: Sendable, Equatable {
     public var loading: Bool {
         switch self {
         case .endpointEntry(let state): state.loading
-        case .existingAccountWarning(let state): state.loading
         case .authentication(let state): state.loading
         case .success: false
         }
@@ -195,7 +186,6 @@ public enum SignInState: Sendable, Equatable {
     public var endpoint: String? {
         switch self {
         case .endpointEntry: nil
-        case .existingAccountWarning(let state): state.configuration.endpoint
         case .authentication(let state): state.configuration.endpoint
         case .success(let state): state.account.endpoint
         }
@@ -211,9 +201,12 @@ public enum SignInState: Sendable, Equatable {
 /// `authenticate()` asks for a code and waits for the user to enter it.
 /// `reset()` cancels it. Whoever started it gets a `SignInResult` once.
 ///
-/// An account already signed in to the server is replaced only once the new
-/// sign-in succeeds; failing to load the user at the end is an error; and an
-/// enterprise server is checked (`GET <api>/meta`) when its address is entered.
+/// Signing in adds the account, or replaces the one with the same login on
+/// the server, once the sign-in succeeds; other accounts on the server stay.
+/// Failing to load the user at the end is an error; signing in again to one
+/// account (`beginSignIn(endpoint:login:)`) that another account authorized is
+/// one too; and an enterprise server is checked (`GET <api>/meta`) when its
+/// address is entered.
 @MainActor @Observable
 public final class SignInModel {
     /// The sign-in in progress, or nil.
@@ -225,6 +218,9 @@ public final class SignInModel {
 
     @ObservationIgnored weak var accounts: AccountsModel?
     @ObservationIgnored private var resultCallback: (@MainActor (SignInResult) -> Void)?
+    /// The account an Enterprise sign-in again expects, until its server is
+    /// set (`beginSignIn(endpoint:login:)`): its API endpoint and login.
+    @ObservationIgnored private var pendingExpectedLogin: (endpoint: String, login: String)?
     /// Bumped by every begin and reset: an asynchronous step applies its
     /// result only to the sign-in it started in.
     @ObservationIgnored private var session = 0
@@ -239,8 +235,7 @@ public final class SignInModel {
 
     // MARK: Starting
 
-    /// Starts signing in to GitHub.com: the existing-account warning if a
-    /// GitHub.com account is signed in, else the authentication step.
+    /// Starts signing in to GitHub.com, at the authentication step.
     public func beginDotComSignIn(_ resultCallback: (@MainActor (SignInResult) -> Void)? = nil) {
         if state != nil {
             reset()
@@ -262,19 +257,23 @@ public final class SignInModel {
     /// Signs in again to `endpoint`, an API endpoint as recoveries (SAML
     /// single sign-on, the workflow scope) and signed-out accounts name it.
     ///
-    /// It asks for a code right away: through the existing-account warning,
-    /// since signing in again is the point. For an enterprise server whose
-    /// OAuth app isn't known (no account used it), it stops at the endpoint
-    /// entry with the address filled in. Returns when the sign-in ends or
-    /// needs the user.
-    public func beginSignIn(endpoint: String, _ resultCallback: (@MainActor (SignInResult) -> Void)? = nil) async {
+    /// With `login`, it signs in again to that account (one signed out, or a
+    /// repository's): a code another account authorizes signs nobody in, and
+    /// fails with `wrongAccount`. It asks for a code right away, since
+    /// signing in again is the point. For an enterprise server whose OAuth
+    /// app isn't known (no account used it), it stops at the endpoint entry
+    /// with the address filled in. Returns when the sign-in ends or needs
+    /// the user.
+    public func beginSignIn(endpoint: String, login: String? = nil, _ resultCallback: (@MainActor (SignInResult) -> Void)? = nil) async {
         if isDotComEndpoint(endpoint) {
             beginDotComSignIn(resultCallback)
+            expectLogin(login)
             await authenticate()
             return
         }
 
         beginEnterpriseSignIn(resultCallback)
+        pendingExpectedLogin = login.map { (endpoint, $0) }
         // The endpoint entry expects the web address: the API endpoint
         // would make `api.api.<tenant>.ghe.com` for ghe.com.
         let address = getHTMLURL(endpoint)
@@ -283,9 +282,18 @@ public final class SignInModel {
             return
         }
         await setEndpoint(address, clientID: clientID)
-        if let kind = state?.kind, kind == .authentication || kind == .existingAccountWarning {
+        if state?.kind == .authentication {
             await authenticate()
         }
+    }
+
+    /// Makes the authentication step expect `login`'s account.
+    private func expectLogin(_ login: String?) {
+        guard let login, case .authentication(var authentication)? = state else {
+            return
+        }
+        authentication.expectedLogin = login
+        state = .authentication(authentication)
     }
 
     /// Starts the sign-in git asked for (`Prompt.gitHubSignIn`) and answers
@@ -345,23 +353,21 @@ public final class SignInModel {
 
     // MARK: Steps
 
-    /// Selects the enterprise server from the endpoint entry or the
-    /// existing-account step.
+    /// Selects the enterprise server from the endpoint entry.
     ///
     /// A github.com address switches to signing in to GitHub.com. Otherwise
     /// the address must be an https URL and the client ID that of an OAuth
     /// app registered on the server; the server is then checked
     /// (`GET <api>/meta`): one that can't be reached or doesn't answer as GitHub
     /// Enterprise stays at this step with an error, and the version it reports
-    /// is recorded for its capabilities. Then the existing-account warning when
-    /// an account is signed in to the server, else the authentication step,
-    /// which asks to confirm a GitHub Enterprise Server address that came from
-    /// git.
+    /// is recorded for its capabilities. Then the authentication step, which
+    /// asks to confirm a GitHub Enterprise Server address that came from git
+    /// when no account is signed in to it.
     ///
     /// - Parameter isEndpointFromGit: The address came from git (also
     ///   assumed when it is the host git asked about).
     public func setEndpoint(_ address: String, clientID: String, isEndpointFromGit: Bool = false) async {
-        guard let current = state, current.kind == .endpointEntry || current.kind == .existingAccountWarning else {
+        guard let current = state, current.kind == .endpointEntry else {
             logger.error("Sign in step \(self.state.map { "'\($0.kind.rawValue)'" } ?? "(none)", privacy: .public) not compatible with endpoint entry")
             return
         }
@@ -411,43 +417,38 @@ public final class SignInModel {
         }
 
         let configuration = EndpointConfiguration(endpoint: endpoint, clientID: trimmedClientID)
-        if let existingAccount = accounts?.accounts.first(where: { $0.endpoint == endpoint }) {
-            state = .existingAccountWarning(SignInState.ExistingAccountWarning(
-                existingAccount: existingAccount.withToken(""),
-                configuration: configuration,
-                error: nil,
-                loading: false
-            ))
-        } else {
-            let fromGit = isEndpointFromGit || isCredentialHelperHost(validURL)
-            state = .authentication(SignInState.Authentication(
-                configuration: configuration,
-                isUnrecognizedEnterpriseServer: fromGit && isGHES(endpoint),
-                code: nil,
-                error: nil,
-                loading: false
-            ))
-        }
+        let hasAccount = accounts?.accounts.contains { JSCompat.caseInsensitiveEquals($0.endpoint, endpoint) } ?? false
+        let fromGit = isEndpointFromGit || isCredentialHelperHost(validURL)
+        let expected = pendingExpectedLogin.flatMap { JSCompat.caseInsensitiveEquals($0.endpoint, endpoint) ? $0.login : nil }
+        state = .authentication(SignInState.Authentication(
+            configuration: configuration,
+            isUnrecognizedEnterpriseServer: fromGit && !hasAccount && isGHES(endpoint),
+            expectedLogin: expected,
+            code: nil,
+            error: nil,
+            loading: false
+        ))
     }
 
     /// Asks the server for a code, shows it, and waits for the user to enter
     /// it on the verification page; then loads the user and stores the
-    /// account, replacing any account signed in to the same server.
+    /// account, replacing the account with the same login on the server.
+    /// Signing in again to one account, another account's authorization
+    /// stores nothing and fails (`wrongAccount`).
     ///
-    /// Runs from the authentication or the existing-account step; calling it
-    /// again (after an error, or for a new code) starts over. Returns when
+    /// Runs from the authentication step; calling it again (after an error,
+    /// or for a new code) starts over. Returns when
     /// the sign-in succeeds, fails (the error is in the state), or is
     /// cancelled. Polling honors the server's interval and `slow_down`.
     public func authenticate() async {
         let configuration: EndpointConfiguration
         let isUnrecognizedEnterpriseServer: Bool
+        let expectedLogin: String?
         switch state {
         case .authentication(let current)?:
             configuration = current.configuration
             isUnrecognizedEnterpriseServer = current.isUnrecognizedEnterpriseServer
-        case .existingAccountWarning(let current)?:
-            configuration = current.configuration
-            isUnrecognizedEnterpriseServer = false
+            expectedLogin = current.expectedLogin
         default:
             logger.error("Sign in step \(self.state.map { "'\($0.kind.rawValue)'" } ?? "(none)", privacy: .public) not compatible with authentication")
             return
@@ -462,6 +463,7 @@ public final class SignInModel {
         state = .authentication(SignInState.Authentication(
             configuration: configuration,
             isUnrecognizedEnterpriseServer: isUnrecognizedEnterpriseServer,
+            expectedLogin: expectedLogin,
             code: nil,
             error: nil,
             loading: true
@@ -472,6 +474,7 @@ public final class SignInModel {
             await self.runDeviceFlow(
                 configuration,
                 isUnrecognizedEnterpriseServer: isUnrecognizedEnterpriseServer,
+                expectedLogin: expectedLogin,
                 flow: flow,
                 environment: environment
             )
@@ -504,6 +507,7 @@ public final class SignInModel {
         flowTask?.cancel()
         flowTask = nil
         credentialHelperURL = nil
+        pendingExpectedLogin = nil
         state = nil
         callback?(.cancelled)
     }
@@ -522,6 +526,7 @@ public final class SignInModel {
     private func runDeviceFlow(
         _ configuration: EndpointConfiguration,
         isUnrecognizedEnterpriseServer: Bool,
+        expectedLogin: String?,
         flow: FlowToken,
         environment: AppEnvironment
     ) async {
@@ -537,6 +542,7 @@ public final class SignInModel {
             state = .authentication(SignInState.Authentication(
                 configuration: configuration,
                 isUnrecognizedEnterpriseServer: isUnrecognizedEnterpriseServer,
+                expectedLogin: expectedLogin,
                 code: code,
                 error: error,
                 loading: loading
@@ -581,6 +587,11 @@ public final class SignInModel {
             }
             guard isCurrent(flow), let accounts else {
                 return
+            }
+            // Checked before saving, so the browser's other account isn't
+            // signed in.
+            if let expectedLogin, !JSCompat.caseInsensitiveEquals(account.login, expectedLogin) {
+                throw SignInError.wrongAccount(expected: expectedLogin, actual: account.login, host: Self.displayHost(of: configuration.endpoint))
             }
 
             try await accounts.add(account)
@@ -702,27 +713,19 @@ public final class SignInModel {
         session += 1
         self.resultCallback = resultCallback
         credentialHelperURL = nil
+        pendingExpectedLogin = nil
     }
 
-    /// The GitHub.com step: the existing-account warning when a GitHub.com
-    /// account is signed in, else authentication.
+    /// The GitHub.com step: authentication. Signing in adds the account, or
+    /// replaces the one with the same login.
     private func showDotComSignIn() {
-        if let existingAccount = accounts?.accounts.first(where: isDotComAccount) {
-            state = .existingAccountWarning(SignInState.ExistingAccountWarning(
-                existingAccount: existingAccount.withToken(""),
-                configuration: .dotCom,
-                error: nil,
-                loading: false
-            ))
-        } else {
-            state = .authentication(SignInState.Authentication(
-                configuration: .dotCom,
-                isUnrecognizedEnterpriseServer: false,
-                code: nil,
-                error: nil,
-                loading: false
-            ))
-        }
+        state = .authentication(SignInState.Authentication(
+            configuration: .dotCom,
+            isUnrecognizedEnterpriseServer: false,
+            code: nil,
+            error: nil,
+            loading: false
+        ))
     }
 
     private func showEndpointEntry(address: String, clientID: String) {
@@ -730,30 +733,16 @@ public final class SignInModel {
     }
 
     private func setLoading(_ loading: Bool, in current: SignInState, address: String, clientID: String) {
-        switch current {
-        case .endpointEntry:
+        if case .endpointEntry = current {
             state = .endpointEntry(SignInState.EndpointEntry(address: address, clientID: clientID, error: nil, loading: loading))
-        case .existingAccountWarning(var warning):
-            warning.error = nil
-            warning.loading = loading
-            state = .existingAccountWarning(warning)
-        default:
-            break
         }
     }
 
     /// Shows `error` at the step `setEndpoint` started from, keeping what
     /// the user entered.
     private func show(_ error: SignInError, in current: SignInState, address: String, clientID: String) {
-        switch current {
-        case .endpointEntry:
+        if case .endpointEntry = current {
             state = .endpointEntry(SignInState.EndpointEntry(address: address, clientID: clientID, error: error, loading: false))
-        case .existingAccountWarning(var warning):
-            warning.error = error
-            warning.loading = false
-            state = .existingAccountWarning(warning)
-        default:
-            break
         }
     }
 

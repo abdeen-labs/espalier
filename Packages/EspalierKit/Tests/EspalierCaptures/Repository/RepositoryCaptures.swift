@@ -3,8 +3,10 @@
 // clone list by owner, and none; Clone with a URL whose folder has files,
 // and GitHub.com's list with two Enterprise accounts signed in too; Create
 // empty, filled over a folder with a README, and failed; Publish with
-// organizations, and to either server with an error; Repository Settings'
-// panes; Alias; Open With; and the missing, unsafe, and cloning states.
+// organizations, with accounts on two servers and none chosen yet, and with
+// one chosen and an error; Repository Settings' panes, and the remote's
+// account; a row's context menu and its Account submenu; Alias; Open With;
+// and the missing, unsafe, and cloning states.
 // Leaf views take fixed values; the sheets' forms run on a hermetic app,
 // with real repositories and folders where they read one.
 
@@ -225,7 +227,7 @@ struct RepositoryCaptures {
 
     // MARK: Publish
 
-    @Test("Publish: the fields with a sanitized name and organizations; both servers, with an error")
+    @Test("Publish: the fields with a sanitized name and organizations; both servers, no account chosen; one chosen, with an error")
     func publish() async throws {
         try await withIsolatedGitConfig { _ in
             let harness = try AppHarness()
@@ -246,7 +248,12 @@ struct RepositoryCaptures {
             capture(PublishRepositoryForm(model: fields).windowEnvironment(context), named: "publish-fields", area: area)
 
             try await harness.signIn([AccountCaptureFixtures.enterprise], to: app)
+            let unchosen = PublishRepositorySheetModel(repository: repository, app: app)
+            unchosen.name = "espalier"
+            capture(PublishRepositoryForm(model: unchosen).windowEnvironment(context), named: "publish-chooseAccount", area: area)
+
             let both = PublishRepositorySheetModel(repository: repository, app: app)
+            both.chooseAccount(AccountCaptureFixtures.enterprise.identity)
             both.name = "espalier"
             both.problem = "Couldn't create the repository in octo-org. Check that octo-org doesn't already have a repository with this name, and that you can create repositories there."
             capture(PublishRepositoryForm(model: both).windowEnvironment(context), named: "publish-error", area: area)
@@ -274,6 +281,51 @@ struct RepositoryCaptures {
                 model.pane = pane
                 capture(RepositorySettingsForm(model: model), named: "settings-\(pane.rawValue)", area: area)
             }
+            await app.idle()
+        }
+    }
+
+    @Test("Repository Settings: the remote's account, of two signed in to GitHub.com")
+    func settingsAccount() async throws {
+        try await withIsolatedGitConfig { _ in
+            let harness = try AppHarness()
+            let app = try await AccountCaptureFixtures.app(harness, signedIn: [AccountCaptureFixtures.dotCom, AccountCaptureFixtures.secondDotCom])
+            let fixture = try await setupTwoCommitRepo()
+            _ = try await runGit(["remote", "add", "origin", "https://github.com/joe/espalier.git"], fixture)
+            let repository = try await harness.addAndSelect(fixture, to: app)
+            app.updateRecord(repository.id) { record in
+                record.gitHubRepository = ModelFixtures.gitHubRepository(owner: "joe", name: "espalier")
+                record.accountLogin = "joe-work"
+            }
+
+            let model = RepositorySettingsModel(repository: repository, app: app)
+            await model.load()
+            model.pane = .remote
+            capture(RepositorySettingsForm(model: model), named: "settings-remote-account", area: area)
+            await app.idle()
+        }
+    }
+
+    // MARK: Context menu
+
+    @Test("a repository row's context menu, and its Account submenu: two accounts on GitHub.com, one assigned")
+    func contextMenu() async throws {
+        try await withIsolatedGitConfig { _ in
+            let harness = try AppHarness()
+            let app = try await AccountCaptureFixtures.app(harness, signedIn: [AccountCaptureFixtures.dotCom, AccountCaptureFixtures.secondDotCom])
+            let repository = try await harness.addAndSelect(try await setupTwoCommitRepo(), to: app)
+            app.updateRecord(repository.id) { record in
+                record.gitHubRepository = ModelFixtures.gitHubRepository(owner: "joe", name: "espalier")
+                record.accountLogin = "joe"
+            }
+            let context = AccountCaptureFixtures.context(app)
+
+            let content = RepositoryContextMenu.content(entry: .repository(repository.id), context: context)
+            let level = MenuLevel(content: content)
+            level.highlighted = level.rows.first { $0.item?.title == "Account" }?.id
+            capture(MenuCard(level: level), named: "contextMenu", area: area)
+            let account = try #require(content.items.first { $0.title == "Account" }?.submenu)
+            capture(MenuCard(level: MenuLevel(content: account)), named: "contextMenu-account", area: area)
             await app.idle()
         }
     }

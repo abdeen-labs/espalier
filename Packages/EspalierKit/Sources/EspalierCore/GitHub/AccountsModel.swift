@@ -20,7 +20,7 @@ public struct AccountsIssue: Sendable, Equatable, Identifiable {
     }
 }
 
-/// The signed-in GitHub accounts, one per server.
+/// The signed-in GitHub accounts; several can be signed in to one server.
 ///
 /// Mirrors GitHubKit's `AccountsStore`: it loads the accounts at launch,
 /// refreshes their details from GitHub at launch and then at most once a
@@ -30,8 +30,8 @@ public struct AccountsIssue: Sendable, Equatable, Identifiable {
 /// `invalidatedAccounts` for the user to sign in again.
 @MainActor @Observable
 public final class AccountsModel {
-    /// The accounts, GitHub.com first, then the others in the order they
-    /// were added; one per endpoint.
+    /// The accounts, GitHub.com's first, then the others in the order they
+    /// were added.
     public private(set) var accounts: [Account] = []
     /// Accounts signed out because GitHub rejected their tokens, or the
     /// tokens expired or are missing, without tokens, until the user signs
@@ -81,14 +81,33 @@ public final class AccountsModel {
         app?.environment
     }
 
-    /// The account for a repository's GitHub endpoint, if one is signed in.
+    /// The account assigned to a repository, if it's signed in: the one
+    /// with its GitHub repository's endpoint and its assigned login. Never
+    /// another account on the same endpoint.
     public func account(for record: RepositoryRecord) -> Account? {
-        getAccountForRepository(accounts, record.gitHubRepository)
+        getAccountForRepository(accounts, record.gitHubRepository, login: record.accountLogin)
     }
 
-    /// The account signed in to `endpoint` (an API endpoint), if any.
-    public func account(forEndpoint endpoint: String) -> Account? {
-        getAccountForEndpoint(accounts, endpoint)
+    /// The repository's account (`account(for:)`) when it's on `endpoint`,
+    /// the API endpoint of the GitHub repository asked about (the
+    /// repository's own, or its parent's).
+    public func account(for record: RepositoryRecord, on endpoint: String) -> Account? {
+        account(for: record).flatMap { JSCompat.strictEquals($0.endpoint, endpoint) ? $0 : nil }
+    }
+
+    /// The signed-in account with `identity`, if any.
+    public func account(_ identity: AccountIdentity) -> Account? {
+        accounts.first { $0.identity == identity }
+    }
+
+    /// The accounts signed in to `endpoint` (an API endpoint), in order.
+    public func accounts(onEndpoint endpoint: String) -> [Account] {
+        accounts.filter { JSCompat.strictEquals($0.endpoint, endpoint) }
+    }
+
+    /// How many repositories are assigned to `identity`.
+    public func assignedRepositoryCount(_ identity: AccountIdentity) -> Int {
+        app?.repositories.filter { $0.accountIdentity == identity }.count ?? 0
     }
 
     /// Signs out `account`: removes it and its token from the keychain. The
@@ -97,14 +116,34 @@ public final class AccountsModel {
     /// can. Cached API responses go too, since they can hold the account's
     /// private data.
     ///
+    /// Repositories assigned to the account keep their assignments, to use
+    /// it again once signed back in, unless `clearingAssignments`: then they
+    /// have no account, and the next one is chosen when they need one. When
+    /// some are assigned, `confirmationRequired(.signOutAccount)` asks
+    /// first, with the option to clear them.
+    ///
     /// - Throws: When the keychain refuses to remove the token; the account
-    ///   stays signed in.
-    public func signOut(_ account: Account) async throws(OperationError) {
+    ///   stays signed in, and so do the assignments.
+    public func signOut(
+        _ account: Account,
+        confirmed: Set<ConfirmationKind> = [],
+        clearingAssignments: Bool = false
+    ) async throws(OperationError) {
+        let assigned = assignedRepositoryCount(account.identity)
+        if assigned > 0, !confirmed.contains(.signOutAccount) {
+            throw OperationError(
+                .confirmationRequired(.signOutAccount(login: account.login, server: account.friendlyEndpoint, repositoryCount: assigned)),
+                operation: .signOut
+            )
+        }
         logger.info("Signing out \(account.login, privacy: .public) from \(account.endpoint, privacy: .public)")
         do {
             try await store.removeAccount(account)
         } catch {
             throw OperationError(.other(Self.message(for: error)), operation: .signOut, underlying: error)
+        }
+        if clearingAssignments {
+            app?.clearAccountAssignments(account.identity)
         }
         _ = await deleteToken(account)
         environment?.gitHub.session.configuration.urlCache?.removeAllCachedResponses()
@@ -132,9 +171,9 @@ public final class AccountsModel {
     }
 
     /// Forgets a signed-out account the user doesn't want to sign in to
-    /// again.
+    /// again. Repositories assigned to it keep their assignments.
     public func dismissInvalidatedAccount(_ account: Account) {
-        invalidatedAccounts.removeAll { accountEquals($0, account) }
+        invalidatedAccounts.removeAll { $0.identity == account.identity }
     }
 
     /// Forgets an issue once the user has seen it.
@@ -205,7 +244,8 @@ public final class AccountsModel {
         accountsDidChange(from: previous)
     }
 
-    /// Stores a newly signed-in account, replacing the endpoint's account.
+    /// Stores a newly signed-in account, replacing the account with the
+    /// same endpoint and login; other accounts on the endpoint stay.
     func add(_ account: Account) async throws(SignInError) {
         do {
             try await store.addAccount(account)
@@ -219,7 +259,7 @@ public final class AccountsModel {
     /// A sign-in succeeded: in the welcome flow, start loading the account's
     /// repositories to clone.
     func signInDidSucceed(_ account: Account) {
-        invalidatedAccounts.removeAll { $0.endpoint == account.endpoint }
+        invalidatedAccounts.removeAll { $0.identity == account.identity }
         if let app, !app.preferences.hasShownWelcomeFlow {
             apiRepositories.load(account)
         }
@@ -230,15 +270,17 @@ public final class AccountsModel {
 
         // An account signed in again replaces its signed-out entry.
         invalidatedAccounts.removeAll { invalidated in
-            accounts.contains { $0.endpoint == invalidated.endpoint }
+            accounts.contains { $0.identity == invalidated.identity }
         }
 
         // Signing in or out, or a new token, can change which repositories
-        // match an account and what they're allowed to do; new details don't.
+        // have their accounts and what they're allowed to do; new details
+        // don't.
         let signedIn = Set(accounts.map(SignedInAccount.init))
         guard signedIn != Set(previous.map(SignedInAccount.init)), let app, app.loadState == .ready else {
             return
         }
+        app.signedInAccountsDidChange()
         app.background.update()
         startTracked {
             await app.refreshSelectedRepositoryAfterAccountChange()
@@ -248,12 +290,12 @@ public final class AccountsModel {
     /// An account and its token, to tell a sign-in or sign-out from a
     /// refresh of the account's details.
     private struct SignedInAccount: Hashable {
-        let endpoint: String
+        let identity: AccountIdentity
         let id: Int
         let token: String
 
         init(_ account: Account) {
-            endpoint = account.endpoint
+            identity = account.identity
             id = account.id
             token = account.token
         }
@@ -303,8 +345,11 @@ public final class AccountsModel {
         }
     }
 
+    /// Lists an account signed out without the user (its token rejected,
+    /// expired, or missing), to sign in again. Repositories assigned to it
+    /// keep their assignments.
     private func markInvalidated(_ account: Account) {
-        invalidatedAccounts.removeAll { $0.endpoint == account.endpoint }
+        invalidatedAccounts.removeAll { $0.identity == account.identity }
         invalidatedAccounts.append(account.token.isEmpty ? account : account.withToken(""))
     }
 
@@ -360,7 +405,7 @@ public final class AccountsModel {
     }
 
     /// Starts `work` in a task of its own, counted for `idle()` from now.
-    private func startTracked(_ work: @escaping @MainActor () async -> Void) {
+    func startTracked(_ work: @escaping @MainActor () async -> Void) {
         runningWork += 1
         Task {
             await work()

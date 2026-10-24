@@ -94,6 +94,21 @@ public struct API: Sendable {
         }
     }
 
+    /// Fetch a repo by its owner and name to find out whether the account can
+    /// access it.
+    ///
+    /// Returns nil when the repository isn't visible to the account (404).
+    /// Unlike `fetchRepository`, any other failure (network errors, rate
+    /// limits, server errors) is thrown, so it isn't mistaken for a lack of
+    /// access.
+    public func fetchRepositoryIfAccessible(owner: String, name: String) async throws -> APIFullRepository? {
+        let response = try await ghRequest(.get, "repos/\(owner)/\(name)")
+        if response.status == HTTPStatusCode.notFound.rawValue {
+            return nil
+        }
+        return try parsedResponse(response, as: APIFullRepository.self)
+    }
+
     /// Fetch info needed to clone a repository. That includes:
     ///  - The canonical clone URL for a repository, respecting the protocol
     ///    preference if provided.

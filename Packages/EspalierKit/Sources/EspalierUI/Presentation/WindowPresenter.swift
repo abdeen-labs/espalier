@@ -20,6 +20,8 @@ nonisolated public struct IntentAnswers: Sendable, Equatable {
     public var moveToTrash = false
     /// "Delete this branch on the remote" (`deleteBranch`).
     public var includeRemoteBranch = false
+    /// "Clear the repositories' account assignments" (`signOutAccount`).
+    public var clearAccountAssignments = false
     /// The decision's answer about the hooks in Git LFS's way
     /// (`replaceLFSHooks`).
     public var lfsHooks: LFSHooksAnswer?
@@ -182,6 +184,7 @@ public final class WindowPresenter {
                     switch confirmation.kind {
                     case .removeRepository: answers.moveToTrash = response.isOptionSelected
                     case .deleteBranch: answers.includeRemoteBranch = response.isOptionSelected
+                    case .signOutAccount: answers.clearAccountAssignments = response.isOptionSelected
                     default: break
                     }
 

@@ -167,7 +167,8 @@ extension SyncModel {
             break
         }
         // update associated github repo
-        associate(fork, endpoint: endpoint)
+        // The fork is on the same server: the repository keeps its account.
+        associate(fork, endpoint: endpoint, assigning: repository.record.accountLogin)
         if case .upstreamPointsElsewhere(let existing) = conversion {
             raiseUpstreamRemoteConflict(existing)
         }
@@ -223,15 +224,16 @@ extension SyncModel {
         }
     }
 
-    /// Stores `apiRepository` and its parent in the GitHub repository table
-    /// and associates the repository with it. Records associated with the
-    /// rows it touched get the new data too.
-    func associate(_ apiRepository: APIFullRepository, endpoint: String) {
+    /// Stores `apiRepository` and its parent in the GitHub repository table,
+    /// as `accountLogin`'s rows (the account that fetched it), associates
+    /// the repository with it, and assigns it the account. Records
+    /// associated with the rows it touched get the new data too.
+    func associate(_ apiRepository: APIFullRepository, endpoint: String, assigning accountLogin: String?) {
         guard let repository, let app = repository.app else {
             return
         }
-        let associated = app.upsertGitHubRepository(endpoint, apiRepository)
-        app.setGitHubRepository(associated, for: repository.id)
+        let associated = app.upsertGitHubRepository(endpoint, apiRepository, accountLogin: accountLogin ?? "")
+        app.setGitHubRepository(associated, for: repository.id, accountLogin: accountLogin)
     }
 }
 

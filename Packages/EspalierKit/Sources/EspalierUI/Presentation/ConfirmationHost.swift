@@ -1,11 +1,13 @@
-// How each of the state layer's 25 confirmations is shown. The copy is the
+// How each of the state layer's confirmations is shown. The copy is the
 // state layer's (`Confirmation`); this file decides alert or compact sheet,
 // button roles, severity, lists, and the checkbox. Remove Repository and
 // Delete Branch are Espalier's compact sheets: their option is Espalier's
 // checkbox ("Also move the folder to the Trash", "Delete this branch on the
 // remote"), and Remove or Delete is the default button. The others are
 // alerts, with "Do not show this message again" where the confirmation can
-// be turned off.
+// be turned off. Signing out of an account repositories are assigned to is
+// a compact sheet too, its option "Clear the repositories' account
+// assignments".
 
 import EspalierCore
 import GitKit
@@ -74,6 +76,15 @@ extension Confirmation {
                 isDestructive: isDestructive
             ))
 
+        case .signOutAccount:
+            return .compactSheet(CompactConfirmation(
+                title: title,
+                paragraphs: message.components(separatedBy: "\n\n"),
+                optionTitle: "Clear the repositories' account assignments",
+                confirmButton: confirmButton,
+                isDestructive: isDestructive
+            ))
+
         default:
             return .alert(alertContent(numberFormat))
         }
@@ -126,7 +137,7 @@ extension Confirmation {
     private var isDestructive: Bool {
         switch kind {
         case .discardChanges, .discardAllChanges, .discardLines, .discardStash, .overwriteCommitMessage,
-             .removeWorktree, .abortWithResolvedConflicts, .deleteBranch, .deleteRemoteBranch, .deleteTag,
+             .removeWorktree, .removeMissingWorktree, .abortWithResolvedConflicts, .deleteBranch, .deleteRemoteBranch, .deleteTag,
              .removeRepository, .leaveCommitsBehind, .replaceCommandLineTool:
             true
         default:

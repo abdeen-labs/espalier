@@ -53,7 +53,7 @@ struct RepositoryListTests {
         await app.idle()
     }
 
-    @Test("loads an added repository's remotes, associates it with GitHub, and tells whether it uses Git LFS", .hangGuard(minutes: 5))
+    @Test("loads an added repository's remotes, associates it with GitHub and the account that can see it, and tells whether it uses Git LFS", .hangGuard(minutes: 5))
     func addLoadsRemotesAssociationAndLFS() async throws {
         let repository = try await setupTwoCommitRepo()
         try await runGit(["remote", "add", "origin", "https://github.com/octocat/app.git"], repository)
@@ -79,6 +79,7 @@ struct RepositoryListTests {
         #expect(result.usingLFS == [id])
         #expect(app.record(id)?.gitHubRepository?.fullName == "octocat/app")
         #expect(app.record(id)?.gitHubRepository?.permissions == .write)
+        #expect(app.record(id)?.accountLogin == testAccount.login)
         #expect(app.repository(id)?.gitState.remotes.all.map(\.name) == ["origin"])
         #expect(app.record(result.added[1])?.gitHubRepository == nil)
         await app.idle()

@@ -30,16 +30,21 @@ struct ExternalActionsTests {
     private struct OpenFailure: Error {}
 
     /// A repository with a commit on `main` and a bare `origin`, associated
-    /// with `gitHubRepository`, in a loaded app; not selected.
+    /// with `gitHubRepository` and assigned `testAccount`, in a loaded app;
+    /// not selected.
     private func makeRepository(
-        _ gitHubRepository: GitHubRepository = ModelFixtures.gitHubRepository()
+        _ gitHubRepository: GitHubRepository = ModelFixtures.gitHubRepository(),
+        responder: PromptCenter.Responder? = PromptResponder.failing()
     ) async throws -> (harness: AppHarness, app: AppModel, model: RepositoryModel, local: Repository, remote: Repository) {
         let (local, remote) = try await setupRepositoryWithRemote()
-        let harness = try AppHarness()
+        let harness = try AppHarness(responder: responder)
         let app = await harness.loadedApp()
         await app.accounts.idle()
         let id = try #require(try await app.addRepositories([local.path]).added.first)
-        app.updateRecord(id) { $0.gitHubRepository = gitHubRepository }
+        app.updateRecord(id) {
+            $0.gitHubRepository = gitHubRepository
+            $0.accountLogin = testAccount.login
+        }
         return (harness, app, try #require(app.repository(id)), local, remote)
     }
 
@@ -345,6 +350,7 @@ struct ExternalActionsTests {
         let upstream = ModelFixtures.gitHubRepository(owner: "octocat", name: "hello", dbID: 1)
         app.updateRecord(id) { record in
             record.gitHubRepository = ModelFixtures.gitHubRepository(owner: "hubot", name: "hello", dbID: 2, parent: upstream)
+            record.accountLogin = testAccount.login
             record.workflowPreferences.forkContributionTarget = .fork
         }
         let record = try #require(app.record(id))
@@ -401,14 +407,20 @@ struct ExternalActionsTests {
         await app.idle()
     }
 
-    @Test("a pull request link without an account, or one GitHub can't find, throws", .hangGuard(minutes: 5))
+    @Test("a pull request link whose repository's account is signed out asks to sign in to it again, and throws when that's cancelled; one GitHub can't find throws", .hangGuard(minutes: 5))
     func pullRequestErrors() async throws {
-        let (harness, app, _, _, _) = try await makeRepository()
+        let (harness, app, _, _, _) = try await makeRepository(responder: PromptResponder.dismissing)
         let action = try url("espalier://openRepo/https://github.com/octocat/app?pr=12")
 
         await #expect(throws: OperationError.self) {
             try await app.handle(action)
         }
+        guard case .repositoryAccount(let request)? = harness.prompts.history.first else {
+            Issue.record("Expected the question about the repository's account, got \(harness.prompts.history)")
+            return
+        }
+        #expect(request.signedOutLogin == testAccount.login)
+        #expect(request.endpoint == testAccount.endpoint)
 
         try await harness.signIn([testAccount], to: app)
         harness.gitHub.on("GET", "/repos/octocat/app/pulls/12", respond: .status(404))
@@ -428,6 +440,15 @@ struct ExternalActionsTests {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
         try await harness.signIn([testAccount], to: app)
+        harness.gitHub.on("GET", "/repos/octocat/app", respond: .json(encoding: APIFullRepository(
+            repository: createMockAPIRepository(
+                cloneURL: "https://github.com/octocat/app.git",
+                htmlURL: "https://github.com/octocat/app",
+                name: "app",
+                owner: createMockAPIIdentity(login: "octocat")
+            ),
+            permissions: APIRepositoryPermissions(admin: false, push: true, pull: true)
+        )))
         harness.gitHub.on("GET", "/repos/octocat/app/pulls/12", respond: pullRequestResponse(head: nil))
 
         let result = try await app.handle(try url("espalier://openRepo/https://github.com/octocat/app?pr=12"))

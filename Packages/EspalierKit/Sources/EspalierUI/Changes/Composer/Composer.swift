@@ -8,6 +8,11 @@
 // avatar. `CommitModel` commits, and the window's presenter shows its
 // gates.
 //
+// With AI on, a Manual | Assisted switch sits above the card. In Assisted
+// the card shows the AI run's status instead of the message fields (the
+// draft stays, out of sight), with co-authors, the options, and the author;
+// the button commits with AI (AssistedCommitPanel.swift).
+//
 // While a merge waits on its conflicts, the form shows the merge's message
 // (git's, which the user may edit) without a button: the operation panel's
 // Commit Merge, and ⌘↩, commit the merge with it. The user's draft is set
@@ -55,6 +60,17 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
     public var isSpellCheckingEnabled: Bool
     /// Whether Repository Settings… can open.
     public var canOpenRepositorySettings: Bool
+    /// How the next commit is made.
+    public var mode: CommitMode
+    /// Whether the Manual | Assisted switch shows: AI is on and nothing is
+    /// being amended.
+    public var showsModeSwitch: Bool
+    /// Whether the switch can change: not while a commit or a generation
+    /// runs, nor while an assisted run waits for its undo or push to be
+    /// retried.
+    public var isModeSwitchEnabled: Bool
+    /// The assisted card's status, in Assisted.
+    public var assisted: AssistedCommitContent?
 
     public init(
         lastCommit: LastCommitContent? = nil,
@@ -77,7 +93,11 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
         isReadOnly: Bool = false,
         isGenerating: Bool = false,
         isSpellCheckingEnabled: Bool = true,
-        canOpenRepositorySettings: Bool = true
+        canOpenRepositorySettings: Bool = true,
+        mode: CommitMode = .manual,
+        showsModeSwitch: Bool = false,
+        isModeSwitchEnabled: Bool = true,
+        assisted: AssistedCommitContent? = nil
     ) {
         self.lastCommit = lastCommit
         self.isAmending = isAmending
@@ -100,6 +120,10 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
         self.isGenerating = isGenerating
         self.isSpellCheckingEnabled = isSpellCheckingEnabled
         self.canOpenRepositorySettings = canOpenRepositorySettings
+        self.mode = mode
+        self.showsModeSwitch = showsModeSwitch
+        self.isModeSwitchEnabled = isModeSwitchEnabled
+        self.assisted = assisted
     }
 
     /// The summary's placeholder when the commit doesn't name one file.
@@ -207,6 +231,18 @@ extension ComposerContent {
             nil
         }
 
+        // Assisted needs AI on, and doesn't amend. A run that's going, or
+        // whose undo or push waits to be retried, keeps its card whatever
+        // the mode, so it stays reachable.
+        let isAssistedPending = switch commit.assisted {
+        case .running, .recoveryNeeded, .pushFailed: true
+        case .idle, .failed: false
+        }
+        let showsModeSwitch = app.ai.isEnabled && !isAmending
+        let mode: CommitMode = isAssistedPending ? .assisted : showsModeSwitch ? commit.mode : .manual
+        let assisted = mode == .assisted ? AssistedCommitContent.make(repository, app: app) : nil
+        let isAssistedRunning = assisted?.isRunning ?? false
+
         let sparkle = SparkleState.make(repository, app: app, isCommitting: isCommitting)
         // The model keeps a provider's failure; errors thrown before a
         // request (no model, a refusal) the window keeps.
@@ -224,6 +260,32 @@ extension ComposerContent {
             nil
         }
 
+        let button: CommitButtonContent
+        if let assisted {
+            button = assistedButton(
+                assisted,
+                included: included,
+                hasCommittableFiles: hasCommittableFiles,
+                allowEmpty: commit.options.allowEmpty,
+                branch: branch,
+                isCommitting: isCommitting,
+                isGenerating: isGenerating,
+                hasRuleFailure: hasRuleFailure,
+                numberFormat: app.preferences.numberFormat
+            )
+        } else {
+            button = CommitButtonContent(
+                isAmending: isAmending,
+                fileCount: included.count,
+                branch: branch,
+                isCommitting: isCommitting,
+                isGenerating: isGenerating,
+                isEnabled: isEnabled,
+                disabledReason: disabledReason,
+                numberFormat: app.preferences.numberFormat
+            )
+        }
+
         return ComposerContent(
             lastCommit: LastCommitContent.make(repository),
             isAmending: isAmending,
@@ -236,29 +298,73 @@ extension ComposerContent {
             modelChoices: sparkle == .chooseModel ? app.ai.availableModels.map(SparkleModelChoice.init) : [],
             aiFailure: sparkle == .hidden ? nil : failure.map(AIFailureContent.init),
             showsCoAuthorsToggle: isGitHub,
-            isCoAuthorsToggleEnabled: !isCommitting && !isGenerating,
+            isCoAuthorsToggleEnabled: !isCommitting && !isGenerating && !isAssistedRunning,
             warning: CommitWarning.make(repository),
             options: CommitOptionsContent(
                 isAmending: isAmending,
                 canToggleAmend: commit.canStartAmending && !isCommitting && !isGenerating,
                 options: commit.options,
-                isEnabled: !isCommitting && !isGenerating
+                isEnabled: !isCommitting && !isGenerating && !isAssistedRunning,
+                isAssisted: assisted != nil,
+                pushesAfterCommitting: commit.pushesAfterAssistedCommits
             ),
             hook: hook,
-            button: CommitButtonContent(
-                isAmending: isAmending,
-                fileCount: included.count,
-                branch: branch,
-                isCommitting: isCommitting,
-                isGenerating: isGenerating,
-                isEnabled: isEnabled,
-                disabledReason: disabledReason,
-                numberFormat: app.preferences.numberFormat
-            ),
-            isReadOnly: isCommitting || isGenerating,
+            button: button,
+            isReadOnly: isCommitting || isGenerating || isAssistedRunning,
             isGenerating: isGenerating,
             isSpellCheckingEnabled: app.preferences.commitSpellcheckEnabled,
-            canOpenRepositorySettings: actions?.canPerform(.repositorySettings) ?? false
+            canOpenRepositorySettings: actions?.canPerform(.repositorySettings) ?? false,
+            mode: mode,
+            showsModeSwitch: showsModeSwitch,
+            isModeSwitchEnabled: !isAssistedPending && !isCommitting && !isGenerating,
+            assisted: assisted
+        )
+    }
+
+    /// The button in Assisted: "Commit 2 Files to main with AI", enabled
+    /// with something to commit, a model to plan with, and no undo waiting
+    /// to be retried.
+    private static func assistedButton(
+        _ assisted: AssistedCommitContent,
+        included: [WorkingDirectoryFileChange],
+        hasCommittableFiles: Bool,
+        allowEmpty: Bool,
+        branch: String?,
+        isCommitting: Bool,
+        isGenerating: Bool,
+        hasRuleFailure: Bool,
+        numberFormat: NumberFormat
+    ) -> CommitButtonContent {
+        // An empty commit asks no model.
+        let needsSetup = !included.isEmpty && (assisted.status == .needsProvider || assisted.status == .needsModelChoice)
+        let isUndoWaiting = assisted.status.isUndoWaiting
+        let isPushing = assisted.status == .running(.pushing, canCancel: false)
+        let isRunning = assisted.isRunning
+        let disabledReason: String? = if isPushing {
+            "Pushing…"
+        } else if isRunning {
+            "Committing with AI…"
+        } else if isUndoWaiting {
+            "Retry undoing the last assisted commit first."
+        } else if included.isEmpty, hasCommittableFiles, !allowEmpty {
+            "Select one or more files to commit"
+        } else if !hasCommittableFiles, !allowEmpty {
+            "There are no changes to commit."
+        } else if needsSetup {
+            "Set up a model in Settings ▸ AI to commit with AI"
+        } else {
+            nil
+        }
+        let canRun = !included.isEmpty || allowEmpty
+        return CommitButtonContent(
+            isAssisted: true,
+            fileCount: included.count,
+            branch: branch,
+            isCommitting: isRunning && !isPushing,
+            isGenerating: isGenerating,
+            isEnabled: canRun && !isRunning && !isCommitting && !isGenerating && !hasRuleFailure && !needsSetup && !isUndoWaiting,
+            disabledReason: disabledReason,
+            numberFormat: numberFormat
         )
     }
 
@@ -315,6 +421,18 @@ public struct ComposerActions {
     /// A warning's link: create a fork, switch branches, or a web page.
     public var openLink: (URL) -> Void = { _ in }
     public var setSpellChecking: (Bool) -> Void = { _ in }
+    /// Manual or Assisted.
+    public var setMode: (CommitMode) -> Void = { _ in }
+    /// Push After Committing, for assisted commits.
+    public var togglePushAfterCommitting: () -> Void = {}
+    public var cancelAssisted: () -> Void = {}
+    public var retryAssistedUndo: () -> Void = {}
+    public var retryAssistedPush: () -> Void = {}
+    public var dismissAssistedFailure: () -> Void = {}
+    /// The assisted card's Choose Model…: shows the model choice.
+    public var chooseAssistedModel: () -> Void = {}
+    /// Chooses the model the assisted card asked for.
+    public var selectAssistedModel: (SparkleModelChoice) -> Void = { _ in }
 
     public init() {}
 }
@@ -364,18 +482,33 @@ public struct ComposerView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
+            if content.showsModeSwitch {
+                CommitModeSwitch(mode: content.mode) { mode in
+                    // The cards crossfade.
+                    withMotion(motion, Motion.kindChange) {
+                        actions.setMode(mode)
+                    }
+                }
+                .disabled(!content.isModeSwitchEnabled)
+            }
             if content.isAmending {
                 // Grows in over 0.22 s and leaves over 0.15 s (Changes'
                 // column sets the motion).
                 AmendBanner(onStopAmending: actions.stopAmending)
                     .barTransition()
             }
-            card
-            if let failure = content.aiFailure {
-                // Grows in over 0.22 s and leaves over 0.15 s (Changes'
-                // column sets the motion).
-                AIFailureLine(failure, onTryAgain: actions.generate, onOpenSettings: actions.openAISettings)
-                    .barTransition()
+            if let assisted = content.assisted {
+                assistedCard(assisted)
+                    .transition(motion.animates ? .opacity : .identity)
+            } else {
+                card
+                    .transition(motion.animates ? .opacity : .identity)
+                if let failure = content.aiFailure {
+                    // Grows in over 0.22 s and leaves over 0.15 s (Changes'
+                    // column sets the motion).
+                    AIFailureLine(failure, onTryAgain: actions.generate, onOpenSettings: actions.openAISettings)
+                        .barTransition()
+                }
             }
             if let warning = content.warning {
                 CommitWarningView(warning, onLink: actions.openLink)
@@ -406,12 +539,52 @@ public struct ComposerView: View {
             focusBridge.focusSummary()
         }
         .onKeyPress(.escape) {
+            if case .running(_, canCancel: true)? = content.assisted?.status {
+                actions.cancelAssisted()
+                return .handled
+            }
             guard content.isGenerating else {
                 return .ignored
             }
             actions.cancelGeneration()
             return .handled
         }
+    }
+
+    /// The card in Assisted: the run's status in place of the message
+    /// fields, the co-authors while they show, and the footer without the
+    /// sparkle (the model writes every message).
+    private func assistedCard(_ assisted: AssistedCommitContent) -> some View {
+        VStack(spacing: 0) {
+            AssistedCommitStatusView(assisted, actions: AssistedCommitActions(
+                cancel: actions.cancelAssisted,
+                retryUndo: actions.retryAssistedUndo,
+                retryPush: actions.retryAssistedPush,
+                dismiss: actions.dismissAssistedFailure,
+                openSettings: actions.openAISettings,
+                chooseModel: actions.chooseAssistedModel
+            ))
+            .padding(.horizontal, Metrics.Composer.cardPadding)
+            .padding(.vertical, Metrics.insetMedium)
+            .popoverCard(item: assistedModelPopover, title: SparklePopover.chooseModel.title) { _ in
+                AIModelPopover(content.modelChoices, onChoose: actions.selectAssistedModel)
+            }
+            if content.showsCoAuthors(draft) {
+                coAuthorsSection
+            }
+            Hairline()
+            footer(showsSparkle: false)
+        }
+        .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+    }
+
+    /// The model choice the assisted card asked for, on the sparkle's
+    /// popover state.
+    private var assistedModelPopover: Binding<SparklePopover?> {
+        Binding(
+            get: { sparklePopover == .chooseModel ? .chooseModel : nil },
+            set: { sparklePopover = $0 }
+        )
     }
 
     /// The commit message card: the summary (semibold), a divider, and the
@@ -469,27 +642,10 @@ public struct ComposerView: View {
             }
             .fieldRegion()
             if content.showsCoAuthors(draft) {
-                // Opens and closes as a bar does (`coAuthorsBinding`).
-                VStack(spacing: 0) {
-                    Hairline()
-                        .padding(.horizontal, Metrics.Composer.cardPadding)
-                    CoAuthorsField(
-                        authors: $draft.coAuthors,
-                        isEditable: !content.isReadOnly,
-                        completions: completions,
-                        focusBridge: focusBridge
-                    )
-                    .padding(.horizontal, Metrics.Composer.cardPadding)
-                    .padding(.vertical, Metrics.grid)
-                    .background {
-                        focusTint(behind: .coAuthors)
-                    }
-                    .fieldRegion()
-                }
-                .barTransition()
+                coAuthorsSection
             }
             Hairline()
-            footer
+            footer(showsSparkle: true)
         }
         .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
         // A field's ring, on the card's edge, while one of its fields has
@@ -501,6 +657,28 @@ public struct ComposerView: View {
                     .disabled(!item.isEnabled)
             }
         }
+    }
+
+    /// The co-authors under a divider. Opens and closes as a bar does
+    /// (`coAuthorsBinding`).
+    private var coAuthorsSection: some View {
+        VStack(spacing: 0) {
+            Hairline()
+                .padding(.horizontal, Metrics.Composer.cardPadding)
+            CoAuthorsField(
+                authors: $draft.coAuthors,
+                isEditable: !content.isReadOnly,
+                completions: completions,
+                focusBridge: focusBridge
+            )
+            .padding(.horizontal, Metrics.Composer.cardPadding)
+            .padding(.vertical, Metrics.grid)
+            .background {
+                focusTint(behind: .coAuthors)
+            }
+            .fieldRegion()
+        }
+        .barTransition()
     }
 
     /// The field the focus tint shows behind: the one with keyboard focus,
@@ -530,20 +708,22 @@ public struct ComposerView: View {
         .accessibilityHidden(true)
     }
 
-    /// The card's footer: the AI button, co-authors, and the options on the
-    /// left, as icon buttons; the author on the right. The commit button
-    /// names the branch.
-    private var footer: some View {
+    /// The card's footer: the AI button (not in Assisted), co-authors, and
+    /// the options on the left, as icon buttons; the author on the right.
+    /// The commit button names the branch.
+    private func footer(showsSparkle: Bool) -> some View {
         HStack(spacing: 0) {
-            SparkleButton(content.sparkle, action: actions.generate)
-                .popoverCard(item: $sparklePopover, title: sparklePopover?.title) { popover in
-                    switch popover {
-                    case .setup:
-                        AISetupPopover(onOpenSettings: actions.openAISettings)
-                    case .chooseModel:
-                        AIModelPopover(content.modelChoices, onChoose: actions.chooseModel)
+            if showsSparkle {
+                SparkleButton(content.sparkle, action: actions.generate)
+                    .popoverCard(item: $sparklePopover, title: sparklePopover?.title) { popover in
+                        switch popover {
+                        case .setup:
+                            AISetupPopover(onOpenSettings: actions.openAISettings)
+                        case .chooseModel:
+                            AIModelPopover(content.modelChoices, onChoose: actions.chooseModel)
+                        }
                     }
-                }
+            }
             if content.showsCoAuthorsToggle {
                 // On, the symbol fills in the accent: a symbol replace, on
                 // the field's motion (`coAuthorsBinding`).
@@ -563,7 +743,11 @@ public struct ComposerView: View {
                 .accessibilityLabel("Co-Authors")
             }
             if content.showsCommitOptions {
-                CommitOptionsMenu(content.options, onToggleAmend: actions.toggleAmend) { options = $0 }
+                CommitOptionsMenu(
+                    content.options,
+                    onToggleAmend: actions.toggleAmend,
+                    onTogglePush: actions.togglePushAfterCommitting
+                ) { options = $0 }
             }
             Spacer(minLength: Metrics.insetSmall)
             AuthorAvatarButton(
@@ -836,6 +1020,19 @@ struct ComposerController {
         actions.updateEmail = { email in Task { await updateEmail(email) } }
         actions.openLink = { url in openLink(url) }
         actions.setSpellChecking = { [context] isOn in context.app.preferences.commitSpellcheckEnabled = isOn }
+        actions.setMode = { mode in repository.commit.setMode(mode) }
+        actions.togglePushAfterCommitting = {
+            repository.commit.setPushesAfterAssistedCommits(!repository.commit.pushesAfterAssistedCommits)
+        }
+        actions.cancelAssisted = { repository.commit.cancelAssistedCommit() }
+        actions.retryAssistedUndo = { Task { await retryAssistedUndo() } }
+        actions.retryAssistedPush = { Task { await retryAssistedPush() } }
+        actions.dismissAssistedFailure = { repository.commit.dismissAssistedCommitFailure() }
+        actions.chooseAssistedModel = { [context] in ChangesWindowState.of(context).sparklePopover = .chooseModel }
+        actions.selectAssistedModel = { [context] choice in
+            context.app.ai.select(model: choice.id, for: .commitMessageGeneration)
+            ChangesWindowState.of(context).sparklePopover = nil
+        }
         return actions
     }
 
@@ -869,6 +1066,10 @@ struct ComposerController {
     /// interrupts "Committing" after a fast commit. A failure's alert or
     /// sheet speaks for itself.
     func commit() async {
+        if windowState.composerContent(repository, context: context).assisted != nil {
+            await commitAssisted()
+            return
+        }
         let repository = repository
         let announcer = context.announcer
         let isAmending = repository.commit.amending != nil
@@ -888,6 +1089,78 @@ struct ComposerController {
         }
         if result != nil, context.repository === repository {
             context.state.searchText = ""
+        }
+    }
+
+    /// Commits with AI through the presenter, which asks the commit's gates,
+    /// then for consent before the provider's first request. A failure of
+    /// the run shows in the assisted card; one before it (no model, the
+    /// repository's rules) in an alert. Success says how many commits were
+    /// made.
+    func commitAssisted() async {
+        let app = context.app
+        let repository = repository
+        let repositoryID = repository.id
+        let announcer = context.announcer
+        let started = Task {
+            await Observing.until { repository.commit.assisted.isRunning }
+            if !Task.isCancelled {
+                announcer.announce("Committing with AI", priority: .medium)
+            }
+        }
+        defer { started.cancel() }
+        do throws(OperationError) {
+            let result = try await context.presenter.performThrowing { answers throws(OperationError) in
+                do throws(OperationError) {
+                    return try await repository.commit.commitAssisted(confirmed: answers.confirmed)
+                } catch {
+                    guard case .ai(.consentRequired) = error.reason, let disclosure = app.ai.disclosure(for: .commitMessageGeneration) else {
+                        throw error
+                    }
+                    guard await askConsent(AIConsentContent(disclosure)) else {
+                        throw OperationError(.cancelled(.userCancelled), operation: .commit, repositoryID: repositoryID)
+                    }
+                    app.ai.recordConsent(disclosure.consentIdentifier)
+                    return try await repository.commit.commitAssisted(confirmed: answers.confirmed)
+                }
+            }
+            guard let result else {
+                return
+            }
+            let count = result.commits.count
+            let message = count == 1 ? "Made 1 commit" : "Made \(count) commits"
+            context.presenter.show(Toast(message))
+            announcer.announce(message)
+            if context.repository === repository {
+                context.state.searchText = ""
+            }
+        } catch {
+            switch repository.commit.assisted {
+            case .failed(let kept) where kept == error, .recoveryNeeded(let kept) where kept == error:
+                // The card shows it.
+                break
+            default:
+                context.presenter.present(error)
+            }
+        }
+    }
+
+    /// Tries undoing the last assisted commit again. A failure stays in the
+    /// card.
+    func retryAssistedUndo() async {
+        do throws(OperationError) {
+            try await repository.commit.retryAssistedCommitRecovery()
+        } catch {
+            if case .busy = error.reason {
+                context.presenter.present(error)
+            }
+        }
+    }
+
+    /// Pushes the assisted commits again.
+    func retryAssistedPush() async {
+        if let outcome = await repository.commit.retryAssistedCommitPush() {
+            context.presenter.report(.push(outcome, repositoryID: repository.id))
         }
     }
 

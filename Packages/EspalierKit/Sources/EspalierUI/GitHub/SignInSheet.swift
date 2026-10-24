@@ -1,11 +1,11 @@
 // The device-flow sign-in sheet, on `SignInModel`: the Enterprise address,
-// the existing account, git's request ("Git is asking for credentials to
-// access <url>.") with its confirmation for an Enterprise Server the user
-// hasn't signed in to, and the errors.
+// git's request ("Git is asking for credentials to access <url>.") with its
+// confirmation for an Enterprise Server the user hasn't signed in to, the
+// account to sign in as when signing in again to one, and the errors.
 //
 // The steps: an Enterprise address and OAuth app (EnterpriseAddressStep),
-// the note about the account a sign-in replaces, then the code with Copy
-// Code and the server's verification page (pressing it also copies the
+// then the code with Copy Code and the server's verification page (pressing
+// it also copies the
 // code), "Waiting for you to authorize Espalier…" and the time left, inline
 // errors with Get a New Code or Try Again, and "Signed in as @login" for a
 // second. Whoever showed the sheet gets the account (git's prompt answers
@@ -40,18 +40,35 @@ nonisolated public struct SignInRequest: Sendable, Equatable {
     /// asked about.
     public var endpoint: String?
     public var reason: Reason
+    /// The account to sign in again to (one signed out, a repository's), on
+    /// `endpoint`: another account authorizing the code signs nobody in.
+    public var login: String?
 
-    public init(endpoint: String?, reason: Reason = .user) {
+    public init(endpoint: String?, reason: Reason = .user, login: String? = nil) {
         self.endpoint = endpoint
         self.reason = reason
+        self.login = login
     }
 
-    /// The sheet's header for git's prompt.
+    /// The sheet's header: git's prompt, or the account to sign in as.
     public var header: String? {
         if case .gitRequestedCredentials(let url) = reason {
             return "Git is asking for credentials to access \(url)."
         }
+        if let login {
+            let host = endpoint.flatMap { (try? JSURL(getHTMLURL($0)))?.host } ?? "github.com"
+            return "Sign in as @\(login) on \(host) to continue."
+        }
         return nil
+    }
+
+    /// Whether the code is asked for at once: unless git asked, which waits
+    /// for the user.
+    var asksForCodeAtOnce: Bool {
+        if case .gitRequestedCredentials = reason {
+            return false
+        }
+        return true
     }
 
     /// Whether the sign-in is to an Enterprise server, as far as the request
@@ -84,8 +101,6 @@ nonisolated struct SignInContent: Sendable, Equatable {
     enum Step: Sendable, Equatable {
         /// The Enterprise server's address and OAuth app.
         case address(EnterpriseAddressContent)
-        /// An account is signed in to the server; signing in replaces it.
-        case existingAccount(host: String, login: String, error: String?, isBusy: Bool)
         /// Git asked to sign in to an Enterprise Server the user hasn't
         /// signed in to.
         case confirmServer(address: String)
@@ -105,7 +120,6 @@ nonisolated struct SignInContent: Sendable, Equatable {
         var kind: Int {
             switch self {
             case .address: 0
-            case .existingAccount: 1
             case .confirmServer: 2
             case .ready: 3
             case .requestingCode: 4
@@ -179,7 +193,7 @@ extension SignInContent {
         case nil:
             // Before the sign-in starts: git's request waits for the user;
             // the others ask for a code at once.
-            step = request.header == nil ? .requestingCode : .ready
+            step = request.asksForCodeAtOnce ? .requestingCode : .ready
         case .endpointEntry(let entry)?:
             step = .address(EnterpriseAddressContent(
                 address: entry.address,
@@ -187,13 +201,6 @@ extension SignInContent {
                 error: entry.error?.message,
                 isChecking: entry.loading
             ))
-        case .existingAccountWarning(let warning)?:
-            step = .existingAccount(
-                host: Self.host(warning.configuration.endpoint),
-                login: warning.existingAccount.login,
-                error: warning.error?.message,
-                isBusy: warning.loading
-            )
         case .authentication(let authentication)?:
             if let error = authentication.error {
                 step = .failed(message: error.message, retryTitle: error == .codeExpired ? "Get a New Code" : "Try Again")
@@ -316,9 +323,9 @@ public struct SignInSheet: View {
 
     /// Begins the sign-in `request` asks for on `signIn`, reporting how it
     /// ends to `callback`: git's request waits for the user; GitHub.com's
-    /// shows a code at once (after the note about an account it replaces);
-    /// a new Enterprise account asks for the server; a known server (a
-    /// recovery, Sign In Again) asks for a code at once.
+    /// shows a code at once; a new Enterprise account asks for the server; a
+    /// known server (a recovery, Sign In Again, a login to sign in as) asks
+    /// for a code at once.
     static func begin(_ request: SignInRequest, signIn: SignInModel, callback: @escaping @MainActor (SignInResult) -> Void) async {
         switch request.reason {
         case .gitRequestedCredentials(let url):
@@ -331,7 +338,7 @@ public struct SignInSheet: View {
             case SignInRequest.enterpriseEndpoint?:
                 signIn.beginEnterpriseSignIn(callback)
             case let endpoint?:
-                await signIn.beginSignIn(endpoint: endpoint, callback)
+                await signIn.beginSignIn(endpoint: endpoint, login: request.login, callback)
             }
         }
     }
@@ -341,7 +348,7 @@ public struct SignInSheet: View {
     /// Server to confirm wait for the user.
     static func requestCodeIfReady(_ signIn: SignInModel, request: SignInRequest) async {
         guard case .authentication(let authentication)? = signIn.state, authentication.code == nil, !authentication.loading,
-              authentication.error == nil, !authentication.isUnrecognizedEnterpriseServer, request.header == nil
+              authentication.error == nil, !authentication.isUnrecognizedEnterpriseServer, request.asksForCodeAtOnce
         else {
             return
         }
@@ -424,23 +431,6 @@ struct SignInView: View {
         switch content.step {
         case .address(let address):
             EnterpriseAddressStep(content: address, cancel: actions.cancel, submit: actions.submitAddress)
-
-        case .existingAccount(let host, let login, let error, let isBusy):
-            Text("You're already signed in to \(host) with the account \(login). If you sign in with another account, it replaces \(login).")
-                .foregroundStyle(.text2)
-                .fixedSize(horizontal: false, vertical: true)
-            if let error {
-                // Fades in over 0.22 s and out over 0.15 s. It comes with
-                // Continue enabling again, which draws at once, so the
-                // buttons below shift at once too.
-                SignInInlineError(message: error)
-                    .barTransition()
-            }
-            buttons {
-                Button("Continue", action: actions.continueSignIn)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(isBusy)
-            }
 
         case .confirmServer(let address):
             Text("Git is requesting permission to sign in to this server:")

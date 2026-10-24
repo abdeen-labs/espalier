@@ -72,7 +72,8 @@ public final class MultiCommitOperationsModel: RepositoryFeature {
     // MARK: Derived state
 
     /// The branches on each side of the conflicts, for labels: a merge's
-    /// current branch and the branch it merges; a rebase's base and the
+    /// current branch and the branch it merges; a rebase's base (for one
+    /// started elsewhere, a branch at the commit it rebases onto) and the
     /// branch being rebased; a squash's or reorder's branch and "squash
     /// commit" or "reorder commit"; a cherry-pick's target and source.
     public var conflictBranches: ConflictBranches? {
@@ -88,15 +89,35 @@ public final class MultiCommitOperationsModel: RepositoryFeature {
             return ConflictBranches(ours: targetBranch, theirs: "squash commit")
         case (.rebase(_, let targetBranch, _, _, _, _), .reorder?):
             return ConflictBranches(ours: targetBranch, theirs: "reorder commit")
-        case (.rebase(_, let targetBranch, let baseBranch, _, _, _), .rebase(let sourceBranch, _, _)?):
-            return ConflictBranches(ours: baseBranch ?? sourceBranch?.name, theirs: targetBranch)
-        case (.rebase(_, let targetBranch, let baseBranch, _, _, _), _):
-            return ConflictBranches(ours: baseBranch, theirs: targetBranch)
+        case (.rebase(_, let targetBranch, let baseBranch, _, let baseBranchTip, _), .rebase(let sourceBranch, _, _)?):
+            return ConflictBranches(
+                ours: baseBranch ?? sourceBranch?.name ?? branchName(at: baseBranchTip, rebasing: targetBranch),
+                theirs: targetBranch
+            )
+        case (.rebase(_, let targetBranch, let baseBranch, _, let baseBranchTip, _), _):
+            return ConflictBranches(ours: baseBranch ?? branchName(at: baseBranchTip, rebasing: targetBranch), theirs: targetBranch)
         case (.cherryPick(let targetBranchName, _), .cherryPick(let sourceBranch, _, _)?):
             return ConflictBranches(ours: targetBranchName, theirs: sourceBranch?.name)
         case (.cherryPick(let targetBranchName, _), _), (.revert(let targetBranchName, _), _):
             return ConflictBranches(ours: targetBranchName, theirs: nil)
         }
+    }
+
+    /// A branch whose tip is `sha`, the commit a rebase of `target` started
+    /// elsewhere rebases onto (git keeps the commit, not the branch): the
+    /// rebased branch's upstream, the default branch, a local branch, then a
+    /// remote branch, by name; nil when no branch is there.
+    private func branchName(at sha: String, rebasing target: String) -> String? {
+        guard let branches = repository?.gitState.branches else {
+            return nil
+        }
+        let isAtTip = { (branch: Branch) in branch.tip.sha == sha && ExactString(branch.name) != ExactString(target) }
+        let upstream = branches.upstreams[ExactString("refs/heads/\(target)")]
+        let byName = { (lhs: Branch, rhs: Branch) in JSCompat.compare(lhs.name, rhs.name) < 0 }
+        let local = branches.all.filter { $0.type == .local && isAtTip($0) }.sorted(by: byName)
+        let remote = (branches.all + Array(branches.upstreams.values)).filter { $0.type == .remote && isAtTip($0) }.sorted(by: byName)
+        let candidates = [upstream, branches.defaultBranch].compactMap(\.self).filter(isAtTip) + local + remote
+        return candidates.first?.name
     }
 
     /// The conflicted files that still need the user: conflict markers left,

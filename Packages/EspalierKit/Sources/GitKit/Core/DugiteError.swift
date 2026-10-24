@@ -136,7 +136,9 @@ extension DugiteError {
         (#"fatal: path '(.+)' does not exist .+"#, .pathDoesNotExist),
         (#"fatal: invalid object name '(.+)'."#, .invalidObjectName),
         (#"fatal: .+: '(.+)' is outside repository"#, .outsideRepository),
-        (#"Another git process seems to be running in this repository, e.g."#, .lockFileAlreadyExists),
+        // Git 2.56 ends the sentence ", or the lock file may be stale";
+        // earlier versions go on with ", e.g.".
+        (#"Another git process seems to be running in this repository"#, .lockFileAlreadyExists),
         (#"fatal: There is no merge to abort"#, .noMergeToAbort),
         (#"error: (?:Your local changes to the following|The following untracked working tree) files would be overwritten by checkout:"#, .localChangesOverwritten),
         (#"You must edit all merge conflicts and then\nmark them as resolved using git add|fatal: Exiting because of an unresolved conflict"#, .unresolvedConflicts),

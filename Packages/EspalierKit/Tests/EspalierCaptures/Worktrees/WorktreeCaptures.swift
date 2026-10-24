@@ -13,13 +13,14 @@ import Testing
 struct WorktreeCaptures {
     private let area = "Worktrees"
 
-    @Test("rows: the main worktree highlighted, the window's worktree (semibold), a locked one, and a detached one")
+    @Test("rows: the main worktree highlighted, the window's worktree (semibold), a locked one, a detached one, and a missing one")
     func rows() {
         let rows = [
             WorktreeRowContent(path: "/Users/joe/Developer/espalier", detail: "main", isMain: true, isCurrent: false, isLocked: false),
             WorktreeRowContent(path: "/Users/joe/Developer/espalier-login", detail: "feature/login", isMain: false, isCurrent: true, isLocked: false),
             WorktreeRowContent(path: "/Users/joe/Developer/espalier-release", detail: "release/2.0", isMain: false, isCurrent: false, isLocked: true),
             WorktreeRowContent(path: "/Users/joe/Developer/espalier-bisect", detail: "a1b2c3d", isDetached: true, isMain: false, isCurrent: false, isLocked: false),
+            WorktreeRowContent(path: "/Users/joe/Developer/espalier-spike", detail: "spike/sync", isMain: false, isCurrent: false, isLocked: false, isMissing: true),
         ]
         let list = VStack(alignment: .leading, spacing: 2) {
             ListGroupLabel("Worktrees")

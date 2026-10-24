@@ -1,6 +1,8 @@
 // The alert for an account signed out because GitHub rejected its token, or
-// the token expired or is missing: "Signed Out" [Not Now] [Sign In…]. Sign In… opens the
-// sign-in sheet for that server, with what Espalier knows of it filled in.
+// the token expired or is missing: "Signed Out" [Not Now] [Sign In…], naming
+// the account. Sign In… opens the sign-in sheet to sign in again to that
+// account, other accounts on the server staying signed in, with what
+// Espalier knows of the server filled in.
 // Problems reading or storing the accounts show as alerts too. Both show on
 // the main window, once each.
 
@@ -15,7 +17,7 @@ enum InvalidatedAccountAlert {
     nonisolated static func content(for account: Account) -> AlertContent {
         AlertContent(
             title: "Signed Out",
-            message: "The token for your \(account.friendlyEndpoint) account is no longer valid, so you've been signed out. Sign in again?",
+            message: "The token for @\(account.login) on \(account.friendlyEndpoint) is no longer valid, so you've been signed out of it. Sign in again?",
             buttons: [AlertContent.Button("Sign In…", role: .primary), AlertContent.Button("Not Now", role: .cancel)]
         )
     }
@@ -33,7 +35,7 @@ enum InvalidatedAccountAlert {
             Task {
                 let response = await context.modals.alert(content(for: account))
                 if response.buttonIndex == 0 {
-                    context.actions.perform(.signIn(endpoint: account.endpoint, then: nil))
+                    GitHubActions.presentSignIn(SignInRequest(endpoint: account.endpoint, login: account.login), then: nil, in: context)
                 }
             }
         }
@@ -55,16 +57,16 @@ enum InvalidatedAccountAlert {
 /// GitHub's per-window state.
 @MainActor
 final class GitHubWindowState {
-    /// The endpoints whose invalidated accounts have been alerted.
-    var alertedInvalidatedAccounts: Set<String> = []
+    /// The invalidated accounts that have been alerted.
+    var alertedInvalidatedAccounts: Set<AccountIdentity> = []
     /// The account problems shown.
     var shownIssues: Set<AccountsIssue.ID> = []
 
     /// The invalidated accounts not alerted yet. An account signed in again
     /// is forgotten, so it alerts again if it's signed out again.
     func accountsToAlert(_ invalidated: [Account]) -> [Account] {
-        alertedInvalidatedAccounts.formIntersection(invalidated.map(\.endpoint))
-        return invalidated.filter { alertedInvalidatedAccounts.insert($0.endpoint).inserted }
+        alertedInvalidatedAccounts.formIntersection(invalidated.map(\.identity))
+        return invalidated.filter { alertedInvalidatedAccounts.insert($0.identity).inserted }
     }
 
     /// The problems not shown yet.
@@ -81,7 +83,7 @@ struct GitHubPresentationHosts: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onChange(of: context.app.accounts.invalidatedAccounts.map(\.endpoint), initial: true) {
+            .onChange(of: context.app.accounts.invalidatedAccounts.map(\.identity), initial: true) {
                 InvalidatedAccountAlert.presentInvalidatedAccounts(in: context)
             }
             .onChange(of: context.app.accounts.issues.map(\.id), initial: true) {

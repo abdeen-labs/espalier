@@ -17,6 +17,11 @@ final class TrampolineInvocation: Sendable {
     /// prompt.
     let isBackgroundTask: Bool
 
+    /// The account to use when git runs where no repository in the list is
+    /// (a clone): only for a request on its endpoint, and only while it's
+    /// signed in (`GitExecutionOptions.fallbackAccount`).
+    let fallbackAccount: GitFallbackAccount?
+
     /// The runtime of the git invocation, so that commands the handlers run
     /// (Git Credential Manager) use the same git and environment.
     let runtime: GitRuntime
@@ -57,9 +62,10 @@ final class TrampolineInvocation: Sendable {
         state.withLock { $0.signingKeyPassphrases[keyPath] = passphrase }
     }
 
-    init(path: String, isBackgroundTask: Bool, runtime: GitRuntime) {
+    init(path: String, isBackgroundTask: Bool, fallbackAccount: GitFallbackAccount? = nil, runtime: GitRuntime) {
         self.path = path
         self.isBackgroundTask = isBackgroundTask
+        self.fallbackAccount = fallbackAccount
         self.runtime = runtime
     }
 
@@ -183,6 +189,8 @@ public final class TrampolineEnvironment: GitTrampoline {
     /// - Parameters:
     ///   - path: The path git runs in.
     ///   - isBackgroundTask: Whether prompts must be skipped.
+    ///   - fallbackAccount: The account to use when no repository in the
+    ///     list is at `path` (`GitExecutionOptions.fallbackAccount`).
     ///   - customEnv: The environment the caller adds (the hooks
     ///     environment), whose `GIT_CONFIG_PARAMETERS` is kept.
     ///   - operation: Function to invoke with all the necessary environment
@@ -191,6 +199,7 @@ public final class TrampolineEnvironment: GitTrampoline {
     public func withTrampolineEnv<T: Sendable>(
         path: String,
         isBackgroundTask: Bool,
+        fallbackAccount: GitFallbackAccount? = nil,
         customEnv: [String: String?]?,
         _ operation: @concurrent @Sendable ([String: String?]) async throws -> T
     ) async throws -> T {
@@ -199,7 +208,7 @@ public final class TrampolineEnvironment: GitTrampoline {
         let socketPath = try await server.socketPath()
         let userAgent = await memoizedGitUserAgent(runtime: runtime)
 
-        let invocation = TrampolineInvocation(path: path, isBackgroundTask: isBackgroundTask, runtime: runtime)
+        let invocation = TrampolineInvocation(path: path, isBackgroundTask: isBackgroundTask, fallbackAccount: fallbackAccount, runtime: runtime)
         let handler = InvocationCommandHandler(environment: self, invocation: invocation)
 
         return try await server.withTrampolineToken(handler) { token in

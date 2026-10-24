@@ -106,7 +106,7 @@ final class BackgroundFetcher: SelectionScopedService {
             return nil
         }
 
-        let interval = await fetchInterval(repository.record.gitHubRepository)
+        let interval = await fetchInterval(repository.record)
         guard generation == self.generation else {
             return nil
         }
@@ -115,12 +115,12 @@ final class BackgroundFetcher: SelectionScopedService {
     }
 
     /// The allowed fetch interval from the server for a GitHub repository,
-    /// else the default, plus the skew.
+    /// asked with its assigned account, else the default, plus the skew.
     ///
     /// `X-Poll-Interval` is in seconds, as GitHub documents it.
-    private func fetchInterval(_ gitHubRepository: GitHubRepository?) async -> Duration {
+    private func fetchInterval(_ record: RepositoryRecord) async -> Duration {
         var interval = Self.defaultInterval
-        if let gitHubRepository, let account = getAccountForEndpoint(accounts.accounts, gitHubRepository.endpoint) {
+        if let gitHubRepository = record.gitHubRepository, let account = accounts.account(for: record) {
             let api = API.fromAccount(account, runtime: environment.gitHub)
             let pollInterval = await api.getFetchPollInterval(owner: gitHubRepository.owner.login, name: gitHubRepository.name)
             if let pollInterval, pollInterval > 0 {

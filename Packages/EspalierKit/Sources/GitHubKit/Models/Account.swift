@@ -1,5 +1,6 @@
 // Ported from desktop/app/src/models/account.ts
 
+import EspalierSupport
 import Foundation
 
 /// Returns a value indicating whether two account instances
@@ -10,6 +11,53 @@ import Foundation
 /// and a particular account.
 public func accountEquals(_ x: Account, _ y: Account) -> Bool {
     x.endpoint == y.endpoint && x.id == y.id
+}
+
+/// Identifies an account by its endpoint and login, without any of its
+/// credentials. Several accounts can be signed in to one endpoint, so the
+/// endpoint alone doesn't name one.
+///
+/// Two identities are equal when `getAccountKey` gives them the same key:
+/// logins (and endpoints) compare ignoring case, as GitHub's do. The values
+/// keep the case they were given, for showing.
+public struct AccountIdentity: Sendable, Hashable, Codable, CustomStringConvertible {
+    /// The account's API endpoint.
+    public let endpoint: String
+    /// The account's login.
+    public let login: String
+
+    public init(endpoint: String, login: String) {
+        self.endpoint = endpoint
+        self.login = login
+    }
+
+    /// The key the identity compares and hashes by.
+    public var key: String {
+        getAccountKey(endpoint, login)
+    }
+
+    public static func == (lhs: AccountIdentity, rhs: AccountIdentity) -> Bool {
+        lhs.key == rhs.key
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(key)
+    }
+
+    public var description: String {
+        "@\(login) on \(endpoint)"
+    }
+}
+
+/// A key naming an account by its endpoint and login, ignoring case: the
+/// canonical API URL of the user.
+public func getAccountKey(_ endpoint: String, _ login: String) -> String {
+    JSCompat.toLowerCase("\(endpoint)/users/\(login)")
+}
+
+/// Whether `x` and `y` are the same account, by endpoint and login.
+public func isSameAccount(_ x: AccountIdentity, _ y: AccountIdentity?) -> Bool {
+    y.map { $0 == x } ?? false
 }
 
 /// A GitHub account, representing the user found on GitHub The Website or GitHub Enterprise.
@@ -118,6 +166,11 @@ public struct Account: Sendable, Hashable {
     /// The credentials git uses for this account.
     public var gitAccount: GitAccount {
         GitAccount(login: login, endpoint: endpoint, token: token)
+    }
+
+    /// The account's endpoint and login.
+    public var identity: AccountIdentity {
+        AccountIdentity(endpoint: endpoint, login: login)
     }
 
     /// Get a name to display

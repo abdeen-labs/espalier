@@ -19,14 +19,16 @@ extension AppModel {
         async let loadResult = listStore.load()
         async let loadedAccounts = environment.accountsStore.getAllWithUnreadable()
         let (result, (accounts, unreadableAccounts)) = await (loadResult, loadedAccounts)
+        let persistedIdentities = await environment.accountsStore.getPersistedIdentities()
 
+        var migrated = false
         switch result {
         case .empty:
             break
         case .loaded(let document):
-            apply(document)
+            migrated = apply(document, identities: persistedIdentities)
         case .recovered(let document, let movedAside):
-            apply(document)
+            migrated = apply(document, identities: persistedIdentities)
             persistenceIssue = .repositoryListUnreadable(movedTo: movedAside)
         case .newerVersion(let version):
             persistenceIssue = .repositoryListFromNewerVersion(version)
@@ -35,6 +37,10 @@ extension AppModel {
         }
         self.accounts.load(accounts, unreadable: unreadableAccounts)
         loadState = .ready
+        if migrated {
+            // The assignments are saved at once, so they're made only once.
+            persist()
+        }
         logger.info("Loaded \(self.repositories.count) repositories and \(accounts.count) accounts")
 
         if let id = persistedSelectionID, record(id) != nil {
@@ -48,6 +54,18 @@ extension AppModel {
         ai.applicationDidLaunch()
         background.update()
         background.observePreferences()
+    }
+
+    /// Takes the loaded list, assigning accounts to the repositories saved
+    /// before repositories had them, from `identities` (every account saved
+    /// at launch). Returns whether any was.
+    private func apply(_ document: RepositoryListDocument, identities: [AccountIdentity]) -> Bool {
+        let migrated = document.migratingAccountAssignments(identities)
+        if migrated != nil {
+            logger.info("Assigned accounts to the repositories saved before repositories had them")
+        }
+        apply(migrated ?? document)
+        return migrated != nil
     }
 
     private func apply(_ document: RepositoryListDocument) {

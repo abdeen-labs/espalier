@@ -169,26 +169,49 @@ nonisolated final class TestPrompter: TrampolinePrompter, Sendable {
     }
 }
 
-/// Signed-in accounts for the credential helper.
+/// Signed-in accounts, and the repositories git runs in, for the
+/// credential helper.
 nonisolated final class TestAccounts: TrampolineAccountsProvider, Sendable {
     private let accounts: Mutex<[TrampolineAccount]>
     private let gitHubHost: @Sendable (String) -> Bool?
     private let unreadable: [String: String]
+    private let repositories: Mutex<[String: TrampolineRepository]>
+    private let associating: @Sendable (TrampolineRepository, String) -> TrampolineRepository
+    private let repositoryAccount: @Sendable (TrampolineRepository) async -> TrampolineAccount?
+    private let prompted = Mutex<[TrampolineRepository]>([])
 
-    /// - Parameter unreadable: The message for each API endpoint whose
-    ///   account's token the keychain wouldn't give.
+    /// - Parameters:
+    ///   - unreadable: The message for each API endpoint whose account's
+    ///     token the keychain wouldn't give.
+    ///   - repositories: The repositories in the list, by the path git runs
+    ///     in.
+    ///   - associate: Associates a repository without a GitHub repository
+    ///     with an endpoint; it stays as it is by default.
+    ///   - repositoryAccount: Answers the question about a repository's
+    ///     account; cancelled by default.
     init(
         _ accounts: [TrampolineAccount] = [],
         unreadable: [String: String] = [:],
-        isGitHubHost: @escaping @Sendable (String) -> Bool? = { _ in false }
+        repositories: [String: TrampolineRepository] = [:],
+        isGitHubHost: @escaping @Sendable (String) -> Bool? = { _ in false },
+        associate: @escaping @Sendable (TrampolineRepository, String) -> TrampolineRepository = { repository, _ in repository },
+        repositoryAccount: @escaping @Sendable (TrampolineRepository) async -> TrampolineAccount? = { _ in nil }
     ) {
         self.accounts = Mutex(accounts)
         self.unreadable = unreadable
+        self.repositories = Mutex(repositories)
         gitHubHost = isGitHubHost
+        associating = associate
+        self.repositoryAccount = repositoryAccount
     }
 
     func add(_ account: TrampolineAccount) {
         accounts.withLock { $0.append(account) }
+    }
+
+    /// The repositories asked about, in order.
+    var promptedRepositories: [TrampolineRepository] {
+        prompted.withLock { $0 }
     }
 
     func getAll() async -> [TrampolineAccount] {
@@ -199,8 +222,27 @@ nonisolated final class TestAccounts: TrampolineAccountsProvider, Sendable {
         gitHubHost(url)
     }
 
-    func unreadableAccountMessage(endpoint: String) async -> String? {
+    func unreadableAccountMessage(endpoint: String, login: String?) async -> String? {
         unreadable[endpoint]
+    }
+
+    func repository(atPath path: String) async -> TrampolineRepository? {
+        repositories.withLock { $0[path] }
+    }
+
+    func associate(_ repository: TrampolineRepository, withEndpoint endpoint: String) async -> TrampolineRepository {
+        let associated = associating(repository, endpoint)
+        repositories.withLock { repositories in
+            for (path, listed) in repositories where listed.id == repository.id {
+                repositories[path] = associated
+            }
+        }
+        return associated
+    }
+
+    func promptForRepositoryAccount(_ repository: TrampolineRepository) async -> TrampolineAccount? {
+        prompted.withLock { $0.append(repository) }
+        return await repositoryAccount(repository)
     }
 }
 

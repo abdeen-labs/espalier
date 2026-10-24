@@ -4,9 +4,10 @@
 // ("Current" or "Incoming" without one) and drawn in that branch's color as
 // the graph draws it: the branch the operation changes (the current branch)
 // in the accent, the default branch in the theme's trunk color, others in
-// their own. Its header holds its Use <branch>'s Version button while the
-// file still needs the user. The common ancestor's block (the diff3 and
-// zdiff3 styles) is "Base", neutral, without a button.
+// their own. Its header, one line of the code's, holds its Use <branch>'s
+// Version button, its title in the branch's color, while the file still
+// needs the user. The common ancestor's block (the diff3 and zdiff3 styles)
+// is "Base", neutral, without a button.
 
 import AppKit
 import EspalierCore
@@ -65,12 +66,12 @@ struct ConflictBlocks: Equatable {
             file: file,
             ours: Side(
                 name: ConflictFileRowContent.sideName(branches?.ours, side: .ours),
-                color: color(of: branches?.ours, side: .ours, repository: repository),
+                color: color(of: branches?.ours, side: .ours, otherSide: branches?.theirs, repository: repository),
                 buttonTitle: offersButtons ? row.oursVersionTitle : nil
             ),
             theirs: Side(
                 name: ConflictFileRowContent.sideName(branches?.theirs, side: .theirs),
-                color: color(of: branches?.theirs, side: .theirs, repository: repository),
+                color: color(of: branches?.theirs, side: .theirs, otherSide: branches?.ours, repository: repository),
                 buttonTitle: offersButtons ? row.theirsVersionTitle : nil
             )
         )
@@ -79,16 +80,25 @@ struct ConflictBlocks: Equatable {
     /// A side's color: the branch the operation changes in the accent (a
     /// rebase's branch too, while HEAD is detached), the default branch's
     /// color, else the branch's as the graph draws it. Without a branch,
-    /// ours is the accent (HEAD) and theirs a color no branch has.
+    /// ours is the accent (HEAD), unless the other side's branch has it (a
+    /// rebase's onto a commit no branch is at), and theirs a color no
+    /// branch has; the two sides never share the accent.
     @MainActor
-    static func color(of branch: String?, side: ManualConflictResolution, repository: RepositoryModel) -> NSColor {
+    static func color(of branch: String?, side: ManualConflictResolution, otherSide: String?, repository: RepositoryModel) -> NSColor {
         let colors = BranchColors.of(repository)
+        let target = repository.operations.conflictState?.targetBranchName
+        let isTarget = { (name: String?) in
+            guard let name, let target else {
+                return false
+            }
+            return ExactString(target) == ExactString(name)
+        }
         guard let branch, !branch.isEmpty else {
-            return side == .ours
+            return side == .ours && !isTarget(otherSide)
                 ? Palette.accent
                 : colors.color(forMergedBranch: nil, isPullRequest: false, merge: ConflictFileRowContent.sideName(nil, side: side))
         }
-        if let target = repository.operations.conflictState?.targetBranchName, ExactString(target) == ExactString(branch) {
+        if isTarget(branch) {
             return Palette.accent
         }
         if let defaultBranch = colors.defaultBranch, ExactString(defaultBranch) == ExactString(branch) {
@@ -99,14 +109,14 @@ struct ConflictBlocks: Equatable {
 }
 
 extension DiffTableMetrics {
-    /// Space above and below a conflict block header's button.
-    static let conflictHeaderPadding: CGFloat = 4
     /// Space between a conflict block's name and its button.
     static let conflictHeaderSpacing: CGFloat = 12
+    /// Space on each side of a conflict block button's title, which the
+    /// button's click takes too.
+    static let conflictButtonInset: CGFloat = Metrics.grid
 
-    /// A conflict block header's height: a small capsule button with room
-    /// around it, and never shorter than a line with that room.
+    /// A conflict block header's height: one line of the code's.
     static func conflictHeaderHeight(lineHeight: CGFloat) -> CGFloat {
-        max(Metrics.ControlHeight.small, lineHeight) + 2 * conflictHeaderPadding
+        lineHeight
     }
 }

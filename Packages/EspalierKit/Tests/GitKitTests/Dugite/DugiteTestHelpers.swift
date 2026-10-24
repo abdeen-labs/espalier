@@ -7,7 +7,7 @@ import Testing
 import TestSupport
 
 /// The version of the bundled git: the one in desktop's git build that
-/// scripts/git-version pins ("v2.53.0-4" is a build of git 2.53.0). Reading
+/// scripts/git-version pins ("v2.56.0-1" is a build of git 2.56.0). Reading
 /// it from the pin means bumping git needs no change here.
 let gitVersion: String = {
     let repositoryRoot = (0..<6).reduce(#filePath) { path, _ in POSIXPath.dirname(path) }

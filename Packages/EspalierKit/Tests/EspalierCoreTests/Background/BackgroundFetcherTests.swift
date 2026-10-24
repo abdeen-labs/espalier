@@ -2,7 +2,10 @@
 // and a mock GitHub: the initial skew, the interval (X-Poll-Interval read
 // in seconds, the 5-minute minimum, the hour without one or off GitHub),
 // the 30-minute FETCH_HEAD gate, a repository without a remote, stopping,
-// failures, and a user fetch waiting behind a background one.
+// failures, and a user fetch waiting behind a background one. A fetch's
+// stall watch sleeps on the same scheduler while git runs, so the tests
+// wait for the fetcher's own sleep (`waitForSleep(of:)`) and leave the
+// watch's out of the sleeps they compare.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -35,7 +38,7 @@ struct BackgroundFetcherTests {
         }
     }
 
-    /// A GitHub repository (with `gitHub`) with a bare `origin`, refreshed
+    /// A GitHub repository (with `gitHub`, assigned `testAccount`) with a bare `origin`, refreshed
     /// but not selected, so the app's own fetcher doesn't run; a fetcher of
     /// the test's own on a clock set to now (`FETCH_HEAD`'s dates are real).
     private func makeFixture(skew: Duration = .seconds(7), gitHub: Bool = true) async throws -> Fixture {
@@ -44,7 +47,10 @@ struct BackgroundFetcherTests {
         let app = await harness.loadedApp()
         let id = try #require(try await app.addRepositories([local.path]).added.first)
         if gitHub {
-            app.updateRecord(id) { $0.gitHubRepository = ModelFixtures.gitHubRepository() }
+            app.updateRecord(id) { record in
+                record.gitHubRepository = ModelFixtures.gitHubRepository()
+                record.accountLogin = testAccount.login
+            }
         }
         let model = try #require(app.repository(id))
         await model.refresh(.full, reason: .user)
@@ -59,16 +65,16 @@ struct BackgroundFetcherTests {
 
         fixture.fetcher.start(for: fixture.model, isFirstSelectionSinceLaunch: true)
         #expect(fixture.fetcher.startedWithInitialSkew)
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(7))
         #expect(fixture.scheduler.sleeps == [.seconds(7)])
         #expect(try await fixture.fetchedTip() != pushed)
 
         await fixture.scheduler.advance(by: .seconds(7))
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(60 * 60 + 7))
 
         #expect(try await fixture.fetchedTip() == pushed)
         #expect(fixture.fetcher.lastInterval == .seconds(60 * 60 + 7))
-        #expect(fixture.scheduler.sleeps == [.seconds(7), .seconds(60 * 60 + 7)])
+        #expect(fixture.scheduler.sleepsWithoutStallWatch == [.seconds(7), .seconds(60 * 60 + 7)])
         // The fetch's refresh, which the fetcher doesn't wait for.
         await fixture.model.idle()
         #expect(fixture.model.gitState.aheadBehind == AheadBehind(ahead: 0, behind: 1))
@@ -82,10 +88,10 @@ struct BackgroundFetcherTests {
         let pushed = try await pushCommitFromAnotherClone(fixture.remote, path: "other.txt", contents: "other\n")
 
         fixture.fetcher.start(for: fixture.model, isFirstSelectionSinceLaunch: false)
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(60 * 60 + 7))
 
         #expect(try await fixture.fetchedTip() == pushed)
-        #expect(fixture.scheduler.sleeps == [.zero, .seconds(60 * 60 + 7)])
+        #expect(fixture.scheduler.sleepsWithoutStallWatch == [.zero, .seconds(60 * 60 + 7)])
         fixture.fetcher.stop()
         await fixture.app.idle()
     }
@@ -96,10 +102,10 @@ struct BackgroundFetcherTests {
         let pushed = try await pushCommitFromAnotherClone(fixture.remote, path: "other.txt", contents: "other\n")
 
         fixture.fetcher.start(for: fixture.model, isFirstSelectionSinceLaunch: false)
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(60 * 60 + 7))
 
         #expect(try await fixture.fetchedTip() == pushed)
-        #expect(fixture.scheduler.sleeps == [.zero, .seconds(60 * 60 + 7)])
+        #expect(fixture.scheduler.sleepsWithoutStallWatch == [.zero, .seconds(60 * 60 + 7)])
         #expect(fixture.harness.gitHub.requests.isEmpty)
         fixture.fetcher.stop()
         await fixture.app.idle()
@@ -113,7 +119,7 @@ struct BackgroundFetcherTests {
         #expect(fixture.model.gitState.remotes.all.isEmpty)
 
         fixture.fetcher.start(for: fixture.model, isFirstSelectionSinceLaunch: false)
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(60 * 60 + 7))
         await fixture.model.idle()
 
         // A fetch would have refreshed after it.
@@ -135,7 +141,7 @@ struct BackgroundFetcherTests {
         ])
 
         fixture.fetcher.start(for: fixture.model, isFirstSelectionSinceLaunch: false)
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(600 + 7))
         // The header is in seconds; compared with milliseconds, any header
         // would give 5 minutes.
         #expect(fixture.fetcher.lastInterval == .seconds(600 + 7))
@@ -143,7 +149,7 @@ struct BackgroundFetcherTests {
         for expected in [Duration.seconds(5 * 60 + 7), .seconds(60 * 60 + 7), .seconds(60 * 60 + 7)] {
             let interval = try #require(fixture.fetcher.lastInterval)
             await fixture.scheduler.advance(by: interval)
-            await fixture.scheduler.waitForSleepers(1)
+            await fixture.scheduler.waitForSleep(of: expected)
             #expect(fixture.fetcher.lastInterval == expected)
         }
         #expect(fixture.harness.gitHub.requests("HEAD", "/repos/octocat/app/git").count == 4)
@@ -159,12 +165,12 @@ struct BackgroundFetcherTests {
         let pushed = try await pushCommitFromAnotherClone(fixture.remote, path: "other.txt", contents: "other\n")
 
         fixture.fetcher.start(for: fixture.model, isFirstSelectionSinceLaunch: false)
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(60 * 60 + 7))
         #expect(try await fixture.fetchedTip() != pushed)
         #expect(fixture.fetcher.lastInterval == .seconds(60 * 60 + 7))
 
         await fixture.scheduler.advance(by: .seconds(60 * 60 + 7))
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(60 * 60 + 7))
         #expect(try await fixture.fetchedTip() == pushed)
         fixture.fetcher.stop()
         await fixture.app.idle()
@@ -174,7 +180,7 @@ struct BackgroundFetcherTests {
     func stopping() async throws {
         let fixture = try await makeFixture()
         fixture.fetcher.start(for: fixture.model, isFirstSelectionSinceLaunch: true)
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(7))
         fixture.fetcher.stop()
         #expect(!fixture.fetcher.isRunning)
         await settle(until: { fixture.scheduler.sleeperCount == 0 })
@@ -200,7 +206,7 @@ struct BackgroundFetcherTests {
         try await runGit(["remote", "set-url", "origin", POSIXPath.join(try createTempDirectory(), "gone.git")], fixture.local)
 
         fixture.fetcher.start(for: fixture.model, isFirstSelectionSinceLaunch: false)
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(60 * 60 + 7))
 
         let failure = try #require(fixture.model.lastBackgroundFailure)
         #expect(failure.error.operation == .fetch)
@@ -218,7 +224,7 @@ struct BackgroundFetcherTests {
         let pushed = try await pushCommitFromAnotherClone(fixture.remote, path: "other.txt", contents: "other\n")
 
         fixture.fetcher.start(for: fixture.model, isFirstSelectionSinceLaunch: true)
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(7))
         await fixture.scheduler.advance(by: .seconds(7))
         // The background fetch holds the network lane, waiting in git.
         await waitUntilObserved { fixture.model.networkOperation?.isBackgroundTask == true }
@@ -234,7 +240,7 @@ struct BackgroundFetcherTests {
         #expect(gate.invocations == 4, "a fetch and a remote HEAD update for each")
         #expect(try await fixture.fetchedTip() == pushed)
         #expect(fixture.model.networkOperation == nil)
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(60 * 60 + 7))
         fixture.fetcher.stop()
         await fixture.app.idle()
     }

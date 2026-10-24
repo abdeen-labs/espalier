@@ -47,6 +47,8 @@ public enum OperationKind: String, Sendable, Hashable, CaseIterable {
 
     /// Signing out of a GitHub account.
     case signOut
+    /// Choosing the GitHub account a repository uses.
+    case assignAccount
 
     /// Giving GitHub Desktop's links (`x-github-client`, `github-mac`) to
     /// Espalier or back to GitHub Desktop.
@@ -84,7 +86,7 @@ public enum OperationKind: String, Sendable, Hashable, CaseIterable {
         case .fetch, .fetchRefspec, .push, .publishRepository, .deleteRemoteBranch, .clone,
              .addRepository, .removeRepository, .relocateRepository, .createRepository,
              .openInEditor, .openInShell, .openFile, .updateLFSFilters, .setGlobalGitConfig, .generateCommitMessage, .resolveConflicts,
-             .updateAIProviders, .signOut, .createPullRequest, .setLinkHandler, .forwardLink, .installCommandLineTool, .openLink:
+             .updateAIProviders, .signOut, .assignAccount, .createPullRequest, .setLinkHandler, .forwardLink, .installCommandLineTool, .openLink:
             false
         case .loadChangesDiff, .loadStashedChanges, .loadHistory, .loadDiff:
             false

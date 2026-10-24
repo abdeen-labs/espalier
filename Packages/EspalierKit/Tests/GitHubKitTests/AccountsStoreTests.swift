@@ -240,17 +240,101 @@ struct AccountsStoreTests {
             #expect(await store.getAll() == [dotCom, first, second])
         }
 
-        @Test("replaces the account for the same endpoint once the new one signs in")
-        func replacesAccountForEndpoint() async throws {
+        @Test("keeps several accounts and their tokens on one endpoint", arguments: [
+            NamedCase("GitHub.com", getDotComAPIEndpoint()),
+            NamedCase("an Enterprise server", "https://enterprise.example.com/api/v3"),
+        ])
+        func keepsAccountsOnOneEndpoint(_ testCase: NamedCase<String>) async throws {
+            let data = InMemoryDataStore()
+            let secure = InMemorySecretStore()
+            let store = AccountsStore(dataStore: data, secureStore: secure)
+            let first = account("first", endpoint: testCase.value, id: 1, token: "first-token")
+            let second = account("second", endpoint: testCase.value, id: 2, token: "second-token")
+
+            try await store.addAccount(first)
+            try await store.addAccount(second)
+
+            #expect(await store.getAll() == [first, second])
+            let reloaded = AccountsStore(dataStore: data, secureStore: secure)
+            #expect(await reloaded.getAll() == [first, second])
+
+            try await reloaded.removeAccount(first)
+            #expect(await reloaded.getAll() == [second])
+            #expect(try secure.secret(service: getKeyForAccount(first), account: "first") == nil)
+            #expect(try secure.secret(service: getKeyForAccount(second), account: "second") == "second-token")
+        }
+
+        @Test("signing in again to an account replaces it where it is, matching the endpoint and login ignoring case")
+        func replacesSameAccountInPlace() async throws {
             let secure = InMemorySecretStore()
             let store = AccountsStore(dataStore: InMemoryDataStore(), secureStore: secure)
-            let octocat = account("octocat", token: "old")
-            try await store.addAccount(octocat)
-            try await store.addAccount(account("monalisa", id: 2, token: "new"))
+            let first = account("first", endpoint: "https://enterprise.example.com/api/v3", id: 1, token: "old-token")
+            let second = account("second", endpoint: "https://enterprise.example.com/api/v3", id: 2, token: "second-token")
+            let refreshed = account("FIRST", endpoint: "https://ENTERPRISE.EXAMPLE.COM/API/V3", id: 1, token: "new-token")
+            try await store.addAccount(first)
+            try await store.addAccount(second)
 
-            #expect(await store.getAll().map(\.login) == ["monalisa"])
-            #expect(try secure.secret(service: getKeyForAccount(octocat), account: "monalisa") == "new")
-            #expect(try secure.secret(service: getKeyForAccount(octocat), account: "octocat") == nil)
+            try await store.addAccount(refreshed)
+
+            #expect(await store.getAll() == [refreshed, second])
+            #expect(try secure.secret(service: getKeyForAccount(first), account: "first") == nil)
+            #expect(try secure.secret(service: getKeyForAccount(refreshed), account: "FIRST") == "new-token")
+        }
+
+        @Test("signs out only the account on the endpoint whose token GitHub rejected")
+        func invalidatesByToken() async throws {
+            let secure = InMemorySecretStore()
+            let store = AccountsStore(dataStore: InMemoryDataStore(), secureStore: secure)
+            let first = account("first", id: 1, token: "first-token")
+            let second = account("second", id: 2, token: "second-token")
+            try await store.addAccount(first)
+            try await store.addAccount(second)
+
+            try await store.invalidateToken(endpoint: getDotComAPIEndpoint(), token: "second-token")
+            #expect(await store.getAll() == [first])
+            #expect(try secure.secret(service: getKeyForAccount(second), account: "second") == nil)
+
+            // A token no account holds any more signs nobody out.
+            try await store.invalidateToken(endpoint: getDotComAPIEndpoint(), token: "second-token")
+            #expect(await store.getAll() == [first])
+        }
+
+        @Test("an account saved twice loads once, with its last entry in its first's place")
+        func dedupesSavedAccounts() async throws {
+            let data = InMemoryDataStore()
+            data.setItem("users", """
+            [{"login":"joan","endpoint":"https://api.github.com","emails":[],"avatarURL":"","id":1,"name":"Old"},\
+            {"login":"bob","endpoint":"https://api.github.com","emails":[],"avatarURL":"","id":2,"name":"Bob"},\
+            {"login":"JOAN","endpoint":"https://api.github.com","emails":[],"avatarURL":"","id":1,"name":"New"}]
+            """)
+            let secure = InMemorySecretStore()
+            try secure.setSecret("joan-token", service: getKeyForEndpoint(getDotComAPIEndpoint()), account: "JOAN")
+            try secure.setSecret("bob-token", service: getKeyForEndpoint(getDotComAPIEndpoint()), account: "bob")
+            let store = AccountsStore(dataStore: data, secureStore: secure)
+
+            let loaded = await store.getAll()
+            #expect(loaded.map(\.login) == ["JOAN", "bob"])
+            #expect(loaded.map(\.name) == ["New", "Bob"])
+            #expect(try persistedUsers(data).map { $0["login"] } == ["JOAN", "bob"])
+        }
+
+        @Test("keeps the old details of an account GitHub renamed to the login of another account here")
+        func keepsRenameThatCollides() async throws {
+            let mock = MockGitHub()
+            mock.on("GET", "/user") { request in
+                // The first account's token now belongs to the second's login.
+                request.header("Authorization") == "Bearer first-token"
+                    ? .json(encoding: createMockAPIFullIdentity(id: 1, login: "second"))
+                    : .json(encoding: createMockAPIFullIdentity(id: 2, login: "second"))
+            }
+            mock.on("GET", "/user/emails", respond: .json(encoding: [createMockAPIEmail()]))
+            let store = AccountsStore(dataStore: InMemoryDataStore(), secureStore: InMemorySecretStore(), runtime: mock.runtime)
+            try await store.addAccount(account("first", id: 1, token: "first-token"))
+            try await store.addAccount(account("second", id: 2, token: "second-token"))
+
+            await store.refresh()
+
+            #expect(await store.getAll().map(\.login) == ["first", "second"])
         }
 
         @Test("keeps the new token, stored once, when signing in again changes only the login's case", arguments: [
@@ -676,16 +760,54 @@ struct AccountsStoreTests {
             #expect(expired != nil)
         }
 
-        @Test("signing in to its server again replaces an account whose token can't be read")
+        @Test("signing in again to an account whose token can't be read replaces it; another account on its server doesn't")
         func signInReplaces() async throws {
             let octocat = account("octocat")
-            let (store, _, _) = try await restarted(with: [octocat], unreadable: [octocat])
+            let (store, _, secure) = try await restarted(with: [octocat], unreadable: [octocat])
             let monalisa = account("monalisa", id: 2, token: "new")
 
             try await store.addAccount(monalisa)
-
             #expect(await store.getAll() == [monalisa])
+            #expect(await store.getAllWithUnreadable().unreadable.map(\.login) == ["octocat"])
+
+            secure.unreadableServices = []
+            let signedInAgain = account("octocat", token: "again")
+            try await store.addAccount(signedInAgain)
+            #expect(await store.getAll() == [signedInAgain, monalisa])
             #expect(await store.getAllWithUnreadable().unreadable.isEmpty)
+        }
+
+        @Test("the persisted identities include accounts whose tokens can't be read, and those signed out as they loaded")
+        func persistedIdentities() async throws {
+            let data = InMemoryDataStore()
+            data.setItem("users", """
+            [{"login":"alice","endpoint":"https://api.github.com","emails":[],"avatarURL":"","id":1,"name":""},\
+            {"login":"bob","endpoint":"\(enterpriseEndpoint)","emails":[],"avatarURL":"","id":2,"name":""},\
+            {"login":"carol","endpoint":"\(otherEndpoint)","emails":[],"avatarURL":"","id":3,"name":""}]
+            """)
+            let secure = FailingSecretStore()
+            try secure.setSecret("alice-token", service: getKeyForEndpoint(getDotComAPIEndpoint()), account: "alice")
+            // Bob's token can't be read; carol's is missing.
+            secure.unreadableServices = [getKeyForEndpoint(enterpriseEndpoint)]
+            let store = AccountsStore(dataStore: data, secureStore: secure)
+
+            #expect(await store.getAll().map(\.login) == ["alice"])
+            #expect(await store.getPersistedIdentities() == [
+                AccountIdentity(endpoint: getDotComAPIEndpoint(), login: "alice"),
+                AccountIdentity(endpoint: enterpriseEndpoint, login: "bob"),
+                AccountIdentity(endpoint: otherEndpoint, login: "carol"),
+            ])
+        }
+
+        @Test("the persisted identities use migrated endpoints")
+        func persistedIdentitiesMigrated() async throws {
+            let data = InMemoryDataStore()
+            data.setItem("users", storedUser(endpoint: "https://whatever.ghe.com/api/v3"))
+            let store = AccountsStore(dataStore: data, secureStore: InMemorySecretStore())
+
+            let identities = await store.getPersistedIdentities()
+            #expect(identities.map(\.endpoint) == ["https://api.whatever.ghe.com/"])
+            #expect(identities.map(\.login) == ["joan"])
         }
 
         @Test("signs out an account whose token can't be read")

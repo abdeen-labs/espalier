@@ -21,7 +21,7 @@ struct PublishOperationTests {
         }
     }
 
-    @Test("creates the repository, adds it as origin, pushes, and associates the repository with it")
+    @Test("creates the repository, adds it as origin, pushes, and associates the repository with it and the account")
     func publishes() async throws {
         let fixture = try await makeUnpublishedRepository()
         #expect(fixture.model.sync.action == .publishRepository)
@@ -55,6 +55,10 @@ struct PublishOperationTests {
         #expect(gitHubRepository.isPrivate == true)
         #expect(gitHubRepository.parent == nil)
         #expect(fixture.app.gitHubRepositories[gitHubRepository.dbID]?.name == "app")
+        // The repository is the account's it was published with, and so is
+        // its GitHub repository's row.
+        #expect(fixture.model.record.accountLogin == "mona")
+        #expect(fixture.app.gitHubRepositories[gitHubRepository.dbID]?.accountLogin == "mona")
         #expect(fixture.model.sync.action == .fetch(remote: "origin"))
         await fixture.app.idle()
     }

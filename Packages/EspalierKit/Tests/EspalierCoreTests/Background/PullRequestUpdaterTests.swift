@@ -1,6 +1,10 @@
 // The pull request updater's cadence on a `ManualScheduler`: at once, then
 // every 30 minutes, never within 2 minutes of the last refresh, a tick
-// right after another refresh only rescheduling; and stopping.
+// right after another refresh only rescheduling; and stopping. After a
+// refresh, pruning the fork remotes is a network operation, whose stall
+// watch sleeps on the same scheduler, so the tests wait for the updater's
+// own sleep (`waitForSleep(of:)`) and leave the watch's out of the sleeps
+// they compare.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -25,15 +29,15 @@ struct PullRequestUpdaterTests {
         updater.start(for: fixture.model, isFirstSelectionSinceLaunch: false)
         #expect(updater.repositoryID == fixture.model.id)
 
-        await fixture.scheduler.waitForSleepers(1)
-        #expect(fixture.scheduler.sleeps == [.zero, .seconds(30 * 60)])
+        await fixture.scheduler.waitForSleep(of: .seconds(30 * 60))
+        #expect(fixture.scheduler.sleepsWithoutStallWatch == [.zero, .seconds(30 * 60)])
         #expect(pullsRequests(fixture) == 1)
         #expect(fixture.model.gitHub.openPullRequests.map(\.pullRequestNumber) == [1])
 
         await fixture.scheduler.advance(by: .seconds(30 * 60))
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(30 * 60))
         #expect(pullsRequests(fixture) == 2)
-        #expect(fixture.scheduler.sleeps == [.zero, .seconds(30 * 60), .seconds(30 * 60)])
+        #expect(fixture.scheduler.sleepsWithoutStallWatch == [.zero, .seconds(30 * 60), .seconds(30 * 60)])
 
         updater.stop()
         #expect(!updater.isRunning)
@@ -49,14 +53,14 @@ struct PullRequestUpdaterTests {
 
         let updater = fixture.app.background.pullRequests
         updater.start(for: fixture.model, isFirstSelectionSinceLaunch: false)
-        await fixture.scheduler.waitForSleepers(1)
-        #expect(fixture.scheduler.sleeps == [.seconds(90)])
+        await fixture.scheduler.waitForSleep(of: .seconds(90))
+        #expect(fixture.scheduler.sleepsWithoutStallWatch == [.seconds(90)])
         #expect(pullsRequests(fixture) == 1)
 
         await fixture.scheduler.advance(by: .seconds(90))
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(30 * 60))
         #expect(pullsRequests(fixture) == 2)
-        #expect(fixture.scheduler.sleeps.last == .seconds(30 * 60))
+        #expect(fixture.scheduler.sleepsWithoutStallWatch.last == .seconds(30 * 60))
 
         updater.stop()
         await settle(until: { fixture.scheduler.sleeperCount == 0 })
@@ -68,7 +72,7 @@ struct PullRequestUpdaterTests {
         let fixture = try await makeGitHubFixture()
         let updater = fixture.app.background.pullRequests
         updater.start(for: fixture.model, isFirstSelectionSinceLaunch: false)
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(30 * 60))
         #expect(pullsRequests(fixture) == 1)
 
         // The list's own refresh, a minute before the tick.
@@ -77,9 +81,9 @@ struct PullRequestUpdaterTests {
         #expect(pullsRequests(fixture) == 2)
 
         await fixture.scheduler.advance(by: .seconds(60))
-        await fixture.scheduler.waitForSleepers(1)
+        await fixture.scheduler.waitForSleep(of: .seconds(29 * 60))
         #expect(pullsRequests(fixture) == 2)
-        #expect(fixture.scheduler.sleeps.last == .seconds(29 * 60))
+        #expect(fixture.scheduler.sleepsWithoutStallWatch.last == .seconds(29 * 60))
         #expect(fixture.scheduler.sleeperCount == 1)
 
         updater.stop()

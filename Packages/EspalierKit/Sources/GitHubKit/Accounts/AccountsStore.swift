@@ -95,15 +95,18 @@ private func isKeyChainError(_ error: any Error) -> Bool {
 /// was denied), so the account isn't used until the user tries again in
 /// Settings ▸ Accounts.
 public struct UnreadableTokenError: Error, LocalizedError, Sendable, Equatable {
+    /// The account's login.
+    public let login: String
     /// The account's server, as `Account.friendlyEndpoint` names it.
     public let friendlyEndpoint: String
 
     public init(_ account: Account) {
+        login = account.login
         friendlyEndpoint = account.friendlyEndpoint
     }
 
     public var errorDescription: String? {
-        "Couldn't read the token for your \(friendlyEndpoint) account from your keychain. "
+        "Couldn't read the token for @\(login) on \(friendlyEndpoint) from your keychain. "
             + "Make sure your login keychain is unlocked, then try again in Settings ▸ Accounts."
     }
 }
@@ -113,6 +116,11 @@ public struct UnreadableTokenError: Error, LocalizedError, Sendable, Equatable {
 /// Loads and saves accounts, keeps their tokens in the secure store,
 /// refreshes their details from the API, and signs out accounts whose tokens
 /// GitHub rejects. The app's observable account model reads `events`.
+///
+/// Several accounts can be signed in to one endpoint. An account is
+/// identified by its endpoint and login (`AccountIdentity`, ignoring case):
+/// signing in again to an account replaces it where it is in the list, and
+/// signing in to another login on the same endpoint adds one.
 ///
 /// A token that has expired can't be refreshed (that needs a client secret),
 /// so accounts with expired tokens are signed out when they load, on
@@ -164,7 +172,12 @@ public actor AccountsStore {
     private var accounts: [Account] = []
 
     /// The accounts whose tokens the keychain refused to read.
-    private var unreadable: Set<AccountKey> = []
+    private var unreadable: Set<AccountIdentity> = []
+
+    /// The endpoint and login of every account saved when the store loaded,
+    /// including those signed out as they loaded and those whose tokens
+    /// couldn't be read.
+    private var persistedIdentities: [AccountIdentity] = []
 
     /// Loads the accounts on first use.
     private var loadingTask: Task<Void, Never>?
@@ -204,12 +217,26 @@ public actor AccountsStore {
     public func getAllWithUnreadable() async -> (accounts: [Account], unreadable: [Account]) {
         await ensureLoaded()
 
-        return (usableAccounts, accounts.filter { unreadable.contains(AccountKey($0)) })
+        return (usableAccounts, accounts.filter { unreadable.contains($0.identity) })
+    }
+
+    /// The endpoint and login of every account that was saved when the
+    /// store loaded, whether or not it could be loaded: one signed out as it
+    /// loaded (its token expired or missing) and one whose token the
+    /// keychain refused to read included.
+    ///
+    /// For when only the identity matters, such as assigning repositories
+    /// their accounts once, so a locked keychain at launch doesn't lose an
+    /// assignment.
+    public func getPersistedIdentities() async -> [AccountIdentity] {
+        await ensureLoaded()
+
+        return persistedIdentities
     }
 
     /// The accounts whose tokens were read.
     private var usableAccounts: [Account] {
-        accounts.filter { !unreadable.contains(AccountKey($0)) }
+        accounts.filter { !unreadable.contains($0.identity) }
     }
 
     /// Handle a rejected API token without leaving unhandled errors: failures
@@ -226,19 +253,19 @@ public actor AccountsStore {
         }
     }
 
-    /// Sign out the account whose current token was rejected.
+    /// Sign out the account on `endpoint` whose current token was rejected.
+    ///
+    /// Several accounts can be signed in to the endpoint, so the token picks
+    /// the account; a token no account holds any more signs nobody out.
     public func invalidateToken(endpoint: String, token: String) async throws {
         await ensureLoaded()
-        guard let account = usableAccounts.first(where: { $0.endpoint == endpoint }) else {
-            return
-        }
-
-        // If we have a token for the account but it doesn't match the token that
-        // was invalidated that likely means that someone held onto an account for
-        // longer than they should have which is bad but what's even worse is if we
-        // invalidate an active account.
-        if !account.token.isEmpty && account.token != token {
-            log.error("Token for \(endpoint, privacy: .public) invalidated but token mismatch")
+        guard let account = usableAccounts.first(where: { $0.endpoint == endpoint && $0.token == token }) else {
+            // Someone held onto a token for longer than they should have,
+            // which is bad, but what's even worse is invalidating an active
+            // account.
+            if usableAccounts.contains(where: { $0.endpoint == endpoint }) {
+                log.error("Token for \(endpoint, privacy: .public) invalidated but token mismatch")
+            }
             return
         }
 
@@ -247,14 +274,14 @@ public actor AccountsStore {
         _ = await deleteToken(account)
     }
 
-    /// Add the account to the store, replacing any account for the same
-    /// endpoint.
+    /// Add the account to the store, or replace the account with the same
+    /// endpoint and login where it is in the list. Other accounts on the
+    /// same endpoint stay.
     ///
     /// Throws when the token can't be stored.
     ///
     /// Sign-in calls this only after it succeeds, so a failed sign-in leaves
-    /// the existing account signed in; this replaces it then, removing its
-    /// token if it belonged to another login.
+    /// the existing account signed in.
     @discardableResult
     public func addAccount(_ account: Account) async throws -> Account {
         await ensureLoaded()
@@ -272,21 +299,26 @@ public actor AccountsStore {
             throw error
         }
 
-        for replaced in accounts where replaced.endpoint == account.endpoint && replaced.login != account.login {
-            removeToken(storedUnder: replaced.login, keepingTokenOf: account, as: account.login)
-        }
-
-        var endpoints: [String] = []
-        var accountsByEndpoint: [String: Account] = [:]
-        for existing in accounts + [account] {
-            if accountsByEndpoint[existing.endpoint] == nil {
-                endpoints.append(existing.endpoint)
+        let identity = account.identity
+        if let index = accounts.firstIndex(where: { $0.identity == identity }) {
+            // The same account, its login or endpoint perhaps in another
+            // case: its token is stored under the login and endpoint as
+            // given now.
+            let replaced = accounts[index]
+            if getKeyForAccount(replaced) != getKeyForAccount(account) {
+                do {
+                    _ = try secureStore.deleteSecret(service: getKeyForAccount(replaced), account: replaced.login)
+                } catch {
+                    log.error("Unable to remove the token stored under the old endpoint of '\(replaced.login, privacy: .public)': \(String(describing: error), privacy: .public)")
+                }
+            } else if replaced.login != account.login {
+                removeToken(storedUnder: replaced.login, keepingTokenOf: account, as: account.login)
             }
-            accountsByEndpoint[existing.endpoint] = existing
+            accounts[index] = account
+        } else {
+            accounts = sortAccounts(accounts + [account])
         }
-
-        accounts = sortAccounts(endpoints.compactMap { accountsByEndpoint[$0] })
-        unreadable = unreadable.filter { $0.endpoint != account.endpoint }
+        unreadable.remove(identity)
 
         save()
         return account
@@ -299,12 +331,12 @@ public actor AccountsStore {
         await ensureLoaded()
         await signOutExpiredAccounts()
 
-        let current = usableAccounts
+        let usable = usableAccounts
         let updated = await withTaskGroup(of: (Int, Account).self) { group in
-            for (index, account) in current.enumerated() {
+            for (index, account) in usable.enumerated() {
                 group.addTask { (index, await self.tryUpdateAccount(account)) }
             }
-            var results = current
+            var results = usable
             for await (index, account) in group {
                 results[index] = account
             }
@@ -316,12 +348,28 @@ public actor AccountsStore {
         // replace accounts that are still here with the token refreshed. An
         // account whose login changed keeps its old details if its token
         // can't be moved to the new login.
-        accounts = accounts.map { account in
+        let current = accounts
+        accounts = current.compactMap { account in
             guard let refreshed = updated.first(where: { accountEquals($0, account) && $0.token == account.token }) else {
                 return account
             }
-            if refreshed.login != account.login, !moveToken(of: account, to: refreshed.login) {
-                return account
+            if refreshed.login != account.login {
+                // A login renamed to one another account here has keeps its
+                // old details, so no two accounts share an identity, unless
+                // that account is the same user signed in again under the new
+                // login while the refresh ran: then this one is stale, and
+                // goes with its token.
+                let renamed = refreshed.identity
+                if renamed != account.identity, let other = current.first(where: { $0.identity == renamed }) {
+                    guard accountEquals(other, refreshed) else {
+                        return account
+                    }
+                    removeToken(storedUnder: account.login, keepingTokenOf: other, as: other.login)
+                    return nil
+                }
+                if !moveToken(of: account, to: refreshed.login) {
+                    return account
+                }
             }
             return refreshed
         }
@@ -402,7 +450,8 @@ public actor AccountsStore {
             .withClientID(account.clientID)
     }
 
-    /// Remove the account from the store.
+    /// Remove the account from the store: the one with its endpoint, login,
+    /// and user ID. Other accounts on the same endpoint stay.
     ///
     /// Throws when the token can't be removed, and the account stays.
     public func removeAccount(_ account: Account) async throws {
@@ -415,8 +464,11 @@ public actor AccountsStore {
             throw error
         }
 
-        accounts = accounts.filter { !accountEquals($0, account) }
-        unreadable.remove(AccountKey(account))
+        let identity = account.identity
+        accounts = accounts.filter { !($0.identity == identity && $0.id == account.id) }
+        if !accounts.contains(where: { $0.identity == identity }) {
+            unreadable.remove(identity)
+        }
 
         save()
     }
@@ -514,10 +566,29 @@ public actor AccountsStore {
         }
 
         let migratedAccounts = getMigratedGHEAccounts(parsedAccounts)
-        let rawAccounts = migratedAccounts ?? parsedAccounts
+        var rawAccounts = migratedAccounts ?? parsedAccounts
+        persistedIdentities = rawAccounts.map { AccountIdentity(endpoint: $0.endpoint, login: $0.login) }
+
+        // An account saved twice keeps its last entry, where its first was.
+        var duplicates = false
+        var firstIndex: [AccountIdentity: Int] = [:]
+        for (index, account) in rawAccounts.enumerated() {
+            let identity = AccountIdentity(endpoint: account.endpoint, login: account.login)
+            if let previous = firstIndex[identity] {
+                duplicates = true
+                rawAccounts[previous] = account
+            } else {
+                firstIndex[identity] = index
+            }
+        }
+        if duplicates {
+            rawAccounts = rawAccounts.enumerated()
+                .filter { firstIndex[AccountIdentity(endpoint: $0.element.endpoint, login: $0.element.login)] == $0.offset }
+                .map(\.element)
+        }
 
         var loadedAccounts: [Account] = []
-        var unreadableAccounts: Set<AccountKey> = []
+        var unreadableAccounts: Set<AccountIdentity> = []
         var signedOutAccounts = false
         for account in rawAccounts {
             let accountWithoutToken = account.account
@@ -529,7 +600,7 @@ public actor AccountsStore {
                 signedOutAccounts = true
             case .unreadable:
                 loadedAccounts.append(accountWithoutToken)
-                unreadableAccounts.insert(AccountKey(accountWithoutToken))
+                unreadableAccounts.insert(accountWithoutToken.identity)
                 continuation.yield(.didError(UnreadableTokenError(accountWithoutToken)))
             }
         }
@@ -537,7 +608,7 @@ public actor AccountsStore {
         accounts = sortAccounts(loadedAccounts)
         unreadable = unreadableAccounts
         // If any account was migrated, make sure to persist the new value
-        if migratedAccounts != nil || signedOutAccounts {
+        if migratedAccounts != nil || signedOutAccounts || duplicates {
             save() // Save already emits an update
         } else {
             continuation.yield(.didUpdate(usableAccounts))
@@ -555,7 +626,7 @@ public actor AccountsStore {
 
         var changed = false
         accounts = accounts.compactMap { account in
-            let key = AccountKey(account)
+            let key = account.identity
             guard unreadable.contains(key) else {
                 return account
             }
@@ -643,18 +714,6 @@ public actor AccountsStore {
         }
 
         continuation.yield(.didUpdate(usableAccounts))
-    }
-}
-
-/// An account's identity in the store, as `accountEquals` compares
-/// accounts.
-private struct AccountKey: Hashable {
-    let endpoint: String
-    let id: Int
-
-    init(_ account: Account) {
-        endpoint = account.endpoint
-        id = account.id
     }
 }
 

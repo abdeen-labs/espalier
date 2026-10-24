@@ -9,10 +9,12 @@ import os
 private let logger = Log.logger(category: "publish")
 
 extension SyncModel {
-    /// Creates the repository on GitHub, adds it as `origin`, pushes the
-    /// default branch (when another branch is checked out) and then the
-    /// current branch, and associates the repository with it. Returns the
-    /// GitHub repository, after the repository's refresh.
+    /// Creates the repository on GitHub, adds it as `origin`, associates the
+    /// repository with it and assigns it the account it was published with
+    /// (before pushing, so git uses that account's credentials), then
+    /// pushes the default branch (when another branch is checked out) and
+    /// the current branch. Returns the GitHub repository, after the
+    /// repository's refresh.
     ///
     /// Nothing is pushed from a detached HEAD or an unborn branch.
     ///
@@ -56,6 +58,7 @@ extension SyncModel {
             }
 
             let origin = try await addRemote(ctx.repository, "origin", apiRepository.cloneURL)
+            self.associate(apiRepository, endpoint: request.account.endpoint, assigning: request.account.login)
 
             // skip pushing if the current branch is a detached HEAD or the
             // repository is unborn
@@ -68,7 +71,6 @@ extension SyncModel {
             return apiRepository
         }
 
-        associate(created, endpoint: request.account.endpoint)
         _ = await app.repositoryWithRefreshedGitHubRepository(id)
         await repository.awaitOperationRefresh(covering: .full)
         logger.info("Published \(created.repository.name, privacy: .private) to \(request.account.endpoint, privacy: .public)")

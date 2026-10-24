@@ -76,11 +76,18 @@ public struct CloneRequest: Sendable, Hashable {
     /// The branch to check out; the default branch for an empty repository
     /// (the API's, from `resolveCloneInfo(_:)`).
     public var options: CloneOptions
+    /// The account the user picked to clone with (the Clone sheet's GitHub
+    /// list), or the repository's own (Clone Again). Only it is used, and
+    /// it's assigned without checking its access again: if it can't see the
+    /// repository the clone fails, never using another account. Without
+    /// one, each account on the server is checked (`chooseAccount(forRemote:)`).
+    public var account: AccountIdentity?
 
-    public init(url: String, path: String, options: CloneOptions = CloneOptions()) {
+    public init(url: String, path: String, options: CloneOptions = CloneOptions(), account: AccountIdentity? = nil) {
         self.url = url
         self.path = path
         self.options = options
+        self.account = account
     }
 }
 
@@ -140,10 +147,17 @@ public final class CloneCoordinator {
     ///    its parent folder).
     /// 2. The clone appears in `clones` and is selected; `progress` follows
     ///    git (and Git LFS).
-    /// 3. When git finishes, the repository is added (`addRepositories`):
-    ///    its remotes, GitHub association, and whether it uses Git LFS.
-    ///    A missing repository already listed at that folder is found again.
-    /// 4. The clone leaves the list; if it was still selected, the
+    /// 3. Before git runs, the account to clone with is chosen: the one in
+    ///    the request, else the only account on the server that can see the
+    ///    repository, or the one the user picks when several might. Git gets
+    ///    its credentials (`CloneOptions.fallbackAccount`); without one the
+    ///    clone runs without credentials. Cancelling the choice cancels the
+    ///    clone.
+    /// 4. When git finishes, the repository is added (`addRepositories`)
+    ///    with that account: its remotes, GitHub association, and whether it
+    ///    uses Git LFS. A missing repository already listed at that folder
+    ///    is found again.
+    /// 5. The clone leaves the list; if it was still selected, the
     ///    repository is selected.
     ///
     /// - Returns: The repository, and whether to ask about Git LFS and the
@@ -155,7 +169,7 @@ public final class CloneCoordinator {
     public func clone(_ request: CloneRequest) async throws(OperationError) -> CloneResult {
         let app = try requireApp(nil)
         // The URL is trimmed before cloning.
-        let request = CloneRequest(url: JSCompat.trim(request.url), path: request.path, options: request.options)
+        let request = CloneRequest(url: JSCompat.trim(request.url), path: request.path, options: request.options, account: request.account)
         try checkNotCloning(into: request.path, repositoryID: nil)
         try await checkDestination(request.path, repositoryID: nil)
         // The folder the clone went into is remembered for the next clone.
@@ -174,12 +188,16 @@ public final class CloneCoordinator {
     /// Clones a missing repository again into its folder, from its GitHub
     /// repository's clone URL, then finds it again ("Clone Again").
     ///
-    /// While git runs the clone is selected; once found again, the
-    /// repository is selected if the clone still was.
+    /// It clones with the repository's assigned account (asking to sign in
+    /// to it again, or choose another, when it's signed out); its assignment
+    /// doesn't change. While git runs the clone is selected; once found
+    /// again, the repository is selected if the clone still was.
     ///
     /// - Throws: A precondition error when the repository isn't in the list
-    ///   or has no clone URL, or its folder can't be cloned into; otherwise
-    ///   as `clone(_:)`, with "Retry Clone" cloning it again.
+    ///   or has no clone URL, or its folder can't be cloned into;
+    ///   `cancelled(.userCancelled)` when asking for the account was
+    ///   cancelled; otherwise as `clone(_:)`, with "Retry Clone" cloning it
+    ///   again.
     public func cloneAgain(_ id: RepositoryID) async throws(OperationError) {
         let app = try requireApp(id)
         guard let record = app.record(id) else {
@@ -194,7 +212,14 @@ public final class CloneCoordinator {
         }
         try checkNotCloning(into: record.path, repositoryID: id)
         try await checkDestination(record.path, repositoryID: id)
-        _ = try await run(CloneRequest(url: url, path: record.path), cloningAgain: id)
+        var account: AccountIdentity?
+        if record.accountLogin != nil {
+            guard let assigned = await app.ensureRepositoryAccount(id) else {
+                throw OperationError(.cancelled(.userCancelled), operation: .clone, repositoryID: id)
+            }
+            account = assigned.identity
+        }
+        _ = try await run(CloneRequest(url: url, path: record.path, account: account), cloningAgain: id)
     }
 
     /// Runs a failed clone again ("Retry Clone"), with what it was given:
@@ -288,21 +313,32 @@ public final class CloneCoordinator {
             self?.update(task.id) { $0.progress = progress }
         }
         let environment = app.environment
-        // Git runs in a task of its own: only `cancel(_:)` stops it, never
-        // the caller's cancellation.
-        let gitTask = Task { () async throws in
+        // Choosing the account and git run in a task of their own: only
+        // `cancel(_:)` stops them, never the caller's cancellation.
+        let gitTask = Task { () async throws -> RemoteRepositoryAssignment? in
+            let assignment = try await app.cloneAssignment(for: request)
+            var options = request.options
+            if let account = assignment?.account.identity ?? request.account {
+                options = CloneOptions(
+                    branch: options.branch,
+                    defaultBranch: options.defaultBranch,
+                    fallbackAccount: GitFallbackAccount(endpoint: account.endpoint, login: account.login)
+                )
+            }
+            let cloneOptions = options
             // The user's shell environment loads at launch; a clone waits for
             // it, as operations do, so cloning over SSH finds the agent the
             // shell sets up.
             await environment.git.shellEnvironment?.waitUntilLoaded()
             try Task.checkCancellation()
             try await environment.withRuntimes {
-                try await GitKit.clone(request.url, request.path, request.options) { progress in
+                try await GitKit.clone(request.url, request.path, cloneOptions) { progress in
                     relay.send(progress)
                 }
             }
+            return assignment
         }
-        let job = CloneJob(gitTask)
+        let job = CloneJob { gitTask.cancel() }
         jobs[task.id] = job
         let outcome = await gitTask.result
         jobs[task.id] = nil
@@ -314,15 +350,23 @@ public final class CloneCoordinator {
             finish(task.id, selecting: nil, previous: previousSelection)
             throw OperationError(.cancelled(.userCancelled), operation: .clone, repositoryID: missingID)
         }
-        if case .failure(let error) = outcome {
+        let assignment: RemoteRepositoryAssignment?
+        switch outcome {
+        case .failure(is CloneAccountChoiceCancelled):
+            // Nothing was cloned.
+            finish(task.id, selecting: nil, previous: previousSelection)
+            throw OperationError(.cancelled(.userCancelled), operation: .clone, repositoryID: missingID)
+        case .failure(let error):
             finish(task.id, selecting: nil, previous: previousSelection)
             throw await classify(error, request: request, cloningAgain: missingID)
+        case .success(let chosen):
+            assignment = chosen
         }
 
         update(task.id) { $0.phase = .adding }
         if let missingID {
             // Clone Again: the repository is in the list, missing; look for
-            // it again.
+            // it again. Its account stays as it was.
             await app.checkRepositoryAgain(missingID)
             finish(task.id, selecting: missingID, previous: previousSelection)
             return CloneResult(repositoryID: missingID, usesLFS: false, isFork: false)
@@ -330,7 +374,7 @@ public final class CloneCoordinator {
 
         let added: AddRepositoriesResult
         do {
-            added = try await app.addRepositories([request.path])
+            added = try await app.addRepositories([request.path], account: .cloned(assignment))
         } catch {
             finish(task.id, selecting: nil, previous: previousSelection)
             throw error
@@ -468,16 +512,45 @@ public final class CloneCoordinator {
 /// A clone's git process, and whether the user cancelled it.
 @MainActor
 private final class CloneJob {
-    private let gitTask: Task<Void, any Error>
+    private let cancelTask: () -> Void
     private(set) var isCancelled = false
 
-    init(_ gitTask: Task<Void, any Error>) {
-        self.gitTask = gitTask
+    init(cancel: @escaping () -> Void) {
+        cancelTask = cancel
     }
 
     func cancel() {
         isCancelled = true
-        gitTask.cancel()
+        cancelTask()
+    }
+}
+
+/// The user cancelled choosing the account to clone with.
+struct CloneAccountChoiceCancelled: Error {}
+
+extension AppModel {
+    /// The account a clone uses and is assigned: the request's, when it's
+    /// signed in and on the URL's server, else the one choosing it for the
+    /// URL finds (nil when none can see it, or none could be checked).
+    ///
+    /// - Throws: `CloneAccountChoiceCancelled` when the user cancels
+    ///   choosing; the error of an account picked that can't see the
+    ///   repository.
+    func cloneAssignment(for request: CloneRequest) async throws -> RemoteRepositoryAssignment? {
+        if let identity = request.account {
+            // The user picked the repository from the account's list: its
+            // access isn't checked again, and no other account is used.
+            let picked = accounts.accounts.filter { $0.identity == identity }
+            return GitHubKit.matchGitHubRepository(picked, request.url).map { RemoteRepositoryAssignment(match: $0) }
+        }
+        switch try await chooseAccount(forRemote: request.url) {
+        case .assigned(let assignment):
+            return assignment
+        case .noAccess, .undecided:
+            return nil
+        case .cancelled:
+            throw CloneAccountChoiceCancelled()
+        }
     }
 }
 

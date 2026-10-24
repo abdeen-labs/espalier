@@ -1,14 +1,17 @@
-// Settings ▸ Accounts: GitHub.com's account (avatar, name, @login) with Sign
-// Out, or "Sign in to your GitHub.com account to access your repositories."
-// with Sign In…; GitHub Enterprise's accounts ("@login (name)" and the
-// server) with Sign Out and Add GitHub Enterprise Account…, or a call to
-// sign in. Accounts signed out because their tokens stopped working offer
-// Sign In Again and Remove (they're kept for signing in again until the user
-// removes them). An account whose token the keychain won't give says so,
-// with Sign Out and Try Again. Sign Out asks nothing, and leaves a note with a link to the
-// page where the user can revoke Espalier's access (signing out can't: it
-// needs a client secret). Signing in opens its sheet on the Settings window,
-// through the window's GitHub actions.
+// Settings ▸ Accounts: GitHub.com's accounts, then GitHub Enterprise's,
+// grouped under one heading per host (alphabetically; the accounts in the
+// order they were signed in to). Each row shows the account's avatar, its
+// name, and @login, with Sign Out. Add GitHub.com Account… and Add GitHub
+// Enterprise Account… sign in to another account; without one, a call to sign
+// in. Accounts signed out because their tokens stopped working offer Sign In
+// Again (to that account) and Remove (they're kept for signing in again until
+// the user removes them). An account whose token the keychain won't give says
+// so, with Sign Out and Try Again. Sign Out asks first when repositories are
+// assigned to the account, whether to keep or clear their assignments
+// (`signOutAccount`), and leaves a note with a link to the page where the user
+// can revoke Espalier's access (signing out can't: it needs a client secret).
+// Signing in opens its sheet on the Settings window, through the window's
+// GitHub actions.
 
 import EspalierCore
 import GitHubKit
@@ -21,19 +24,20 @@ nonisolated struct AccountRowContent: Sendable, Equatable, Identifiable {
     var login: String
     var name: String
     var avatar: AvatarUser
-    /// The server, for Enterprise accounts: `https://ghe.example.com`.
-    var server: String?
 
     var id: String {
-        endpoint
+        getAccountKey(endpoint, login)
     }
 
-    init(endpoint: String, login: String, name: String, avatar: AvatarUser, server: String?) {
+    var identity: AccountIdentity {
+        AccountIdentity(endpoint: endpoint, login: login)
+    }
+
+    init(endpoint: String, login: String, name: String, avatar: AvatarUser) {
         self.endpoint = endpoint
         self.login = login
         self.name = name
         self.avatar = avatar
-        self.server = server
     }
 
     init(_ account: Account) {
@@ -46,22 +50,18 @@ nonisolated struct AccountRowContent: Sendable, Equatable, Identifiable {
                 avatarURL: account.avatarURL.isEmpty ? nil : account.avatarURL,
                 name: account.name,
                 endpoint: account.endpoint
-            ),
-            server: isDotComAccount(account) ? nil : getHTMLURL(account.endpoint)
+            )
         )
     }
 
-    /// The row's title: GitHub.com's shows the name, then @login; an
-    /// Enterprise account "@login (name)", then the server.
+    /// The row's title: the name, else @login.
     var title: String {
-        guard server != nil else {
-            return name.isEmpty ? "@\(login)" : name
-        }
-        return name.isEmpty || name == login ? "@\(login)" : "@\(login) (\(name))"
+        name.isEmpty ? "@\(login)" : name
     }
 
-    var subtitle: String {
-        server ?? "@\(login)"
+    /// @login, under the name.
+    var subtitle: String? {
+        name.isEmpty ? nil : "@\(login)"
     }
 }
 
@@ -76,33 +76,42 @@ nonisolated struct SignedOutNote: Sendable, Equatable, Identifiable {
     }
 }
 
+/// The accounts of one server: signed in, with tokens the keychain won't
+/// give, and signed out because their tokens stopped working.
+nonisolated struct AccountsHostContent: Sendable, Equatable, Identifiable {
+    /// The host, as the heading shows it: `ghe.example.com`.
+    var host: String
+    var accounts: [AccountRowContent]
+    var unreadable: [AccountRowContent]
+    var invalidated: [AccountRowContent]
+
+    init(host: String, accounts: [AccountRowContent] = [], unreadable: [AccountRowContent] = [], invalidated: [AccountRowContent] = []) {
+        self.host = host
+        self.accounts = accounts
+        self.unreadable = unreadable
+        self.invalidated = invalidated
+    }
+
+    var id: String {
+        host
+    }
+
+    var isEmpty: Bool {
+        accounts.isEmpty && unreadable.isEmpty && invalidated.isEmpty
+    }
+}
+
 /// What the Accounts pane shows.
 nonisolated struct AccountsContent: Sendable, Equatable {
-    var dotCom: AccountRowContent?
-    /// GitHub.com's account, whose token the keychain won't give.
-    var unreadableDotCom: AccountRowContent?
-    /// GitHub.com's account, signed out because its token stopped working.
-    var invalidatedDotCom: AccountRowContent?
-    var enterprise: [AccountRowContent]
-    var unreadableEnterprise: [AccountRowContent]
-    var invalidatedEnterprise: [AccountRowContent]
+    /// GitHub.com's accounts.
+    var dotCom: AccountsHostContent
+    /// Each GitHub Enterprise host's accounts, by host.
+    var enterprise: [AccountsHostContent]
     var notes: [SignedOutNote]
 
-    init(
-        dotCom: AccountRowContent? = nil,
-        unreadableDotCom: AccountRowContent? = nil,
-        invalidatedDotCom: AccountRowContent? = nil,
-        enterprise: [AccountRowContent] = [],
-        unreadableEnterprise: [AccountRowContent] = [],
-        invalidatedEnterprise: [AccountRowContent] = [],
-        notes: [SignedOutNote] = []
-    ) {
+    init(dotCom: AccountsHostContent = AccountsHostContent(host: "github.com"), enterprise: [AccountsHostContent] = [], notes: [SignedOutNote] = []) {
         self.dotCom = dotCom
-        self.unreadableDotCom = unreadableDotCom
-        self.invalidatedDotCom = invalidatedDotCom
         self.enterprise = enterprise
-        self.unreadableEnterprise = unreadableEnterprise
-        self.invalidatedEnterprise = invalidatedEnterprise
         self.notes = notes
     }
 
@@ -112,46 +121,53 @@ nonisolated struct AccountsContent: Sendable, Equatable {
         let unreadable = accounts.unreadableAccounts
         let saved = signedIn + unreadable
         let invalidated = accounts.invalidatedAccounts.filter { invalid in
-            !saved.contains { $0.endpoint == invalid.endpoint }
+            !saved.contains { $0.identity == invalid.identity }
         }
+        func content(_ host: String, _ hostAccounts: [Account]) -> AccountsHostContent {
+            let identities = Set(hostAccounts.map(\.identity))
+            return AccountsHostContent(
+                host: host,
+                accounts: signedIn.filter { identities.contains($0.identity) }.map(AccountRowContent.init),
+                unreadable: unreadable.filter { identities.contains($0.identity) }.map(AccountRowContent.init),
+                invalidated: invalidated.filter { identities.contains($0.identity) }.map(AccountRowContent.init)
+            )
+        }
+        let everyone = signedIn + unreadable + invalidated
         self.init(
-            dotCom: signedIn.first(where: isDotComAccount).map(AccountRowContent.init),
-            unreadableDotCom: unreadable.first(where: isDotComAccount).map(AccountRowContent.init),
-            invalidatedDotCom: invalidated.first(where: isDotComAccount).map(AccountRowContent.init),
-            enterprise: signedIn.filter(isEnterpriseAccount).map(AccountRowContent.init),
-            unreadableEnterprise: unreadable.filter(isEnterpriseAccount).map(AccountRowContent.init),
-            invalidatedEnterprise: invalidated.filter(isEnterpriseAccount).map(AccountRowContent.init),
+            dotCom: content("github.com", everyone.filter(isDotComAccount)),
+            enterprise: groupAccountsByHost(everyone.filter(isEnterpriseAccount)).map { content($0.host, $0.accounts) },
             notes: notes.filter { note in !saved.contains { $0.endpoint == note.endpoint } }
         )
     }
 
-    /// The note for an endpoint, if its account was signed out here.
+    /// The note for an endpoint, if an account was signed out of it here.
     func note(for endpoint: String) -> SignedOutNote? {
         notes.first { $0.endpoint == endpoint }
-    }
-
-    /// Whether GitHub Enterprise shows its call to sign in: no account,
-    /// signed in, unreadable, or signed out.
-    var showsEnterpriseCallToAction: Bool {
-        enterprise.isEmpty && unreadableEnterprise.isEmpty && invalidatedEnterprise.isEmpty
     }
 
     /// Notes for Enterprise accounts that are gone.
     var enterpriseNotes: [SignedOutNote] {
         notes.filter { !isDotCom($0.endpoint) }
     }
+
+    /// Whether GitHub Enterprise shows its call to sign in: no account,
+    /// signed in, unreadable, or signed out.
+    var showsEnterpriseCallToAction: Bool {
+        enterprise.allSatisfy(\.isEmpty)
+    }
 }
 
 /// What the pane's buttons do.
 struct AccountsActions {
-    /// Signs in to an endpoint: nil for GitHub.com,
-    /// `SignInRequest.enterpriseEndpoint` for a new Enterprise account.
-    var signIn: (String?) -> Void
-    var signOut: (String) -> Void
+    /// Signs in: to an endpoint (nil for GitHub.com,
+    /// `SignInRequest.enterpriseEndpoint` for a new Enterprise account), and
+    /// to one login on it (an account signed out), if any.
+    var signIn: (_ endpoint: String?, _ login: String?) -> Void
+    var signOut: (AccountIdentity) -> Void
     /// Reads the tokens the keychain wouldn't give again.
     var tryAgain: () -> Void
-    /// Forgets a signed-out account (by endpoint).
-    var remove: (String) -> Void
+    /// Forgets a signed-out account.
+    var remove: (AccountIdentity) -> Void
     var open: (URL) -> Void
 }
 
@@ -175,17 +191,24 @@ public struct AccountsPane: View {
 
     private func actions(_ accounts: AccountsModel) -> AccountsActions {
         AccountsActions(
-            signIn: { endpoint in
-                context?.actions.perform(.signIn(endpoint: endpoint, then: nil))
+            signIn: { endpoint, login in
+                guard let context else {
+                    return
+                }
+                if let endpoint, let login {
+                    GitHubActions.presentSignIn(SignInRequest(endpoint: endpoint, login: login), then: nil, in: context)
+                } else {
+                    context.actions.perform(.signIn(endpoint: endpoint, then: nil))
+                }
             },
-            signOut: { endpoint in
+            signOut: { identity in
                 let saved = accounts.accounts + accounts.unreadableAccounts
-                guard let context, let account = saved.first(where: { $0.endpoint == endpoint }) else {
+                guard let context, let account = saved.first(where: { $0.identity == identity }) else {
                     return
                 }
                 Task {
                     if let note = await Self.signOut(account, accounts: accounts, presenter: context.presenter) {
-                        notes.removeAll { $0.endpoint == endpoint }
+                        notes.removeAll { $0.endpoint == note.endpoint }
                         notes.append(note)
                     }
                 }
@@ -195,8 +218,8 @@ public struct AccountsPane: View {
                     await accounts.retryUnreadableAccounts()
                 }
             },
-            remove: { endpoint in
-                Self.removeSignedOutAccount(endpoint, accounts: accounts)
+            remove: { identity in
+                Self.removeSignedOutAccount(identity, accounts: accounts)
             },
             open: { url in
                 model?.integrations.openInBrowser(url)
@@ -204,27 +227,28 @@ public struct AccountsPane: View {
         )
     }
 
-    /// Forgets the signed-out account of `endpoint` (its token is gone
-    /// already); the server's call to sign in shows again.
-    static func removeSignedOutAccount(_ endpoint: String, accounts: AccountsModel) {
-        for account in accounts.invalidatedAccounts where account.endpoint == endpoint {
+    /// Forgets the signed-out account (its token is gone already). The
+    /// repositories assigned to it keep their assignments.
+    static func removeSignedOutAccount(_ identity: AccountIdentity, accounts: AccountsModel) {
+        for account in accounts.invalidatedAccounts where account.identity == identity {
             accounts.dismissInvalidatedAccount(account)
         }
     }
 
-    /// Signs `account` out through the window's presenter, which shows a
-    /// failure; returns the note to leave in its place when it's signed
-    /// out.
+    /// Signs `account` out through the window's presenter, which asks about
+    /// the repositories assigned to it and shows a failure; returns the note
+    /// to leave in its place when it's signed out.
     static func signOut(_ account: Account, accounts: AccountsModel, presenter: WindowPresenter) async -> SignedOutNote? {
         let note = SignedOutNote(endpoint: account.endpoint, url: GitHubWebURLs.applicationSettings(for: account))
-        let signedOut: Void? = await presenter.perform { _ throws(OperationError) in
-            try await accounts.signOut(account)
+        let signedOut: Void? = await presenter.perform { answers throws(OperationError) in
+            try await accounts.signOut(account, confirmed: answers.confirmed, clearingAssignments: answers.clearAccountAssignments)
         }
         return signedOut == nil ? nil : note
     }
 }
 
-/// The Accounts pane: GitHub.com's account, then GitHub Enterprise's.
+/// The Accounts pane: GitHub.com's accounts, then GitHub Enterprise's by
+/// host.
 struct AccountsForm: View {
     let content: AccountsContent
     let actions: AccountsActions
@@ -232,60 +256,35 @@ struct AccountsForm: View {
     var body: some View {
         SettingsPage {
             SettingsSection("GitHub.com") {
-                if let account = content.dotCom {
-                    AccountRow(account: account) {
-                        Button("Sign Out") {
-                            actions.signOut(account.endpoint)
-                        }
-                        .settingsButton()
-                    }
-                    .settingsTransition()
-                } else if let account = content.unreadableDotCom {
-                    UnreadableAccountRow(account: account, actions: actions)
-                        .settingsTransition()
-                } else if let account = content.invalidatedDotCom {
-                    InvalidatedAccountRow(account: account) {
-                        actions.signIn(account.endpoint)
-                    } remove: {
-                        actions.remove(account.endpoint)
-                    }
-                    .settingsTransition()
-                } else {
-                    SignInCallToAction(
-                        text: "Sign in to your GitHub.com account to access your repositories.",
-                        button: "Sign In…"
-                    ) {
-                        actions.signIn(nil)
-                    }
-                    .settingsTransition()
-                }
+                HostAccountRows(content: content.dotCom, actions: actions)
                 if let note = content.note(for: getDotComAPIEndpoint()) {
                     SignedOutNoteView(note: note, open: actions.open)
                         .settingsTransition()
                 }
-            }
-
-            SettingsSection("GitHub Enterprise") {
-                ForEach(content.enterprise) { account in
-                    AccountRow(account: account) {
-                        Button("Sign Out") {
-                            actions.signOut(account.endpoint)
+                if content.dotCom.isEmpty {
+                    SignInCallToAction(
+                        text: "Sign in to your GitHub.com account to access your repositories.",
+                        button: "Sign In…"
+                    ) {
+                        actions.signIn(nil, nil)
+                    }
+                    .settingsTransition()
+                } else {
+                    SettingsButtonRow {
+                        Button("Add GitHub.com Account…") {
+                            actions.signIn(nil, nil)
                         }
                         .settingsButton()
                     }
                     .settingsTransition()
                 }
-                ForEach(content.unreadableEnterprise) { account in
-                    UnreadableAccountRow(account: account, actions: actions)
+            }
+
+            SettingsSection("GitHub Enterprise") {
+                ForEach(content.enterprise) { host in
+                    HostHeading(host: host.host)
                         .settingsTransition()
-                }
-                ForEach(content.invalidatedEnterprise) { account in
-                    InvalidatedAccountRow(account: account) {
-                        actions.signIn(account.endpoint)
-                    } remove: {
-                        actions.remove(account.endpoint)
-                    }
-                    .settingsTransition()
+                    HostAccountRows(content: host, actions: actions)
                 }
                 ForEach(content.enterpriseNotes) { note in
                     SignedOutNoteView(note: note, open: actions.open)
@@ -296,13 +295,13 @@ struct AccountsForm: View {
                         text: "Sign in to your GitHub Enterprise account to access your repositories.",
                         button: "Sign In…"
                     ) {
-                        actions.signIn(SignInRequest.enterpriseEndpoint)
+                        actions.signIn(SignInRequest.enterpriseEndpoint, nil)
                     }
                     .settingsTransition()
                 } else {
                     SettingsButtonRow {
                         Button("Add GitHub Enterprise Account…") {
-                            actions.signIn(SignInRequest.enterpriseEndpoint)
+                            actions.signIn(SignInRequest.enterpriseEndpoint, nil)
                         }
                         .settingsButton()
                     }
@@ -316,6 +315,51 @@ struct AccountsForm: View {
         // one takes another's place, the rows below making room or closing
         // the gap.
         .motion(Motion.arrive, value: content)
+    }
+}
+
+/// A host's heading in GitHub Enterprise: `ghe.example.com`.
+private struct HostHeading: View {
+    let host: String
+
+    var body: some View {
+        Text(host)
+            .font(Typography.rowTitle)
+            .foregroundStyle(.text2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, Metrics.insetSmall)
+            .padding(.bottom, Metrics.grid)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// A host's accounts: signed in, unreadable, then signed out.
+private struct HostAccountRows: View {
+    let content: AccountsHostContent
+    let actions: AccountsActions
+
+    var body: some View {
+        ForEach(content.accounts) { account in
+            AccountRow(account: account) {
+                Button("Sign Out") {
+                    actions.signOut(account.identity)
+                }
+                .settingsButton()
+            }
+            .settingsTransition()
+        }
+        ForEach(content.unreadable) { account in
+            UnreadableAccountRow(account: account, actions: actions)
+                .settingsTransition()
+        }
+        ForEach(content.invalidated) { account in
+            InvalidatedAccountRow(account: account) {
+                actions.signIn(account.endpoint, account.login)
+            } remove: {
+                actions.remove(account.identity)
+            }
+            .settingsTransition()
+        }
     }
 }
 
@@ -376,7 +420,7 @@ private struct UnreadableAccountRow: View {
     var body: some View {
         AccountRow(account: account) {
             Button("Sign Out") {
-                actions.signOut(account.endpoint)
+                actions.signOut(account.identity)
             }
             .settingsButton()
             Button("Try Again", action: actions.tryAgain)

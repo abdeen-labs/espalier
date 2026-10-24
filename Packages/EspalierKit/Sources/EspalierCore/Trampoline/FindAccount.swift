@@ -28,8 +28,36 @@ public struct TrampolineAccount: Sendable, Equatable {
     }
 }
 
-/// The signed-in GitHub accounts, for the credential helper. The app
-/// implements this with `AccountsTrampolineProvider`.
+extension TrampolineAccount {
+    /// The account's endpoint and login.
+    var identity: AccountIdentity {
+        AccountIdentity(endpoint: endpoint, login: login)
+    }
+}
+
+/// A repository in the list, as the credential helper sees it: its GitHub
+/// repository's endpoint and its assigned account.
+public struct TrampolineRepository: Sendable, Equatable {
+    public let id: RepositoryID
+    /// The API endpoint of its GitHub repository, nil without one.
+    public let endpoint: String?
+    /// The login of its assigned account, nil without one.
+    public let accountLogin: String?
+
+    public init(id: RepositoryID, endpoint: String?, accountLogin: String?) {
+        self.id = id
+        self.endpoint = endpoint
+        self.accountLogin = accountLogin
+    }
+
+    public init(_ record: RepositoryRecord) {
+        self.init(id: record.id, endpoint: record.gitHubRepository?.endpoint, accountLogin: record.accountLogin)
+    }
+}
+
+/// The signed-in GitHub accounts and the repository list, for the
+/// credential helper. The app implements this with
+/// `AccountsTrampolineProvider`.
 @MainActor
 public protocol TrampolineAccountsProvider: Sendable {
     /// Every signed-in account.
@@ -40,10 +68,25 @@ public protocol TrampolineAccountsProvider: Sendable {
     /// host's `/meta` API.
     func isGitHubHost(_ url: String) async -> Bool?
 
-    /// What to tell the user when git needs the account signed in to
-    /// `endpoint` (an API endpoint) and the keychain wouldn't give its
-    /// token, or `nil` when there's no such account.
-    func unreadableAccountMessage(endpoint: String) async -> String?
+    /// What to tell the user when git needs a repository's account and the
+    /// keychain wouldn't give its token: the account `login` (its assigned
+    /// one) on `endpoint`, or with no login, the only accounts on
+    /// `endpoint`. Nil when there's no such account.
+    func unreadableAccountMessage(endpoint: String, login: String?) async -> String?
+
+    /// The repository in the list whose folder git runs in, if any.
+    func repository(atPath path: String) async -> TrampolineRepository?
+
+    /// Associates a repository without a GitHub repository with `endpoint`
+    /// (git asks credentials for it) when its default remote is on it, and
+    /// returns the repository as it is then.
+    func associate(_ repository: TrampolineRepository, withEndpoint endpoint: String) async -> TrampolineRepository
+
+    /// Asks the user for the repository's account: to sign in to its own
+    /// again or choose another, to choose one, or to sign in to its server.
+    /// Returns the account, assigned to the repository, or nil when the user
+    /// cancelled. Only for git commands the user started.
+    func promptForRepositoryAccount(_ repository: TrampolineRepository) async -> TrampolineAccount?
 }
 
 /// The username in `url`, percent-decoded, as git gives it and Espalier

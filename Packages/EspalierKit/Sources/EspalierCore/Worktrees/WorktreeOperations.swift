@@ -115,6 +115,9 @@ extension WorktreesModel {
     ///
     /// - `confirmationRequired(.removeWorktree)` first while "Confirm
     ///   removing worktrees" is on.
+    /// - A worktree whose folder is gone (`isMissing(_:)`) always asks
+    ///   instead, `confirmationRequired(.removeMissingWorktree)`, and is left
+    ///   in place when its folder is back by the time git runs.
     /// - The repository's own worktree is deleted from the main worktree,
     ///   and then the repository switches to the main worktree (or selects
     ///   it, when it's another repository in the list, and this one goes
@@ -125,16 +128,30 @@ extension WorktreesModel {
     ///   (`RemoveWorktreeRetry`).
     ///
     /// - Throws: A precondition error for the main worktree or a locked one,
-    ///   or a worktree git no longer lists; `busy` while another repository in
-    ///   the list at that folder runs an operation the user started; git's
-    ///   error.
+    ///   a worktree git no longer lists, or a missing one whose folder is
+    ///   back; `busy` while another repository in the list at that folder
+    ///   runs an operation the user started; git's error.
     public func remove(_ worktree: WorktreeEntry, force: Bool = false, confirmed: Set<ConfirmationKind> = []) async throws(OperationError) {
         guard let repository, let app = repository.app else {
             throw notInList(.removeWorktree)
         }
         let name = getWorktreeDisplayName(worktree)
         try refuseMainOrLocked(worktree, .removeWorktree)
-        if app.preferences.confirmWorktreeRemoval, !confirmed.contains(.removeWorktree) {
+        // Once the user agreed to remove it as missing, it stays a missing
+        // worktree's removal: if its folder is back, it's left in place
+        // rather than asked about deleting, which would delete the folder.
+        let missing = confirmed.contains(.removeMissingWorktree) || isMissing(worktree)
+        if missing {
+            // The user may not have asked to delete it (a click on it in the
+            // list), so this asks whatever the setting says.
+            if !confirmed.contains(.removeMissingWorktree) {
+                throw OperationError(
+                    .confirmationRequired(.removeMissingWorktree(name: name, path: worktree.path)),
+                    operation: .removeWorktree,
+                    repositoryID: repository.id
+                )
+            }
+        } else if app.preferences.confirmWorktreeRemoval, !confirmed.contains(.removeWorktree) {
             throw OperationError(
                 .confirmationRequired(.removeWorktree(name: name, path: worktree.path)),
                 operation: .removeWorktree,
@@ -162,6 +179,13 @@ extension WorktreesModel {
                     )
                 }
                 try self.refuseMainOrLocked(target, .removeWorktree)
+                if missing, itemExists(atPath: target.path) {
+                    throw OperationError(
+                        .precondition("The worktree \(name) is available again, so it was left in place."),
+                        operation: .removeWorktree,
+                        repositoryID: self.repository?.id
+                    )
+                }
 
                 let isCurrent = sameWorktreePath(ctx.repository.path, target.path)
                 let main = worktrees.first { $0.type == .main }
@@ -219,7 +243,7 @@ extension WorktreesModel {
         if sameWorktreePath(worktree.path, destination) {
             return
         }
-        if itemExists(at: destination) {
+        if itemExists(atPath: destination) {
             throw OperationError(
                 .precondition("There's already a file or folder at \(destination)."),
                 operation: .moveWorktree,
@@ -381,12 +405,6 @@ func sameWorktreePath(_ x: String, _ y: String) -> Bool {
 
 private func trimmingSlash(_ path: String) -> String {
     path.count > 1 && JSCompat.endsWith(path, "/") ? String(path.dropLast()) : path
-}
-
-/// Whether anything, a dangling symbolic link included, is at `path`.
-private func itemExists(at path: String) -> Bool {
-    var info = stat()
-    return lstat(path, &info) == 0
 }
 
 // MARK: - Forced deletion

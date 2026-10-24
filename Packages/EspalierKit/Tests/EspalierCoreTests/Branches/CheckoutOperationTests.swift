@@ -1,6 +1,7 @@
 // These drive `BranchesModel.checkout` against real git, with every
-// strategy, the confirmations and decisions, and the
-// local-changes-overwritten recovery.
+// strategy, the confirmations and decisions, a branch in another worktree
+// or in one whose folder is gone, and the local-changes-overwritten
+// recovery.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -330,6 +331,125 @@ struct CheckoutOperationTests {
         await app.idle()
         #expect(repository.gitState.tip.branch?.name == "feature")
         #expect(try await runGit(["rev-parse", "--abbrev-ref", "HEAD"], local) == "main\n")
+    }
+
+    /// Adds a worktree for `feature` with git, refreshes, then deletes its
+    /// folder, as Finder would; returns the worktree's folder.
+    private func addMissingWorktree(to repository: RepositoryModel, _ local: Repository) async throws -> String {
+        let worktreePath = try createTempDirectory() + "/feature"
+        try await runGit(["worktree", "add", worktreePath, "feature"], local)
+        await repository.refresh(.full, reason: .user)
+        try FileManager.default.removeItem(atPath: worktreePath)
+        return worktreePath
+    }
+
+    @Test("a branch checked out in a worktree whose folder is gone asks, then removes that worktree and checks the branch out here")
+    func missingWorktree() async throws {
+        let (_, app, repository, local) = try await makeRepository()
+        _ = try await addMissingWorktree(to: repository, local)
+        let feature = try branch("feature", in: repository)
+
+        let error = await #expect(throws: OperationError.self) {
+            try await repository.branches.checkout(feature)
+        }
+        guard case .confirmationRequired(let confirmation)? = error?.reason else {
+            Issue.record("Expected a confirmation, got \(String(describing: error))")
+            return
+        }
+        #expect(confirmation.kind == .removeMissingWorktree)
+        #expect(try await listWorktrees(local).count == 2)
+
+        #expect(try await repository.branches.checkout(feature, confirmed: [.removeMissingWorktree]) == .checkedOut(feature))
+        #expect(try await listWorktrees(local).count == 1)
+        #expect(try await runGit(["rev-parse", "--abbrev-ref", "HEAD"], local) == "feature\n")
+        #expect(repository.record.path == local.path)
+        #expect(repository.gitState.tip.branch?.name == "feature")
+        await app.idle()
+        #expect(repository.gitState.worktrees.count == 1)
+    }
+
+    @Test("the missing worktree's question comes before the changes', and nothing is removed until both are answered")
+    func missingWorktreeWithChanges() async throws {
+        let (harness, app, repository, local) = try await makeRepository()
+        _ = try await addMissingWorktree(to: repository, local)
+        try harness.write("notes.txt", "notes\n", in: local)
+        await repository.refresh(.status, reason: .user)
+        let feature = try branch("feature", in: repository)
+
+        let first = await #expect(throws: OperationError.self) {
+            try await repository.branches.checkout(feature)
+        }
+        guard case .confirmationRequired(let confirmation)? = first?.reason else {
+            Issue.record("Expected a confirmation, got \(String(describing: first))")
+            return
+        }
+        #expect(confirmation.kind == .removeMissingWorktree)
+        let second = await #expect(throws: OperationError.self) {
+            try await repository.branches.checkout(feature, confirmed: [.removeMissingWorktree])
+        }
+        #expect(second?.reason == .decisionRequired(.uncommittedChanges(currentBranch: "main", targetBranch: "feature")))
+        #expect(try await listWorktrees(local).count == 2)
+
+        let result = try await repository.branches.checkout(feature, strategy: .stashOnCurrentBranch, confirmed: [.removeMissingWorktree])
+        #expect(result == .checkedOut(feature))
+        #expect(try await listWorktrees(local).count == 1)
+        #expect(try await stashList(local) == ["On main: !!Espalier<main>"])
+        #expect(repository.gitState.tip.branch?.name == "feature")
+        await app.idle()
+    }
+
+    @Test("a missing worktree whose folder is back by the answer is switched to, not removed")
+    func missingWorktreeThatCameBack() async throws {
+        let (_, app, repository, local) = try await makeRepository()
+        let worktreePath = try createTempDirectory() + "/feature"
+        try await runGit(["worktree", "add", worktreePath, "feature"], local)
+        await repository.refresh(.full, reason: .user)
+        let worktree = try #require(repository.gitState.worktrees.first { $0.branch == "refs/heads/feature" })
+        let away = POSIXPath.join(try createTempDirectory(), "away")
+        try FileManager.default.moveItem(atPath: worktreePath, toPath: away)
+        let feature = try branch("feature", in: repository)
+
+        let error = await #expect(throws: OperationError.self) {
+            try await repository.branches.checkout(feature)
+        }
+        guard case .confirmationRequired(let confirmation)? = error?.reason else {
+            Issue.record("Expected a confirmation, got \(String(describing: error))")
+            return
+        }
+        #expect(confirmation.kind == .removeMissingWorktree)
+
+        // The folder comes back between the question and the answer.
+        try FileManager.default.moveItem(atPath: away, toPath: worktreePath)
+        let result = try await repository.branches.checkout(feature, confirmed: [.removeMissingWorktree])
+        #expect(result == .switchedToWorktree(worktree))
+        #expect(repository.record.path == worktree.path)
+        #expect(try await listWorktrees(local).count == 2)
+        #expect(try await runGit(["rev-parse", "--abbrev-ref", "HEAD"], local) == "main\n")
+        await app.idle()
+    }
+
+    @Test("during the checkout, the worktree holding the branch is removed only while its folder is gone")
+    func removeMissingWorktreeInCheckout() async throws {
+        let (_, app, repository, local) = try await makeRepository()
+        let worktreePath = try createTempDirectory() + "/feature"
+        try await runGit(["worktree", "add", worktreePath, "feature"], local)
+        let holding = { () async throws -> WorktreeEntry? in
+            try await repository.perform(OperationDescriptor(kind: .checkoutBranch)) { ctx in
+                try await repository.worktrees.removeMissingWorktree(holding: "refs/heads/feature", in: ctx)
+            }
+        }
+
+        let listed = try #require(try await listWorktrees(local).first { $0.branch == "refs/heads/feature" })
+        #expect(try await holding() == listed)
+        #expect(try await listWorktrees(local).count == 2)
+
+        try FileManager.default.removeItem(atPath: worktreePath)
+        #expect(try await holding() == nil)
+        #expect(try await listWorktrees(local).count == 1)
+
+        // Nothing holds the branch now.
+        #expect(try await holding() == nil)
+        await app.idle()
     }
 
     @Test("checking out while another local operation runs is busy")

@@ -17,7 +17,10 @@ import GitHubKit
 ///
 /// Repositories are listed in the order they were added. GitHub
 /// repositories are a table the repositories refer to by ID, so a fork and
-/// its parent share one row.
+/// its parent share one row. A row belongs to the account its data was
+/// fetched with (`StoredGitHubRepository.accountLogin`): repositories
+/// assigned to different accounts refer to different rows of one GitHub
+/// repository.
 public struct RepositoryListDocument: Codable, Sendable, Equatable {
     /// The schema version this build reads and writes. A file with a larger
     /// one comes from a newer Espalier and is never overwritten.
@@ -92,6 +95,13 @@ public struct StoredRepository: Codable, Sendable, Hashable {
     public var missing: Bool
     /// The `StoredGitHubRepository.id` of the associated GitHub repository.
     public var gitHubRepositoryID: Int?
+    /// The login of the account assigned to the repository
+    /// (`RepositoryRecord.accountLogin`), or nil for none.
+    public var accountLogin: String?
+    /// Whether the row was written before repositories had accounts (it has
+    /// no `accountLogin` key): its account is assigned once, from the
+    /// accounts saved then (`migratingAccountAssignments(_:)`).
+    public var awaitsAccountAssignment: Bool
     public var workflowPreferences: WorkflowPreferences
     public var isTutorialRepository: Bool
     public var tagsToPush: [String]
@@ -114,6 +124,8 @@ public struct StoredRepository: Codable, Sendable, Hashable {
         alias: String? = nil,
         missing: Bool = false,
         gitHubRepositoryID: Int? = nil,
+        accountLogin: String? = nil,
+        awaitsAccountAssignment: Bool = false,
         workflowPreferences: WorkflowPreferences = WorkflowPreferences(),
         isTutorialRepository: Bool = false,
         tagsToPush: [String] = [],
@@ -129,6 +141,8 @@ public struct StoredRepository: Codable, Sendable, Hashable {
         self.alias = alias
         self.missing = missing
         self.gitHubRepositoryID = gitHubRepositoryID
+        self.accountLogin = accountLogin
+        self.awaitsAccountAssignment = awaitsAccountAssignment
         self.workflowPreferences = workflowPreferences
         self.isTutorialRepository = isTutorialRepository
         self.tagsToPush = tagsToPush
@@ -148,6 +162,7 @@ public struct StoredRepository: Codable, Sendable, Hashable {
             alias: record.alias,
             missing: record.isMissing,
             gitHubRepositoryID: record.gitHubRepository?.dbID,
+            accountLogin: record.accountLogin,
             workflowPreferences: record.workflowPreferences,
             isTutorialRepository: record.isTutorialRepository,
             tagsToPush: record.tagsToPush,
@@ -159,12 +174,13 @@ public struct StoredRepository: Codable, Sendable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, path, gitDir, mainWorktreePath, alias, missing, gitHubRepositoryID, workflowPreferences
+        case id, path, gitDir, mainWorktreePath, alias, missing, gitHubRepositoryID, accountLogin, workflowPreferences
         case isTutorialRepository, tagsToPush, ignoreExistingUpstreamRemote, rewrittenBranches, addedAt, historyScope
     }
 
     /// Requires `id` and `path`; anything else missing or null takes its
-    /// default. A value of the wrong type fails the row.
+    /// default. A value of the wrong type fails the row. Without an
+    /// `accountLogin` key (even a null one) the row awaits its account.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(RepositoryID.self, forKey: .id)
@@ -174,6 +190,8 @@ public struct StoredRepository: Codable, Sendable, Hashable {
         alias = try container.decodeIfPresent(String.self, forKey: .alias)
         missing = try container.decodeIfPresent(Bool.self, forKey: .missing) ?? false
         gitHubRepositoryID = try container.decodeIfPresent(Int.self, forKey: .gitHubRepositoryID)
+        awaitsAccountAssignment = !container.contains(.accountLogin)
+        accountLogin = try container.decodeIfPresent(String.self, forKey: .accountLogin)
         workflowPreferences = try container.decodeIfPresent(WorkflowPreferences.self, forKey: .workflowPreferences)
             ?? WorkflowPreferences()
         isTutorialRepository = try container.decodeIfPresent(Bool.self, forKey: .isTutorialRepository) ?? false
@@ -186,7 +204,8 @@ public struct StoredRepository: Codable, Sendable, Hashable {
     }
 
     /// Writes every key, with `null` for an absent value, so the file shows
-    /// its whole shape.
+    /// its whole shape. A row awaiting its account leaves out
+    /// `accountLogin`, so it still does when read again.
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -196,6 +215,9 @@ public struct StoredRepository: Codable, Sendable, Hashable {
         try container.encode(alias, forKey: .alias)
         try container.encode(missing, forKey: .missing)
         try container.encode(gitHubRepositoryID, forKey: .gitHubRepositoryID)
+        if !awaitsAccountAssignment {
+            try container.encode(accountLogin, forKey: .accountLogin)
+        }
         try container.encode(workflowPreferences, forKey: .workflowPreferences)
         try container.encode(isTutorialRepository, forKey: .isTutorialRepository)
         try container.encode(tagsToPush, forKey: .tagsToPush)
@@ -214,6 +236,17 @@ public struct StoredGitHubRepository: Codable, Sendable, Hashable {
     public var id: Int
     public var name: String
     public var owner: StoredOwner
+    /// The lowercased login of the account the row's data was fetched with,
+    /// or empty for data no account is known for (a repository without an
+    /// account, a row written before repositories had accounts).
+    ///
+    /// It isn't the repository's account (`StoredRepository.accountLogin`
+    /// is), only the scope of what's cached for it: the permissions, and
+    /// everything keyed by the row's ID (pull requests, issues, mentionable
+    /// users), may differ between accounts or be private to one. A row's
+    /// account never changes: a repository assigned to another account
+    /// moves to the row of that account (`GitHubRepositoryTable.scopedRowID`).
+    public var accountLogin: String
     public var isPrivate: Bool?
     public var htmlURL: String?
     public var cloneURL: String?
@@ -229,6 +262,7 @@ public struct StoredGitHubRepository: Codable, Sendable, Hashable {
         id: Int,
         name: String,
         owner: StoredOwner,
+        accountLogin: String = "",
         isPrivate: Bool? = nil,
         htmlURL: String? = nil,
         cloneURL: String? = nil,
@@ -241,6 +275,7 @@ public struct StoredGitHubRepository: Codable, Sendable, Hashable {
         self.id = id
         self.name = name
         self.owner = owner
+        self.accountLogin = JSCompat.toLowerCase(accountLogin)
         self.isPrivate = isPrivate
         self.htmlURL = htmlURL
         self.cloneURL = cloneURL
@@ -253,11 +288,12 @@ public struct StoredGitHubRepository: Codable, Sendable, Hashable {
 
     /// The row for `repository` (its `dbID` and its parent's), without its
     /// parent's own row.
-    public init(_ repository: GitHubRepository, lastPruneDate: Date? = nil) {
+    public init(_ repository: GitHubRepository, accountLogin: String = "", lastPruneDate: Date? = nil) {
         self.init(
             id: repository.dbID,
             name: repository.name,
             owner: StoredOwner(repository.owner),
+            accountLogin: accountLogin,
             isPrivate: repository.isPrivate,
             htmlURL: repository.htmlURL,
             cloneURL: repository.cloneURL,
@@ -270,25 +306,35 @@ public struct StoredGitHubRepository: Codable, Sendable, Hashable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, owner, isPrivate, htmlURL, cloneURL, parentID, issuesEnabled, isArchived, permissions, lastPruneDate
+        case id, name, owner, accountLogin, isPrivate, htmlURL, cloneURL, parentID, issuesEnabled, isArchived, permissions, lastPruneDate
     }
 
     /// Requires `id`, `name`, and `owner`; anything else missing or null is
     /// unknown. Permissions this version doesn't know are unknown too. A
     /// value of the wrong type fails the row.
+    ///
+    /// A row without an `accountLogin` key was written before repositories
+    /// had accounts: it belongs to no account, and its permissions, which
+    /// can't be told to be any account's, are unknown.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(Int.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
         owner = try container.decode(StoredOwner.self, forKey: .owner)
+        let storedAccountLogin = try container.decodeIfPresent(String.self, forKey: .accountLogin)
+        accountLogin = JSCompat.toLowerCase(storedAccountLogin ?? "")
         isPrivate = try container.decodeIfPresent(Bool.self, forKey: .isPrivate)
         htmlURL = try container.decodeIfPresent(String.self, forKey: .htmlURL)
         cloneURL = try container.decodeIfPresent(String.self, forKey: .cloneURL)
         parentID = try container.decodeIfPresent(Int.self, forKey: .parentID)
         issuesEnabled = try container.decodeIfPresent(Bool.self, forKey: .issuesEnabled)
         isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived)
-        permissions = try container.decodeIfPresent(String.self, forKey: .permissions)
-            .flatMap(GitHubRepositoryPermission.init(rawValue:))
+        if container.contains(.accountLogin) {
+            permissions = try container.decodeIfPresent(String.self, forKey: .permissions)
+                .flatMap(GitHubRepositoryPermission.init(rawValue:))
+        } else {
+            permissions = nil
+        }
         lastPruneDate = try container.decodeIfPresent(Date.self, forKey: .lastPruneDate)
     }
 
@@ -297,6 +343,7 @@ public struct StoredGitHubRepository: Codable, Sendable, Hashable {
         try container.encode(id, forKey: .id)
         try container.encode(name, forKey: .name)
         try container.encode(owner, forKey: .owner)
+        try container.encode(accountLogin, forKey: .accountLogin)
         try container.encode(isPrivate, forKey: .isPrivate)
         try container.encode(htmlURL, forKey: .htmlURL)
         try container.encode(cloneURL, forKey: .cloneURL)
@@ -362,7 +409,8 @@ public struct StoredOwner: Codable, Sendable, Hashable {
 ///
 /// Rows are matched by owner and name: an owner is the same on an
 /// endpoint whatever the case of its login (`getOwnerKey`), and the name
-/// matches case-insensitively too, as GitHub does.
+/// matches case-insensitively too, as GitHub does. Each account has rows of
+/// its own (`StoredGitHubRepository.accountLogin`).
 public struct GitHubRepositoryTable: Sendable, Equatable {
     /// The rows, by ID.
     public private(set) var rows: [Int: StoredGitHubRepository]
@@ -384,14 +432,53 @@ public struct GitHubRepositoryTable: Sendable, Equatable {
         rows[id]
     }
 
-    /// The row for the repository named `name` that `ownerLogin` owns on
-    /// `endpoint`, ignoring case; the oldest row when several match.
-    public func row(endpoint: String, ownerLogin: String, name: String) -> StoredGitHubRepository? {
+    /// The row of `accountLogin` (empty for none) for the repository named
+    /// `name` that `ownerLogin` owns on `endpoint`, ignoring case; the
+    /// oldest row when several match.
+    public func row(endpoint: String, ownerLogin: String, name: String, accountLogin: String) -> StoredGitHubRepository? {
         let ownerKey = getOwnerKey(endpoint, ownerLogin)
+        let account = JSCompat.toLowerCase(accountLogin)
         return rows.values
+            .filter { JSCompat.strictEquals($0.accountLogin, account) }
             .filter { JSCompat.strictEquals(getOwnerKey($0.owner.endpoint, $0.owner.login), ownerKey) }
             .filter { JSCompat.caseInsensitiveEquals($0.name, name) }
             .min { $0.id < $1.id }
+    }
+
+    /// The ID of the row of `accountLogin` (nil for none) for the repository
+    /// of row `id`: that row when it's the account's, else the account's
+    /// own, made when it has none.
+    ///
+    /// A row made for the account copies what doesn't depend on who asked
+    /// (the name, owner, URLs) and leaves out what does: the permissions
+    /// and the last prune. Its parent is the account's row for the parent.
+    /// Nil when there's no row `id`.
+    public mutating func scopedRowID(for id: Int, accountLogin: String?) -> Int? {
+        var visiting: Set<Int> = []
+        return scopedRowID(for: id, accountLogin: JSCompat.toLowerCase(accountLogin ?? ""), visiting: &visiting)
+    }
+
+    private mutating func scopedRowID(for id: Int, accountLogin: String, visiting: inout Set<Int>) -> Int? {
+        guard let source = rows[id] else {
+            return nil
+        }
+        if JSCompat.strictEquals(source.accountLogin, accountLogin) {
+            return id
+        }
+        if let existing = row(endpoint: source.owner.endpoint, ownerLogin: source.owner.login, name: source.name, accountLogin: accountLogin) {
+            return existing.id
+        }
+        // A parent chain that loops ends where it would repeat a row.
+        visiting.insert(id)
+        let parentID = source.parentID.flatMap { parent in
+            visiting.contains(parent) ? nil : scopedRowID(for: parent, accountLogin: accountLogin, visiting: &visiting)
+        }
+        var scoped = source
+        scoped.accountLogin = accountLogin
+        scoped.parentID = parentID
+        scoped.permissions = nil
+        scoped.lastPruneDate = nil
+        return insert(scoped)
     }
 
     /// Adds `row` under a new ID (whatever `row.id` says) and returns the ID.
@@ -490,7 +577,7 @@ extension RepositoryListDocument {
         for record in records {
             var next = record.gitHubRepository
             while let repository = next, table[repository.dbID] == nil {
-                table.update(StoredGitHubRepository(repository))
+                table.update(StoredGitHubRepository(repository, accountLogin: record.accountLogin ?? ""))
                 next = repository.parent
             }
         }
@@ -533,6 +620,7 @@ extension RepositoryListDocument {
                 alias: stored.alias,
                 isMissing: stored.missing,
                 gitHubRepository: stored.gitHubRepositoryID.flatMap(table.gitHubRepository(withID:)),
+                accountLogin: stored.accountLogin,
                 workflowPreferences: stored.workflowPreferences,
                 isTutorialRepository: stored.isTutorialRepository,
                 tagsToPush: stored.tagsToPush,
@@ -542,5 +630,47 @@ extension RepositoryListDocument {
                 historyScope: stored.historyScope
             )
         }
+    }
+}
+
+// MARK: - Assigning accounts once
+
+extension RepositoryListDocument {
+    /// Whether some repository was saved before repositories had accounts.
+    public var awaitsAccountAssignments: Bool {
+        repositories.contains(where: \.awaitsAccountAssignment)
+    }
+
+    /// The document with an account assigned to each repository saved
+    /// before repositories had accounts: the first of `identities` (the
+    /// accounts saved when Espalier launched, `getPersistedIdentities`) on
+    /// its GitHub repository's endpoint, else none. The repository moves to
+    /// that account's row of its GitHub repository.
+    ///
+    /// Every saved account counts, those whose tokens couldn't be read or
+    /// were signed out as they loaded included, so a locked keychain at
+    /// launch doesn't leave repositories without their accounts. It runs
+    /// once: a repository assigned no account keeps none, and is never
+    /// assigned one by signing in later.
+    ///
+    /// Nil when no repository awaits its account.
+    public func migratingAccountAssignments(_ identities: [AccountIdentity]) -> RepositoryListDocument? {
+        guard awaitsAccountAssignments else {
+            return nil
+        }
+        var table = gitHubRepositoryTable
+        var document = self
+        for index in document.repositories.indices where document.repositories[index].awaitsAccountAssignment {
+            var stored = document.repositories[index]
+            let endpoint = stored.gitHubRepositoryID.flatMap { table[$0] }?.owner.endpoint
+            let login = endpoint.flatMap { endpoint in identities.first { JSCompat.strictEquals($0.endpoint, endpoint) } }?.login
+            stored.accountLogin = login
+            stored.gitHubRepositoryID = stored.gitHubRepositoryID.flatMap { table.scopedRowID(for: $0, accountLogin: login) }
+            stored.awaitsAccountAssignment = false
+            document.repositories[index] = stored
+        }
+        document.gitHubRepositories = table.rows.values.sorted { $0.id < $1.id }
+        document.nextGitHubRepositoryID = table.nextID
+        return document
     }
 }

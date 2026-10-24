@@ -260,7 +260,7 @@ extension AppModel {
                 headRepositoryOwner: head.owner.login,
                 headCloneURL: head.cloneURL,
                 headRef: pullRequest.head.ref,
-                pullRequest: background.pullRequests.store.model(for: pullRequest, endpoint: gitHubRepository.endpoint)
+                pullRequest: background.pullRequests.store.model(for: pullRequest, in: gitHubRepository)
             )
         } else if let branch = action.branch {
             // Ensure a fresh clone has its state before the next steps.
@@ -347,17 +347,61 @@ extension AppModel {
         return resolved
     }
 
-    /// The pull request `pr` of the repository at `url`, through the account
-    /// signed in to its server.
+    /// The pull request `pr` of the repository at `url`: through the account
+    /// of the repository in the list for it (the selected one first), asked
+    /// for when it has none; else through the account that can see it,
+    /// asked when several might. It throws when no account can be used, when
+    /// no account's access could be checked, and when the user cancels the
+    /// question.
     private func fetchPullRequest(_ url: String, _ pr: String) async throws(OperationError) -> APIPullRequest {
         let endpoint = getEndpointForRepository(url)
         let remoteURL = parseRemote(url)
-        guard let account = getAccountForEndpoint(accounts.accounts, endpoint) else {
-            let host = remoteURL?.hostname ?? url
-            throw OperationError(.precondition("Sign in to \(host) to check out this pull request."), operation: .checkoutBranch)
-        }
+        let host = remoteURL?.hostname ?? url
+        let signIn = OperationError(.precondition("Sign in to \(host) to check out this pull request."), operation: .checkoutBranch)
         guard let remoteURL, !remoteURL.owner.isEmpty, !remoteURL.name.isEmpty else {
+            guard !accounts.accounts(onEndpoint: endpoint).isEmpty else {
+                throw signIn
+            }
             throw OperationError(.precondition("\(url) isn't a GitHub repository."), operation: .checkoutBranch)
+        }
+
+        func names(_ repository: GitHubRepository?) -> Bool {
+            guard let repository else {
+                return false
+            }
+            return JSCompat.strictEquals(repository.endpoint, endpoint)
+                && JSCompat.caseInsensitiveEquals(repository.owner.login, remoteURL.owner)
+                && JSCompat.caseInsensitiveEquals(repository.name, remoteURL.name)
+        }
+        let matching = repositories.filter { names($0.gitHubRepository) || names($0.gitHubRepository?.parent) }
+        let local = matching.first { selection == .repository($0.id) } ?? matching.first
+
+        let account: Account?
+        if let local {
+            account = await ensureRepositoryAccount(local.id)
+        } else {
+            let choice: RemoteAccountChoice
+            do {
+                choice = try await chooseAccount(forRemote: url)
+            } catch {
+                throw OperationError(.api(apiFailure(from: error)), operation: .checkoutBranch, underlying: error)
+            }
+            switch choice {
+            case .assigned(let assignment):
+                account = assignment.account
+            case .noAccess:
+                account = nil
+            case .undecided:
+                throw OperationError(
+                    .precondition("Couldn't check which of your accounts on \(host) can see \(remoteURL.owner)/\(remoteURL.name). Try again."),
+                    operation: .checkoutBranch
+                )
+            case .cancelled:
+                throw OperationError(.cancelled(.userCancelled), operation: .checkoutBranch)
+            }
+        }
+        guard let account, JSCompat.strictEquals(account.endpoint, endpoint) else {
+            throw signIn
         }
         let gitHub = environment.gitHub
         do {

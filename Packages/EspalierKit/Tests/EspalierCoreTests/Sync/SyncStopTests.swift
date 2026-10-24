@@ -245,6 +245,11 @@ struct SyncStopTests {
         #expect(!sync.stop())
 
         mergeGate.release()
+        // After its merge, the pull updates the remote's HEAD, which asks the
+        // remote again, through the same gate.
+        let headHeld = try await fetchGate.waitUntilHeld(while: pull)
+        defer { Darwin.close(headHeld) }
+        fetchGate.release()
         #expect(try await pull.value == .completed)
         #expect(FileManager.default.fileExists(atPath: POSIXPath.join(fixture.local.path, "other.txt")))
         await fixture.app.idle()

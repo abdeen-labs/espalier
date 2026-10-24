@@ -1408,21 +1408,21 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     // MARK: Conflict blocks
 
     /// Where a conflict block header's button is in its row (from the
-    /// pane's left edge, the row's top): a small capsule at the trailing
-    /// edge, centered; nil for a header without one.
+    /// pane's left edge, the row's top): its title with a little room on
+    /// each side, at the trailing edge, the row's height; nil for a header
+    /// without one.
     func conflictButtonRect(ofRow row: Int, rowHeight: CGFloat) -> CGRect? {
         guard let header = document.conflictHeader(ofRow: row),
               let title = shownContent?.conflicts?.side(header.side)?.buttonTitle
         else {
             return nil
         }
-        let width = conflictButtonTitleWidth(title) + 2 * Metrics.ControlHeight.horizontalPadding(for: .small)
-        let height = Metrics.ControlHeight.small
+        let width = conflictButtonTitleWidth(title) + 2 * DiffTableMetrics.conflictButtonInset
         return CGRect(
-            x: (geometry.width - DiffTableMetrics.trailingInset - width).rounded(),
-            y: ((rowHeight - height) / 2).rounded(),
+            x: (geometry.width - DiffTableMetrics.trailingInset + DiffTableMetrics.conflictButtonInset - width).rounded(),
+            y: 0,
             width: width,
-            height: height
+            height: rowHeight
         )
     }
 

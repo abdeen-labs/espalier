@@ -17,6 +17,9 @@ import Synchronization
 /// await scheduler.advance(by: .seconds(10))   // the loop's body runs
 /// ```
 ///
+/// `waitForSleep(of:)` waits for one sleep among others: a loop's interval
+/// while another task sleeps too.
+///
 /// `advance(by:)` wakes sleepers in deadline order and gives the tasks it
 /// woke a moment to run between deadlines (it waits for the main actor and
 /// yields, until they sleep again or a bound passes), so a loop that sleeps
@@ -26,6 +29,8 @@ import Synchronization
 /// time and use `waitForSleepers` to be exact.
 public final class ManualScheduler: Scheduler {
     private struct Sleeper {
+        /// How long the sleep was for.
+        let duration: Duration
         let deadline: Duration
         let continuation: CheckedContinuation<Void, any Error>
     }
@@ -33,6 +38,8 @@ public final class ManualScheduler: Scheduler {
     private struct SleeperWaiter {
         let id: UInt64
         let count: Int
+        /// The sleep to wait for, instead of a count of sleepers.
+        let duration: Duration?
         let continuation: CheckedContinuation<Void, Never>
     }
 
@@ -50,10 +57,19 @@ public final class ManualScheduler: Scheduler {
         var waiters: [SleeperWaiter] = []
 
         mutating func takeSatisfiedWaiters() -> [CheckedContinuation<Void, Never>] {
-            let count = sleepers.count
-            let satisfied = waiters.filter { $0.count <= count }
-            waiters.removeAll { $0.count <= count }
+            let asleep = sleepers
+            let satisfied = waiters.filter { Self.isSatisfied(count: $0.count, duration: $0.duration, asleep) }
+            waiters.removeAll { Self.isSatisfied(count: $0.count, duration: $0.duration, asleep) }
             return satisfied.map(\.continuation)
+        }
+
+        /// Whether `count` tasks are asleep, or, with `duration`, one in a
+        /// sleep that long.
+        static func isSatisfied(count: Int, duration: Duration?, _ sleepers: [UInt64: Sleeper]) -> Bool {
+            if let duration {
+                return sleepers.values.contains { $0.duration == duration }
+            }
+            return sleepers.count >= count
         }
     }
 
@@ -107,7 +123,7 @@ public final class ManualScheduler: Scheduler {
                     if state.registering.removeValue(forKey: id) == true {
                         return (true, [])
                     }
-                    state.sleepers[id] = Sleeper(deadline: state.elapsed + duration, continuation: continuation)
+                    state.sleepers[id] = Sleeper(duration: duration, deadline: state.elapsed + duration, continuation: continuation)
                     state.registrations += 1
                     return (false, state.takeSatisfiedWaiters())
                 }
@@ -166,6 +182,17 @@ public final class ManualScheduler: Scheduler {
     /// Waits until at least `count` tasks are asleep. Returns at once when
     /// they already are, and when the waiting task is cancelled.
     public func waitForSleepers(_ count: Int = 1) async {
+        await waitForSleepers(count, duration: nil)
+    }
+
+    /// Waits until a task is asleep in a sleep of `duration`, whatever else
+    /// sleeps. Returns at once when one already is, and when the waiting
+    /// task is cancelled.
+    public func waitForSleep(of duration: Duration) async {
+        await waitForSleepers(1, duration: duration)
+    }
+
+    private func waitForSleepers(_ count: Int, duration: Duration?) async {
         let id = state.withLock { state in
             state.nextID += 1
             return state.nextID
@@ -173,10 +200,10 @@ public final class ManualScheduler: Scheduler {
         await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                 let ready = state.withLock { state in
-                    if state.sleepers.count >= count || Task.isCancelled {
+                    if State.isSatisfied(count: count, duration: duration, state.sleepers) || Task.isCancelled {
                         return true
                     }
-                    state.waiters.append(SleeperWaiter(id: id, count: count, continuation: continuation))
+                    state.waiters.append(SleeperWaiter(id: id, count: count, duration: duration, continuation: continuation))
                     return false
                 }
                 if ready {

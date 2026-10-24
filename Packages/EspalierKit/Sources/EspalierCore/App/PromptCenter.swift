@@ -1,5 +1,6 @@
 import EspalierSupport
 import Foundation
+import GitHubKit
 import GitKit
 import Observation
 import os
@@ -19,6 +20,9 @@ public enum Prompt: Sendable, Equatable {
     case genericGitAuthentication(endpoint: String, username: String?)
     /// Signing in to the GitHub host at `endpoint` is needed.
     case gitHubSignIn(endpoint: String)
+    /// Which account to use for a repository: its own isn't signed in, it
+    /// has none, or several can see it.
+    case repositoryAccount(RepositoryAccountRequest)
     /// A hook failed: ignore the failure and continue, or abort.
     case hookFailed(hookName: String, terminalOutput: String)
 
@@ -29,6 +33,7 @@ public enum Prompt: Sendable, Equatable {
         case .addSSHHost: .addSSHHost(false)
         case .sshKeyPassphrase, .sshUserPassword: .sshSecret(PromptSSHSecretResponse(secret: nil, storeSecret: false))
         case .genericGitAuthentication, .gitHubSignIn: .credentials(nil)
+        case .repositoryAccount: .repositoryAccount(nil)
         case .hookFailed: .hookFailure(.abort)
         }
     }
@@ -39,7 +44,7 @@ public enum Prompt: Sendable, Equatable {
         case (.addSSHHost, .addSSHHost),
              (.sshKeyPassphrase, .sshSecret), (.sshUserPassword, .sshSecret),
              (.genericGitAuthentication, .credentials), (.gitHubSignIn, .credentials),
-             (.hookFailed, .hookFailure):
+             (.repositoryAccount, .repositoryAccount), (.hookFailed, .hookFailure):
             true
         default:
             false
@@ -55,8 +60,38 @@ public enum PromptAnswer: Sendable, Equatable {
     case sshSecret(PromptSSHSecretResponse)
     /// The credentials or account, or nil when dismissed.
     case credentials(TrampolineAccount?)
+    /// The account chosen, or signed in to, for a repository; nil when
+    /// dismissed.
+    case repositoryAccount(AccountIdentity?)
     /// What to do about the failed hook.
     case hookFailure(HookFailureResolution)
+}
+
+/// What asking which account to use for a repository shows.
+public struct RepositoryAccountRequest: Sendable, Equatable {
+    /// The repository, as the list names it or `owner/name`.
+    public let repositoryName: String
+    /// The API endpoint of the repository's GitHub repository.
+    public let endpoint: String
+    /// The account assigned to the repository when it isn't signed in: the
+    /// prompt offers to sign in to it again, or to choose another.
+    public let signedOutLogin: String?
+    /// The accounts to choose among when only some can be (those that can
+    /// see the repository, and those whose access couldn't be checked); nil
+    /// for every account signed in to the endpoint.
+    public let candidates: [AccountIdentity]?
+
+    public init(repositoryName: String, endpoint: String, signedOutLogin: String? = nil, candidates: [AccountIdentity]? = nil) {
+        self.repositoryName = repositoryName
+        self.endpoint = endpoint
+        self.signedOutLogin = signedOutLogin
+        self.candidates = candidates
+    }
+
+    /// The host to name: `github.com`, `ghe.example.com`.
+    public var host: String {
+        (try? JSURL(getHTMLURL(endpoint)))?.host ?? endpoint
+    }
 }
 
 /// A prompt waiting for an answer.
@@ -192,6 +227,15 @@ public final class PromptCenter: TrampolinePrompter {
             return nil
         }
         return account
+    }
+
+    /// Which account to use for a repository (`Prompt.repositoryAccount`):
+    /// the one chosen or signed in to, or nil when dismissed.
+    public func promptForRepositoryAccount(_ request: RepositoryAccountRequest) async -> AccountIdentity? {
+        guard case .repositoryAccount(let identity) = await ask(.repositoryAccount(request)) else {
+            return nil
+        }
+        return identity
     }
 
     public func promptHookFailure(hookName: String, terminalOutput: String) async -> HookFailureResolution {

@@ -5,9 +5,9 @@
 // submodule, large, unrenderable, empty, or conflicted state. A conflicted
 // file whose markers make whole conflicts, while an operation waits on
 // them, shows as the working file with each conflict as blocks
-// (ConflictBlocks.swift) in place of its diff; their headers' buttons keep
-// one side of one conflict, and the band leaves the whole file's sides to
-// the file's row.
+// (ConflictBlocks.swift) in place of its diff, with no line counts in the
+// header; their headers' buttons keep one side of one conflict, and the
+// band leaves the whole file's sides to the file's row.
 // The previous diff stays while the next loads, with a spinner after
 // 150 ms; the header's counts and the file's actions wait for the file's
 // own diff. A text diff has the find bar over its top trailing corner while
@@ -195,7 +195,9 @@ public struct DiffContainer: View {
 
     private func headerContent(_ file: DiffFileInfo) -> DiffHeaderContent {
         var content = DiffHeaderContent(path: file.path, oldPath: file.oldPath, status: file.status)
-        switch showsFilesDiff ? diff.value : nil {
+        // A conflicted file drawn as its conflicts' blocks isn't a diff, so
+        // it has no lines added or deleted to count.
+        switch showsFilesDiff && conflictBlocks == nil ? diff.value : nil {
         case .text(let text)?:
             let (added, deleted) = lineCounts(text.hunks)
             content.addedLines = added

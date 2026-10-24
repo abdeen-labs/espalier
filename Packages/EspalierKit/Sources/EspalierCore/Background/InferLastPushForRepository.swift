@@ -18,16 +18,15 @@ extension AppModel {
     /// branch.
     ///
     /// Returns nil if no date can be detected: the repository has no GitHub
-    /// repository, no account is signed in to its server, or the API can't
+    /// repository, its assigned account isn't signed in, or the API can't
     /// tell. A repository GitHub says was never pushed to counts as pushed
     /// at the epoch.
     ///
-    /// The account asked about a remote's repository is the one for that
-    /// remote's server.
+    /// Only the repository's account is asked, about the current remote's
+    /// repository when it's on the account's server.
     func inferLastPushForRepository(_ repository: RepositoryModel) async -> Date? {
         let record = repository.record
-        let accounts = accounts.accounts
-        guard let account = getAccountForRepository(accounts, record.gitHubRepository) else {
+        guard let account = accounts.account(for: record) else {
             return nil
         }
 
@@ -36,7 +35,7 @@ extension AppModel {
         let gitHub = environment.gitHub
         return await environment.withRuntimes {
             if let currentRemote = await currentRemote(gitRepository, tip: tip),
-               let matchedRepository = GitHubKit.matchGitHubRepository(accounts, currentRemote.url) {
+               let matchedRepository = GitHubKit.matchGitHubRepository([account], currentRemote.url) {
                 let api = API.fromAccount(matchedRepository.account, runtime: gitHub)
                 if let repo = await api.fetchRepository(owner: matchedRepository.owner, name: matchedRepository.name) {
                     return pushedAtDate(repo.pushedAt)

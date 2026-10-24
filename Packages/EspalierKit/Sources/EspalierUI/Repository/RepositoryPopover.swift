@@ -105,7 +105,7 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
         if let repository = app.selectedRepository, repository.isUsable,
            repository.worktrees.isListVisible || repository.id == revealed {
             let model = repository.worktrees
-            worktrees = WorktreeRowContent.rows(model.entries, currentPath: model.current?.path, filter: filter)
+            worktrees = WorktreeRowContent.rows(model.entries, currentPath: model.current?.path, filter: filter, isMissing: model.isMissing)
             showsWorktrees = true
         }
         return RepositoryPopoverContent(worktrees: worktrees, groups: groups, hasRepositories: !all.isEmpty, showsWorktrees: showsWorktrees)
@@ -435,6 +435,13 @@ enum RepositoryContextMenu {
             context.actions.perform(.newWorktree(branch: nil))
         }
         .disabled(isMissing || !context.actions.canPerform(.newWorktree(branch: nil)))
+        accountMenu(for: record, in: context)
+        if !isMissing {
+            MenuAction("Repository Settings…") {
+                Task { await showSettings(record.id, in: context) }
+            }
+            .closesPopover()
+        }
         MenuAction("Copy Repository Name") {
             RepositoryActions.copy(copiedName(record))
         }
@@ -469,5 +476,68 @@ enum RepositoryContextMenu {
             Task { await RepositoryActions.remove(record.id, in: context) }
         }
         .closesPopover()
+    }
+
+    /// The accounts a repository's Account submenu offers: those signed in
+    /// to its GitHub repository's server, and its own when it isn't signed
+    /// in (shown, not to choose). Nil when there's nothing to choose between:
+    /// a repository not on GitHub, one with an account and no other on its
+    /// server, or one without an account and none signed in to its server.
+    static func accountChoices(for record: RepositoryRecord, accounts: [Account]) -> (signedOut: String?, accounts: [Account])? {
+        guard let endpoint = record.gitHubRepository?.endpoint else {
+            return nil
+        }
+        let eligible = accounts.filter { JSCompat.strictEquals($0.endpoint, endpoint) }
+        let assigned = record.accountIdentity
+        let signedOut = assigned.flatMap { identity in eligible.contains { $0.identity == identity } ? nil : identity.login }
+        let retained = eligible.count + (signedOut == nil ? 0 : 1)
+        if assigned == nil ? eligible.isEmpty : retained <= 1 {
+            return nil
+        }
+        return (signedOut, eligible)
+    }
+
+    /// Account ▸ @login, the repository's checked: choosing another assigns
+    /// it, as Repository Settings does. Its own, signed out, is listed
+    /// checked and can't be chosen.
+    @MenuBuilder
+    private static func accountMenu(for record: RepositoryRecord, in context: WindowContext) -> MenuContent {
+        if let choices = accountChoices(for: record, accounts: context.app.accounts.accounts) {
+            Submenu("Account") {
+                if let signedOut = choices.signedOut {
+                    MenuToggle("@\(signedOut) (Signed Out)", isOn: true) {}
+                        .disabled(true)
+                }
+                for account in choices.accounts {
+                    let isAssigned = account.identity == record.accountIdentity
+                    MenuToggle("@\(account.login)", isOn: isAssigned) {
+                        guard !isAssigned else {
+                            return
+                        }
+                        let app = context.app
+                        let id = record.id
+                        let login = account.login
+                        Task {
+                            await context.presenter.perform { _ throws(OperationError) in
+                                try await app.updateRepositoryAccount(id, login: login)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Repository Settings… for the row's repository, whichever is selected:
+    /// its remotes load first when it hasn't been refreshed, so the Remote
+    /// pane shows its remote.
+    private static func showSettings(_ id: RepositoryID, in context: WindowContext) async {
+        guard let repository = context.app.repository(id) else {
+            return
+        }
+        if repository.gitState.remotes.defaultRemote == nil {
+            await repository.refresh(.remotes, reason: .user)
+        }
+        RepositorySettingsSheet.present(for: repository, in: context)
     }
 }

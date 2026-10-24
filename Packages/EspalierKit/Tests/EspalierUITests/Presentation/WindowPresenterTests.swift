@@ -120,6 +120,13 @@ struct WindowPresenterTests {
         presenter.respond(to: await confirmation(of: presenter).id, with: ConfirmationResponse(isConfirmed: true, isOptionSelected: true))
         #expect(await deleteTask.value == "done")
         #expect(delete.calls.last?.includeRemoteBranch == true)
+
+        let signOut = ScriptedIntent([required(.signOutAccount(login: "joe", server: "GitHub.com", repositoryCount: 2))])
+        let signOutTask = Task { await presenter.perform { answers throws(OperationError) in try signOut.run(answers) } }
+        presenter.respond(to: await confirmation(of: presenter).id, with: ConfirmationResponse(isConfirmed: true, isOptionSelected: true))
+        #expect(await signOutTask.value == "done")
+        #expect(signOut.calls.last?.clearAccountAssignments == true)
+        #expect(signOut.calls.last?.moveToTrash == false)
     }
 
     @Test("a decision is asked, then the intent runs with the strategy")
@@ -402,12 +409,13 @@ struct WindowPresenterTests {
         for (name, confirmation) in UIFixtures.confirmations {
             switch confirmation.presentation(defaultNumberFormat) {
             case .alert(let content):
-                #expect(![.removeRepository, .deleteBranch].contains(confirmation.kind), "\(name)")
+                #expect(![.removeRepository, .deleteBranch, .signOutAccount].contains(confirmation.kind), "\(name)")
                 #expect(content.buttons.last?.role == .cancel, "\(name)")
                 #expect((content.suppressionTitle != nil) == (confirmation.suppressionSetting != nil), "\(name)")
             case .compactSheet(let compact):
-                #expect([.removeRepository, .deleteBranch].contains(confirmation.kind), "\(name)")
-                #expect(compact.isDestructive, "\(name)")
+                #expect([.removeRepository, .deleteBranch, .signOutAccount].contains(confirmation.kind), "\(name)")
+                // Signing out keeps the repositories' assignments by default.
+                #expect(compact.isDestructive == (confirmation.kind != .signOutAccount), "\(name)")
             }
         }
         // Discarding changes is critical.

@@ -92,15 +92,6 @@ struct TrampolineCredentialHelper: Sendable {
         }
     }
 
-    private func getGitHubCredential(_ cred: GitCredential) async throws -> GitCredential? {
-        let endpoint = try getCredentialUrl(cred).href
-        let account = try await findGitHubTrampolineAccount(store, endpoint)
-        if account != nil {
-            info("found GitHub credential for \(endpoint) in store")
-        }
-        return credWithAccount(cred, account)
-    }
-
     private func promptForCredential(_ cred: GitCredential, _ endpoint: String) async throws -> GitCredential? {
         let parsedUrl = try JSURL(endpoint)
         let username = parsedUrl.username.isEmpty ? nil : decodedUsername(parsedUrl)
@@ -132,52 +123,95 @@ struct TrampolineCredentialHelper: Sendable {
         return cred
     }
 
-    /// Implementation of the 'get' git credential helper command
+    /// Implementation of the 'get' git credential helper command.
+    ///
+    /// For a repository in the list, a request on its GitHub repository's
+    /// exact origin (scheme, host, and port) gets its assigned account's
+    /// credentials; when that account isn't signed in, or it has none, a
+    /// git command the user started asks for one, and a background task
+    /// gets nothing. Where no repository is (a clone), the fallback account
+    /// git was given, on its own origin, and only while it's signed in.
+    /// Other GitHub hosts get nothing: a repository's credentials are never
+    /// lent to another endpoint (a submodule on another server, a remote
+    /// over plain HTTP). Hosts that aren't GitHub's use the stored generic
+    /// credentials, or the external helper.
     private func getCredential(_ cred: GitCredential) async throws -> GitCredential? {
-        if let ghCred = try await getGitHubCredential(cred) {
-            return ghCred
+        let credentialUrl = try getCredentialUrl(cred)
+        let endpoint = credentialUrl.href
+
+        var knownKind: EndpointKind?
+        func endpointKind() async throws -> EndpointKind {
+            if let knownKind {
+                return knownKind
+            }
+            let kind = try await getEndpointKind(cred)
+            knownKind = kind
+            return kind
         }
 
-        let endpointKind = try await getEndpointKind(cred)
-        let accounts = await store.getAll()
+        var repository = await store.repository(atPath: invocation.path)
+        // A repository whose GitHub remote hasn't been recognized yet (an
+        // Enterprise Server without a signed-in account, or a remote added
+        // outside Espalier) is associated with the endpoint now, so it's
+        // handled like any other repository without an account below.
+        if let existing = repository, existing.endpoint == nil, try await endpointKind() != .generic {
+            repository = await store.associate(existing, withEndpoint: getAPIEndpoint(endpoint))
+        }
 
-        let endpoint = try getCredentialUrl(cred).href
-        let apiEndpoint = getAPIEndpoint(endpoint)
+        if let repository, let repositoryEndpoint = repository.endpoint, isSameOrigin(credentialUrl, repositoryEndpoint) {
+            return await getRepositoryCredential(cred, repository: repository, endpoint: repositoryEndpoint)
+        }
 
-        // If it appears as if the endpoint is a GitHub host and we don't have
-        // an account for that endpoint then we should prompt the user to sign
-        // in.
-        if endpointKind != .generic, !accounts.contains(where: { $0.endpoint == apiEndpoint }) {
-            // An account whose token the keychain wouldn't give: git fails
-            // with a message that says so, instead of asking to sign in.
-            if let message = await store.unreadableAccountMessage(endpoint: apiEndpoint) {
-                info("the token of the account for \(endpoint) couldn't be read from the keychain")
-                invocation.setUnreadableAccountMessage(message)
-                return nil
-            }
-
-            if invocation.isBackgroundTask {
-                debug("background task environment, skipping prompt")
-                return nil
-            }
-
-            let account = await prompter.promptForGitHubSignIn(endpoint: endpoint)
-
-            if account == nil {
-                invocation.setHasRejectedCredentialsForEndpoint(endpoint)
-            }
-
+        if let fallback = invocation.fallbackAccount, isSameOrigin(credentialUrl, fallback.endpoint) {
+            let identity = AccountIdentity(endpoint: fallback.endpoint, login: fallback.login)
+            let account = await store.getAll().first { $0.identity == identity }
+            info("\(account == nil ? "the account to clone with isn't signed in" : "found the account to clone with") for \(endpoint)")
             return credWithAccount(cred, account)
         }
 
-        // GitHub.com/GHE creds are only stored internally
-        if endpointKind != .generic {
+        // GitHub.com/GHE creds are only stored internally, and never lent to
+        // another endpoint.
+        if try await endpointKind() != .generic {
+            info("no matching account for \(endpoint)")
             return nil
         }
 
         return useExternalCredentialHelper()
             ? try await getExternalCredential(cred)
             : try await getGenericCredential(cred)
+    }
+
+    /// The credentials of the repository's account, a request on its
+    /// GitHub repository's origin. Its account isn't signed in, or it has
+    /// none: one whose token the keychain wouldn't give fails with a message
+    /// that says so, a background task gets nothing, and otherwise the user
+    /// is asked.
+    private func getRepositoryCredential(_ cred: GitCredential, repository: TrampolineRepository, endpoint: String) async -> GitCredential? {
+        if let login = repository.accountLogin {
+            let identity = AccountIdentity(endpoint: endpoint, login: login)
+            if let account = await store.getAll().first(where: { $0.identity == identity }) {
+                info("found the repository's account for \(endpoint)")
+                return credWithAccount(cred, account)
+            }
+        }
+
+        if let message = await store.unreadableAccountMessage(endpoint: endpoint, login: repository.accountLogin) {
+            info("the token of the repository's account on \(endpoint) couldn't be read from the keychain")
+            invocation.setUnreadableAccountMessage(message)
+            return nil
+        }
+
+        if invocation.isBackgroundTask {
+            debug("background task environment, skipping prompt")
+            return nil
+        }
+
+        let account = await store.promptForRepositoryAccount(repository)
+        info("prompt for the repository's account on \(endpoint): \(account != nil ? "completed" : "cancelled")")
+        guard let account, JSCompat.strictEquals(account.endpoint, endpoint) else {
+            return nil
+        }
+        return credWithAccount(cred, account)
     }
 
     private func getEndpointKind(_ cred: GitCredential) async throws -> EndpointKind {
@@ -221,8 +255,28 @@ struct TrampolineCredentialHelper: Sendable {
         return await store.isGitHubHost(endpoint) == true ? .enterprise : .generic
     }
 
+    /// Whether the request is on the GitHub origin of the repository git
+    /// runs in, or of the account a clone uses, as `getCredential` decides:
+    /// its credentials are an account's, so they're never stored or erased
+    /// as generic ones, whatever kind of host it looks like (an account
+    /// chosen when git asked isn't in the list of accounts yet).
+    private func isAccountOrigin(_ cred: GitCredential) async throws -> Bool {
+        let credentialUrl = try getCredentialUrl(cred)
+        if let repository = await store.repository(atPath: invocation.path), let endpoint = repository.endpoint,
+           isSameOrigin(credentialUrl, endpoint) {
+            return true
+        }
+        if let fallback = invocation.fallbackAccount, isSameOrigin(credentialUrl, fallback.endpoint) {
+            return true
+        }
+        return false
+    }
+
     /// Implementation of the 'store' git credential helper command
     private func storeCredential(_ cred: GitCredential) async throws {
+        if try await isAccountOrigin(cred) {
+            return
+        }
         if try await getEndpointKind(cred) != .generic {
             return
         }
@@ -244,6 +298,9 @@ struct TrampolineCredentialHelper: Sendable {
 
     /// Implementation of the 'erase' git credential helper command
     private func eraseCredential(_ cred: GitCredential) async throws {
+        if try await isAccountOrigin(cred) {
+            return
+        }
         if try await getEndpointKind(cred) != .generic {
             return
         }
@@ -268,3 +325,13 @@ struct TrampolineCredentialHelper: Sendable {
 }
 
 private let thirdPartyRealmRe = JSCompat.regex(#"realm="(GitLab|Gitea|Atlassian Bitbucket)""#)
+
+/// Whether `url` is on the exact origin (scheme, host, and port) of the web
+/// site of `endpoint`, an API endpoint, so a token is never sent over plain
+/// HTTP, to another port, or to another service on the same host.
+func isSameOrigin(_ url: JSURL, _ endpoint: String) -> Bool {
+    guard let site = try? JSURL(getHTMLURL(endpoint)) else {
+        return false
+    }
+    return JSCompat.strictEquals(site.origin, url.origin)
+}

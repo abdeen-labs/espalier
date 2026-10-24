@@ -1,13 +1,15 @@
-// Clone a Repository (⇧⌘O): GitHub.com, GitHub Enterprise, and URL, each with
-// its own URL, path, filter, selection, and problem; the account picker with
-// two or more accounts; the local path that follows the URL
-// (`clonePath(_:afterURLChangeFrom:to:)`), a leading `~` in it as the home
-// folder, its checks (`validateClonePath`), and its warning
-// (`clonePathWarning`); and Clone, which resolves what to clone
-// (`resolveCloneInfo`), closes the sheet, and clones, unless Cancel was
-// pressed meanwhile. The GitHub.com
-// segment is always there (its call to action signs in); the Enterprise
-// segment shows once an Enterprise account exists.
+// Clone a Repository (⇧⌘O): GitHub and URL, each with its own URL, path,
+// filter, selection, and problem. GitHub lists the repositories of the
+// account chosen in its pop-up, which lists every signed-in account by host
+// (GitHub.com's first, then each GitHub Enterprise host's) and starts on the
+// account last chosen in this session, else the first; without an account it
+// signs in to GitHub.com or GitHub Enterprise and chooses the new account.
+// The local path follows the URL (`clonePath(_:afterURLChangeFrom:to:)`), a
+// leading `~` in it is the home folder, with its checks (`validateClonePath`)
+// and its warning (`clonePathWarning`). Clone takes the tab and the account
+// as they are when it's pressed, resolves what to clone (`resolveCloneInfo`),
+// closes the sheet, and clones, unless Cancel was pressed meanwhile; a
+// repository from the GitHub list is cloned with its account only.
 
 import AppKit
 import EspalierCore
@@ -18,7 +20,7 @@ import SwiftUI
 
 /// Where a clone comes from: a segment of the sheet.
 nonisolated enum CloneSource: String, CaseIterable, Sendable, Identifiable {
-    case gitHub, enterprise, url
+    case gitHub, url
 
     var id: String {
         rawValue
@@ -26,8 +28,7 @@ nonisolated enum CloneSource: String, CaseIterable, Sendable, Identifiable {
 
     var title: String {
         switch self {
-        case .gitHub: "GitHub.com"
-        case .enterprise: "GitHub Enterprise"
+        case .gitHub: "GitHub"
         case .url: "URL"
         }
     }
@@ -45,9 +46,10 @@ final class CloneSheetModel {
         var problem: String?
         var filter = ""
         var selection: CloneableRepositoryListItem.ID?
-        /// The chosen account, among two or more.
-        var account: AccountKey?
     }
+
+    /// The account last chosen in the GitHub tab in this session.
+    static var lastChosenAccount: AccountIdentity?
 
     @ObservationIgnored let app: AppModel
     /// The link that asked for the clone, if one did.
@@ -63,6 +65,11 @@ final class CloneSheetModel {
         }
     }
     private(set) var fields: [CloneSource: Fields] = [:]
+    /// The account chosen in the GitHub tab, if any.
+    private(set) var chosenAccount: AccountIdentity?
+    /// The account whose list the GitHub tab's selection and filter belong
+    /// to.
+    private(set) var listedAccount: AccountIdentity?
     /// Clone is resolving what to clone.
     private(set) var isResolving = false
     /// Cancel was pressed: a clone being prepared doesn't start.
@@ -80,56 +87,57 @@ final class CloneSheetModel {
         for source in CloneSource.allCases {
             fields[source] = Fields(path: initialPath)
         }
+        chosenAccount = Self.lastChosenAccount
         if let initialURL, !initialURL.isEmpty {
             source = .url
             setURL(initialURL)
-        } else if let savedSource, sources.contains(savedSource) {
+        } else if let savedSource {
             source = savedSource
         }
+        listedAccount = account?.identity
     }
 
-    // MARK: Sources and accounts
+    // MARK: Accounts
 
-    /// The sources shown: GitHub.com, GitHub Enterprise once an Enterprise
-    /// account exists (signed in, or signed out but still listed), and URL.
-    var sources: [CloneSource] {
-        let hasEnterprise = (app.accounts.accounts + app.accounts.invalidatedAccounts).contains { !isDotCom($0.endpoint) }
-        return hasEnterprise ? CloneSource.allCases : [.gitHub, .url]
+    /// The signed-in accounts, as the pop-up lists them.
+    var accounts: [Account] {
+        groupAccountsForPicker(app.accounts.accounts).flatMap(\.accounts)
     }
 
-    /// The signed-in accounts of a source.
-    func accounts(for source: CloneSource) -> [Account] {
-        switch source {
-        case .gitHub: app.accounts.accounts.filter { isDotCom($0.endpoint) }
-        case .enterprise: app.accounts.accounts.filter { !isDotCom($0.endpoint) }
-        case .url: []
-        }
-    }
-
-    /// The account the source lists: the chosen one, else the first.
-    func account(for source: CloneSource) -> Account? {
-        let accounts = accounts(for: source)
-        if let key = fields[source]?.account, let chosen = accounts.first(where: { AccountKey($0) == key }) {
+    /// The account the GitHub tab lists: the one chosen, while it's signed
+    /// in, else the first.
+    var account: Account? {
+        let accounts = accounts
+        if let chosenAccount, let chosen = accounts.first(where: { $0.identity == chosenAccount }) {
             return chosen
         }
         return accounts.first
     }
 
-    /// The server a source's call to action signs in to: nil for GitHub.com,
-    /// or the Enterprise server of a signed-out account.
-    func signInEndpoint(for source: CloneSource) -> String? {
-        switch source {
-        case .gitHub, .url: nil
-        case .enterprise: app.accounts.invalidatedAccounts.first { !isDotCom($0.endpoint) }?.endpoint
-        }
+    /// Chooses the account the GitHub tab lists, for this session too: the
+    /// selection and filter, another account's, go.
+    func chooseAccount(_ identity: AccountIdentity) {
+        chosenAccount = identity
+        Self.lastChosenAccount = identity
+        accountDidChange()
     }
 
-    func chooseAccount(_ account: Account) {
-        update(source) { fields in
-            fields.account = AccountKey(account)
-            fields.selection = nil
+    /// The account the GitHub tab lists changed (chosen, signed out): a
+    /// repository selected from another account's list isn't cloned with
+    /// this one.
+    func accountDidChange() {
+        let current = account?.identity
+        guard current != listedAccount else {
+            return
         }
-        setURL("")
+        listedAccount = current
+        update(.gitHub) { fields in
+            fields.path = clonePath(fields.path, afterURLChangeFrom: fields.url, to: "")
+            fields.url = ""
+            fields.selection = nil
+            fields.filter = ""
+            fields.problem = nil
+        }
     }
 
     // MARK: Fields
@@ -141,7 +149,7 @@ final class CloneSheetModel {
     /// Whether the sheet shows the local path: always for URL; for GitHub,
     /// only with an account (the call to action shows instead).
     var showsLocalPath: Bool {
-        source == .url || account(for: source) != nil
+        source == .url || account != nil
     }
 
     /// Sets the current source's URL; the path's last folder follows the
@@ -217,14 +225,22 @@ final class CloneSheetModel {
         }
     }
 
-    /// Checks the path again and resolves what to clone. Nil when there's a
-    /// problem, which the sheet shows, and when Cancel was pressed meanwhile.
+    /// Checks the path again and resolves what to clone, with the tab and
+    /// the account as they are now. Nil when there's a problem, which the
+    /// sheet shows, and when Cancel was pressed meanwhile.
     func prepareClone() async -> CloneRequest? {
         guard canClone else {
             return nil
         }
         let source = source
         let fields = current
+        // A repository from the GitHub list is cloned with the account that
+        // listed it, and only with it.
+        let account = source == .gitHub ? listedAccount : nil
+        if source == .gitHub, account == nil || account != self.account?.identity {
+            accountDidChange()
+            return nil
+        }
         let path = expandingTilde(fields.path)
         isResolving = true
         defer { isResolving = false }
@@ -234,11 +250,11 @@ final class CloneSheetModel {
             return nil
         }
         do throws(OperationError) {
-            let info = try await app.clones.resolveCloneInfo(fields.url)
+            let info = try await app.clones.resolveCloneInfo(fields.url, account: account)
             guard !isCancelled else {
                 return nil
             }
-            return CloneRequest(url: info.url, path: path, options: CloneOptions(defaultBranch: info.defaultBranch))
+            return CloneRequest(url: info.url, path: path, options: CloneOptions(defaultBranch: info.defaultBranch), account: account)
         } catch {
             update(source) { $0.problem = error.message }
             return nil
@@ -337,7 +353,7 @@ struct CloneForm: View {
             CapsuleSegmentedControl(
                 "Source",
                 selection: $model.source,
-                segments: model.sources.map { CapsuleSegment($0.title, value: $0) }
+                segments: CloneSource.allCases.map { CapsuleSegment($0.title, value: $0) }
             )
             .frame(maxWidth: .infinity)
 
@@ -345,7 +361,7 @@ struct CloneForm: View {
             // of one height whichever source shows, so switching sources
             // never resizes the sheet: the content crossfades (0.15 s).
             VStack(alignment: .leading, spacing: Metrics.Sheet.spacing) {
-                if model.source != .url {
+                if model.source == .gitHub {
                     accountRepositories
                 }
                 if model.showsLocalPath {
@@ -366,30 +382,27 @@ struct CloneForm: View {
                 confirm: clone
             )
         }
+        // The tab and the account can't change while Clone resolves.
+        .disabled(model.isResolving)
+        .onChange(of: model.account?.identity) {
+            model.accountDidChange()
+        }
     }
 
-    /// GitHub.com's or GitHub Enterprise's repositories: the accounts'
-    /// pop-up among two or more accounts, and the list; without an account,
-    /// the call to action.
+    /// The accounts' pop-up and the chosen account's repositories; without
+    /// an account, the call to action.
     @ViewBuilder
     private var accountRepositories: some View {
-        if let account = model.account(for: model.source) {
-            let accounts = model.accounts(for: model.source)
-            if accounts.count > 1 {
-                CapsulePopUp("Account", selection: Binding(
-                    get: { AccountKey(account) },
-                    set: { key in
-                        if let chosen = accounts.first(where: { AccountKey($0) == key }) {
-                            model.chooseAccount(chosen)
-                        }
-                    }
-                ), title: "@\(account.login) – \(account.friendlyEndpoint)") {
-                    for account in accounts {
-                        MenuChoice("@\(account.login) – \(account.friendlyEndpoint)", value: AccountKey(account))
+        if let account = model.account {
+            AccountPicker(accounts: model.accounts, selection: Binding(
+                get: { account.identity },
+                set: { identity in
+                    if let identity {
+                        model.chooseAccount(identity)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            ))
+            .frame(maxWidth: .infinity, alignment: .leading)
             AccountRepositoryList(
                 account: account,
                 filter: Binding(get: { model.current.filter }, set: { model.setFilter($0) }),
@@ -412,8 +425,10 @@ struct CloneForm: View {
             )
             .frame(maxHeight: .infinity)
         } else {
-            RepositorySignInPrompt(isEnterprise: model.source == .enterprise, endpoint: model.signInEndpoint(for: model.source))
-                .frame(maxHeight: .infinity)
+            AccountsSignInPrompt { account in
+                model.chooseAccount(account.identity)
+            }
+            .frame(maxHeight: .infinity)
         }
     }
 

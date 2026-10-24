@@ -1,4 +1,5 @@
 // Espalier's alert card in each of its layouts, Reset to Commit's question,
+// Remove Missing Worktree? (from the worktree list and before a checkout),
 // a link's questions (a branch, a pull request, one from a fork), and
 // Replace Hooks?, through the same mappings the hosts use where there's
 // one, and the modal layer over a window: a sheet in its card over the
@@ -61,6 +62,13 @@ struct ModalCaptures {
 
     @Test("Reset to Commit's question, on a clean tree and with changes", arguments: ["resetToCommit", "resetWithChanges"])
     func resetAlert(name: String) throws {
+        capture(card(try confirmation(name)), named: "alert-\(name)", area: area)
+    }
+
+    @Test("Remove Missing Worktree?, from the worktree list and before a checkout", arguments: [
+        "removeMissingWorktree", "removeMissingWorktree-checkout",
+    ])
+    func removeMissingWorktreeAlert(name: String) throws {
         capture(card(try confirmation(name)), named: "alert-\(name)", area: area)
     }
 

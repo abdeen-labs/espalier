@@ -64,17 +64,13 @@ struct SignInModelTests {
             await fixture.settle()
         }
 
-        @Test("transitions to ExistingAccountWarning when a dotcom account exists")
-        func transitionsToExistingAccountWarning() async throws {
+        @Test("transitions to Authentication step when a dotcom account exists: another account is added")
+        func transitionsToAuthenticationWithAccount() async throws {
             let fixture = try await makeSignIn(accounts: [dotComAccount()])
             let signIn = fixture.signIn
             signIn.beginDotComSignIn()
-            #expect(signIn.state?.kind == .existingAccountWarning)
-            guard case .existingAccountWarning(let warning)? = signIn.state else {
-                return
-            }
-            #expect(warning.existingAccount.login == "octocat")
-            #expect(warning.existingAccount.token.isEmpty)
+            #expect(signIn.state?.kind == .authentication)
+            #expect(signIn.state?.endpoint == getDotComAPIEndpoint())
             await fixture.settle()
         }
     }
@@ -256,17 +252,22 @@ struct SignInModelTests {
             await fixture.settle()
         }
 
-        @Test("warns of the existing account for a known Enterprise endpoint, whoever asked", arguments: [
-            NamedCase("keeps the existing-account warning for a known Enterprise endpoint", (login: "enterprise-user", isEndpointFromGit: true)),
-            NamedCase("shows ExistingAccountWarning if enterprise account exists", (login: "user", isEndpointFromGit: false)),
+        @Test("goes on to Authentication for a known Enterprise endpoint, whoever asked, without asking to confirm it", arguments: [
+            NamedCase("git asked", true),
+            NamedCase("the user asked", false),
         ])
-        func existingAccountWarning(_ testCase: NamedCase<(login: String, isEndpointFromGit: Bool)>) async throws {
-            let fixture = try await makeSignIn(accounts: [enterpriseAccount(login: testCase.value.login)])
+        func knownEnterpriseEndpoint(_ testCase: NamedCase<Bool>) async throws {
+            let fixture = try await makeSignIn(accounts: [enterpriseAccount()])
             let signIn = fixture.signIn
             signIn.beginEnterpriseSignIn()
-            await signIn.setEndpoint("https://github.example.com", clientID: enterpriseClientID, isEndpointFromGit: testCase.value.isEndpointFromGit)
+            await signIn.setEndpoint("https://github.example.com", clientID: enterpriseClientID, isEndpointFromGit: testCase.value)
 
-            #expect(signIn.state?.kind == .existingAccountWarning)
+            guard case .authentication(let authentication)? = signIn.state else {
+                Issue.record("Expected the authentication step, got \(String(describing: signIn.state))")
+                return
+            }
+            #expect(!authentication.isUnrecognizedEnterpriseServer)
+            #expect(authentication.expectedLogin == nil)
             await fixture.settle()
         }
     }

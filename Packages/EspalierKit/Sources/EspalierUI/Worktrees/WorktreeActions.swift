@@ -1,9 +1,10 @@
 // The worktree actions, on `WorktreesModel`: New Worktree… (⇧⌘W, and a
 // branch's or pull request's "Check Out in New Worktree…"), Show Worktrees
 // (⌥⌘W, which opens the repository popover at its worktrees), switching to
-// a worktree, Rename…, and Delete… ("Delete Worktree?" with its suppression
-// toggle; when git refuses, "Delete Worktree Failed" offers Delete Anyway,
-// the model's retry).
+// a worktree (or, when its folder is gone, "Remove Missing Worktree?"),
+// Rename…, and Delete… ("Delete Worktree?" with its suppression toggle;
+// when git refuses, "Delete Worktree Failed" offers Delete Anyway, the
+// model's retry).
 
 import AppKit
 import EspalierCore
@@ -24,6 +25,14 @@ enum WorktreeActions {
         }) { [weak context] action in
             guard case .switchToWorktree(let path) = action, let context, let repository = context.repository,
                   let worktree = worktree(at: path, in: repository) else {
+                return
+            }
+            // There's nothing to switch to in a worktree whose folder is gone:
+            // removing it is what's left, which asks first.
+            if repository.worktrees.isMissing(worktree) {
+                await context.presenter.perform { answers throws(OperationError) in
+                    try await repository.worktrees.remove(worktree, confirmed: answers.confirmed)
+                }
                 return
             }
             await context.presenter.perform { _ throws(OperationError) in

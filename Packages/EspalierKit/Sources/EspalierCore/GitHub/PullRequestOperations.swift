@@ -411,7 +411,7 @@ extension RepositoryGitHubModel {
             logger.error("[bypassPushProtection] - No GitHub repository selected")
             throw OperationError(.precondition("Only repositories on GitHub can bypass push protection."), operation: .push, repositoryID: repository.id)
         }
-        guard let account = app.accounts.account(forEndpoint: gitHubRepository.endpoint) else {
+        guard let account = await app.ensureRepositoryAccount(repository.id), account.endpoint == gitHubRepository.endpoint else {
             logger.error("[bypassPushProtection] - No account found for endpoint - \(gitHubRepository.endpoint, privacy: .public)")
             throw OperationError(
                 .precondition("Sign in to \(getHTMLURL(gitHubRepository.endpoint)) to bypass push protection."),
