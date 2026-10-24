@@ -4,9 +4,10 @@
 // ("Current" or "Incoming" without one) and drawn in that branch's color as
 // the graph draws it: the branch the operation changes (the current branch)
 // in the accent, the default branch in the theme's trunk color, others in
-// their own. Its header holds its Use <branch>'s Version button while the
-// file still needs the user. The common ancestor's block (the diff3 and
-// zdiff3 styles) is "Base", neutral, without a button.
+// their own. Its header, one line of the code's, holds its Use <branch>'s
+// Version button, its title in the branch's color, while the file still
+// needs the user. The common ancestor's block (the diff3 and zdiff3 styles)
+// is "Base", neutral, without a button.
 
 import AppKit
 import EspalierCore
@@ -108,14 +109,14 @@ struct ConflictBlocks: Equatable {
 }
 
 extension DiffTableMetrics {
-    /// Space above and below a conflict block header's button.
-    static let conflictHeaderPadding: CGFloat = 4
     /// Space between a conflict block's name and its button.
     static let conflictHeaderSpacing: CGFloat = 12
+    /// Space on each side of a conflict block button's title, which the
+    /// button's click takes too.
+    static let conflictButtonInset: CGFloat = Metrics.grid
 
-    /// A conflict block header's height: a small capsule button with room
-    /// around it, and never shorter than a line with that room.
+    /// A conflict block header's height: one line of the code's.
     static func conflictHeaderHeight(lineHeight: CGFloat) -> CGFloat {
-        max(Metrics.ControlHeight.small, lineHeight) + 2 * conflictHeaderPadding
+        lineHeight
     }
 }

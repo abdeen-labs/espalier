@@ -4,12 +4,12 @@
 // runs, waits on conflicts, or a stash restore conflicted, with the
 // operation, one line under it (the commit it stopped at and the files
 // resolved, or its progress), Resolve with AI and Abort (quiet) while files
-// need the user, and, once every file is resolved, the step that finishes
-// the operation as its one prominent button: Commit Merge (committing the
-// message in the commit form's place, OperationSlot.swift), or Continue
-// <Operation>, with "Untracked files will be excluded" on a line of its own
-// for a rebase. A stash restore's conflicts have no sides to take: its panel
-// says how to resolve them.
+// need the user, and the step that finishes the operation as its one
+// prominent button, disabled until every file is resolved: Commit Merge
+// (committing the message in the commit form's place, OperationSlot.swift),
+// or Continue <Operation>, with "Untracked files will be excluded" on a line
+// of its own for a rebase once it can continue. A stash restore's conflicts
+// have no sides to take: its panel says how to resolve them.
 
 import AIKit
 import EspalierCore
@@ -107,16 +107,17 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
         finish.map { CommitButtonContent(kind: $0, fileCount: 0, branch: nil, isEnabled: true).title }
     }
 
-    /// The panel's prominent button, once it finishes the operation: every
-    /// conflicted file resolved (or a rebase interrupted between commits).
-    /// Working while the operation is being finished, disabled with why
-    /// while it can't be (a merge's summary is empty). Nil before.
+    /// The panel's prominent button, the step that finishes the operation,
+    /// from the start: disabled with why until it can run (files still need
+    /// the user, or a merge's summary is empty), working while the
+    /// operation is being finished. Nil while the operation runs and where
+    /// there's nothing for Espalier to finish.
     public var finishButton: CommitButtonContent? {
         guard let finish else {
             return nil
         }
         switch state {
-        case .conflicts where isResolved, .interrupted:
+        case .conflicts, .interrupted:
             return CommitButtonContent(
                 kind: finish,
                 fileCount: 0,
@@ -125,7 +126,7 @@ nonisolated public struct OperationPanelContent: Sendable, Equatable {
                 isEnabled: canContinue && !isContinuing,
                 disabledReason: isContinuing ? nil : continueHelp
             )
-        case .running, .conflicts, .stashConflicts, .unsupported:
+        case .running, .stashConflicts, .unsupported:
             return nil
         }
     }
@@ -442,12 +443,12 @@ struct OperationPanelView: View {
 
     /// The line under the subtitle: how to resolve a stash restore's
     /// conflicts, or "Untracked files will be excluded" with a rebase's
-    /// Continue.
+    /// Continue, once it can run.
     private var detail: String? {
         if let howTo = content.howTo {
             return howTo
         }
-        if content.finishButton != nil, content.notesUntrackedFiles {
+        if content.finishButton != nil, content.notesUntrackedFiles, content.isResolved {
             return OperationSlotContent.untrackedFilesNote
         }
         return nil

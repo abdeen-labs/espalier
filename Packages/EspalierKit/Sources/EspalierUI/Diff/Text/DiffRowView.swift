@@ -363,65 +363,43 @@ struct DiffRowRenderer {
             drawLine(CTLineCreateWithAttributedString(name), x: nameStart, baseline: centeredBaseline(of: nameFont, in: bounds.height))
             context.restoreGState()
         }
-        if let button, let title = side?.buttonTitle {
-            drawConflictButton(title, in: button, headerIndex: Int(document.rows[row].block))
+        if let button, let side, let title = side.buttonTitle {
+            drawConflictButton(title, color: side.color, in: button, headerIndex: Int(document.rows[row].block))
         }
     }
 
-    /// A conflict block's button: a small quiet capsule (the theme's quiet
-    /// control fill, with the quiet ring and small shadow where the theme
-    /// raises quiet controls), washed while hovered and more while
-    /// pressed, faded while the buttons wait.
-    private func drawConflictButton(_ title: String, in rect: CGRect, headerIndex: Int) {
+    /// A conflict block's button: its title in the side's branch color,
+    /// underlined while hovered (as a link is), dimmer while pressed, faded
+    /// while the buttons wait.
+    private func drawConflictButton(_ title: String, color: NSColor, in rect: CGRect, headerIndex: Int) {
         let isEnabled = controller.shownContent?.isInteractive == true && controller.pendingConflictChoice == nil
-        let radius = rect.height / 2
-        let capsule = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-        let theme = Theme.current
-        let isDark = AppearanceVariant.of(NSAppearance.currentDrawing()).isDark
+        let isPressed = isEnabled && controller.pressedConflictButton == headerIndex
+        let isHovered = isEnabled && controller.hoveredConflictButton == headerIndex
+        let font = AppKitTypography.smallButton
+        let label = NSAttributedString(string: title, attributes: [.font: font, Self.foregroundKey: color.cgColor])
+        let line = CTLineCreateWithAttributedString(label)
+        let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+        let x = (rect.midX - width / 2).rounded()
+        let baseline = rect.minY + centeredBaseline(of: font, in: rect.height)
         context.saveGState()
         if !isEnabled {
             context.setAlpha(Palette.disabledOpacity)
+        } else if isPressed {
+            context.setAlpha(Self.pressedConflictButtonOpacity)
         }
-        context.beginTransparencyLayer(auxiliaryInfo: nil)
-        NSGraphicsContext.saveGraphicsState()
-        if theme.quietControlIsRaised, let shadowColor = Elevation.quiet.shadowColor {
-            let shadow = NSShadow()
-            shadow.shadowColor = shadowColor
-            shadow.shadowBlurRadius = Elevation.quiet.blur(dark: isDark) / 2
-            shadow.shadowOffset = NSSize(width: 0, height: -Elevation.quiet.offset(dark: isDark))
-            shadow.set()
-        }
-        theme.quietControl.setFill()
-        capsule.fill()
-        NSGraphicsContext.restoreGraphicsState()
-        if theme.quietControlIsRaised, let ring = Elevation.quiet.ring {
-            let outline = NSBezierPath(roundedRect: rect.insetBy(dx: -0.5, dy: -0.5), xRadius: radius + 0.5, yRadius: radius + 0.5)
-            outline.lineWidth = 1
-            ring.setStroke()
-            outline.stroke()
-        }
-        if isEnabled {
-            let isPressed = controller.pressedConflictButton == headerIndex
-            let isHovered = controller.hoveredConflictButton == headerIndex
-            if isPressed || isHovered {
-                Palette.hover.setFill()
-                capsule.fill()
-                if isPressed {
-                    capsule.fill()
-                }
-            }
-        }
-        let font = AppKitTypography.smallButton
-        let label = NSAttributedString(string: title, attributes: [.font: font, Self.foregroundKey: Palette.text.cgColor])
-        let line = CTLineCreateWithAttributedString(label)
-        let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
-        context.saveGState()
         context.clip(to: rect)
-        drawLine(line, x: (rect.midX - width / 2).rounded(), baseline: rect.minY + centeredBaseline(of: font, in: rect.height))
-        context.restoreGState()
-        context.endTransparencyLayer()
+        drawLine(line, x: x, baseline: baseline)
+        if isHovered || isPressed {
+            // Below the baseline (rows are flipped), as the font places it.
+            let thickness = max(font.underlineThickness, 1)
+            context.setFillColor(color.cgColor)
+            context.fill(CGRect(x: x, y: (baseline - font.underlinePosition).rounded(), width: width, height: thickness))
+        }
         context.restoreGState()
     }
+
+    /// A pressed conflict block button's title's opacity.
+    private static let pressedConflictButtonOpacity: CGFloat = 0.6
 
     /// The baseline that centers `font`'s ascent and descent in a height.
     private func centeredBaseline(of font: NSFont, in height: CGFloat) -> CGFloat {
