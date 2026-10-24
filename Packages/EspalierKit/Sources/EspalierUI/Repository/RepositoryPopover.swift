@@ -7,7 +7,9 @@
 // after Show Worktrees) with New Worktree…, and the repositories in groups
 // (Recent with more than seven repositories, then GitHub.com owners,
 // Enterprise hosts, Other) with their status, or "No Matching
-// Repositories". It's as tall as its rows, up to the window's height under
+// Repositories". Each group's header leads with its mark in the rows'
+// glyph column: the owner's avatar, or a symbol for the worktrees, Recent,
+// a host, and Other. It's as tall as its rows, up to the window's height under
 // the toolbar, and keeps that height while a filter leaves fewer rows.
 // Arrow keys move through the rows from the filter field and Return
 // switches; a click switches. Each row has desktop's context menu.
@@ -33,7 +35,16 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
     struct Group: Sendable, Equatable, Identifiable {
         let id: String
         let title: String
+        let mark: GroupMark
         let rows: [RepositoryRowContent]
+    }
+
+    /// What leads a group's header, in the rows' glyph column.
+    enum GroupMark: Sendable, Equatable {
+        /// A GitHub.com owner's avatar.
+        case owner(AvatarUser)
+        /// A symbol: the worktrees', Recent's, a host's, Other's.
+        case symbol(String)
     }
 
     var worktrees: [WorktreeRowContent]
@@ -75,6 +86,20 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
         }
     }
 
+    /// A group's mark: Recent's clock, the owner's avatar, a host's server,
+    /// Other's folder.
+    static func mark(of group: RepositoryListGroup) -> GroupMark {
+        switch group {
+        case .recent: .symbol("clock")
+        case .dotcom(let owner): .owner(AvatarUser(owner: owner))
+        case .enterprise: .symbol("server.rack")
+        case .other: .symbol("folder")
+        }
+    }
+
+    /// The worktrees' mark, as their header leads with it.
+    static let worktreesMark = GroupMark.symbol("rectangle.stack")
+
     /// The content for the app's repository list and the selected
     /// repository's worktrees, both filtered.
     ///
@@ -88,13 +113,15 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
             Group(
                 id: group.id,
                 title: title(of: group.identifier),
+                mark: mark(of: group.identifier),
                 rows: group.items.map { item in
                     RepositoryRowContent(
                         item,
                         selection: app.selection,
                         availability: { app.availability(of: $0) },
                         showsStatus: showsStatus,
-                        disambiguates: item.needsDisambiguation
+                        disambiguates: item.needsDisambiguation,
+                        showsOwner: group.identifier == .recent
                     )
                 }
             )
@@ -256,7 +283,7 @@ struct RepositoryPopoverView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     if !content.worktrees.isEmpty {
                         Group {
-                            ListGroupLabel("Worktrees") {
+                            RepositoryGroupHeader("Worktrees", mark: RepositoryPopoverContent.worktreesMark) {
                                 if let newWorktree {
                                     Button(action: newWorktree) {
                                         Image(systemName: "plus")
@@ -282,7 +309,7 @@ struct RepositoryPopoverView: View {
                         .transition(motion.animates ? .opacity : .identity)
                     }
                     ForEach(content.groups) { group in
-                        ListGroupLabel(group.title)
+                        RepositoryGroupHeader(group.title, mark: group.mark)
                             .padding(.horizontal, Metrics.ListRow.inset)
                         ForEach(group.rows) { repository in
                             row(.entry(repository.id, group: group.id)) {
@@ -354,6 +381,49 @@ struct RepositoryPopoverView: View {
             return
         }
         self.highlighted = rows[min(max(index + offset, 0), rows.count - 1)]
+    }
+}
+
+/// A group's header: its mark in the rows' glyph column, its title as
+/// written (an owner's login keeps its case), and an accessory at the
+/// trailing edge.
+struct RepositoryGroupHeader<Accessory: View>: View {
+    private let title: String
+    private let mark: RepositoryPopoverContent.GroupMark
+    private let accessory: Accessory
+
+    init(_ title: String, mark: RepositoryPopoverContent.GroupMark, @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
+        self.title = title
+        self.mark = mark
+        self.accessory = accessory()
+    }
+
+    var body: some View {
+        HStack(spacing: Metrics.insetSmall) {
+            Group {
+                switch mark {
+                case .owner(let owner):
+                    Avatar(owner, size: Metrics.RepositoryPopover.ownerAvatarSize)
+                case .symbol(let systemImage):
+                    Image(systemName: systemImage)
+                        .font(Typography.secondary)
+                        .foregroundStyle(.text3)
+                }
+            }
+            .frame(width: Metrics.Sidebar.glyphSize, alignment: .center)
+            .accessibilityHidden(true)
+            Text(title)
+                .font(Typography.secondary.weight(.semibold))
+                .foregroundStyle(.text2)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: Metrics.grid)
+            accessory
+        }
+        .frame(minHeight: Metrics.RepositoryPopover.headerHeight)
+        .padding(.horizontal, Metrics.ListRow.horizontalPadding)
+        .padding(.top, Metrics.RepositoryPopover.groupSpacing)
     }
 }
 

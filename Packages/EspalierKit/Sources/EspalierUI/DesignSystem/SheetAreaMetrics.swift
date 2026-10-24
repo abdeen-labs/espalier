@@ -64,6 +64,12 @@ extension Metrics {
     /// height.
     public enum RepositoryPopover {
         public static let width: CGFloat = 360
+        /// A group's header, and the room above it.
+        public static let headerHeight: CGFloat = 24
+        public static let groupSpacing: CGFloat = 8
+        /// An owner's avatar in a group's header, and in a Recent row.
+        public static let ownerAvatarSize: CGFloat = 18
+        public static let rowAvatarSize: CGFloat = 16
     }
 
     /// A list inside a sheet (repositories to clone, a branch picker's

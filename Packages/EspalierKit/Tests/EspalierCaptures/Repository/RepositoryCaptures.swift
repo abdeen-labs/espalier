@@ -27,7 +27,7 @@ struct RepositoryCaptures {
 
     // MARK: Rows, popover
 
-    @Test("rows: the current repository, a fork, private with an owner, not on GitHub with a folder, missing, cloning, status off")
+    @Test("rows: the current repository, a fork, private with an owner, not on GitHub with a folder, missing, cloning, status off; in Recent, on GitHub and not")
     func rows() {
         let rows = VStack(alignment: .leading, spacing: Metrics.grid) {
             RepositoryRow(content: RepositoryCaptureFixtures.row("espalier", isCurrent: true, changed: 3, ahead: 2))
@@ -38,6 +38,8 @@ struct RepositoryCaptures {
             RepositoryRow(content: RepositoryCaptureFixtures.row("swift", icon: .cloning(progress: 0)))
             RepositoryRow(content: RepositoryCaptureFixtures.row("linux", icon: .cloning(progress: 0.42)))
             RepositoryRow(content: RepositoryCaptureFixtures.row("quiet", changed: 3, ahead: 2, showsStatus: false))
+            RepositoryRow(content: RepositoryCaptureFixtures.row("dotfiles", icon: .private, owner: "joe", changed: 1))
+            RepositoryRow(content: RepositoryCaptureFixtures.row("scratch", icon: .local, showsOwner: true))
         }
         .padding(Metrics.insetMedium)
         .frame(width: 260)
@@ -51,15 +53,15 @@ struct RepositoryCaptures {
             WorktreeRowContent(path: "/Users/joe/Developer/espalier-login", detail: "feature/login", isMain: false, isCurrent: false, isLocked: true),
         ]
         let groups = [
-            RepositoryPopoverContent.Group(id: "0:recent", title: "Recent", rows: [
-                RepositoryCaptureFixtures.row("desktop", icon: .fork, behind: 14),
-                RepositoryCaptureFixtures.row("website", icon: .private, subtitle: "octo-org"),
+            RepositoryPopoverContent.Group(id: "0:recent", title: "Recent", mark: .symbol("clock"), rows: [
+                RepositoryCaptureFixtures.row("desktop", icon: .fork, owner: "joe", behind: 14),
+                RepositoryCaptureFixtures.row("website", icon: .private, subtitle: "octo-org", owner: "octo-org"),
             ]),
-            RepositoryPopoverContent.Group(id: "1:dotcom:joe", title: "joe", rows: [
+            RepositoryPopoverContent.Group(id: "1:dotcom:joe", title: "joe", mark: RepositoryCaptureFixtures.ownerMark("joe"), rows: [
                 RepositoryCaptureFixtures.row("espalier", isCurrent: true, changed: 3, ahead: 2),
                 RepositoryCaptureFixtures.row("dotfiles", icon: .private),
             ]),
-            RepositoryPopoverContent.Group(id: "3:other", title: "Other", rows: [
+            RepositoryPopoverContent.Group(id: "3:other", title: "Other", mark: .symbol("folder"), rows: [
                 RepositoryCaptureFixtures.row("scratch", icon: .local),
                 RepositoryCaptureFixtures.row("notes", icon: .missing, showsStatus: false),
                 RepositoryCaptureFixtures.row("swift", icon: .cloning(progress: 0.3)),
@@ -90,6 +92,55 @@ struct RepositoryCaptures {
                 )
             },
             named: "popover-empty",
+            area: area
+        )
+    }
+
+    @Test("the popover with a long list: Recent, then three owners whose names repeat, most of them private")
+    func popoverLong() {
+        typealias Row = RepositoryCaptureFixtures
+        func group(_ owner: String, _ rows: [RepositoryRowContent]) -> RepositoryPopoverContent.Group {
+            RepositoryPopoverContent.Group(id: "1:dotcom:\(owner)", title: owner, mark: Row.ownerMark(owner), rows: rows)
+        }
+        let groups = [
+            RepositoryPopoverContent.Group(id: "0:recent", title: "Recent", mark: .symbol("clock"), rows: [
+                Row.row(".github", subtitle: "Octo-Edu", owner: "Octo-Edu"),
+                Row.row("dotfiles", icon: .private, owner: "joe", changed: 1),
+                Row.row("mobile-android", icon: .private, owner: "octo-industries"),
+            ]),
+            group("octo-industries", [
+                Row.row(".github"),
+                Row.row(".github-private", icon: .private),
+                Row.row("brand", icon: .private),
+                Row.row("octo.industries", icon: .private, changed: 2),
+                Row.row("updates", icon: .private),
+            ]),
+            group("octo-labs", [
+                Row.row(".github"),
+                Row.row(".github-private", icon: .private),
+                Row.row("espalier", isCurrent: true),
+                Row.row("espalier.octo.dev", ahead: 1),
+                Row.row("frost", icon: .fork),
+                Row.row("hark"),
+                Row.row("pocketful", icon: .private),
+                Row.row("rapid-serial-visual-presentation"),
+            ]),
+            group("Octo-Edu", [
+                Row.row(".github"),
+                Row.row("curriculum", icon: .private),
+            ]),
+        ]
+        let maxHeight = Metrics.Window.defaultHeight - Metrics.Toolbar.height - Metrics.insetLarge * 2
+        capture(
+            RepositoryCaptureFixtures.popoverCard {
+                RepositoryPopoverView(
+                    content: RepositoryPopoverContent(worktrees: [], groups: groups, hasRepositories: true),
+                    filter: .constant(""),
+                    highlighted: .constant(.entry(groups[1].rows[2].id, group: groups[1].id)),
+                    maxHeight: maxHeight
+                )
+            },
+            named: "popover-long",
             area: area
         )
     }
@@ -415,12 +466,15 @@ enum RepositoryCaptureFixtures {
         await app.accounts.apiRepositories.idle()
     }
 
-    /// A repository row.
+    /// A repository row. With an owner (or `showsOwner`), it's a Recent
+    /// row, the owner's avatar leading it.
     static func row(
         _ title: String,
         icon: RepositoryRowContent.Icon = .repository,
         isCurrent: Bool = false,
         subtitle: String? = nil,
+        owner: String? = nil,
+        showsOwner: Bool? = nil,
         changed: Int = 0,
         ahead: Int = 0,
         behind: Int = 0,
@@ -431,6 +485,8 @@ enum RepositoryCaptureFixtures {
             title: title,
             subtitle: subtitle,
             icon: icon,
+            showsOwner: showsOwner ?? (owner != nil),
+            owner: owner.map { AvatarUser(owner: Owner(login: $0, endpoint: getDotComAPIEndpoint(), id: nil)) },
             isCurrent: isCurrent,
             changedFileCount: changed,
             ahead: ahead,
@@ -440,6 +496,11 @@ enum RepositoryCaptureFixtures {
             alias: nil,
             path: "/Users/joe/Developer/\(title)"
         )
+    }
+
+    /// A GitHub.com owner's group mark: their avatar.
+    static func ownerMark(_ login: String) -> RepositoryPopoverContent.GroupMark {
+        .owner(AvatarUser(owner: Owner(login: login, endpoint: getDotComAPIEndpoint(), id: nil)))
     }
 
     /// `content` in a popover's card, as a popover shows it, with the

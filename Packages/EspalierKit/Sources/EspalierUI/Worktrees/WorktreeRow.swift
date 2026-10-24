@@ -118,11 +118,16 @@ struct WorktreeRow: View {
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
-            Image(systemName: content.isMissing ? "questionmark.folder" : "rectangle.stack")
-                .foregroundStyle(content.isMissing ? .text3 : .text2)
-                // In line with the repositories' glyphs.
-                .frame(width: Metrics.Sidebar.glyphSize)
-                .accessibilityHidden(true)
+            // The glyph column, under the worktrees' mark, as the
+            // repositories' is: a missing worktree's glyph, else empty.
+            ZStack {
+                if content.isMissing {
+                    Image(systemName: "questionmark.folder")
+                        .foregroundStyle(.text3)
+                }
+            }
+            .frame(width: Metrics.Sidebar.glyphSize)
+            .accessibilityHidden(true)
             Text(content.name)
                 .font(content.isCurrent ? Typography.row.weight(.semibold) : Typography.row)
                 .foregroundStyle(.text)

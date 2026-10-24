@@ -1,9 +1,10 @@
-// A repository's row in the repository popover: desktop's glyph for what
-// kind of repository it is (public, private, or a fork on GitHub, or not on
-// GitHub), the alias or name (the selected repository's semibold), the
-// owner where the name is ambiguous,
-// the status indicators with their tooltips, the hover tooltip (full name,
-// alias, path), and the cloning and missing states.
+// A repository's row in the repository popover: the alias or name (the
+// selected repository's semibold) with a lock after a private repository's
+// and a branch after a fork's, the owner where the name is ambiguous, the
+// status indicators with their tooltips, and the hover tooltip (full name,
+// alias, path). The glyph column under the group's mark is empty but for a
+// missing repository's glyph, a clone's ring, and in Recent, where owners
+// mix, the owner's avatar.
 
 import EspalierCore
 import EspalierSupport
@@ -13,7 +14,8 @@ import SwiftUI
 
 /// What a repository row shows.
 nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
-    /// The row's glyph.
+    /// What the repository is: the mark after its name, or the glyph of a
+    /// missing or cloning one.
     enum Icon: Sendable, Equatable {
         /// A public GitHub repository.
         case repository
@@ -33,9 +35,13 @@ nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
     /// The alias, or the name.
     var title: String
     /// Where the title is ambiguous: the owner (GitHub), or the folder it's
-    /// in.
+    /// in, at the row's trailing edge.
     var subtitle: String?
     var icon: Icon
+    /// In Recent, the glyph column shows where the repository is from: the
+    /// owner's avatar, or a folder for one not on GitHub (`owner` nil).
+    var showsOwner = false
+    var owner: AvatarUser?
     /// The selected repository: its title semibold.
     var isCurrent = false
     /// Changed files, and commits ahead of and behind the upstream: shown
@@ -116,8 +122,10 @@ nonisolated struct RepositoryRowContent: Sendable, Equatable, Identifiable {
 
 extension RepositoryRowContent {
     /// The row for a list item.
+    ///
+    /// - Parameter showsOwner: A row in Recent: its owner's avatar leads it.
     @MainActor
-    init(_ item: RepositoryListItem, selection: AppSelection?, availability: (RepositoryID) -> RepositoryAvailability?, showsStatus: Bool, disambiguates: Bool) {
+    init(_ item: RepositoryListItem, selection: AppSelection?, availability: (RepositoryID) -> RepositoryAvailability?, showsStatus: Bool, disambiguates: Bool, showsOwner: Bool = false) {
         // The item's texts are its title and, for a repository, its full
         // name (owner/name, or its name).
         let title = item.text.first ?? item.repository.displayTitle
@@ -133,6 +141,8 @@ extension RepositoryRowContent {
                 title: title,
                 subtitle: disambiguates ? Self.disambiguation(for: record) : nil,
                 icon: isMissing ? .missing : Self.icon(for: record),
+                showsOwner: showsOwner,
+                owner: showsOwner ? record.gitHubRepository.map { AvatarUser(owner: $0.owner) } : nil,
                 isCurrent: !isMissing && selection == .repository(record.id),
                 changedFileCount: item.changedFilesCount,
                 ahead: item.aheadBehind?.ahead ?? 0,
@@ -189,30 +199,46 @@ extension RepositoryRowContent {
     }
 }
 
-/// A repository row: the glyph, the title (with the owner when ambiguous),
-/// and the status indicators.
+nonisolated extension AvatarUser {
+    /// A GitHub owner's avatar: GitHub.com's by the owner's ID, or by login
+    /// until the API has given the ID; an Enterprise owner's monogram.
+    init(owner: Owner) {
+        let avatarURL: String? = if isDotCom(owner.endpoint) {
+            owner.id.map { "https://avatars.githubusercontent.com/u/\($0)" } ?? "https://avatars.githubusercontent.com/\(owner.login)"
+        } else {
+            nil
+        }
+        self.init(email: "", avatarURL: avatarURL, name: owner.login, endpoint: owner.endpoint)
+    }
+}
+
+/// A repository row: the glyph column, the title and its mark, the owner
+/// when ambiguous, and the status indicators.
 struct RepositoryRow: View {
     let content: RepositoryRowContent
     @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
-            RepositoryRowIcon(icon: content.icon)
-            VStack(alignment: .leading, spacing: 0) {
+            RepositoryRowGlyph(content: content)
+            HStack(spacing: Metrics.grid + 1) {
                 Text(content.title)
                     .font(content.isCurrent ? Typography.row.weight(.semibold) : Typography.row)
                     .foregroundStyle(.text)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if let subtitle = content.subtitle {
-                    Text(subtitle)
-                        .font(Typography.subheadline)
-                        .foregroundStyle(.text3)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+                RepositoryKindMark(icon: content.icon)
             }
+            // The name wins over the owner when the row is narrow.
+            .layoutPriority(1)
             Spacer(minLength: Metrics.grid)
+            if let subtitle = content.subtitle {
+                Text(subtitle)
+                    .font(Typography.secondary)
+                    .foregroundStyle(.text3)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
             RepositoryStatusIndicators(content: content)
         }
         .tooltip(content.tooltip)
@@ -221,37 +247,60 @@ struct RepositoryRow: View {
     }
 }
 
-/// The row's glyph: the repository's kind in secondary text, with the
-/// clone list's symbols, as the worktrees' glyph is.
-struct RepositoryRowIcon: View {
-    let icon: RepositoryRowContent.Icon
+/// The row's glyph column, under its group's mark: a missing repository's
+/// glyph, a clone's ring, in Recent the owner's avatar (a folder for a
+/// repository not on GitHub), else empty.
+struct RepositoryRowGlyph: View {
+    let content: RepositoryRowContent
 
     var body: some View {
-        Group {
-            switch icon {
-            case .repository:
-                kind("folder")
-            case .private:
-                kind("lock.fill")
-            case .fork:
-                kind("arrow.trianglehead.branch")
-            case .local:
-                kind("desktopcomputer")
+        // A stack, not a group, so an empty column keeps its width.
+        ZStack {
+            switch content.icon {
             case .missing:
                 Image(systemName: "questionmark.folder")
                     .foregroundStyle(.text3)
             case .cloning(let progress):
                 // It turns until git reports how far it has got.
                 ArcProgress(.mini, value: progress > 0 ? progress : nil)
+            case .repository, .private, .fork, .local:
+                if content.showsOwner {
+                    if let owner = content.owner {
+                        Avatar(owner, size: Metrics.RepositoryPopover.rowAvatarSize)
+                    } else {
+                        Image(systemName: "folder")
+                            .foregroundStyle(.text3)
+                    }
+                }
             }
         }
         .frame(width: Metrics.Sidebar.glyphSize, alignment: .center)
         .accessibilityHidden(true)
     }
+}
 
-    private func kind(_ systemImage: String) -> some View {
+/// The mark after a repository's name: a lock for a private repository, a
+/// branch for a fork.
+struct RepositoryKindMark: View {
+    let icon: RepositoryRowContent.Icon
+
+    var body: some View {
+        switch icon {
+        case .private:
+            mark("lock.fill")
+        case .fork:
+            mark("arrow.trianglehead.branch")
+        case .repository, .local, .missing, .cloning:
+            EmptyView()
+        }
+    }
+
+    private func mark(_ systemImage: String) -> some View {
         Image(systemName: systemImage)
-            .foregroundStyle(.text2)
+            .font(Typography.subheadline)
+            .imageScale(.small)
+            .foregroundStyle(.text3)
+            .accessibilityHidden(true)
     }
 }
 
@@ -297,6 +346,8 @@ struct RepositoryStatusIndicators: View {
                     .tooltip(tooltip)
                 }
             }
+            // The counts keep one line; the owner beside them truncates.
+            .fixedSize()
         }
     }
 }
