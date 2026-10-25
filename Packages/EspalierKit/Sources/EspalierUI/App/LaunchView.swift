@@ -1,7 +1,7 @@
 // The window while Espalier launches, and when launching fails: nothing for
 // 300 ms, then a centered spinner. Until the spinner, the window is
-// transparent, so a quick launch never shows it empty. The window fades in
-// over 0.22 s, with the spinner or with what launching loaded, and what
+// transparent, so a quick launch never shows it empty. The window appears
+// at once, with the spinner or with what launching loaded, and what
 // replaces a spinner crossfades in over 0.22 s.
 
 import AppKit
@@ -80,8 +80,7 @@ private final class WindowTransparencyView: NSView {
     }
 
     /// Makes `window` opaque on the run loop's next turn, after this turn's
-    /// drawing, unless the view is keeping it transparent again by then. It
-    /// fades in over 0.22 s, as a window opening does.
+    /// drawing, unless the view is keeping it transparent again by then.
     private func reveal(_ window: NSWindow) {
         DispatchQueue.main.async { [weak self, weak window] in
             guard let window else {
@@ -90,13 +89,7 @@ private final class WindowTransparencyView: NSView {
             if let self, self.isTransparent, self.window === window {
                 return
             }
-            Motion.run(Motion.arrive, in: window.contentView) { animates in
-                if animates {
-                    window.animator().alphaValue = 1
-                } else {
-                    window.alphaValue = 1
-                }
-            }
+            window.alphaValue = 1
         }
     }
 }
