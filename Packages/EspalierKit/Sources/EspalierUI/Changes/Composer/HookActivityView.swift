@@ -1,7 +1,8 @@
 // The composer's hook line: while a commit runs a hook, a line says so, with
-// Show Output (the live terminal output in a popover) and Stop. The state
-// layer reports the hook (`ActiveOperation.hook`), its output
-// (`terminalOutput`), and aborts it (`RepositoryModel.abortRunningHook()`).
+// Show Output (the live terminal output in a popover) and Stop, once the hook
+// has run 300 ms (`HookLinePresence`). The state layer reports the hook
+// (`ActiveOperation.hook`), its output (`terminalOutput`), and aborts it
+// (`RepositoryModel.abortRunningHook()`).
 
 import EspalierCore
 import GitKit

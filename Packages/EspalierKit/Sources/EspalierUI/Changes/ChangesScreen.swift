@@ -76,21 +76,25 @@ public struct ChangesScreen: View {
 /// them, and the composer eases to the size of a generated message over
 /// 0.2 s: the motion is set here, over the whole column, so the list above
 /// moves too. Where several change at once, the motion listed first (the
-/// inner one) wins.
+/// inner one) wins. The hook line shows by `HookLinePresence`'s 300 ms
+/// rule.
 struct ChangesColumn: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
     @Environment(\.showsOperationPanel) private var showsOperationPanel
     @Environment(\.motion) private var motion
+    @State private var hookLine = HookLinePresence()
 
     var body: some View {
         let hasFiles = !repository.changes.workingDirectory.files.isEmpty
         let controller = ChangesController(context: context, repository: repository)
+        let hook = HookLinePresence.hook(for: repository)
         let footer = ChangesFooterLayout.make(
             repository,
             showsOperationPanel: showsOperationPanel,
             app: context.app,
-            aiFailure: ChangesWindowState.of(context).aiFailures[repository.id]
+            aiFailure: ChangesWindowState.of(context).aiFailures[repository.id],
+            showsHookLine: hookLine.line != nil
         )
         FileList(repository: repository)
         .safeAreaBar(edge: .top, spacing: 0) {
@@ -132,12 +136,27 @@ struct ChangesColumn: View {
         .animation(hasFiles ? motion.animation(Motion.arrive) : nil, value: footer.lastCommit)
         // The hook line leaves as the commit lands, under the Last Commit
         // row's motion (set inside, so it wins), or none with the empty
-        // state.
+        // state; or on its own, once it has shown its minimum.
         .barMotion(footer.showsHook)
         // A generated message arriving: the composer takes its size over
         // 0.2 s as the shimmer gives way to it. Starting a generation moves
         // nothing (the shimmer and the button crossfade on their own).
         .animation(footer.isGenerating ? nil : motion.animation(Motion.kindChange), value: footer.isGenerating)
+        .environment(\.hookLine, footer.showsHook ? hookLine.line : nil)
+        .onChange(of: HookLineKey(repository: repository.id, hook: hook), initial: true) {
+            hookLine.update(
+                hook,
+                output: repository.localOperation?.terminalOutput,
+                in: repository.id,
+                scheduler: context.app.environment.scheduler
+            )
+        }
+    }
+
+    /// What the hook line follows.
+    private struct HookLineKey: Equatable {
+        let repository: RepositoryID
+        let hook: HookActivity?
     }
 }
 
@@ -170,7 +189,7 @@ struct ChangesFooterLayout: Equatable {
     var branch: ExactString?
     /// The composer's line saying a generation failed.
     var showsAIFailure = false
-    /// The composer's hook line, while a commit runs a hook.
+    /// The composer's hook line (`HookLinePresence`).
     var showsHook = false
     /// A commit message is being generated.
     var isGenerating = false
@@ -179,14 +198,17 @@ struct ChangesFooterLayout: Equatable {
     /// composer away (the operation panel's 300 ms rule, which Changes
     /// passes as `showsOperationPanel`).
     ///
-    /// - Parameter aiFailure: The window's last generation failure for
-    ///   `repository`.
+    /// - Parameters:
+    ///   - aiFailure: The window's last generation failure for
+    ///     `repository`.
+    ///   - showsHookLine: The hook line shows (`HookLinePresence`).
     @MainActor
     static func make(
         _ repository: RepositoryModel,
         showsOperationPanel: Bool?,
         app: AppModel,
-        aiFailure: OperationError? = nil
+        aiFailure: OperationError? = nil,
+        showsHookLine: Bool = false
     ) -> ChangesFooterLayout {
         let bottom: Bottom
         switch OperationSlotContent.make(repository)?.kind {
@@ -202,18 +224,12 @@ struct ChangesFooterLayout: Equatable {
         // shows.
         let commit = repository.commit
         let hasLastCommit = commit.mostRecentLocalCommit.map { $0.sha == commit.undoableCommitSHA } ?? false
-        // `ComposerContent.make`'s rules for the AI failure and hook lines,
-        // without making what they show.
+        // `ComposerContent.make`'s rule for the AI failure line, without
+        // making what it shows.
         let generation = repository.ai.commitMessageGeneration
         var hasGenerationFailure = aiFailure != nil
         if case .failed = generation {
             hasGenerationFailure = true
-        }
-        let operation = repository.localOperation
-        let hasHook = switch bottom {
-        case .composer: operation?.kind == .commit && operation?.hook != nil
-        case .merge: OperationSlotContent.isContinuing(repository) && operation?.hook != nil
-        case .none: false
         }
         let showsLastCommit = bottom == .composer && hasLastCommit
         return ChangesFooterLayout(
@@ -225,7 +241,7 @@ struct ChangesFooterLayout: Equatable {
             lastCommit: showsLastCommit ? commit.mostRecentLocalCommit?.sha : nil,
             branch: repository.gitState.tip.composerBranchName.map(ExactString.init),
             showsAIFailure: bottom == .composer && app.ai.isEnabled && hasGenerationFailure,
-            showsHook: hasHook,
+            showsHook: bottom != .none && showsHookLine,
             isGenerating: bottom == .composer && generation == .generating
         )
     }

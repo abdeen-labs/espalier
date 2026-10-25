@@ -165,22 +165,24 @@ nonisolated public struct AIFailureContent: Sendable, Equatable {
 
 extension ComposerContent {
     /// The composer for a repository: the merge's while a merge waits on
-    /// its conflicts (`merge(_:app:actions:button:)`).
+    /// its conflicts (`merge(_:app:actions:button:hook:)`).
     ///
     /// - Parameters:
     ///   - aiFailure: The window's last generation failure.
     ///   - messageRuleFailures: The rules the commit message fails, as last
     ///     checked (`commitMessageRuleFailures()`).
+    ///   - hook: The hook line, as Changes shows it (`HookLinePresence`).
     @MainActor
     public static func make(
         _ repository: RepositoryModel,
         app: AppModel,
         actions: WindowActions? = nil,
         aiFailure: OperationError? = nil,
-        messageRuleFailures: MessageRuleFailures? = nil
+        messageRuleFailures: MessageRuleFailures? = nil,
+        hook: HookActivityContent? = nil
     ) -> ComposerContent {
         if let slot = OperationSlotContent.make(repository), slot.kind == .merge {
-            return merge(repository, app: app, actions: actions, button: slot.button)
+            return merge(repository, app: app, actions: actions, button: slot.button, hook: hook)
         }
         let commit = repository.commit
         let draft = commit.draft
@@ -250,16 +252,6 @@ extension ComposerContent {
         if case .failed(let error) = repository.ai.commitMessageGeneration {
             failure = error
         }
-        let hook: HookActivityContent? = if isCommitting, let activity = repository.localOperation?.hook {
-            HookActivityContent(
-                hookName: activity.name,
-                status: activity.status,
-                canShowOutput: repository.localOperation?.terminalOutput != nil
-            )
-        } else {
-            nil
-        }
-
         let button: CommitButtonContent
         if let assisted {
             button = assistedButton(
@@ -374,17 +366,8 @@ extension ComposerContent {
     /// it), AI, co-authors, options, last commit, or warnings. The fields
     /// can't change while the merge is committed.
     @MainActor
-    static func merge(_ repository: RepositoryModel, app: AppModel, actions: WindowActions?, button: CommitButtonContent) -> ComposerContent {
+    static func merge(_ repository: RepositoryModel, app: AppModel, actions: WindowActions?, button: CommitButtonContent, hook: HookActivityContent?) -> ComposerContent {
         let isCommitting = button.isCommitting
-        let hook: HookActivityContent? = if isCommitting, let activity = repository.localOperation?.hook {
-            HookActivityContent(
-                hookName: activity.name,
-                status: activity.status,
-                canShowOutput: repository.localOperation?.terminalOutput != nil
-            )
-        } else {
-            nil
-        }
         return ComposerContent(
             author: AuthorIdentityContent.make(repository, app: app),
             showsCommitOptions: false,
@@ -514,8 +497,8 @@ public struct ComposerView: View {
                 CommitWarningView(warning, onLink: actions.openLink)
             }
             if let hook = content.hook {
-                // Grows in over 0.22 s and leaves with the commit (Changes'
-                // column sets the motion).
+                // Grows in over 0.22 s and leaves with the commit, or after
+                // it once shown 1 s (Changes' column sets the motion).
                 HookActivityView(hook, output: hookOutput, onStop: actions.stopHook)
                     .barTransition()
             }
@@ -890,17 +873,18 @@ struct AIFailureLine: View {
 struct Composer: View {
     let repository: RepositoryModel
     @Environment(WindowContext.self) private var context
+    @Environment(\.hookLine) private var hookLine
 
     var body: some View {
         let windowState = ChangesWindowState.of(context)
         let controller = ComposerController(context: context, repository: repository)
         let commit = repository.commit
         ComposerView(
-            windowState.composerContent(repository, context: context),
+            windowState.composerContent(repository, context: context, hookLine: hookLine),
             draft: Self.draft(for: repository),
             options: Binding(get: { commit.options }, set: { commit.options = $0 }),
             sparklePopover: Binding(get: { windowState.sparklePopover }, set: { windowState.sparklePopover = $0 }),
-            hookOutput: repository.localOperation?.terminalOutput,
+            hookOutput: hookLine?.output,
             completions: ComposerCompletions.make(repository, app: context.app),
             focusRequest: context.state.commitMessageFocusRequest,
             actions: Self.isMerging(repository) ? controller.mergeActions : controller.actions
@@ -978,14 +962,18 @@ final class ChangesWindowState {
         )
     }
 
-    /// The composer for `repository` in this window.
-    func composerContent(_ repository: RepositoryModel, context: WindowContext) -> ComposerContent {
+    /// The composer for `repository` in this window, with `hookLine` as
+    /// Changes shows it.
+    func composerContent(_ repository: RepositoryModel, context: WindowContext, hookLine: HookLine? = nil) -> ComposerContent {
         ComposerContent.make(
             repository,
             app: context.app,
             actions: context.actions,
             aiFailure: aiFailures[repository.id],
-            messageRuleFailures: messageRuleFailures[repository.id]
+            messageRuleFailures: messageRuleFailures[repository.id],
+            hook: hookLine.map {
+                HookActivityContent(hookName: $0.hook.name, status: $0.hook.status, canShowOutput: $0.output != nil)
+            }
         )
     }
 }

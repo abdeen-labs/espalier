@@ -462,6 +462,8 @@ public enum Metrics {
 public enum Timing {
     /// Spinners appear only after this long.
     public static let spinnerDelay: Duration = .milliseconds(300)
+    /// Once the composer's hook line shows, it stays at least this long.
+    public static let hookLineMinimum: Duration = .seconds(1)
     /// After a switch, the sidebar's sections keep showing the previous
     /// repository at most this long while the selected one loads.
     public static let sidebarHold: Duration = .seconds(1)
