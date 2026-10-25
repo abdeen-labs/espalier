@@ -67,6 +67,9 @@ public enum Typography {
     }
     /// Ref tags: the mono at 10, semibold.
     public static var refCapsule: Font { mono(size: 10, weight: .semibold) }
+    /// A word in a quiet capsule ("Draft", "Local", "Archived"): the sans at
+    /// 11, medium.
+    public static var capsuleWord: Font { sans(.subheadline, weight: .medium) }
     /// "+N" and other tiny counts (the mono at 10).
     public static var tinyCount: Font { mono(size: 10, weight: .medium) }
     /// Counts in rows and headers (the mono at 11).

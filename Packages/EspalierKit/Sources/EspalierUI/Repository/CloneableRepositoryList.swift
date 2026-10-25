@@ -1,7 +1,8 @@
 // The repositories an account can clone, in the Clone sheet and Get Started:
-// "Your Repositories" first, then each owner; a lock for private
-// repositories, a fork glyph for forks, "Archived"; the filter and Refresh;
-// and four empty states.
+// "Your Repositories" first, then each owner, each group's label leading
+// with the owner's avatar in the rows' glyph column; each row the
+// repository's name, a lock after a private repository's and a branch after
+// a fork's, and "Archived"; the filter and Refresh; and four empty states.
 
 import EspalierCore
 import GitHubKit
@@ -28,6 +29,9 @@ nonisolated struct CloneableListContent: Sendable, Equatable {
     var emptyState: EmptyState?
     /// Whether the list is loading or refreshing (Refresh spins).
     var isLoading: Bool
+    /// The account's endpoint, which the owners' avatars load from (nil:
+    /// GitHub.com's).
+    var endpoint: String?
 
     /// The content for an account's repositories as loaded so far (nil:
     /// never loaded, which counts as loading, as Get Started does).
@@ -37,6 +41,7 @@ nonisolated struct CloneableListContent: Sendable, Equatable {
         let isLoading = repositories?.loading ?? true
         self.groups = groups
         self.isLoading = isLoading
+        endpoint = account.endpoint
         if !groups.isEmpty {
             emptyState = nil
         } else if isLoading, loaded.isEmpty {
@@ -61,6 +66,12 @@ nonisolated struct CloneableListContent: Sendable, Equatable {
         group.identifier == yourRepositoriesIdentifier ? "Your Repositories" : group.identifier
     }
 
+    /// A group's mark: its owner's avatar (the account's own for Your
+    /// Repositories).
+    func mark(of group: CloneableRepositoryGroup) -> ListGroupMark {
+        .owner(AvatarUser(email: "", avatarURL: group.owner.avatarURL, name: group.owner.login, endpoint: endpoint))
+    }
+
     /// The repositories listed; nil while the first load runs.
     var resultCount: Int? {
         if case .loading = emptyState {
@@ -79,12 +90,12 @@ nonisolated struct CloneableListContent: Sendable, Equatable {
 }
 
 extension CloneableRepositoryKind {
-    /// The row's symbol.
-    var systemImage: String {
+    /// The mark after the name, as a repository row's.
+    var icon: RepositoryRowContent.Icon {
         switch self {
-        case .private: "lock.fill"
-        case .fork: "arrow.trianglehead.branch"
-        case .repository: "folder"
+        case .private: .private
+        case .fork: .fork
+        case .repository: .repository
         }
     }
 
@@ -142,10 +153,7 @@ struct CloneableRepositoryListView: View {
                         ForEach(content.groups) { group in
                             // The group's label is a row of its own: a plain
                             // list's floating header draws a line.
-                            SectionLabel(CloneableListContent.title(of: group))
-                                .padding(.horizontal, Metrics.ListRow.horizontalPadding)
-                                .padding(.top, Metrics.PaletteList.sectionTopPadding)
-                                .padding(.bottom, Metrics.PaletteList.sectionBottomPadding)
+                            ListGroupLabel(CloneableListContent.title(of: group), mark: content.mark(of: group))
                                 .listRowInsets(EdgeInsets(top: 0, leading: Metrics.ListRow.inset, bottom: 0, trailing: Metrics.ListRow.inset))
                                 .listRowSeparator(.hidden)
                                 .listRowBackground(Color.clear)
@@ -175,32 +183,44 @@ struct CloneableRepositoryListView: View {
     }
 }
 
-/// A repository to clone: its kind's symbol, "owner/name", "Archived".
+/// A repository to clone, under its owner's label: the empty glyph column,
+/// the name and its kind's mark, "Archived". VoiceOver reads owner/name.
 struct CloneableRepositoryRow: View {
     let item: CloneableRepositoryListItem
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
-            Image(systemName: item.kind.systemImage)
-                .foregroundStyle(.text2)
-                .frame(width: Metrics.insetLarge)
-                .accessibilityLabel(item.kind.accessibilityDescription ?? "")
-                .accessibilityHidden(item.kind.accessibilityDescription == nil)
-            Text(item.text.first ?? item.name)
-                .foregroundStyle(.text)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            Color.clear
+                .frame(width: Metrics.Sidebar.glyphSize, height: 0)
+            HStack(spacing: Metrics.grid + 1) {
+                Text(item.name)
+                    .font(Typography.row)
+                    .foregroundStyle(.text)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                RepositoryKindMark(icon: item.kind.icon)
+            }
+            .layoutPriority(1)
             if item.archived {
                 Spacer(minLength: Metrics.grid)
-                Text("Archived")
-                    .font(Typography.refCapsule)
-                    .foregroundStyle(.text2)
-                    .padding(.horizontal, Metrics.RefCapsule.horizontalPadding)
-                    .frame(height: Metrics.RefCapsule.height)
-                    .background(Capsule(style: .circular).fill(Color(espalier: Palette.field)))
+                QuietCapsule("Archived")
+                    .fixedSize()
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    /// "joe/dotfiles, Private, Archived".
+    private var accessibilityLabel: String {
+        var parts = [item.text.first ?? item.name]
+        if let kind = item.kind.accessibilityDescription {
+            parts.append(kind)
+        }
+        if item.archived {
+            parts.append("Archived")
+        }
+        return parts.joined(separator: ", ")
     }
 }
 

@@ -347,6 +347,8 @@ public struct CloneableRepositoryListItem: Hashable, Sendable, Identifiable {
 public struct CloneableRepositoryGroup: Hashable, Sendable, Identifiable {
     /// `yourRepositoriesIdentifier`, or the owner's login.
     public let identifier: String
+    /// The owner, as the API gave it, whose avatar leads the group.
+    public let owner: APIIdentity
     public let items: [CloneableRepositoryListItem]
 
     public var id: String {
@@ -396,7 +398,12 @@ public func groupRepositories(_ repositories: [APIRepository], login: String) ->
     }
 
     return identifiers
-        .map { CloneableRepositoryGroup(identifier: $0, items: toListItems(groups[ExactString($0)] ?? [])) }
+        .compactMap { identifier -> CloneableRepositoryGroup? in
+            guard let repositories = groups[ExactString(identifier)], let first = repositories.first else {
+                return nil
+            }
+            return CloneableRepositoryGroup(identifier: identifier, owner: first.owner, items: toListItems(repositories))
+        }
         .sorted { x, y in
             if JSCompat.strictEquals(x.identifier, yourRepositoriesIdentifier) {
                 return !JSCompat.strictEquals(y.identifier, yourRepositoriesIdentifier)

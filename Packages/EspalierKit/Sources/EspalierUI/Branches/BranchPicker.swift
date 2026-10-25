@@ -4,7 +4,9 @@
 // Request, and Preview Pull Request's base-branch picker use the picker. It
 // groups the branches as the sidebar's Branches section does
 // (`groupBranches`): the default branch first and the recent branches next,
-// with no label, then Other Branches and Remote Branches.
+// with no label, then Other Branches and Remote Branches, each label leading
+// with the sidebar's symbol for its group in the rows' glyph column, over
+// the branches' dots.
 
 import EspalierCore
 import EspalierSupport
@@ -34,6 +36,15 @@ nonisolated public struct BranchPickerContent: Sendable, Equatable {
             case .defaultBranch, .recent: nil
             case .other: BranchListLabels.otherBranches
             case .remote: BranchListLabels.remoteBranches
+            }
+        }
+
+        /// What leads the label: the sidebar's symbol for the group.
+        var mark: ListGroupMark? {
+            switch kind {
+            case .defaultBranch, .recent: nil
+            case .other: .symbol(BranchListLabels.otherBranchesSymbol)
+            case .remote: .symbol(BranchListLabels.remoteBranchesSymbol)
             }
         }
 
@@ -481,7 +492,7 @@ struct BranchPickerList: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(content.groups) { group in
                         if let title = group.title {
-                            ListGroupLabel(title)
+                            ListGroupLabel(title, mark: group.mark)
                                 .padding(.horizontal, Metrics.ListRow.inset)
                         }
                         ForEach(group.branches, id: \.ref) { branch in
@@ -544,7 +555,7 @@ struct BranchPickerList: View {
                     // The group's label is a row of its own, not a section
                     // header: a plain list's floating header draws a line.
                     if let title = group.title {
-                        ListGroupLabel(title)
+                        ListGroupLabel(title, mark: group.mark)
                             .listRowInsets(EdgeInsets(top: 0, leading: Metrics.ListRow.inset, bottom: 0, trailing: Metrics.ListRow.inset))
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
@@ -635,10 +646,11 @@ private struct EmbeddedListChrome: ViewModifier {
     }
 }
 
-/// A branch in the picker: its dot, its name (the current one semibold),
-/// how the current branch compares with it (Compare's list), and the date
-/// of its last commit; its tooltip is its name, and says when it's the
-/// default branch, as the sidebar's row does.
+/// A branch in the picker: its dot in the glyph column, under its group's
+/// mark, its name (the current one semibold), how the current branch
+/// compares with it (Compare's list), and the date of its last commit; its
+/// tooltip is its name, and says when it's the default branch, as the
+/// sidebar's row does.
 struct BranchPickerRow: View {
     let branch: Branch
     let isCurrent: Bool
@@ -654,6 +666,7 @@ struct BranchPickerRow: View {
             Circle()
                 .fill(Color(nsColor: dotColor ?? TrackPalette.color(forBranch: branch.name, isCurrent: isCurrent, isDefault: false)))
                 .frame(width: Metrics.Sidebar.dotSize, height: Metrics.Sidebar.dotSize)
+                .frame(width: Metrics.Sidebar.glyphSize)
                 .accessibilityHidden(true)
             Text(branch.name)
                 .font(isCurrent ? Typography.row.weight(.semibold) : Typography.row)

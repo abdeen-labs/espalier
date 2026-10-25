@@ -31,7 +31,7 @@ extension Array where Element == CloneableRepositoryGroup {
         }
         return compactMap { group in
             let items = group.items.filter { item in item.text.contains { query.matches($0) } }
-            return items.isEmpty ? nil : CloneableRepositoryGroup(identifier: group.identifier, items: items)
+            return items.isEmpty ? nil : CloneableRepositoryGroup(identifier: group.identifier, owner: group.owner, items: items)
         }
     }
 }

@@ -23,7 +23,7 @@ struct WorktreeCaptures {
             WorktreeRowContent(path: "/Users/joe/Developer/espalier-spike", detail: "spike/sync", isMain: false, isCurrent: false, isLocked: false, isMissing: true),
         ]
         let list = VStack(alignment: .leading, spacing: 2) {
-            RepositoryGroupHeader("Worktrees", mark: RepositoryPopoverContent.worktreesMark)
+            ListGroupLabel("Worktrees", mark: RepositoryPopoverContent.worktreesMark)
             ForEach(rows) { row in
                 WorktreeRow(content: row)
                     .selectableRow(isSelected: row.path == rows[0].path)

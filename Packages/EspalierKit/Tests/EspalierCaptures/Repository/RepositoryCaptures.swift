@@ -499,7 +499,7 @@ enum RepositoryCaptureFixtures {
     }
 
     /// A GitHub.com owner's group mark: their avatar.
-    static func ownerMark(_ login: String) -> RepositoryPopoverContent.GroupMark {
+    static func ownerMark(_ login: String) -> ListGroupMark {
         .owner(AvatarUser(owner: Owner(login: login, endpoint: getDotComAPIEndpoint(), id: nil)))
     }
 

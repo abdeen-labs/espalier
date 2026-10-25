@@ -17,13 +17,15 @@ import SwiftUI
 // MARK: - Content
 
 /// The labels of the groups after the default and recent branches, which
-/// lead a branch list without one: the same in the sidebar and the branch
-/// picker.
+/// lead a branch list without one, and their symbols: the same in the
+/// sidebar and the branch picker.
 nonisolated enum BranchListLabels {
     /// The other local branches.
     static let otherBranches = "Other Branches"
+    static let otherBranchesSymbol = "arrow.trianglehead.branch"
     /// The remote branches no local branch tracks.
     static let remoteBranches = "Remote Branches"
+    static let remoteBranchesSymbol = "network"
 }
 
 /// A folder of branches whose names share a `/` prefix, or a branch.
@@ -801,7 +803,7 @@ struct BranchesSectionRows: View {
             BranchGroupDisclosure(
                 id: "branches.other",
                 title: BranchListLabels.otherBranches,
-                systemImage: "arrow.trianglehead.branch",
+                systemImage: BranchListLabels.otherBranchesSymbol,
                 count: content.otherCount,
                 isExpandedByDefault: true,
                 isFiltering: content.isFiltering,
@@ -814,7 +816,7 @@ struct BranchesSectionRows: View {
             BranchGroupDisclosure(
                 id: "branches.remote",
                 title: BranchListLabels.remoteBranches,
-                systemImage: "network",
+                systemImage: BranchListLabels.remoteBranchesSymbol,
                 count: content.remoteCount,
                 isFiltering: content.isFiltering,
                 scope: AnyHashable(ObjectIdentifier(repository))

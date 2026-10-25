@@ -35,16 +35,8 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
     struct Group: Sendable, Equatable, Identifiable {
         let id: String
         let title: String
-        let mark: GroupMark
+        let mark: ListGroupMark
         let rows: [RepositoryRowContent]
-    }
-
-    /// What leads a group's header, in the rows' glyph column.
-    enum GroupMark: Sendable, Equatable {
-        /// A GitHub.com owner's avatar.
-        case owner(AvatarUser)
-        /// A symbol: the worktrees', Recent's, a host's, Other's.
-        case symbol(String)
     }
 
     var worktrees: [WorktreeRowContent]
@@ -88,7 +80,7 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
 
     /// A group's mark: Recent's clock, the owner's avatar, a host's server,
     /// Other's folder.
-    static func mark(of group: RepositoryListGroup) -> GroupMark {
+    static func mark(of group: RepositoryListGroup) -> ListGroupMark {
         switch group {
         case .recent: .symbol("clock")
         case .dotcom(let owner): .owner(AvatarUser(owner: owner))
@@ -98,7 +90,7 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
     }
 
     /// The worktrees' mark, as their header leads with it.
-    static let worktreesMark = GroupMark.symbol("rectangle.stack")
+    static let worktreesMark = ListGroupMark.symbol("rectangle.stack")
 
     /// The content for the app's repository list and the selected
     /// repository's worktrees, both filtered.
@@ -283,7 +275,7 @@ struct RepositoryPopoverView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     if !content.worktrees.isEmpty {
                         Group {
-                            RepositoryGroupHeader("Worktrees", mark: RepositoryPopoverContent.worktreesMark) {
+                            ListGroupLabel("Worktrees", mark: RepositoryPopoverContent.worktreesMark) {
                                 if let newWorktree {
                                     Button(action: newWorktree) {
                                         Image(systemName: "plus")
@@ -309,7 +301,7 @@ struct RepositoryPopoverView: View {
                         .transition(motion.animates ? .opacity : .identity)
                     }
                     ForEach(content.groups) { group in
-                        RepositoryGroupHeader(group.title, mark: group.mark)
+                        ListGroupLabel(group.title, mark: group.mark)
                             .padding(.horizontal, Metrics.ListRow.inset)
                         ForEach(group.rows) { repository in
                             row(.entry(repository.id, group: group.id)) {
@@ -381,49 +373,6 @@ struct RepositoryPopoverView: View {
             return
         }
         self.highlighted = rows[min(max(index + offset, 0), rows.count - 1)]
-    }
-}
-
-/// A group's header: its mark in the rows' glyph column, its title as
-/// written (an owner's login keeps its case), and an accessory at the
-/// trailing edge.
-struct RepositoryGroupHeader<Accessory: View>: View {
-    private let title: String
-    private let mark: RepositoryPopoverContent.GroupMark
-    private let accessory: Accessory
-
-    init(_ title: String, mark: RepositoryPopoverContent.GroupMark, @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
-        self.title = title
-        self.mark = mark
-        self.accessory = accessory()
-    }
-
-    var body: some View {
-        HStack(spacing: Metrics.insetSmall) {
-            Group {
-                switch mark {
-                case .owner(let owner):
-                    Avatar(owner, size: Metrics.RepositoryPopover.ownerAvatarSize)
-                case .symbol(let systemImage):
-                    Image(systemName: systemImage)
-                        .font(Typography.secondary)
-                        .foregroundStyle(.text3)
-                }
-            }
-            .frame(width: Metrics.Sidebar.glyphSize, alignment: .center)
-            .accessibilityHidden(true)
-            Text(title)
-                .font(Typography.secondary.weight(.semibold))
-                .foregroundStyle(.text2)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: Metrics.grid)
-            accessory
-        }
-        .frame(minHeight: Metrics.RepositoryPopover.headerHeight)
-        .padding(.horizontal, Metrics.ListRow.horizontalPadding)
-        .padding(.top, Metrics.RepositoryPopover.groupSpacing)
     }
 }
 

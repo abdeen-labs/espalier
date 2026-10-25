@@ -232,12 +232,7 @@ struct SettingsNote: View {
 /// The "Local" badge: a provider whose server is this Mac.
 struct LocalBadge: View {
     var body: some View {
-        Text("Local")
-            .font(Typography.refCapsule)
-            .foregroundStyle(.text2)
-            .padding(.horizontal, Metrics.RefCapsule.horizontalPadding)
-            .frame(height: Metrics.RefCapsule.height)
-            .background(Capsule(style: .circular).fill(Color(espalier: Palette.field)))
+        QuietCapsule("Local")
             .accessibilityLabel("Local server")
     }
 }
