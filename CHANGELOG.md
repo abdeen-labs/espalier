@@ -16,6 +16,21 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.4.2] - 2026-10-25
+
+### Changed
+
+- The clone list groups each owner's repositories under the owner's avatar and name, as the repository list does, with a lock or fork mark after a name. The branch picker's Other Branches and Remote Branches, and Keyboard Shortcuts' menus, are headed the same way.
+- A stash made outside Espalier is named by its message ("fix login"), or by the branch it was made on when it has none ("main").
+- Counts in text, such as History's commit count and the diff's find count, match the text around them. Compare's list leaves out counts of zero, as the sidebar does, and an image diff's sizes read "640 × 480 · 24 KiB".
+- Espalier's window appears at once when it opens, without fading in.
+
+### Fixed
+
+- Committing no longer flickers as the commit lands: the message clears, the button changes, and the committed files leave the list together.
+- A hook that finishes quickly, such as a post-commit hook, no longer flashes its line under the commit form. A hook that runs longer shows the line, which stays long enough to read.
+- Clicking Show Logs in Finder again right away no longer saves the logs a second time.
+
 ## [1.4.1] - 2026-10-24
 
 ### Changed
@@ -133,7 +148,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/abdeen-labs/espalier/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/abdeen-labs/espalier/compare/v1.4...v1.4.1
 [1.4]: https://github.com/abdeen-labs/espalier/compare/v1.3...v1.4
 [1.3]: https://github.com/abdeen-labs/espalier/compare/v1.2.1...v1.3
