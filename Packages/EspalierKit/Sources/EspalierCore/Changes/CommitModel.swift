@@ -104,6 +104,8 @@ public final class CommitModel: RepositoryFeature {
     private(set) var setAsideDraft: CommitDraft?
     /// The draft as amending loaded it, to tell an edited one apart.
     @ObservationIgnored var draftLoadedForAmend: CommitDraft?
+    /// A commit has been made and waits for the status that shows it.
+    private(set) var isLanding = false
 
     @ObservationIgnored weak var repository: RepositoryModel?
     /// Loads `mostRecentLocalCommit`, by SHA.
@@ -135,6 +137,13 @@ public final class CommitModel: RepositoryFeature {
 
     // MARK: Committing
 
+    /// Whether a commit runs, or has been made and waits for the status
+    /// that shows it: until then the files and the form show it committing,
+    /// and they change together as it lands.
+    public var isCommitting: Bool {
+        isLanding || repository?.localOperation?.kind == .commit
+    }
+
     /// Commits the included changes (every file whose selection isn't
     /// none), amending while `amending` is set.
     ///
@@ -143,20 +152,26 @@ public final class CommitModel: RepositoryFeature {
     /// co-authors, included files the filter hides, files over 100 MB that
     /// Git LFS doesn't track, then included files with conflict markers.
     ///
-    /// On success: leaves amend mode, clears allow-empty, clears the summary
-    /// and description (co-authors stay; a message set aside by amending comes
-    /// back), and waits for the status part of the refresh, dropping partial
-    /// line selections. An amend that changed the tip records the branch as
-    /// rewritten (it needs a force push).
+    /// On success, the commit lands with the status part of the refresh,
+    /// which drops partial line selections: in the turn the committed files
+    /// leave the list, it leaves amend mode, clears allow-empty, and clears
+    /// the summary and description (co-authors stay; a message set aside by
+    /// amending comes back). An amend that changed the tip records the branch
+    /// as rewritten (it needs a force push).
     ///
     /// - Throws: `.precondition` when there's nothing to commit, and while a
     ///   rebase is in progress; `.confirmationRequired` for a gate;
-    ///   `busy(.commit)` while another local operation runs;
-    ///   `cancelled(.hookAborted)` when the user aborts a failed hook; the
-    ///   classified git error otherwise (titled "Commit failed").
+    ///   `busy(.commit)` while another local operation runs or the last
+    ///   commit lands; `cancelled(.hookAborted)` when the user aborts a
+    ///   failed hook; the classified git error otherwise (titled "Commit
+    ///   failed").
     public func commit(confirmed: Set<ConfirmationKind> = []) async throws(OperationError) -> CommitResult {
         guard let repository else {
             throw OperationError(.precondition("The repository is no longer in the list."), operation: .commit)
+        }
+        // The files listed are the last commit's until it lands.
+        guard !isLanding else {
+            throw OperationError(.busy(.commit), operation: .commit, repositoryID: repository.id)
         }
         // A submodule with only uncommitted changes inside it shows as
         // excluded whatever its selection, and git has nothing to commit for
@@ -183,9 +198,32 @@ public final class CommitModel: RepositoryFeature {
             return await resolveCommitSHA(ctx.repository, shortSHA)
         }
 
-        self.amending = nil
-        self.amendingUpstreamTip = nil
-        self.options.allowEmpty = false
+        // The operation held refreshes and dropped those in flight, so the
+        // next status is one loaded after the commit: it lands then
+        // (`repositoryDidRefresh`), or once the pass ends if its status
+        // didn't load.
+        isLanding = true
+        await repository.awaitOperationRefresh(covering: .status)
+        land()
+
+        // An amend that changed the tip needs a force push.
+        if let amended = amending, let branch = repository.gitState.tip.branch,
+           !JSCompat.strictEquals(branch.tip.sha, amended.sha) {
+            await repository.operations.recordRewrite(of: branch, previousTip: amended.sha, upstreamTip: amendingUpstreamTip)
+        }
+        return CommitResult(sha: sha, amended: amending != nil)
+    }
+
+    /// The commit made lands: leaves amend mode, clears allow-empty, and
+    /// clears the message, bringing back one set aside by amending.
+    private func land() {
+        guard isLanding else {
+            return
+        }
+        isLanding = false
+        amending = nil
+        amendingUpstreamTip = nil
+        options.allowEmpty = false
         draft.summary = ""
         draft.description = ""
         draft.generatedByAI = false
@@ -194,15 +232,6 @@ public final class CommitModel: RepositoryFeature {
             draft = setAside
             setAsideDraft = nil
         }
-
-        await repository.awaitOperationRefresh(covering: .status)
-
-        // An amend that changed the tip needs a force push.
-        if let amended = amending, let branch = repository.gitState.tip.branch,
-           !JSCompat.strictEquals(branch.tip.sha, amended.sha) {
-            await repository.operations.recordRewrite(of: branch, previousTip: amended.sha, upstreamTip: amendingUpstreamTip)
-        }
-        return CommitResult(sha: sha, amended: amending != nil)
     }
 
     // MARK: Amend mode
@@ -237,6 +266,10 @@ public final class CommitModel: RepositoryFeature {
     }
 
     func repositoryDidRefresh(_ update: RefreshUpdate) {
+        if update.applied.contains(.status) {
+            // Before amend mode's check: the amend committed is done with.
+            land()
+        }
         if update.applied != .status {
             // The pass's other scopes load the local commits.
             loadMostRecentLocalCommit()

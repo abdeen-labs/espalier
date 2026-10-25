@@ -957,7 +957,7 @@ struct ChangesController {
     }
 
     var isCommitting: Bool {
-        repository.localOperation?.kind == .commit
+        repository.commit.isCommitting
     }
 
     // MARK: Including

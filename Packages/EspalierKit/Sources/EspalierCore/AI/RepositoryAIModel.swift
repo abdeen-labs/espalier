@@ -124,7 +124,7 @@ public final class RepositoryAIModel: RepositoryFeature {
         if generation != nil {
             throw fail(.busy(.generateCommitMessage))
         }
-        if repository.localOperation?.kind == .commit {
+        if repository.commit.isCommitting {
             throw fail(.busy(.commit))
         }
 

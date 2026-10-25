@@ -190,7 +190,7 @@ extension ComposerContent {
         let files = repository.changes.workingDirectory.files
         let included = files.filter(\.isIncludedInCommit)
         let hasCommittableFiles = files.contains { !$0.isUncommittableSubmodule }
-        let isCommitting = repository.localOperation?.kind == .commit
+        let isCommitting = commit.isCommitting
         let isGenerating = repository.ai.commitMessageGeneration == .generating
         let isAmending = commit.amending != nil
         let isGitHub = repository.record.gitHubRepository != nil

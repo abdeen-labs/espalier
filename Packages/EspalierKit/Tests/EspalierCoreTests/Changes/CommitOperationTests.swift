@@ -5,6 +5,7 @@ import EspalierCoreTestSupport
 import EspalierSupport
 import Foundation
 import GitKit
+import Observation
 import Testing
 import TestSupport
 
@@ -268,6 +269,42 @@ struct CommitOperationTests {
         await app.idle()
     }
 
+    @Test("a commit shows committing with its message until the status that shows it, and its message clears as the file leaves the list")
+    func landsWithStatus() async throws {
+        let (harness, app, repository, local) = try await makeRepository()
+        try harness.write("a.txt", "a\n", in: local)
+        await repository.refresh(.status, reason: .user)
+        repository.commit.draft.summary = "Add a"
+
+        // The commit's refresh waits for the hold.
+        let hold = repository.refreshScheduler.hold()
+        let commit = Task { try await repository.commit.commit() }
+        await waitUntilObserved { repository.commit.isLanding }
+        #expect(repository.localOperation == nil)
+        #expect(repository.commit.isCommitting)
+        #expect(repository.commit.draft.summary == "Add a")
+        #expect(repository.changes.workingDirectory.files.map(\.path) == ["a.txt"])
+        let busy = await #expect(throws: OperationError.self) { try await repository.commit.commit() }
+        #expect(busy?.reason == .busy(.commit))
+
+        let atClear = LandingObservation()
+        withObservationTracking {
+            _ = repository.commit.draft
+        } onChange: {
+            MainActor.assumeIsolated {
+                atClear.files = repository.changes.workingDirectory.files.map(\.path)
+                atClear.isCommitting = repository.commit.isCommitting
+            }
+        }
+        repository.refreshScheduler.release(hold)
+        _ = try await commit.value
+        #expect(atClear.files == [])
+        #expect(atClear.isCommitting == false)
+        #expect(repository.commit.draft.summary == "")
+        #expect(try await commitCount(local) == 2)
+        await app.idle()
+    }
+
     @Test("Abort in a failing hook's prompt cancels the commit; Ignore lets it land")
     func hookFailurePrompt() async throws {
         try await withIsolatedGitConfig { _ in
@@ -334,4 +371,11 @@ struct CommitOperationTests {
 private final class HookObservations {
     weak var repository: RepositoryModel?
     var hooksAtPrompt: [HookActivity?] = []
+}
+
+/// What the form's state was as the commit's message cleared.
+@MainActor
+private final class LandingObservation {
+    var files: [String]?
+    var isCommitting: Bool?
 }

@@ -292,7 +292,7 @@ extension ChangesModel {
         else {
             return false
         }
-        if repository?.localOperation?.kind == .commit {
+        if repository?.commit.isCommitting == true {
             return false
         }
         if case .rebase? = repository?.operations.conflictState {

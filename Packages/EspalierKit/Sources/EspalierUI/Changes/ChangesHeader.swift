@@ -70,7 +70,7 @@ extension ChangesHeaderContent {
     public static func make(_ repository: RepositoryModel, numberFormat: NumberFormat) -> ChangesHeaderContent {
         let changes = repository.changes
         let files = changes.workingDirectory.files
-        let isCommitting = repository.localOperation?.kind == .commit
+        let isCommitting = repository.commit.isCommitting
         var isRebaseConflicts = false
         if case .rebase? = repository.operations.conflictState {
             isRebaseConflicts = true

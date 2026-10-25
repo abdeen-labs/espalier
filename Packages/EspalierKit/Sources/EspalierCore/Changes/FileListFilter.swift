@@ -303,7 +303,7 @@ extension ChangesModel {
             includeAll
         }
 
-        let isCommitting = repository?.localOperation?.kind == .commit
+        let isCommitting = repository?.commit.isCommitting ?? false
         let help: String? = if isUncommittableSubmodule {
             "This submodule has uncommitted changes, so its change can't be committed here."
         } else if isPartiallyCommittableSubmodule {
