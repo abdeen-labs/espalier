@@ -1,14 +1,48 @@
 // Help ▸ Show Logs in Finder. Espalier logs to the unified log, so this
 // writes this session's entries to the logs folder (`Log.directory`), then
 // shows that file in Finder with the rolling log's files, which hold
-// earlier runs too.
+// earlier runs too. After a click it's off for 5 seconds
+// (`LogRevealCooldown`), so clicking again doesn't write another log.
 
 import AppKit
 import EspalierSupport
 import Foundation
+import Observation
 import OSLog
 
 nonisolated private let logger = Log.logger(category: "logs")
+
+/// Keeps Show Logs in Finder off for a few seconds after each click. The
+/// time counts from the click, not from Finder showing the logs.
+@MainActor @Observable
+final class LogRevealCooldown {
+    /// The one every window's Show Logs reads, so the Help menu and
+    /// Settings ▸ Advanced are off together.
+    static let shared = LogRevealCooldown()
+
+    /// Whether Show Logs is off.
+    private(set) var isActive = false
+
+    private let duration: Duration
+    private let scheduler: any Scheduler
+
+    init(duration: Duration = .seconds(5), scheduler: any Scheduler = SystemScheduler()) {
+        self.duration = duration
+        self.scheduler = scheduler
+    }
+
+    /// Turns Show Logs off for `duration`.
+    func start() {
+        guard !isActive else {
+            return
+        }
+        isActive = true
+        Task { [duration, scheduler] in
+            try? await scheduler.sleep(for: duration)
+            self.isActive = false
+        }
+    }
+}
 
 /// Writes this session's log to a file and shows it with the rolling log.
 enum LogExporter {

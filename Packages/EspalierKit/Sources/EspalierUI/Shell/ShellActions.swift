@@ -47,7 +47,13 @@ enum ShellActions {
                 KeyboardShortcutsSheet(isHidden: { actions.isHidden($0) })
             }
         }
-        actions.register(.showLogsInFinder) { _ in
+        registerShowLogs(into: actions)
+    }
+
+    /// Show Logs in Finder, off while `cooldown` runs.
+    static func registerShowLogs(into actions: WindowActions, cooldown: LogRevealCooldown = .shared) {
+        actions.register(.showLogsInFinder, isEnabled: { _ in !cooldown.isActive }) { _ in
+            cooldown.start()
             await LogExporter.exportAndReveal()
         }
     }

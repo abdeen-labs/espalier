@@ -1,6 +1,7 @@
 // Every Settings pane in the window's layout, the sidebar and the header
 // band included, as tall as its content: Prompts, Appearance (the run's
-// look chosen, and themes of its own), Advanced, Notifications with the
+// look chosen, and themes of its own), Advanced (and with Show Logs in
+// Finder off after a click), Notifications with the
 // permission denied, Integrations with editors found and none, Git (an
 // account's address, nothing configured with invalid input, and a
 // configuration git can't read), and AI with no providers and with
@@ -87,6 +88,19 @@ struct SettingsCaptures {
         navigation.selectedTab = .advanced
         let context = SettingsWindowContext.make(app: app, navigation: navigation)
         capture(window(.advanced) { AdvancedForm(preferences: app.preferences, actions: context.actions) }, named: "advanced", area: area)
+    }
+
+    @Test("Advanced: Show Logs in Finder off for a few seconds after a click")
+    func advancedLogsCoolingDown() throws {
+        let harness = try AppHarness()
+        let app = app(harness)
+        let navigation = SettingsNavigation()
+        navigation.selectedTab = .advanced
+        let context = SettingsWindowContext.make(app: app, navigation: navigation)
+        let cooldown = LogRevealCooldown(scheduler: ManualScheduler())
+        ShellActions.registerShowLogs(into: context.actions, cooldown: cooldown)
+        cooldown.start()
+        capture(window(.advanced) { AdvancedForm(preferences: app.preferences, actions: context.actions) }, named: "advanced-logs-cooling-down", area: area)
     }
 
     // MARK: Notifications
