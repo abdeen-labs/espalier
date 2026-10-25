@@ -241,14 +241,14 @@ func imageAccessibilityLabel(_ title: String, image: DecodedImage?, bytes: Int, 
     return "\(kind), \(Int(image.pixelSize.width)) by \(Int(image.pixelSize.height)) pixels, \(size)"
 }
 
-/// "W: 640px | H: 480px | Size: 24 KiB", or "Size: 24 KiB" for an image
-/// that couldn't be decoded; the size in `numberFormat`.
+/// "640 × 480 · 24 KiB", or "24 KiB" for an image that couldn't be
+/// decoded; the size in `numberFormat`.
 func imageFooter(image: DecodedImage?, bytes: Int, numberFormat: NumberFormat) -> String {
-    let size = "Size: \(formatBytes(Double(bytes), 2, numberFormat: numberFormat))"
+    let size = formatBytes(Double(bytes), 2, numberFormat: numberFormat)
     guard let image else {
         return size
     }
-    return "W: \(Int(image.pixelSize.width))px | H: \(Int(image.pixelSize.height))px | \(size)"
+    return "\(Int(image.pixelSize.width)) × \(Int(image.pixelSize.height)) · \(size)"
 }
 
 /// One image with a header (an added or deleted file).

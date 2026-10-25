@@ -30,7 +30,7 @@ struct StashFileCountsTests {
         await fixture.refresh()
         #expect(try await fixture.stash.stashAllChanges())
         await fixture.settle()
-        #expect(fixture.model.gitState.stashes.entries.map(\.title) == ["feature", "On main: my own", "main"])
+        #expect(fixture.model.gitState.stashes.entries.map(\.title) == ["feature", "my own", "main"])
         return fixture
     }
 

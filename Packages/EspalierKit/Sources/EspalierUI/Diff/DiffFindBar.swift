@@ -113,7 +113,9 @@ struct DiffFindBar: View {
                 }
             if let count = find.countText(numberFormat) {
                 Text(count)
-                    .font(find.matches.isEmpty ? Typography.secondary : Typography.count)
+                    .font(Typography.secondary)
+                    // The digits keep their width as the count rolls.
+                    .monospacedDigit()
                     .foregroundStyle(.text3)
                     .lineLimit(1)
                     .fixedSize()

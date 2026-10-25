@@ -62,9 +62,56 @@ public struct ApplyStashRetry: RetryableOperation {
 
 extension StashEntry {
     /// What the entry is called: its branch when Espalier or GitHub Desktop
-    /// made it, else git's message ("On main: fix login").
+    /// made it, else `title(ofMessage:)`.
     public var title: String {
-        branchName ?? message
+        branchName ?? Self.title(ofMessage: message)
+    }
+
+    /// What an entry made outside the app is called: the message it was
+    /// given ("On main: fix login" is "fix login"), else the branch git
+    /// made it on ("WIP on main: a1b2c3d Subject" is "main"), else git's
+    /// message.
+    public static func title(ofMessage message: String) -> String {
+        givenMessage(in: message) ?? branch(inMessage: message) ?? message
+    }
+
+    /// Whether `title(ofMessage:)` is a branch, which reads from both ends,
+    /// rather than text read from its start.
+    public static func titleIsBranch(ofMessage message: String) -> Bool {
+        givenMessage(in: message) == nil && branch(inMessage: message) != nil
+    }
+
+    /// The branch git's message names: "On main: fix login" and "WIP on
+    /// main: a1b2c3d Subject" are main's. Nil for another message, or for
+    /// an entry made on a detached HEAD ("(no branch)").
+    public static func branch(inMessage message: String) -> String? {
+        guard let parts = parts(of: message), parts.branch != "(no branch)" else {
+            return nil
+        }
+        return String(parts.branch)
+    }
+
+    /// The message `git stash push -m` gave the entry: "On main: fix login"
+    /// is "fix login". Nil for an entry git named itself ("WIP on …").
+    private static func givenMessage(in message: String) -> String? {
+        guard let parts = parts(of: message), !parts.isWorkInProgress, !parts.rest.isEmpty else {
+            return nil
+        }
+        return String(parts.rest)
+    }
+
+    /// Git's message in its parts: "WIP on <branch>: <commit> <subject>" for
+    /// an entry git named, "On <branch>: <message>" for one given a message.
+    /// A branch name can't have a colon, so the first ": " ends it.
+    private static func parts(of message: String) -> (isWorkInProgress: Bool, branch: Substring, rest: Substring)? {
+        for (prefix, isWorkInProgress) in [("WIP on ", true), ("On ", false)] where message.hasPrefix(prefix) {
+            let named = message.dropFirst(prefix.count)
+            guard let colon = named.range(of: ": ") else {
+                return nil
+            }
+            return (isWorkInProgress, named[..<colon.lowerBound], named[colon.upperBound...])
+        }
+        return nil
     }
 }
 

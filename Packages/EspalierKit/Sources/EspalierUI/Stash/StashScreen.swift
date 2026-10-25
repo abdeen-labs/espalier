@@ -55,10 +55,11 @@ nonisolated struct StashColumnContent: Sendable, Equatable {
     /// The selected file.
     var selectedFileID: String?
 
-    /// "On main · 4 files" ("On main" until the files load), or git's
-    /// message for an entry without a branch, the count in `numberFormat`.
+    /// "On main · 4 files" ("On main" until the files load): the branch in
+    /// the entry's marker or git's message, else git's message, the count
+    /// in `numberFormat`.
     func subtitle(_ numberFormat: NumberFormat) -> String {
-        let origin = branch.map { "On \($0)" } ?? message
+        let origin = (branch ?? StashEntry.branch(inMessage: message)).map { "On \($0)" } ?? message
         if case .loaded(_, let total) = files {
             return "\(origin) · \(StashFilesSummary.files(total, numberFormat))"
         }

@@ -166,7 +166,7 @@ struct PreviewPullRequestSheet: View {
                     .foregroundStyle(.text2)
                 // The period follows the branch as it would a word.
                 HStack(spacing: 0) {
-                    QuietCapsule(content.headBranch, monospaced: true)
+                    QuietCapsule(content.headBranch, isName: true)
                     Text(".")
                         .foregroundStyle(.text2)
                 }

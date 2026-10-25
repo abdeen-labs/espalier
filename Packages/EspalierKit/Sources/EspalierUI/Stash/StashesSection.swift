@@ -1,7 +1,8 @@
 // The sidebar's Stashes section: every stash entry, newest first, each with
 // its file count. Entries Espalier or GitHub Desktop made are named by their
-// branch; others by git's message. Selecting a row shows the stash's place;
-// Return or a double-click restores it.
+// branch; others by the message they were given, or the branch git made them
+// on (`StashEntry.title(ofMessage:)`). Selecting a row shows the stash's
+// place; Return or a double-click restores it.
 
 import EspalierCore
 import GitKit
@@ -23,9 +24,16 @@ nonisolated struct StashRowContent: Sendable, Equatable, Identifiable {
         sha
     }
 
-    /// The row's name: the branch, else git's message.
+    /// The row's name: the branch, else what git's message names it
+    /// (`StashEntry.title(ofMessage:)`).
     var title: String {
-        branch ?? message
+        branch ?? StashEntry.title(ofMessage: message)
+    }
+
+    /// Where a long title is cut: the middle of a branch, the end of a
+    /// message.
+    var truncationMode: Text.TruncationMode {
+        branch != nil || StashEntry.titleIsBranch(ofMessage: message) ? .middle : .tail
     }
 
     /// The badge: the file count, once counted, in `numberFormat`.
@@ -68,8 +76,7 @@ struct StashRow: View {
     @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
-        // Git's message reads from its start; a branch keeps the middle cut.
-        SidebarRowLabel(content.title, systemImage: "tray.full", truncationMode: content.branch == nil ? .tail : .middle) {
+        SidebarRowLabel(content.title, systemImage: "tray.full", truncationMode: content.truncationMode) {
             if let badge = content.badge(numberFormat) {
                 Text(badge)
                     .font(Typography.count)

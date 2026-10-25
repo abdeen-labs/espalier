@@ -81,7 +81,9 @@ struct HistoryHeader: View {
                                 isFinal: content.countIsTotal,
                                 subject: AnyHashable([AnyHashable(content.branchName), AnyHashable(content.scope)])
                             )
-                            .font(Typography.secondaryCount)
+                            .font(Typography.secondary)
+                            // The digits keep their width as the count rolls.
+                            .monospacedDigit()
                             .foregroundStyle(.text3)
                             .lineLimit(1)
                             .fixedSize()

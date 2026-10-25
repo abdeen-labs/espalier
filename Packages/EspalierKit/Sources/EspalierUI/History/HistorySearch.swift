@@ -9,22 +9,8 @@ import SwiftUI
 
 /// What the search's status says.
 nonisolated struct HistorySearchStatusContent: Sendable, Equatable {
-    /// A run of the status's text: its words, or a count.
-    struct Part: Sendable, Equatable {
-        var text: String
-        var isCount: Bool
-
-        static func words(_ text: String) -> Part {
-            Part(text: text, isCount: false)
-        }
-
-        static func count(_ count: Int, _ numberFormat: NumberFormat) -> Part {
-            Part(text: formatCount(count, numberFormat), isCount: true)
-        }
-    }
-
-    /// "3 of 17 matches in 2,400 loaded commits", its counts apart.
-    var parts: [Part]
+    /// "3 of 17 matches in 2,400 loaded commits".
+    var text: String
     /// Whether there are matches to move between.
     var canMove: Bool
     /// Whether older commits can be loaded and searched.
@@ -35,8 +21,8 @@ nonisolated struct HistorySearchStatusContent: Sendable, Equatable {
     /// short form for the button.
     var commitID: String?
 
-    init(parts: [Part], canMove: Bool, canSearchOlder: Bool, isSearchingOlder: Bool, commitID: String?) {
-        self.parts = parts
+    init(text: String, canMove: Bool, canSearchOlder: Bool, isSearchingOlder: Bool, commitID: String?) {
+        self.text = text
         self.canMove = canMove
         self.canSearchOlder = canSearchOlder
         self.isSearchingOlder = isSearchingOlder
@@ -45,19 +31,19 @@ nonisolated struct HistorySearchStatusContent: Sendable, Equatable {
 
     /// The status of `search`, its counts in `numberFormat`.
     init(search: HistorySearch, loaded: Int, isComplete: Bool, isLoadingMore: Bool, numberFormat: NumberFormat) {
-        let commits: [Part] = [.count(loaded, numberFormat), .words(loaded == 1 ? " loaded commit" : " loaded commits")]
+        let commits = "\(formatCount(loaded, numberFormat)) \(loaded == 1 ? "loaded commit" : "loaded commits")"
         let count = search.matchCount
-        let matches = count == 1 ? " match in " : " matches in "
-        let parts: [Part]
+        let matches = "\(formatCount(count, numberFormat)) \(count == 1 ? "match" : "matches") in \(commits)"
+        let text: String
         if count == 0 {
-            parts = search.isSearching ? [.words("Searching…")] : [.words("No matches in ")] + commits
+            text = search.isSearching ? "Searching…" : "No matches in \(commits)"
         } else if let current = search.currentMatch {
-            parts = [.count(current + 1, numberFormat), .words(" of "), .count(count, numberFormat), .words(matches)] + commits
+            text = "\(formatCount(current + 1, numberFormat)) of \(matches)"
         } else {
-            parts = [.count(count, numberFormat), .words(matches)] + commits
+            text = matches
         }
         self.init(
-            parts: parts,
+            text: text,
             canMove: count > 0,
             canSearchOlder: !isComplete,
             isSearchingOlder: isLoadingMore && !isComplete,
@@ -77,11 +63,6 @@ nonisolated struct HistorySearchStatusContent: Sendable, Equatable {
             isLoadingMore: history.isLoadingMore,
             numberFormat: numberFormat
         )
-    }
-
-    /// The status as one string, as VoiceOver reads it.
-    var text: String {
-        parts.map(\.text).joined()
     }
 
     /// The commit's short SHA for "Go to Commit a1b2c3d".
@@ -113,11 +94,13 @@ struct HistorySearchStatus: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.text3)
                     .accessibilityHidden(true)
-                statusText
+                Text(content.text)
+                    .font(Typography.meta)
+                    // The digits keep their width as the counts change.
+                    .monospacedDigit()
                     .foregroundStyle(.text2)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .accessibilityLabel(content.text)
                     .accessibilityAddTraits(.updatesFrequently)
                 Spacer(minLength: Metrics.grid)
                 HStack(spacing: Metrics.grid) {
@@ -166,14 +149,6 @@ struct HistorySearchStatus: View {
                 .controlSize(.small)
                 .motion(Motion.leave, value: content.isSearchingOlder)
             }
-        }
-    }
-
-    /// The status's words in the meta font, its counts in the code font.
-    private var statusText: Text {
-        content.parts.reduce(Text(verbatim: "")) { text, part in
-            let run = Text(verbatim: part.text).font(part.isCount ? Typography.secondaryCount : Typography.meta)
-            return Text("\(text)\(run)")
         }
     }
 }

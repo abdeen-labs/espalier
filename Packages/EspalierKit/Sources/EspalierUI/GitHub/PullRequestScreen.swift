@@ -350,12 +350,12 @@ struct PullRequestOverviewView: View {
             .foregroundStyle(.text2)
             .accessibilityElement(children: .combine)
             HStack(spacing: Metrics.grid) {
-                QuietCapsule(content.base, monospaced: true)
+                QuietCapsule(content.base, isName: true)
                 Image(systemName: "arrow.left")
                     .font(Typography.subheadline)
                     .foregroundStyle(.text2)
                     .accessibilityLabel("from")
-                QuietCapsule(content.head, monospaced: true)
+                QuietCapsule(content.head, isName: true)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(content.head) into \(content.base)")

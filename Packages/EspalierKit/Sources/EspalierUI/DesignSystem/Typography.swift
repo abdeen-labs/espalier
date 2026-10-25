@@ -1,6 +1,7 @@
 // Espalier's type roles, in the current app font (`AppFont`, the sans) for
-// text and code font (`CodeFont`, the mono) for commit IDs, counts, ahead
-// and behind, ref tags, code, and terminal output. At the sizes of the
+// text, counts within it included, and code font (`CodeFont`, the mono) for
+// commit IDs, counts set apart (a row's, a header's), ahead and behind, ref
+// tags, code, and terminal output. At the sizes of the
 // system's text styles: body 13, secondary 12, meta 11, section labels 10
 // (the theme's size); the mono 11 for commit IDs, counts, and ahead and
 // behind arrows, 10 in ref tags, and code at the user's code text size.
@@ -67,9 +68,6 @@ public enum Typography {
     }
     /// Ref tags: the mono at 10, semibold.
     public static var refCapsule: Font { mono(size: 10, weight: .semibold) }
-    /// A word in a quiet capsule ("Draft", "Local", "Archived"): the sans at
-    /// 11, medium.
-    public static var capsuleWord: Font { sans(.subheadline, weight: .medium) }
     /// "+N" and other tiny counts (the mono at 10).
     public static var tinyCount: Font { mono(size: 10, weight: .medium) }
     /// Counts in rows and headers (the mono at 11).

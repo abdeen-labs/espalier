@@ -346,7 +346,7 @@ struct CreatePullRequestForm<BasePicker: View>: View {
                     .foregroundStyle(.text2)
                 // The period follows the branch as it would a word.
                 HStack(spacing: 0) {
-                    QuietCapsule(content.head, monospaced: true)
+                    QuietCapsule(content.head, isName: true)
                     Text(".")
                         .foregroundStyle(.text2)
                 }

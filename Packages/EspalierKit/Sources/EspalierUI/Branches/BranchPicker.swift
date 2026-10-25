@@ -675,8 +675,8 @@ struct BranchPickerRow: View {
                 .truncationMode(.middle)
                 .accessibilityLabel(accessibilityName)
             Spacer(minLength: Metrics.insetSmall)
-            if let counts {
-                Text(counts.text(numberFormat))
+            if let counts, let text = counts.text(numberFormat) {
+                Text(text)
                     .font(Typography.secondaryCount)
                     .foregroundStyle(.text2)
                     .lineLimit(1)
@@ -725,9 +725,17 @@ nonisolated struct BranchComparisonCounts: Sendable, Equatable {
         self.currentBranch = currentBranch
     }
 
-    /// "↓3 ↑2", in `numberFormat`.
-    func text(_ numberFormat: NumberFormat) -> String {
-        "↓\(formatCount(behind, numberFormat)) ↑\(formatCount(ahead, numberFormat))"
+    /// "↓3 ↑2", leaving out zero counts, in `numberFormat`; nil when the
+    /// branches are on the same commit.
+    func text(_ numberFormat: NumberFormat) -> String? {
+        var parts: [String] = []
+        if behind > 0 {
+            parts.append("↓\(formatCount(behind, numberFormat))")
+        }
+        if ahead > 0 {
+            parts.append("↑\(formatCount(ahead, numberFormat))")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     /// What the tooltip and VoiceOver say, counts in `numberFormat`.

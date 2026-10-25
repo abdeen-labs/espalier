@@ -140,7 +140,7 @@ struct StashModelTests {
         }
     }
 
-    @Test("lists every entry, newest first: both markers by their branch, others with git's message")
+    @Test("lists every entry, newest first: both markers by their branch, others by their message, or the branch git names")
     func listsEveryEntry() async throws {
         let (fixture, _) = try await ChangesFixture.withRemote()
         func change(_ text: String) throws {
@@ -162,8 +162,7 @@ struct StashModelTests {
         let entries = fixture.model.gitState.stashes.entries
         #expect(entries.map(\.branchName) == ["main", nil, nil, "feature", "main"])
         #expect(entries.map(\.name) == (0..<5).map { "refs/stash@{\($0)}" })
-        #expect(entries[1].title.hasPrefix("WIP on main: "))
-        #expect(entries.map(\.title)[2...] == ["On main: fix login", "feature", "main"])
+        #expect(entries.map(\.title) == ["main", "main", "fix login", "feature", "main"])
         let listed = try await fixture.git(["stash", "list", "--format=%H"]).split(separator: "\n").map(String.init)
         #expect(entries.map(\.stashSha) == listed)
         // The current branch's: its two, newest first.
