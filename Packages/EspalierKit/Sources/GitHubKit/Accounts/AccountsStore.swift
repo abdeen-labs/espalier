@@ -492,55 +492,6 @@ public actor AccountsStore {
         return signedOut
     }
 
-    /// Moves each migrated account's token to the new endpoint's key, so the
-    /// account loads with its token, and leaves the account unmigrated (until
-    /// the next launch) if the token can't be moved.
-    private func getMigratedGHEAccounts(_ accounts: [PersistedAccount]) -> [PersistedAccount]? {
-        var migrated = false
-        let migratedAccounts = accounts.map { account in
-            var account = account
-            // Migrate endpoints of subdomains of `.ghe.com` that use the `/api/v3`
-            // path to the correct URL using the `api.` subdomain.
-            if isGHE(account.endpoint) && !(hostname(of: account.endpoint) ?? "").hasPrefix("api.") {
-                let endpoint = getEnterpriseAPIURL(account.endpoint)
-                if moveToken(of: account.login, from: account.endpoint, to: endpoint) {
-                    account.endpoint = endpoint
-                    migrated = true
-                }
-            }
-
-            return account
-        }
-
-        return migrated ? migratedAccounts : nil
-    }
-
-    /// Moves a login's token from one endpoint's key to another's, keeping a
-    /// token already stored under the new key. Returns whether the token is
-    /// now under the new key (or there was none).
-    private func moveToken(of login: String, from oldEndpoint: String, to newEndpoint: String) -> Bool {
-        let oldKey = getKeyForEndpoint(oldEndpoint)
-        let newKey = getKeyForEndpoint(newEndpoint)
-        do {
-            if try secureStore.secret(service: newKey, account: login) == nil,
-               let token = try secureStore.secret(service: oldKey, account: login)
-            {
-                try secureStore.setSecret(token, service: newKey, account: login)
-            }
-        } catch {
-            log.error("Unable to move the token for '\(login, privacy: .public)' to \(newEndpoint, privacy: .public): \(String(describing: error), privacy: .public)")
-            continuation.yield(.didError(error))
-            return false
-        }
-
-        do {
-            try secureStore.deleteSecret(service: oldKey, account: login)
-        } catch {
-            log.error("Unable to remove the token for '\(login, privacy: .public)' stored under \(oldEndpoint, privacy: .public): \(String(describing: error), privacy: .public)")
-        }
-        return true
-    }
-
     private func ensureLoaded() async {
         if loadingTask == nil {
             loadingTask = Task { self.loadFromStore() }
@@ -554,9 +505,9 @@ public actor AccountsStore {
             return
         }
 
-        let parsedAccounts: [PersistedAccount]
+        var rawAccounts: [PersistedAccount]
         do {
-            parsedAccounts = try JSONDecoder()
+            rawAccounts = try JSONDecoder()
                 .decode([Lenient<PersistedAccount>].self, from: Data(raw.utf8))
                 .compactMap(\.value)
         } catch {
@@ -564,9 +515,6 @@ public actor AccountsStore {
             continuation.yield(.didError(error))
             return
         }
-
-        let migratedAccounts = getMigratedGHEAccounts(parsedAccounts)
-        var rawAccounts = migratedAccounts ?? parsedAccounts
         persistedIdentities = rawAccounts.map { AccountIdentity(endpoint: $0.endpoint, login: $0.login) }
 
         // An account saved twice keeps its last entry, where its first was.
@@ -607,8 +555,7 @@ public actor AccountsStore {
 
         accounts = sortAccounts(loadedAccounts)
         unreadable = unreadableAccounts
-        // If any account was migrated, make sure to persist the new value
-        if migratedAccounts != nil || signedOutAccounts || duplicates {
+        if signedOutAccounts || duplicates {
             save() // Save already emits an update
         } else {
             continuation.yield(.didUpdate(usableAccounts))
@@ -676,7 +623,7 @@ public actor AccountsStore {
             return .unreadable
         }
 
-        let credential: AccountCredential
+        let credential: OAuthToken?
         var isUnknownVersion = false
         do {
             credential = try deserializeAccountCredential(stored)

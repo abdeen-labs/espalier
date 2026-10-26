@@ -90,97 +90,8 @@ private func storedUser(endpoint: String) -> String {
     """
 }
 
-/// A secure store holding the token of `storedUser(endpoint:)`.
-private func storedToken(endpoint: String) throws -> InMemorySecretStore {
-    let secure = InMemorySecretStore()
-    try secure.setSecret("token", service: getKeyForEndpoint(endpoint), account: "joan")
-    return secure
-}
-
 @Suite("AccountsStore", .offline, .hangGuard(minutes: 5))
 struct AccountsStoreTests {
-    @Suite("loading persisted users")
-    struct LoadingPersistedUsers {
-        @Test("migrates .ghe.com users still using /api/v3 to api. subdomain")
-        func migratesGHEUsers() async throws {
-            let dataStore = InMemoryDataStore()
-            dataStore.setItem("users", storedUser(endpoint: "https://whatever.ghe.com/api/v3"))
-            let accountsStore = AccountsStore(dataStore: dataStore, secureStore: try storedToken(endpoint: "https://whatever.ghe.com/api/v3"))
-
-            let users = await accountsStore.getAll()
-            #expect(users.first?.login == "joan")
-            #expect(users.first?.endpoint == "https://api.whatever.ghe.com/")
-
-            let persistedUsers = try persistedUsers(dataStore)
-            #expect(persistedUsers.first?["login"] == "joan")
-            #expect(persistedUsers.first?["endpoint"] == "https://api.whatever.ghe.com/")
-        }
-
-        @Test("does NOT migrate GHE users already using the api. subdomain")
-        func doesNotMigrateMigratedGHEUsers() async throws {
-            let dataStore = InMemoryDataStore()
-            dataStore.setItem("users", storedUser(endpoint: "https://api.whatever.ghe.com/"))
-            let accountsStore = AccountsStore(dataStore: dataStore, secureStore: try storedToken(endpoint: "https://api.whatever.ghe.com/"))
-
-            let users = await accountsStore.getAll()
-            #expect(users.first?.login == "joan")
-            #expect(users.first?.endpoint == "https://api.whatever.ghe.com/")
-
-            let persistedUsers = try persistedUsers(dataStore)
-            #expect(persistedUsers.first?["login"] == "joan")
-            #expect(persistedUsers.first?["endpoint"] == "https://api.whatever.ghe.com/")
-        }
-
-        @Test("moves the token of a migrated .ghe.com user to the new endpoint")
-        func movesMigratedToken() async throws {
-            let dataStore = InMemoryDataStore()
-            dataStore.setItem("users", storedUser(endpoint: "https://whatever.ghe.com/api/v3"))
-            let secure = InMemorySecretStore()
-            try secure.setSecret("ghe-token", service: "Espalier - https://whatever.ghe.com/api/v3", account: "joan")
-            let accountsStore = AccountsStore(dataStore: dataStore, secureStore: secure)
-
-            let users = await accountsStore.getAll()
-            #expect(users.first?.endpoint == "https://api.whatever.ghe.com/")
-            #expect(users.first?.token == "ghe-token")
-            #expect(try secure.secret(service: "Espalier - https://api.whatever.ghe.com/", account: "joan") == "ghe-token")
-            #expect(try secure.secret(service: "Espalier - https://whatever.ghe.com/api/v3", account: "joan") == nil)
-
-            let restarted = AccountsStore(dataStore: dataStore, secureStore: secure)
-            #expect(await restarted.getAll().first?.token == "ghe-token")
-        }
-
-        @Test("keeps a .ghe.com user unmigrated when its token can't be moved")
-        func keepsUnmovableAccountUnmigrated() async throws {
-            let dataStore = InMemoryDataStore()
-            dataStore.setItem("users", storedUser(endpoint: "https://whatever.ghe.com/api/v3"))
-            let secure = FailingSecretStore()
-            try secure.setSecret("ghe-token", service: "Espalier - https://whatever.ghe.com/api/v3", account: "joan")
-            secure.failWrites = true
-            let accountsStore = AccountsStore(dataStore: dataStore, secureStore: secure)
-
-            let users = await accountsStore.getAll()
-            #expect(users.first?.endpoint == "https://whatever.ghe.com/api/v3")
-            #expect(users.first?.token == "ghe-token")
-            let persistedUsers = try persistedUsers(dataStore)
-            #expect(persistedUsers.first?["endpoint"] == "https://whatever.ghe.com/api/v3")
-        }
-
-        @Test("does NOT migrate GHES users still using /api/v3 to api. subdomain")
-        func doesNotMigrateGHESUsers() async throws {
-            let dataStore = InMemoryDataStore()
-            dataStore.setItem("users", storedUser(endpoint: "https://my-company-repos.com/api/v3"))
-            let accountsStore = AccountsStore(dataStore: dataStore, secureStore: try storedToken(endpoint: "https://my-company-repos.com/api/v3"))
-
-            let users = await accountsStore.getAll()
-            #expect(users.first?.login == "joan")
-            #expect(users.first?.endpoint == "https://my-company-repos.com/api/v3")
-
-            let persistedUsers = try persistedUsers(dataStore)
-            #expect(persistedUsers.first?["login"] == "joan")
-            #expect(persistedUsers.first?["endpoint"] == "https://my-company-repos.com/api/v3")
-        }
-    }
-
     // Tokens, ordering, refreshing, and expiry.
 
     @Suite("tokens and accounts")
@@ -797,17 +708,6 @@ struct AccountsStoreTests {
                 AccountIdentity(endpoint: enterpriseEndpoint, login: "bob"),
                 AccountIdentity(endpoint: otherEndpoint, login: "carol"),
             ])
-        }
-
-        @Test("the persisted identities use migrated endpoints")
-        func persistedIdentitiesMigrated() async throws {
-            let data = InMemoryDataStore()
-            data.setItem("users", storedUser(endpoint: "https://whatever.ghe.com/api/v3"))
-            let store = AccountsStore(dataStore: data, secureStore: InMemorySecretStore())
-
-            let identities = await store.getPersistedIdentities()
-            #expect(identities.map(\.endpoint) == ["https://api.whatever.ghe.com/"])
-            #expect(identities.map(\.login) == ["joan"])
         }
 
         @Test("signs out an account whose token can't be read")

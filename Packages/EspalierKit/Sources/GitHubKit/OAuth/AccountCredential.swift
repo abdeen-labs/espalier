@@ -14,31 +14,23 @@ import Foundation
 
 private let prefix = "espalier-oauth:"
 
-/// A `nil` credential represents missing or previously invalidated credentials.
-public typealias AccountCredential = OAuthToken?
-
 /// Store the entire credential in one secure-store item.
-public func serializeAccountCredential(_ credential: AccountCredential) -> String {
-    if let credential, credential.refreshToken == nil, credential.expiresAt == nil {
+public func serializeAccountCredential(_ credential: OAuthToken) -> String {
+    if credential.refreshToken == nil, credential.expiresAt == nil {
         return credential.accessToken
     }
 
-    var record: [String: JSONValue] = ["version": 1]
-    if let credential {
-        var fields: [String: JSONValue] = ["accessToken": .string(credential.accessToken)]
-        if let refreshToken = credential.refreshToken {
-            fields["refreshToken"] = .string(refreshToken)
-        }
-        if let expiresAt = credential.expiresAt {
-            fields["expiresAt"] = .number(Double(expiresAt))
-        }
-        if let refreshTokenExpiresAt = credential.refreshTokenExpiresAt {
-            fields["refreshTokenExpiresAt"] = .number(Double(refreshTokenExpiresAt))
-        }
-        record["credential"] = .object(fields)
-    } else {
-        record["credential"] = .null
+    var fields: [String: JSONValue] = ["accessToken": .string(credential.accessToken)]
+    if let refreshToken = credential.refreshToken {
+        fields["refreshToken"] = .string(refreshToken)
     }
+    if let expiresAt = credential.expiresAt {
+        fields["expiresAt"] = .number(Double(expiresAt))
+    }
+    if let refreshTokenExpiresAt = credential.refreshTokenExpiresAt {
+        fields["refreshTokenExpiresAt"] = .number(Double(refreshTokenExpiresAt))
+    }
+    let record: [String: JSONValue] = ["version": 1, "credential": .object(fields)]
 
     let json = (try? JSONValue.object(record).serialized()).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
     return prefix + json
@@ -59,8 +51,9 @@ public struct AccountCredentialError: Error, LocalizedError, CustomStringConvert
     public var description: String { message }
 }
 
-/// Read legacy tokens and versioned credentials without exposing malformed data.
-public func deserializeAccountCredential(_ value: String?) throws -> AccountCredential {
+/// Read plain tokens and versioned credentials without exposing malformed
+/// data; nil when nothing is stored.
+public func deserializeAccountCredential(_ value: String?) throws -> OAuthToken? {
     guard let value, !value.isEmpty else {
         return nil
     }
@@ -80,10 +73,6 @@ public func deserializeAccountCredential(_ value: String?) throws -> AccountCred
     }
     guard let credential = record["credential"] else {
         throw AccountCredentialError()
-    }
-
-    if credential == .null {
-        return nil
     }
 
     let refreshToken = credential["refreshToken"]

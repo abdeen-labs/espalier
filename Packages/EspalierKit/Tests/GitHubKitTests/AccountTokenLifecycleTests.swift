@@ -51,10 +51,9 @@ struct OAuthCredentialPersistenceTests {
         #expect(serializeAccountCredential(OAuthToken(accessToken: "legacy")) == "legacy")
     }
 
-    @Test("round trips the entire rotating pair and reauthentication marker")
+    @Test("round trips the entire rotating pair")
     func roundTripsRotatingPair() throws {
         #expect(try deserializeAccountCredential(serializeAccountCredential(rotating)) == rotating)
-        #expect(try deserializeAccountCredential(serializeAccountCredential(nil)) == nil)
     }
 
     @Test("rejects corrupted or unsupported records without exposing secrets", arguments: [
@@ -79,19 +78,6 @@ struct OAuthCredentialPersistenceTests {
         let expiring = OAuthToken(accessToken: "access", expiresAt: now)
         #expect(serializeAccountCredential(expiring).hasPrefix("espalier-oauth:"))
         #expect(try deserializeAccountCredential(serializeAccountCredential(expiring)) == expiring)
-    }
-
-    @Test("signs out accounts marked as requiring sign-in by an earlier build")
-    func signsOutMarkedAccounts() async throws {
-        let data = InMemoryDataStore()
-        let secure = InMemorySecretStore()
-        let store = AccountsStore(dataStore: data, secureStore: secure)
-        try await store.addAccount(account)
-        try secure.setSecret(serializeAccountCredential(nil), service: getKeyForAccount(account), account: account.login)
-        let restarted = AccountsStore(dataStore: data, secureStore: secure)
-        #expect(await restarted.getAll() == [])
-        #expect(try secure.secret(service: getKeyForAccount(account), account: account.login) == nil)
-        #expect(data.getItem("users") == "[]")
     }
 }
 
