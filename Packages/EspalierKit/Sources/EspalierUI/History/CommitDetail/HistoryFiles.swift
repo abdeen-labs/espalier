@@ -114,7 +114,7 @@ final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableV
         tableView.allowsEmptySelection = true
         tableView.allowsTypeSelect = true
         tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
-        tableView.backgroundColor = Palette.background
+        tableView.backgroundColor = Palette.pane
         tableView.focusRingType = .none
         tableView.setAccessibilityLabel("Changed Files")
         tableView.dataSource = self
@@ -127,8 +127,8 @@ final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableV
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = true
-        scrollView.backgroundColor = Palette.background
+        scrollView.drawsBackground = !Theme.current.cardIsGlass
+        scrollView.backgroundColor = Palette.pane
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.contentInsets = NSEdgeInsets(top: Metrics.grid, left: 0, bottom: Metrics.grid, right: 0)
     }
@@ -500,7 +500,8 @@ extension HistoryFileTableView: LookChangeObserving {
     /// The rows' height and the background follow the look.
     func lookDidChange() {
         rowHeight = Metrics.FileList.rowHeight
-        backgroundColor = Palette.background
-        enclosingScrollView?.backgroundColor = Palette.background
+        backgroundColor = Palette.pane
+        enclosingScrollView?.backgroundColor = Palette.pane
+        enclosingScrollView?.drawsBackground = !Theme.current.cardIsGlass
     }
 }

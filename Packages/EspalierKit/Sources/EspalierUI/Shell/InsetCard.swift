@@ -1,9 +1,10 @@
 // The inset card layout (`PaneLayout.insetCard`, Frost). The window's
 // chrome is the backdrop (`ChromeBackdrop`, glass in Frost): the toolbar's
 // band, the sidebar or the rail, and the margins around the card, with no
-// hairlines. The content is one card on it, the `background` fill in a
-// rounded rectangle (radius 10) with a 1-point ring in the `line` color
-// inside its edge, everything inside clipped to it: 8 from the window's
+// hairlines. The content is one card on it, the `cardFill` (in Frost, the
+// background at 40% over the glass, the panes in it clear) in a rounded
+// rectangle (radius 10) with a 1-point ring in the `line` color inside
+// its edge, everything inside clipped to it: 8 from the window's
 // trailing and bottom edges, none below the toolbar's band (the band ends
 // where the card starts), and none after the sidebar or the rail (whose
 // rows keep their own inset); as the sidebar shows and hides, the card
@@ -73,7 +74,7 @@ extension View {
     }
 }
 
-/// A part of the inset card: the `background` fill, clipped to the card's
+/// A part of the inset card: the `cardFill`, clipped to the card's
 /// shape, with the ring inside its edge. In another layout every modifier
 /// stays, drawing nothing.
 private struct InsetCardModifier: ViewModifier {
@@ -83,7 +84,7 @@ private struct InsetCardModifier: ViewModifier {
         let isOn = InsetCard.isOn
         let theme = Theme.current
         content
-            .background(isOn ? Color(nsColor: theme.background) : .clear)
+            .background(isOn ? Color(nsColor: theme.cardFill) : .clear)
             // In another layout, the clip is a rectangle far outside the
             // view.
             .clipShape(InsetCardShape(part: part, radius: isOn ? InsetCard.radius : 0).inset(by: isOn ? 0 : -100_000))

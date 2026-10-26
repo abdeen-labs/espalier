@@ -180,69 +180,81 @@ struct PreferencesTests {
         #expect(Preferences(store: PreferenceStore(temporary.defaults), locale: Locale(identifier: "de_CH")).numberFormat == periodComma)
     }
 
-    @Test("keeps the design theme, each theme's color and background tint, the app font, and the code font, and reads unknown ones as the defaults")
+    @Test("keeps the design theme, the palette and background tint on every theme, the app font, and the code font, and reads unknown ones as the defaults")
     func designTheme() throws {
         let temporary = try TemporaryDefaults()
         defer { temporary.remove() }
         let preferences = Preferences(store: PreferenceStore(temporary.defaults))
         #expect(preferences.designTheme == .classic)
-        #expect(preferences.designThemeColor == nil)
-        #expect(preferences.designThemeBackground == .own)
+        #expect(preferences.designPalette == .system)
+        #expect(preferences.designBackground == .own)
         #expect(preferences.appFont == .sf)
         #expect(preferences.codeFont == .sfMono)
 
+        preferences.designPalette = .tangerine
+        preferences.designBackground = .warm
         preferences.designTheme = .frost
-        #expect(preferences.designThemeColor == .iris)
-        preferences.designThemeColor = .ember
-        // A color of another theme isn't the theme's.
-        preferences.designThemeColor = .berry
-        preferences.designThemeBackground = .warm
-        preferences.designTheme = .pop
-        #expect(preferences.designThemeBackground == .own)
-        preferences.designThemeColor = .magenta
-        preferences.designThemeBackground = .lavender
+        preferences.designTheme = .islands
+        // A palette and background chosen on one theme are every theme's.
+        #expect(preferences.designPalette == .tangerine)
+        #expect(preferences.designThemeBackground == .warm)
+        preferences.designBackground = .classic
         preferences.appFont = .atkinson
         preferences.codeFont = .geistMono
-        #expect(storedKeys(temporary) == [
-            "design-theme", "design-theme-color-frost", "design-theme-color-pop",
-            "design-theme-background-frost", "design-theme-background-pop", "app-font", "code-font",
-        ])
+        #expect(storedKeys(temporary) == ["design-theme", "design-palette", "design-background", "app-font", "code-font"])
 
-        // Switching back restores the theme's own color.
         let reloaded = Preferences(store: PreferenceStore(temporary.defaults))
-        #expect(reloaded.designTheme == .pop)
-        #expect(reloaded.designThemeColor == .magenta)
-        #expect(reloaded.designThemeBackground == .lavender)
-        reloaded.designTheme = .frost
-        #expect(reloaded.designThemeColor == .ember)
-        #expect(reloaded.designThemeBackground == .warm)
-        reloaded.designTheme = .islands
-        #expect(reloaded.designThemeColor == .lagoon)
+        #expect(reloaded.designTheme == .islands)
+        #expect(reloaded.designPalette == .tangerine)
+        #expect(reloaded.designThemeBackground == .classic)
+        // Classic draws its own backgrounds for Classic's, and keeps the
+        // choice for the other themes.
+        reloaded.designTheme = .classic
         #expect(reloaded.designThemeBackground == .own)
-        // Classic's backgrounds are Islands' alone.
-        reloaded.designThemeBackground = .classic
-        reloaded.designTheme = .frost
-        reloaded.designThemeBackground = .classic
-        #expect(reloaded.designThemeBackgrounds == [.classic: .own, .frost: .warm, .islands: .classic, .pop: .lavender])
+        reloaded.designTheme = .pop
+        #expect(reloaded.designThemeBackground == .classic)
         #expect(reloaded.appFont == .atkinson)
         #expect(reloaded.codeFont == .geistMono)
 
-        // Unknown values, a color of another theme, and a background the
-        // theme doesn't offer are the defaults.
         temporary.defaults.set("neon", forKey: "design-theme")
-        temporary.defaults.set("berry", forKey: "design-theme-color-frost")
-        temporary.defaults.set("chartreuse", forKey: "design-theme-color-pop")
-        temporary.defaults.set("plaid", forKey: "design-theme-background-frost")
-        temporary.defaults.set("classic", forKey: "design-theme-background-pop")
+        temporary.defaults.set("chartreuse", forKey: "design-palette")
+        temporary.defaults.set("plaid", forKey: "design-background")
         temporary.defaults.set("comic", forKey: "app-font")
         // A font of the other kind isn't one of these.
         temporary.defaults.set("atkinson", forKey: "code-font")
         let unknown = Preferences(store: PreferenceStore(temporary.defaults))
         #expect(unknown.designTheme == .classic)
-        #expect(unknown.designThemeColors == [.frost: .iris, .islands: .lagoon, .pop: .tangerine])
-        #expect(unknown.designThemeBackgrounds == [.classic: .own, .frost: .own, .islands: .classic, .pop: .own])
+        #expect(unknown.designPalette == .system)
+        #expect(unknown.designBackground == .own)
         #expect(unknown.appFont == .sf)
         #expect(unknown.codeFont == .sfMono)
+    }
+
+    @Test("reads the palette and background tint stored for the stored theme while none of their own is stored", arguments: [
+        NamedCase("the theme's color and background", (stored: ["design-theme": "pop", "design-theme-color-pop": "magenta", "design-theme-background-pop": "lavender", "design-theme-color-frost": "ember"], palette: DesignPalette.magenta, background: BackgroundTint.lavender)),
+        NamedCase("another theme's color", (stored: ["design-theme": "islands", "design-theme-color-frost": "ember"], palette: .lagoon, background: .own)),
+        NamedCase("an unknown color", (stored: ["design-theme": "frost", "design-theme-color-frost": "chartreuse"], palette: .iris, background: .own)),
+        NamedCase("a color that's no longer a palette, as the nearest", (stored: ["design-theme": "islands", "design-theme-color-islands": "berry"], palette: .magenta, background: .own)),
+        NamedCase("a stored palette that's no longer one, as the nearest", (stored: ["design-theme": "frost", "design-palette": "electric"], palette: .iris, background: .own)),
+        NamedCase("Pop with nothing of its own", (stored: ["design-theme": "pop"], palette: .tangerine, background: .own)),
+        NamedCase("nothing stored", (stored: [:], palette: .system, background: .own)),
+    ])
+    func designPaletteFromTheme(_ testCase: NamedCase<(stored: [String: String], palette: DesignPalette, background: BackgroundTint)>) throws {
+        let temporary = try TemporaryDefaults()
+        defer { temporary.remove() }
+        for (key, value) in testCase.value.stored {
+            temporary.defaults.set(value, forKey: key)
+        }
+        let preferences = Preferences(store: PreferenceStore(temporary.defaults))
+        #expect(preferences.designPalette == testCase.value.palette)
+        #expect(preferences.designBackground == testCase.value.background)
+
+        // They stay as they are on another theme, and after it.
+        preferences.designTheme = preferences.designTheme == .frost ? .classic : .frost
+        #expect(preferences.designPalette == testCase.value.palette)
+        let reloaded = Preferences(store: PreferenceStore(temporary.defaults))
+        #expect(reloaded.designPalette == testCase.value.palette)
+        #expect(reloaded.designBackground == testCase.value.background)
     }
 
     @Test("changes the hooks and credential helper settings that GitKit and the trampoline read")

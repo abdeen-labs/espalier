@@ -236,8 +236,7 @@ struct GraphDot: Equatable {
         // The gap is opaque whatever the node's opacity, so dimmed dots
         // still hide the lines' ends.
         context.setAlpha(1)
-        context.setFillColor(background)
-        context.fillEllipse(in: circle(clearance(scale: scale, extraStroke: extraStroke)))
+        context.knockOutEllipse(in: circle(clearance(scale: scale, extraStroke: extraStroke)), background: background)
         context.setAlpha(opacity)
         if let ringStroke {
             context.setStrokeColor(color)
@@ -248,8 +247,26 @@ struct GraphDot: Equatable {
         context.setFillColor(color)
         context.fillEllipse(in: circle(radius))
         if let hole {
-            context.setFillColor(background)
-            context.fillEllipse(in: circle(hole * scale))
+            context.knockOutEllipse(in: circle(hole * scale), background: background)
         }
+    }
+}
+
+extension CGContext {
+    /// Fills the ellipse in `rect` with `background`: a gap or hole a node
+    /// makes in what's drawn. A clear background (a clear pane's, Frost's)
+    /// clears what's drawn there instead, as far as the context's alpha, so
+    /// what's behind the drawing shows (a selected row's fill).
+    nonisolated func knockOutEllipse(in rect: CGRect, background: CGColor) {
+        guard background.alpha == 0 else {
+            setFillColor(background)
+            fillEllipse(in: rect)
+            return
+        }
+        saveGState()
+        setBlendMode(.destinationOut)
+        setFillColor(gray: 0, alpha: 1)
+        fillEllipse(in: rect)
+        restoreGState()
     }
 }

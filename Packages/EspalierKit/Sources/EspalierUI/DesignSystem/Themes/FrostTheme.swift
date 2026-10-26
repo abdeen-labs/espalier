@@ -1,30 +1,34 @@
 // Frost: quiet and precise. Near-white and near-black surfaces with almost
 // no hue, a neutral wash for every selection, ink (near-black, near-white
 // in dark) for the one prominent action and the current branch's tag, and
-// one accent kept for focus, links, checkboxes, and the current branch's
-// line. Flat pills, sentence-case labels, small radii, a fine graph of
-// dots, code in a soft palette, and lists that fade out at an edge with
-// more beyond it. The main window's chrome is glass, the sidebar's color at
-// 80% over a blur of what's behind the window, around one inset card
-// (`PaneLayout.insetCard`). Colors: Iris (the default), Glacier, Ember.
+// the palette's accent kept for focus, links, checkboxes, and the current
+// branch's line. Flat pills, sentence-case labels, small radii, a fine graph
+// of dots, code in a soft palette, and lists that fade out at an edge with
+// more beyond it. The main window is glass: the backdrop color at 80% over
+// a plain blur of what's behind the window, with a 5% wash for the chrome,
+// around one inset card (`PaneLayout.insetCard`) that's a panel, the
+// background at 40% over the glass, the panes in it clear. Lines, hover,
+// selection, fields, and hunk headers are washes, so they read the same on
+// the glass wherever they are.
 
 import AppKit
 import EspalierCore
 import SwiftUI
 
 nonisolated extension ThemeDefinition {
-    static func frost(_ color: DesignThemeColor) -> ThemeDefinition {
-        let palette = FrostColor(color)
-        return ThemeDefinition(
+    static func frost(_ palette: PaletteColors) -> ThemeDefinition {
+        ThemeDefinition(
             theme: .frost,
-            color: palette.color,
+            palette: palette.palette,
             background: ThemeColor.surface(0xFFFFFF, 0x0A0A0A),
             sidebar: ThemeColor.surface(0xEBEBED, 0x171717),
-            field: ThemeColor.fill(0xEFEFF2, 0x1F1F21),
-            hunk: ThemeColor.surface(0xF6F6F7, 0x121213),
-            hover: ThemeColor.wash(.black, 0.04, .white, 0.055),
-            line: ThemeColor.line(0xE2E2E4, 0x1F1F21),
-            line2: ThemeColor.line2(0xCCCCCF, 0x313134),
+            // Washes: the fields' ink, the hunk headers' blue-gray, the
+            // hover, and the lines.
+            field: ThemeColor.wash(.black, 0.035, .white, 0.035),
+            hunk: ThemeColor.wash(.hex(0x3A5378), 0.07, .hex(0x7592BD), 0.05),
+            hover: ThemeColor.wash(.hex(0x1A1A1A), 0.06, .hex(0xEBEBEB), 0.11),
+            line: ThemeColor.wash(.black, 0.10, .white, 0.08),
+            line2: ThemeColor.wash(.black, 0.17, .white, 0.14),
             quiet: ThemeColor.surface(0xFFFFFF, 0x1C1C1E),
             soft: ThemeColor.fill(0xEAEAEC, 0x232325),
             // Quiet controls are flat pills on the field's gray; the
@@ -33,9 +37,10 @@ nonisolated extension ThemeDefinition {
             quietControlIsRaised: false,
             segmentSelection: ThemeColor.surface(0xFFFFFF, 0x333336),
             scrim: .espalierDynamic(light: NSColor.black.withAlphaComponent(0.2), dark: NSColor.black.withAlphaComponent(0.6)),
-            // The chrome: the sidebar's color, as glass.
-            backdrop: ThemeColor.surface(0xEBEBED, 0x171717),
-            backdropGlass: GlassStyle(opacity: 0.8),
+            // The chrome: the backdrop color at 80% over the blur, and a
+            // 5% wash over that.
+            backdrop: ThemeColor.surface(0xF3F3F5, 0x0D0D0D),
+            backdropGlass: GlassStyle(opacity: 0.8, wash: ThemeColor.wash(.hex(0x1A1A1A), 0.05, .hex(0xEBEBEB), 0.05)),
             raisedShadow: .espalierDynamic(light: NSColor.black.withAlphaComponent(0.08), dark: .clear),
             raisedRing: .espalierDynamic(light: NSColor.black.withAlphaComponent(0.06), dark: NSColor.white.withAlphaComponent(0.08)),
             text: ThemeColor.text(0x303035, 0xE8E8EA),
@@ -46,14 +51,12 @@ nonisolated extension ThemeDefinition {
             selection: FrostColor.selection,
             prominent: ThemeColor.fixed(0x232328, 0xEBEBEF),
             prominentText: ThemeColor.fixed(0xFFFFFF, 0x0A0A0A),
-            // Checks, radio dots, and the switch's knob: white on the deep
-            // accents of light, the dark background on the light ones of
-            // dark.
-            onAccent: ThemeColor.fixed(0xFFFFFF, 0x0A0A0A),
+            marks: palette.marks,
             add: ThemeColor.fixed(0x15803D, 0x34D399),
             delete: ThemeColor.fixed(0xDC2626, 0xF87171),
             modified: ThemeColor.fixed(0xA16207, 0xFACC15),
-            renamed: palette.renamed,
+            renamed: FrostColor.violet,
+            renamedNearAccent: FrostColor.blue,
             conflictOurs: FrostColor.cyan,
             conflictTheirs: FrostColor.orange,
             syntaxColors: [
@@ -65,8 +68,9 @@ nonisolated extension ThemeDefinition {
                 .function: FrostColor.blue,
                 .operatorOrPunctuation: ThemeColor.fixed(0x52525B, 0xA1A1AA),
             ],
-            trunk: palette.trunk,
-            tones: palette.tones,
+            // Cyan; green beside a blue or teal accent.
+            branches: BranchTones(trunk: FrostColor.cyan, tones: [.orange, .pink, .violet, .blue, .green]),
+            branchesNearAccent: BranchTones(trunk: FrostColor.green, tones: [.orange, .pink, .violet, .blue, .cyan]),
             toneColors: FrostColor.toneColors,
             sidebarSelection: FrostColor.selection,
             sidebarSelectionIcon: ThemeColor.text(0x303035, 0xE8E8EA),
@@ -85,17 +89,8 @@ nonisolated extension ThemeDefinition {
     }
 }
 
-/// A Frost color's values, light and dark.
-nonisolated private struct FrostColor {
-    let color: DesignThemeColor
-    let accent: NSColor
-    /// Renamed and copied files.
-    let renamed: NSColor
-    /// The default branch's color.
-    let trunk: NSColor
-    let tones: [TrackPalette.Tone]
-
-    // The branch and code colors.
+/// Frost's branch and code colors, light and dark.
+nonisolated private enum FrostColor {
     static let iris = ThemeColor.fixed(0x5B43E8, 0x8B7CF6)
     static let violet = ThemeColor.fixed(0x7E22CE, 0xC084FC)
     static let blue = ThemeColor.fixed(0x2563EB, 0x60A5FA)
@@ -109,30 +104,7 @@ nonisolated private struct FrostColor {
         .blue: blue, .cyan: cyan, .green: green,
     ]
 
-    /// Every selection: black 6% (white 9% in dark).
-    static let selection = ThemeColor.wash(.black, 0.06, .white, 0.09)
-
-    init(_ color: DesignThemeColor) {
-        switch color {
-        case .glacier:
-            self.color = .glacier
-            accent = Self.blue
-            renamed = Self.violet
-            trunk = Self.green
-            tones = [.orange, .pink, .violet, .cyan]
-        case .ember:
-            self.color = .ember
-            accent = Self.orange
-            renamed = Self.violet
-            trunk = Self.cyan
-            tones = [.pink, .violet, .blue, .green]
-        default:
-            // Iris, the default: a cool blue-violet.
-            self.color = .iris
-            accent = Self.iris
-            renamed = Self.blue
-            trunk = Self.cyan
-            tones = [.orange, .pink, .blue, .green]
-        }
-    }
+    /// Every selection: one neutral wash, near-black 10% (near-white
+    /// 16% in dark).
+    static let selection = ThemeColor.wash(.hex(0x1A1A1A), 0.10, .hex(0xEBEBEB), 0.16)
 }

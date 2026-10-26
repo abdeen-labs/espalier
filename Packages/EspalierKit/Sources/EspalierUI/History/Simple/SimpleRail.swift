@@ -219,8 +219,10 @@ enum SimpleRailRenderer {
                 colors[color] = color.cgColor
             }
             let variant = AppearanceVariant.of(appearance)
-            let base = Palette.background.resolved(in: variant)
-            background = (isSelected ? ColorContrast.composite(Palette.accentSoft.resolved(in: variant), over: base) : base).cgColor
+            // Clear on a clear pane (Frost's), where the row's fill behind
+            // the rail shows.
+            let base = Palette.pane.resolved(in: variant)
+            background = (isSelected && !Theme.current.cardIsGlass ? ColorContrast.composite(Palette.accentSoft.resolved(in: variant), over: base) : base).cgColor
         }
         func cg(_ color: NSColor) -> CGColor {
             colors[color] ?? color.cgColor
@@ -291,8 +293,7 @@ enum SimpleRailRenderer {
         func ring(radius: CGFloat, width: CGFloat) {
             let width = width + extraStroke
             // Filled with the background, so the lines stop at it.
-            context.setFillColor(background)
-            context.fillEllipse(in: circle(radius + width / 2))
+            context.knockOutEllipse(in: circle(radius + width / 2), background: background)
             context.setAlpha(opacity)
             context.setStrokeColor(nodeColor)
             context.setLineWidth(width)

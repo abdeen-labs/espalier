@@ -43,16 +43,26 @@ other themes change what their tokens say (Themes, below).
 
 ## Themes, colors, and fonts
 
-Settings ▸ Appearance picks a theme (Classic, Frost, Islands, Pop), the
-theme's color, its background tint, the appearance, the app font, and the
-code font, each apart from the others. Views use the tokens, which read the
-current look.
+Settings ▸ Appearance picks a theme (Classic, Frost, Islands, Pop), a
+palette, a background tint, the appearance, the app font, and the code
+font, each apart from the others. The theme is how the app looks; the
+palette and the background are its colors, and every theme takes every
+palette and background. Views use the tokens, which read the current look.
+
+- **A palette** is an accent color and the colors made from it: links,
+  labels, the prominent fill, and selected items' tints. Each is made for
+  one theme and each is a hue of its own: System (the Mac's accent color)
+  for Classic, Iris and Slate for Frost, Lagoon and Plum for Islands, and
+  Tangerine, Magenta, and Volt for Pop. A theme's default branch, renamed,
+  and deleted colors give way to others beside an accent near their hue.
 
 - **Frost** is quiet and precise: near-white and near-black
   with almost no hue, a neutral wash for every selection, ink for the
   prominent action, flat pills, one accent for focus and links, and lists
-  that fade out at an edge with more beyond it. Its chrome is glass around
-  one inset card.
+  that fade out at an edge with more beyond it. The window is
+  glass: one plain blur with its tint, the chrome a wash lighter, the inset
+  card a panel darker, and lines, hover, selection, and fields as washes
+  on it.
 - **Islands** is calm and friendly: the panes float as cards on a sage
   backdrop (the floating layout), with soft pills and bold titles.
 - **Pop** is bright and confident: a sidebar tinted with the accent, a bar
@@ -60,7 +70,7 @@ current look.
 - **A background tint** (Neutral, Warm, Cool, Sage, Rose, Lavender) gives
   any theme's surfaces its hue in place of the theme's own, faint on white
   and stronger toward gray, each surface as light as before. Pop's sidebar
-  keeps its accent. Islands can also take Classic's backgrounds.
+  keeps its accent. The other themes can also take Classic's backgrounds.
 
 ## Motion
 

@@ -111,7 +111,7 @@ struct ImageDiffView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: Palette.background))
+        .background(Color(nsColor: Palette.pane))
     }
 }
 

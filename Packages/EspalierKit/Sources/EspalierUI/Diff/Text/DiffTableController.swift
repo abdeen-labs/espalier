@@ -257,7 +257,7 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         tableView.usesAutomaticRowHeights = false
         tableView.focusRingType = .none
-        tableView.backgroundColor = Palette.background
+        tableView.backgroundColor = Palette.pane
         tableView.usesAlternatingRowBackgroundColors = false
         tableView.rowHeight = font.lineHeight
         tableView.allowsTypeSelect = false
@@ -271,8 +271,8 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         // Shown while lines don't wrap and one is wider than the pane.
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = true
-        scrollView.backgroundColor = Palette.background
+        scrollView.drawsBackground = !Theme.current.cardIsGlass
+        scrollView.backgroundColor = Palette.pane
         scrollView.borderType = .noBorder
         scrollView.contentView.postsBoundsChangedNotifications = true
         scrollView.contentView.postsFrameChangedNotifications = true
@@ -612,8 +612,9 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
     @objc private func lookDidChange(_ notification: Notification) {
         font = DiffFontMetrics(fontSize: font.fontSize)
         tableView.rowHeight = font.lineHeight
-        tableView.backgroundColor = Palette.background
-        scrollView.backgroundColor = Palette.background
+        tableView.backgroundColor = Palette.pane
+        scrollView.backgroundColor = Palette.pane
+        scrollView.drawsBackground = !Theme.current.cardIsGlass
         textCache.reset()
         conflictButtonTitleWidths.removeAll()
         relayout(force: true, reload: true)

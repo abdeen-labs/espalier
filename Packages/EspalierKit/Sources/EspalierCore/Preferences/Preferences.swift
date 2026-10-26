@@ -37,13 +37,16 @@ public enum PreferenceKey {
     public static let theme = "theme"
     /// The design theme (`DesignTheme`), Espalier's own.
     public static let designTheme = "design-theme"
-    /// The design theme's color, one key per theme
-    /// (`design-theme-color-frost`), so each theme keeps its own.
+    /// The palette (`DesignPalette`), Espalier's own, on every design theme.
+    public static let designPalette = "design-palette"
+    /// The background tint (`BackgroundTint`), on every design theme.
+    public static let designBackground = "design-background"
+    /// A color and a background tint stored for one design theme
+    /// (`design-theme-color-pop`, `design-theme-background-pop`): read for
+    /// the palette and the background while those aren't stored.
     public static func designThemeColor(_ theme: DesignTheme) -> String {
         "design-theme-color-\(theme.rawValue)"
     }
-    /// The design theme's background tint, one key per theme
-    /// (`design-theme-background-frost`), so each theme keeps its own.
     public static func designThemeBackground(_ theme: DesignTheme) -> String {
         "design-theme-background-\(theme.rawValue)"
     }
@@ -110,55 +113,67 @@ public enum ApplicationTheme: String, Sendable, Hashable, CaseIterable {
     case system, light, dark
 }
 
-/// Espalier's design theme: its colors, shapes, and marks, picked apart from
-/// the appearance (`ApplicationTheme`), the app font, and the code font. The
-/// raw values are the ones stored.
+/// Espalier's design theme: how the app looks (its layout, shapes, type,
+/// and marks, and where it puts the palette's colors), picked apart from the
+/// palette (`DesignPalette`), the background tint, the appearance
+/// (`ApplicationTheme`), the app font, and the code font. The raw values are
+/// the ones stored.
 public enum DesignTheme: String, Sendable, Hashable, CaseIterable {
-    /// The look Espalier had before themes, following the Mac's accent
-    /// color.
+    /// The look Espalier had before themes.
     case classic
     case frost
     case islands
     case pop
 
-    /// The theme's colors, in the order Settings shows them; none for
-    /// Classic, which follows the Mac's accent color.
-    public var colors: [DesignThemeColor] {
-        switch self {
-        case .classic: []
-        case .frost: [.iris, .glacier, .ember]
-        case .islands: [.berry, .lagoon, .indigo]
-        case .pop: [.tangerine, .electric, .magenta]
-        }
-    }
-
-    /// The color the theme has until the user picks another; nil for
-    /// Classic.
-    public var defaultColor: DesignThemeColor? {
-        switch self {
-        case .classic: nil
-        case .frost: .iris
-        case .islands: .lagoon
-        case .pop: .tangerine
-        }
-    }
-
     /// The theme's background tints, in the order Settings shows them:
-    /// every tint, and for Islands, Classic's backgrounds.
+    /// every tint, and Classic's backgrounds on the other themes.
     public var backgrounds: [BackgroundTint] {
         switch self {
-        case .islands: BackgroundTint.allCases
-        case .classic, .frost, .pop: BackgroundTint.allCases.filter { $0 != .classic }
+        case .classic: BackgroundTint.allCases.filter { $0 != .classic }
+        case .frost, .islands, .pop: BackgroundTint.allCases
         }
+    }
+
+    /// The background tint the theme draws for `tint`: `tint` where the
+    /// theme offers it, else the theme's own.
+    public func backgroundDrawn(for tint: BackgroundTint) -> BackgroundTint {
+        backgrounds.contains(tint) ? tint : .own
     }
 }
 
-/// A design theme's color. Each belongs to one theme (`DesignTheme.colors`).
-/// The raw values are the ones stored.
-public enum DesignThemeColor: String, Sendable, Hashable, CaseIterable {
-    case iris, glacier, ember
-    case berry, lagoon, indigo
-    case tangerine, electric, magenta
+/// Espalier's palette: the accent color and the colors made from it (links,
+/// the prominent fill, selected items' tints), on every design theme. Each
+/// is made for one theme (`theme`), and each is a hue of its own. In the
+/// order Settings shows them, by theme; the raw values are the ones stored.
+public enum DesignPalette: String, Sendable, Hashable, CaseIterable {
+    /// The Mac's accent color.
+    case system
+    case iris, slate
+    case lagoon, plum
+    case tangerine, magenta, volt
+
+    /// The theme the palette is made for.
+    public var theme: DesignTheme {
+        switch self {
+        case .system: .classic
+        case .iris, .slate: .frost
+        case .lagoon, .plum: .islands
+        case .tangerine, .magenta, .volt: .pop
+        }
+    }
+
+    /// The palette a stored name names: a palette's raw value, or the name
+    /// of a color the themes had that's no longer one, as the palette
+    /// nearest it.
+    public init?(storedName name: String) {
+        switch name {
+        case "glacier": self = .system
+        case "indigo", "electric": self = .iris
+        case "berry": self = .magenta
+        case "ember": self = .tangerine
+        default: self.init(rawValue: name)
+        }
+    }
 }
 
 /// The tint of a design theme's backgrounds: its panes, sidebar, fields, and
@@ -166,7 +181,7 @@ public enum DesignThemeColor: String, Sendable, Hashable, CaseIterable {
 public enum BackgroundTint: String, Sendable, Hashable, CaseIterable {
     /// The theme's own backgrounds.
     case own
-    /// Classic's backgrounds, which Islands offers
+    /// Classic's backgrounds, on the other themes
     /// (`DesignTheme.backgrounds`).
     case classic
     case neutral, warm, cool, sage, rose, lavender
@@ -262,8 +277,8 @@ public final class Preferences {
 
         theme = Self.storedTheme(in: store)
         designTheme = Self.storedDesignTheme(in: store)
-        designThemeColors = Self.storedDesignThemeColors(in: store)
-        designThemeBackgrounds = Self.storedDesignThemeBackgrounds(in: store)
+        designPalette = Self.storedDesignPalette(in: store)
+        designBackground = Self.storedDesignBackground(in: store)
         appFont = Self.storedAppFont(in: store)
         codeFont = Self.storedCodeFont(in: store)
         underlineLinks = store.getBoolean(PreferenceKey.underlineLinks, true)
@@ -465,56 +480,45 @@ public final class Preferences {
         store.getEnum(PreferenceKey.theme, ApplicationTheme.self) ?? .system
     }
 
-    /// The design theme (`design-theme`; Classic by default).
+    /// The design theme (`design-theme`; Classic by default). Choosing one
+    /// also writes the palette and the background tint while they aren't
+    /// stored, so they stay as they are when they were read from the
+    /// theme's own keys (`storedDesignPalette(in:)`).
     public var designTheme: DesignTheme {
         didSet {
             guard designTheme != oldValue else { return }
             store.setEnum(PreferenceKey.designTheme, designTheme)
-        }
-    }
-
-    /// The color each design theme has, its default until the user picks
-    /// another (`design-theme-color-<theme>`). Only the themes whose color
-    /// changed are written.
-    public var designThemeColors: [DesignTheme: DesignThemeColor] {
-        didSet {
-            for theme in DesignTheme.allCases where designThemeColors[theme] != oldValue[theme] {
-                if let color = designThemeColors[theme] {
-                    store.setEnum(PreferenceKey.designThemeColor(theme), color)
-                }
+            if !store.contains(PreferenceKey.designPalette) {
+                store.setEnum(PreferenceKey.designPalette, designPalette)
+            }
+            if !store.contains(PreferenceKey.designBackground) {
+                store.setEnum(PreferenceKey.designBackground, designBackground)
             }
         }
     }
 
-    /// The current design theme's color; nil for Classic. Setting a color
-    /// that isn't one of the theme's does nothing.
-    public var designThemeColor: DesignThemeColor? {
-        get { designThemeColors[designTheme] }
-        set {
-            guard let newValue, designTheme.colors.contains(newValue) else { return }
-            designThemeColors[designTheme] = newValue
-        }
-    }
-
-    /// The background tint each design theme has, its own backgrounds
-    /// until the user picks another (`design-theme-background-<theme>`).
-    /// Only the themes whose tint changed are written.
-    public var designThemeBackgrounds: [DesignTheme: BackgroundTint] {
+    /// The palette (`design-palette`; System by default), on every design
+    /// theme.
+    public var designPalette: DesignPalette {
         didSet {
-            for theme in DesignTheme.allCases where designThemeBackgrounds[theme] != oldValue[theme] {
-                store.setEnum(PreferenceKey.designThemeBackground(theme), designThemeBackgrounds[theme] ?? .own)
-            }
+            guard designPalette != oldValue else { return }
+            store.setEnum(PreferenceKey.designPalette, designPalette)
         }
     }
 
-    /// The current design theme's background tint; setting one the theme
-    /// doesn't offer does nothing.
+    /// The background tint chosen (`design-background`; the theme's own by
+    /// default), on every design theme. A theme that doesn't offer it draws
+    /// its own (`designThemeBackground`).
+    public var designBackground: BackgroundTint {
+        didSet {
+            guard designBackground != oldValue else { return }
+            store.setEnum(PreferenceKey.designBackground, designBackground)
+        }
+    }
+
+    /// The background tint the design theme draws.
     public var designThemeBackground: BackgroundTint {
-        get { designThemeBackgrounds[designTheme] ?? .own }
-        set {
-            guard designTheme.backgrounds.contains(newValue) else { return }
-            designThemeBackgrounds[designTheme] = newValue
-        }
+        designTheme.backgroundDrawn(for: designBackground)
     }
 
     /// The app font (`app-font`; SF Pro by default).
@@ -540,28 +544,36 @@ public final class Preferences {
         store.getEnum(PreferenceKey.designTheme, DesignTheme.self) ?? .classic
     }
 
-    /// Each design theme's color stored in `store`: one that isn't the
-    /// theme's, or none, is the theme's default.
-    public static func storedDesignThemeColors(in store: PreferenceStore) -> [DesignTheme: DesignThemeColor] {
-        var colors: [DesignTheme: DesignThemeColor] = [:]
-        for theme in DesignTheme.allCases {
-            let stored = store.getEnum(PreferenceKey.designThemeColor(theme), DesignThemeColor.self)
-            if let stored, theme.colors.contains(stored) {
-                colors[theme] = stored
-            } else if let defaultColor = theme.defaultColor {
-                colors[theme] = defaultColor
-            }
+    /// The palette stored in `store` (`DesignPalette(storedName:)`); an
+    /// unknown one is System. While none is stored, the color stored for
+    /// the stored design theme (`design-theme-color-<theme>`), else the
+    /// color that theme draws in without one: Iris for Frost, Lagoon for
+    /// Islands, Tangerine for Pop, and System for Classic.
+    public static func storedDesignPalette(in store: PreferenceStore) -> DesignPalette {
+        guard !store.contains(PreferenceKey.designPalette) else {
+            return store.getString(PreferenceKey.designPalette).flatMap(DesignPalette.init(storedName:)) ?? .system
         }
-        return colors
+        let theme = storedDesignTheme(in: store)
+        if let color = store.getString(PreferenceKey.designThemeColor(theme)).flatMap(DesignPalette.init(storedName:)) {
+            return color
+        }
+        return switch theme {
+        case .classic: .system
+        case .frost: .iris
+        case .islands: .lagoon
+        case .pop: .tangerine
+        }
     }
 
-    /// Each design theme's background tint stored in `store`: one the theme
-    /// doesn't offer, or none, is the theme's own.
-    public static func storedDesignThemeBackgrounds(in store: PreferenceStore) -> [DesignTheme: BackgroundTint] {
-        Dictionary(uniqueKeysWithValues: DesignTheme.allCases.map { theme in
-            let stored = store.getEnum(PreferenceKey.designThemeBackground(theme), BackgroundTint.self)
-            return (theme, stored.flatMap { theme.backgrounds.contains($0) ? $0 : nil } ?? .own)
-        })
+    /// The background tint stored in `store`; an unknown one is the
+    /// theme's own. While none is stored, the one stored for the stored
+    /// design theme (`design-theme-background-<theme>`).
+    public static func storedDesignBackground(in store: PreferenceStore) -> BackgroundTint {
+        guard !store.contains(PreferenceKey.designBackground) else {
+            return store.getEnum(PreferenceKey.designBackground, BackgroundTint.self) ?? .own
+        }
+        let theme = storedDesignTheme(in: store)
+        return store.getEnum(PreferenceKey.designThemeBackground(theme), BackgroundTint.self) ?? .own
     }
 
     /// The app font stored in `store`; an unknown one is SF Pro.

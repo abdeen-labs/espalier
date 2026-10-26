@@ -1,7 +1,8 @@
 #!/bin/zsh
 # Draws Espalier's views to PNGs to look at: every capture, or those whose
 # suite or name matches FILTER (a regular expression), in LOOK (Classic by
-# default; "all" for each theme in each of its colors). Prints the folder.
+# default; "all" for each palette on the theme it's made for). Prints the
+# folder.
 #
 #   scripts/capture.sh [--look LOOK] [--out FOLDER] [FILTER]
 #
@@ -20,14 +21,14 @@ while (( $# )); do
     case $1 in
         --look) look=$2; shift 2 ;;
         --out) out=${2:A}; shift 2 ;;
-        -h|--help) sed -n '2,10p' $0 | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,11p' $0 | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) filter=$1; shift ;;
     esac
 done
 
 if [[ $look == all ]]; then
-    looks=(classic frost-iris frost-glacier frost-ember
-        islands-berry islands-lagoon islands-indigo pop-tangerine pop-electric pop-magenta)
+    looks=(classic frost-iris frost-slate islands-lagoon islands-plum
+        pop-tangerine pop-magenta pop-volt)
 else
     looks=($look)
 fi

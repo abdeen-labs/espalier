@@ -5,11 +5,11 @@
 // surface's chroma grows with its depth (away from white in light, away
 // from black in dark), as the themes' own tints do; a surface too near
 // white to carry the hue is as light as the hue allows. Neutral takes the
-// hue away. Classic (Islands') puts Classic's surfaces in place of the
-// theme's, its sidebar's color for the backdrop. Translucent washes (hover,
+// hue away. Classic puts Classic's surfaces in place of another theme's,
+// its sidebar's color for the backdrop. Translucent washes (hover,
 // selection, the scrim) stay as they are and take the tint from what's
-// under them; text, the accent, and status colors stay the theme's. Hue and
-// chroma are OKLCH's.
+// under them; text, status colors, and the palette's colors stay as they
+// are. Hue and chroma are OKLCH's.
 
 import AppKit
 import EspalierCore
@@ -74,7 +74,7 @@ nonisolated extension ThemeDefinition {
     /// The definition with Classic's surfaces, and Classic's sidebar for
     /// the backdrop.
     private var withClassicSurfaces: ThemeDefinition {
-        let classic = ThemeDefinition.classic
+        let classic = ThemeDefinition.classic(.named(palette))
         var definition = self
         definition.tint = .classic
         definition.background = classic.background
@@ -198,6 +198,92 @@ nonisolated enum OKLCH {
         let lab = lab(linear(color))
         let degrees = atan2(lab.b, lab.a) * 180 / .pi
         return degrees < 0 ? degrees + 360 : degrees
+    }
+
+    /// The chroma of `color`.
+    static func chroma(of color: NSColor) -> Double {
+        let lab = lab(linear(color))
+        return (lab.a * lab.a + lab.b * lab.b).squareRoot()
+    }
+
+    /// A change to a color's lightness, and a factor for its chroma (as
+    /// much as sRGB holds at the new lightness and the color's hue).
+    struct Adjustment: Hashable, Sendable {
+        enum Lightness: Hashable, Sendable {
+            case by(Double)
+            case to(Double)
+            case atLeast(Double)
+        }
+
+        var lightness: Lightness
+        var chroma: Double
+    }
+
+    /// `color` adjusted as each appearance resolves it: by `light` in light
+    /// and `dark` in dark, its hue kept. Each adjusted color is worked out
+    /// once.
+    static func adjusted(_ color: NSColor, light: Adjustment, dark: Adjustment) -> NSColor {
+        NSColor.espalierDynamic { variant in
+            let source = color.resolved(in: variant)
+            let adjustment = variant.isDark ? dark : light
+            return derived(from: source, .adjusted(adjustment)) {
+                let lab = lab(linear(source))
+                let lightness = switch adjustment.lightness {
+                case let .by(change): lab.lightness + change
+                case let .to(value): value
+                case let .atLeast(value): max(lab.lightness, value)
+                }
+                return Self.color(lightness: min(max(lightness, 0), 1), chroma: chroma(of: source) * adjustment.chroma, hue: hue(of: source))
+            }
+        }
+    }
+
+    /// `color` adjusted by `adjustment` in light and dark.
+    static func adjusted(_ color: NSColor, _ adjustment: Adjustment) -> NSColor {
+        adjusted(color, light: adjustment, dark: adjustment)
+    }
+
+    /// A faint color in `color`'s hue as each appearance resolves it, at
+    /// `light`'s or `dark`'s lightness and chroma; less chroma for a color
+    /// with little of its own (graphite).
+    static func hueTint(of color: NSColor, light: (lightness: Double, chroma: Double), dark: (lightness: Double, chroma: Double)) -> NSColor {
+        NSColor.espalierDynamic { variant in
+            let source = color.resolved(in: variant)
+            let tint = variant.isDark ? dark : light
+            return derived(from: source, .hueTint(lightness: tint.lightness, chroma: tint.chroma)) {
+                let share = min(chroma(of: source) / fullTintChroma, 1)
+                return Self.color(lightness: tint.lightness, chroma: tint.chroma * share, hue: hue(of: source))
+            }
+        }
+    }
+
+    /// The chroma at which a color gives `hueTint(of:light:dark:)` all of
+    /// its chroma; the palettes' accents have at least this much.
+    private static let fullTintChroma = 0.09
+
+    private enum Derivation: Hashable {
+        case adjusted(Adjustment)
+        case hueTint(lightness: Double, chroma: Double)
+    }
+
+    private struct DerivedKey: Hashable {
+        let red: CGFloat
+        let green: CGFloat
+        let blue: CGFloat
+        let derivation: Derivation
+    }
+
+    private static let derivedColors = Mutex<[DerivedKey: NSColor]>([:])
+
+    /// The color `make` derives from the sRGB color `source`, made once.
+    private static func derived(from source: NSColor, _ derivation: Derivation, make: () -> NSColor) -> NSColor {
+        let key = DerivedKey(red: source.redComponent, green: source.greenComponent, blue: source.blueComponent, derivation: derivation)
+        if let made = derivedColors.withLock({ $0[key] }) {
+            return made
+        }
+        let made = make()
+        derivedColors.withLock { $0[key] = made }
+        return made
     }
 
     /// `color` with `factor` times its chroma (as much as sRGB holds), at

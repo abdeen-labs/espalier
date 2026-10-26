@@ -1,7 +1,7 @@
 // The components the sheets, popovers, and panels outside Changes, the
 // diff, and History share, each in light and dark: the sheet scaffold with
 // its capsule fields, text area, choices, and buttons, also in Frost's
-// Iris and Ember and Pop's Tangerine; the status bar's tones with the
+// Iris and Slate and Pop's Tangerine; the status bar's tones with the
 // step indicator; the action list; and menus drawn as capsules.
 
 import AppKit
@@ -50,10 +50,10 @@ struct SheetComponentCaptures {
         capture(sheetScaffold, named: "sheetScaffold", area: area)
     }
 
-    @Test("the sheet scaffold in Frost's Iris and Ember and Pop's Tangerine", arguments: [
-        Look(theme: .frost, color: .iris),
-        Look(theme: .frost, color: .ember),
-        Look(theme: .pop, color: .tangerine),
+    @Test("the sheet scaffold in Frost's Iris and Slate and Pop's Tangerine", arguments: [
+        Look(theme: .frost, palette: .iris),
+        Look(theme: .frost, palette: .slate),
+        Look(theme: .pop, palette: .tangerine),
     ])
     func sheetScaffoldInLooks(_ look: Look) {
         capture(sheetScaffold, named: "sheetScaffold", area: area, look: look)

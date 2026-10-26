@@ -1,11 +1,11 @@
-// Settings ▸ Appearance's theme, color, and background pickers, Espalier's
-// own controls. The theme is four cards, each a small preview drawn in its
-// theme's colors and background (the sidebar with its selection, a selected
-// row, the prominent capsule) with the theme's name under it; the chosen
-// card has the focus-ring-style accent ring. A theme's colors and its
-// background tints are round swatches, the chosen one ringed. Each picker
-// is one stop in the key view loop: the left and right arrows move the
-// choice, and VoiceOver sees a radio group.
+// Settings ▸ Appearance's theme, palette, and background pickers, Espalier's
+// own controls. The theme is four cards, each a small preview of its theme
+// in the chosen palette and background (the sidebar with its selection, a
+// selected row, the prominent capsule) with the theme's name under it; the
+// chosen card has the focus-ring-style accent ring. The palettes and the
+// background tints are round swatches, the chosen one ringed. Each picker is
+// one stop in the key view loop: the left and right arrows move the choice,
+// and VoiceOver sees a radio group.
 
 import EspalierCore
 import SwiftUI
@@ -22,10 +22,16 @@ extension DesignTheme {
     }
 }
 
-extension DesignThemeColor {
-    /// The color's name in Settings.
+extension DesignPalette {
+    /// The palette's name in Settings.
     var title: String {
         rawValue.prefix(1).uppercased() + rawValue.dropFirst()
+    }
+
+    /// What Settings says of the palette under its row's title: its name
+    /// and the theme it's made for, and for System, whose color it is.
+    var summary: String {
+        self == .system ? "Your Mac's accent color" : "\(title), made for \(theme.title)"
     }
 }
 
@@ -46,15 +52,16 @@ extension BackgroundTint {
 }
 
 extension Theme {
-    /// The background swatch: the field fill as light draws it, its tint
-    /// three times as strong, so tints this faint tell apart.
+    /// The background swatch: the soft fill, an opaque surface every tint
+    /// re-hues, as light draws it, its tint three times as strong, so tints
+    /// this faint tell apart.
     var backgroundSwatch: NSColor {
-        OKLCH.saturated(field.resolved(in: .light), by: 3)
+        OKLCH.saturated(soft.resolved(in: .light), by: 3)
     }
 }
 
 extension Metrics {
-    /// The theme, color, and background pickers.
+    /// The theme, palette, and background pickers.
     public enum ThemePicker {
         /// Between the cards, and between the swatches.
         public static let cardSpacing: CGFloat = 12
@@ -72,9 +79,9 @@ extension Metrics {
 /// The four themes as cards.
 struct ThemeCardPicker: View {
     @Binding var selection: DesignTheme
-    /// Each theme's color and background tint, for its card.
-    let colors: [DesignTheme: DesignThemeColor]
-    let backgrounds: [DesignTheme: BackgroundTint]
+    /// The palette and the background tint the cards are drawn in.
+    let palette: DesignPalette
+    let background: BackgroundTint
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -106,14 +113,14 @@ struct ThemeCardPicker: View {
         let isSelected = theme == selection
         let shape = RoundedRectangle(cornerRadius: Metrics.ThemePicker.previewRadius, style: .continuous)
         return VStack(spacing: Metrics.ThemePicker.nameSpacing) {
-            ThemePreview(theme: Theme.named(theme, color: colors[theme], background: backgrounds[theme] ?? .own))
+            ThemePreview(theme: Theme.named(theme, palette: palette, background: background))
                 .frame(height: Metrics.ThemePicker.previewHeight)
                 .clipShape(shape)
                 .overlay(shape.strokeBorder(.line, lineWidth: 1))
-                // A color or background chosen for the theme recolors its
-                // preview over 0.15 s.
-                .motion(Motion.leave, value: colors[theme])
-                .motion(Motion.leave, value: backgrounds[theme])
+                // A palette or background chosen recolors the previews over
+                // 0.15 s.
+                .motion(Motion.leave, value: palette)
+                .motion(Motion.leave, value: background)
                 .overlay {
                     SelectionRing(isSelected: isSelected, isFocused: isFocused, shape: shape)
                 }
@@ -238,8 +245,8 @@ struct ThemePreview: View {
     }
 }
 
-/// Choices as round swatches, the chosen one ringed: a theme's colors, or
-/// its background tints.
+/// Choices as round swatches, the chosen one ringed: the palettes, or the
+/// background tints.
 struct SwatchPicker<Value: Hashable>: View {
     private let label: String
     private let values: [Value]

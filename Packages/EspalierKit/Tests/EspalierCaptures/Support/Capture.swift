@@ -271,15 +271,15 @@ func capture(
 }
 
 extension Look {
-    /// The look's name in captures: "classic" for Classic, its own
-    /// backgrounds, in SF Pro and SF Mono; else the theme and color
-    /// ("frost-iris"), then the background tint, the app font, and the code
-    /// font when they aren't the defaults ("classic-warm",
+    /// The look's name in captures: "classic" for Classic in System, its
+    /// own backgrounds, in SF Pro and SF Mono; else the theme, then the
+    /// palette, the background tint, the app font, and the code font when
+    /// they aren't the defaults ("frost-iris", "classic-warm",
     /// "islands-lagoon-fixel", "pop-tangerine-geistmono").
     var captureName: String {
         var parts = [theme.rawValue]
-        if let color {
-            parts.append(color.rawValue)
+        if palette != .system {
+            parts.append(palette.rawValue)
         }
         if background != .own {
             parts.append(background.rawValue)
@@ -301,13 +301,13 @@ extension Look {
             fatalError("ESPALIER_CAPTURE_LOOK=\(name) doesn't start with a theme")
         }
         parts.removeFirst()
-        var color: DesignThemeColor?
+        var palette = DesignPalette.system
         var background = BackgroundTint.own
         var appFont = AppFont.sf
         var codeFont = CodeFont.sfMono
         for part in parts {
-            if let named = DesignThemeColor(rawValue: part) {
-                color = named
+            if let named = DesignPalette(rawValue: part) {
+                palette = named
             } else if let named = BackgroundTint(rawValue: part) {
                 background = named
             } else if let named = AppFont(rawValue: part) {
@@ -315,9 +315,9 @@ extension Look {
             } else if let named = CodeFont(rawValue: part) {
                 codeFont = named
             } else {
-                fatalError("ESPALIER_CAPTURE_LOOK=\(name): \(part) is neither a color, a background, an app font, nor a code font")
+                fatalError("ESPALIER_CAPTURE_LOOK=\(name): \(part) is neither a palette, a background, an app font, nor a code font")
             }
         }
-        self.init(theme: theme, color: color, background: background, appFont: appFont, codeFont: codeFont)
+        self.init(theme: theme, palette: palette, background: background, appFont: appFont, codeFont: codeFont)
     }
 }

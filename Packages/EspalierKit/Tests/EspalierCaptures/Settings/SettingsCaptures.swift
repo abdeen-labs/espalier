@@ -45,8 +45,8 @@ struct SettingsCaptures {
     /// Chooses `look` in `preferences`, as Settings ▸ Appearance does.
     private func choose(_ look: Look, in preferences: Preferences) {
         preferences.designTheme = look.theme
-        preferences.designThemeColor = look.color
-        preferences.designThemeBackground = look.background
+        preferences.designPalette = look.palette
+        preferences.designBackground = look.background
         preferences.appFont = look.appFont
         preferences.codeFont = look.codeFont
     }
@@ -65,19 +65,20 @@ struct SettingsCaptures {
         let harness = try AppHarness()
         let app = app(harness)
         choose(Capture.look, in: app.preferences)
-        capture(window(.appearance) { AppearanceForm(preferences: app.preferences, openAppearanceSettings: {}) }, named: "appearance", area: area)
+        capture(window(.appearance) { AppearanceForm(preferences: app.preferences) }, named: "appearance", area: area)
     }
 
-    @Test("Appearance in a look of its own: a theme with its colors, its fonts; the pane a card on the backdrop in Islands", arguments: [
-        Look(theme: .frost, color: .iris, appFont: .fixel, codeFont: .geistMono),
-        Look(theme: .islands, color: .lagoon),
-        Look(theme: .islands, color: .indigo),
+    @Test("Appearance in a look of its own: a theme in a palette, its fonts; the pane a card on the backdrop in Islands", arguments: [
+        Look(theme: .frost, palette: .iris, appFont: .fixel, codeFont: .geistMono),
+        Look(theme: .islands, palette: .lagoon),
+        Look(theme: .islands, palette: .plum),
+        Look(theme: .pop),
     ])
     func appearanceTheme(_ look: Look) throws {
         let harness = try AppHarness()
         let app = app(harness)
         choose(look, in: app.preferences)
-        capture(window(.appearance) { AppearanceForm(preferences: app.preferences, openAppearanceSettings: {}) }, named: "appearance", area: area, look: look)
+        capture(window(.appearance) { AppearanceForm(preferences: app.preferences) }, named: "appearance", area: area, look: look)
     }
 
     @Test("Advanced: the command line tool's button, enabled in the Settings window")

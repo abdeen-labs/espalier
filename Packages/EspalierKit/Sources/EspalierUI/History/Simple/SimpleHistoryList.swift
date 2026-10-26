@@ -30,7 +30,7 @@ struct SimpleHistoryList: View {
             list(history)
         }
         .barMotion(history.simpleBaseStatus != nil)
-        .background(Color(espalier: Palette.background))
+        .background(Color(espalier: Palette.pane))
     }
 
     @ViewBuilder

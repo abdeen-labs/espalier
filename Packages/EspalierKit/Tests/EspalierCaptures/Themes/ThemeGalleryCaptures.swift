@@ -1,9 +1,9 @@
 // A compact gallery of what the themes and fonts change, in light and
 // dark: the sidebar with its selection and a section label, a few graph
 // rows, two History rows with ref tags (one selected), the buttons, a
-// commit's title, and file badges. Each theme in each of its colors, each
-// background tint on Classic, Classic's backgrounds on Islands, and each app
-// font and code font on Classic.
+// commit's title, and file badges. Each theme in each palette, each
+// background tint on Classic, Classic's backgrounds on the other themes, and
+// each app font and code font on Classic.
 
 import AppKit
 import EspalierCore
@@ -17,8 +17,8 @@ import TestSupport
 struct ThemeGalleryCaptures {
     private let area = "Themes"
 
-    @Test("each theme in each of its colors", arguments: DesignTheme.allCases.flatMap { theme in
-        theme.colors.isEmpty ? [Look(theme: theme)] : theme.colors.map { Look(theme: theme, color: $0) }
+    @Test("each theme in each palette", arguments: DesignTheme.allCases.flatMap { theme in
+        DesignPalette.allCases.map { Look(theme: theme, palette: $0) }
     })
     func themes(_ look: Look) {
         capture(ThemeGallery(), named: "gallery", area: area, look: look)
@@ -29,9 +29,9 @@ struct ThemeGalleryCaptures {
         capture(ThemeGallery(), named: "gallery", area: area, look: Look(background: background))
     }
 
-    @Test("Classic's backgrounds on Islands")
-    func islandsClassicBackgrounds() {
-        capture(ThemeGallery(), named: "gallery", area: area, look: Look(theme: .islands, background: .classic))
+    @Test("Classic's backgrounds on the other themes", arguments: [DesignTheme.frost, .islands, .pop])
+    func classicBackgrounds(_ theme: DesignTheme) {
+        capture(ThemeGallery(), named: "gallery", area: area, look: Look(theme: theme, background: .classic))
     }
 
     @Test("each app font on Classic", arguments: [AppFont.fixel, .atkinson, .martian, .geist])

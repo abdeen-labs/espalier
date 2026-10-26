@@ -234,7 +234,9 @@ final class GraphColors {
     private let current: CGColor
     private let named: [Int: CGColor]
     private let others: [CGColor]
-    /// What fills a ring: the row's background, or a selected row's.
+    /// What fills a ring: the row's background, or a selected row's; clear
+    /// on a clear pane (Frost's), where the row's fill behind the graph
+    /// shows.
     let background: CGColor
     let selectedBackground: CGColor
 
@@ -251,9 +253,9 @@ final class GraphColors {
             named = palette.namedTracks.mapValues(\.cgColor)
             others = palette.otherTracks.map(\.cgColor)
             let variant = AppearanceVariant.of(appearance)
-            let base = Palette.background.resolved(in: variant)
+            let base = Palette.pane.resolved(in: variant)
             background = base.cgColor
-            selectedBackground = ColorContrast.composite(Palette.accentSoft.resolved(in: variant), over: base).cgColor
+            selectedBackground = Theme.current.cardIsGlass ? base.cgColor : ColorContrast.composite(Palette.accentSoft.resolved(in: variant), over: base).cgColor
         }
         self.palette = palette
         self.trunk = trunk
@@ -625,8 +627,7 @@ enum GraphRenderer {
         // pens left on the context), so dimmed rings still hide the lines'
         // ends.
         context.setAlpha(1)
-        context.setFillColor(emphasis.isSelected ? colors.selectedBackground : colors.background)
-        context.fillEllipse(in: circle(center, ring.radius + ring.stroke / 2))
+        context.knockOutEllipse(in: circle(center, ring.radius + ring.stroke / 2), background: emphasis.isSelected ? colors.selectedBackground : colors.background)
 
         context.setAlpha(opacity)
         context.setStrokeColor(color)

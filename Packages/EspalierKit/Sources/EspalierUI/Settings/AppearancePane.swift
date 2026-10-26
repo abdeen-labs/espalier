@@ -1,8 +1,9 @@
-// Settings ▸ Appearance: the theme (Classic, Frost, Islands, Pop), its
-// color (Classic's is the Mac's accent color), its background tint, the
-// appearance (System, Light, Dark), and the app font; code (the code font,
-// its text size, the diff's tab size), dates and numbers, accessibility, and
-// the sidebar (its style, hidden or icons, and the worktree list). Each font's name in its pop-up is drawn in that font. The
+// Settings ▸ Appearance: the theme (Classic, Frost, Islands, Pop) and the
+// app font; colors (the palette, System's the Mac's accent color, on any
+// theme; the background tint; the appearance, System, Light, or Dark); code
+// (the code font, its text size, the diff's tab size), dates and numbers,
+// accessibility, and the sidebar (its style, hidden or icons, and the
+// worktree list). Each font's name in its pop-up is drawn in that font. The
 // code text size steps through the same sizes as View ▸ Bigger (⌘=) and
 // Smaller (⌘−).
 
@@ -20,9 +21,7 @@ public struct AppearancePane: View {
 
     public var body: some View {
         if let model {
-            AppearanceForm(preferences: model.preferences, openAppearanceSettings: {
-                model.openSystemSettings(AppearanceSettings.systemAppearanceURL)
-            })
+            AppearanceForm(preferences: model.preferences)
         } else {
             SettingsPanePlaceholder(tab: .appearance)
         }
@@ -31,10 +30,7 @@ public struct AppearancePane: View {
 
 /// The Appearance pane's values and copy.
 enum AppearanceSettings {
-    /// System Settings ▸ Appearance.
-    static let systemAppearanceURL = "x-apple.systempreferences:com.apple.Appearance-Settings.extension"
-
-    /// The theme's choices, in order.
+    /// The appearance's choices, in order.
     static let themes = ApplicationTheme.allCases.map { CapsuleSegment($0.title, value: $0) }
 
     /// The sidebar's styles, in order.
@@ -84,12 +80,11 @@ enum AppearanceSettings {
     }
 }
 
-/// The Appearance pane: the theme, its color and background tint, the
-/// appearance, and the app font; code (its font, text size, and tab size),
-/// dates and numbers, accessibility, and the sidebar.
+/// The Appearance pane: the theme and the app font; the palette, the
+/// background tint, and the appearance; code (its font, text size, and tab
+/// size), dates and numbers, accessibility, and the sidebar.
 struct AppearanceForm: View {
     @Bindable var preferences: Preferences
-    let openAppearanceSettings: () -> Void
     @Environment(\.motion) private var motion
 
     var body: some View {
@@ -100,35 +95,10 @@ struct AppearanceForm: View {
                 } footer: {
                     ThemeCardPicker(
                         selection: $preferences.designTheme,
-                        colors: preferences.designThemeColors,
-                        backgrounds: preferences.designThemeBackgrounds
+                        palette: preferences.designPalette,
+                        background: preferences.designBackground
                     )
                     .padding(.vertical, Metrics.FocusRing.outset)
-                }
-                if preferences.designTheme == .classic {
-                    SettingsRow("Color", description: "Espalier follows your Mac's accent color.") {
-                        Button("Appearance Settings…", action: openAppearanceSettings)
-                            .settingsButton()
-                    }
-                } else {
-                    SettingsRow("Color", description: preferences.designThemeColor?.title) {
-                        SwatchPicker("Color", values: preferences.designTheme.colors, selection: designThemeColor, title: \.title) { color in
-                            Theme.named(preferences.designTheme, color: color).accent
-                        }
-                    }
-                    // The chosen color's name, and the background's below,
-                    // crossfade with the swatch's motion.
-                    .contentTransition(motion.animates ? .opacity : .identity)
-                }
-                SettingsRow("Background", description: preferences.designThemeBackground.title) {
-                    SwatchPicker("Background", values: preferences.designTheme.backgrounds, selection: $preferences.designThemeBackground, title: \.title) { tint in
-                        Theme.named(preferences.designTheme, color: preferences.designThemeColor, background: tint).backgroundSwatch
-                    }
-                }
-                .contentTransition(motion.animates ? .opacity : .identity)
-                SettingsRow("Appearance", labelsControl: true) {
-                    CapsuleSegmentedControl("Appearance", selection: $preferences.theme, segments: AppearanceSettings.themes)
-                        .fixedSize()
                 }
                 SettingsRow("Font", labelsControl: true) {
                     CapsulePopUp("Font", selection: $preferences.appFont, title: preferences.appFont.title) {
@@ -138,6 +108,27 @@ struct AppearanceForm: View {
                         }
                     }
                     .fixedSize()
+                }
+            }
+
+            SettingsSection("Colors") {
+                SettingsRow("Palette", description: preferences.designPalette.summary) {
+                    SwatchPicker("Palette", values: DesignPalette.allCases, selection: $preferences.designPalette, title: \.title) { palette in
+                        Theme.named(preferences.designTheme, palette: palette).accent
+                    }
+                }
+                // The chosen palette's name, and the background's below,
+                // crossfade with the swatch's motion.
+                .contentTransition(motion.animates ? .opacity : .identity)
+                SettingsRow("Background", description: preferences.designThemeBackground.title) {
+                    SwatchPicker("Background", values: preferences.designTheme.backgrounds, selection: designBackground, title: \.title) { tint in
+                        Theme.named(preferences.designTheme, palette: preferences.designPalette, background: tint).backgroundSwatch
+                    }
+                }
+                .contentTransition(motion.animates ? .opacity : .identity)
+                SettingsRow("Appearance", labelsControl: true) {
+                    CapsuleSegmentedControl("Appearance", selection: $preferences.theme, segments: AppearanceSettings.themes)
+                        .fixedSize()
                 }
             }
 
@@ -243,12 +234,13 @@ struct AppearanceForm: View {
         AppearanceSettings.formatTitle(example: format.example, pattern: format.rawValue)
     }
 
-    /// The current design theme's color.
-    private var designThemeColor: Binding<DesignThemeColor> {
+    /// The background tint: the one the theme draws, setting the one
+    /// chosen.
+    private var designBackground: Binding<BackgroundTint> {
         Binding {
-            preferences.designThemeColor ?? preferences.designTheme.defaultColor ?? .iris
-        } set: { color in
-            preferences.designThemeColor = color
+            preferences.designThemeBackground
+        } set: { tint in
+            preferences.designBackground = tint
         }
     }
 

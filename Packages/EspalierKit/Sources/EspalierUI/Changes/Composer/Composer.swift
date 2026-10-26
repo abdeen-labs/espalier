@@ -558,7 +558,7 @@ public struct ComposerView: View {
             Hairline()
             footer(showsSparkle: false)
         }
-        .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+        .surface(Color(espalier: Palette.cardFill), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
     }
 
     /// The model choice the assisted card asked for, on the sparkle's
@@ -631,7 +631,7 @@ public struct ComposerView: View {
             Hairline()
             footer(showsSparkle: true)
         }
-        .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+        .surface(Color(espalier: Palette.cardFill), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
         // A field's ring, on the card's edge, while one of its fields has
         // focus.
         .focusRing(markedField != nil, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous), outset: 0)

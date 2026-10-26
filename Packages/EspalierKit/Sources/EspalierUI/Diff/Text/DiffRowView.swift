@@ -29,15 +29,16 @@ final class DiffRowView: NSTableRowView {
         true
     }
 
+    // Opaque but where the pane is clear (`Palette.pane`, Frost).
     override var isOpaque: Bool {
-        true
+        !Theme.current.cardIsGlass
     }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let controller, let context = NSGraphicsContext.current?.cgContext else {
             return
         }
-        Palette.background.setFill()
+        Palette.pane.setFill()
         dirtyRect.fill()
         // While lines don't wrap, the table is as wide as the longest line
         // needs and scrolls sideways: the row draws where it shows, from
@@ -106,7 +107,7 @@ struct DiffRowRenderer {
 
     func draw() {
         controller.textCache.use(AppearanceVariant.of(NSAppearance.currentDrawing()))
-        Palette.background.setFill()
+        Palette.pane.setFill()
         bounds.fill()
         guard document.rows.indices.contains(row) else {
             return
@@ -586,7 +587,7 @@ struct DiffRowRenderer {
     private func drawNumberCells(_ half: DiffRowGeometry.Half, included: Bool, isHovered: Bool) {
         let cells = rect(spanning: half.gutter)
         if included {
-            Palette.background.setFill()
+            Palette.pane.setFill()
             cells.fill()
             DiffColors.includedNumberCell.setFill()
             cells.fill(using: .sourceOver)

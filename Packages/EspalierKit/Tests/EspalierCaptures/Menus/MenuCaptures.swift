@@ -2,7 +2,7 @@
 // symbols, subtitles, checks, a choice, sections with headers and
 // dividers, destructive and disabled items, a submenu's chevron, the
 // highlighted row, and a long menu scrolled to its choice; the highlighted
-// row in Frost's Iris and Ember and the sections in Pop's Tangerine; a
+// row in Frost with Iris and Slate and the sections in Pop's Tangerine; a
 // list row as a context menu's target; the buttons that open menus,
 // closed; and the suggestion list's card.
 
@@ -102,7 +102,7 @@ struct MenuCaptures {
 
     @Test("sections with headers, a destructive item, a disabled one, and a submenu, in Pop's Tangerine")
     func sectionsInPop() {
-        capture(card(sections), named: "sectionsDestructiveDisabledSubmenu", area: area, look: Look(theme: .pop, color: .tangerine))
+        capture(card(sections), named: "sectionsDestructiveDisabledSubmenu", area: area, look: Look(theme: .pop, palette: .tangerine))
     }
 
     /// Symbols, a disabled item, and a destructive one.
@@ -123,9 +123,9 @@ struct MenuCaptures {
         capture(card(branchMenu, highlighted: "View on GitHub"), named: "highlightedDisabled", area: area)
     }
 
-    @Test("the highlighted row in Frost's Iris and Ember", arguments: [DesignThemeColor.iris, .ember])
-    func highlightedInFrost(_ color: DesignThemeColor) {
-        capture(card(branchMenu, highlighted: "Copy Branch Name"), named: "highlighted", area: area, look: Look(theme: .frost, color: color))
+    @Test("the highlighted row in Frost with Iris and Slate", arguments: [DesignPalette.iris, .slate])
+    func highlightedInFrost(_ palette: DesignPalette) {
+        capture(card(branchMenu, highlighted: "Copy Branch Name"), named: "highlighted", area: area, look: Look(theme: .frost, palette: palette))
     }
 
     @Test("a long menu, scrolled to its choice")

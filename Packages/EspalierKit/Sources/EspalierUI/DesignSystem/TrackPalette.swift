@@ -7,12 +7,12 @@ import SwiftUI
 ///
 /// The current branch's track takes the accent color; the trunk (track 0,
 /// the default branch's line) is the theme's default-branch color,
-/// Classic's teal. Other tracks take the theme's tones (Classic's are pink,
-/// violet, orange, green, blue, and cyan, without the entry nearest the
-/// accent's hue). A track a local branch starts takes that branch's color
-/// (`BranchColors`), so a line, its branch's tag, and its sidebar dot
-/// agree; other tracks take entry `(t − 1) mod count` of the entries no
-/// branch has. Colors follow the engine's tracks, so a line of development
+/// Classic's teal (green beside a teal accent). Other tracks take the
+/// theme's tones (Classic's are pink, violet, orange, green, blue, and cyan),
+/// without the entry nearest the accent's hue. A track a local branch
+/// starts takes that branch's color (`BranchColors`), so a line, its
+/// branch's tag, and its sidebar dot agree; other tracks take entry
+/// `(t − 1) mod count` of the entries no branch has. Colors follow the engine's tracks, so a line of development
 /// keeps its color as lanes are reused.
 public enum TrackPalette {
     /// A branch color: a hue each theme gives its own shade
@@ -51,29 +51,11 @@ public enum TrackPalette {
     /// An accent with less saturation than this (graphite) skips nothing.
     nonisolated static let minimumAccentSaturation: CGFloat = 0.15
 
-    /// The current theme's palette for an accent color: its tones, without
-    /// the entry nearest the accent's hue when the theme leaves it out
-    /// (Classic).
+    /// The current theme's palette for an accent color: the tones that go
+    /// with its trunk, without the entry nearest the accent's hue
+    /// (`Theme.branchTones(accent:)`).
     public static func palette(accent: NSColor = Palette.accent) -> [Tone] {
-        let theme = Theme.current
-        let tones = theme.tones
-        guard theme.skipsToneNearestAccent else {
-            return tones
-        }
-        let accent = accent.resolved(in: .light)
-        guard accent.saturationComponent >= minimumAccentSaturation else {
-            return tones
-        }
-        let hue = accent.hueComponent
-        let nearest = tones.indices.min { first, second in
-            hueDistance(tones[first].hue, hue) < hueDistance(tones[second].hue, hue)
-        }
-        guard let nearest else {
-            return tones
-        }
-        var palette = tones
-        palette.remove(at: nearest)
-        return palette
+        Theme.current.branchTones(accent: accent)
     }
 
     /// The color of track `track`.

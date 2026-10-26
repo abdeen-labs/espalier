@@ -373,7 +373,7 @@ public struct NoChangesSuggestions: View {
             .unbouncedScrollContent()
         }
         .scrollBounceBehavior(.basedOnSize)
-        .background(Color(espalier: Palette.background))
+        .background(Color(espalier: Palette.pane))
     }
 
     /// The suggestions as rows in one card, hairlines between them.

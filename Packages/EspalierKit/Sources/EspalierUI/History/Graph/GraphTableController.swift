@@ -149,7 +149,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         tableView.allowsEmptySelection = true
         tableView.allowsTypeSelect = true
         tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
-        tableView.backgroundColor = Palette.background
+        tableView.backgroundColor = Palette.pane
         tableView.draggingDestinationFeedbackStyle = .none
         tableView.setDraggingSourceOperationMask([.copy, .move, .generic], forLocal: true)
         tableView.setDraggingSourceOperationMask([], forLocal: false)
@@ -165,8 +165,8 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = true
-        scrollView.backgroundColor = Palette.background
+        scrollView.drawsBackground = !Theme.current.cardIsGlass
+        scrollView.backgroundColor = Palette.pane
         scrollView.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(boundsDidChange(_:)), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         NotificationCenter.default.addObserver(self, selector: #selector(willStartLiveScroll(_:)), name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
@@ -1217,8 +1217,9 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// rows' fonts follow it.
     @objc private func lookDidChange(_ notification: Notification) {
         tableView.rowHeight = Metrics.Graph.rowHeight
-        tableView.backgroundColor = Palette.background
-        scrollView.backgroundColor = Palette.background
+        tableView.backgroundColor = Palette.pane
+        scrollView.backgroundColor = Palette.pane
+        scrollView.drawsBackground = !Theme.current.cardIsGlass
         style.geometry = GraphGeometry(rowHeight: tableView.rowHeight, laneCount: lanesSeen, increaseContrast: isIncreasedContrast)
         appearanceDidChange()
     }

@@ -1,24 +1,28 @@
-// A design theme's tokens: every color, shape, and mark Espalier draws
-// with that differs between themes. `Palette`, `DiffColors`,
-// `TrackPalette`, `Typography`, and `Metrics` read the current theme
-// (`Theme.current`), so views never pick a theme themselves. Each theme is
-// defined in its own file (ClassicTheme.swift, FrostTheme.swift,
-// IslandsTheme.swift, PopTheme.swift) from a `ThemeDefinition`, which a
+// A design theme's tokens in a palette and a background tint: every color,
+// shape, and mark Espalier draws with that differs between looks.
+// `Palette`, `DiffColors`, `TrackPalette`, `Typography`, and `Metrics` read
+// the current theme (`Theme.current`), so views never pick a theme
+// themselves. Each theme is defined in its own file (ClassicTheme.swift,
+// FrostTheme.swift, IslandsTheme.swift, PopTheme.swift) as a
+// `ThemeDefinition` made from a palette's colors (Palettes.swift), which a
 // background tint re-hues (BackgroundTints.swift); the colors and marks
-// derived from it (status colors, diff tints, branch colors) are
-// worked out once per theme, color, and tint.
+// derived from it (status colors, diff tints, branch colors) are worked out
+// once per theme, palette, and tint. A theme's trunk, renamed, and deletion
+// colors give way to others where the palette's accent is near their hue,
+// and the branch tone nearest the accent is left out, so the current
+// branch, the default branch, and file statuses stay apart in every
+// palette.
 
 import AppKit
 import EspalierCore
 import Synchronization
 import SwiftUI
 
-/// Every token of one design theme in one of its colors and background
-/// tints.
+/// Every token of one design theme in a palette and a background tint.
 nonisolated public final class Theme: Sendable {
-    /// The theme, color, and background tint it's made of.
+    /// The theme, palette, and background tint it's made of.
     public let theme: DesignTheme
-    public let color: DesignThemeColor?
+    public let palette: DesignPalette
     public let tint: BackgroundTint
 
     // MARK: Surfaces
@@ -60,6 +64,17 @@ nonisolated public final class Theme: Sendable {
     /// backdrop color over a blur of what's behind the window; nil is the
     /// backdrop color, opaque.
     public let backdropGlass: GlassStyle?
+    /// Whether the content's card is glass too: the inset card on the
+    /// backdrop's glass (Frost's), its fill `cardFill` over the glass and
+    /// its panes clear, so the glass shows through the whole window.
+    public let cardIsGlass: Bool
+    /// What the panes in the main window's content fill with: clear where
+    /// the card is glass, so the card's fill shows; else `background`.
+    public let pane: NSColor
+    /// The inset card's fill, and a card's on a pane (the commit
+    /// message's): where the card is glass, `background` at 40% over what's
+    /// behind it; else `background`.
+    public let cardFill: NSColor
     /// A raised card's soft shadow and ring: a selected segment on its
     /// track, Islands' floating panes.
     public let raisedShadow: NSColor
@@ -128,14 +143,12 @@ nonisolated public final class Theme: Sendable {
 
     /// The default branch's color (the graph's trunk).
     public let trunk: NSColor
-    /// The other branches' colors, in the order they're handed out.
-    public let tones: [TrackPalette.Tone]
+    /// The trunk and the other branches' tones, and those in their place
+    /// for an accent near the trunk's hue.
+    private let branches: BranchTones
+    private let branchesNearAccent: BranchTones?
     /// Each tone as lines, dots, and tags draw it.
     let toneColors: [TrackPalette.Tone: NSColor]
-    /// Whether the tone nearest the accent's hue is left out (Classic, whose
-    /// accent is the Mac's); the other themes' tones are chosen around
-    /// their accents.
-    public let skipsToneNearestAccent: Bool
 
     // MARK: Selection
 
@@ -188,7 +201,7 @@ nonisolated public final class Theme: Sendable {
 
     init(_ definition: ThemeDefinition) {
         theme = definition.theme
-        color = definition.color
+        palette = definition.palette
         tint = definition.tint
         background = definition.background
         sidebar = definition.sidebar
@@ -229,18 +242,35 @@ nonisolated public final class Theme: Sendable {
         prominentTextStyle = definition.prominentText.map { Color(nsColor: $0) } ?? .white
 
         let background = definition.background
-        onAccent = definition.onAccent ?? NSColor.espalierDynamic { variant in
-            // White, but on a near-white accent, where it wouldn't show.
-            ColorContrast.ratio(.white, accent.resolved(in: variant)) >= Theme.onAccentWhiteMinimum ? .white : background.resolved(in: variant)
+        onAccent = switch definition.marks {
+        case .white:
+            NSColor.espalierDynamic { variant in
+                // White, but on a near-white accent, where it wouldn't show.
+                ColorContrast.ratio(.white, accent.resolved(in: variant)) >= Theme.onAccentWhiteMinimum ? .white : background.resolved(in: variant)
+            }
+        case .whiteOnDeep:
+            NSColor.espalierDynamic { variant in
+                variant.isDark ? background.resolved(in: variant) : .white
+            }
+        case let .color(color):
+            color
         }
+        let cardIsGlass = definition.paneLayout == .insetCard && definition.backdropGlass != nil
+        self.cardIsGlass = cardIsGlass
+        pane = cardIsGlass ? .clear : background
+        cardFill = cardIsGlass ? NSColor.espalierDynamic { variant in
+            background.resolved(in: variant).withAlphaComponent(Theme.glassCardOpacity)
+        } : background
         link = definition.linkBase ?? accent
 
+        let delete = Theme.awayFromAccent(definition.delete, else: definition.deleteNearAccent, accent: accent)
+        let renamed = Theme.awayFromAccent(definition.renamed, else: definition.renamedNearAccent, accent: accent)
         add = definition.add
-        delete = definition.delete
+        self.delete = delete
         modified = definition.modified
-        renamed = definition.renamed
+        self.renamed = renamed
         warning = definition.modified
-        error = definition.delete
+        error = delete
         success = definition.add
         warningMark = definition.modified
 
@@ -248,8 +278,8 @@ nonisolated public final class Theme: Sendable {
             let color: NSColor = switch kind {
             case .new, .untracked, .resolved: definition.add
             case .modified, .conflicted: definition.modified
-            case .deleted: definition.delete
-            case .renamed, .copied: definition.renamed
+            case .deleted: delete
+            case .renamed, .copied: renamed
             }
             return (kind, color)
         })
@@ -269,20 +299,20 @@ nonisolated public final class Theme: Sendable {
         }
         checksColors = [
             .success: definition.add,
-            .failure: definition.delete,
+            .failure: delete,
             .pending: definition.modified,
             .neutral: definition.text2,
         ]
 
-        diff = DiffTints(add: definition.add, delete: definition.delete, modified: definition.modified, accent: accent, ours: definition.conflictOurs, theirs: definition.conflictTheirs)
+        diff = DiffTints(add: definition.add, delete: delete, modified: definition.modified, accent: accent, ours: definition.conflictOurs, theirs: definition.conflictTheirs)
         syntaxColors = definition.syntaxColors
 
-        trunk = definition.trunk
-        tones = definition.tones
-        toneColors = Dictionary(uniqueKeysWithValues: definition.tones.map { tone in
+        trunk = Theme.awayFromAccent(definition.branches.trunk, else: definition.branchesNearAccent?.trunk, accent: accent)
+        branches = definition.branches
+        branchesNearAccent = definition.branchesNearAccent
+        toneColors = Dictionary(uniqueKeysWithValues: TrackPalette.Tone.allCases.map { tone in
             (tone, definition.toneColors[tone] ?? tone.color)
         })
-        skipsToneNearestAccent = definition.skipsToneNearestAccent
 
         sidebarSelection = definition.sidebarSelection
         sidebarSelectionText = definition.sidebarSelectionText
@@ -313,6 +343,63 @@ nonisolated public final class Theme: Sendable {
         toneColors[tone] ?? tone.color
     }
 
+    /// The tones branches other than the current and default ones take
+    /// beside `accent`, in the order they're handed out: those that go
+    /// with the trunk, without the one nearest the accent's hue.
+    func branchTones(accent: NSColor) -> [TrackPalette.Tone] {
+        var tones = branches.tones
+        if let branchesNearAccent, Theme.prefersAlternate(branches.trunk, branchesNearAccent.trunk, accent: self.accent) {
+            tones = branchesNearAccent.tones
+        }
+        guard let hue = Theme.accentHue(accent) else {
+            return tones
+        }
+        let nearest = tones.indices.min { first, second in
+            TrackPalette.hueDistance(tones[first].hue, hue) < TrackPalette.hueDistance(tones[second].hue, hue)
+        }
+        if let nearest {
+            tones.remove(at: nearest)
+        }
+        return tones
+    }
+
+    /// `primary`, or `alternate` while the accent's hue is near `primary`'s
+    /// and farther from `alternate`'s (`prefersAlternate`), worked out as
+    /// it's drawn, so it follows the Mac's accent color as it changes.
+    static func awayFromAccent(_ primary: NSColor, else alternate: NSColor?, accent: NSColor) -> NSColor {
+        guard let alternate else {
+            return primary
+        }
+        return NSColor.espalierDynamic { variant in
+            (prefersAlternate(primary, alternate, accent: accent) ? alternate : primary).resolved(in: variant)
+        }
+    }
+
+    /// Whether `accent`'s hue is within `nearAccentHue` of `primary`'s and
+    /// farther from `alternate`'s, as light draws them.
+    static func prefersAlternate(_ primary: NSColor, _ alternate: NSColor, accent: NSColor) -> Bool {
+        guard let hue = accentHue(accent) else {
+            return false
+        }
+        let toPrimary = TrackPalette.hueDistance(primary.resolved(in: .light).hueComponent, hue)
+        let toAlternate = TrackPalette.hueDistance(alternate.resolved(in: .light).hueComponent, hue)
+        return toPrimary < nearAccentHue && toAlternate > toPrimary
+    }
+
+    /// The accent's hue as light draws it, 0 to 1; nil for an accent with
+    /// too little saturation to have one (graphite).
+    private static func accentHue(_ accent: NSColor) -> CGFloat? {
+        let accent = accent.resolved(in: .light)
+        guard accent.saturationComponent >= TrackPalette.minimumAccentSaturation else {
+            return nil
+        }
+        return accent.hueComponent
+    }
+
+    /// How near an accent's hue is to a color's for the color to give way
+    /// (`awayFromAccent`): 30°.
+    static let nearAccentHue: CGFloat = 30.0 / 360
+
     /// White or `dark` on `fill`, whichever reads better.
     static func legibleText(on fill: NSColor, light: NSColor, dark: NSColor) -> NSColor {
         ColorContrast.ratio(light, fill) >= ColorContrast.ratio(dark, fill) ? light : dark
@@ -322,6 +409,9 @@ nonisolated public final class Theme: Sendable {
     /// background (`onAccent`, in a theme that sets none): only a
     /// near-white accent, none of the Mac's.
     static let onAccentWhiteMinimum = 1.3
+
+    /// The background's opacity in a glass card's fill (`cardFill`).
+    static let glassCardOpacity: CGFloat = 0.4
 }
 
 // MARK: - The current theme
@@ -330,20 +420,18 @@ nonisolated extension Theme {
     /// The theme the current look draws in.
     public static var current: Theme {
         let look = Look.current
-        return named(look.theme, color: look.color, background: look.background)
+        return named(look.theme, palette: look.palette, background: look.background)
     }
 
-    /// `theme` in `color` (its default when nil or not one of its colors),
-    /// its backgrounds in `background` (its own when not one it offers),
-    /// made once.
-    public static func named(_ theme: DesignTheme, color: DesignThemeColor? = nil, background: BackgroundTint = .own) -> Theme {
-        let color = color.flatMap { theme.colors.contains($0) ? $0 : nil } ?? theme.defaultColor
-        let background = theme.backgrounds.contains(background) ? background : .own
-        let key = ThemeKey(theme: theme, color: color, background: background)
+    /// `theme` in `palette`, its backgrounds in `background` (its own when
+    /// not one it offers), made once.
+    public static func named(_ theme: DesignTheme, palette: DesignPalette = .system, background: BackgroundTint = .own) -> Theme {
+        let background = theme.backgroundDrawn(for: background)
+        let key = ThemeKey(theme: theme, palette: palette, background: background)
         if let made = ThemeCache.themes.withLock({ $0[key] }) {
             return made
         }
-        let made = Theme(definition(theme, color: color).tinted(background))
+        let made = Theme(definition(theme, palette: .named(palette)).tinted(background))
         return ThemeCache.themes.withLock { themes in
             if let existing = themes[key] {
                 return existing
@@ -353,19 +441,19 @@ nonisolated extension Theme {
         }
     }
 
-    private static func definition(_ theme: DesignTheme, color: DesignThemeColor?) -> ThemeDefinition {
+    private static func definition(_ theme: DesignTheme, palette: PaletteColors) -> ThemeDefinition {
         switch theme {
-        case .classic: .classic
-        case .frost: .frost(color ?? .iris)
-        case .islands: .islands(color ?? .lagoon)
-        case .pop: .pop(color ?? .tangerine)
+        case .classic: .classic(palette)
+        case .frost: .frost(palette)
+        case .islands: .islands(palette)
+        case .pop: .pop(palette)
         }
     }
 }
 
 nonisolated private struct ThemeKey: Hashable, Sendable {
     let theme: DesignTheme
-    let color: DesignThemeColor?
+    let palette: DesignPalette
     let background: BackgroundTint
 }
 
@@ -386,10 +474,13 @@ nonisolated public enum PaneLayout: Sendable, Equatable {
     case insetCard
 }
 
-/// Glass: a color over a blur of what's behind the window.
+/// Glass: a color over a blur of what's behind the window, and a wash over
+/// the color.
 nonisolated public struct GlassStyle: Sendable, Equatable {
     /// The color's opacity over the blur.
     public var opacity: CGFloat
+    /// A translucent wash over the color; nil for none.
+    public var wash: NSColor? = nil
 }
 
 /// Section labels' look.
@@ -534,10 +625,17 @@ nonisolated public struct MonogramTone: Sendable, Equatable {
 
 // MARK: - Definitions
 
-/// What a theme file defines; `Theme` derives the rest.
+/// The default branch's color, and the tones the other branches take beside
+/// it, in the order they're handed out.
+nonisolated struct BranchTones: Sendable {
+    var trunk: NSColor
+    var tones: [TrackPalette.Tone]
+}
+
+/// What a theme file defines from a palette; `Theme` derives the rest.
 nonisolated struct ThemeDefinition: Sendable {
     var theme: DesignTheme
-    var color: DesignThemeColor?
+    var palette: DesignPalette
     /// Set by `tinted(_:)`.
     var tint: BackgroundTint = .own
 
@@ -580,24 +678,29 @@ nonisolated struct ThemeDefinition: Sendable {
     var prominent: NSColor
     /// Nil is white.
     var prominentText: NSColor?
-    /// Nil is white, or the background on a near-white accent.
-    var onAccent: NSColor?
+    /// The check, dash, radio dot, and switch knob on the accent.
+    var marks: AccentMarks
 
     var add: NSColor
+    /// Deletions; `deleteNearAccent` in its place for an accent near its
+    /// hue (`Theme.awayFromAccent`), and the same for renamed files.
     var delete: NSColor
+    var deleteNearAccent: NSColor?
     var modified: NSColor
     var renamed: NSColor
+    var renamedNearAccent: NSColor?
     /// A conflict's sides in the diff: ours and theirs.
     var conflictOurs: NSColor = SystemTone.mint.base
     var conflictTheirs: NSColor = SystemTone.orange.base
     /// Syntax tokens' colors; a style missing here is its system tone.
     var syntaxColors: [TokenStyle: NSColor] = [:]
 
-    var trunk: NSColor
-    var tones: [TrackPalette.Tone]
+    /// The trunk and the other branches' tones, and those in their place
+    /// for an accent near the trunk's hue.
+    var branches: BranchTones
+    var branchesNearAccent: BranchTones?
     /// The tones' colors; a tone missing here is Classic's.
     var toneColors: [TrackPalette.Tone: NSColor] = [:]
-    var skipsToneNearestAccent = false
 
     var sidebarSelection: NSColor
     var sidebarSelectionText: NSColor?
@@ -685,6 +788,15 @@ nonisolated enum ThemeColor {
             highContrastLight: light.withAlphaComponent(min(lightAlpha * 1.6, 1)),
             highContrastDark: dark.withAlphaComponent(min(darkAlpha * 1.6, 1))
         )
+    }
+
+    /// A translucent wash of a dynamic color (a palette's accent) as it
+    /// resolves: 1.6 times as opaque under Increase Contrast.
+    static func wash(_ color: NSColor, _ lightAlpha: CGFloat, _ darkAlpha: CGFloat) -> NSColor {
+        .espalierDynamic { variant in
+            let alpha = variant.isDark ? darkAlpha : lightAlpha
+            return color.resolved(in: variant).withAlphaComponent(variant.isHighContrast ? min(alpha * 1.6, 1) : alpha)
+        }
     }
 
     private static func strengthened(_ light: UInt32, _ dark: UInt32, by fraction: CGFloat) -> NSColor {

@@ -24,7 +24,7 @@ struct SettingsWindowCaptures {
         for appearance in CaptureAppearance.allCases {
             let stage = SettingsWindowStage(appearance: appearance) {
                 SettingsLayout(selection: .constant(.appearance)) {
-                    AppearanceForm(preferences: app.preferences, openAppearanceSettings: {})
+                    AppearanceForm(preferences: app.preferences)
                 }
             }
             await stage.settle()

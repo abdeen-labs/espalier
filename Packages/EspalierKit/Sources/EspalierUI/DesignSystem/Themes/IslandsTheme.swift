@@ -1,21 +1,20 @@
 // Islands: calm and friendly. The panes float as white cards on a sage
 // backdrop (`PaneLayout.floatingCards`), controls are soft pills with bold
 // titles (white and raised on the backdrop, flat on the field fill in a
-// card), and one accent marks selection, the current branch, and the one
-// prominent action. Bold uppercase labels, rounded-square avatars, round
-// file badges, rounded-rectangle ref tags, and a graph of dots. Colors:
-// Berry, Lagoon (the default), Indigo.
+// card), and the palette's accent marks selection, the current branch, and
+// (as its prominent fill) the one prominent action. Bold uppercase labels,
+// rounded-square avatars, round file badges, rounded-rectangle ref tags,
+// and a graph of dots.
 
 import AppKit
 import EspalierCore
 import SwiftUI
 
 nonisolated extension ThemeDefinition {
-    static func islands(_ color: DesignThemeColor) -> ThemeDefinition {
-        let palette = IslandsColor(color)
-        return ThemeDefinition(
+    static func islands(_ palette: PaletteColors) -> ThemeDefinition {
+        ThemeDefinition(
             theme: .islands,
-            color: palette.color,
+            palette: palette.palette,
             background: ThemeColor.surface(0xFFFFFF, 0x181D1A),
             // The sidebar sits on the backdrop.
             sidebar: ThemeColor.surface(0xE3E9E5, 0x0E1210),
@@ -35,22 +34,23 @@ nonisolated extension ThemeDefinition {
             text3: ThemeColor.text3(0x909E96, 0x6D7A73, text2: (0x55625B, 0xA2AFA7)),
             accent: palette.accent,
             linkBase: palette.ink,
-            accentSoftAlpha: palette.selectionAlpha,
-            textSelectionAlpha: palette.textSelectionAlpha,
+            accentSoftAlpha: (0.10, 0.14),
+            textSelectionAlpha: (0.14, 0.18),
             prominent: palette.prominent,
-            // A dark mark on the light accents of dark mode.
-            onAccent: ThemeColor.fixed(0xFFFFFF, 0x181D1A),
+            prominentText: palette.prominentText,
+            marks: palette.marks,
             add: ThemeColor.fixed(0x23784A, 0x6FD39A),
-            delete: palette.delete,
+            delete: IslandsColor.red,
             modified: ThemeColor.fixed(0x9A6400, 0xE9B64E),
             renamed: palette.accent,
             conflictOurs: IslandsColor.mint,
             conflictTheirs: IslandsColor.orange,
-            trunk: palette.trunk,
-            tones: palette.tones,
-            toneColors: palette.toneColors,
-            sidebarSelection: palette.sidebarSelection,
-            sidebarSelectionText: palette.sidebarSelectionText,
+            // Mint; green beside a teal accent.
+            branches: BranchTones(trunk: IslandsColor.mint, tones: [.orange, .pink, .blue, .violet, .cyan]),
+            branchesNearAccent: BranchTones(trunk: IslandsColor.green, tones: [.orange, .pink, .blue, .violet, .cyan]),
+            toneColors: IslandsColor.toneColors,
+            sidebarSelection: ThemeColor.wash(palette.accent, 0.12, 0.16),
+            sidebarSelectionText: palette.deepInk,
             sidebarSelectionIsBold: true,
             sidebarSelectionTintsCounts: true,
             sectionLabel: SectionLabelStyle(isUppercase: true, size: 10, weight: .bold, tracking: 0.08, color: nil),
@@ -67,22 +67,8 @@ nonisolated extension ThemeDefinition {
     }
 }
 
-/// An Islands color's values, light and dark.
-nonisolated private struct IslandsColor {
-    let color: DesignThemeColor
-    let accent: NSColor
-    let ink: NSColor
-    let prominent: NSColor
-    let selectionAlpha: (light: CGFloat, dark: CGFloat)
-    /// Selected text's wash.
-    let textSelectionAlpha: (light: CGFloat, dark: CGFloat)
-    let sidebarSelection: NSColor
-    let sidebarSelectionText: NSColor
-    let delete: NSColor
-    let trunk: NSColor
-    let tones: [TrackPalette.Tone]
-    let toneColors: [TrackPalette.Tone: NSColor]
-
+/// Islands' status and branch colors, light and dark.
+nonisolated private enum IslandsColor {
     static let orange = ThemeColor.fixed(0xE07B24, 0xF0A05C)
     static let rose = ThemeColor.fixed(0xC2416B, 0xE7779B)
     static let periwinkle = ThemeColor.fixed(0x5868D6, 0x9AA3F2)
@@ -92,50 +78,8 @@ nonisolated private struct IslandsColor {
     static let mint = ThemeColor.fixed(0x2E8A6E, 0x5CC7A0)
     static let red = ThemeColor.fixed(0xC23A2B, 0xF0877A)
 
-    init(_ color: DesignThemeColor) {
-        let toneColors: [TrackPalette.Tone: NSColor] = [
-            .orange: Self.orange, .pink: Self.rose, .blue: Self.periwinkle,
-            .violet: Self.violet, .cyan: Self.sea, .green: Self.green,
-        ]
-        self.toneColors = toneColors
-        switch color {
-        case .berry:
-            self.color = .berry
-            accent = ThemeColor.fixed(0xB8255F, 0xF07AA8)
-            ink = ThemeColor.fixed(0xA6215A, 0xF07AA8)
-            prominent = ThemeColor.fixed(0xB0225C, 0xC42A67)
-            selectionAlpha = (0.09, 0.14)
-            textSelectionAlpha = (0.14, 0.20)
-            sidebarSelection = ThemeColor.wash(.hex(0xB8255F), 0.12, .hex(0xF07AA8), 0.16)
-            sidebarSelectionText = ThemeColor.fixed(0x8E1C4C, 0xF7AECB)
-            delete = Self.red
-            trunk = Self.mint
-            tones = [.orange, .blue, .violet]
-        case .indigo:
-            self.color = .indigo
-            accent = ThemeColor.fixed(0x4447C9, 0x9C9FF5)
-            ink = ThemeColor.fixed(0x3E41BC, 0x9C9FF5)
-            prominent = ThemeColor.fixed(0x3F42BE, 0x4A4DD0)
-            selectionAlpha = (0.09, 0.15)
-            textSelectionAlpha = (0.14, 0.18)
-            sidebarSelection = ThemeColor.wash(.hex(0x4447C9), 0.12, .hex(0x9C9FF5), 0.16)
-            sidebarSelectionText = ThemeColor.fixed(0x33369F, 0xC0C2FA)
-            delete = Self.red
-            trunk = Self.mint
-            tones = [.orange, .pink, .cyan]
-        default:
-            // Lagoon, the default: a deep sea blue-green.
-            self.color = .lagoon
-            accent = ThemeColor.fixed(0x0B7A8C, 0x5CC6D6)
-            ink = ThemeColor.fixed(0x096C7C, 0x5CC6D6)
-            prominent = ThemeColor.fixed(0x0A6F80, 0x0E8094)
-            selectionAlpha = (0.10, 0.14)
-            textSelectionAlpha = (0.15, 0.16)
-            sidebarSelection = ThemeColor.wash(.hex(0x0B7A8C), 0.13, .hex(0x5CC6D6), 0.16)
-            sidebarSelectionText = ThemeColor.fixed(0x075E6C, 0x93DCE7)
-            delete = Self.red
-            trunk = Self.green
-            tones = [.orange, .pink, .blue, .violet]
-        }
-    }
+    static let toneColors: [TrackPalette.Tone: NSColor] = [
+        .orange: orange, .pink: rose, .blue: periwinkle,
+        .violet: violet, .cyan: sea, .green: green,
+    ]
 }
