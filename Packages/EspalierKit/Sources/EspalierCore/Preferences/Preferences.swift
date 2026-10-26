@@ -38,12 +38,12 @@ public enum PreferenceKey {
     /// The design theme (`DesignTheme`), Espalier's own.
     public static let designTheme = "design-theme"
     /// The design theme's color, one key per theme
-    /// (`design-theme-color-orchard`), so each theme keeps its own.
+    /// (`design-theme-color-frost`), so each theme keeps its own.
     public static func designThemeColor(_ theme: DesignTheme) -> String {
         "design-theme-color-\(theme.rawValue)"
     }
     /// The design theme's background tint, one key per theme
-    /// (`design-theme-background-orchard`), so each theme keeps its own.
+    /// (`design-theme-background-frost`), so each theme keeps its own.
     public static func designThemeBackground(_ theme: DesignTheme) -> String {
         "design-theme-background-\(theme.rawValue)"
     }
@@ -117,7 +117,7 @@ public enum DesignTheme: String, Sendable, Hashable, CaseIterable {
     /// The look Espalier had before themes, following the Mac's accent
     /// color.
     case classic
-    case orchard
+    case frost
     case islands
     case pop
 
@@ -126,7 +126,7 @@ public enum DesignTheme: String, Sendable, Hashable, CaseIterable {
     public var colors: [DesignThemeColor] {
         switch self {
         case .classic: []
-        case .orchard: [.plum, .clay, .ink, .teal, .espresso]
+        case .frost: [.iris, .glacier, .ember]
         case .islands: [.berry, .lagoon, .indigo]
         case .pop: [.tangerine, .electric, .magenta]
         }
@@ -137,7 +137,7 @@ public enum DesignTheme: String, Sendable, Hashable, CaseIterable {
     public var defaultColor: DesignThemeColor? {
         switch self {
         case .classic: nil
-        case .orchard: .ink
+        case .frost: .iris
         case .islands: .lagoon
         case .pop: .tangerine
         }
@@ -148,7 +148,7 @@ public enum DesignTheme: String, Sendable, Hashable, CaseIterable {
     public var backgrounds: [BackgroundTint] {
         switch self {
         case .islands: BackgroundTint.allCases
-        case .classic, .orchard, .pop: BackgroundTint.allCases.filter { $0 != .classic }
+        case .classic, .frost, .pop: BackgroundTint.allCases.filter { $0 != .classic }
         }
     }
 }
@@ -156,7 +156,7 @@ public enum DesignTheme: String, Sendable, Hashable, CaseIterable {
 /// A design theme's color. Each belongs to one theme (`DesignTheme.colors`).
 /// The raw values are the ones stored.
 public enum DesignThemeColor: String, Sendable, Hashable, CaseIterable {
-    case plum, clay, ink, teal, espresso
+    case iris, glacier, ember
     case berry, lagoon, indigo
     case tangerine, electric, magenta
 }
@@ -183,6 +183,8 @@ public enum AppFont: String, Sendable, Hashable, CaseIterable {
     case atkinson
     /// Martian Grotesk.
     case martian
+    /// Geist.
+    case geist
 }
 
 /// The code font: what's drawn monospaced (commit IDs, counts, ref tags,

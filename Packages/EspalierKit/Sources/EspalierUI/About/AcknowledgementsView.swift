@@ -178,6 +178,7 @@ extension Acknowledgement {
     /// its license as the font ships it.
     static let fonts: [Acknowledgement] = [
         font("fixel", name: "Fixel Text", version: "1.000", url: "https://github.com/MacPaw/Fixel"),
+        font("geist", name: "Geist", version: "1.800", url: "https://github.com/vercel/geist-font"),
         font("geist-mono", name: "Geist Mono", version: "1.701", url: "https://github.com/vercel/geist-font"),
         font("atkinson-hyperlegible-next", name: "Atkinson Hyperlegible Next", version: "2.001", url: "https://github.com/googlefonts/atkinson-hyperlegible-next"),
         font("atkinson-hyperlegible-mono", name: "Atkinson Hyperlegible Mono", version: "2.001", url: "https://github.com/googlefonts/atkinson-hyperlegible-next-mono"),

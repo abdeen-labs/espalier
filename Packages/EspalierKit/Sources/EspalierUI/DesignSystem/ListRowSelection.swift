@@ -242,26 +242,11 @@ enum SelectionBarDrawing {
 }
 
 /// The sidebar's selected row: the theme's selection fill in the row's
-/// shape; a card raised off the sidebar by a soft shadow and a ring
-/// (Orchard); and the accent bar at its leading edge (Pop).
+/// shape, and the accent bar at its leading edge (Pop).
 struct SidebarSelectionFill: View {
     var body: some View {
-        let theme = Theme.current
-        let shape = RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-        shape
-            .fill(Color(nsColor: theme.sidebarSelection))
-            .background {
-                if theme.sidebarSelectionStyle == .raisedCard {
-                    shape
-                        .fill(Color(nsColor: theme.sidebarSelection))
-                        .shadow(color: Color(nsColor: theme.raisedShadow), radius: 1, y: 1)
-                }
-            }
-            .overlay {
-                if theme.sidebarSelectionStyle == .raisedCard {
-                    shape.strokeBorder(Color(nsColor: theme.raisedRing), lineWidth: 1)
-                }
-            }
+        RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
+            .fill(Color(nsColor: Theme.current.sidebarSelection))
             .overlay {
                 SelectionBar()
             }

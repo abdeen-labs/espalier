@@ -191,9 +191,9 @@ struct PreferencesTests {
         #expect(preferences.appFont == .sf)
         #expect(preferences.codeFont == .sfMono)
 
-        preferences.designTheme = .orchard
-        #expect(preferences.designThemeColor == .ink)
-        preferences.designThemeColor = .clay
+        preferences.designTheme = .frost
+        #expect(preferences.designThemeColor == .iris)
+        preferences.designThemeColor = .ember
         // A color of another theme isn't the theme's.
         preferences.designThemeColor = .berry
         preferences.designThemeBackground = .warm
@@ -204,8 +204,8 @@ struct PreferencesTests {
         preferences.appFont = .atkinson
         preferences.codeFont = .geistMono
         #expect(storedKeys(temporary) == [
-            "design-theme", "design-theme-color-orchard", "design-theme-color-pop",
-            "design-theme-background-orchard", "design-theme-background-pop", "app-font", "code-font",
+            "design-theme", "design-theme-color-frost", "design-theme-color-pop",
+            "design-theme-background-frost", "design-theme-background-pop", "app-font", "code-font",
         ])
 
         // Switching back restores the theme's own color.
@@ -213,34 +213,34 @@ struct PreferencesTests {
         #expect(reloaded.designTheme == .pop)
         #expect(reloaded.designThemeColor == .magenta)
         #expect(reloaded.designThemeBackground == .lavender)
-        reloaded.designTheme = .orchard
-        #expect(reloaded.designThemeColor == .clay)
+        reloaded.designTheme = .frost
+        #expect(reloaded.designThemeColor == .ember)
         #expect(reloaded.designThemeBackground == .warm)
         reloaded.designTheme = .islands
         #expect(reloaded.designThemeColor == .lagoon)
         #expect(reloaded.designThemeBackground == .own)
         // Classic's backgrounds are Islands' alone.
         reloaded.designThemeBackground = .classic
-        reloaded.designTheme = .orchard
+        reloaded.designTheme = .frost
         reloaded.designThemeBackground = .classic
-        #expect(reloaded.designThemeBackgrounds == [.classic: .own, .orchard: .warm, .islands: .classic, .pop: .lavender])
+        #expect(reloaded.designThemeBackgrounds == [.classic: .own, .frost: .warm, .islands: .classic, .pop: .lavender])
         #expect(reloaded.appFont == .atkinson)
         #expect(reloaded.codeFont == .geistMono)
 
         // Unknown values, a color of another theme, and a background the
         // theme doesn't offer are the defaults.
         temporary.defaults.set("neon", forKey: "design-theme")
-        temporary.defaults.set("berry", forKey: "design-theme-color-orchard")
+        temporary.defaults.set("berry", forKey: "design-theme-color-frost")
         temporary.defaults.set("chartreuse", forKey: "design-theme-color-pop")
-        temporary.defaults.set("plaid", forKey: "design-theme-background-orchard")
+        temporary.defaults.set("plaid", forKey: "design-theme-background-frost")
         temporary.defaults.set("classic", forKey: "design-theme-background-pop")
         temporary.defaults.set("comic", forKey: "app-font")
         // A font of the other kind isn't one of these.
         temporary.defaults.set("atkinson", forKey: "code-font")
         let unknown = Preferences(store: PreferenceStore(temporary.defaults))
         #expect(unknown.designTheme == .classic)
-        #expect(unknown.designThemeColors == [.orchard: .ink, .islands: .lagoon, .pop: .tangerine])
-        #expect(unknown.designThemeBackgrounds == [.classic: .own, .orchard: .own, .islands: .classic, .pop: .own])
+        #expect(unknown.designThemeColors == [.frost: .iris, .islands: .lagoon, .pop: .tangerine])
+        #expect(unknown.designThemeBackgrounds == [.classic: .own, .frost: .own, .islands: .classic, .pop: .own])
         #expect(unknown.appFont == .sf)
         #expect(unknown.codeFont == .sfMono)
     }

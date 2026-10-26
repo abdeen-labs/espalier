@@ -69,7 +69,7 @@ struct SettingsCaptures {
     }
 
     @Test("Appearance in a look of its own: a theme with its colors, its fonts; the pane a card on the backdrop in Islands", arguments: [
-        Look(theme: .orchard, color: .ink, appFont: .fixel, codeFont: .geistMono),
+        Look(theme: .frost, color: .iris, appFont: .fixel, codeFont: .geistMono),
         Look(theme: .islands, color: .lagoon),
         Look(theme: .islands, color: .indigo),
     ])

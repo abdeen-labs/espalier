@@ -5,7 +5,7 @@
 // `<folder>/<look>/<Area>/<name>-<light|dark>.png`.
 //
 // ESPALIER_CAPTURE_LOOK=<theme>[-<color>][-<background>][-<app font>]
-// [-<code font>], as the settings store them ("orchard-ink",
+// [-<code font>], as the settings store them ("frost-iris",
 // "islands-lagoon-warm-fixel", "pop-tangerine-atkinson-geistmono"), draws
 // every capture in that look instead of Classic's; a capture made in a
 // look of its own (`look:`) keeps it, and its name says which.
@@ -273,7 +273,7 @@ func capture(
 extension Look {
     /// The look's name in captures: "classic" for Classic, its own
     /// backgrounds, in SF Pro and SF Mono; else the theme and color
-    /// ("orchard-ink"), then the background tint, the app font, and the code
+    /// ("frost-iris"), then the background tint, the app font, and the code
     /// font when they aren't the defaults ("classic-warm",
     /// "islands-lagoon-fixel", "pop-tangerine-geistmono").
     var captureName: String {

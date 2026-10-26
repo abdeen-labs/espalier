@@ -1,4 +1,4 @@
-// Settings ▸ Appearance: the theme (Classic, Orchard, Islands, Pop), its
+// Settings ▸ Appearance: the theme (Classic, Frost, Islands, Pop), its
 // color (Classic's is the Mac's accent color), its background tint, the
 // appearance (System, Light, Dark), and the app font; code (the code font,
 // its text size, the diff's tab size), dates and numbers, accessibility, and
@@ -246,7 +246,7 @@ struct AppearanceForm: View {
     /// The current design theme's color.
     private var designThemeColor: Binding<DesignThemeColor> {
         Binding {
-            preferences.designThemeColor ?? preferences.designTheme.defaultColor ?? .ink
+            preferences.designThemeColor ?? preferences.designTheme.defaultColor ?? .iris
         } set: { color in
             preferences.designThemeColor = color
         }

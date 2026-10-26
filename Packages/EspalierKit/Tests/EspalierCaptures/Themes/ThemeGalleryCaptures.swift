@@ -34,7 +34,7 @@ struct ThemeGalleryCaptures {
         capture(ThemeGallery(), named: "gallery", area: area, look: Look(theme: .islands, background: .classic))
     }
 
-    @Test("each app font on Classic", arguments: [AppFont.fixel, .atkinson, .martian])
+    @Test("each app font on Classic", arguments: [AppFont.fixel, .atkinson, .martian, .geist])
     func appFonts(_ font: AppFont) {
         capture(ThemeGallery(), named: "gallery", area: area, look: Look(appFont: font))
     }

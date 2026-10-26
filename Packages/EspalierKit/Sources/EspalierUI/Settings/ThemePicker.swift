@@ -15,7 +15,7 @@ extension DesignTheme {
     var title: String {
         switch self {
         case .classic: "Classic"
-        case .orchard: "Orchard"
+        case .frost: "Frost"
         case .islands: "Islands"
         case .pop: "Pop"
         }

@@ -43,14 +43,14 @@ other themes change what their tokens say (Themes, below).
 
 ## Themes, colors, and fonts
 
-Settings ▸ Appearance picks a theme (Classic, Orchard, Islands, Pop), the
+Settings ▸ Appearance picks a theme (Classic, Frost, Islands, Pop), the
 theme's color, its background tint, the appearance, the app font, and the
 code font, each apart from the others. Views use the tokens, which read the
 current look.
 
-- **Orchard** is warm and crafted: paper and stone instead of gray, flat
-  stone pills, a raised card for the sidebar's selection, and orchard
-  colors for branches and code.
+- **Frost** is quiet and precise: near-white and near-black
+  with almost no hue, a neutral wash for every selection, ink for the
+  prominent action, flat pills, and one accent for focus and links.
 - **Islands** is calm and friendly: the panes float as cards on a sage
   backdrop (the floating layout), with soft pills and bold titles.
 - **Pop** is bright and confident: a sidebar tinted with the accent, a bar

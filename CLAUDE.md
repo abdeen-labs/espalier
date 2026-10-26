@@ -70,7 +70,7 @@ cd Packages/EspalierKit && swift test
 Captures draw Espalier's views offscreen to PNGs, in light and dark, to
 look at with the Read tool. `scripts/capture.sh` writes every capture, or
 those matching a filter, to `.captures/` (gitignored) and prints the
-folder; `--look` draws them in another look (`orchard-ink`,
+folder; `--look` draws them in another look (`frost-iris`,
 `pop-magenta-fixel`, `islands-lagoon-warm`, or `all`). The test suite
 skips them.
 

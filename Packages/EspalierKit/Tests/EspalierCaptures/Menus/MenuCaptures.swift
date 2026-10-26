@@ -2,7 +2,7 @@
 // symbols, subtitles, checks, a choice, sections with headers and
 // dividers, destructive and disabled items, a submenu's chevron, the
 // highlighted row, and a long menu scrolled to its choice; the highlighted
-// row in Orchard's Ink and Espresso and the sections in Pop's Tangerine; a
+// row in Frost's Iris and Ember and the sections in Pop's Tangerine; a
 // list row as a context menu's target; the buttons that open menus,
 // closed; and the suggestion list's card.
 
@@ -123,9 +123,9 @@ struct MenuCaptures {
         capture(card(branchMenu, highlighted: "View on GitHub"), named: "highlightedDisabled", area: area)
     }
 
-    @Test("the highlighted row in Orchard's Ink and Espresso", arguments: [DesignThemeColor.ink, .espresso])
-    func highlightedInOrchard(_ color: DesignThemeColor) {
-        capture(card(branchMenu, highlighted: "Copy Branch Name"), named: "highlighted", area: area, look: Look(theme: .orchard, color: color))
+    @Test("the highlighted row in Frost's Iris and Ember", arguments: [DesignThemeColor.iris, .ember])
+    func highlightedInFrost(_ color: DesignThemeColor) {
+        capture(card(branchMenu, highlighted: "Copy Branch Name"), named: "highlighted", area: area, look: Look(theme: .frost, color: color))
     }
 
     @Test("a long menu, scrolled to its choice")

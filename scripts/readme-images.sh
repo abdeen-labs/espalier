@@ -1,6 +1,6 @@
 #!/bin/bash
 # Makes the README's images in .github/readme: the app icon, and History
-# from the Showcase captures in Classic, Orchard, Islands, and Pop, light
+# from the Showcase captures in Classic, Frost, Islands, and Pop, light
 # and dark. Each window gets rounded corners, a hairline, and a shadow, so
 # it stands apart from GitHub's page.
 #
@@ -45,7 +45,7 @@ frame() {
 }
 
 # Classic is the README's large window; the other themes sit in a row below it.
-looks=(classic orchard-clay islands-lagoon pop-magenta)
+looks=(classic frost-iris islands-lagoon pop-magenta)
 for look in "${looks[@]}"; do
   "$root/scripts/capture.sh" --look "$look" --out "$work/$look" ShowcaseCaptures >/dev/null
   theme="${look%%-*}"

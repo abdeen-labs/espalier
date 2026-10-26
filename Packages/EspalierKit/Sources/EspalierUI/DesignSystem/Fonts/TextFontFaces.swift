@@ -79,6 +79,14 @@ nonisolated struct BundledFace: Sendable, Hashable {
         isMono: false
     )
 
+    static let geist = BundledFace(
+        family: "Geist",
+        names: [400: "Geist-Regular", 500: "Geist-Medium", 600: "Geist-SemiBold", 700: "Geist-Bold", 800: "Geist-ExtraBold", 900: "Geist-Black"],
+        isVariable: true,
+        fixedAxes: [:],
+        isMono: false
+    )
+
     static let geistMono = BundledFace(
         family: "Geist Mono",
         names: [400: "GeistMono-Regular", 500: "GeistMono-Medium", 600: "GeistMono-SemiBold", 700: "GeistMono-Bold", 800: "GeistMono-ExtraBold", 900: "GeistMono-Black"],
@@ -211,13 +219,14 @@ extension AppFont {
         case .fixel: .fixelText
         case .atkinson: .atkinsonNext
         case .martian: .martianGrotesk
+        case .geist: .geist
         }
     }
 
     /// Its sizes against SF Pro's, so every app font reads alike.
     nonisolated var scale: CGFloat {
         switch self {
-        case .sf, .fixel: 1
+        case .sf, .fixel, .geist: 1
         case .atkinson: 1.04
         case .martian: 0.88
         }
@@ -230,6 +239,7 @@ extension AppFont {
         case .fixel: "Fixel Text"
         case .atkinson: "Atkinson Hyperlegible Next"
         case .martian: "Martian Grotesk"
+        case .geist: "Geist"
         }
     }
 }

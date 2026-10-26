@@ -49,14 +49,14 @@
   using OpenAI, Anthropic, Azure OpenAI, or a local model on your Mac. API
   keys stay in your Keychain, and nothing is sent unless you configure a
   provider.
-- **Customizable interface.** Choose from four themes (Classic, Orchard,
+- **Customizable interface.** Choose from four themes (Classic, Frost,
   Islands, and Pop), tweak background tints, pick your UI and code fonts, and
   match your Mac's light or dark appearance.
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/orchard-dark.webp">
-    <img src=".github/readme/orchard-light.webp" alt="Espalier using the Orchard theme" width="32%">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/frost-dark.webp">
+    <img src=".github/readme/frost-light.webp" alt="Espalier using the Frost theme" width="32%">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/readme/islands-dark.webp">
@@ -68,7 +68,7 @@
   </picture>
 </p>
 
-<p align="center"><sub>The Orchard, Islands, and Pop themes</sub></p>
+<p align="center"><sub>The Frost, Islands, and Pop themes</sub></p>
 
 ## Building
 

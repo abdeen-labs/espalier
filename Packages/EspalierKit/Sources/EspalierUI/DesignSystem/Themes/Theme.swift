@@ -2,7 +2,7 @@
 // with that differs between themes. `Palette`, `DiffColors`,
 // `TrackPalette`, `Typography`, and `Metrics` read the current theme
 // (`Theme.current`), so views never pick a theme themselves. Each theme is
-// defined in its own file (ClassicTheme.swift, OrchardTheme.swift,
+// defined in its own file (ClassicTheme.swift, FrostTheme.swift,
 // IslandsTheme.swift, PopTheme.swift) from a `ThemeDefinition`, which a
 // background tint re-hues (BackgroundTints.swift); the colors and marks
 // derived from it (status colors, diff tints, branch colors) are
@@ -55,8 +55,8 @@ nonisolated public final class Theme: Sendable {
     public let scrim: NSColor
     /// What the panes float on in the floating cards layout (Islands).
     public let backdrop: NSColor
-    /// A raised card's soft shadow and ring: Orchard's sidebar selection,
-    /// Islands' floating panes.
+    /// A raised card's soft shadow and ring: a selected segment on its
+    /// track, Islands' floating panes.
     public let raisedShadow: NSColor
     public let raisedRing: NSColor
 
@@ -139,8 +139,6 @@ nonisolated public final class Theme: Sendable {
     public let sidebarSelection: NSColor
     public let sidebarSelectionText: NSColor?
     public let sidebarSelectionIcon: NSColor
-    /// How the sidebar's selection is drawn.
-    public let sidebarSelectionStyle: SidebarSelectionStyle
     /// A selected row in History's and the file lists.
     public let listSelection: NSColor
     /// Whether a selected row shows a bar in the accent at its leading
@@ -213,7 +211,7 @@ nonisolated public final class Theme: Sendable {
                 return resolved.withAlphaComponent(variant.isHighContrast ? min(value * 1.6, 1) : value)
             }
         }
-        accentSoft = accentAlpha(definition.accentSoftAlpha)
+        accentSoft = definition.selection ?? accentAlpha(definition.accentSoftAlpha)
         accentFaint = accentAlpha(definition.accentFaintAlpha)
         accentMid = accentAlpha(definition.accentMidAlpha)
         textSelection = accentAlpha(definition.textSelectionAlpha)
@@ -280,7 +278,6 @@ nonisolated public final class Theme: Sendable {
         sidebarSelection = definition.sidebarSelection
         sidebarSelectionText = definition.sidebarSelectionText
         sidebarSelectionIcon = definition.sidebarSelectionIcon ?? accent
-        sidebarSelectionStyle = definition.sidebarSelectionStyle
         listSelection = accentSoft
         selectionBar = definition.selectionBar
         sidebarSelectionIsBold = definition.sidebarSelectionIsBold
@@ -349,7 +346,7 @@ nonisolated extension Theme {
     private static func definition(_ theme: DesignTheme, color: DesignThemeColor?) -> ThemeDefinition {
         switch theme {
         case .classic: .classic
-        case .orchard: .orchard(color ?? .ink)
+        case .frost: .frost(color ?? .iris)
         case .islands: .islands(color ?? .lagoon)
         case .pop: .pop(color ?? .tangerine)
         }
@@ -367,15 +364,6 @@ nonisolated private enum ThemeCache {
 }
 
 // MARK: - Token types
-
-/// How the sidebar's selected item is drawn.
-nonisolated public enum SidebarSelectionStyle: Sendable, Equatable {
-    /// A fill in the row's shape.
-    case wash
-    /// A card, the fill with a soft shadow, raised off the sidebar
-    /// (Orchard).
-    case raisedCard
-}
 
 /// How the panes sit in the window.
 nonisolated public enum PaneLayout: Sendable, Equatable {
@@ -566,6 +554,9 @@ nonisolated struct ThemeDefinition: Sendable {
     var accentFaintAlpha: (light: CGFloat, dark: CGFloat) = (0.06, 0.10)
     var accentMidAlpha: (light: CGFloat, dark: CGFloat) = (0.16, 0.24)
     var textSelectionAlpha: (light: CGFloat, dark: CGFloat) = (0.16, 0.24)
+    /// Selected rows and chips, and a menu's highlighted row; nil is the
+    /// accent at `accentSoftAlpha`.
+    var selection: NSColor?
     var prominent: NSColor
     /// Nil is white.
     var prominentText: NSColor?
@@ -592,7 +583,6 @@ nonisolated struct ThemeDefinition: Sendable {
     var sidebarSelectionText: NSColor?
     /// Nil is the accent.
     var sidebarSelectionIcon: NSColor?
-    var sidebarSelectionStyle: SidebarSelectionStyle = .wash
     var selectionBar = false
     var sidebarSelectionIsBold = false
     var sidebarSelectionTintsCounts = false

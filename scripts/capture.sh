@@ -5,7 +5,7 @@
 #
 #   scripts/capture.sh [--look LOOK] [--out FOLDER] [FILTER]
 #
-# LOOK is spelled as the settings store it: orchard-ink, pop-magenta-fixel,
+# LOOK is spelled as the settings store it: frost-iris, pop-magenta-fixel,
 # islands-lagoon-warm, classic-geistmono. FOLDER defaults to .captures in
 # the checkout; it's emptied first.
 
@@ -26,7 +26,7 @@ while (( $# )); do
 done
 
 if [[ $look == all ]]; then
-    looks=(classic orchard-plum orchard-clay orchard-ink orchard-teal orchard-espresso
+    looks=(classic frost-iris frost-glacier frost-ember
         islands-berry islands-lagoon islands-indigo pop-tangerine pop-electric pop-magenta)
 else
     looks=($look)
