@@ -17,6 +17,10 @@ import Testing
 
 @Suite("Presentation", .captures) @MainActor
 struct PresentationCaptures {
+    /// A detail area's width, wider than toasts and the capsule get: they
+    /// draw as they do in the window, offered more than they take.
+    static let detailWidth: CGFloat = 720
+
     @Test("the compact confirmation sheets", arguments: ["removeRepository", "deleteBranch-remote", "signOutAccount"])
     func confirmation(name: String) throws {
         let confirmation = try #require(UIFixtures.confirmations.first { $0.name == name }?.confirmation)
@@ -83,13 +87,13 @@ struct PresentationCaptures {
     @Test("the toast, with Undo and its key, and without", arguments: ["cherryPick-undo", "revert-undo", "merged", "reset", "busy", "ignored-tracked", "removedWorktree", "refused"])
     func toast(name: String) throws {
         let content = try #require(UIFixtures.toasts.first { $0.name == name }?.content)
-        capture(ToastView(content).padding(Metrics.insetLarge), named: name, area: "Toasts")
+        capture(ToastView(content).frame(width: Self.detailWidth).padding(.vertical, Metrics.insetLarge), named: name, area: "Toasts")
     }
 
     @Test("the operation capsule: running with its progress, and waiting on the user", arguments: ["rebase-running", "rebase-conflicted"])
     func capsule(name: String) throws {
         let content = try #require(UIFixtures.capsules.first { $0.name == name }?.content)
-        capture(OperationCapsule(content).padding(Metrics.insetLarge), named: name, area: "Capsule")
+        capture(OperationCapsule(content).frame(width: Self.detailWidth).padding(.vertical, Metrics.insetLarge), named: name, area: "Capsule")
     }
 
     @Test("a background failure's details")

@@ -152,7 +152,7 @@ public struct OperationCapsule: View {
             }
         }
         .frame(minHeight: Metrics.Floating.height)
-        .frame(maxWidth: Metrics.Floating.maximumWidth)
+        .floatingWidth()
         .floatingSurface()
     }
 

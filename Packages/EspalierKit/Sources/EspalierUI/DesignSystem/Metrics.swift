@@ -375,6 +375,10 @@ public enum Metrics {
         public static let bottomInset: CGFloat = 24
         public static let spacing: CGFloat = 8
         public static let maximumWidth: CGFloat = 560
+        /// A toast's symbol, square.
+        public static let symbolSize: CGFloat = 20
+        /// A toast's round close button.
+        public static let closeSize: CGFloat = 22
     }
 
     /// Sheets.

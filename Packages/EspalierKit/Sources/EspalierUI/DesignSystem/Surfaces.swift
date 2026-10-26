@@ -115,6 +115,13 @@ extension View {
         surface(.quiet, elevation: .floating, in: shape)
     }
 
+    /// Hugs what the view shows, at most `Metrics.Floating.maximumWidth`
+    /// wide, however much width it's offered: the operation capsule and
+    /// toasts.
+    public func floatingWidth() -> some View {
+        HuggingWidthLayout(maximumWidth: Metrics.Floating.maximumWidth) { self }
+    }
+
     /// A quiet capsule control's surface (the location control, a
     /// co-author token): the theme's quiet control fill, with the quiet
     /// ring and small shadow where the theme raises quiet controls.
@@ -127,6 +134,25 @@ extension View {
     /// 14.
     public func cardSurface(cornerRadius: CGFloat = Metrics.Radius.card) -> some View {
         surface(.quiet, elevation: .card, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+}
+
+/// Offers its one view at most `maximumWidth` and takes the view's own
+/// size, where `frame(maxWidth:)` would grow to `maximumWidth` whenever it's
+/// offered more.
+private struct HuggingWidthLayout: Layout {
+    let maximumWidth: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        subviews.first?.sizeThatFits(capped(proposal)) ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
+
+    private func capped(_ proposal: ProposedViewSize) -> ProposedViewSize {
+        ProposedViewSize(width: min(proposal.width ?? maximumWidth, maximumWidth), height: proposal.height)
     }
 }
 

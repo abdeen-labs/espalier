@@ -47,7 +47,7 @@ public struct Toast: Identifiable {
 
     /// "Another operation is in progress".
     public static var busy: Toast {
-        Toast("Another operation is in progress", systemImage: "hourglass", tone: .notice)
+        Toast("Another operation is in progress", systemImage: "hourglass.circle.fill", tone: .notice)
     }
 
     /// Why an action the user asked for can't run.
@@ -57,7 +57,7 @@ public struct Toast: Identifiable {
 
     /// "<worktree> was removed. Showing <repository>."
     public static func removedWorktree(_ notice: RemovedWorktreeNotice) -> Toast {
-        Toast("\(notice.worktreeName) was removed. Showing \(notice.shownName).", systemImage: "folder.badge.minus", tone: .notice)
+        Toast("\(notice.worktreeName) was removed. Showing \(notice.shownName).", systemImage: "minus.circle.fill", tone: .notice)
     }
 }
 
@@ -115,7 +115,8 @@ enum ToastAnnouncer {
 }
 
 /// One toast's capsule: the symbol, the message, Undo when there is one,
-/// and the close button, spaced as the operation capsule.
+/// and the close button, spaced as the operation capsule. The symbol and
+/// the round close button sit concentric with the capsule's ends.
 public struct ToastView: View {
     private let content: ToastContent
     private let onUndo: () -> Void
@@ -130,9 +131,9 @@ public struct ToastView: View {
     public var body: some View {
         HStack(spacing: Metrics.insetSmall) {
             Image(systemName: content.systemImage)
-                .font(Typography.row)
-                .imageScale(.large)
+                .font(.system(size: 17))
                 .foregroundStyle(symbolStyle)
+                .frame(width: Metrics.Floating.symbolSize, height: Metrics.Floating.symbolSize)
                 .accessibilityHidden(true)
             Text(content.message)
                 .font(Typography.row)
@@ -154,14 +155,14 @@ public struct ToastView: View {
             Button(action: onClose) {
                 Label("Close", systemImage: "xmark")
             }
-            .buttonStyle(.icon)
+            .buttonStyle(ToastCloseButtonStyle())
             .tooltip("Close")
         }
-        .padding(.leading, Metrics.insetMedium)
-        .padding(.trailing, Metrics.insetSmall)
+        .padding(.leading, (Metrics.Floating.height - Metrics.Floating.symbolSize) / 2)
+        .padding(.trailing, (Metrics.Floating.height - Metrics.Floating.closeSize) / 2)
         .padding(.vertical, Metrics.insetSmall)
         .frame(minHeight: Metrics.Floating.height)
-        .frame(maxWidth: Metrics.Floating.maximumWidth)
+        .floatingWidth()
         .floatingSurface()
         // One element: the message, with Undo and Close as its actions.
         .accessibilityElement(children: .combine)
@@ -173,6 +174,47 @@ public struct ToastView: View {
         case .success: AnyShapeStyle(Color(espalier: Palette.success))
         case .notice: AnyShapeStyle(.text2)
         }
+    }
+}
+
+/// A toast's close button: a small bold xmark on a soft circle, filled and
+/// shaded as the Undo capsule beside it.
+private struct ToastCloseButtonStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        FocusRingButton(configuration: configuration, style: ToastCloseDrawing())
+    }
+}
+
+private struct ToastCloseDrawing: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        ToastCloseBody(label: configuration.label, isPressed: configuration.isPressed)
+    }
+}
+
+private struct ToastCloseBody<Label: View>: View {
+    let label: Label
+    let isPressed: Bool
+    /// Whether the button has keyboard focus.
+    @Environment(\.isFocused) private var isFocused
+    @State private var isHovered = false
+
+    var body: some View {
+        let appearance = CapsuleButtonAppearance(kind: .secondary, controlSize: .small, isPressed: isPressed, isHovered: isHovered)
+        label
+            .labelStyle(.iconOnly)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.text2)
+            .frame(width: Metrics.Floating.closeSize, height: Metrics.Floating.closeSize)
+            .background(Circle().fill(appearance.fill))
+            .overlay(
+                Circle().fill(appearance.stateOverlay)
+                    .pressMotion(isPressed)
+                    .hoverMotion(isHovered)
+                    .allowsHitTesting(false)
+            )
+            .contentShape(Circle())
+            .focusRing(isFocused, in: Circle())
+            .onHover { isHovered = $0 }
     }
 }
 
