@@ -2,7 +2,7 @@
 
 The visual design I chose: a flat, precise skeleton with
 personality. New UI follows it. The values are `DesignSystem`'s tokens.
-This describes Classic, the default theme, in SF Pro and SF Mono; the
+This describes Classic, the default theme, in Geist and Geist Mono; the
 other themes change what their tokens say (Themes, below).
 
 ## Principles
@@ -38,8 +38,8 @@ other themes change what their tokens say (Themes, below).
   its line of development.
 - **Buttons come in three styles:** quiet, prominent (one per area), and
   secondary (Cancel in sheets, Undo).
-- **SF Symbols** for every icon; the app font for text (SF Pro by
-  default); the code font (SF Mono by default) for what's monospaced.
+- **SF Symbols** for every icon; the app font for text (Geist by
+  default); the code font (Geist Mono by default) for what's monospaced.
 
 ## Themes, colors, and fonts
 

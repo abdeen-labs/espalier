@@ -188,8 +188,8 @@ struct PreferencesTests {
         #expect(preferences.designTheme == .classic)
         #expect(preferences.designPalette == .system)
         #expect(preferences.designBackground == .own)
-        #expect(preferences.appFont == .sf)
-        #expect(preferences.codeFont == .sfMono)
+        #expect(preferences.appFont == .geist)
+        #expect(preferences.codeFont == .geistMono)
 
         preferences.designPalette = .tangerine
         preferences.designBackground = .warm
@@ -200,7 +200,7 @@ struct PreferencesTests {
         #expect(preferences.designThemeBackground == .warm)
         preferences.designBackground = .classic
         preferences.appFont = .atkinson
-        preferences.codeFont = .geistMono
+        preferences.codeFont = .atkinsonMono
         #expect(storedKeys(temporary) == ["design-theme", "design-palette", "design-background", "app-font", "code-font"])
 
         let reloaded = Preferences(store: PreferenceStore(temporary.defaults))
@@ -214,7 +214,7 @@ struct PreferencesTests {
         reloaded.designTheme = .pop
         #expect(reloaded.designThemeBackground == .classic)
         #expect(reloaded.appFont == .atkinson)
-        #expect(reloaded.codeFont == .geistMono)
+        #expect(reloaded.codeFont == .atkinsonMono)
 
         temporary.defaults.set("neon", forKey: "design-theme")
         temporary.defaults.set("chartreuse", forKey: "design-palette")
@@ -226,8 +226,8 @@ struct PreferencesTests {
         #expect(unknown.designTheme == .classic)
         #expect(unknown.designPalette == .system)
         #expect(unknown.designBackground == .own)
-        #expect(unknown.appFont == .sf)
-        #expect(unknown.codeFont == .sfMono)
+        #expect(unknown.appFont == .geist)
+        #expect(unknown.codeFont == .geistMono)
     }
 
     @Test("reads the palette and background tint stored for the stored theme while none of their own is stored", arguments: [

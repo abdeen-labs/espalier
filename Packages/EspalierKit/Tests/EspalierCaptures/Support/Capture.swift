@@ -272,10 +272,10 @@ func capture(
 
 extension Look {
     /// The look's name in captures: "classic" for Classic in System, its
-    /// own backgrounds, in SF Pro and SF Mono; else the theme, then the
+    /// own backgrounds, in Geist and Geist Mono; else the theme, then the
     /// palette, the background tint, the app font, and the code font when
     /// they aren't the defaults ("frost-iris", "classic-warm",
-    /// "islands-lagoon-fixel", "pop-tangerine-geistmono").
+    /// "islands-lagoon-fixel", "pop-tangerine-sfmono").
     var captureName: String {
         var parts = [theme.rawValue]
         if palette != .system {
@@ -284,10 +284,10 @@ extension Look {
         if background != .own {
             parts.append(background.rawValue)
         }
-        if appFont != .sf {
+        if appFont != .geist {
             parts.append(appFont.rawValue)
         }
-        if codeFont != .sfMono {
+        if codeFont != .geistMono {
             parts.append(codeFont.rawValue)
         }
         return parts.joined(separator: "-")
@@ -303,8 +303,8 @@ extension Look {
         parts.removeFirst()
         var palette = DesignPalette.system
         var background = BackgroundTint.own
-        var appFont = AppFont.sf
-        var codeFont = CodeFont.sfMono
+        var appFont = AppFont.geist
+        var codeFont = CodeFont.geistMono
         for part in parts {
             if let named = DesignPalette(rawValue: part) {
                 palette = named

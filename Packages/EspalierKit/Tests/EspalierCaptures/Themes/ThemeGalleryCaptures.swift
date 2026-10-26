@@ -34,12 +34,12 @@ struct ThemeGalleryCaptures {
         capture(ThemeGallery(), named: "gallery", area: area, look: Look(theme: theme, background: .classic))
     }
 
-    @Test("each app font on Classic", arguments: [AppFont.fixel, .atkinson, .martian, .geist])
+    @Test("each app font on Classic", arguments: [AppFont.sf, .fixel, .atkinson, .martian])
     func appFonts(_ font: AppFont) {
         capture(ThemeGallery(), named: "gallery", area: area, look: Look(appFont: font))
     }
 
-    @Test("each code font on Classic", arguments: [CodeFont.geistMono, .atkinsonMono])
+    @Test("each code font on Classic", arguments: [CodeFont.sfMono, .atkinsonMono])
     func codeFonts(_ font: CodeFont) {
         capture(ThemeGallery(), named: "gallery", area: area, look: Look(codeFont: font))
     }

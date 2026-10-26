@@ -521,7 +521,7 @@ public final class Preferences {
         designTheme.backgroundDrawn(for: designBackground)
     }
 
-    /// The app font (`app-font`; SF Pro by default).
+    /// The app font (`app-font`; Geist by default).
     public var appFont: AppFont {
         didSet {
             guard appFont != oldValue else { return }
@@ -529,7 +529,7 @@ public final class Preferences {
         }
     }
 
-    /// The code font (`code-font`; SF Mono by default).
+    /// The code font (`code-font`; Geist Mono by default).
     public var codeFont: CodeFont {
         didSet {
             guard codeFont != oldValue else { return }
@@ -576,14 +576,14 @@ public final class Preferences {
         return store.getEnum(PreferenceKey.designThemeBackground(theme), BackgroundTint.self) ?? .own
     }
 
-    /// The app font stored in `store`; an unknown one is SF Pro.
+    /// The app font stored in `store`; an unknown one is Geist.
     public static func storedAppFont(in store: PreferenceStore) -> AppFont {
-        store.getEnum(PreferenceKey.appFont, AppFont.self) ?? .sf
+        store.getEnum(PreferenceKey.appFont, AppFont.self) ?? .geist
     }
 
-    /// The code font stored in `store`; an unknown one is SF Mono.
+    /// The code font stored in `store`; an unknown one is Geist Mono.
     public static func storedCodeFont(in store: PreferenceStore) -> CodeFont {
-        store.getEnum(PreferenceKey.codeFont, CodeFont.self) ?? .sfMono
+        store.getEnum(PreferenceKey.codeFont, CodeFont.self) ?? .geistMono
     }
 
     /// Underline links (`underline-links`).

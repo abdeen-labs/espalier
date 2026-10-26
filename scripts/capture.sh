@@ -7,7 +7,7 @@
 #   scripts/capture.sh [--look LOOK] [--out FOLDER] [FILTER]
 #
 # LOOK is spelled as the settings store it: frost-iris, pop-magenta-fixel,
-# islands-lagoon-warm, classic-geistmono. FOLDER defaults to .captures in
+# islands-lagoon-warm, classic-sfmono. FOLDER defaults to .captures in
 # the checkout; it's emptied first.
 
 set -euo pipefail

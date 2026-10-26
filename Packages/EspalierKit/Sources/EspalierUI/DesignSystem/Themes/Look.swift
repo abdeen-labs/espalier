@@ -25,7 +25,7 @@ nonisolated public struct Look: Sendable, Hashable {
     public var codeFont: CodeFont
 
     /// A look; a background the theme doesn't offer is its own.
-    public init(theme: DesignTheme = .classic, palette: DesignPalette = .system, background: BackgroundTint = .own, appFont: AppFont = .sf, codeFont: CodeFont = .sfMono) {
+    public init(theme: DesignTheme = .classic, palette: DesignPalette = .system, background: BackgroundTint = .own, appFont: AppFont = .geist, codeFont: CodeFont = .geistMono) {
         self.theme = theme
         self.palette = palette
         self.background = theme.backgroundDrawn(for: background)
@@ -33,8 +33,8 @@ nonisolated public struct Look: Sendable, Hashable {
         self.codeFont = codeFont
     }
 
-    /// Classic in the Mac's accent color, its own backgrounds, in SF Pro
-    /// and SF Mono: the look before themes.
+    /// Classic in the Mac's accent color, its own backgrounds, in Geist and
+    /// Geist Mono: the default look.
     public static let classic = Look()
 
     /// The look the current task draws in: its own (`with(_:operation:)`),
