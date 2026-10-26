@@ -41,15 +41,6 @@ public enum PreferenceKey {
     public static let designPalette = "design-palette"
     /// The background tint (`BackgroundTint`), on every design theme.
     public static let designBackground = "design-background"
-    /// A color and a background tint stored for one design theme
-    /// (`design-theme-color-pop`, `design-theme-background-pop`): read for
-    /// the palette and the background while those aren't stored.
-    public static func designThemeColor(_ theme: DesignTheme) -> String {
-        "design-theme-color-\(theme.rawValue)"
-    }
-    public static func designThemeBackground(_ theme: DesignTheme) -> String {
-        "design-theme-background-\(theme.rawValue)"
-    }
     /// The app font (`AppFont`), Espalier's own.
     public static let appFont = "app-font"
     /// The code font (`CodeFont`), Espalier's own.
@@ -159,19 +150,6 @@ public enum DesignPalette: String, Sendable, Hashable, CaseIterable {
         case .iris, .slate: .frost
         case .lagoon, .plum: .islands
         case .tangerine, .magenta, .volt: .pop
-        }
-    }
-
-    /// The palette a stored name names: a palette's raw value, or the name
-    /// of a color the themes had that's no longer one, as the palette
-    /// nearest it.
-    public init?(storedName name: String) {
-        switch name {
-        case "glacier": self = .system
-        case "indigo", "electric": self = .iris
-        case "berry": self = .magenta
-        case "ember": self = .tangerine
-        default: self.init(rawValue: name)
         }
     }
 }
@@ -480,20 +458,11 @@ public final class Preferences {
         store.getEnum(PreferenceKey.theme, ApplicationTheme.self) ?? .system
     }
 
-    /// The design theme (`design-theme`; Classic by default). Choosing one
-    /// also writes the palette and the background tint while they aren't
-    /// stored, so they stay as they are when they were read from the
-    /// theme's own keys (`storedDesignPalette(in:)`).
+    /// The design theme (`design-theme`; Classic by default).
     public var designTheme: DesignTheme {
         didSet {
             guard designTheme != oldValue else { return }
             store.setEnum(PreferenceKey.designTheme, designTheme)
-            if !store.contains(PreferenceKey.designPalette) {
-                store.setEnum(PreferenceKey.designPalette, designPalette)
-            }
-            if !store.contains(PreferenceKey.designBackground) {
-                store.setEnum(PreferenceKey.designBackground, designBackground)
-            }
         }
     }
 
@@ -544,36 +513,15 @@ public final class Preferences {
         store.getEnum(PreferenceKey.designTheme, DesignTheme.self) ?? .classic
     }
 
-    /// The palette stored in `store` (`DesignPalette(storedName:)`); an
-    /// unknown one is System. While none is stored, the color stored for
-    /// the stored design theme (`design-theme-color-<theme>`), else the
-    /// color that theme draws in without one: Iris for Frost, Lagoon for
-    /// Islands, Tangerine for Pop, and System for Classic.
+    /// The palette stored in `store`; an unknown one is System.
     public static func storedDesignPalette(in store: PreferenceStore) -> DesignPalette {
-        guard !store.contains(PreferenceKey.designPalette) else {
-            return store.getString(PreferenceKey.designPalette).flatMap(DesignPalette.init(storedName:)) ?? .system
-        }
-        let theme = storedDesignTheme(in: store)
-        if let color = store.getString(PreferenceKey.designThemeColor(theme)).flatMap(DesignPalette.init(storedName:)) {
-            return color
-        }
-        return switch theme {
-        case .classic: .system
-        case .frost: .iris
-        case .islands: .lagoon
-        case .pop: .tangerine
-        }
+        store.getEnum(PreferenceKey.designPalette, DesignPalette.self) ?? .system
     }
 
     /// The background tint stored in `store`; an unknown one is the
-    /// theme's own. While none is stored, the one stored for the stored
-    /// design theme (`design-theme-background-<theme>`).
+    /// theme's own.
     public static func storedDesignBackground(in store: PreferenceStore) -> BackgroundTint {
-        guard !store.contains(PreferenceKey.designBackground) else {
-            return store.getEnum(PreferenceKey.designBackground, BackgroundTint.self) ?? .own
-        }
-        let theme = storedDesignTheme(in: store)
-        return store.getEnum(PreferenceKey.designThemeBackground(theme), BackgroundTint.self) ?? .own
+        store.getEnum(PreferenceKey.designBackground, BackgroundTint.self) ?? .own
     }
 
     /// The app font stored in `store`; an unknown one is Geist.

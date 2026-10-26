@@ -16,6 +16,23 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.5] - 2026-10-25
+
+### Added
+
+- A command palette. View ▸ Command Palette… (⌘K) lists the menu commands you can use right now, your other repositories, and the current repository's branches. Type a few letters of what you want, in any order, and press Return to run the command, switch to the repository, or check out the branch.
+- Frost, a new theme: quiet, nearly colorless glass around a single card that holds your work, with lists that fade out at their edges.
+- Geist, a new app font, in Settings ▸ Appearance.
+- The trackpad taps lightly when a commit you're dragging in History reaches a new place to drop, or a branch in the sidebar, and when a slider reaches either end.
+
+### Changed
+
+- Espalier has a new icon: an E grown as an espalier, its trunk trained into three tiers with a violet fruit, in lilac in light mode and amethyst in dark.
+- Espalier now uses Geist for its interface and Geist Mono for code, unless you've picked other fonts in Settings ▸ Appearance.
+- Palettes aren't tied to a theme anymore: every theme takes every palette, and your palette and background stay the same when you change themes. Settings ▸ Appearance has a Theme section and a Colors section. The palettes are System, Iris, Slate, Lagoon, Plum, Tangerine, Magenta, and Volt.
+- Frost replaces Orchard.
+- The sync button's title, such as Push origin, and a pop-up button's choice change letter by letter instead of crossfading, and a generated commit message fades into place.
+
 ## [1.4.2] - 2026-10-25
 
 ### Changed
@@ -148,7 +165,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5...HEAD
+[1.5]: https://github.com/abdeen-labs/espalier/compare/v1.4.2...v1.5
 [1.4.2]: https://github.com/abdeen-labs/espalier/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/abdeen-labs/espalier/compare/v1.4...v1.4.1
 [1.4]: https://github.com/abdeen-labs/espalier/compare/v1.3...v1.4

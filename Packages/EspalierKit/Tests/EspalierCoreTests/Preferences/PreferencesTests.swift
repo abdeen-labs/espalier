@@ -230,33 +230,6 @@ struct PreferencesTests {
         #expect(unknown.codeFont == .geistMono)
     }
 
-    @Test("reads the palette and background tint stored for the stored theme while none of their own is stored", arguments: [
-        NamedCase("the theme's color and background", (stored: ["design-theme": "pop", "design-theme-color-pop": "magenta", "design-theme-background-pop": "lavender", "design-theme-color-frost": "ember"], palette: DesignPalette.magenta, background: BackgroundTint.lavender)),
-        NamedCase("another theme's color", (stored: ["design-theme": "islands", "design-theme-color-frost": "ember"], palette: .lagoon, background: .own)),
-        NamedCase("an unknown color", (stored: ["design-theme": "frost", "design-theme-color-frost": "chartreuse"], palette: .iris, background: .own)),
-        NamedCase("a color that's no longer a palette, as the nearest", (stored: ["design-theme": "islands", "design-theme-color-islands": "berry"], palette: .magenta, background: .own)),
-        NamedCase("a stored palette that's no longer one, as the nearest", (stored: ["design-theme": "frost", "design-palette": "electric"], palette: .iris, background: .own)),
-        NamedCase("Pop with nothing of its own", (stored: ["design-theme": "pop"], palette: .tangerine, background: .own)),
-        NamedCase("nothing stored", (stored: [:], palette: .system, background: .own)),
-    ])
-    func designPaletteFromTheme(_ testCase: NamedCase<(stored: [String: String], palette: DesignPalette, background: BackgroundTint)>) throws {
-        let temporary = try TemporaryDefaults()
-        defer { temporary.remove() }
-        for (key, value) in testCase.value.stored {
-            temporary.defaults.set(value, forKey: key)
-        }
-        let preferences = Preferences(store: PreferenceStore(temporary.defaults))
-        #expect(preferences.designPalette == testCase.value.palette)
-        #expect(preferences.designBackground == testCase.value.background)
-
-        // They stay as they are on another theme, and after it.
-        preferences.designTheme = preferences.designTheme == .frost ? .classic : .frost
-        #expect(preferences.designPalette == testCase.value.palette)
-        let reloaded = Preferences(store: PreferenceStore(temporary.defaults))
-        #expect(reloaded.designPalette == testCase.value.palette)
-        #expect(reloaded.designBackground == testCase.value.background)
-    }
-
     @Test("changes the hooks and credential helper settings that GitKit and the trampoline read")
     func liveSettings() throws {
         let temporary = try TemporaryDefaults()
