@@ -68,6 +68,9 @@ nonisolated struct BundledFace: Sendable, Hashable {
     let isVariable: Bool
     /// Axes set to a fixed value (Martian Grotesk's width, 100).
     let fixedAxes: [UInt32: CGFloat]
+    /// The weight Regular (400) is drawn at: Geist's Medium (500), as its
+    /// own Regular reads thin at text sizes; 400 for the others.
+    let regularWeight: Int
     /// Whether it's monospaced: ligatures and contextual alternates off.
     let isMono: Bool
 
@@ -76,6 +79,7 @@ nonisolated struct BundledFace: Sendable, Hashable {
         names: [400: "FixelText-Regular", 500: "FixelText-Medium", 600: "FixelText-SemiBold", 700: "FixelText-Bold"],
         isVariable: false,
         fixedAxes: [:],
+        regularWeight: 400,
         isMono: false
     )
 
@@ -84,6 +88,7 @@ nonisolated struct BundledFace: Sendable, Hashable {
         names: [400: "Geist-Regular", 500: "Geist-Medium", 600: "Geist-SemiBold", 700: "Geist-Bold", 800: "Geist-ExtraBold", 900: "Geist-Black"],
         isVariable: true,
         fixedAxes: [:],
+        regularWeight: 500,
         isMono: false
     )
 
@@ -92,6 +97,7 @@ nonisolated struct BundledFace: Sendable, Hashable {
         names: [400: "GeistMono-Regular", 500: "GeistMono-Medium", 600: "GeistMono-SemiBold", 700: "GeistMono-Bold", 800: "GeistMono-ExtraBold", 900: "GeistMono-Black"],
         isVariable: true,
         fixedAxes: [:],
+        regularWeight: 400,
         isMono: true
     )
 
@@ -106,6 +112,7 @@ nonisolated struct BundledFace: Sendable, Hashable {
         ],
         isVariable: true,
         fixedAxes: [:],
+        regularWeight: 400,
         isMono: false
     )
 
@@ -120,6 +127,7 @@ nonisolated struct BundledFace: Sendable, Hashable {
         ],
         isVariable: true,
         fixedAxes: [:],
+        regularWeight: 400,
         isMono: true
     )
 
@@ -128,6 +136,7 @@ nonisolated struct BundledFace: Sendable, Hashable {
         names: [400: "MartianGrotesk-NormalRegular", 500: "MartianGrotesk-Medium", 600: "MartianGrotesk-SemiBold", 700: "MartianGrotesk-Bold", 800: "MartianGrotesk-ExtraBold", 900: "MartianGrotesk-Black"],
         isVariable: true,
         fixedAxes: [Self.widthAxis: 100],
+        regularWeight: 400,
         isMono: false
     )
 
@@ -135,9 +144,16 @@ nonisolated struct BundledFace: Sendable, Hashable {
     static let weightAxis: UInt32 = 0x7767_6874
     static let widthAxis: UInt32 = 0x7764_7468
 
-    /// The PostScript name for `weight` (100 to 900): the nearest the face
-    /// has, the heavier of two as near.
+    /// The weight `weight` (100 to 900) is drawn at: Regular at the face's
+    /// regular weight, every other weight as is.
+    func drawnWeight(_ weight: Int) -> Int {
+        weight == 400 ? regularWeight : weight
+    }
+
+    /// The PostScript name for `weight` (100 to 900) as drawn: the nearest
+    /// the face has, the heavier of two as near.
     func name(for weight: Int) -> String {
+        let weight = drawnWeight(weight)
         let nearest = names.keys.min { first, second in
             let a = abs(first - weight)
             let b = abs(second - weight)
@@ -157,7 +173,7 @@ nonisolated struct BundledFace: Sendable, Hashable {
         var attributes: [NSFontDescriptor.AttributeName: Any] = [.name: name(for: weight)]
         var axes = fixedAxes.reduce(into: [NSNumber: NSNumber]()) { $0[NSNumber(value: $1.key)] = NSNumber(value: Double($1.value)) }
         if isVariable {
-            axes[NSNumber(value: Self.weightAxis)] = NSNumber(value: weight)
+            axes[NSNumber(value: Self.weightAxis)] = NSNumber(value: drawnWeight(weight))
         }
         if !axes.isEmpty {
             attributes[.variation] = axes
