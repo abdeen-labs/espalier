@@ -1,7 +1,8 @@
 // Espalier's slider: a thin capsule track, faint neutral gray, filled in the
 // same gray up to a round knob on the quiet fill with the quiet capsules'
 // ring and small shadow (the image diff's opacity and swipe). A press on the
-// track moves the knob there and drags it. The knob takes the hover wash,
+// track moves the knob there and drags it, and the trackpad ticks as the
+// dragged knob reaches an end (`Haptics`). The knob takes the hover wash,
 // fading in and out, and darkens while pressed, as capsules do. It's one
 // stop in the key view loop with keyboard navigation on, with the focus ring
 // around the knob: the arrows step it by 1% of its range, Page Up and Page
@@ -48,6 +49,10 @@ public struct CapsuleSlider: View {
                             }
                             isPressed = true
                             let moved = Self.fraction(atX: drag.location.x, width: proxy.size.width)
+                            // The trackpad ticks as the knob reaches an end.
+                            if moved == 0 || moved == 1, moved != Self.fraction(of: value, in: range) {
+                                Haptics.stop()
+                            }
                             value = Self.value(atFraction: moved, in: range)
                         }
                         .onEnded { _ in

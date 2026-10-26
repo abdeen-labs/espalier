@@ -54,11 +54,11 @@ public struct CapsulePopUp<Value: Hashable>: View {
                             .hidden()
                             .accessibilityHidden(true)
                     }
-                    // A new choice's title crossfades in as the menu
-                    // fades out.
+                    // A new choice's title rolls in, letter by letter
+                    // where it differs, as the menu fades out.
                     Text(title)
                         .truncationMode(.tail)
-                        .contentTransition(motion.animates ? .opacity : .identity)
+                        .contentTransition(motion.animates ? .numericText() : .identity)
                         .motion(Motion.leave, value: title)
                 }
                 .lineLimit(1)

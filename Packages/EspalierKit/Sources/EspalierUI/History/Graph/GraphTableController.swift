@@ -89,6 +89,8 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// after the last).
     private(set) var reorderInsertionRow: Int?
     private var dropFeedbackRow: Int?
+    /// Where a drag over the graph would drop.
+    private var dropTarget: GraphDropTarget?
     /// The rows a stub's other end is loading for (a spinner at the stub).
     private var loadingStubRow: Int?
 
@@ -1010,8 +1012,13 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         }
     }
 
-    /// Shows drop feedback for `target`, or none.
+    /// Shows drop feedback for `target`, or none, with the trackpad's tap
+    /// as a drag takes a new target.
     func setDropFeedback(_ feedback: GraphDropFeedback?, target: GraphDropTarget?) {
+        if let target, target != dropTarget {
+            Haptics.dropTarget()
+        }
+        dropTarget = target
         let previous = dropFeedbackRow
         switch target {
         case .onto(let row)?: dropFeedbackRow = row

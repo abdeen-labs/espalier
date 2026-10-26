@@ -616,7 +616,8 @@ public struct ComposerView: View {
                 onSpellCheckingChange: actions.setSpellChecking,
                 onEscape: cancelGeneration,
                 focusBridge: focusBridge,
-                textColor: Palette.text2
+                textColor: Palette.text2,
+                isGenerating: content.isGenerating
             )
             .padding(.horizontal, Metrics.Composer.cardPadding)
             .padding(.vertical, Metrics.grid)

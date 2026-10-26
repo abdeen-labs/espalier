@@ -4,7 +4,10 @@
 // 0.08 s and out over 0.15 s; a press shows at once and eases back over
 // 0.15 s; a spinner's arc turns once every 0.9 s, and an indeterminate bar
 // sweeps every 1.4 s; the floating panes lean 6 points against the
-// sidebar's travel over 0.08 s and spring back, bouncing a little.
+// sidebar's travel over 0.08 s and spring back, bouncing a little. A
+// generated commit message fades in over 0.5 s on an exponential ease-out,
+// cubic (0.16, 1, 0.3, 1), at full speed at once and settling long, its
+// summary rising 4 points into place.
 // One answer to "animate?": never with Reduce Motion on (hover and
 // press included), never in a window that isn't on screen (tests draw
 // offscreen), and never where motion is turned off (menus and popovers
@@ -66,6 +69,11 @@ public enum Motion {
     /// Half of a pulse marking the commit a jump landed on: the outline
     /// fades in over this and back, twice, eased in and out.
     nonisolated public static let pulse: TimeInterval = 0.3
+    /// Text arriving that the user didn't write (a generated commit
+    /// message), fading in on the reveal's curve.
+    nonisolated public static let reveal: TimeInterval = 0.5
+    /// How far a revealed summary rises into place.
+    nonisolated public static let revealRise: CGFloat = 4
 
     // MARK: The curve
 
@@ -88,6 +96,22 @@ public enum Motion {
     /// A scroll's ease-in-out, for Core Animation.
     nonisolated public static var scrollTimingFunction: CAMediaTimingFunction {
         CAMediaTimingFunction(name: .easeInEaseOut)
+    }
+
+    /// The reveal's control points: an exponential ease-out.
+    nonisolated public static let revealControlPoints: (x1: Double, y1: Double, x2: Double, y2: Double) = (0.16, 1, 0.3, 1)
+
+    /// The reveal, as a SwiftUI animation.
+    nonisolated public static var revealAnimation: Animation {
+        .timingCurve(revealControlPoints.x1, revealControlPoints.y1, revealControlPoints.x2, revealControlPoints.y2, duration: reveal)
+    }
+
+    /// The reveal's curve, for Core Animation.
+    nonisolated public static var revealTimingFunction: CAMediaTimingFunction {
+        CAMediaTimingFunction(
+            controlPoints: Float(revealControlPoints.x1), Float(revealControlPoints.y1),
+            Float(revealControlPoints.x2), Float(revealControlPoints.y2)
+        )
     }
 
     // MARK: Whether to animate
@@ -142,7 +166,7 @@ public enum Motion {
     /// A crossfade of `layer`'s next change of contents (its sublayers'
     /// included), lasting `duration` on the curve.
     @MainActor
-    public static func crossfade(_ layer: CALayer?, duration: TimeInterval) {
+    public static func crossfade(_ layer: CALayer?, duration: TimeInterval, timingFunction: CAMediaTimingFunction = Motion.timingFunction) {
         guard let layer else {
             return
         }
@@ -164,6 +188,12 @@ extension Motion {
             insertion: .move(edge: .bottom).combined(with: .opacity).animation(animation(arrive)),
             removal: .move(edge: .bottom).combined(with: .opacity).animation(animation(leave))
         )
+    }
+
+    /// Generated text arriving: fading in as it rises 4 points into place
+    /// over 0.5 s, on the reveal's curve.
+    public static var revealTransition: AnyTransition {
+        .opacity.combined(with: .offset(y: revealRise)).animation(revealAnimation)
     }
 
     /// A bar or banner arriving (fading in over 0.22 s while what's below

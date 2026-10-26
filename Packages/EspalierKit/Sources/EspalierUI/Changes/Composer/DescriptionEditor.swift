@@ -46,6 +46,9 @@ struct DescriptionEditor: NSViewRepresentable {
     /// The text's color (the commit message card's description is
     /// secondary text).
     var textColor: NSColor = .labelColor
+    /// Whether a message is being generated: the description it ends with
+    /// fades in on the reveal's curve.
+    var isGenerating = false
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -99,14 +102,18 @@ struct DescriptionEditor: NSViewRepresentable {
         }
         focusBridge?.descriptionView = textView
         textView.focusBridge = focusBridge
-        apply(to: textView, animated: context.environment.motion.animates)
+        let reveals = context.coordinator.wasGenerating && !isGenerating
+        context.coordinator.wasGenerating = isGenerating
+        apply(to: textView, animated: context.environment.motion.animates, reveals: reveals)
     }
 
-    /// - Parameter animated: Whether a description set from outside the
-    ///   editor (a commit clearing it, Undo or amending bringing a message
-    ///   back, a generated message) crossfades in over 0.2 s; typing sets
-    ///   none.
-    private func apply(to textView: ComposerTextView, animated: Bool = false) {
+    /// - Parameters:
+    ///   - animated: Whether a description set from outside the editor (a
+    ///     commit clearing it, Undo or amending bringing a message back, a
+    ///     generated message) crossfades in over 0.2 s; typing sets none.
+    ///   - reveals: Whether it's the description a generation ended with,
+    ///     which fades in over 0.5 s on the reveal's curve instead.
+    private func apply(to textView: ComposerTextView, animated: Bool = false, reveals: Bool = false) {
         // The look's font and color.
         if textView.font != Self.font {
             textView.font = Self.font
@@ -118,7 +125,11 @@ struct DescriptionEditor: NSViewRepresentable {
             let scrollView = textView.enclosingScrollView
             let crossfades = animated && Motion.animates(scrollView)
             if crossfades {
-                Motion.crossfade(scrollView?.layer, duration: Motion.kindChange)
+                if reveals {
+                    Motion.crossfade(scrollView?.layer, duration: Motion.reveal, timingFunction: Motion.revealTimingFunction)
+                } else {
+                    Motion.crossfade(scrollView?.layer, duration: Motion.kindChange)
+                }
             }
             textView.string = text
             textView.needsDisplay = true
@@ -168,6 +179,8 @@ struct DescriptionEditor: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: DescriptionEditor
         weak var textView: ComposerTextView?
+        /// Whether a message was being generated at the last update.
+        var wasGenerating = false
         /// Looks up and offers the completions.
         let session: ComposerCompletionSession
 

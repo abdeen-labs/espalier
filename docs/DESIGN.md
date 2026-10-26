@@ -74,11 +74,16 @@ token, `Motion`.
 - **Controls** move as AppKit's controls do: hover fades, presses ease,
   and what floats fades in, settling toward its control, and fades out
   quicker.
-- **What the user changes moves:** counts roll, bars and banners grow in
-  while what's below moves, view switches crossfade, and rows animate in
-  and out as a section opens and closes. Hover in lists fades, row by row.
+- **What the user changes moves:** counts and a button's or pop-up's new
+  title roll, bars and banners grow in while what's below moves, view
+  switches crossfade, and rows animate in and out as a section opens and
+  closes. Hover in lists fades, row by row.
 - **Work that runs moves:** the arc turns, the bar's segment sweeps, and
-  the shimmer passes over a message being generated.
+  the shimmer passes over a message being generated. The generated message
+  fades in over half a second, settling long, its summary rising into
+  place.
+- **The trackpad taps** as a drag takes a new place to drop, and ticks as
+  a dragged slider's knob reaches an end.
 - **Instant:** selection and arrow-key browsing, and what follows them; a
   slider's knob, dragged or stepped; navigating between repositories and
   places, and the reload after a branch switch; typing-driven updates;

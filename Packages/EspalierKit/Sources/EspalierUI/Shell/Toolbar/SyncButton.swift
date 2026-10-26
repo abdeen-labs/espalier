@@ -407,7 +407,7 @@ nonisolated public enum SyncMenuItem: Sendable, Equatable {
 /// push, pull, or fetch runs, the button keeps its capsule, words, and
 /// width, the arc turns or fills in its symbol's place, and it takes no
 /// clicks. Nothing while the repository's state loads. A new action in the
-/// same capsule (Push to Pull) crossfades its title and replaces its
+/// same capsule (Push to Pull) rolls its title and replaces its
 /// symbol over 0.2 s, and the background failure's badge fades in and out.
 public struct SyncButtonView: View {
     private let state: SyncButtonState
@@ -454,7 +454,7 @@ public struct SyncButtonView: View {
     }
 
     /// What the capsule says and its symbol: a change of it in the same
-    /// look crossfades the title, replaces the symbol, and fades the badge
+    /// look rolls the title, replaces the symbol, and fades the badge
     /// over 0.2 s.
     private struct Face: Hashable {
         var title: String
@@ -572,9 +572,11 @@ public struct SyncButtonView: View {
         let symbolColor: NSColor = kind == .prominent ? Palette.buttonText : Palette.text2
         return HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
             symbol(color: symbolColor, drawsArc: drawsArc)
+            // A new title in the same look rolls in, letter by letter,
+            // where it differs ("Push origin" to "Pull origin").
             Text(state.title)
                 .lineLimit(1)
-                .contentTransition(motion.animates ? .opacity : .identity)
+                .contentTransition(motion.animates ? .numericText() : .identity)
             if let counts = state.countsText(numberFormat) {
                 // The counts roll to a new value over 0.2 s (a commit adds
                 // one to push).

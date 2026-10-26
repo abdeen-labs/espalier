@@ -1075,6 +1075,10 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         guard drop != currentDrop else {
             return
         }
+        // The trackpad taps as the drag takes a new target.
+        if let drop, drop.target != currentDrop?.target {
+            Haptics.dropTarget()
+        }
         currentDrop = drop
         updateFeedback()
     }

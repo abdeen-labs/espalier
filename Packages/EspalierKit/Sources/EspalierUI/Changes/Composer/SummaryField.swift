@@ -40,7 +40,8 @@ struct SummaryField: View {
     @Environment(\.motion) private var motion
 
     var body: some View {
-        // The shimmer and the generated summary crossfade over 0.2 s.
+        // The shimmer crossfades in over 0.2 s; the summary after it fades
+        // in as it rises into place (`Motion.revealTransition`).
         ZStack(alignment: .leading) {
             if isGenerating {
                 GeneratingText()
@@ -60,7 +61,7 @@ struct SummaryField: View {
                     onEscape: onEscape,
                     focusBridge: focusBridge
                 )
-                .transition(motion.animates ? .opacity : .identity)
+                .transition(motion.animates ? .asymmetric(insertion: Motion.revealTransition, removal: .opacity) : .identity)
             }
         }
         .motion(Motion.kindChange, value: isGenerating)

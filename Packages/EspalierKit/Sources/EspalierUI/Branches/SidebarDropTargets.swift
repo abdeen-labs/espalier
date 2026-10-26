@@ -124,9 +124,13 @@ struct CommitDropTargetModifier: ViewModifier {
             }
     }
 
+    /// Sets `isTargeted`, with the trackpad's tap as the row takes the drag.
     private func setTargeted(_ targeted: Bool) {
         if targeted != isTargeted {
             isTargeted = targeted
+            if targeted {
+                Haptics.dropTarget()
+            }
         }
     }
 
