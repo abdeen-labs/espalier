@@ -59,6 +59,8 @@ nonisolated public enum ActionID: Sendable {
     case toggleSidebar
     case filterSidebar
     case search
+    /// The command palette (⌘K).
+    case showCommandPalette
     case toggleInspector
     case toggleSplitDiff
     case toggleHideWhitespace
@@ -202,6 +204,7 @@ nonisolated public enum ActionID: Sendable {
         case .toggleSidebar: .toggleSidebar
         case .filterSidebar: .filterSidebar
         case .search: .search
+        case .showCommandPalette: .showCommandPalette
         case .toggleInspector: .toggleInspector
         case .toggleSplitDiff: .toggleSplitDiff
         case .toggleHideWhitespace: .toggleHideWhitespace
@@ -323,8 +326,8 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
     case about, installCommandLineTool, reportIssue, showKeyboardShortcuts, showLogsInFinder, openSettings
     case newRepository, addLocalRepository, cloneRepository, addRepositories
     case deleteSelection, copyPath
-    case showChanges, showHistory, showNextPlace, showPreviousPlace, selectPlace, toggleSidebar, filterSidebar, search, toggleInspector
-    case toggleSplitDiff, toggleHideWhitespace, toggleWrapLines, setImageDiffType, setHistoryScope
+    case showChanges, showHistory, showNextPlace, showPreviousPlace, selectPlace, toggleSidebar, filterSidebar, search, showCommandPalette
+    case toggleInspector, toggleSplitDiff, toggleHideWhitespace, toggleWrapLines, setImageDiffType, setHistoryScope
     case toggleStashedChanges, increaseCodeTextSize, decreaseCodeTextSize, resetCodeTextSize
     case goBack, goForward, goToCommit, goToFirstParent, goToSecondParent, goToChild
     case push, forcePush, pull, fetch, publishRepository, publishBranch
@@ -367,6 +370,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .toggleSidebar: "Show Sidebar"
         case .filterSidebar: "Filter Sidebar"
         case .search: "Search"
+        case .showCommandPalette: "Command Palette…"
         case .toggleInspector: "Show Inspector"
         case .toggleSplitDiff: "Split Diff"
         case .toggleHideWhitespace: "Hide Whitespace Changes"
@@ -500,6 +504,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .copyPath: MenuShortcut("c", [.command, .option])
         case .deleteSelection: MenuShortcut(.delete)
         case .search: MenuShortcut("f", [.command, .option])
+        case .showCommandPalette: MenuShortcut("k")
         case .filterSidebar: MenuShortcut("j", [.command, .option])
         case .commitChanges: MenuShortcut(.return)
         case .generateCommitMessage: MenuShortcut("g", [.command, .option])
@@ -523,7 +528,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         switch self {
         case .about, .installCommandLineTool, .reportIssue, .showKeyboardShortcuts, .showLogsInFinder, .openSettings,
              .newRepository, .addLocalRepository, .cloneRepository, .addRepositories,
-             .switchRepository, .toggleSidebar, .filterSidebar, .search, .toggleSplitDiff, .toggleHideWhitespace,
+             .switchRepository, .toggleSidebar, .filterSidebar, .search, .showCommandPalette, .toggleSplitDiff, .toggleHideWhitespace,
              .toggleWrapLines, .setImageDiffType, .increaseCodeTextSize, .decreaseCodeTextSize,
              .resetCodeTextSize, .signIn, .runBenchmark, .checkMenuShortcuts:
             false

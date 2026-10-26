@@ -70,6 +70,7 @@ nonisolated public enum MenuCatalog {
         .item(.toggleSidebar),
         .item(.filterSidebar),
         .item(.search),
+        .item(.showCommandPalette),
         .separator,
         .toggle(.toggleSplitDiff),
         .toggle(.toggleHideWhitespace),

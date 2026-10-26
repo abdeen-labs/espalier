@@ -70,20 +70,14 @@ struct WindowRoot: View {
                 onWindowContext(context)
                 MoveToApplicationsPrompt.presentIfNeeded(in: context)
             }
-            .onChange(of: showsWelcome) {
+            .onChange(of: context.showsWelcome) {
                 context.modals.window?.crossfadeContents(Motion.arrive)
             }
     }
 
-    /// Whether the welcome flow fills the window.
-    private var showsWelcome: Bool {
-        let app = context.app
-        return app.loadState == .ready && !app.preferences.hasShownWelcomeFlow
-    }
-
     @ViewBuilder
     private var content: some View {
-        if showsWelcome {
+        if context.showsWelcome {
             // The welcome flow fills the window.
             WelcomeView()
         } else {

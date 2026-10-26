@@ -93,6 +93,8 @@ public final class WindowState {
     /// the current branch onto (Merge into Current Branch…); nil while it
     /// switches branches.
     var branchPopoverMethod: CompareMethod?
+    /// The command palette's state while it's open (⌘K).
+    var commandPalette: CommandPaletteModel?
     /// The focused list's selection.
     public var focusedSelection: FocusedSelection?
     /// The pull request a link showed: its place shows this one for its

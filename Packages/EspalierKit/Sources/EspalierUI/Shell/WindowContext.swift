@@ -107,6 +107,12 @@ public final class WindowContext {
         app.selectedRepository
     }
 
+    /// Whether the welcome flow fills the window, in the main window's
+    /// place.
+    var showsWelcome: Bool {
+        app.loadState == .ready && !app.preferences.hasShownWelcomeFlow
+    }
+
     /// Whether a confirmation, decision, error, prompt, or sheet is showing:
     /// the menus disable themselves.
     public var isModalPresented: Bool {

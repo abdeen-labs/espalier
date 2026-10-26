@@ -1,8 +1,9 @@
 // The main window's layout: a detail area with its own inner split, the
-// inspector, the toolbar with its search field, and the floating capsule
-// and toasts. The window is flat (`FlatWindowChrome`): the sidebar is
-// opaque and the columns draw the toolbar's band. In the floating layout
-// the panes are cards on the backdrop (FloatingPanes.swift).
+// inspector, the toolbar with its search field, the floating capsule and
+// toasts, and where the command palette opens. The window is flat
+// (`FlatWindowChrome`): the sidebar is opaque and the columns draw the
+// toolbar's band. In the floating layout the panes are cards on the
+// backdrop (FloatingPanes.swift).
 //
 // The sidebar takes the style Settings ▸ Appearance ▸ Sidebar picks: in the
 // hidden style a two-column `NavigationSplitView`, the sidebar's column
@@ -47,6 +48,10 @@ struct MainWindow: View {
             WindowDividerStyler()
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
+        }
+        // The command palette opens across the window, under the toolbar.
+        .overlay {
+            CommandPaletteAnchor()
         }
         .navigationTitle(context.repository?.record.displayName ?? "Espalier")
         .toolbar(removing: .title)
