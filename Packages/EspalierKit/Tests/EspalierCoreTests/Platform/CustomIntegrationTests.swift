@@ -118,19 +118,13 @@ struct CustomIntegrationTests {
 
     @Suite("Stored format")
     struct StoredFormat {
-        @Test("decodes desktop's formats, migrating array arguments")
+        @Test("decodes the stored format")
         func decoding() throws {
-            let current = #"{"path":"/usr/local/bin/tool","arguments":"--title='a b' %TARGET_PATH%"}"#
+            let stored = #"{"path":"/usr/local/bin/tool","arguments":"--title='a b' %TARGET_PATH%"}"#
             #expect(
-                try JSONDecoder().decode(CustomIntegration.self, from: Data(current.utf8))
+                try JSONDecoder().decode(CustomIntegration.self, from: Data(stored.utf8))
                     == CustomIntegration(path: "/usr/local/bin/tool", arguments: "--title='a b' %TARGET_PATH%")
             )
-
-            // The legacy format stored the parsed arguments.
-            let legacy = #"{"path":"/Applications/Editor.app","arguments":["-n","%TARGET_PATH%"],"bundleID":"com.example.editor"}"#
-            let migrated = try JSONDecoder().decode(CustomIntegration.self, from: Data(legacy.utf8))
-            #expect(migrated == CustomIntegration(path: "/Applications/Editor.app", arguments: "-n %TARGET_PATH%", bundleID: "com.example.editor"))
-            #expect(String(decoding: try JSONEncoder().encode(migrated), as: UTF8.self).contains(#""arguments":"-n %TARGET_PATH%""#))
 
             #expect(throws: DecodingError.self) {
                 try JSONDecoder().decode(CustomIntegration.self, from: Data(#"{"arguments":"%TARGET_PATH%"}"#.utf8))

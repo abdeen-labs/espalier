@@ -29,28 +29,6 @@ public struct CustomIntegration: Codable, Sendable, Hashable {
         self.arguments = arguments
         self.bundleID = bundleID
     }
-
-    private enum CodingKeys: String, CodingKey {
-        case path
-        case arguments
-        case bundleID
-    }
-
-    /// Decodes either stored format: the arguments as a string, or as an
-    /// array of strings, which is joined with spaces. Encoding always writes
-    /// the string: parsing the arguments into an array removes their quotes,
-    /// so the string the user entered is kept and parsed right before
-    /// launching.
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        path = try container.decode(String.self, forKey: .path)
-        if let arguments = try? container.decode(String.self, forKey: .arguments) {
-            self.arguments = arguments
-        } else {
-            arguments = try container.decode([String].self, forKey: .arguments).joined(separator: " ")
-        }
-        bundleID = try container.decodeIfPresent(String.self, forKey: .bundleID)
-    }
 }
 
 /// Parse the arguments string of a custom integration into an array of

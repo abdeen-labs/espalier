@@ -738,8 +738,8 @@ public final class Preferences {
     }
 
     /// Reads each setting: an empty editor name is none, an empty or unknown
-    /// shell is Terminal, and a custom integration in either stored format is
-    /// read (`CustomIntegration`'s decoder).
+    /// shell is Terminal, and a custom integration that doesn't decode is
+    /// none.
     private static func loadIntegrations(_ store: PreferenceStore) -> IntegrationSettings {
         IntegrationSettings(
             selectedExternalEditor: store.getString(PreferenceKey.externalEditor).flatMap { $0.isEmpty ? nil : $0 },

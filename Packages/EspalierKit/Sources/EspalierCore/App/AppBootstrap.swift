@@ -46,7 +46,6 @@ public enum AppBootstrap {
             : nil
 
         // 1. Storage and prompts.
-        removeStaleDefaults(from: defaults)
         let secrets = KeychainSecretStore()
         let directories = AppDirectories.live(bundle: bundle)
         let prompts = PromptCenter()
@@ -147,18 +146,6 @@ public enum AppBootstrap {
         await model.load()
         logger.info("Launched Espalier \(appVersion, privacy: .public)")
         return launched
-    }
-
-    /// Keys earlier builds left in the defaults that nothing reads: the main
-    /// window's frame, which AppKit saved under an autosave name the window
-    /// no longer has.
-    static let staleDefaultsKeys = ["NSWindow Frame EspalierMainWindow"]
-
-    /// Removes `staleDefaultsKeys`; nothing when they're gone.
-    static func removeStaleDefaults(from defaults: UserDefaults) {
-        for key in staleDefaultsKeys where defaults.object(forKey: key) != nil {
-            defaults.removeObject(forKey: key)
-        }
     }
 }
 

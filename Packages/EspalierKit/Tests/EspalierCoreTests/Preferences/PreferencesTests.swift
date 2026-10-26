@@ -67,12 +67,12 @@ struct PreferencesTests {
         defer { desktop.remove() }
         desktop.defaults.set("0", forKey: "confirmForcePush")
         desktop.defaults.set("8", forKey: "tab-size")
-        desktop.defaults.set(#"{"path":"/usr/local/bin/vim","arguments":["-g","%TARGET_PATH%"]}"#, forKey: "custom-editor")
+        desktop.defaults.set(#"{"path":"/usr/local/bin/vim","arguments":"-g %TARGET_PATH%"}"#, forKey: "custom-editor")
         _ = Preferences(store: PreferenceStore(desktop.defaults))
         #expect(storedKeys(desktop) == ["confirmForcePush", "tab-size", "custom-editor"])
         #expect(desktop.defaults.object(forKey: "confirmForcePush") as? String == "0")
         #expect(desktop.defaults.object(forKey: "tab-size") as? String == "8")
-        #expect(desktop.defaults.string(forKey: "custom-editor")?.contains(#"["-g","%TARGET_PATH%"]"#) == true)
+        #expect(desktop.defaults.string(forKey: "custom-editor") == #"{"path":"/usr/local/bin/vim","arguments":"-g %TARGET_PATH%"}"#)
     }
 
     @Test("writes only the settings that change, so the others keep following their defaults")
@@ -335,7 +335,7 @@ struct PreferencesTests {
             temporary.defaults.set(#"{"path":"/usr/local/bin/code","arguments":"--wait %TARGET_PATH%"}"#, forKey: "custom-editor")
             temporary.defaults.set(true, forKey: "use-custom-shell")
             temporary.defaults.set(
-                #"{"path":"/Applications/Ghostty.app","arguments":["--working-directory=%TARGET_PATH%","--new-window"],"bundleID":"com.mitchellh.ghostty"}"#,
+                #"{"path":"/Applications/Ghostty.app","arguments":"--working-directory=%TARGET_PATH% --new-window","bundleID":"com.mitchellh.ghostty"}"#,
                 forKey: "custom-shell"
             )
 
