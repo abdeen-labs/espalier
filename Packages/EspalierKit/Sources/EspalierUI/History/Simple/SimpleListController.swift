@@ -151,7 +151,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
 
     override init() {
         tableView = SimpleNSTableView(frame: .zero)
-        scrollView = UnbouncedScrollView()
+        scrollView = UnbouncedScrollView(fadesEdges: true)
         super.init()
         configureTable()
         startMinuteTimer()

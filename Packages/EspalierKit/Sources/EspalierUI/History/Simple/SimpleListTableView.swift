@@ -68,6 +68,11 @@ final class SimpleNSTableView: NSTableView, ContextMenuContentProviding {
     /// confirms, Esc cancels.
     var isReordering = false
 
+    /// A row scrolled into view shows clear of the list's edge fades.
+    override func scrollToVisible(_ rect: NSRect) -> Bool {
+        super.scrollToVisible(clearingEdgeFades(rect))
+    }
+
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if event.clickCount == 1, event.modifierFlags.intersection([.shift, .command]).isEmpty,

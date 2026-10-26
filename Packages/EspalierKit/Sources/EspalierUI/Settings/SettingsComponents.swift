@@ -36,7 +36,7 @@ struct SettingsPage<Content: View>: View {
             .padding(.top, Metrics.SettingsWindow.contentTopInset)
             .padding(.bottom, Metrics.SettingsWindow.contentBottomInset)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .unbouncedScrollContent()
+            .unbouncedScrollContent(fadesEdges: true)
         }
         .scrollBounceBehavior(.basedOnSize)
     }

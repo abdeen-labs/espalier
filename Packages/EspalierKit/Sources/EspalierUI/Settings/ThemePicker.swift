@@ -144,7 +144,9 @@ struct ThemeCardPicker: View {
 
 /// A small picture of a theme in its own colors: the sidebar with its
 /// selected row, a list with a selected row, and the prominent capsule;
-/// the list a card on the backdrop in a theme whose panes float.
+/// the list a card on the backdrop in a theme whose panes float, and a card
+/// with its ring inset in the backdrop, the sidebar on it, in a theme with
+/// the inset card.
 struct ThemePreview: View {
     let theme: Theme
 
@@ -173,7 +175,7 @@ struct ThemePreview: View {
             .padding(5)
             .frame(width: 38, alignment: .top)
             .frame(maxHeight: .infinity, alignment: .top)
-            .background(Color(nsColor: theme.sidebar))
+            .background(Color(nsColor: layout == .insetCard ? theme.backdrop : theme.sidebar))
             // The content: a selected row, another, and the prominent
             // capsule.
             VStack(alignment: .leading, spacing: 6) {
@@ -202,27 +204,32 @@ struct ThemePreview: View {
             .padding(6)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
-                if floats {
+                switch layout {
+                case .flat:
+                    Color(nsColor: theme.background)
+                case .floatingCards:
                     // A card on the backdrop.
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
                         .fill(Color(nsColor: theme.background))
-                } else {
-                    Color(nsColor: theme.background)
+                case .insetCard:
+                    // The inset card, with its ring.
+                    RoundedRectangle(cornerRadius: 4, style: .circular)
+                        .fill(Color(nsColor: theme.background))
+                        .strokeBorder(Color(nsColor: theme.line), lineWidth: 1)
                 }
             }
-            .padding(floats ? EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 4) : EdgeInsets())
+            .padding(layout.chromeIsBackdrop ? EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 4) : EdgeInsets())
         }
         .background {
-            if floats {
+            if layout.chromeIsBackdrop {
                 Color(nsColor: theme.backdrop)
             }
         }
         .accessibilityHidden(true)
     }
 
-    /// Whether the theme floats its panes as cards.
-    private var floats: Bool {
-        theme.paneLayout == .floatingCards
+    private var layout: PaneLayout {
+        theme.paneLayout
     }
 
     /// A line of text, as a bar.

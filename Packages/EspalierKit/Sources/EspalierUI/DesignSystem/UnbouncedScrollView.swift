@@ -15,6 +15,9 @@
 // it moves out, and back where it was sideways as the scroll began. SwiftUI's
 // clip view rests where it puts itself, so that sideways origin is measured,
 // not worked out.
+//
+// Either kind can fade its content out at the edges with more beyond them
+// (`fadesEdges`, ScrollEdgeFade.swift).
 
 import AppKit
 import SwiftUI
@@ -25,15 +28,50 @@ final class UnbouncedScrollView: NSScrollView {
         false
     }
 
-    override init(frame: NSRect) {
+    /// Its content's fade at the edges with more beyond them, in a look
+    /// that fades them; nil for a scroll view that doesn't fade.
+    private var edgeFade: ScrollEdgeFade?
+
+    /// Whether its content fades out at the edges with more beyond them,
+    /// in a look that fades them.
+    var fadesEdges: Bool {
+        edgeFade != nil
+    }
+
+    /// - Parameter fadesEdges: Whether its content fades out at the edges
+    ///   with more beyond them, in a look that fades them
+    ///   (`ScrollEdgeFade`).
+    init(frame: NSRect, fadesEdges: Bool) {
         super.init(frame: frame)
         contentView = EdgeClampingClipView(frame: contentView.frame)
         verticalScrollElasticity = .none
         horizontalScrollElasticity = .none
+        if fadesEdges {
+            edgeFade = ScrollEdgeFade(self)
+        }
+    }
+
+    convenience init(fadesEdges: Bool) {
+        self.init(frame: .zero, fadesEdges: fadesEdges)
+    }
+
+    override convenience init(frame: NSRect) {
+        self.init(frame: frame, fadesEdges: false)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override var documentView: NSView? {
+        didSet {
+            edgeFade?.update()
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        edgeFade?.update()
     }
 }
 
@@ -82,18 +120,22 @@ final class EdgeClampingClipView: NSClipView {
 
 extension View {
     /// Keeps the SwiftUI `ScrollView` whose content this is from moving
-    /// past the content's ends, or sideways.
-    func unbouncedScrollContent() -> some View {
+    /// past the content's ends, or sideways; with `fadesEdges`, its content
+    /// fades out at the edges with more beyond them, in a look that fades
+    /// them (`ScrollEdgeFade`).
+    func unbouncedScrollContent(fadesEdges: Bool = false) -> some View {
         background {
-            UnbouncedScrollPin(finds: .enclosing)
+            UnbouncedScrollPin(finds: .enclosing, fadesEdges: fadesEdges)
                 .accessibilityHidden(true)
         }
     }
 
-    /// Keeps this `List` from scrolling past its rows' ends, or sideways.
-    func unbouncedList() -> some View {
+    /// Keeps this `List` from scrolling past its rows' ends, or sideways;
+    /// with `fadesEdges`, its rows fade out at the edges with more beyond
+    /// them, in a look that fades them (`ScrollEdgeFade`).
+    func unbouncedList(fadesEdges: Bool = false) -> some View {
         background {
-            UnbouncedScrollPin(finds: .besideList)
+            UnbouncedScrollPin(finds: .besideList, fadesEdges: fadesEdges)
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
         }
@@ -101,7 +143,7 @@ extension View {
 }
 
 /// Keeps a scroll view SwiftUI made from moving past its content's ends,
-/// or sideways, while it scrolls.
+/// or sideways, while it scrolls, and fades its edges when asked.
 private struct UnbouncedScrollPin: NSViewRepresentable {
     /// Where the scroll view is.
     enum Search {
@@ -112,27 +154,41 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
     }
 
     let finds: Search
+    let fadesEdges: Bool
 
     func makeNSView(context: Context) -> PinView {
-        PinView(finds: finds)
+        PinView(finds: finds, fadesEdges: fadesEdges)
     }
 
     func updateNSView(_ view: PinView, context: Context) {
         view.attach()
+        view.fadesEdges = fadesEdges
     }
 
     final class PinView: NSView {
         private let search: Search
+        /// Whether the scroll view's content fades at its edges.
+        var fadesEdges: Bool {
+            didSet {
+                if fadesEdges != oldValue {
+                    fade(scrollView)
+                }
+            }
+        }
+
         /// The scroll view it watches.
         private weak var scrollView: NSScrollView?
+        /// The scroll view's edge fade, with `fadesEdges`.
+        private var edgeFade: ScrollEdgeFade?
         /// The clip view's horizontal origin as the scroll in progress
         /// began; nil between scrolls.
         private var heldX: CGFloat?
         /// Whether it's moving the clip view itself.
         private var isPinning = false
 
-        init(finds search: Search) {
+        init(finds search: Search, fadesEdges: Bool) {
             self.search = search
+            self.fadesEdges = fadesEdges
             super.init(frame: .zero)
         }
 
@@ -185,6 +241,50 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
             if let found {
                 observe(found)
             }
+            fade(found)
+        }
+
+        /// Fades `scrollView`'s edges with `fadesEdges`, and a list's
+        /// selected row clear of them; else no fade.
+        private func fade(_ scrollView: NSScrollView?) {
+            NotificationCenter.default.removeObserver(self, name: NSTableView.selectionDidChangeNotification, object: nil)
+            edgeFade = nil
+            guard fadesEdges, let scrollView else {
+                return
+            }
+            edgeFade = ScrollEdgeFade(scrollView)
+            if search == .besideList, let table = scrollView.documentView.flatMap(Self.firstTable(in:)) {
+                NotificationCenter.default.addObserver(self, selector: #selector(selectionDidChange(_:)), name: NSTableView.selectionDidChangeNotification, object: table)
+            }
+        }
+
+        /// A list's row selected partly in view at an edge (by its keys, a
+        /// click, or the model) shows clear of the fade, once the list has
+        /// scrolled to it.
+        @objc private func selectionDidChange(_ notification: Notification) {
+            guard let table = notification.object as? NSTableView, table.selectedRowIndexes.count == 1 else {
+                return
+            }
+            let row = table.selectedRow
+            DispatchQueue.main.async { [weak self, weak table] in
+                guard let self, let table, table.selectedRow == row, row < table.numberOfRows else {
+                    return
+                }
+                edgeFade?.reveal(table.rect(ofRow: row), in: table)
+            }
+        }
+
+        /// The first table in `view`, `view` included, depth first.
+        private static func firstTable(in view: NSView) -> NSTableView? {
+            if let table = view as? NSTableView {
+                return table
+            }
+            for subview in view.subviews {
+                if let table = firstTable(in: subview) {
+                    return table
+                }
+            }
+            return nil
         }
 
         private func findScrollView() -> NSScrollView? {

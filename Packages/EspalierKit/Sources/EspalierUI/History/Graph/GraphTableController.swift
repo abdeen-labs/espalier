@@ -114,7 +114,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     override init() {
         let table = GraphNSTableView(frame: .zero)
         tableView = table
-        scrollView = UnbouncedScrollView()
+        scrollView = UnbouncedScrollView(fadesEdges: true)
         let palette = TrackPalette.Resolved()
         style = GraphRowStyle(
             geometry: GraphGeometry(laneCount: 1, increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast),

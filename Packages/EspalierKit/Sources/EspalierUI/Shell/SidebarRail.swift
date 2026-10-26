@@ -16,10 +16,10 @@
 // ends. The filter clears as it closes.
 //
 // The rail is flat: the `sidebar` color with a hairline on its trailing
-// edge (on the backdrop with none in the floating layout), its icons 36
-// square with the row radius, the hover wash under the pointer and on the
-// icon whose popover is open, and the selected one in the sidebar's
-// selection with its symbol in the selection's color.
+// edge (on the backdrop with none in the floating and inset card layouts),
+// its icons 36 square with the row radius, the hover wash under the pointer
+// and on the icon whose popover is open, and the selected one in the
+// sidebar's selection with its symbol in the selection's color.
 //
 // The hover wash fades. Changes' count rolls to a new value over 0.2 s, and
 // its capsule and the warning fade in and out. A section's icon fades in
@@ -173,12 +173,13 @@ struct SidebarRail: View {
         .padding(.top, Metrics.Rail.topInset)
         .frame(width: Metrics.Rail.width)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Color(espalier: Palette.sidebar))
+        // The inset card layout's rail is on the detail column's backdrop.
+        .background(Color(espalier: InsetCard.isOn ? .clear : Palette.sidebar))
         .overlay(alignment: .trailing) {
             // The floating layout's rail sits on the backdrop, beside the
-            // cards.
+            // cards, and the inset card layout's beside the card.
             Hairline(.vertical)
-                .opacity(PaneCards.floats ? 0 : 1)
+                .opacity(Theme.current.paneLayout.chromeIsBackdrop ? 0 : 1)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Sidebar")
@@ -388,7 +389,7 @@ struct RailSectionPopover: View {
                 }
             }
             .sidebarListStyle(surface: Palette.background)
-            .unbouncedList()
+            .unbouncedList(fadesEdges: !fits)
             .scrollDisabled(fits)
             .scrollIndicators(fits ? .never : .automatic)
             .environment(\.sidebarSelection, selection.wrappedValue)

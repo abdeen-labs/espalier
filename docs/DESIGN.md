@@ -50,7 +50,9 @@ current look.
 
 - **Frost** is quiet and precise: near-white and near-black
   with almost no hue, a neutral wash for every selection, ink for the
-  prominent action, flat pills, and one accent for focus and links.
+  prominent action, flat pills, one accent for focus and links, and lists
+  that fade out at an edge with more beyond it. Its chrome is glass around
+  one inset card.
 - **Islands** is calm and friendly: the panes float as cards on a sage
   backdrop (the floating layout), with soft pills and bold titles.
 - **Pop** is bright and confident: a sidebar tinted with the accent, a bar

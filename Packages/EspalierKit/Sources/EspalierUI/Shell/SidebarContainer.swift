@@ -8,10 +8,11 @@
 // (`SidebarSectionsHold`).
 //
 // The sidebar is flat: the `sidebar` color with a hairline on its trailing
-// edge, the theme's section labels after their chevrons (a collapsed
-// section's with its count), rows 28 high with the row radius, hairline
-// dividers between groups of a section's rows, and the selected item in the
-// theme's sidebar selection
+// edge (the chrome's backdrop with none in the inset card layout:
+// ChromeBackdrop.swift), the theme's section labels after their chevrons
+// (a collapsed section's with its count), rows 28 high with the row radius,
+// hairline dividers between groups of a section's rows, and the selected
+// item in the theme's sidebar selection
 // (`Palette.sidebarSelection`), its title in the selected weight
 // (`SidebarRowFont`) and its symbol in the theme's selection symbol color
 // (the list's own selection drawing is off before it first draws:
@@ -60,8 +61,8 @@ struct SidebarContainer: View {
                 }
             }
         }
-        .sidebarListStyle()
-        .unbouncedList()
+        .sidebarListStyle(surface: InsetCard.isOn ? .clear : Palette.sidebar)
+        .unbouncedList(fadesEdges: true)
         .sidebarMotionScope([selected?.id, shown?.id], loading: selected)
         .environment(\.sidebarSelection, selection.wrappedValue)
         .contextMenuCard(forSelectionType: SidebarPlace.self, selection: selection.wrappedValue.map { [$0] } ?? []) { [context] places in
@@ -83,13 +84,13 @@ struct SidebarContainer: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SidebarFilterField()
         }
-        .background(Color(espalier: Palette.sidebar).ignoresSafeArea())
+        .background(ChromeSurface(Palette.sidebar).ignoresSafeArea())
         .overlay(alignment: .trailing) {
             // The floating layout's sidebar sits on the backdrop, beside
-            // the cards.
+            // the cards, and the inset card layout's is the backdrop.
             Hairline(.vertical)
                 .ignoresSafeArea()
-                .opacity(PaneCards.floats ? 0 : 1)
+                .opacity(Theme.current.paneLayout.chromeIsBackdrop ? 0 : 1)
         }
     }
 
@@ -955,9 +956,9 @@ private struct SidebarHeaderButtonBody<Label: View>: View {
 /// The filter at the bottom of the sidebar (⌥⌘J), and at the top of a rail
 /// popover: narrows every section but the first.
 struct SidebarFilterField: View {
-    /// What it's on: the `sidebar` color, or a rail popover's
-    /// `background`.
-    var surface: NSColor = Palette.sidebar
+    /// What it's on: nil for the sidebar's surface (`ChromeSurface`), or a
+    /// rail popover's `background`.
+    var surface: NSColor?
     @Environment(WindowContext.self) private var context
 
     var body: some View {
@@ -972,7 +973,13 @@ struct SidebarFilterField: View {
         .environment(\.searchFieldIsRaised, PaneCards.floats)
         .padding(.horizontal, Metrics.Sidebar.rowInset)
         .padding(.vertical, Metrics.insetSmall)
-        .background(Color(espalier: surface))
+        .background {
+            if let surface {
+                Color(espalier: surface)
+            } else {
+                ChromeSurface(Palette.sidebar)
+            }
+        }
         .announcesFilterResults(state.sidebarFilter) { [context] in
             Self.resultCount(in: context)
         }

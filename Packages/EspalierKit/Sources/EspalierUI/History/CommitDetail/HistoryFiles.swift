@@ -89,7 +89,7 @@ struct HistoryFileList: NSViewRepresentable {
 /// it keeps in step with the model's.
 final class HistoryFileListController: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     let tableView = HistoryFileTableView(frame: .zero)
-    let scrollView = UnbouncedScrollView()
+    let scrollView = UnbouncedScrollView(fadesEdges: true)
     private(set) var files: [HistoryFileContent] = []
     var actions = HistoryFilesActions()
     /// The file the model has selected.
@@ -271,6 +271,11 @@ final class HistoryFileTableView: NSTableView, ContextMenuContentProviding {
     weak var controller: HistoryFileListController?
     /// The row whose context menu is open.
     lazy var contextMenuTarget = TableContextMenuTarget(table: self)
+
+    /// A row scrolled into view shows clear of the list's edge fades.
+    override func scrollToVisible(_ rect: NSRect) -> Bool {
+        super.scrollToVisible(clearingEdgeFades(rect))
+    }
 
     /// A click on a row focuses the list, so the arrow keys move through
     /// the files: the row's hosted SwiftUI view takes the click but not

@@ -264,7 +264,7 @@ struct FileTable: NSViewRepresentable {
         tableView.doubleAction = #selector(FileTableCoordinator.doubleClicked(_:))
         coordinator.tableView = tableView
 
-        let scrollView = UnbouncedScrollView()
+        let scrollView = UnbouncedScrollView(fadesEdges: true)
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -715,6 +715,11 @@ final class ChangesTableView: NSTableView, ContextMenuContentProviding {
     weak var coordinator: FileTableCoordinator?
     /// The row whose context menu is open.
     lazy var contextMenuTarget = TableContextMenuTarget(table: self)
+
+    /// A row scrolled into view shows clear of the list's edge fades.
+    override func scrollToVisible(_ rect: NSRect) -> Bool {
+        super.scrollToVisible(clearingEdgeFades(rect))
+    }
 
     // MARK: The context menu
 

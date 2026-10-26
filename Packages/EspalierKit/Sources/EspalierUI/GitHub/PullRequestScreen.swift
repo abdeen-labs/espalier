@@ -632,7 +632,7 @@ struct ChangedFilesList: View {
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
-                    .unbouncedList()
+                    .unbouncedList(fadesEdges: true)
                     .contextMenuCard(forSelectionType: String.self, selection: selection.file.map { [$0.id] } ?? []) { [context, menuContent] ids in
                         if let menuContent, let id = ids.first, let file = changeset.files.first(where: { $0.id == id }) {
                             CommittedFileContextMenu.content(menuContent(file), context: context)

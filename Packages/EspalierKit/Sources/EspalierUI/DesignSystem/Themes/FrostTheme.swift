@@ -3,8 +3,10 @@
 // in dark) for the one prominent action and the current branch's tag, and
 // one accent kept for focus, links, checkboxes, and the current branch's
 // line. Flat pills, sentence-case labels, small radii, a fine graph of
-// dots, and code in a soft palette. Colors: Iris (the default), Glacier,
-// Ember.
+// dots, code in a soft palette, and lists that fade out at an edge with
+// more beyond it. The main window's chrome is glass, the sidebar's color at
+// 80% over a blur of what's behind the window, around one inset card
+// (`PaneLayout.insetCard`). Colors: Iris (the default), Glacier, Ember.
 
 import AppKit
 import EspalierCore
@@ -31,6 +33,9 @@ nonisolated extension ThemeDefinition {
             quietControlIsRaised: false,
             segmentSelection: ThemeColor.surface(0xFFFFFF, 0x333336),
             scrim: .espalierDynamic(light: NSColor.black.withAlphaComponent(0.2), dark: NSColor.black.withAlphaComponent(0.6)),
+            // The chrome: the sidebar's color, as glass.
+            backdrop: ThemeColor.surface(0xEBEBED, 0x171717),
+            backdropGlass: GlassStyle(opacity: 0.8),
             raisedShadow: .espalierDynamic(light: NSColor.black.withAlphaComponent(0.08), dark: .clear),
             raisedRing: .espalierDynamic(light: NSColor.black.withAlphaComponent(0.06), dark: NSColor.white.withAlphaComponent(0.08)),
             text: ThemeColor.text(0x303035, 0xE8E8EA),
@@ -71,7 +76,11 @@ nonisolated extension ThemeDefinition {
             buttonWeights: ButtonWeights(quiet: .regular, prominent: .medium),
             graph: GraphStyle(lineWidth: 2, lanePitch: 15, node: .dot),
             refTag: RefTagStyle(fill: .tinted(alpha: (0.10, 0.16), textMix: (0.30, 0.15), ink: 0x000000), currentUsesProminent: true),
-            statusBadge: StatusBadgeStyle(fill: .tinted, shape: .roundedSquare)
+            statusBadge: StatusBadgeStyle(fill: .tinted, shape: .roundedSquare),
+            paneLayout: .insetCard,
+            // Lists fade out at an edge with more beyond it, over a
+            // 24-point band, instead of ending at a hard cut.
+            scrollEdgeFade: 24
         )
     }
 }

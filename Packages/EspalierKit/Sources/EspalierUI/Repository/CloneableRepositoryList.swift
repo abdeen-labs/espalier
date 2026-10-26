@@ -170,7 +170,7 @@ struct CloneableRepositoryListView: View {
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
                     .rowsDrawSelection()
-                    .unbouncedList()
+                    .unbouncedList(fadesEdges: true)
                     .listPrimaryAction(forSelectionType: CloneableRepositoryListItem.ID.self) { ids in
                         if let id = ids.first, let item = content.item(id) {
                             activate(item)

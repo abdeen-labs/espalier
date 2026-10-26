@@ -127,12 +127,13 @@ extension View {
         modifier(PaneMarginsModifier(leading: leading, trailing: trailing))
     }
 
-    /// The detail area's margins beside the sidebar in the floating layout:
-    /// the leading one follows the sidebar's edge as it shows and hides, so
-    /// the cards move with the sidebar and stop at the window's edge
-    /// margin. `trailing` replaces the trailing one.
-    func paneMarginsBesideSidebar(trailing: CGFloat = PaneCards.frameMargins.trailing) -> some View {
-        modifier(SidebarPaneMarginsModifier(trailing: trailing))
+    /// The detail area's margins beside the sidebar in the floating layout
+    /// and the inset card layout: the leading one follows the sidebar's
+    /// edge as it shows and hides, so the cards move with the sidebar and
+    /// stop at the window's edge margin. Before Commit Info, the trailing
+    /// one is the inspector's to keep.
+    func paneMarginsBesideSidebar(beforeInspector: Bool) -> some View {
+        modifier(SidebarPaneMarginsModifier(beforeInspector: beforeInspector))
     }
 
     /// Nudges the detail's column as the sidebar shows or hides in the
@@ -230,17 +231,29 @@ private struct SidebarNudge: NSViewRepresentable {
 /// The detail area's margins beside the sidebar, the leading one read from
 /// where the detail is in the window on every layout: the frame margin
 /// after the sidebar, growing to the window's edge margin as the sidebar's
-/// edge comes within it. It changes with the sidebar's own animation and
-/// has none of its own.
+/// edge comes within it (the inset card's margins in that layout). It
+/// changes with the sidebar's own animation and has none of its own.
 private struct SidebarPaneMarginsModifier: ViewModifier {
-    let trailing: CGFloat
+    let beforeInspector: Bool
 
     func body(content: Content) -> some View {
         GeometryReader { proxy in
-            content.paneMargins(
-                leading: max(PaneCards.frameMargins.leading, PaneCards.windowEdgeMargin - proxy.frame(in: .global).minX),
-                trailing: trailing
-            )
+            content.padding(margins(minX: proxy.frame(in: .global).minX))
+        }
+    }
+
+    /// The margins with the detail's leading edge `minX` from the window's.
+    private func margins(minX: CGFloat) -> EdgeInsets {
+        switch Theme.current.paneLayout {
+        case .flat:
+            return EdgeInsets()
+        case .floatingCards:
+            var margins = PaneCards.frameMargins
+            margins.leading = max(PaneCards.frameMargins.leading, PaneCards.windowEdgeMargin - minX)
+            margins.trailing = beforeInspector ? 0 : PaneCards.frameMargins.trailing
+            return margins
+        case .insetCard:
+            return InsetCard.detailMargins(minX: minX, beforeInspector: beforeInspector)
         }
     }
 }
@@ -435,8 +448,9 @@ final class PaneSplitView: NSSplitView, LookChangeObserving {
 
 /// Hides the window's split view dividers (the sidebar's and the
 /// inspector's) in the floating layout, where the backdrop's gaps divide
-/// the columns; flat, they show as AppKit draws them. It sits in the
-/// background of the window's content and looks after the splits in it.
+/// the columns, and in the inset card layout, where the card's ring does;
+/// flat, they show as AppKit draws them. It sits in the background of the
+/// window's content and looks after the splits in it.
 struct WindowDividerStyler: NSViewRepresentable {
     func makeNSView(context: Context) -> StylerView {
         StylerView()
@@ -486,9 +500,10 @@ struct WindowDividerStyler: NSViewRepresentable {
         }
 
         /// Hides every divider of the window's own splits (`SplitView`'s
-        /// draw their own) while floating; shows the ones it hid once flat.
+        /// draw their own) while the chrome is the backdrop; shows the ones
+        /// it hid once flat.
         func apply() {
-            guard PaneCards.floats else {
+            guard Theme.current.paneLayout.chromeIsBackdrop else {
                 for divider in hiddenDividers.allObjects {
                     divider.alphaValue = 1
                 }
@@ -506,9 +521,9 @@ struct WindowDividerStyler: NSViewRepresentable {
         /// A divider, and the edge AppKit draws beside the sidebar.
         private static let dividerClasses: Set<String> = ["NSSplitDividerView", "_NSSplitViewShadowView"]
 
-        /// Hides `splitView`'s dividers while floating.
+        /// Hides `splitView`'s dividers while the chrome is the backdrop.
         private func style(_ splitView: NSSplitView) {
-            guard PaneCards.floats, !(splitView is PaneSplitView) else {
+            guard Theme.current.paneLayout.chromeIsBackdrop, !(splitView is PaneSplitView) else {
                 return
             }
             for divider in splitView.subviews where Self.dividerClasses.contains(NSStringFromClass(type(of: divider))) && divider.alphaValue != 0 {

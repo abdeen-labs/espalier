@@ -1,8 +1,9 @@
 // The repositories History's captures show, each selected in an app with a
 // window: History's places (main with a merged feature, a branch off it,
 // and a tag), the graph table's rows (a merge, unpushed commits, branches,
-// a remote branch, and tags on one commit), and the simple list's feature
-// branch. Commits are dated back from now, so their times read as recent.
+// a remote branch, and tags on one commit), a history taller than its
+// list, and the simple list's feature branch. Commits are dated back from
+// now, so their times read as recent.
 
 import AppKit
 @testable import EspalierCore
@@ -162,6 +163,45 @@ func makeHistoryTableFixture(dirty: Bool = true) async throws -> HistoryCaptureF
             try Data("Changed\n".utf8).write(to: URL(exactFilePath: POSIXPath.join(local.path, path)))
         }
     }
+    return try await selectInApp(local, shas: commits.shas)
+}
+
+/// `main`: twenty-seven commits by several authors, two hours apart,
+/// tagged v2.0 at the tenth and v2.1 at the twentieth, then a merge of
+/// `feature/search` (four commits) and Bump version (HEAD): a history
+/// taller than its list.
+@MainActor
+func makeLongHistoryFixture() async throws -> HistoryCaptureFixture {
+    let local = try setupEmptyRepository("main")
+    var commits = DatedCommits(repository: local)
+    let authors = ["Leo Park", "Priya Nair", "Sam Ortiz", "Maya Chen", "Jonas Weber"]
+    let summaries = [
+        "Initial commit", "Add forecast model", "Fetch current conditions", "Show the temperature in the menu bar",
+        "Add a settings window", "Remember the chosen city", "Localize the units", "Draw the radar overlay",
+        "Cache forecasts for an hour", "Release 2.0", "Fix the radar's colors in dark mode", "Add severe weather alerts",
+        "Show alerts as notifications", "Tune the alert sounds", "Add the hourly chart", "Animate the hourly chart",
+        "Fix a crash when offline", "Update the app icon", "Add a widget", "Release 2.1",
+        "Refresh the widget's timeline", "Use the new widget sizes", "Speed up launching", "Fix the chart's labels",
+        "Add air quality", "Show the pollen count", "Update docs",
+    ]
+    var minutesAgo = 3 * 24 * 60
+    for (index, summary) in summaries.enumerated() {
+        minutesAgo -= 120
+        let name = String(summary.lowercased().map { $0.isLetter ? $0 : "-" })
+        try await commits.commit(summary, files: ["\(name).txt"], by: authors[index % authors.count], minutesAgo: minutesAgo)
+        if summary.hasPrefix("Release ") {
+            try await runGit(["tag", "v" + summary.dropFirst("Release ".count)], local)
+        }
+    }
+    try await runGit(["checkout", "-q", "-b", "feature/search"], local)
+    for summary in ["Add a search field", "Search cities as you type", "Show recent searches", "Clear recent searches"] {
+        minutesAgo -= 60
+        let name = String(summary.lowercased().map { $0.isLetter ? $0 : "-" })
+        try await commits.commit(summary, files: ["\(name).txt"], by: "Maya Chen", minutesAgo: minutesAgo)
+    }
+    try await runGit(["checkout", "-q", "main"], local)
+    try await commits.merge("feature/search", "Merge branch 'feature/search'", by: "Maya Chen", minutesAgo: minutesAgo - 30)
+    try await commits.commit("Bump version", files: ["VERSION"], by: "Sam Ortiz", minutesAgo: minutesAgo - 40)
     return try await selectInApp(local, shas: commits.shas)
 }
 

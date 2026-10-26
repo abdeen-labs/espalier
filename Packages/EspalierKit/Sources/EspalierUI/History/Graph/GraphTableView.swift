@@ -80,6 +80,11 @@ final class GraphNSTableView: NSTableView, ContextMenuContentProviding {
     var loadingStubRow: Int?
     private var trackingArea: NSTrackingArea?
 
+    /// A row scrolled into view shows clear of the list's edge fades.
+    override func scrollToVisible(_ rect: NSRect) -> Bool {
+        super.scrollToVisible(clearingEdgeFades(rect))
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let trackingArea {

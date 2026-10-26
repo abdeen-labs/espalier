@@ -53,8 +53,13 @@ nonisolated public final class Theme: Sendable {
     public let segmentSelection: NSColor?
     /// The dim over a window behind a sheet or an alert.
     public let scrim: NSColor
-    /// What the panes float on in the floating cards layout (Islands).
+    /// What the panes float on in the floating cards layout (Islands), and
+    /// what the card is inset in in the inset card layout (Frost).
     public let backdrop: NSColor
+    /// The backdrop as glass, in the main window's inset card layout: the
+    /// backdrop color over a blur of what's behind the window; nil is the
+    /// backdrop color, opaque.
+    public let backdropGlass: GlassStyle?
     /// A raised card's soft shadow and ring: a selected segment on its
     /// track, Islands' floating panes.
     public let raisedShadow: NSColor
@@ -177,6 +182,9 @@ nonisolated public final class Theme: Sendable {
     public let paneLayout: PaneLayout
     /// Capsule controls' surfaces.
     public let controls: ControlStyle
+    /// How far a scrolling list's content fades out at an edge with more
+    /// beyond it (`ScrollEdgeFade`), in points; 0 for no fade.
+    public let scrollEdgeFade: CGFloat
 
     init(_ definition: ThemeDefinition) {
         theme = definition.theme
@@ -196,6 +204,7 @@ nonisolated public final class Theme: Sendable {
         segmentSelection = definition.segmentSelection
         scrim = definition.scrim
         backdrop = definition.backdrop ?? definition.background
+        backdropGlass = definition.backdropGlass
         raisedShadow = definition.raisedShadow
         raisedRing = definition.raisedRing
         text = definition.text
@@ -296,6 +305,7 @@ nonisolated public final class Theme: Sendable {
         monogramTone = definition.monogramTone
         paneLayout = definition.paneLayout
         controls = definition.controls
+        scrollEdgeFade = definition.scrollEdgeFade
     }
 
     /// A tone's color as lines, dots, and tags draw it in this theme.
@@ -371,6 +381,15 @@ nonisolated public enum PaneLayout: Sendable, Equatable {
     case flat
     /// Cards floating on the backdrop (Islands).
     case floatingCards
+    /// One card inset in the backdrop, the panes in it edge to edge and
+    /// divided by hairlines (Frost).
+    case insetCard
+}
+
+/// Glass: a color over a blur of what's behind the window.
+nonisolated public struct GlassStyle: Sendable, Equatable {
+    /// The color's opacity over the blur.
+    public var opacity: CGFloat
 }
 
 /// Section labels' look.
@@ -540,6 +559,7 @@ nonisolated struct ThemeDefinition: Sendable {
     var segmentSelection: NSColor?
     var scrim: NSColor
     var backdrop: NSColor?
+    var backdropGlass: GlassStyle?
     var raisedShadow: NSColor = .espalierDynamic(light: NSColor.black.withAlphaComponent(0.1), dark: NSColor.black.withAlphaComponent(0.3))
     var raisedRing: NSColor = .espalierDynamic(light: NSColor.black.withAlphaComponent(0.05), dark: NSColor.white.withAlphaComponent(0.06))
 
@@ -600,6 +620,7 @@ nonisolated struct ThemeDefinition: Sendable {
     var monogramTone: MonogramTone?
     var paneLayout: PaneLayout = .flat
     var controls: ControlStyle = .standard
+    var scrollEdgeFade: CGFloat = 0
 }
 
 /// A theme's colors from its light and dark values, with Increase Contrast

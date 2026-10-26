@@ -82,7 +82,7 @@ public struct KeyboardShortcutsSheet: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .rowsDrawSelection()
-            .unbouncedList()
+            .unbouncedList(fadesEdges: true)
             .sheetListCard()
             .frame(height: 420)
         } buttons: {
