@@ -6,11 +6,9 @@
 writes, next to this script, Espalier-Icon.svg and Espalier-Icon-Dark.svg on a
 square background that fills the canvas, and Espalier-Icon-Transparent.svg and
 Espalier-Icon-Dark-Transparent.svg with no background. The geometry and colors
-are Espalier/AppIcon.icon's: its SVG layers and the fills in icon.json, drawn
-flat with no glass, shadow, or icon mask. The back and middle panes keep the
-icon's translucency as one opacity each, the average of what macOS's render of
-the icon lets through; the front pane reads as opaque there and is drawn so.
-Change the icon there first and then update this to match.
+are Espalier/AppIcon.icon's: its SVG layers (the tree, the fruit, and the glow
+behind the fruit) and the fills in icon.json, drawn flat with no glass, shadow,
+or icon mask. Change the icon there first and then update this to match.
 
 The PNGs beside the SVGs are 1024-pixel renders of them:
 
@@ -19,33 +17,42 @@ The PNGs beside the SVGs are 1024-pixel renders of them:
 from pathlib import Path
 
 
-OPACITY = dict(back=0.7, middle=0.8, front=1)
+# The tree: a trunk trained into three tiers, the lower two peeling off it.
+TREE = [
+    "M58 146V66A22 22 0 0 1 80 44H124",
+    "M58 108C58 95 66 87 80 87H108",
+    "M58 146C58 136 66 130 80 130H124",
+]
+TIPS = [(124, 44), (124, 130)]
+FRUIT = (108, 87)
 
-LIGHT = dict(name="Espalier", body="#1B2B4A", back="#5ED1C1", middle="#7EE0A0",
-             front="#F4FAF6", branch="#1B2B4A", leaf="#3FA56B")
-DARK = dict(name="Espalier", body="#101A2E", back="#2F8A86", middle="#3F9E6E",
-            front="#2B3B5E", branch="#E9F1EC", leaf="#6FD39A")
-
-
-def pane(x, y, color, opacity):
-    fill = f' fill-opacity="{opacity}"' if opacity < 1 else ""
-    return f'  <rect x="{x}" y="{y}" width="92" height="92" rx="22" fill="{color}"{fill}/>'
+LIGHT = dict(name="Espalier", top="#F6F2FF", bottom="#E1D6FF",
+             ink_top="#3A2380", ink_bottom="#24145C", fruit="#8B5CF6", glow="#B48CFF")
+DARK = dict(name="Espalier", top="#221A33", bottom="#0B0712",
+            ink_top="#F6F1FF", ink_bottom="#DCCFF7", fruit="#C996FF", glow="#B48CFF")
 
 
 def svg(p, background):
+    x, y = FRUIT
     return "\n".join([
         '<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 180 180">',
         f'  <title>{p["name"]}</title>',
-        *([f'  <rect width="180" height="180" fill="{p["body"]}"/>'] if background else []),
-        pane(22, 66, p["back"], OPACITY["back"]),
-        pane(44, 46, p["middle"], OPACITY["middle"]),
-        pane(66, 26, p["front"], OPACITY["front"]),
-        '  <g transform="translate(110 74) scale(0.85)">',
-        f'    <path d="M-8 32V-28M-8 12C-8 -4 14 -2 18 -18" stroke="{p["branch"]}" stroke-width="7" stroke-linecap="round" fill="none"/>',
-        f'    <circle cx="-8" cy="32" r="7" fill="{p["branch"]}"/>',
-        f'    <circle cx="-8" cy="-28" r="7" fill="{p["branch"]}"/>',
-        f'    <path d="M16 -16C16 -32 26 -42 40 -44C40 -30 32 -18 16 -16Z" fill="{p["leaf"]}"/>',
+        '  <defs>',
+        f'    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">'
+        f'<stop offset="0" stop-color="{p["top"]}"/><stop offset="1" stop-color="{p["bottom"]}"/></linearGradient>',
+        f'    <linearGradient id="ink" gradientUnits="userSpaceOnUse" x1="0" y1="40" x2="0" y2="150">'
+        f'<stop offset="0" stop-color="{p["ink_top"]}"/><stop offset="1" stop-color="{p["ink_bottom"]}"/></linearGradient>',
+        f'    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="{x}" cy="{y}" r="34">'
+        f'<stop offset="0" stop-color="{p["glow"]}" stop-opacity="0.5"/>'
+        f'<stop offset="1" stop-color="{p["glow"]}" stop-opacity="0"/></radialGradient>',
+        '  </defs>',
+        *(['  <rect width="180" height="180" fill="url(#body)"/>'] if background else []),
+        f'  <circle cx="{x}" cy="{y}" r="34" fill="url(#glow)"/>',
+        '  <g fill="none" stroke="url(#ink)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">',
+        *(f'    <path d="{d}"/>' for d in TREE),
         '  </g>',
+        *(f'  <circle cx="{cx}" cy="{cy}" r="11" fill="url(#ink)"/>' for cx, cy in TIPS),
+        f'  <circle cx="{x}" cy="{y}" r="11.5" fill="{p["fruit"]}"/>',
         '</svg>',
     ]) + "\n"
 

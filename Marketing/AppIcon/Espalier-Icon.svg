@@ -1,13 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 180 180">
   <title>Espalier</title>
-  <rect width="180" height="180" fill="#1B2B4A"/>
-  <rect x="22" y="66" width="92" height="92" rx="22" fill="#5ED1C1" fill-opacity="0.7"/>
-  <rect x="44" y="46" width="92" height="92" rx="22" fill="#7EE0A0" fill-opacity="0.8"/>
-  <rect x="66" y="26" width="92" height="92" rx="22" fill="#F4FAF6"/>
-  <g transform="translate(110 74) scale(0.85)">
-    <path d="M-8 32V-28M-8 12C-8 -4 14 -2 18 -18" stroke="#1B2B4A" stroke-width="7" stroke-linecap="round" fill="none"/>
-    <circle cx="-8" cy="32" r="7" fill="#1B2B4A"/>
-    <circle cx="-8" cy="-28" r="7" fill="#1B2B4A"/>
-    <path d="M16 -16C16 -32 26 -42 40 -44C40 -30 32 -18 16 -16Z" fill="#3FA56B"/>
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F6F2FF"/><stop offset="1" stop-color="#E1D6FF"/></linearGradient>
+    <linearGradient id="ink" gradientUnits="userSpaceOnUse" x1="0" y1="40" x2="0" y2="150"><stop offset="0" stop-color="#3A2380"/><stop offset="1" stop-color="#24145C"/></linearGradient>
+    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="108" cy="87" r="34"><stop offset="0" stop-color="#B48CFF" stop-opacity="0.5"/><stop offset="1" stop-color="#B48CFF" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="180" height="180" fill="url(#body)"/>
+  <circle cx="108" cy="87" r="34" fill="url(#glow)"/>
+  <g fill="none" stroke="url(#ink)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M58 146V66A22 22 0 0 1 80 44H124"/>
+    <path d="M58 108C58 95 66 87 80 87H108"/>
+    <path d="M58 146C58 136 66 130 80 130H124"/>
   </g>
+  <circle cx="124" cy="44" r="11" fill="url(#ink)"/>
+  <circle cx="124" cy="130" r="11" fill="url(#ink)"/>
+  <circle cx="108" cy="87" r="11.5" fill="#8B5CF6"/>
 </svg>
