@@ -2,9 +2,8 @@
 // assigned account, choosing it, and clearing it.
 //
 // A repository's account is its GitHub repository's endpoint and its
-// `accountLogin`. It's assigned once to repositories saved before accounts
-// were (RepositoryListDocument.swift), when a repository is added or cloned
-// (the only account that can see it, or the one the user picks), when one is
+// `accountLogin`. It's assigned when a repository is added or cloned (the
+// only account that can see it, or the one the user picks), when one is
 // published, and when the user picks one: in Repository Settings, the
 // repository list's Account menu, or when asked. Signing in never assigns
 // one; signing out clears assignments only when the user says to.

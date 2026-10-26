@@ -174,11 +174,6 @@ public actor AccountsStore {
     /// The accounts whose tokens the keychain refused to read.
     private var unreadable: Set<AccountIdentity> = []
 
-    /// The endpoint and login of every account saved when the store loaded,
-    /// including those signed out as they loaded and those whose tokens
-    /// couldn't be read.
-    private var persistedIdentities: [AccountIdentity] = []
-
     /// Loads the accounts on first use.
     private var loadingTask: Task<Void, Never>?
 
@@ -218,20 +213,6 @@ public actor AccountsStore {
         await ensureLoaded()
 
         return (usableAccounts, accounts.filter { unreadable.contains($0.identity) })
-    }
-
-    /// The endpoint and login of every account that was saved when the
-    /// store loaded, whether or not it could be loaded: one signed out as it
-    /// loaded (its token expired or missing) and one whose token the
-    /// keychain refused to read included.
-    ///
-    /// For when only the identity matters, such as assigning repositories
-    /// their accounts once, so a locked keychain at launch doesn't lose an
-    /// assignment.
-    public func getPersistedIdentities() async -> [AccountIdentity] {
-        await ensureLoaded()
-
-        return persistedIdentities
     }
 
     /// The accounts whose tokens were read.
@@ -515,7 +496,6 @@ public actor AccountsStore {
             continuation.yield(.didError(error))
             return
         }
-        persistedIdentities = rawAccounts.map { AccountIdentity(endpoint: $0.endpoint, login: $0.login) }
 
         // An account saved twice keeps its last entry, where its first was.
         var duplicates = false

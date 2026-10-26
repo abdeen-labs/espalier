@@ -688,28 +688,6 @@ struct AccountsStoreTests {
             #expect(await store.getAllWithUnreadable().unreadable.isEmpty)
         }
 
-        @Test("the persisted identities include accounts whose tokens can't be read, and those signed out as they loaded")
-        func persistedIdentities() async throws {
-            let data = InMemoryDataStore()
-            data.setItem("users", """
-            [{"login":"alice","endpoint":"https://api.github.com","emails":[],"avatarURL":"","id":1,"name":""},\
-            {"login":"bob","endpoint":"\(enterpriseEndpoint)","emails":[],"avatarURL":"","id":2,"name":""},\
-            {"login":"carol","endpoint":"\(otherEndpoint)","emails":[],"avatarURL":"","id":3,"name":""}]
-            """)
-            let secure = FailingSecretStore()
-            try secure.setSecret("alice-token", service: getKeyForEndpoint(getDotComAPIEndpoint()), account: "alice")
-            // Bob's token can't be read; carol's is missing.
-            secure.unreadableServices = [getKeyForEndpoint(enterpriseEndpoint)]
-            let store = AccountsStore(dataStore: data, secureStore: secure)
-
-            #expect(await store.getAll().map(\.login) == ["alice"])
-            #expect(await store.getPersistedIdentities() == [
-                AccountIdentity(endpoint: getDotComAPIEndpoint(), login: "alice"),
-                AccountIdentity(endpoint: enterpriseEndpoint, login: "bob"),
-                AccountIdentity(endpoint: otherEndpoint, login: "carol"),
-            ])
-        }
-
         @Test("signs out an account whose token can't be read")
         func signsOut() async throws {
             let octocat = account("octocat")

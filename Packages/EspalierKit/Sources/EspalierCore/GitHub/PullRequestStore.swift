@@ -28,8 +28,7 @@ struct CachedPullRequest: Codable, Sendable, Equatable {
     var base: Ref
     var body: String
     var author: String
-    /// The author's avatar URL; nil when the API gave none, and in a cache
-    /// written before it was kept, until the pull request is fetched again.
+    /// The author's avatar URL; nil when the API gave none.
     var authorAvatarURL: String?
     var draft: Bool
 }

@@ -1,10 +1,9 @@
 // Ported from desktop/app/test/unit/repositories-store-test.ts,
 // stores/app-store-accounts-test.ts, and repository-account-test.ts.
 //
-// A repository's account against a mock GitHub: assigned once at launch to
-// repositories saved before accounts were; when a repository is added, the
-// only account that can see it, or the one the user picks among several on
-// one host (an account whose access can't be checked is never passed over);
+// A repository's account against a mock GitHub: when a repository is added,
+// the only account that can see it, or the one the user picks among several
+// on one host (an account whose access can't be checked is never passed over);
 // each account's own GitHub repository rows; choosing another; asking for
 // one; and signing out, which keeps or clears assignments as the user says,
 // while an account signed out without the user keeps them.
@@ -61,50 +60,6 @@ struct RepositoryAccountsTests {
         let id = try #require(try await app.addRepositories([repository.path]).added.first)
         await app.idle()
         return id
-    }
-
-    // MARK: At launch
-
-    @Test("assigns accounts once at launch to the repositories saved before accounts were, from every account saved then")
-    func migratesAtLaunch() async throws {
-        let harness = try AppHarness()
-        // octocat's token is missing, so it's signed out as it loads: its
-        // repository keeps it, to use once it signs in again.
-        harness.defaults.defaults.set(
-            #"[{"login":"octocat","endpoint":"https://api.github.com","emails":[],"avatarURL":"","id":1,"name":"octocat"}]"#,
-            forKey: "users"
-        )
-        let list = """
-            {"version": 1, "nextGitHubRepositoryID": 2, "repositories": [
-              {"id": "11111111-0000-0000-0000-000000000001", "path": "/Users/joe/hello", "missing": true, "gitHubRepositoryID": 1},
-              {"id": "11111111-0000-0000-0000-000000000002", "path": "/Users/joe/notes", "missing": true}
-            ], "gitHubRepositories": [
-              {"id": 1, "name": "hello", "owner": {"login": "octocat", "endpoint": "https://api.github.com"}, "permissions": "admin"}
-            ]}
-            """
-        let file = harness.environment.directories.repositoryList
-        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data(list.utf8).write(to: file)
-
-        let app = await harness.loadedAppWithAccounts()
-        await app.idle()
-
-        #expect(app.accounts.accounts.isEmpty)
-        #expect(app.repositories.map(\.accountLogin) == ["octocat", nil])
-        let gitHubRepository = try #require(app.repositories.first?.gitHubRepository)
-        #expect(app.gitHubRepositories[gitHubRepository.dbID]?.accountLogin == "octocat")
-        // What one account was allowed isn't known for it.
-        #expect(gitHubRepository.permissions == nil)
-
-        // Saved at once: the next launch doesn't assign them again, even with
-        // another account signed in.
-        let saved = try JSONDecoder.repositoryListDecoder.decode(RepositoryListDocument.self, from: Data(contentsOf: file))
-        #expect(!saved.awaitsAccountAssignments)
-        try await harness.store(first)
-        let relaunched = await harness.loadedAppWithAccounts()
-        #expect(relaunched.repositories.map(\.accountLogin) == ["octocat", nil])
-        await settle(relaunched, harness)
-        await settle(app, harness)
     }
 
     // MARK: Adding

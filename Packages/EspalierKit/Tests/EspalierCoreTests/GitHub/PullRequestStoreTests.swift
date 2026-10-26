@@ -223,7 +223,7 @@ struct PullRequestStoreTests {
         await fixture.settle()
     }
 
-    @Test("the author's avatar URL is kept, in the cache too; a cache written before it was kept loads without it until the pull request is fetched again")
+    @Test("the author's avatar URL is kept, in the cache too")
     func authorAvatarURL() async throws {
         let monalisa = "https://avatars.githubusercontent.com/u/2?v=4"
         let fixture = try await makeGitHubFixture { _, pulls in
@@ -240,31 +240,6 @@ struct PullRequestStoreTests {
         let url = GitHubCacheKind.pullRequests.url(in: fixture.harness.environment.directories, gitHubRepositoryID: dbID)
         let written = try JSONDecoder().decode(PullRequestCacheFile.self, from: Data(contentsOf: url))
         #expect(written.pullRequests.map(\.authorAvatarURL) == [monalisa, monalisa, nil])
-
-        // The cache as it was written before avatar URLs were kept.
-        var file = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-        let records = try #require(file["pullRequests"] as? [[String: Any]])
-        #expect(records.map { $0["authorAvatarURL"] as? String } == [monalisa, monalisa, nil])
-        file["pullRequests"] = records.map { record in record.filter { $0.key != "authorAvatarURL" } }
-        try JSONSerialization.data(withJSONObject: file).write(to: url)
-
-        // A relaunched app that can't reach GitHub shows what's cached.
-        fixture.pulls.openStatus = 500
-        fixture.pulls.updatedStatus = 500
-        let relaunched = await fixture.harness.loadedAppWithAccounts()
-        let model = try #require(relaunched.repository(fixture.model.id))
-        await waitForState { model.gitHub.openPullRequests.count == 3 }
-        await settle(relaunched, fixture.harness)
-        await model.gitHub.idle()
-        #expect(model.gitHub.openPullRequests.map(\.author) == ["hubot", "hubot", "hubot"])
-        #expect(model.gitHub.openPullRequests.map(\.authorAvatarURL) == [nil, nil, nil])
-
-        // Pull request 2 changed on GitHub: its author's avatar URL is back.
-        fixture.pulls.updated = [apiPullRequest(2, updatedAt: "2026-10-04T10:00:00Z", authorAvatarURL: monalisa)]
-        fixture.pulls.updatedStatus = 200
-        await model.gitHub.refreshPullRequests()
-        #expect(model.gitHub.openPullRequests.map(\.authorAvatarURL) == [nil, monalisa, nil])
-        await settle(relaunched, fixture.harness)
         await fixture.settle()
     }
 

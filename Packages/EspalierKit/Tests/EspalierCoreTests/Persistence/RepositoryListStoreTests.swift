@@ -372,7 +372,7 @@ struct RepositoryListStoreTests {
             }
             let goodID = RepositoryID(rawValue: try #require(UUID(uuidString: good)))
             #expect(recovered.repositories == [
-                StoredRepository(id: goodID, path: "/a", awaitsAccountAssignment: true, addedAt: Date(timeIntervalSince1970: 1_791_201_600)),
+                StoredRepository(id: goodID, path: "/a", addedAt: Date(timeIntervalSince1970: 1_791_201_600)),
             ])
             #expect(recovered.gitHubRepositories == [
                 StoredGitHubRepository(id: 5, name: "x", owner: StoredOwner(login: "o", endpoint: "e")),
@@ -587,89 +587,6 @@ struct RepositoryListStoreTests {
 
     @Suite("Accounts")
     struct Accounts {
-        let alice = AccountIdentity(endpoint: dotCom, login: "alice")
-        let bob = AccountIdentity(endpoint: dotCom, login: "bob")
-        let carol = AccountIdentity(endpoint: "https://github.example.com/api/v3", login: "carol")
-
-        /// A list saved before repositories had accounts: a GitHub.com
-        /// repository (a fork, with its parent), an Enterprise one, and one
-        /// not on GitHub.
-        let legacy = """
-            {"version": 1, "nextGitHubRepositoryID": 4, "repositories": [
-              {"id": "11111111-0000-0000-0000-000000000001", "path": "/dotcom", "gitHubRepositoryID": 2},
-              {"id": "11111111-0000-0000-0000-000000000002", "path": "/enterprise", "gitHubRepositoryID": 3},
-              {"id": "11111111-0000-0000-0000-000000000003", "path": "/local"}
-            ], "gitHubRepositories": [
-              {"id": 1, "name": "app", "owner": {"login": "upstream", "endpoint": "https://api.github.com"}, "permissions": "read"},
-              {"id": 2, "name": "app", "owner": {"login": "alice", "endpoint": "https://api.github.com"}, "parentID": 1, "permissions": "admin", "lastPruneDate": "2026-10-05T12:00:00Z"},
-              {"id": 3, "name": "tool", "owner": {"login": "team", "endpoint": "https://github.example.com/api/v3"}, "permissions": "write"}
-            ]}
-            """
-
-        private func load(_ text: String) async throws -> RepositoryListDocument {
-            let (store, file) = try makeStore()
-            try writeFile(text, to: file)
-            guard case .loaded(let document) = await store.load() else {
-                throw TestSupportError("The list didn't load")
-            }
-            return document
-        }
-
-        @Test("a list saved before repositories had accounts awaits them, its rows with unknown permissions")
-        func legacyRows() async throws {
-            let document = try await load(legacy)
-
-            #expect(document.awaitsAccountAssignments)
-            #expect(document.repositories.allSatisfy { $0.awaitsAccountAssignment })
-            #expect(document.gitHubRepositories.allSatisfy { $0.accountLogin.isEmpty && $0.permissions == nil })
-        }
-
-        @Test("assigns each repository the first account saved on its endpoint, on that account's rows")
-        func assignsOnce() async throws {
-            let document = try await load(legacy)
-
-            let migrated = try #require(document.migratingAccountAssignments([carol, alice, bob]))
-            let records = migrated.records()
-
-            #expect(records.map(\.accountLogin) == ["alice", "carol", nil])
-            #expect(!migrated.awaitsAccountAssignments)
-            let fork = try #require(records[0].gitHubRepository)
-            let table = migrated.gitHubRepositoryTable
-            #expect(table[fork.dbID]?.accountLogin == "alice")
-            #expect(table[fork.dbID]?.lastPruneDate == nil)
-            #expect(fork.fullName == "alice/app")
-            // The parent moves with it.
-            let parent = try #require(fork.parent)
-            #expect(parent.fullName == "upstream/app")
-            #expect(table[parent.dbID]?.accountLogin == "alice")
-            #expect(records[1].gitHubRepository.flatMap { table[$0.dbID]?.accountLogin } == "carol")
-            #expect(records[2].gitHubRepository == nil)
-
-            // Saved, it's never migrated again.
-            let saved = RepositoryListDocument(records: records, gitHubRepositories: table, selectedRepositoryID: nil, recentRepositoryIDs: [])
-            #expect(saved.migratingAccountAssignments([bob]) == nil)
-            #expect(saved.records().map(\.accountLogin) == ["alice", "carol", nil])
-        }
-
-        @Test("a repository without an account saved on its endpoint gets none, for good")
-        func noAccount() async throws {
-            let document = try await load(legacy)
-
-            let migrated = try #require(document.migratingAccountAssignments([]))
-
-            #expect(migrated.records().map(\.accountLogin) == [nil, nil, nil])
-            #expect(!migrated.awaitsAccountAssignments)
-            #expect(migrated.migratingAccountAssignments([alice]) == nil)
-        }
-
-        @Test("a list saved with accounts doesn't wait for them")
-        func current() {
-            let record = RepositoryRecord(path: "/a", accountLogin: nil)
-            let saved = RepositoryListDocument(records: [record], gitHubRepositories: GitHubRepositoryTable(), selectedRepositoryID: nil, recentRepositoryIDs: [])
-            #expect(!saved.awaitsAccountAssignments)
-            #expect(saved.migratingAccountAssignments([alice]) == nil)
-        }
-
         @Test("two accounts of one GitHub repository have rows of their own, made without what the other fetched")
         func scopedRows() throws {
             var table = GitHubRepositoryTable()

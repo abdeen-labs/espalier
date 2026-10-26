@@ -98,10 +98,6 @@ public struct StoredRepository: Codable, Sendable, Hashable {
     /// The login of the account assigned to the repository
     /// (`RepositoryRecord.accountLogin`), or nil for none.
     public var accountLogin: String?
-    /// Whether the row was written before repositories had accounts (it has
-    /// no `accountLogin` key): its account is assigned once, from the
-    /// accounts saved then (`migratingAccountAssignments(_:)`).
-    public var awaitsAccountAssignment: Bool
     public var workflowPreferences: WorkflowPreferences
     public var isTutorialRepository: Bool
     public var tagsToPush: [String]
@@ -125,7 +121,6 @@ public struct StoredRepository: Codable, Sendable, Hashable {
         missing: Bool = false,
         gitHubRepositoryID: Int? = nil,
         accountLogin: String? = nil,
-        awaitsAccountAssignment: Bool = false,
         workflowPreferences: WorkflowPreferences = WorkflowPreferences(),
         isTutorialRepository: Bool = false,
         tagsToPush: [String] = [],
@@ -142,7 +137,6 @@ public struct StoredRepository: Codable, Sendable, Hashable {
         self.missing = missing
         self.gitHubRepositoryID = gitHubRepositoryID
         self.accountLogin = accountLogin
-        self.awaitsAccountAssignment = awaitsAccountAssignment
         self.workflowPreferences = workflowPreferences
         self.isTutorialRepository = isTutorialRepository
         self.tagsToPush = tagsToPush
@@ -179,8 +173,7 @@ public struct StoredRepository: Codable, Sendable, Hashable {
     }
 
     /// Requires `id` and `path`; anything else missing or null takes its
-    /// default. A value of the wrong type fails the row. Without an
-    /// `accountLogin` key (even a null one) the row awaits its account.
+    /// default. A value of the wrong type fails the row.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(RepositoryID.self, forKey: .id)
@@ -190,7 +183,6 @@ public struct StoredRepository: Codable, Sendable, Hashable {
         alias = try container.decodeIfPresent(String.self, forKey: .alias)
         missing = try container.decodeIfPresent(Bool.self, forKey: .missing) ?? false
         gitHubRepositoryID = try container.decodeIfPresent(Int.self, forKey: .gitHubRepositoryID)
-        awaitsAccountAssignment = !container.contains(.accountLogin)
         accountLogin = try container.decodeIfPresent(String.self, forKey: .accountLogin)
         workflowPreferences = try container.decodeIfPresent(WorkflowPreferences.self, forKey: .workflowPreferences)
             ?? WorkflowPreferences()
@@ -204,8 +196,7 @@ public struct StoredRepository: Codable, Sendable, Hashable {
     }
 
     /// Writes every key, with `null` for an absent value, so the file shows
-    /// its whole shape. A row awaiting its account leaves out
-    /// `accountLogin`, so it still does when read again.
+    /// its whole shape.
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -215,9 +206,7 @@ public struct StoredRepository: Codable, Sendable, Hashable {
         try container.encode(alias, forKey: .alias)
         try container.encode(missing, forKey: .missing)
         try container.encode(gitHubRepositoryID, forKey: .gitHubRepositoryID)
-        if !awaitsAccountAssignment {
-            try container.encode(accountLogin, forKey: .accountLogin)
-        }
+        try container.encode(accountLogin, forKey: .accountLogin)
         try container.encode(workflowPreferences, forKey: .workflowPreferences)
         try container.encode(isTutorialRepository, forKey: .isTutorialRepository)
         try container.encode(tagsToPush, forKey: .tagsToPush)
@@ -238,7 +227,7 @@ public struct StoredGitHubRepository: Codable, Sendable, Hashable {
     public var owner: StoredOwner
     /// The lowercased login of the account the row's data was fetched with,
     /// or empty for data no account is known for (a repository without an
-    /// account, a row written before repositories had accounts).
+    /// account).
     ///
     /// It isn't the repository's account (`StoredRepository.accountLogin`
     /// is), only the scope of what's cached for it: the permissions, and
@@ -312,10 +301,6 @@ public struct StoredGitHubRepository: Codable, Sendable, Hashable {
     /// Requires `id`, `name`, and `owner`; anything else missing or null is
     /// unknown. Permissions this version doesn't know are unknown too. A
     /// value of the wrong type fails the row.
-    ///
-    /// A row without an `accountLogin` key was written before repositories
-    /// had accounts: it belongs to no account, and its permissions, which
-    /// can't be told to be any account's, are unknown.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(Int.self, forKey: .id)
@@ -329,12 +314,8 @@ public struct StoredGitHubRepository: Codable, Sendable, Hashable {
         parentID = try container.decodeIfPresent(Int.self, forKey: .parentID)
         issuesEnabled = try container.decodeIfPresent(Bool.self, forKey: .issuesEnabled)
         isArchived = try container.decodeIfPresent(Bool.self, forKey: .isArchived)
-        if container.contains(.accountLogin) {
-            permissions = try container.decodeIfPresent(String.self, forKey: .permissions)
-                .flatMap(GitHubRepositoryPermission.init(rawValue:))
-        } else {
-            permissions = nil
-        }
+        permissions = try container.decodeIfPresent(String.self, forKey: .permissions)
+            .flatMap(GitHubRepositoryPermission.init(rawValue:))
         lastPruneDate = try container.decodeIfPresent(Date.self, forKey: .lastPruneDate)
     }
 
@@ -630,47 +611,5 @@ extension RepositoryListDocument {
                 historyScope: stored.historyScope
             )
         }
-    }
-}
-
-// MARK: - Assigning accounts once
-
-extension RepositoryListDocument {
-    /// Whether some repository was saved before repositories had accounts.
-    public var awaitsAccountAssignments: Bool {
-        repositories.contains(where: \.awaitsAccountAssignment)
-    }
-
-    /// The document with an account assigned to each repository saved
-    /// before repositories had accounts: the first of `identities` (the
-    /// accounts saved when Espalier launched, `getPersistedIdentities`) on
-    /// its GitHub repository's endpoint, else none. The repository moves to
-    /// that account's row of its GitHub repository.
-    ///
-    /// Every saved account counts, those whose tokens couldn't be read or
-    /// were signed out as they loaded included, so a locked keychain at
-    /// launch doesn't leave repositories without their accounts. It runs
-    /// once: a repository assigned no account keeps none, and is never
-    /// assigned one by signing in later.
-    ///
-    /// Nil when no repository awaits its account.
-    public func migratingAccountAssignments(_ identities: [AccountIdentity]) -> RepositoryListDocument? {
-        guard awaitsAccountAssignments else {
-            return nil
-        }
-        var table = gitHubRepositoryTable
-        var document = self
-        for index in document.repositories.indices where document.repositories[index].awaitsAccountAssignment {
-            var stored = document.repositories[index]
-            let endpoint = stored.gitHubRepositoryID.flatMap { table[$0] }?.owner.endpoint
-            let login = endpoint.flatMap { endpoint in identities.first { JSCompat.strictEquals($0.endpoint, endpoint) } }?.login
-            stored.accountLogin = login
-            stored.gitHubRepositoryID = stored.gitHubRepositoryID.flatMap { table.scopedRowID(for: $0, accountLogin: login) }
-            stored.awaitsAccountAssignment = false
-            document.repositories[index] = stored
-        }
-        document.gitHubRepositories = table.rows.values.sorted { $0.id < $1.id }
-        document.nextGitHubRepositoryID = table.nextID
-        return document
     }
 }
