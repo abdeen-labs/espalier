@@ -8,6 +8,8 @@
 // - A response is one JSON object: bare, or as the whole of one fenced code
 //   block. Anything else around it is invalid, never a reason to fall back.
 // - A `null` description is no description.
+// - The prompt says what a description leads with, and wraps it at 72
+//   columns.
 
 import EspalierSupport
 import Foundation
@@ -192,6 +194,14 @@ public func buildAssistedCommitSystemPrompt(tags: CommitMessagePromptTags, mode:
         ENTIRE selection, not the first message of a split. If the selection can't be
         described safely, return unsafe with an explanation. Invalid output is an error,
         not a fallback.
+
+        By default, a description says what the commit changes and, when the units
+        show it, why. Lead with what matters most to someone reading the history, such
+        as a change in behavior or in what the product says, then the work that carries
+        it out. It isn't a list of every file or area the units touch. When a commit
+        adds something only a later commit in the plan uses, say so. Wrap descriptions
+        at 72 columns, with a blank line between paragraphs; URLs, code, and trailers
+        stay unbroken on their own lines.
 
         Instructions for this repository, and its constraints, decide the messages'
         content, structure, and language; they may ask for long titles, bodies,
