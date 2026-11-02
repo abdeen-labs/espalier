@@ -2,7 +2,8 @@
 // the GitHub repository upserts) against a mock GitHub: the account that can
 // see an added repository, the API's row with permissions and the fork's
 // parent, the skeleton row when GitHub can't be reached, rewriting origin
-// after a rename, a remote that moves to another host, and signing in.
+// after a rename, a remote that moves to another host or owner, and signing
+// in.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -166,6 +167,77 @@ struct GitHubAssociationTests {
 
         #expect(app.record(id)?.gitHubRepository == associated)
         #expect(harness.gitHub.requests("GET", "/repos/octocat/hello").count == 3)
+        await settle(app, harness)
+    }
+
+    @Test("follows a remote pointed at another owner when GitHub can't answer for it, keeping the account")
+    func followsRemoteWhenUnanswered() async throws {
+        let harness = try await harness()
+        harness.gitHub.on("GET", "/repos/octocat/hello", respond: .json(encoding: apiFullRepository()))
+        harness.gitHub.on("GET", "/repos/team/hello", respond: .status(404))
+        let app = await harness.loadedAppWithAccounts()
+        let local = try await repository(origin: "git@github.com:octocat/hello.git")
+        let id = try await add(local, to: app)
+
+        try await runGit(["remote", "set-url", "origin", "git@github.com:team/hello.git"], local)
+        await app.repositoryWithRefreshedGitHubRepository(id)
+
+        let skeleton = try #require(app.record(id)?.gitHubRepository)
+        #expect(skeleton.fullName == "team/hello")
+        #expect(skeleton.endpoint == dotComEndpoint)
+        #expect(skeleton.htmlURL == nil)
+        #expect(app.record(id)?.accountLogin == "octocat")
+        #expect(!harness.gitHub.requests("GET", "/repos/team/hello").isEmpty)
+        await settle(app, harness)
+    }
+
+    @Test("follows a remote pointed at another owner without the repository's account signed in")
+    func followsRemoteWithoutAccount() async throws {
+        let harness = try await harness()
+        harness.gitHub.on("GET", "/repos/octocat/hello", respond: .json(encoding: apiFullRepository()))
+        let app = await harness.loadedAppWithAccounts()
+        let local = try await repository(origin: "git@github.com:octocat/hello.git")
+        let id = try await add(local, to: app)
+        try await app.accounts.signOut(try #require(app.accounts.accounts.first), confirmed: [.signOutAccount])
+        await app.accounts.idle()
+
+        try await runGit(["remote", "set-url", "origin", "git@github.com:Team/Hello.git"], local)
+        await app.repositoryWithRefreshedGitHubRepository(id)
+
+        let skeleton = try #require(app.record(id)?.gitHubRepository)
+        #expect(skeleton.fullName == "Team/Hello")
+        #expect(skeleton.htmlURL == nil)
+        // The account belongs to the endpoint, which didn't change.
+        #expect(app.record(id)?.accountLogin == "octocat")
+        #expect(harness.gitHub.requests("GET", "/repos/Team/Hello").isEmpty)
+
+        // The same repository named in another case is still it.
+        try await runGit(["remote", "set-url", "origin", "git@github.com:team/hello.git"], local)
+        await app.repositoryWithRefreshedGitHubRepository(id)
+        #expect(app.record(id)?.gitHubRepository == skeleton)
+        await settle(app, harness)
+    }
+
+    @Test("a default remote pointed elsewhere refreshes the association once the remotes load")
+    func refreshesWhenRemoteChanges() async throws {
+        let harness = try await harness()
+        harness.gitHub.on("GET", "/repos/octocat/hello", respond: .json(encoding: apiFullRepository()))
+        harness.gitHub.on("GET", "/repos/team/hello", respond: .json(encoding: apiFullRepository(owner: "team", ownerID: 5)))
+        let app = await harness.loadedAppWithAccounts()
+        let model = try await harness.addAndSelect(try await repository(origin: "https://github.com/octocat/hello.git"), to: app)
+        await app.accounts.idle()
+        #expect(model.record.gitHubRepository?.fullName == "octocat/hello")
+
+        try await model.sync.setRemoteURL("https://github.com/team/hello.git", for: "origin")
+        await app.idle()
+        await model.gitHub.idle()
+        await app.accounts.idle()
+
+        let moved = try #require(model.record.gitHubRepository)
+        #expect(moved.fullName == "team/hello")
+        #expect(moved.owner.id == 5)
+        #expect(moved.htmlURL == "https://github.com/team/hello")
+        #expect(model.record.accountLogin == "octocat")
         await settle(app, harness)
     }
 

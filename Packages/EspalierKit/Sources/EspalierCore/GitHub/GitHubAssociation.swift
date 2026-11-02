@@ -21,14 +21,16 @@ extension AppModel {
     /// GitHub-style URL, the association stays as it is.
     ///
     /// Then the repository's assigned account, if it's signed in, asks the
-    /// API about it; no other account is used. When the API can't be
-    /// reached, the association stays, unless the endpoint changed: then a
-    /// skeleton row (owner and name from the remote) is better than nothing.
-    /// Otherwise the account's row is updated from the API, with its
-    /// permissions and the fork's parent, and the default remote is pointed
-    /// at the new clone URL when the repository was renamed or transferred
-    /// (`updateRemoteUrl`). An answer for an account or GitHub repository the
-    /// repository no longer has is dropped.
+    /// API about it; no other account is used. Without one, an association
+    /// that isn't the repository the remote names (the remote was pointed at
+    /// another owner, say) becomes a skeleton row for the remote's owner and
+    /// name. When the API can't answer, the association stays, unless the
+    /// endpoint or the repository the remote names changed: then a skeleton
+    /// row is better than nothing. Otherwise the account's row is updated
+    /// from the API, with its permissions and the fork's parent, and the
+    /// default remote is pointed at the new clone URL when the repository
+    /// was renamed or transferred (`updateRemoteUrl`). An answer for an
+    /// account or GitHub repository the repository no longer has is dropped.
     ///
     /// Returns nil when the repository is no longer in the list.
     @discardableResult
@@ -118,6 +120,7 @@ extension AppModel {
         associateWithEndpoint(of: remote, id)
 
         guard let current = self.record(id), let match = matchGitHubRepository(current, remote: remote) else {
+            associateWithRepository(of: remote, id)
             return self.record(id)
         }
 
@@ -142,9 +145,10 @@ extension AppModel {
         guard let apiRepository else {
             // If the request fails, we want to preserve the existing GitHub
             // repository info. But if we didn't have a GitHub repository
-            // already or the endpoint changed, the skeleton repository is
-            // better than nothing.
-            if endpoint != latest.gitHubRepository?.endpoint {
+            // already, or it isn't the one the remote names (another
+            // endpoint, owner, or name), the skeleton repository is better
+            // than nothing.
+            if !isMatchedRepository(latest.gitHubRepository, match) {
                 setGitHubRepository(upsertGitHubRepositoryFromMatch(match), for: id)
             }
             return self.record(id)
@@ -183,6 +187,20 @@ extension AppModel {
         }
         let match = toAnonymousMatch(endpoint: endpoint, owner: parsed.owner, name: parsed.name)
         setGitHubRepository(upsertGitHubRepositoryFromMatch(match), for: id, accountLogin: nil)
+    }
+
+    /// Points the association at the repository the remote names, as a
+    /// skeleton row, when it's another one and no account can ask GitHub
+    /// about it. `associateWithEndpoint` left only an association on the
+    /// remote's endpoint, so the account stays: it belongs to the endpoint.
+    private func associateWithRepository(of remote: Remote, _ id: RepositoryID) {
+        guard let gitHubRepository = record(id)?.gitHubRepository, let parsed = parseRemote(remote.url) else {
+            return
+        }
+        let match = toAnonymousMatch(endpoint: gitHubRepository.endpoint, owner: parsed.owner, name: parsed.name)
+        if !isMatchedRepository(gitHubRepository, match) {
+            setGitHubRepository(upsertGitHubRepositoryFromMatch(match), for: id)
+        }
     }
 
     /// Associates a repository without a GitHub repository with `endpoint`,
@@ -382,6 +400,17 @@ extension AppModel {
         }
         return existing.id
     }
+}
+
+/// Whether `gitHubRepository` is the repository `match` names: the same
+/// endpoint, owner, and name (owner and name ignoring case, as GitHub does).
+private func isMatchedRepository(_ gitHubRepository: GitHubRepository?, _ match: MatchedGitHubRepository) -> Bool {
+    guard let gitHubRepository else {
+        return false
+    }
+    return gitHubRepository.endpoint == match.account.endpoint
+        && JSCompat.caseInsensitiveEquals(gitHubRepository.owner.login, match.owner)
+        && JSCompat.caseInsensitiveEquals(gitHubRepository.name, match.name)
 }
 
 /// The user's permission level from the API's permissions: nil when the

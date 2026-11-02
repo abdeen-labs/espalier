@@ -210,6 +210,7 @@ struct RepositoriesStoreTests {
         let fork = APIFullRepository(repository: apiRepo.repository, parent: parent, permissions: apiRepo.permissions)
         let keptRepository = try setupEmptyRepository()
         let removedRepository = try setupEmptyRepository()
+        try await runGit(["remote", "add", "origin", "https://github.com/my-user/my-repo.git"], removedRepository)
         let kept = addRepository(app, keptRepository.path, POSIXPath.join(keptRepository.path, ".git"))
         let removed = addRepository(app, removedRepository.path, POSIXPath.join(removedRepository.path, ".git"))
         app.setGitHubRepository(app.upsertGitHubRepository(endpoint, fork), for: removed)

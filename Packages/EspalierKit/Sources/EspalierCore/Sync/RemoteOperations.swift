@@ -8,9 +8,9 @@ private let logger = Log.logger(category: "remotes")
 
 extension SyncModel {
     /// Changes the URL of the remote named `remoteName`, then refreshes the
-    /// remotes. The URL is trimmed, and an unchanged URL changes nothing. The
-    /// GitHub association follows at the next selection or association
-    /// refresh.
+    /// remotes. The URL is trimmed, and an unchanged URL changes nothing. A
+    /// new default remote URL refreshes the GitHub association once the
+    /// remotes have loaded.
     ///
     /// Holds the network lane: network operations read the remote's URL.
     public func setRemoteURL(_ url: String, for remoteName: String) async throws(OperationError) {

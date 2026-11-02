@@ -44,6 +44,9 @@ public final class RepositoryGitHubModel: RepositoryFeature {
     @ObservationIgnored private(set) var pullRequestsKey: Int?
     /// The tip the last refresh notification saw, to notice a new branch.
     @ObservationIgnored private var lastSeenTip: Tip = .unknown
+    /// The default remote the last refresh that loaded the remotes saw, to
+    /// notice one pointed elsewhere; nil until the remotes have loaded.
+    @ObservationIgnored private var lastSeenDefaultRemote: Remote?? = nil
     /// Bumped by every protection refresh and by `clearBranchProtection()`,
     /// so only the latest refresh applies.
     @ObservationIgnored var protectionGeneration: UInt64 = 0
@@ -363,6 +366,9 @@ public final class RepositoryGitHubModel: RepositoryFeature {
         guard let repository else {
             return
         }
+        if update.applied.contains(.remotes) {
+            defaultRemoteDidLoad(repository.gitState.remotes.defaultRemote)
+        }
         if syncGitHubRepository() {
             gitHubRepositoryDidChange()
         }
@@ -384,6 +390,22 @@ public final class RepositoryGitHubModel: RepositoryFeature {
         }
         startTracked { [weak self] in
             await self?.refreshBranchProtection()
+        }
+    }
+
+    /// A default remote that changed since the remotes last loaded (the user
+    /// pointed it at another URL) refreshes the GitHub association, so the
+    /// repository follows it to another owner or server.
+    private func defaultRemoteDidLoad(_ remote: Remote?) {
+        defer { lastSeenDefaultRemote = .some(remote) }
+        guard case .some(let previous) = lastSeenDefaultRemote, !remoteEquals(previous, remote),
+              let repository, let app = repository.app
+        else {
+            return
+        }
+        let id = repository.id
+        startTracked {
+            await app.refreshGitHubAssociation(id)
         }
     }
 
