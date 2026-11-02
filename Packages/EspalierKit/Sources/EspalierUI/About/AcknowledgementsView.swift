@@ -45,7 +45,7 @@ extension Acknowledgement {
 
     /// The bundled git's release (scripts/git-version, its build's tag).
     static let gitVersion = "2.56.0"
-    static let bundledGitTag = "v2.56.0-1"
+    static let bundledGitTag = "v2.56.0-2"
 
     static let basedOn: [Acknowledgement] = [
         Acknowledgement(
