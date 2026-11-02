@@ -95,7 +95,7 @@ struct MultipleAccountsTests {
         let zebraBob = account("bob", endpoint: "https://zebra.example.com/api/v3")
         let acme = account("carol", endpoint: "https://acme.example.com/api/v3")
         let zebraAlice = account("alice", endpoint: "https://zebra.example.com/api/v3")
-        let ghe = account("dave", endpoint: "https://api.octo.ghe.com/")
+        let ghe = account("dave", endpoint: "https://api.octo.ghe.com")
         let acmePort = account("erin", endpoint: "https://acme.example.com:8443/api/v3")
 
         let groups = groupAccountsByHost([zebraBob, ghe, acmePort, acme, zebraAlice])

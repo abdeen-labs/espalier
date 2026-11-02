@@ -569,7 +569,7 @@ struct DeviceFlowSignInTests {
         let app = await harness.loadedAppWithAccounts()
         let signIn = app.accounts.signIn
 
-        await signIn.beginSignIn(endpoint: "https://api.octocorp.ghe.com/")
+        await signIn.beginSignIn(endpoint: "https://api.octocorp.ghe.com")
 
         // The address, not the API endpoint (api.api.<tenant>).
         #expect(signIn.state == .endpointEntry(SignInState.EndpointEntry(

@@ -36,7 +36,7 @@ private let bypassPageCases: [NamedCase<(url: String, endpoint: String?, opens: 
     NamedCase("github.com, in capitals", (url: "https://GitHub.COM/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: true)),
     NamedCase("the repository's Enterprise server", (url: "https://ghe.example.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://ghe.example.com/api/v3", opens: true)),
     NamedCase("the repository's Enterprise server, on a port", (url: "https://ghe.example.com:8443/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://ghe.example.com:8443/api/v3", opens: true)),
-    NamedCase("the repository's GHE.com server", (url: "https://octo.ghe.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.octo.ghe.com/", opens: true)),
+    NamedCase("the repository's GHE.com server", (url: "https://octo.ghe.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.octo.ghe.com", opens: true)),
     NamedCase("an Enterprise server, for a repository on github.com", (url: "https://ghe.example.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://api.github.com", opens: false)),
     NamedCase("an Enterprise server, for a repository not known to be on GitHub", (url: "https://ghe.example.com/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: nil, opens: false)),
     NamedCase("another Enterprise server", (url: "https://ghe.other.example/octocat/hello/security/secret-scanning/unblock-secret/2abc", endpoint: "https://ghe.example.com/api/v3", opens: false)),

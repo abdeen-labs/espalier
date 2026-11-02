@@ -63,7 +63,7 @@ public func fetchUser(
 ///
 /// https://github.com/desktop/desktop -> https://api.github.com
 /// http://github.mycompany.com/my-team/my-project -> https://github.mycompany.com/api/v3
-/// https://octocorp.ghe.com/my-team/my-project -> https://api.octocorp.ghe.com/
+/// https://octocorp.ghe.com/my-team/my-project -> https://api.octocorp.ghe.com
 ///
 /// For any other host, this returns the endpoint sign-in stores for that
 /// host (`.../api/v3`, or the `api.` subdomain on ghe.com), so it compares
@@ -114,10 +114,11 @@ public func getHTMLURL(_ endpoint: String) -> String {
 /// Get the API URL for an HTML URL. For example:
 ///
 /// http://github.mycompany.com -> https://github.mycompany.com/api/v3
+/// https://octocorp.ghe.com -> https://api.octocorp.ghe.com
 public func getEnterpriseAPIURL(_ endpoint: String) -> String {
     let host = ParsedURL(endpoint).host ?? ""
 
-    return isGHE(endpoint) ? "https://api.\(host)/" : "https://\(host)/api/v3"
+    return isGHE(endpoint) ? "https://api.\(host)" : "https://\(host)/api/v3"
 }
 
 public func getAPIEndpoint(_ endpoint: String) -> String {

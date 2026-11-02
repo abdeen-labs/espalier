@@ -233,7 +233,7 @@ struct TextTokenParserTests {
 
     @Test("ghe.com mentions link to the enterprise's profiles")
     func gheMention() {
-        let enterprise = gitHubRepoFixture(owner: "team", name: "tool", endpoint: "https://api.acme.ghe.com/")
+        let enterprise = gitHubRepoFixture(owner: "team", name: "tool", endpoint: "https://api.acme.ghe.com")
         let results = Tokenizer(emoji: emoji, gitHubRepository: enterprise).tokenize("thanks @octo")
         #expect(results == [.text("thanks "), .link(text: "@octo", url: "https://acme.ghe.com/octo")])
     }

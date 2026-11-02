@@ -96,7 +96,7 @@ struct DeviceFlowTests {
         }
 
         @Test("signs in on the enterprise's host and port", arguments: [
-            NamedCase("uses the api. subdomain for ghe.com", (address: "https://octocorp.ghe.com", endpoint: "https://api.octocorp.ghe.com/", deviceCodeURL: "https://octocorp.ghe.com/login/device/code")),
+            NamedCase("uses the api. subdomain for ghe.com", (address: "https://octocorp.ghe.com", endpoint: "https://api.octocorp.ghe.com", deviceCodeURL: "https://octocorp.ghe.com/login/device/code")),
             NamedCase("keeps an Enterprise Server's port", (address: "https://github.example.com:8443", endpoint: "https://github.example.com:8443/api/v3", deviceCodeURL: "https://github.example.com:8443/login/device/code")),
         ])
         func requestsDeviceCodeOnEnterpriseHost(_ testCase: NamedCase<(address: String, endpoint: String, deviceCodeURL: String)>) async throws {

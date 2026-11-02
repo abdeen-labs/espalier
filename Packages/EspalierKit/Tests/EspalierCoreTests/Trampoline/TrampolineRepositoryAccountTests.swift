@@ -252,7 +252,7 @@ struct TrampolineRepositoryAccountTests {
         #expect(isSameOrigin(try JSURL("https://ghe.example.com:8443/x"), "https://ghe.example.com:8443/api/v3"))
         #expect(!isSameOrigin(try JSURL("https://ghe.example.com/x"), "https://ghe.example.com:8443/api/v3"))
         #expect(!isSameOrigin(try JSURL("https://ghe.example.com:8443/x"), "https://ghe.example.com/api/v3"))
-        #expect(isSameOrigin(try JSURL("https://octocorp.ghe.com/x"), "https://api.octocorp.ghe.com/"))
+        #expect(isSameOrigin(try JSURL("https://octocorp.ghe.com/x"), "https://api.octocorp.ghe.com"))
     }
 }
 

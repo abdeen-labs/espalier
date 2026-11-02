@@ -18,14 +18,14 @@ struct APIClientTests {
             #expect(getHTMLURL("http://github.mycompany.com/api/v3") == "http://github.mycompany.com")
             #expect(getHTMLURL("https://github.mycompany.com:8443/api/v3") == "https://github.mycompany.com:8443")
             #expect(getHTMLURL("https://github.mycompany.com:443/api/v3") == "https://github.mycompany.com")
-            #expect(getHTMLURL("https://api.octocorp.ghe.com/") == "https://octocorp.ghe.com/")
+            #expect(getHTMLURL("https://api.octocorp.ghe.com") == "https://octocorp.ghe.com/")
         }
 
         @Test("maps HTML URLs to enterprise API endpoints")
         func enterpriseAPIURLs() {
             #expect(getEnterpriseAPIURL("https://github.mycompany.com") == "https://github.mycompany.com/api/v3")
             #expect(getEnterpriseAPIURL("http://github.mycompany.com:8080/") == "https://github.mycompany.com:8080/api/v3")
-            #expect(getEnterpriseAPIURL("https://octocorp.ghe.com") == "https://api.octocorp.ghe.com/")
+            #expect(getEnterpriseAPIURL("https://octocorp.ghe.com") == "https://api.octocorp.ghe.com")
             #expect(getAPIEndpoint("https://github.com") == "https://api.github.com")
             #expect(getAPIEndpoint("https://github.mycompany.com") == "https://github.mycompany.com/api/v3")
         }
@@ -35,7 +35,7 @@ struct APIClientTests {
             #expect(getEndpointForRepository("https://github.com/desktop/desktop") == "https://api.github.com")
             #expect(getEndpointForRepository("http://github.mycompany.com/my-team/my-project") == "https://github.mycompany.com/api/v3")
             #expect(getEndpointForRepository("https://github.mycompany.com:8443/team/project") == "https://github.mycompany.com:8443/api/v3")
-            #expect(getEndpointForRepository("https://octocorp.ghe.com/team/project") == "https://api.octocorp.ghe.com/")
+            #expect(getEndpointForRepository("https://octocorp.ghe.com/team/project") == "https://api.octocorp.ghe.com")
 
             let enterprise = try EndpointConfiguration.enterprise(address: "github.mycompany.com", clientID: "client")
             #expect(getEndpointForRepository("https://github.mycompany.com/team/project") == enterprise.endpoint)
@@ -48,11 +48,11 @@ struct APIClientTests {
             #expect(isDotCom("http://github.com:8080/x"))
             #expect(!isDotCom("https://github.mycompany.com/"))
             #expect(!isDotCom("not a url"))
-            #expect(isGHE("https://api.octocorp.ghe.com/"))
+            #expect(isGHE("https://api.octocorp.ghe.com"))
             #expect(isGHE("https://octocorp.ghe.com/"))
             #expect(!isGHE("https://ghe.com/"))
             #expect(isGHES("https://github.mycompany.com/api/v3"))
-            #expect(!isGHES("https://api.octocorp.ghe.com/"))
+            #expect(!isGHES("https://api.octocorp.ghe.com"))
             #expect(isGist("https://gist.github.com/"))
             #expect(!isGist("https://github.com/"))
         }
@@ -105,7 +105,7 @@ struct APIClientTests {
                     == "https://github.com/settings/connections/applications/Ov23li"
             )
             #expect(
-                getOAuthApplicationSettingsURL(endpoint: "https://api.octocorp.ghe.com/", clientID: "Ov23li")
+                getOAuthApplicationSettingsURL(endpoint: "https://api.octocorp.ghe.com", clientID: "Ov23li")
                     == "https://octocorp.ghe.com/settings/connections/applications/Ov23li"
             )
         }
