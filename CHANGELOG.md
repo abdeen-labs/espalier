@@ -16,6 +16,18 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.5.1] - 2026-11-02
+
+### Changed
+
+- Toasts and the operation capsule are only as wide as what they hold. A toast's symbol sits in a round badge, and its close button is a small × in a soft circle.
+- Text in Geist is a little heavier, so it's easier to read at the app's small sizes.
+- Assisted commits write descriptions that say what a commit changes and why, rather than listing the files it touches.
+
+### Fixed
+
+- A repository whose remote now points at another owner, such as one moved to an organization, moves to that owner's group in the repository list.
+
 ## [1.5] - 2026-10-25
 
 ### Added
@@ -165,7 +177,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/abdeen-labs/espalier/compare/v1.5...v1.5.1
 [1.5]: https://github.com/abdeen-labs/espalier/compare/v1.4.2...v1.5
 [1.4.2]: https://github.com/abdeen-labs/espalier/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/abdeen-labs/espalier/compare/v1.4...v1.4.1
