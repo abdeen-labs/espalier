@@ -85,7 +85,7 @@ let package = Package(
         // The C library SwiftTreeSitter wraps; EspalierSyntax imports it directly.
         .package(url: "https://github.com/tree-sitter/tree-sitter", exact: "0.25.10"),
         // App updates: the appcast at Info.plist's SUFeedURL.
-        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1"),
     ] + grammarPackages.map { .package(url: $0.url, exact: $0.version) },
     targets: [
         // Shared, dependency-free utilities: Keychain, logging, file helpers.
