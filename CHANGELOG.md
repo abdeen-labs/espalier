@@ -16,6 +16,17 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.5.2] - 2026-11-08
+
+### Changed
+
+- Assisted commits send the model only the name of a file that's binary or has a very large diff, and whether it was added, modified, or deleted, which saves tokens and keeps big changes from going over the model's limit. The card says so while the model plans.
+
+### Fixed
+
+- Assisted commits no longer fail, or get stuck on "Couldn't undo the assisted commit", when another app runs `git status` in the repository during the commit.
+- When an assisted commit really can't be undone, Dismiss clears it, so you no longer have to restart Espalier. Its message no longer gets cut off.
+
 ## [1.5.1] - 2026-11-02
 
 ### Changed
@@ -177,7 +188,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5.2...HEAD
+[1.5.2]: https://github.com/abdeen-labs/espalier/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/abdeen-labs/espalier/compare/v1.5...v1.5.1
 [1.5]: https://github.com/abdeen-labs/espalier/compare/v1.4.2...v1.5
 [1.4.2]: https://github.com/abdeen-labs/espalier/compare/v1.4.1...v1.4.2
