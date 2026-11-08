@@ -336,6 +336,99 @@ struct AssistedCommitTests {
         #expect(try await getStatusOrThrow(repository).workingDirectory.files.isEmpty)
     }
 
+    /// `count` numbered lines of about 60 bytes each, marked with `tag`.
+    private func longFile(_ tag: String, count: Int) -> String {
+        text((1...count).map { "\(tag) line \($0) " + String(repeating: "x", count: 50) })
+    }
+
+    @Test("leaves out the diffs of binary and very large files, and commits them whole")
+    func leavesOutLargeDiffs() async throws {
+        let repository = try setupEmptyRepository()
+        try writeBytes(repository, "logo.png", [0x89, 0x50, 0, 1, 2])
+        try write(repository, "gone.bin", "\u{0}old\n")
+        try write(repository, "logo.svg", "<svg><path d=\"\(String(repeating: "M1 1", count: 1000))\"/></svg>\n")
+        try write(repository, "big.txt", longFile("old", count: 1500))
+        try write(repository, "small.txt", "small\n")
+        try await commitEverything(repository, "Initial")
+        try writeBytes(repository, "logo.png", [0x89, 0x50, 0, 3, 4])
+        try await run(repository, ["rm", "gone.bin"])
+        try writeBytes(repository, "added.png", [0, 9])
+        try write(repository, "logo.svg", "<svg><path d=\"\(String(repeating: "M2 2", count: 1000))\"/></svg>\n")
+        try write(repository, "big.txt", longFile("new", count: 1500))
+        try write(repository, "small.txt", "small changed\n")
+
+        let snapshot = try await capture(repository, try await everything(repository))
+        let expected: [(path: String, change: AssistedCommitFileChange)] = [
+            ("added.png", .added),
+            ("big.txt", .modified),
+            ("gone.bin", .deleted),
+            ("logo.png", .modified),
+            ("logo.svg", .modified),
+        ]
+        for (path, change) in expected {
+            let units = snapshot.analysis.changes.filter { $0.path == path }
+            #expect(units.count == 1, "\(path)")
+            #expect(units.first?.kind == .atomic, "\(path)")
+            #expect(units.first?.diff == nil, "\(path)")
+            #expect(units.first?.fileChange == change, "\(path)")
+        }
+        #expect(snapshot.analysis.changes.first { $0.path == "small.txt" }?.diff != nil)
+
+        let validated = try await snapshot.validate(plan(snapshot, [("Everything", snapshot.analysis.changes.map(\.id))]))
+        _ = try await snapshot.execute(validated)
+        #expect(try await contents(repository, "HEAD", "big.txt") == longFile("new", count: 1500))
+        #expect(try await getStatusOrThrow(repository).workingDirectory.files.isEmpty)
+    }
+
+    @Test("commits only the selected lines of a file whose diff is left out")
+    func partialOfLargeDiff() async throws {
+        let repository = try setupEmptyRepository()
+        let original = (1...3000).map { "line \($0) " + String(repeating: "x", count: 50) }
+        try write(repository, "big.txt", text(original))
+        try await commitEverything(repository, "Initial")
+        let changed = original.map { $0 + "!" }
+        try write(repository, "big.txt", text(changed))
+
+        let file = try #require(try await everything(repository).first)
+        guard case .text(let diff) = try await getWorkingDirectoryDiff(repository, file) else {
+            throw TestSupportError("Expected a text diff")
+        }
+        // The first half of the file's deletions and of its additions.
+        let first = diff.hunks[0].unifiedDiffStart + 1
+        let selection = DiffSelection.fromInitialSelection(.none)
+            .withRangeSelection(from: first, length: 1500, selected: true)
+            .withRangeSelection(from: first + 3000, length: 1500, selected: true)
+        let snapshot = try await capture(repository, [file.withSelection(selection)])
+        let units = snapshot.analysis.changes
+        #expect(units.count == 1)
+        #expect(units.first?.kind == .atomic)
+        #expect(units.first?.diff == nil)
+
+        _ = try await snapshot.execute(try await snapshot.validate(plan(snapshot, [("Part", units.map(\.id))])))
+        // The kept deletions come first in the hunk, so they stay first.
+        #expect(try await contents(repository, "HEAD", "big.txt") == text(Array(original[1500...] + changed[..<1500])))
+        #expect(try read(repository, "big.txt") == text(changed))
+    }
+
+    @Test("leaves out the largest diffs when a selection's add up to too much")
+    func leavesOutLargestDiffs() async throws {
+        let repository = try setupEmptyRepository()
+        // Four files of about 56 KB each, and one a little larger: over the
+        // limit by less than the largest.
+        let sizes = ["a.txt": 850, "b.txt": 850, "c.txt": 850, "d.txt": 850, "largest.txt": 900]
+        for (path, _) in sizes {
+            try write(repository, path, "start\n")
+        }
+        try await commitEverything(repository, "Initial")
+        for (path, count) in sizes {
+            try write(repository, path, "start\n" + longFile("new", count: count))
+        }
+
+        let snapshot = try await capture(repository, try await everything(repository))
+        let leftOut = snapshot.analysis.changes.filter { $0.diff == nil }.map(\.path)
+        #expect(leftOut == ["largest.txt"])
+    }
+
     @Test("refuses part of a binary file")
     func partialBinary() async throws {
         let repository = try setupEmptyRepository()
@@ -437,6 +530,72 @@ struct AssistedCommitTests {
         #expect(error?.code == .indexChanged)
         #expect(try await tip(repository) == original)
         #expect(try await run(repository, ["diff", "--cached", "--name-only"]) == "c.txt\n")
+    }
+
+    /// Rewrites the index without staging anything differently, as a
+    /// `git status` in another program can.
+    private func rewriteIndex(_ repository: Repository, _ args: [String]) async throws {
+        let before = try indexFile(repository).bytes
+        try await run(repository, args)
+        #expect(try indexFile(repository).bytes != before)
+    }
+
+    @Test("isn't stopped by an index rewritten while the model plans", arguments: [(from: "2", to: "4"), (from: "4", to: "2")])
+    func indexRewrittenBeforeCommitting(_ versions: (from: String, to: String)) async throws {
+        let repository = try await repositoryWithTwoFiles()
+        try await run(repository, ["update-index", "--index-version", versions.from])
+        let snapshot = try await capture(repository, try await everything(repository))
+        try await rewriteIndex(repository, ["update-index", "--index-version", versions.to])
+
+        let validated = try await snapshot.validate(twoCommitPlan(snapshot))
+        let transaction = try await snapshot.execute(validated)
+        try await transaction.accept()
+        #expect(try await subjects(repository) == ["Change the end", "Change the start", "Initial"])
+    }
+
+    @Test("keeps the commits when something refreshes the index they left")
+    func indexRefreshedAfterCommitting() async throws {
+        let repository = try await repositoryWithTwoFiles()
+        let snapshot = try await capture(repository, try await everything(repository))
+        let transaction = try await snapshot.execute(try await snapshot.validate(twoCommitPlan(snapshot)))
+        try await rewriteIndex(repository, ["update-index", "-q", "--refresh"])
+
+        try await transaction.accept()
+        #expect(try await subjects(repository) == ["Change the end", "Change the start", "Initial"])
+    }
+
+    @Test("undoes a run whose index something refreshed")
+    func rollbackAfterIndexRefresh() async throws {
+        let repository = try await repositoryWithTwoFiles()
+        let original = try await tip(repository)
+        let index = try indexFile(repository)
+        let snapshot = try await capture(repository, try await everything(repository))
+        let transaction = try await snapshot.execute(try await snapshot.validate(twoCommitPlan(snapshot)))
+        try await rewriteIndex(repository, ["update-index", "-q", "--refresh"])
+
+        let recovery = try await transaction.rollback()
+        #expect(recovery.history == .restored)
+        #expect(recovery.index == .restored)
+        #expect(try await tip(repository) == original)
+        #expect(try indexFile(repository).bytes == index.bytes)
+    }
+
+    @Test("leaves an index something staged other changes in, when undoing a run")
+    func rollbackLeavesStagedChanges() async throws {
+        let repository = try await repositoryWithTwoFiles()
+        try write(repository, "c.txt", "staged elsewhere\n")
+        let original = try await tip(repository)
+        let snapshot = try await capture(repository, try await everything(repository).filter { $0.path != "c.txt" })
+        let transaction = try await snapshot.execute(try await snapshot.validate(twoCommitPlan(snapshot)))
+        try await run(repository, ["add", "c.txt"])
+
+        let error = await #expect(throws: AssistedCommitError.self) {
+            _ = try await transaction.rollback()
+        }
+        #expect(error?.code == .recoveryFailed)
+        #expect(error?.recovery?.index == .interfered)
+        #expect(try await tip(repository) == original)
+        #expect(try await run(repository, ["ls-files", "c.txt"]) == "c.txt\n")
     }
 
     typealias StageMatcher = @Sendable (AssistedCommitProgress) -> Bool

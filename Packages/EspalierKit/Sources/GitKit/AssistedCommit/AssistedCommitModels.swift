@@ -36,6 +36,15 @@ public enum AssistedCommitChangeKind: String, Sendable, Hashable {
     case atomic
 }
 
+/// What happened to a file, for a planner that can't be sent its diff.
+public enum AssistedCommitFileChange: String, Sendable, Hashable {
+    case added
+    case modified
+    case deleted
+    case renamed
+    case copied
+}
+
 /// An indivisible unit of the selected changes, valid only in its snapshot.
 ///
 /// The diff is for analysis. A plan names units by ID; it never supplies
@@ -48,16 +57,27 @@ public struct AssistedCommitChange: Sendable, Hashable, Identifiable {
     public let path: String
     /// The original path of a rename or copy.
     public let oldPath: String?
+    /// What happened to the file.
+    public let fileChange: AssistedCommitFileChange
     /// The selected changes with their unchanged context, and nothing that
-    /// wasn't selected. A binary change shows git's summary line, not its
-    /// bytes.
-    public let diff: String
+    /// wasn't selected; nil for a whole file whose diff is left out because
+    /// it's binary or too large, so a planner has only the path and
+    /// `fileChange`.
+    public let diff: String?
 
-    public init(id: String, kind: AssistedCommitChangeKind, path: String, oldPath: String?, diff: String) {
+    public init(
+        id: String,
+        kind: AssistedCommitChangeKind,
+        path: String,
+        oldPath: String?,
+        fileChange: AssistedCommitFileChange,
+        diff: String?
+    ) {
         self.id = id
         self.kind = kind
         self.path = path
         self.oldPath = oldPath
+        self.fileChange = fileChange
         self.diff = diff
     }
 }

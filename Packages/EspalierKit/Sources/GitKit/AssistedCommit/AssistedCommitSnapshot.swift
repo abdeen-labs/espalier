@@ -21,6 +21,19 @@ import Foundation
 /// into hunks at: larger files are one unit.
 let assistedMaximumSplittableBytes = 4 * 1024 * 1024
 
+/// The most bytes of one file's selected diff a planner is sent: about 1,500
+/// lines of code. A larger diff is left out, and the file is one unit.
+let assistedMaximumFileDiffBytes = 64 * 1024
+
+/// The longest diff line a planner is sent. A longer one is minified code,
+/// SVG path data, or an embedded blob rather than something to read, and the
+/// file's diff is left out.
+let assistedMaximumDiffLineBytes = 2 * 1024
+
+/// The most bytes of diffs a planner is sent for a selection, about 70,000
+/// tokens of code. Past it, the largest files' diffs are left out.
+let assistedMaximumSelectionDiffBytes = 256 * 1024
+
 /// A selected file, frozen.
 struct AssistedFrozenFile: Sendable {
     let change: WorkingDirectoryFileChange
@@ -155,8 +168,10 @@ public actor AssistedCommitSnapshot {
     /// and file-backed refs. Then reads each selected file, cleans it as
     /// `git add` would, and splits text changes into hunks; binary, renamed,
     /// deleted, symbolic link, mode-changing, and very large changes are
-    /// one unit each. Finally checks that HEAD, the index, and the files
-    /// are as they were.
+    /// one unit each. Files that are binary or whose diffs are too large
+    /// reach the planner as their path and what happened to them, without
+    /// a diff. Finally checks that HEAD, the index, and the files are as
+    /// they were.
     ///
     /// The repository's index and working tree aren't touched.
     ///
@@ -397,11 +412,12 @@ public actor AssistedCommitSnapshot {
             let isLarge = baseBytes.count + fullBytes.count > assistedMaximumSplittableBytes
             let diff: (text: String, parsed: RawDiff?)
             if isLarge {
-                diff = ("Selected change to \u{201C}\(file.path)\u{201D}, too large to show.\n", nil)
+                diff = ("", nil)
             } else {
                 diff = try await frozenDiff(privateRepository, baseTree, fullTree, diffPaths, parse: !isSymbolicLink)
             }
-            let isText = isUTF8Text(baseBytes) && isUTF8Text(fullBytes) && diff.parsed.map { !$0.isBinary } == true
+            let isBinary = !isUTF8Text(baseBytes) || !isUTF8Text(fullBytes) || diff.parsed?.isBinary == true
+            let isText = !isBinary && diff.parsed != nil
             let isModeChange = base != nil && full != nil && base?.mode != full?.mode
 
             if isPartial, !isText || isModeChange || isSymbolicLink {
@@ -447,7 +463,8 @@ public actor AssistedCommitSnapshot {
                     kind: .atomic,
                     path: file.path,
                     oldPath: isRenamed || isCopied ? oldPath : nil,
-                    diff: selectedDiff.text
+                    fileChange: fileChange(file),
+                    diff: isLarge || isBinary ? nil : selectedDiff.text
                 ))
             } else if let parsed = selectedDiff.parsed {
                 for hunk in parsed.hunks {
@@ -462,7 +479,14 @@ public actor AssistedCommitSnapshot {
                         text += line.text + "\n" + (line.noTrailingNewLine ? "\\ No newline at end of file\n" : "")
                     }
                     hunks.append(AssistedFrozenHunk(id: id, start: start, end: start + hunk.header.oldLineCount, replacement: replacement))
-                    changes.append(AssistedCommitChange(id: id, kind: .textHunk, path: file.path, oldPath: nil, diff: "\(parsed.header)\n\(text)"))
+                    changes.append(AssistedCommitChange(
+                        id: id,
+                        kind: .textHunk,
+                        path: file.path,
+                        oldPath: nil,
+                        fileChange: fileChange(file),
+                        diff: "\(parsed.header)\n\(text)"
+                    ))
                 }
             }
             files.append(AssistedFrozenFile(
@@ -480,7 +504,85 @@ public actor AssistedCommitSnapshot {
             throw AssistedCommitError(.unsafeSelection, "The selected files have no changes to commit.")
         }
         let selectedTree = try await privateRepository.writeTree(baseTree, files.flatMap { $0.treeUpdates() }, indexPath: scratchIndex)
-        return Frozen(baseTree: baseTree, selectedTree: selectedTree, files: files, changes: changes)
+        let limited = leavingOutLargeDiffs(files, changes, newID: newID)
+        return Frozen(baseTree: baseTree, selectedTree: selectedTree, files: limited.files, changes: limited.changes)
+    }
+
+    /// What happened to `file`, in its selected changes.
+    private static func fileChange(_ file: WorkingDirectoryFileChange) -> AssistedCommitFileChange {
+        switch file.status.kind {
+        case .new, .untracked: .added
+        case .deleted: file.selection.getSelectionType() == .all ? .deleted : .modified
+        case .renamed: .renamed
+        case .copied: .copied
+        case .modified, .conflicted: .modified
+        }
+    }
+
+    /// `files` and `changes` with the diffs too large to send to a planner
+    /// left out: a file over `assistedMaximumFileDiffBytes` or with a line
+    /// over `assistedMaximumDiffLineBytes`, then the largest files until the
+    /// rest fit in `assistedMaximumSelectionDiffBytes`. Such a file becomes
+    /// one unit, since the planner can't tell its hunks apart.
+    private static func leavingOutLargeDiffs(
+        _ files: [AssistedFrozenFile],
+        _ changes: [AssistedCommitChange],
+        newID: () -> String
+    ) -> (files: [AssistedFrozenFile], changes: [AssistedCommitChange]) {
+        let unitsByID = Dictionary(uniqueKeysWithValues: changes.map { ($0.id, $0) })
+        func units(of file: AssistedFrozenFile) -> [AssistedCommitChange] {
+            (file.atomicID.map { [$0] } ?? file.hunks.map(\.id)).compactMap { unitsByID[$0] }
+        }
+
+        var leftOut = Set<Int>()
+        var kept: [(offset: Int, size: Int)] = []
+        for (offset, file) in files.enumerated() {
+            let diffs = units(of: file).compactMap(\.diff)
+            let size = diffs.reduce(0) { $0 + $1.utf8.count }
+            let hasLongLine = diffs.contains { diff in
+                diff.utf8.split(separator: UInt8(ascii: "\n")).contains { $0.count > assistedMaximumDiffLineBytes }
+            }
+            if size > assistedMaximumFileDiffBytes || hasLongLine {
+                leftOut.insert(offset)
+            } else {
+                kept.append((offset, size))
+            }
+        }
+        var total = kept.reduce(0) { $0 + $1.size }
+        for file in kept.sorted(by: { ($0.size, $1.offset) > ($1.size, $0.offset) }) where total > assistedMaximumSelectionDiffBytes {
+            leftOut.insert(file.offset)
+            total -= file.size
+        }
+
+        var limitedFiles: [AssistedFrozenFile] = []
+        var limitedChanges: [AssistedCommitChange] = []
+        for (offset, file) in files.enumerated() {
+            let fileUnits = units(of: file)
+            guard leftOut.contains(offset), let first = fileUnits.first else {
+                limitedFiles.append(file)
+                limitedChanges += fileUnits
+                continue
+            }
+            let id = file.atomicID ?? newID()
+            limitedFiles.append(AssistedFrozenFile(
+                change: file.change,
+                state: file.state,
+                base: file.base,
+                selected: file.selected,
+                baseBytes: file.baseBytes,
+                atomicID: id,
+                hunks: []
+            ))
+            limitedChanges.append(AssistedCommitChange(
+                id: id,
+                kind: .atomic,
+                path: first.path,
+                oldPath: first.oldPath,
+                fileChange: first.fileChange,
+                diff: nil
+            ))
+        }
+        return (limitedFiles, limitedChanges)
     }
 
     /// The entries `git update-index --add` makes for `paths` in an index

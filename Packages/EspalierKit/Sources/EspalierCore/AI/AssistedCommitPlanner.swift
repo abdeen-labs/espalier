@@ -20,8 +20,8 @@ struct AssistedCommitPlanRefused: Error, LocalizedError, Sendable {
 
 /// What a planning turn is doing.
 enum AssistedCommitPlanningStep: Sendable, Equatable {
-    /// Asking for a plan.
-    case planning(changes: Int)
+    /// Asking for a plan, with the diffs of `filesLeftOut` files left out.
+    case planning(changes: Int, filesLeftOut: Int)
     /// Asking for one message for the whole selection, after a split that
     /// can't be committed in its order.
     case summarizing(changes: Int)
@@ -31,13 +31,20 @@ enum AssistedCommitPlanner {
     /// Asks the model for a plan of the analysis's units, in a mode.
     typealias Propose = @Sendable (AIAssistedCommitAnalysis, AIAssistedCommitPlanningMode) async throws -> AIAssistedCommitResponse
 
-    /// The snapshot's analysis, as AIKit takes it: IDs, kinds, paths, and
-    /// diffs, nothing else.
+    /// The snapshot's analysis, as AIKit takes it: IDs, kinds, paths, what
+    /// happened to the files, and diffs, nothing else.
     static func analysis(_ snapshot: AssistedCommitSnapshot) -> AIAssistedCommitAnalysis {
         AIAssistedCommitAnalysis(
             snapshotID: snapshot.analysis.snapshotID,
             changes: snapshot.analysis.changes.map { change in
-                AIAssistedCommitChange(id: change.id, kind: change.kind.rawValue, path: change.path, oldPath: change.oldPath, diff: change.diff)
+                AIAssistedCommitChange(
+                    id: change.id,
+                    kind: change.kind.rawValue,
+                    path: change.path,
+                    oldPath: change.oldPath,
+                    status: change.fileChange.rawValue,
+                    diff: change.diff
+                )
             }
         )
     }
@@ -68,7 +75,8 @@ enum AssistedCommitPlanner {
 
         func ask(_ mode: AIAssistedCommitPlanningMode) async throws -> AIAssistedCommitResponse {
             try checkCancelled(options)
-            await onStep(mode == .plan ? .planning(changes: analysis.changes.count) : .summarizing(changes: analysis.changes.count))
+            let filesLeftOut = analysis.changes.filter { $0.diff == nil }.count
+            await onStep(mode == .plan ? .planning(changes: analysis.changes.count, filesLeftOut: filesLeftOut) : .summarizing(changes: analysis.changes.count))
             try checkCancelled(options)
             let response = try await propose(analysis, mode)
             try checkCancelled(options)

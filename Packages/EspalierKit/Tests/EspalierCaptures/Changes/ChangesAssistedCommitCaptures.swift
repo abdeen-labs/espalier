@@ -69,8 +69,13 @@ struct ChangesAssistedCommitCaptures {
     @Test("Assisted, planning and committing")
     func running() {
         capture(
-            values.composer(assisted(.running(.planning(changes: 7), canCancel: true), button: button(enabled: false, committing: true))),
+            values.composer(assisted(.running(.planning(changes: 7, filesLeftOut: 0), canCancel: true), button: button(enabled: false, committing: true))),
             named: "composer-assisted-planning",
+            area: area
+        )
+        capture(
+            values.composer(assisted(.running(.planning(changes: 7, filesLeftOut: 3), canCancel: true), button: button(enabled: false, committing: true))),
+            named: "composer-assisted-planning-files-left-out",
             area: area
         )
         capture(
@@ -96,7 +101,7 @@ struct ChangesAssistedCommitCaptures {
         )
         capture(
             values.composer(assisted(
-                .failed(message: "Something else changed the index, so the assisted commit left it as it is.", recovery: .retryUndo),
+                .failed(message: "Something else changed the branch or the index, so Espalier left them as they are.", recovery: .retryUndo),
                 button: button(enabled: false, reason: "Retry undoing the last assisted commit first.")
             )),
             named: "composer-assisted-undo-needed",

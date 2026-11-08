@@ -8,9 +8,9 @@ import Testing
 import TestSupport
 
 private let analysis = AIAssistedCommitAnalysis(snapshotID: "snapshot-1", changes: [
-    AIAssistedCommitChange(id: "aaa", kind: "text-hunk", path: "a.txt", diff: "diff --git a/a.txt b/a.txt\n@@ -1 +1 @@\n-old\n+new\n"),
-    AIAssistedCommitChange(id: "bbb", kind: "atomic", path: "new.txt", oldPath: "old.txt", diff: "diff --git a/old.txt b/new.txt\n"),
-    AIAssistedCommitChange(id: "ccc", kind: "text-hunk", path: "c.txt", diff: "@@ -1 +1 @@\n-x\n+y\n"),
+    AIAssistedCommitChange(id: "aaa", kind: "text-hunk", path: "a.txt", status: "modified", diff: "diff --git a/a.txt b/a.txt\n@@ -1 +1 @@\n-old\n+new\n"),
+    AIAssistedCommitChange(id: "bbb", kind: "atomic", path: "new.txt", oldPath: "old.txt", status: "renamed", diff: "diff --git a/old.txt b/new.txt\n"),
+    AIAssistedCommitChange(id: "ccc", kind: "text-hunk", path: "c.txt", status: "modified", diff: "@@ -1 +1 @@\n-x\n+y\n"),
 ])
 
 private let validPlan = #"{"kind":"plan","snapshotId":"snapshot-1","commits":[{"title":"Change a","description":"Why.","changeIds":["aaa","ccc"]},{"title":"Rename old","changeIds":["bbb"]}]}"#
@@ -144,12 +144,27 @@ struct AssistedCommitPlanningTests {
         }
     }
 
+    @Test("sends a file without a diff as its path and status")
+    func fileWithoutDiff() throws {
+        let analysis = AIAssistedCommitAnalysis(snapshotID: "snapshot-1", changes: [
+            AIAssistedCommitChange(id: "aaa", kind: "atomic", path: "logo.png", status: "deleted", diff: nil),
+        ])
+        let tags = generateCommitMessagePromptTags()
+        let prompt = try buildAssistedCommitUserPrompt(analysis, tags)
+        let start = try #require(prompt.range(of: "\(tags.diffOpen)\n"))
+        let end = try #require(prompt.range(of: "\n\(tags.diffClose)"))
+        let sent = try #require(try JSONValue.parse(String(prompt[start.upperBound..<end.lowerBound]))["changes"]?.arrayValue?.first)
+        #expect(sent["path"]?.stringValue == "logo.png")
+        #expect(sent["status"]?.stringValue == "deleted")
+        #expect(sent["diff"] == nil)
+    }
+
     @Test("asks the model nothing for an empty selection or one too large to send")
     func noRequest() async throws {
         let provider = ScriptedProvider { _ in .content(validPlan) }
         let empty = AIAssistedCommitAnalysis(snapshotID: "snapshot-1", changes: [])
         let huge = AIAssistedCommitAnalysis(snapshotID: "snapshot-1", changes: [
-            AIAssistedCommitChange(id: "aaa", kind: "text-hunk", path: "a.txt", diff: String(repeating: "+", count: AssistedCommitPromptLimitBytes)),
+            AIAssistedCommitChange(id: "aaa", kind: "text-hunk", path: "a.txt", status: "modified", diff: String(repeating: "+", count: AssistedCommitPromptLimitBytes)),
         ])
         let cases: [(AIAssistedCommitAnalysis, AIAssistedCommitError.Code)] = [(empty, .emptySelection), (huge, .promptTooLarge)]
         for (input, code) in cases {

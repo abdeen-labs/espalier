@@ -33,8 +33,9 @@ public enum CommitMode: String, Sendable, Hashable, CaseIterable {
 public enum AssistedCommitPhase: Sendable, Equatable {
     /// Reading the selected changes.
     case preparing
-    /// Asking the model for a plan of `changes` units.
-    case planning(changes: Int)
+    /// Asking the model for a plan of `changes` units, without the diffs of
+    /// `filesLeftOut` files that are binary or too large.
+    case planning(changes: Int, filesLeftOut: Int)
     /// Asking the model for one message for everything, after a split that
     /// couldn't be committed in its order.
     case summarizing(changes: Int)
@@ -58,8 +59,9 @@ public enum AssistedCommitState: Sendable, Equatable {
     case failed(OperationError)
     /// The last run failed and couldn't undo all of itself, because
     /// something else changed the branch or the index:
-    /// `retryAssistedCommitRecovery()` tries again. New assisted commits wait
-    /// for it.
+    /// `retryAssistedCommitRecovery()` tries again, and
+    /// `dismissAssistedCommitFailure()` leaves things as they are. New
+    /// assisted commits wait for one of them.
     case recoveryNeeded(OperationError)
     /// The commits were made, and pushing them failed:
     /// `retryAssistedCommitPush()` pushes again.
@@ -314,13 +316,16 @@ extension CommitModel {
         return await pushAssistedCommits()
     }
 
-    /// Forgets the last run's failure, or its failed push. A rollback that
-    /// needs retrying stays.
+    /// Forgets the last run's failure, its failed push, or the rollback that
+    /// couldn't finish, leaving the branch and the index as they are.
     public func dismissAssistedCommitFailure() {
         switch assisted {
         case .failed, .pushFailed:
             assisted = .idle
-        case .idle, .running, .recoveryNeeded:
+        case .recoveryNeeded:
+            assistedRecovery = nil
+            assisted = .idle
+        case .idle, .running:
             break
         }
     }
@@ -382,7 +387,7 @@ extension CommitModel {
                     onStep: { step in
                         await MainActor.run {
                             switch step {
-                            case .planning(let changes): onPhase(.planning(changes: changes))
+                            case .planning(let changes, let filesLeftOut): onPhase(.planning(changes: changes, filesLeftOut: filesLeftOut))
                             case .summarizing(let changes): onPhase(.summarizing(changes: changes))
                             }
                         }

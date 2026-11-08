@@ -27,6 +27,11 @@ struct AssistedRepositoryIdentity: Sendable {
     /// The null object ID in the repository's object format.
     let zeroID: String
 
+    /// The size of an object ID, in bytes.
+    var objectIDSize: Int {
+        zeroID.utf8.count / 2
+    }
+
     /// The ref a run updates: HEAD's branch, or HEAD itself when detached.
     var updatedRef: String {
         originalHead.ref ?? "HEAD"
@@ -39,10 +44,133 @@ struct AssistedIndexState: Sendable {
     let mode: mode_t
     let times: (access: AssistedTimestamp, modification: AssistedTimestamp)?
 
-    /// The same bytes (and permissions, for a file that exists).
-    func matches(_ other: AssistedIndexState) -> Bool {
-        bytes == other.bytes && (bytes == nil || mode == other.mode)
+    /// Whether both stage the same things (with the same permissions, for
+    /// a file that exists). Git rewrites the index just to refresh its
+    /// cached file times (any `git status` can), so an index with other
+    /// bytes can still be the same one. A split index, whose entries are in
+    /// another file, has to match byte for byte.
+    func matches(_ other: AssistedIndexState, objectIDSize: Int) -> Bool {
+        guard let bytes, let otherBytes = other.bytes else {
+            return bytes == nil && other.bytes == nil
+        }
+        guard mode == other.mode else {
+            return false
+        }
+        if bytes == otherBytes {
+            return true
+        }
+        guard let entries = assistedIndexEntries(bytes, objectIDSize: objectIDSize),
+              let otherEntries = assistedIndexEntries(otherBytes, objectIDSize: objectIDSize)
+        else {
+            return false
+        }
+        return entries == otherEntries
     }
+}
+
+/// What an index entry stages, without the cached file times git refreshes.
+private struct AssistedIndexEntry: Equatable {
+    let path: Data
+    let mode: UInt32
+    let objectID: Data
+    /// Assume-valid and the stage, from the entry's flags, and skip-worktree
+    /// and intent-to-add, from its extended flags.
+    let flags: UInt16
+    let extendedFlags: UInt16
+}
+
+/// The entries of the index file `bytes` (versions 2 to 4), or nil when it's
+/// malformed or is a split index.
+private func assistedIndexEntries(_ bytes: Data, objectIDSize: Int) -> [AssistedIndexEntry]? {
+    let data = [UInt8](bytes)
+    func number(_ offset: Int, _ size: Int) -> UInt32? {
+        guard offset >= 0, size <= 4, offset + size <= data.count else {
+            return nil
+        }
+        return data[offset..<offset + size].reduce(0) { ($0 << 8) | UInt32($1) }
+    }
+    guard data.count >= 12 + objectIDSize, Array(data[0..<4]) == Array("DIRC".utf8),
+          let version = number(4, 4), (2...4).contains(version),
+          let count = number(8, 4)
+    else {
+        return nil
+    }
+    let end = data.count - objectIDSize
+    let fixedSize = 40 + objectIDSize + 2
+    var entries: [AssistedIndexEntry] = []
+    entries.reserveCapacity(Int(count))
+    var offset = 12
+    var previousPath: [UInt8] = []
+    for _ in 0..<count {
+        guard offset + fixedSize <= end, let mode = number(offset + 24, 4), let flags = number(offset + 40 + objectIDSize, 2) else {
+            return nil
+        }
+        var cursor = offset + fixedSize
+        var extendedFlags: UInt32 = 0
+        if flags & 0x4000 != 0 {
+            guard let value = number(cursor, 2) else {
+                return nil
+            }
+            extendedFlags = value
+            cursor += 2
+        }
+        var path: [UInt8]
+        if version == 4 {
+            // How many bytes of the previous path to drop, as git writes it.
+            guard cursor < end else {
+                return nil
+            }
+            var byte = data[cursor]
+            cursor += 1
+            var strip = Int(byte & 0x7F)
+            while byte & 0x80 != 0 {
+                guard cursor < end, strip < Int.max >> 8 else {
+                    return nil
+                }
+                byte = data[cursor]
+                cursor += 1
+                strip = ((strip + 1) << 7) + Int(byte & 0x7F)
+            }
+            guard strip <= previousPath.count else {
+                return nil
+            }
+            path = Array(previousPath[0..<previousPath.count - strip])
+        } else {
+            path = []
+        }
+        guard let terminator = data[cursor..<end].firstIndex(of: 0) else {
+            return nil
+        }
+        path += data[cursor..<terminator]
+        cursor = terminator + 1
+        if version != 4 {
+            // One to eight NULs pad the entry to a multiple of eight bytes.
+            cursor = offset + ((terminator - offset + 8) & ~7)
+            guard cursor <= end else {
+                return nil
+            }
+        }
+        entries.append(AssistedIndexEntry(
+            path: Data(path),
+            mode: mode,
+            objectID: Data(data[offset + 40..<offset + 40 + objectIDSize]),
+            flags: UInt16(flags & 0xB000),
+            extendedFlags: UInt16(extendedFlags & 0x6000)
+        ))
+        previousPath = path
+        offset = cursor
+    }
+    // The extensions: a split index's `link` says the entries are elsewhere.
+    while offset + 8 <= end {
+        guard let size = number(offset + 4, 4) else {
+            return nil
+        }
+        if Array(data[offset..<offset + 4]) == Array("link".utf8) {
+            return nil
+        }
+        offset += 8 + Int(size)
+    }
+    return offset == end ? entries : nil
 }
 
 /// A tree entry: mode, object, and path.
@@ -181,9 +309,9 @@ func assistedReadIndexState(_ path: String) throws -> AssistedIndexState {
     )
 }
 
-/// Throws `indexChanged` unless the index has `expected`'s bytes.
+/// Throws `indexChanged` unless the index stages what `expected` does.
 func assistedVerifyIndex(_ identity: AssistedRepositoryIdentity, _ expected: AssistedIndexState? = nil) throws {
-    guard try assistedReadIndexState(identity.indexPath).matches(expected ?? identity.originalIndex) else {
+    guard try assistedReadIndexState(identity.indexPath).matches(expected ?? identity.originalIndex, objectIDSize: identity.objectIDSize) else {
         throw AssistedCommitError(.indexChanged, "The repository's index changed during the assisted commit.")
     }
 }

@@ -78,7 +78,7 @@ nonisolated public struct AssistedCommitContent: Sendable, Equatable {
         case .running(let phase, _):
             switch phase {
             case .preparing: return "The changes are frozen as they are now."
-            case .planning(let changes): return "Asking the model to group \(changes) \(changes == 1 ? "change" : "changes")."
+            case .planning(let changes, _): return "Asking the model to group \(changes) \(changes == 1 ? "change" : "changes")."
             case .summarizing: return "The planned commits can't be made in that order, so they become one."
             case .validating: return "Every commit is checked before any is made."
             case .committing(_, _, let title): return title
@@ -89,6 +89,16 @@ nonisolated public struct AssistedCommitContent: Sendable, Equatable {
         case .failed(let message, _):
             return message
         }
+    }
+
+    /// What the model can't see of the changes, while it plans.
+    public var warning: String? {
+        guard case .running(.planning(_, let filesLeftOut), _) = status, filesLeftOut > 0 else {
+            return nil
+        }
+        return filesLeftOut == 1
+            ? "1 file is binary or too large, so the model sees only its name and whether it was added, modified, or deleted."
+            : "\(filesLeftOut) files are binary or too large, so the model sees only their names and whether they were added, modified, or deleted."
     }
 
     /// Whether a run is going.
@@ -183,10 +193,16 @@ struct AssistedCommitStatusView: View {
                 Text(content.detail)
                     .font(Typography.secondary)
                     .foregroundStyle(.text2)
-                    .lineLimit(4)
-                    .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
+                if let warning = content.warning {
+                    Text(warning)
+                        .font(Typography.secondary)
+                        .foregroundStyle(Color(espalier: Palette.warning))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                retryButtons
+                    .padding(.top, Metrics.insetSmall)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             button
@@ -233,19 +249,8 @@ struct AssistedCommitStatusView: View {
                 .controlSize(.small)
         case .failed(_, let recovery):
             switch recovery {
-            case .retryUndo:
-                Button("Retry Undo", action: actions.retryUndo)
-                    .buttonStyle(.quiet)
-                    .controlSize(.small)
-            case .retryPush:
-                HStack(spacing: Metrics.insetSmall) {
-                    Button("Dismiss", action: actions.dismiss)
-                        .buttonStyle(.quiet)
-                        .controlSize(.small)
-                    Button("Retry Push", action: actions.retryPush)
-                        .buttonStyle(.quiet)
-                        .controlSize(.small)
-                }
+            case .retryUndo, .retryPush:
+                EmptyView()
             case .openSettings:
                 Button("Open AI Settings…", action: actions.openSettings)
                     .buttonStyle(.quiet)
@@ -257,6 +262,22 @@ struct AssistedCommitStatusView: View {
             }
         case .ready:
             EmptyView()
+        }
+    }
+
+    /// Dismiss and the retry, under the text: side by side with it, they
+    /// don't fit the card.
+    @ViewBuilder
+    private var retryButtons: some View {
+        if case .failed(_, let recovery) = content.status, recovery == .retryUndo || recovery == .retryPush {
+            HStack(spacing: Metrics.insetSmall) {
+                Button("Dismiss", action: actions.dismiss)
+                    .buttonStyle(.quiet)
+                    .controlSize(.small)
+                Button(recovery == .retryUndo ? "Retry Undo" : "Retry Push", action: recovery == .retryUndo ? actions.retryUndo : actions.retryPush)
+                    .buttonStyle(.quiet)
+                    .controlSize(.small)
+            }
         }
     }
 }

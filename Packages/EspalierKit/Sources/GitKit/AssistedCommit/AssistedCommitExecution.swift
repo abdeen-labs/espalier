@@ -79,7 +79,7 @@ extension AssistedCommitSnapshot {
             return transaction
         } catch {
             let failure = AssistedCommitError.wrapping(error, .commitFailed, "The assisted commit failed.")
-            var outcome = await assistedRecover(
+            let outcome = await assistedRecover(
                 identity,
                 files: files,
                 created: run.created,
@@ -92,7 +92,9 @@ extension AssistedCommitSnapshot {
             do {
                 try dispose()
             } catch {
-                outcome.errors.append(error)
+                // Undoing the run didn't need them; only the temporary files
+                // stay behind.
+                logger.error("Couldn't remove an assisted commit's temporary files: \(error.localizedDescription, privacy: .public)")
             }
             let retry = outcome.errors.isEmpty ? nil : AssistedCommitTransaction(
                 snapshotID: id,
@@ -108,7 +110,7 @@ extension AssistedCommitSnapshot {
             if recovery.needsAttention {
                 throw AssistedCommitError(
                     .recoveryFailed,
-                    "The assisted commit stopped, and Espalier couldn't undo all of it: something else changed the branch or the index.",
+                    "Something else changed the branch or the index, so Espalier left them as they are.",
                     underlying: failure,
                     recovery: recovery
                 )
@@ -454,14 +456,14 @@ func assistedRecover(
     var attempted = false
     do {
         let current = try assistedReadIndexState(identity.indexPath)
-        if !current.matches(identity.originalIndex) {
+        if !current.matches(identity.originalIndex, objectIDSize: identity.objectIDSize) {
             if outcome.history == .interfered {
                 outcome.index = .interfered
                 outcome.errors.append(AssistedCommitError(
                     .indexChanged,
                     "The index wasn't restored because the branch isn't where the assisted commit left it."
                 ))
-            } else if let installedIndex, current.matches(installedIndex) {
+            } else if let installedIndex, current.matches(installedIndex, objectIDSize: identity.objectIDSize) {
                 let lock: AssistedLockFile
                 if let heldLock, !heldLock.isConsumed, !heldLock.isReleased {
                     lock = heldLock
@@ -497,7 +499,7 @@ func assistedRecover(
         }
     } catch {
         outcome.errors.append(error)
-        if let current = try? assistedReadIndexState(identity.indexPath), current.matches(identity.originalIndex) {
+        if let current = try? assistedReadIndexState(identity.indexPath), current.matches(identity.originalIndex, objectIDSize: identity.objectIDSize) {
             outcome.index = attempted ? .restored : .unchanged
         } else {
             outcome.index = .interfered
@@ -647,7 +649,7 @@ public actor AssistedCommitTransaction {
             state = .retained
             throw AssistedCommitError(
                 .recoveryFailed,
-                "Espalier couldn't undo all of the assisted commit: something else changed the branch or the index.",
+                "Something else changed the branch or the index, so Espalier left them as they are.",
                 recovery: recovery
             )
         }

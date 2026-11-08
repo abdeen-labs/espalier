@@ -171,6 +171,44 @@ struct AssistedCommitModelTests {
         #expect(try await subjects(fixture) == ["Initial commit"])
     }
 
+    @Test("Dismiss gives up an undo that can't finish, and commits can run again")
+    func dismissesUndoThatCantFinish() async throws {
+        let fixture = try await fixture()
+        try fixture.addProvider()
+        fixture.server.answer { onePerPath($0) }
+
+        // On the second commit, a hook moves the branch off the run's first,
+        // as another program would.
+        let path = fixture.local.path
+        let branch = try await runGit(["symbolic-ref", "--short", "HEAD"], fixture.local).trimmingCharacters(in: .newlines)
+        let elsewhere = try await runGit(["commit-tree", "HEAD^{tree}", "-p", "HEAD", "-m", "Elsewhere"], fixture.local)
+        let temporary = try createTempDirectory()
+        try elsewhere.write(toFile: POSIXPath.join(temporary, "elsewhere"), atomically: true, encoding: .utf8)
+        let hook = POSIXPath.join(path, ".git/hooks/pre-commit")
+        try FileManager.default.createDirectory(atPath: POSIXPath.dirname(hook), withIntermediateDirectories: true)
+        try """
+            #!/bin/sh
+            if [ -e '\(temporary)/ran' ]; then
+              cp '\(temporary)/elsewhere' '\(path)/.git/refs/heads/\(branch)'
+            fi
+            touch '\(temporary)/ran'
+
+            """.write(toFile: hook, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook)
+
+        await #expect(throws: OperationError.self) {
+            try await fixture.model.commit.commitAssisted()
+        }
+        guard case .recoveryNeeded = fixture.model.commit.assisted else {
+            Issue.record("Expected a rollback to retry, not \(fixture.model.commit.assisted)")
+            return
+        }
+
+        fixture.model.commit.dismissAssistedCommitFailure()
+        #expect(fixture.model.commit.assisted == .idle)
+        #expect(try await subjects(fixture).first == "Elsewhere")
+    }
+
     @Test("remembers the mode and the push choice per repository")
     func remembersPreferences() async throws {
         let fixture = try await fixture()
