@@ -20,6 +20,10 @@
   <a href="CHANGELOG.md">What's New</a>
 </p>
 
+<p align="center">
+  Or with Homebrew: <code>brew install --cask abdeen-labs/tap/espalier</code>
+</p>
+
 <p align="center"><sub>Requires macOS 27 or later on Apple silicon. Free and MIT-licensed.</sub></p>
 
 <p align="center">

@@ -3,8 +3,8 @@
 # Direct Distribution, which notarizes and staples it) to the checkout's root:
 # puts the app in a DMG, adds the DMG to the appcast, signed with Sparkle's
 # key, uploads the DMG and then the appcast to the update bucket, reads both
-# back through updates.abdeen.industries, and tags the release.
-# docs/RELEASING.md has the whole release.
+# back through updates.abdeen.industries, tags the release, and moves the
+# Homebrew cask to it. docs/RELEASING.md has the whole release.
 #
 #   scripts/publish-release.sh
 #
@@ -26,7 +26,9 @@
 #   FIRST_RELEASE=1  Starts a new appcast when the feed has none. Only for
 #                    the first release.
 #   UPLOAD=0         Makes the DMG and the signed appcast in dist/ and stops:
-#                    no upload, no tag.
+#                    no upload, no tag, no cask.
+#   TAP_REMOTE       The Homebrew tap with Casks/espalier.rb
+#                    (default: git@github.com:abdeen-labs/homebrew-tap.git).
 
 set -euo pipefail
 
@@ -38,6 +40,7 @@ app_key=espalier
 base_url="https://updates.abdeen.industries/$app_key"
 sparkle_account="${SPARKLE_ACCOUNT:-espalier}"
 upload="${UPLOAD:-1}"
+tap_remote="${TAP_REMOTE:-git@github.com:abdeen-labs/homebrew-tap.git}"
 
 fail() {
   echo "error: $*" >&2
@@ -126,6 +129,8 @@ if [[ "$upload" == 1 ]]; then
   command -v railway >/dev/null || fail "the uploads need the Railway CLI (brew install railway). UPLOAD=0 stops before uploading."
   with_bucket /bin/sh -c '[ -n "$BUCKET" ] && [ -n "$ACCESS_KEY_ID" ] && [ -n "$SECRET_ACCESS_KEY" ]' ||
     fail "Railway didn't give the bucket's credentials. Sign in with railway login, link this checkout (docs/RELEASING.md, One-time setup), and run again."
+  git ls-remote --exit-code "$tap_remote" HEAD >/dev/null ||
+    fail "can't reach the Homebrew tap at $tap_remote, which the release pushes to."
 fi
 
 # Sparkle's tools come with the Sparkle package, which Xcode resolves into
@@ -286,8 +291,29 @@ git -C "$root" rev-parse -q --verify "refs/tags/$tag" >/dev/null ||
   git -C "$root" tag --annotate --message "Espalier $version" "$tag" "$head"
 git -C "$root" push --quiet origin "refs/tags/$tag"
 
+# The Homebrew cask names the DMG by version and pins its hash, so new
+# installs through Homebrew start on this release.
+tap="$work/tap"
+git clone --quiet --depth 1 "$tap_remote" "$tap" || fail "can't clone $tap_remote"
+cask="$tap/Casks/espalier.rb"
+[[ -f "$cask" ]] || fail "$tap_remote has no Casks/espalier.rb"
+sha256="$(shasum -a 256 "$dmg" | cut -d ' ' -f 1)"
+sed -i '' -E \
+  -e "s/^(  version )\"[^\"]*\"\$/\\1\"$version\"/" \
+  -e "s/^(  sha256 )\"[^\"]*\"\$/\\1\"$sha256\"/" \
+  "$cask"
+grep -qx "  version \"$version\"" "$cask" && grep -qx "  sha256 \"$sha256\"" "$cask" ||
+  fail "couldn't set the version and sha256 in $tap_remote's Casks/espalier.rb"
+if git -C "$tap" diff --quiet; then
+  echo "The cask is already at $version."
+else
+  git -C "$tap" commit --quiet --all --message "Espalier $version"
+  git -C "$tap" push --quiet origin HEAD || fail "pushing the cask to $tap_remote failed"
+fi
+
 echo
 echo "Published Espalier $version:"
 echo "  Feed:     $base_url/appcast.xml"
 echo "  Download: $base_url/$dmg_name"
 echo "  Tag:      $tag ($head)"
+echo "  Homebrew: brew install --cask abdeen-labs/tap/espalier"

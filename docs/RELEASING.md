@@ -20,6 +20,10 @@ app; `scripts/publish-release.sh` packages and publishes it.
   signed with another key.
 - Gatekeeper's side is Apple's: Xcode signs the app with Developer ID,
   notarizes it, and staples the ticket. The DMG around it isn't notarized.
+- Homebrew installs the same DMG through the tap `abdeen-labs/homebrew-tap`
+  (`brew install --cask abdeen-labs/tap/espalier`). `Casks/espalier.rb` pins
+  the version and the DMG's SHA-256, and the cask links the command line tool.
+  Sparkle updates copies installed this way like any other.
 
 ## One-time setup
 
@@ -45,6 +49,8 @@ app; `scripts/publish-release.sh` packages and publishes it.
    settings, not the repo, so a new checkout or Mac links again. The script
    runs each upload through `railway run`, which gives it the bucket's
    credentials from the update host's service.
+4. **Push access to the tap** over SSH:
+   `git@github.com:abdeen-labs/homebrew-tap.git`.
 
 ## Cutting a release
 
@@ -77,17 +83,19 @@ app; `scripts/publish-release.sh` packages and publishes it.
 - the app's feed isn't Espalier's, or it has no public key;
 - the checkout has changes, or HEAD isn't `origin/main`;
 - the version's tag names another commit;
+- the tap can't be reached;
 - the Keychain's Sparkle key isn't the app's;
 - the build number isn't higher than every one in the feed.
 
 It refuses to replace a published DMG with different contents, uploads the
-DMG before the appcast, reads each back through the update host, and tags
-`v<version>` last.
+DMG before the appcast, reads each back through the update host, tags
+`v<version>`, and then sets the cask's version and SHA-256 and pushes the tap.
 
 ## When publishing stops partway
 
 Fix the cause and run `scripts/publish-release.sh` again. The DMG in `dist/`
 is reused while it holds the same app, a DMG already uploaded is kept when it
-matches, the appcast's entry for the version is replaced, and the tag is
-made at the end. A published DMG is never replaced: to ship a different
+matches, the appcast's entry for the version is replaced, the tag is made
+when it's missing, and the cask is left alone when it's already at the
+version. A published DMG is never replaced: to ship a different
 build, raise the version and archive again.
