@@ -39,6 +39,7 @@ let grammarPackages: [(url: String, version: Version, product: String)] = [
     ("https://github.com/tree-sitter/tree-sitter-php", "0.25.1", "TreeSitterPHP"),
     ("https://github.com/tree-sitter/tree-sitter-ruby", "0.23.1", "TreeSitterRuby"),
     ("https://github.com/tree-sitter/tree-sitter-rust", "0.24.2", "TreeSitterRust"),
+    ("https://github.com/tree-sitter-grammars/tree-sitter-svelte", "1.0.2", "TreeSitterSvelte"),
     ("https://github.com/alex-pinkus/tree-sitter-swift", "0.7.4-with-generated-files", "TreeSitterSwift"),
     ("https://github.com/tree-sitter-grammars/tree-sitter-toml", "0.7.0", "TreeSitterTOML"),
     ("https://github.com/tree-sitter/tree-sitter-typescript", "0.23.2", "TreeSitterTypeScript"),

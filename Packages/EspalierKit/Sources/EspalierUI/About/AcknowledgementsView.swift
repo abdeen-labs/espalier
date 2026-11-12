@@ -168,6 +168,7 @@ extension Acknowledgement {
         package("tree-sitter-python", version: "0.25.0", url: "https://github.com/tree-sitter/tree-sitter-python"),
         package("tree-sitter-ruby", version: "0.23.1", url: "https://github.com/tree-sitter/tree-sitter-ruby"),
         package("tree-sitter-rust", version: "0.24.2", url: "https://github.com/tree-sitter/tree-sitter-rust"),
+        package("tree-sitter-svelte", version: "1.0.2", url: "https://github.com/tree-sitter-grammars/tree-sitter-svelte"),
         package("tree-sitter-swift", version: "0.7.4-with-generated-files", url: "https://github.com/alex-pinkus/tree-sitter-swift"),
         package("tree-sitter-toml", version: "0.7.0", url: "https://github.com/tree-sitter-grammars/tree-sitter-toml"),
         package("tree-sitter-typescript", version: "0.23.2", url: "https://github.com/tree-sitter/tree-sitter-typescript"),

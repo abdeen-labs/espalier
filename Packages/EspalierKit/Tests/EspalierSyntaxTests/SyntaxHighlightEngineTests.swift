@@ -335,6 +335,41 @@ struct SyntaxHighlightEngineTests {
         ])
     }
 
+    @Test("Svelte colors its script by its lang, its style, and the expressions in its markup")
+    func svelteInjections() throws {
+        try checkHighlights("""
+        <script lang="ts">
+          interface Item { name: string }
+          let count: number = 42;
+        </script>
+        <button onclick={() => bump(count + 1)}>{label("add")}</button>
+        {#if count > 10}<p>Many</p>{/if}
+        <style>
+          button { color: red; }
+        </style>
+        """, grammar: "svelte", [
+            HighlightCheck("script", .tag, in: "<script"),
+            // TypeScript, not JavaScript: `interface` is a keyword only there.
+            HighlightCheck("interface", .keyword),
+            HighlightCheck("let", .keyword),
+            HighlightCheck("42", .number),
+            HighlightCheck("button", .tag, in: "<button"),
+            HighlightCheck("bump", .function),
+            HighlightCheck("1", .number, in: "count + 1"),
+            HighlightCheck("\"add\"", .string),
+            HighlightCheck("10", .number, in: "count > 10"),
+            HighlightCheck("color", .property),
+        ])
+        try checkHighlights("""
+        <script>
+          const answer = 42;
+        </script>
+        """, grammar: "svelte", [
+            HighlightCheck("const", .keyword),
+            HighlightCheck("42", .number),
+        ])
+    }
+
     @Test("an injected layer's ranges, intersected with the spans asked for")
     func spanIntersection() {
         #expect(HighlightRun.intersect([0..<10, 20..<30], [5..<25]) == [5..<10, 20..<25])

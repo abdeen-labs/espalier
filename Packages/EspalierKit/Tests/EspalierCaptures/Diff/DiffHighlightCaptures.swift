@@ -1,5 +1,5 @@
-// A diff colored by the tree-sitter highlighter. Both versions of a Swift
-// file go through the diff's pipeline (`highlightContents`), as in the
+// A diff colored by the tree-sitter highlighter. Both versions of a file go
+// through the diff's pipeline (`highlightContents`), as in the
 // app, and the tokens go into the diff table, in light and dark (the theme
 // is the same for every language).
 
@@ -92,6 +92,42 @@ struct HighlightedDiffChange {
         """#,
         below: ["    }", "}"]
     )
+
+    /// A Svelte change: a TypeScript script, markup with blocks and
+    /// expressions, and a style.
+    static let svelte = HighlightedDiffChange(
+        path: "src/lib/TideList.svelte",
+        above: [
+            "<!-- The next tides at a station. -->",
+            "<script lang=\"ts\">",
+            "  import type { Tide } from \"./tides\";",
+            "",
+        ],
+        hunk: #"""
+           let { tides, limit = 5 }: { tides: Tide[]; limit?: number } = $props();
+        -  let shown = tides.slice(0, limit);
+        +  let expanded = $state(false);
+        +  let shown = $derived(expanded ? tides : tides.slice(0, limit));
+         </script>
+
+         <ul class="tides">
+           {#each shown as tide (tide.time)}
+        -    <li>{tide.kind}: {tide.height} m</li>
+        +    <li class:high={tide.kind === "high"}>{tide.kind}: {tide.height.toFixed(1)} m</li>
+        +  {:else}
+        +    <li class="empty">No tides today</li>
+           {/each}
+         </ul>
+        +{#if tides.length > limit}
+        +  <button onclick={() => (expanded = !expanded)}>Show {expanded ? "Fewer" : "All"}</button>
+        +{/if}
+
+         <style>
+           .tides { margin: 0; padding-left: 1.5rem; }
+        +  .high { font-weight: 600; color: #0a6; }
+        """#,
+        below: ["</style>"]
+    )
 }
 
 @Suite("Diff highlighting", .captures, .hangGuard(minutes: 5)) @MainActor
@@ -114,5 +150,10 @@ struct DiffHighlightCaptures {
     @Test("Swift")
     func swift() async throws {
         try await capture("highlight-swift", HighlightedDiffChange.swift, height: 400)
+    }
+
+    @Test("Svelte")
+    func svelte() async throws {
+        try await capture("highlight-svelte", HighlightedDiffChange.svelte, height: 520)
     }
 }

@@ -1,5 +1,5 @@
 {
-  "originHash" : "1e8c5f20422049e4bae520c4123cbfc2ddddce1b025ec509314eafdbd16cf3a4",
+  "originHash" : "c2f7e816f046ae6f6721d1671d6bc4f9e63bdfa31653e22dfcf7464b47a20084",
   "pins" : [
     {
       "identity" : "sparkle",
@@ -152,6 +152,15 @@
       "state" : {
         "revision" : "77a3747266f4d621d0757825e6b11edcbf991ca5",
         "version" : "0.24.2"
+      }
+    },
+    {
+      "identity" : "tree-sitter-svelte",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tree-sitter-grammars/tree-sitter-svelte",
+      "state" : {
+        "revision" : "774a65aea563accc35f5d45fafa4d96ec5761f57",
+        "version" : "1.0.2"
       }
     },
     {

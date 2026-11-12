@@ -330,6 +330,22 @@ struct HighlightSampleTests {
             HighlightCheck("1", .builtinConstant), HighlightCheck("Point", .type), HighlightCheck("i32", .type),
             HighlightCheck("sum", .function), HighlightCheck("println!", .function), HighlightCheck("#", .attribute, in: "#["), HighlightCheck("derive", .attribute),
         ]),
+        HighlightSample(grammar: "svelte", text: #"""
+        <!-- A list of items. -->
+        <ul class="list">
+          {#each items as item}
+            <li id="row">{item.name}</li>
+          {:else}
+            <li>None</li>
+          {/each}
+          {#if ready}<Spinner />{/if}
+        </ul>
+        """#, checks: [
+            HighlightCheck("ul", .tag, in: "<ul"), HighlightCheck("class", .attribute), HighlightCheck("list", .string, in: "\"list\""),
+            HighlightCheck("<!-- A list of items. -->", .comment), HighlightCheck("each", .keyword, in: "{#each"),
+            HighlightCheck("as", .keyword, in: "items as item"), HighlightCheck("else", .keyword, in: "{:else}"),
+            HighlightCheck("if", .keyword, in: "{#if"), HighlightCheck("Spinner", .tag),
+        ]),
         HighlightSample(grammar: "swift", text: #"""
         import Foundation
         // A greeter.

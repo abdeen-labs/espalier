@@ -16,6 +16,10 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+### Added
+
+- Svelte files are syntax highlighted, with their scripts, styles, and expressions.
+
 ### Changed
 
 - Espalier now includes Git 2.56.1.

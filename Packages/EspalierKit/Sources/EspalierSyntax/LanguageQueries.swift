@@ -39,6 +39,9 @@ struct LanguageSpec: Sendable {
     /// Espalier's own highlight patterns, after the files' (so they win
     /// over them; `additionalHighlights`).
     let additionalHighlights: String?
+    /// Espalier's own injection query, used in place of the files'
+    /// (`ownInjections`).
+    let ownInjections: String?
 
     /// A query file in a language's resource bundle.
     struct QueryFile: Sendable, Hashable {
@@ -56,7 +59,8 @@ struct LanguageSpec: Sendable {
         injections: [QueryFile(bundleName: "TreeSitterMarkdown_TreeSitterMarkdownInline", name: "injections.scm")],
         locals: [],
         precedence: .lastWins,
-        additionalHighlights: nil
+        additionalHighlights: nil,
+        ownInjections: nil
     )
 
     /// Highlight files that aren't just the grammar's own `highlights.scm`
@@ -102,6 +106,37 @@ struct LanguageSpec: Sendable {
         """,
     ]
 
+    /// Injection queries Espalier writes itself, where a grammar's file
+    /// can't be used as it is.
+    ///
+    /// Svelte: its file is written for Neovim, which adds HTML's injections
+    /// from a file of its own and lets a later pattern replace an earlier
+    /// one. Here a script is TypeScript when its `lang` says so and
+    /// JavaScript otherwise, a style is CSS, and the
+    /// expression in a tag or block (`{count + 1}`, `{#if ready}`) is
+    /// JavaScript.
+    static let ownInjections: [String: String] = [
+        "svelte": """
+        ((script_element
+          (start_tag
+            (attribute
+              (attribute_name) @_attr
+              (quoted_attribute_value (attribute_value) @_lang)))
+          (raw_text) @injection.content)
+         (#eq? @_attr "lang")
+         (#any-of? @_lang "ts" "typescript")
+         (#set! injection.language "typescript"))
+        ((script_element
+          (raw_text) @injection.content)
+         (#set! injection.language "javascript"))
+        ((style_element
+          (raw_text) @injection.content)
+         (#set! injection.language "css"))
+        ((svelte_raw_text) @injection.content
+         (#set! injection.language "javascript"))
+        """,
+    ]
+
     init(
         id: String,
         bundleName: String,
@@ -110,7 +145,8 @@ struct LanguageSpec: Sendable {
         injections: [QueryFile],
         locals: [QueryFile],
         precedence: PatternPrecedence,
-        additionalHighlights: String?
+        additionalHighlights: String?,
+        ownInjections: String?
     ) {
         self.id = id
         self.bundleName = bundleName
@@ -120,6 +156,7 @@ struct LanguageSpec: Sendable {
         self.locals = locals
         self.precedence = precedence
         self.additionalHighlights = additionalHighlights
+        self.ownInjections = ownInjections
     }
 
     /// A grammar's highlighting: its inherited grammars' highlight and
@@ -142,7 +179,8 @@ struct LanguageSpec: Sendable {
             injections: (Self.injectionFiles[grammar.id] ?? ["injections.scm"]).map { QueryFile(bundleName: grammar.bundleName, name: $0) },
             locals: lineage.map { QueryFile(bundleName: $0.bundleName, name: "locals.scm") },
             precedence: Self.firstWins.contains(grammar.id) ? .firstWins : .lastWins,
-            additionalHighlights: Self.additionalHighlights[grammar.id]
+            additionalHighlights: Self.additionalHighlights[grammar.id],
+            ownInjections: Self.ownInjections[grammar.id]
         )
     }
 
@@ -238,7 +276,7 @@ final class CompiledLanguage: @unchecked Sendable {
         highlights = try CompiledQuery(source: highlightSource, language: language, grammar: spec.id)
         captureRoles = highlights.captureNames.map(CaptureNames.role)
         usesLocals = highlights.predicates.patterns.contains(where: \.isNotLocal)
-        if let source = try Self.source(of: spec.injections, required: false, grammar: spec.id) {
+        if let source = try spec.ownInjections ?? Self.source(of: spec.injections, required: false, grammar: spec.id) {
             injections = try InjectionQuery(source: source, language: language, grammar: spec.id)
         } else {
             injections = nil

@@ -21,6 +21,7 @@ import TreeSitterPHP
 import TreeSitterPython
 import TreeSitterRuby
 import TreeSitterRust
+import TreeSitterSvelte
 import TreeSitterSwift
 import TreeSitterTOML
 import TreeSitterTSX
@@ -38,7 +39,8 @@ public struct Grammar: Sendable, Hashable, CustomStringConvertible {
     /// Whole file names that use the language ("Gemfile").
     public let fileNames: [String]
     /// The grammars whose highlight queries this one's build on, in order:
-    /// TypeScript's assume JavaScript's, and C++'s assume C's.
+    /// TypeScript's assume JavaScript's, C++'s assume C's, and Svelte's
+    /// assume HTML's.
     public let inheritedQueries: [String]
     /// The resource bundle holding the grammar's queries.
     let bundleName: String
@@ -130,6 +132,7 @@ public enum Grammars {
         Grammar(id: "python", name: "Python", fileExtensions: ["py", "pyi", "pyw"], fileNames: [], inheritedQueries: [], bundleName: "EspalierKit_TreeSitterPython", language: { tree_sitter_python() }),
         Grammar(id: "ruby", name: "Ruby", fileExtensions: ["rb", "rake", "gemspec"], fileNames: ["Gemfile", "Rakefile", "Podfile", "Fastfile", "Brewfile"], inheritedQueries: [], bundleName: "TreeSitterRuby_TreeSitterRuby", language: { tree_sitter_ruby() }),
         Grammar(id: "rust", name: "Rust", fileExtensions: ["rs"], fileNames: [], inheritedQueries: [], bundleName: "TreeSitterRust_TreeSitterRust", language: { tree_sitter_rust() }),
+        Grammar(id: "svelte", name: "Svelte", fileExtensions: ["svelte"], fileNames: [], inheritedQueries: ["html"], bundleName: "TreeSitterSvelte_TreeSitterSvelte", language: { tree_sitter_svelte() }),
         Grammar(id: "swift", name: "Swift", fileExtensions: ["swift"], fileNames: [], inheritedQueries: [], bundleName: "TreeSitterSwift_TreeSitterSwift", language: { tree_sitter_swift() }),
         Grammar(id: "toml", name: "TOML", fileExtensions: ["toml"], fileNames: ["Cargo.lock", "Pipfile"], inheritedQueries: [], bundleName: "TreeSitterTOML_TreeSitterTOML", language: { tree_sitter_toml() }),
         Grammar(id: "typescript", name: "TypeScript", fileExtensions: ["ts", "mts", "cts"], fileNames: [], inheritedQueries: ["javascript"], bundleName: "TreeSitterTypeScript_TreeSitterTypeScript", language: { tree_sitter_typescript() }),
