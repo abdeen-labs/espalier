@@ -33,7 +33,7 @@ nonisolated struct Acknowledgement: Sendable, Equatable, Identifiable {
     var text: String
     var group: Group
 
-    /// "Version 2.56.0 · MIT License".
+    /// "Version 2.56.1 · MIT License".
     var subtitle: String {
         [version.map { "Version \($0)" }, license].compactMap(\.self).joined(separator: " · ")
     }
@@ -44,8 +44,8 @@ extension Acknowledgement {
     static let all: [Acknowledgement] = basedOn + bundled + syntax + fonts
 
     /// The bundled git's release (scripts/git-version, its build's tag).
-    static let gitVersion = "2.56.0"
-    static let bundledGitTag = "v2.56.0-2"
+    static let gitVersion = "2.56.1"
+    static let bundledGitTag = "v2.56.1"
 
     static let basedOn: [Acknowledgement] = [
         Acknowledgement(

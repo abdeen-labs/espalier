@@ -16,6 +16,10 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+### Changed
+
+- Espalier now includes Git 2.56.1.
+
 ## [1.5.2] - 2026-11-08
 
 ### Changed
