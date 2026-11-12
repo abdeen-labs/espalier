@@ -16,6 +16,8 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.5.3] - 2026-11-12
+
 ### Added
 
 - Svelte files are syntax highlighted, with their scripts, styles, and expressions.
@@ -196,7 +198,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5.2...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5.3...HEAD
+[1.5.3]: https://github.com/abdeen-labs/espalier/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/abdeen-labs/espalier/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/abdeen-labs/espalier/compare/v1.5...v1.5.1
 [1.5]: https://github.com/abdeen-labs/espalier/compare/v1.4.2...v1.5
