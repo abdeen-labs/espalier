@@ -16,6 +16,26 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.5.4] - 2026-11-14
+
+### Changed
+
+- Buttons that delete or discard something, like Delete in Delete Branch? and Discard Changes, are red.
+- A pull request's Check Out, New Worktree…, and View on GitHub fit on one line, and a pull request you've checked out shows a green check.
+- The branch list is only as tall as your branches, and a hook's output only as tall as what the hook printed.
+- When changes, files, history, or a stash can't load, the message says which, in place of "Error".
+- The stash's header keeps its title in a narrow column.
+- In Repository Settings, the remote's address is labeled "Remote (origin)".
+- In Settings, the Theme section is now Look, and the Shell section is Terminal.
+
+### Fixed
+
+- The sidebar's Filter field was nearly invisible in light mode.
+- Open AI Settings… was cut off in the assisted commit card when no provider was set up.
+- Lists in error messages, such as the reasons authentication can fail, showed as lines starting with a dash. They're bulleted now.
+- A merge's commit message had an empty bar under it.
+- With no changed files, the Changes header showed a checked checkbox.
+
 ## [1.5.3] - 2026-11-12
 
 ### Added
@@ -198,7 +218,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5.3...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5.4...HEAD
+[1.5.4]: https://github.com/abdeen-labs/espalier/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/abdeen-labs/espalier/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/abdeen-labs/espalier/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/abdeen-labs/espalier/compare/v1.5...v1.5.1
