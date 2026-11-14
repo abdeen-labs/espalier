@@ -25,6 +25,9 @@ nonisolated extension ThemeDefinition {
             line2: ThemeColor.line2(0xD2DAD5, 0x343D38),
             quiet: ThemeColor.surface(0xFFFFFF, 0x1F2522),
             soft: ThemeColor.fill(0xE8EDEA, 0x2A322E),
+            // The selected segment: white, and in dark a step lighter than
+            // its track.
+            segmentSelection: ThemeColor.surface(0xFFFFFF, 0x333C37),
             scrim: .espalierDynamic(light: NSColor.black.withAlphaComponent(0.2), dark: NSColor.black.withAlphaComponent(0.45)),
             backdrop: ThemeColor.surface(0xE3E9E5, 0x0E1210),
             raisedShadow: .espalierDynamic(light: NSColor.hex(0x142D1E, alpha: 0.08), dark: .clear),
