@@ -1,7 +1,7 @@
 // The diff's colors. Line and word tints are the theme's add and delete
-// colors with alpha; a conflict block's, its branch's color (as the graph
-// draws it in the theme) with alpha. Increase Contrast multiplies them by
-// 1.6.
+// colors with alpha, times the theme's strength for them; a conflict
+// block's, its branch's color (as the graph draws it in the theme) with
+// alpha. Increase Contrast multiplies them by 1.6.
 
 import AppKit
 import SwiftUI
@@ -36,13 +36,18 @@ nonisolated public struct DiffTints: Sendable {
     public let ours: NSColor
     public let theirs: NSColor
 
-    init(add: NSColor, delete: NSColor, modified: NSColor, accent: NSColor, ours: NSColor, theirs: NSColor) {
-        addedLine = Palette.tint(add, light: 0.075, dark: 0.08)
-        addedChange = Palette.tint(add, light: 0.20, dark: 0.20)
-        deletedLine = Palette.tint(delete, light: 0.065, dark: 0.08)
-        deletedChange = Palette.tint(delete, light: 0.18, dark: 0.18)
-        excludedAddedLine = Palette.tint(add, light: 0.03, dark: 0.04)
-        excludedDeletedLine = Palette.tint(delete, light: 0.025, dark: 0.04)
+    /// - Parameter strength: What the added and deleted lines' alphas are
+    ///   multiplied by, in light and dark.
+    init(add: NSColor, delete: NSColor, modified: NSColor, accent: NSColor, ours: NSColor, theirs: NSColor, strength: (light: CGFloat, dark: CGFloat) = (1, 1)) {
+        func tint(_ color: NSColor, light: CGFloat, dark: CGFloat) -> NSColor {
+            Palette.tint(color, light: light * strength.light, dark: dark * strength.dark)
+        }
+        addedLine = tint(add, light: 0.075, dark: 0.08)
+        addedChange = tint(add, light: 0.20, dark: 0.20)
+        deletedLine = tint(delete, light: 0.065, dark: 0.08)
+        deletedChange = tint(delete, light: 0.18, dark: 0.18)
+        excludedAddedLine = tint(add, light: 0.03, dark: 0.04)
+        excludedDeletedLine = tint(delete, light: 0.025, dark: 0.04)
         addedMarker = add
         deletedMarker = delete
         currentFindMatch = NSColor.espalierDynamic { variant in

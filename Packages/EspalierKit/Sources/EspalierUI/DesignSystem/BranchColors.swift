@@ -16,7 +16,7 @@ import AppKit
 /// graph draws the lines no local branch starts in the entries no branch
 /// has (`otherTones`).
 public struct BranchColors: Equatable {
-    /// The palette, without the entry nearest the accent.
+    /// The palette, without the entries near the accent.
     public let tones: [TrackPalette.Tone]
     public let current: String?
     public let defaultBranch: String?

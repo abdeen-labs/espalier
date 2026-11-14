@@ -4,7 +4,7 @@
 // card), and the palette's accent marks selection, the current branch, and
 // (as its prominent fill) the one prominent action. Bold uppercase labels,
 // rounded-square avatars, round file badges, rounded-rectangle ref tags,
-// and a graph of dots.
+// a graph of dots, and code in the theme's own muted colors.
 
 import AppKit
 import EspalierCore
@@ -48,9 +48,23 @@ nonisolated extension ThemeDefinition {
             renamed: palette.accent,
             conflictOurs: IslandsColor.mint,
             conflictTheirs: IslandsColor.orange,
-            // Mint; green beside a teal accent.
-            branches: BranchTones(trunk: IslandsColor.mint, tones: [.orange, .pink, .blue, .violet, .cyan]),
-            branchesNearAccent: BranchTones(trunk: IslandsColor.green, tones: [.orange, .pink, .blue, .violet, .cyan]),
+            // Added and deleted lines half again as strong in light, so an
+            // added line stands apart from the sage hunk headers.
+            diffLineStrength: (1.5, 1),
+            syntaxColors: [
+                .keyword: IslandsColor.violet,
+                .string: ThemeColor.fixed(0xB93B63, 0xE7779B),
+                .comment: ThemeColor.fixed(0x76857D, 0x84928A),
+                .number: ThemeColor.fixed(0xB8650F, 0xF0A05C),
+                .type: IslandsColor.sea,
+                .function: IslandsColor.periwinkle,
+            ],
+            // Mint; green beside a teal accent, and sea beside a green one.
+            branches: [
+                BranchTones(trunk: IslandsColor.mint, tones: [.orange, .pink, .blue, .violet, .cyan]),
+                BranchTones(trunk: IslandsColor.green, tones: [.orange, .pink, .blue, .violet, .cyan]),
+                BranchTones(trunk: IslandsColor.sea, tones: [.orange, .pink, .blue, .violet]),
+            ],
             toneColors: IslandsColor.toneColors,
             sidebarSelection: ThemeColor.wash(palette.accent, 0.12, 0.16),
             sidebarSelectionText: palette.deepInk,

@@ -1,6 +1,7 @@
-// The default branch's color beside the current branch's, the accent: in
-// every theme and palette their hues stay apart, the trunk taking its other
-// color beside an accent near it.
+// The branches' colors beside the current branch's, the accent: in every
+// theme and palette the default branch's hue stays apart from the accent's,
+// the trunk taking another color beside an accent near it, and no other
+// branch takes a color near the accent's or the default branch's own.
 
 import AppKit
 import EspalierCore
@@ -9,14 +10,42 @@ import Testing
 
 @Suite("Theme branch colors")
 struct ThemeBranchColorTests {
+    // System is this Mac's accent color.
+    private static let palettes = DesignPalette.allCases.filter { $0 != .system }
+
+    private static func hue(_ color: NSColor) -> Double {
+        OKLCH.hue(of: color.resolved(in: .light))
+    }
+
     @Test("the default branch's hue stays apart from the accent's in every palette", arguments: DesignTheme.allCases)
     func trunkApartFromAccent(_ theme: DesignTheme) {
-        // System is this Mac's accent color.
-        for palette in DesignPalette.allCases where palette != .system {
+        for palette in Self.palettes {
             let drawn = Theme.named(theme, palette: palette)
-            let accent = drawn.accent.resolved(in: .light).hueComponent
-            let trunk = drawn.trunk.resolved(in: .light).hueComponent
-            #expect(TrackPalette.hueDistance(accent, trunk) >= Theme.nearAccentHue, "\(theme) in \(palette)")
+            let distance = OKLCH.hueDistance(Self.hue(drawn.accent), Self.hue(drawn.trunk))
+            #expect(distance >= Theme.trunkClearance, "\(theme) in \(palette)")
         }
+    }
+
+    @Test("the other branches' colors stay apart from the accent's and the default branch's in every palette", arguments: DesignTheme.allCases)
+    func tonesApartFromAccentAndTrunk(_ theme: DesignTheme) {
+        for palette in Self.palettes {
+            let drawn = Theme.named(theme, palette: palette)
+            let tones = drawn.branchTones(accent: drawn.accent)
+            #expect(tones.count >= 3, "\(theme) in \(palette)")
+            for tone in tones {
+                let color = drawn.color(of: tone)
+                #expect(OKLCH.hueDistance(Self.hue(drawn.accent), Self.hue(color)) >= Theme.nearAccentHue, "\(tone) in \(theme) in \(palette)")
+                #expect(color.resolved(in: .light) != drawn.trunk.resolved(in: .light), "\(tone) in \(theme) in \(palette)")
+            }
+        }
+    }
+
+    @Test("an accent with no hue keeps the theme's first trunk and every tone")
+    func grayAccentKeepsEverything() {
+        let gray = NSColor(srgbRed: 0.55, green: 0.55, blue: 0.55, alpha: 1)
+        let candidates: [NSColor] = [.hex(0x0F766E), .hex(0x16A34A)]
+        #expect(Theme.indexApart(from: gray, candidates, clearance: Theme.trunkClearance) == 0)
+        let classic = Theme.named(.classic, palette: .iris)
+        #expect(classic.branchTones(accent: gray) == TrackPalette.tones)
     }
 }

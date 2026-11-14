@@ -9,7 +9,7 @@ import SwiftUI
 /// the default branch's line) is the theme's default-branch color,
 /// Classic's teal (green beside a teal accent). Other tracks take the
 /// theme's tones (Classic's are pink, violet, orange, green, blue, and cyan),
-/// without the entry nearest the accent's hue. A track a local branch
+/// without the entries near the accent's hue. A track a local branch
 /// starts takes that branch's color (`BranchColors`), so a line, its
 /// branch's tag, and its sidebar dot agree; other tracks take entry
 /// `(t − 1) mod count` of the entries no branch has. Colors follow the engine's tracks, so a line of development
@@ -32,14 +32,9 @@ public enum TrackPalette {
             case .cyan: .espalierDynamic(light: .hex(0x0891B2), dark: .hex(0x22D3EE))
             }
         }
-
-        /// The hue of the light shade, 0 to 1.
-        public var hue: CGFloat {
-            color.resolved(in: .light).hueComponent
-        }
     }
 
-    /// Classic's branch palette, in order, before the accent's neighbor is
+    /// Classic's branch palette, in order, before the accent's neighbors are
     /// skipped.
     nonisolated public static let tones: [Tone] = [.pink, .violet, .orange, .green, .blue, .cyan]
 
@@ -48,11 +43,8 @@ public enum TrackPalette {
         Theme.current.trunk
     }
 
-    /// An accent with less saturation than this (graphite) skips nothing.
-    nonisolated static let minimumAccentSaturation: CGFloat = 0.15
-
     /// The current theme's palette for an accent color: the tones that go
-    /// with its trunk, without the entry nearest the accent's hue
+    /// with its trunk, without the entries near the accent's hue
     /// (`Theme.branchTones(accent:)`).
     public static func palette(accent: NSColor = Palette.accent) -> [Tone] {
         Theme.current.branchTones(accent: accent)
@@ -161,11 +153,5 @@ public enum TrackPalette {
             lhs.current == rhs.current && lhs.currentTrack == rhs.currentTrack
                 && lhs.branchColors == rhs.branchColors && lhs.trackBranches == rhs.trackBranches
         }
-    }
-
-    /// The distance between two hues on the color wheel, 0 to 0.5.
-    nonisolated static func hueDistance(_ first: CGFloat, _ second: CGFloat) -> CGFloat {
-        let difference = abs(first - second)
-        return min(difference, 1 - difference)
     }
 }

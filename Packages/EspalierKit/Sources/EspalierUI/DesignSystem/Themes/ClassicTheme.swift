@@ -61,8 +61,10 @@ nonisolated extension ThemeDefinition {
             renamed: .espalierDynamic(light: .hex(0x7C3AED), dark: .hex(0xA78BFA)),
             renamedNearAccent: TrackPalette.Tone.blue.color,
             // Teal; green beside a teal accent.
-            branches: BranchTones(trunk: .espalierDynamic(light: .hex(0x0F766E), dark: .hex(0x2DD4BF)), tones: TrackPalette.tones),
-            branchesNearAccent: BranchTones(trunk: TrackPalette.Tone.green.color, tones: [.pink, .violet, .orange, .blue, .cyan]),
+            branches: [
+                BranchTones(trunk: .espalierDynamic(light: .hex(0x0F766E), dark: .hex(0x2DD4BF)), tones: TrackPalette.tones),
+                BranchTones(trunk: TrackPalette.Tone.green.color, tones: [.pink, .violet, .orange, .blue, .cyan]),
+            ],
             // A neutral wash, black 6.5% (white 5% in dark).
             sidebarSelection: .espalierDynamic(
                 light: NSColor.black.withAlphaComponent(0.065), dark: NSColor.white.withAlphaComponent(0.05),

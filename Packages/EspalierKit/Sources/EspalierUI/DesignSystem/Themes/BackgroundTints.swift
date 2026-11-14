@@ -200,6 +200,13 @@ nonisolated enum OKLCH {
         return degrees < 0 ? degrees + 360 : degrees
     }
 
+    /// The distance between two hues on the color wheel, in degrees: 0 to
+    /// 180.
+    static func hueDistance(_ first: Double, _ second: Double) -> Double {
+        let difference = abs(first - second).truncatingRemainder(dividingBy: 360)
+        return min(difference, 360 - difference)
+    }
+
     /// The chroma of `color`.
     static func chroma(of color: NSColor) -> Double {
         let lab = lab(linear(color))

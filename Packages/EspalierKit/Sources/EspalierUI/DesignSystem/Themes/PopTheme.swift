@@ -4,7 +4,7 @@
 // commit has a halo. Section labels and the sidebar's counts take the
 // accent's ink; a selected row is a tint with a bar in the accent at its
 // leading edge, the sidebar's bold. Buttons are semibold, the prominent one
-// bold.
+// bold. Code is in the branch colors.
 
 import AppKit
 import EspalierCore
@@ -60,9 +60,21 @@ nonisolated extension ThemeDefinition {
             renamed: palette.accent,
             conflictOurs: PopColor.cyan,
             conflictTheirs: PopColor.orange,
-            // Emerald; green beside a teal accent.
-            branches: BranchTones(trunk: ThemeColor.fixed(0x17936A, 0x3CCB98), tones: PopColor.tones),
-            branchesNearAccent: BranchTones(trunk: ThemeColor.fixed(0x2F9E44, 0x5FD07A), tones: PopColor.tones),
+            syntaxColors: [
+                .keyword: PopColor.pink,
+                .string: ThemeColor.fixed(0xD9480F, 0xFF9A5C),
+                .comment: ThemeColor.fixed(0x85859A, 0x7F7F92),
+                .number: PopColor.blue,
+                .type: PopColor.cyan,
+                .function: PopColor.violet,
+            ],
+            // Emerald; green beside a teal accent, and cyan beside a green
+            // one.
+            branches: [
+                BranchTones(trunk: ThemeColor.fixed(0x17936A, 0x3CCB98), tones: PopColor.tones),
+                BranchTones(trunk: ThemeColor.fixed(0x2F9E44, 0x5FD07A), tones: PopColor.tones),
+                BranchTones(trunk: PopColor.cyan, tones: [.orange, .blue, .pink, .violet]),
+            ],
             toneColors: PopColor.toneColors,
             sidebarSelection: ThemeColor.wash(palette.accent, 0.14, 0.17),
             sidebarSelectionText: palette.deepInk,

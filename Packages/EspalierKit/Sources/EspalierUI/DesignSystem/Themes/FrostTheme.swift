@@ -69,8 +69,10 @@ nonisolated extension ThemeDefinition {
                 .operatorOrPunctuation: ThemeColor.fixed(0x52525B, 0xA1A1AA),
             ],
             // Cyan; green beside a blue or teal accent.
-            branches: BranchTones(trunk: FrostColor.cyan, tones: [.orange, .pink, .violet, .blue, .green]),
-            branchesNearAccent: BranchTones(trunk: FrostColor.green, tones: [.orange, .pink, .violet, .blue, .cyan]),
+            branches: [
+                BranchTones(trunk: FrostColor.cyan, tones: [.orange, .pink, .violet, .blue, .green]),
+                BranchTones(trunk: FrostColor.green, tones: [.orange, .pink, .violet, .blue, .cyan]),
+            ],
             toneColors: FrostColor.toneColors,
             sidebarSelection: FrostColor.selection,
             sidebarSelectionIcon: ThemeColor.text(0x303035, 0xE8E8EA),

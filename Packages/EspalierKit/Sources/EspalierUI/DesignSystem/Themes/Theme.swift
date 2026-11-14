@@ -9,9 +9,10 @@
 // derived from it (status colors, diff tints, branch colors) are worked out
 // once per theme, palette, and tint. A theme's trunk, renamed, and deletion
 // colors give way to others where the palette's accent is near their hue,
-// and the branch tone nearest the accent is left out, so the current
+// and the branch tones near the accent are left out, so the current
 // branch, the default branch, and file statuses stay apart in every
-// palette.
+// palette. Hues are OKLCH's, which puts colors that look alike near each
+// other.
 
 import AppKit
 import EspalierCore
@@ -136,17 +137,16 @@ nonisolated public final class Theme: Sendable {
     /// The diff's line and change tints, markers, and find match.
     public let diff: DiffTints
     /// Syntax tokens' colors, by style; a style missing here is its system
-    /// tone.
+    /// tone (the text color for operators and punctuation).
     public let syntaxColors: [TokenStyle: NSColor]
 
     // MARK: Branches
 
     /// The default branch's color (the graph's trunk).
     public let trunk: NSColor
-    /// The trunk and the other branches' tones, and those in their place
-    /// for an accent near the trunk's hue.
-    private let branches: BranchTones
-    private let branchesNearAccent: BranchTones?
+    /// The trunk and the other branches' tones, then those in their place
+    /// for an accent near the trunk's hue, in order.
+    private let branches: [BranchTones]
     /// Each tone as lines, dots, and tags draw it.
     let toneColors: [TrackPalette.Tone: NSColor]
 
@@ -263,8 +263,8 @@ nonisolated public final class Theme: Sendable {
         } : background
         link = definition.linkBase ?? accent
 
-        let delete = Theme.awayFromAccent(definition.delete, else: definition.deleteNearAccent, accent: accent)
-        let renamed = Theme.awayFromAccent(definition.renamed, else: definition.renamedNearAccent, accent: accent)
+        let delete = Theme.apart(from: accent, [definition.delete, definition.deleteNearAccent].compactMap { $0 }, clearance: Theme.nearAccentHue)
+        let renamed = Theme.apart(from: accent, [definition.renamed, definition.renamedNearAccent].compactMap { $0 }, clearance: Theme.nearAccentHue)
         add = definition.add
         self.delete = delete
         modified = definition.modified
@@ -304,12 +304,11 @@ nonisolated public final class Theme: Sendable {
             .neutral: definition.text2,
         ]
 
-        diff = DiffTints(add: definition.add, delete: delete, modified: definition.modified, accent: accent, ours: definition.conflictOurs, theirs: definition.conflictTheirs)
+        diff = DiffTints(add: definition.add, delete: delete, modified: definition.modified, accent: accent, ours: definition.conflictOurs, theirs: definition.conflictTheirs, strength: definition.diffLineStrength)
         syntaxColors = definition.syntaxColors
 
-        trunk = Theme.awayFromAccent(definition.branches.trunk, else: definition.branchesNearAccent?.trunk, accent: accent)
+        trunk = Theme.apart(from: accent, definition.branches.map(\.trunk), clearance: Theme.trunkClearance)
         branches = definition.branches
-        branchesNearAccent = definition.branchesNearAccent
         toneColors = Dictionary(uniqueKeysWithValues: TrackPalette.Tone.allCases.map { tone in
             (tone, definition.toneColors[tone] ?? tone.color)
         })
@@ -345,60 +344,65 @@ nonisolated public final class Theme: Sendable {
 
     /// The tones branches other than the current and default ones take
     /// beside `accent`, in the order they're handed out: those that go
-    /// with the trunk, without the one nearest the accent's hue.
+    /// with the trunk, without the ones near the accent's hue.
     func branchTones(accent: NSColor) -> [TrackPalette.Tone] {
-        var tones = branches.tones
-        if let branchesNearAccent, Theme.prefersAlternate(branches.trunk, branchesNearAccent.trunk, accent: self.accent) {
-            tones = branchesNearAccent.tones
-        }
+        let tones = branches[Theme.indexApart(from: self.accent, branches.map(\.trunk), clearance: Theme.trunkClearance)].tones
         guard let hue = Theme.accentHue(accent) else {
             return tones
         }
-        let nearest = tones.indices.min { first, second in
-            TrackPalette.hueDistance(tones[first].hue, hue) < TrackPalette.hueDistance(tones[second].hue, hue)
+        return tones.filter { tone in
+            OKLCH.hueDistance(OKLCH.hue(of: color(of: tone).resolved(in: .light)), hue) >= Theme.nearAccentHue
         }
-        if let nearest {
-            tones.remove(at: nearest)
-        }
-        return tones
     }
 
-    /// `primary`, or `alternate` while the accent's hue is near `primary`'s
-    /// and farther from `alternate`'s (`prefersAlternate`), worked out as
-    /// it's drawn, so it follows the Mac's accent color as it changes.
-    static func awayFromAccent(_ primary: NSColor, else alternate: NSColor?, accent: NSColor) -> NSColor {
-        guard let alternate else {
-            return primary
+    /// The first of `candidates` whose hue is at least `clearance` degrees
+    /// from the accent's, else the one farthest from it, worked out as it's
+    /// drawn, so it follows the Mac's accent color as it changes.
+    static func apart(from accent: NSColor, _ candidates: [NSColor], clearance: Double) -> NSColor {
+        guard candidates.count > 1 else {
+            return candidates[0]
         }
         return NSColor.espalierDynamic { variant in
-            (prefersAlternate(primary, alternate, accent: accent) ? alternate : primary).resolved(in: variant)
+            candidates[indexApart(from: accent, candidates, clearance: clearance)].resolved(in: variant)
         }
     }
 
-    /// Whether `accent`'s hue is within `nearAccentHue` of `primary`'s and
-    /// farther from `alternate`'s, as light draws them.
-    static func prefersAlternate(_ primary: NSColor, _ alternate: NSColor, accent: NSColor) -> Bool {
-        guard let hue = accentHue(accent) else {
-            return false
+    /// Which of `candidates` stands apart from the accent
+    /// (`apart(from:_:clearance:)`), as light draws them; the first for an
+    /// accent with no hue.
+    static func indexApart(from accent: NSColor, _ candidates: [NSColor], clearance: Double) -> Int {
+        guard candidates.count > 1, let hue = accentHue(accent) else {
+            return 0
         }
-        let toPrimary = TrackPalette.hueDistance(primary.resolved(in: .light).hueComponent, hue)
-        let toAlternate = TrackPalette.hueDistance(alternate.resolved(in: .light).hueComponent, hue)
-        return toPrimary < nearAccentHue && toAlternate > toPrimary
+        let distances = candidates.map { OKLCH.hueDistance(OKLCH.hue(of: $0.resolved(in: .light)), hue) }
+        if let first = distances.firstIndex(where: { $0 >= clearance }) {
+            return first
+        }
+        return distances.indices.max { distances[$0] < distances[$1] } ?? 0
     }
 
-    /// The accent's hue as light draws it, 0 to 1; nil for an accent with
-    /// too little saturation to have one (graphite).
-    private static func accentHue(_ accent: NSColor) -> CGFloat? {
+    /// The accent's hue as light draws it, in OKLCH degrees; nil for an
+    /// accent with too little chroma to have one (graphite).
+    static func accentHue(_ accent: NSColor) -> Double? {
         let accent = accent.resolved(in: .light)
-        guard accent.saturationComponent >= TrackPalette.minimumAccentSaturation else {
+        guard OKLCH.chroma(of: accent) >= minimumAccentChroma else {
             return nil
         }
-        return accent.hueComponent
+        return OKLCH.hue(of: accent)
     }
 
-    /// How near an accent's hue is to a color's for the color to give way
-    /// (`awayFromAccent`): 30°.
-    static let nearAccentHue: CGFloat = 30.0 / 360
+    /// An accent with less chroma than this (graphite) has no hue for
+    /// colors to keep apart from.
+    static let minimumAccentChroma = 0.03
+
+    /// How near an accent's hue is to a color's, in degrees, for the color
+    /// to give way: a status color to its other shade, a branch tone left
+    /// out.
+    static let nearAccentHue = 30.0
+
+    /// How far the default branch's hue stays from the accent's, in
+    /// degrees.
+    static let trunkClearance = 50.0
 
     /// White or `dark` on `fill`, whichever reads better.
     static func legibleText(on fill: NSColor, light: NSColor, dark: NSColor) -> NSColor {
@@ -692,13 +696,16 @@ nonisolated struct ThemeDefinition: Sendable {
     /// A conflict's sides in the diff: ours and theirs.
     var conflictOurs: NSColor = SystemTone.mint.base
     var conflictTheirs: NSColor = SystemTone.orange.base
-    /// Syntax tokens' colors; a style missing here is its system tone.
+    /// What the diff's added and deleted lines' tints are multiplied by.
+    var diffLineStrength: (light: CGFloat, dark: CGFloat) = (1, 1)
+    /// Syntax tokens' colors; a style missing here is its system tone
+    /// (the text color for operators and punctuation).
     var syntaxColors: [TokenStyle: NSColor] = [:]
 
-    /// The trunk and the other branches' tones, and those in their place
-    /// for an accent near the trunk's hue.
-    var branches: BranchTones
-    var branchesNearAccent: BranchTones?
+    /// The trunk and the other branches' tones, then those in their place
+    /// for an accent near the trunk's hue, in order: the first whose trunk
+    /// stands apart from the accent is drawn.
+    var branches: [BranchTones]
     /// The tones' colors; a tone missing here is Classic's.
     var toneColors: [TrackPalette.Tone: NSColor] = [:]
 
