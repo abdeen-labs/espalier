@@ -812,9 +812,11 @@ public final class HistoryModel: RepositoryFeature {
     // MARK: Pull requests
 
     /// Previews a pull request from the current branch into `base`, or the
-    /// default branch when nil: `pullRequestPreview` shows it.
+    /// default branch its work goes to when nil (the parent's, for a fork
+    /// contributing to it): `pullRequestPreview` shows it.
     public func previewPullRequest(base: Branch? = nil) async {
-        await pullRequestPreview.preview(base: base ?? repository?.gitState.branches.defaultBranch)
+        let target = repository.flatMap { findContributionTargetDefaultBranch($0.record, $0.gitState.branches) }
+        await pullRequestPreview.preview(base: base ?? target)
     }
 
     // MARK: Waiting

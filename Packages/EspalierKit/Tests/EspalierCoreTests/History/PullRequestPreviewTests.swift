@@ -168,6 +168,38 @@ struct PullRequestPreviewTests {
         #expect(!names.contains("local-only"))
     }
 
+    @Test("a fork contributing to its parent previews into the parent's default branch", .hangGuard(minutes: 5))
+    func previewIntoParentDefaultBranch() async throws {
+        var featureSHA: String?
+        // The parent's `main` is a commit ahead of the fork's, which the
+        // local `main` tracks; `feature` branches from the parent's.
+        let fixture = try await makeGitHubFixture(mock: { gitHub, _ in
+            let upstream = apiRepository(owner: "upstream", name: "hello", ownerID: 9)
+            gitHub.on("GET", "/repos/octocat/hello", respond: .json(encoding: apiFullRepository(parent: upstream)))
+        }, prepare: { local in
+            try await runGit(["checkout", "-q", "-b", "feature"], local)
+            try await commitWithGit(local, "upstream.txt", "upstream\n", message: "Upstream")
+            try await runGit(["update-ref", "refs/remotes/upstream/main", "HEAD"], local)
+            try await runGit(["symbolic-ref", "refs/remotes/upstream/HEAD", "refs/remotes/upstream/main"], local)
+            featureSHA = try await commitWithGit(local, "feature.txt", "feature\n", message: "Feature")
+        })
+        #expect(fixture.model.record.gitHubRepository?.parent?.fullName == "upstream/hello")
+        // The branches load again now that the repository is known as a fork.
+        await fixture.model.refresh(.full, reason: .user)
+        // The default branch is the fork's local one, behind the parent's.
+        #expect(fixture.model.gitState.branches.defaultBranch?.type == .local)
+        #expect(fixture.model.gitState.branches.defaultBranch?.name == "main")
+
+        let preview = fixture.model.history.pullRequestPreview
+        await fixture.model.history.previewPullRequest()
+        await fixture.settle()
+
+        #expect(preview.status == .loaded)
+        #expect(preview.baseBranch?.name == "upstream/main")
+        #expect(preview.commitSHAs == [try #require(featureSHA)])
+        #expect(preview.baseBranchCandidates.contains { $0.name == "upstream/main" })
+    }
+
     // MARK: Open pull requests
 
     private func pullRequest(head: String, base: String, headRef: String = "feature") -> PullRequest {

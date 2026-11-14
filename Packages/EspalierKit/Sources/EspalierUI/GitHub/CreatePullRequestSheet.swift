@@ -214,13 +214,14 @@ struct CreatePullRequestSheet: View {
         }
     }
 
-    /// Shows the sheet for a pull request from `head` into `base` (the
-    /// default branch when nil).
+    /// Shows the sheet for a pull request from `head` into `base` (when nil,
+    /// the default branch the repository's work goes to: the parent's, for a
+    /// fork contributing to it).
     static func present(head: Branch, base: Branch?, repository: RepositoryModel, in context: WindowContext) {
         let model = CreatePullRequestSheetModel(
             repository: repository,
             head: head,
-            base: base ?? repository.gitState.branches.defaultBranch
+            base: base ?? findContributionTargetDefaultBranch(repository.record, repository.gitState.branches)
         )
         context.modals.presentSheet(id: sheetID) {
             CreatePullRequestSheet(model: model)
