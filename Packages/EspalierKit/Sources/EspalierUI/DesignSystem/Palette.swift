@@ -248,8 +248,8 @@ nonisolated public enum Palette {
     /// The text on the prominent fill.
     public static var buttonText: NSColor { Theme.current.prominentText }
     /// A destructive default button's fill (Delete, Discard), under white
-    /// text.
-    public static let destructiveButton: NSColor = ThemeColor.fill(0xD9352C, 0xD23A30)
+    /// text: red; crimson beside an orange accent.
+    public static var destructiveButton: NSColor { Theme.current.destructive }
 
     /// Whether `accent` is the system's default blue (`#007AFF`).
     nonisolated static func isDefaultBlue(_ accent: NSColor) -> Bool {

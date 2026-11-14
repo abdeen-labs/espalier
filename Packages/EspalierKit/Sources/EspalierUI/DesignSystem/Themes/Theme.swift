@@ -108,6 +108,9 @@ nonisolated public final class Theme: Sendable {
     /// Marks drawn on the accent: a checkbox's check or dash, a chosen
     /// radio's dot, the switch's knob while it's on.
     public let onAccent: NSColor
+    /// A destructive default button's fill (Delete, Discard), under white
+    /// text: red; crimson beside an orange accent.
+    public let destructive: NSColor
 
     // MARK: Link and status
 
@@ -240,6 +243,8 @@ nonisolated public final class Theme: Sendable {
         prominent = definition.prominent
         prominentText = definition.prominentText ?? .white
         prominentTextStyle = definition.prominentText.map { Color(nsColor: $0) } ?? .white
+
+        destructive = Theme.apart(from: accent, [ThemeColor.fill(0xD9352C, 0xD23A30), ThemeColor.fill(0xCF2257, 0xD42F62)], clearance: Theme.nearAccentHue)
 
         let background = definition.background
         onAccent = switch definition.marks {
