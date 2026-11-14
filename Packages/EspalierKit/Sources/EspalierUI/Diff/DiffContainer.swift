@@ -345,7 +345,7 @@ public struct DiffContainer: View {
         case .diff(let loaded, let isInteractive):
             kindView(loaded, settings: settings, isInteractive: isInteractive)
         case .failed(let error):
-            CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
+            CenteredMessage(error.title(or: "Couldn't Load Changes"), systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }

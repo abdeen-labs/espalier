@@ -37,7 +37,8 @@ other themes change what their tokens say (Themes, below).
   cyan, skipping the one nearest the accent. A track keeps its color for
   its line of development.
 - **Buttons come in three styles:** quiet, prominent (one per area), and
-  secondary (Cancel in sheets, Undo).
+  secondary (Cancel in sheets, Undo). A prominent button that deletes or
+  discards is red.
 - **SF Symbols** for every icon; the app font for text (Geist by
   default); the code font (Geist Mono by default) for what's monospaced.
 

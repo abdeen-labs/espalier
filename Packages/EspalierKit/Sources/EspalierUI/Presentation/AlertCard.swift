@@ -55,11 +55,11 @@ final class AlertCardModel {
 nonisolated enum AlertMessageBlock: Equatable, Sendable {
     /// Lines of text.
     case text(String)
-    /// "• " lines, without their bullets.
+    /// "• " and "- " lines, without their bullets.
     case list([String])
 
     /// `message`'s paragraphs (split at blank lines), with each run of "• "
-    /// lines as a list.
+    /// or "- " lines as a list.
     static func blocks(_ message: String) -> [AlertMessageBlock] {
         var blocks: [AlertMessageBlock] = []
         for paragraph in message.components(separatedBy: "\n\n") where !paragraph.isEmpty {
@@ -78,7 +78,7 @@ nonisolated enum AlertMessageBlock: Equatable, Sendable {
                 }
             }
             for line in paragraph.components(separatedBy: "\n") {
-                if line.hasPrefix("• ") {
+                if line.hasPrefix("• ") || line.hasPrefix("- ") {
                     flushLines()
                     items.append(String(line.dropFirst(2)))
                 } else {
@@ -142,6 +142,54 @@ struct AlertCard: View {
     }
 
     private func message(_ message: String) -> some View {
+        MessageBlocks(message)
+            .font(Typography.row)
+            .foregroundStyle(.text2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func buttons(_ content: AlertContent) -> some View {
+        HStack(spacing: Metrics.insetSmall) {
+            Spacer(minLength: 0)
+            ForEach(content.buttons.indices.reversed(), id: \.self) { index in
+                let button = content.buttons[index]
+                Button(button.title, role: Self.role(button.role)) {
+                    model.answer(index)
+                }
+                .buttonStyle(Self.style(button.role, isDefault: index == 0))
+                .focused($focusedButton, equals: index)
+            }
+        }
+    }
+
+    /// The default button is prominent (red with the destructive role), as
+    /// in the compact confirmation sheets; Cancel secondary; the rest quiet.
+    static func style(_ role: AlertContent.Role, isDefault: Bool) -> CapsuleButtonStyle {
+        if isDefault {
+            return .prominent
+        }
+        return role == .cancel ? .secondary : .quiet
+    }
+
+    private static func role(_ role: AlertContent.Role) -> ButtonRole? {
+        switch role {
+        case .destructive: .destructive
+        case .cancel: .cancel
+        case .primary, .secondary: nil
+        }
+    }
+}
+
+/// A message's paragraphs and bulleted lists (`AlertMessageBlock`), in the
+/// font and color around it: an alert's, and a failure popover's.
+struct MessageBlocks: View {
+    private let message: String
+
+    init(_ message: String) {
+        self.message = message
+    }
+
+    var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
             ForEach(Array(AlertMessageBlock.blocks(message).enumerated()), id: \.offset) { _, block in
                 switch block {
@@ -163,40 +211,6 @@ struct AlertCard: View {
                     }
                 }
             }
-        }
-        .font(Typography.row)
-        .foregroundStyle(.text2)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func buttons(_ content: AlertContent) -> some View {
-        HStack(spacing: Metrics.insetSmall) {
-            Spacer(minLength: 0)
-            ForEach(content.buttons.indices.reversed(), id: \.self) { index in
-                let button = content.buttons[index]
-                Button(button.title, role: Self.role(button.role)) {
-                    model.answer(index)
-                }
-                .buttonStyle(Self.style(button.role, isDefault: index == 0))
-                .focused($focusedButton, equals: index)
-            }
-        }
-    }
-
-    /// The default button is prominent, destructive or not, as in the
-    /// compact confirmation sheets; Cancel secondary; the rest quiet.
-    static func style(_ role: AlertContent.Role, isDefault: Bool) -> CapsuleButtonStyle {
-        if isDefault {
-            return .prominent
-        }
-        return role == .cancel ? .secondary : .quiet
-    }
-
-    private static func role(_ role: AlertContent.Role) -> ButtonRole? {
-        switch role {
-        case .destructive: .destructive
-        case .cancel: .cancel
-        case .primary, .secondary: nil
         }
     }
 }

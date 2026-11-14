@@ -240,7 +240,7 @@ struct PreviewPullRequestSheet: View {
         case .changesNotAvailable:
             CenteredMessage("Changes Not Available", systemImage: "doc.text.magnifyingglass")
         case .failed(let error):
-            CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
+            CenteredMessage(error.title(or: "Couldn't Load Changes"), systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
         case .loaded:
             if let empty = preview.emptyMessage {
                 CenteredMessage(empty.title, systemImage: "arrow.trianglehead.pull", description: empty.message)

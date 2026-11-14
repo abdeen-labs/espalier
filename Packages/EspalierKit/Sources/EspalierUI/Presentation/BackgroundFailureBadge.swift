@@ -50,11 +50,9 @@ public struct BackgroundFailureDetails: View {
             } icon: {
                 WarningGlyph()
             }
-            Text(summary.message)
+            MessageBlocks(summary.message)
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
             if !summary.recoveryTitles.isEmpty {
                 HStack(spacing: Metrics.insetSmall) {
                     Spacer()
@@ -72,5 +70,13 @@ public struct BackgroundFailureDetails: View {
         .padding(Metrics.Popover.padding)
         .frame(width: Metrics.Popover.width, alignment: .leading)
         .background(Color(espalier: Palette.background))
+    }
+}
+
+extension OperationError {
+    /// The error's title, or `fallback` (what failed, "Couldn't Load
+    /// Changes") when it has only the generic one.
+    func title(or fallback: String) -> String {
+        title == Self.genericTitle ? fallback : title
     }
 }

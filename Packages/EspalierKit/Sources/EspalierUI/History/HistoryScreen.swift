@@ -398,7 +398,7 @@ struct HistoryListPane: View {
             // Leaving a comparison for the history.
             DelayedProgressView()
         } else if let error = history.loadError, history.commitSHAs.isEmpty {
-            CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
+            CenteredMessage(error.title(or: "Couldn't Load History"), systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
                 .fillingSpace()
         } else if history.style == .simple {
             // History's simple mode: one branch's commits one after another
@@ -422,7 +422,7 @@ struct HistoryListPane: View {
     @ViewBuilder
     private func comparison(history: HistoryModel, state: HistoryWindowState, branch: Branch) -> some View {
         if let error = state.compareError {
-            CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
+            CenteredMessage(error.title(or: "Couldn't Compare Branches"), systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
                 .fillingSpace()
         } else if !isComparisonShown(of: branch, history: history) {
             DelayedProgressView()

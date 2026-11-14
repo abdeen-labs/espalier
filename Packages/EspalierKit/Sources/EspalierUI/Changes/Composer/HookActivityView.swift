@@ -145,30 +145,31 @@ public struct HookOutputView: View {
     }
 
     public var body: some View {
-        ScrollViewReader { proxy in
+        // As tall as the output, up to the popover's tallest; longer output
+        // scrolls, kept at its end.
+        CappedHeightLayout(maximumHeight: Metrics.Composer.hookOutputHeight) {
+            // Measures the output's height; the scroll view shows it.
+            output
+                .hidden()
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(text.isEmpty ? "No output yet." : text)
-                        .font(Typography.terminal)
-                        .foregroundStyle(text.isEmpty ? .secondary : .primary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(Metrics.insetMedium)
-                    Color.clear
-                        .frame(height: 1)
-                        .id(Self.endID)
-                }
-                .unbouncedScrollContent()
+                output
+                    .unbouncedScrollContent()
             }
-            .onChange(of: text, initial: true) {
-                proxy.scrollTo(Self.endID, anchor: .bottom)
-            }
+            .defaultScrollAnchor(.bottom, for: .initialOffset)
+            .defaultScrollAnchor(.bottom, for: .sizeChanges)
         }
-        .frame(width: Metrics.Composer.hookOutputWidth, height: Metrics.Composer.hookOutputHeight)
+        .frame(width: Metrics.Composer.hookOutputWidth)
         .accessibilityLabel("Hook output")
     }
 
-    private static let endID = "end"
+    private var output: some View {
+        Text(text.isEmpty ? "No output yet." : text)
+            .font(Typography.terminal)
+            .foregroundStyle(text.isEmpty ? .secondary : .primary)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Metrics.insetMedium)
+    }
 }
 
 /// The output popover, following the commit's output live.

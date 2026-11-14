@@ -201,7 +201,7 @@ struct AssistedCommitStatusView: View {
                         .foregroundStyle(Color(espalier: Palette.warning))
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                retryButtons
+                buttonsBelow
                     .padding(.top, Metrics.insetSmall)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -230,6 +230,7 @@ struct AssistedCommitStatusView: View {
         }
     }
 
+    /// Cancel and Dismiss, beside the text.
     @ViewBuilder
     private var button: some View {
         switch content.status {
@@ -239,7 +240,22 @@ struct AssistedCommitStatusView: View {
                     .buttonStyle(.quiet)
                     .controlSize(.small)
             }
-        case .needsProvider:
+        case .failed(_, .dismiss):
+            Button("Dismiss", action: actions.dismiss)
+                .buttonStyle(.quiet)
+                .controlSize(.small)
+        case .ready, .needsProvider, .needsModelChoice, .failed:
+            EmptyView()
+        }
+    }
+
+    /// The buttons with longer titles (Open AI Settings…, Choose Model…,
+    /// Dismiss and the retry), under the text: side by side with it, they
+    /// don't fit the card.
+    @ViewBuilder
+    private var buttonsBelow: some View {
+        switch content.status {
+        case .needsProvider, .failed(_, .openSettings):
             Button("Open AI Settings…", action: actions.openSettings)
                 .buttonStyle(.quiet)
                 .controlSize(.small)
@@ -247,29 +263,7 @@ struct AssistedCommitStatusView: View {
             Button("Choose Model…", action: actions.chooseModel)
                 .buttonStyle(.quiet)
                 .controlSize(.small)
-        case .failed(_, let recovery):
-            switch recovery {
-            case .retryUndo, .retryPush:
-                EmptyView()
-            case .openSettings:
-                Button("Open AI Settings…", action: actions.openSettings)
-                    .buttonStyle(.quiet)
-                    .controlSize(.small)
-            case .dismiss:
-                Button("Dismiss", action: actions.dismiss)
-                    .buttonStyle(.quiet)
-                    .controlSize(.small)
-            }
-        case .ready:
-            EmptyView()
-        }
-    }
-
-    /// Dismiss and the retry, under the text: side by side with it, they
-    /// don't fit the card.
-    @ViewBuilder
-    private var retryButtons: some View {
-        if case .failed(_, let recovery) = content.status, recovery == .retryUndo || recovery == .retryPush {
+        case .failed(_, let recovery) where recovery == .retryUndo || recovery == .retryPush:
             HStack(spacing: Metrics.insetSmall) {
                 Button("Dismiss", action: actions.dismiss)
                     .buttonStyle(.quiet)
@@ -278,6 +272,8 @@ struct AssistedCommitStatusView: View {
                     .buttonStyle(.quiet)
                     .controlSize(.small)
             }
+        case .ready, .running, .failed:
+            EmptyView()
         }
     }
 }

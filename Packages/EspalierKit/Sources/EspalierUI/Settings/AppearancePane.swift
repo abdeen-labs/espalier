@@ -89,7 +89,7 @@ struct AppearanceForm: View {
 
     var body: some View {
         SettingsPage {
-            SettingsSection("Theme") {
+            SettingsSection("Look") {
                 SettingsRow("Theme") {
                     EmptyView()
                 } footer: {

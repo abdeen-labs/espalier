@@ -82,7 +82,7 @@ struct CommitFiles: View {
                 )
             }
         } else if let error = selection.changeset.failure {
-            CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
+            CenteredMessage(error.title(or: "Couldn't Load Files"), systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
                 .fillingSpace()
         } else {
             DelayedProgressView()

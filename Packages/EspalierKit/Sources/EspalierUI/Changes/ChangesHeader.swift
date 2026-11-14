@@ -79,7 +79,8 @@ extension ChangesHeaderContent {
         return ChangesHeaderContent(
             title: title(fileCount: files.count, visibleCount: changes.visibleFiles.count, numberFormat: numberFormat),
             included: files.isEmpty ? "" : included(count: includedCount, numberFormat: numberFormat),
-            includeAll: changes.visibleIncludeAll,
+            // Nothing to include: the box is empty.
+            includeAll: files.isEmpty ? false : changes.visibleIncludeAll,
             isIncludeAllEnabled: files.contains { !$0.isUncommittableSubmodule } && !isCommitting && !isRebaseConflicts,
             filter: FilterMenuContent(filter: changes.filter, visibleFiles: changes.visibleFiles, numberFormat: numberFormat),
             fileCount: files.count,

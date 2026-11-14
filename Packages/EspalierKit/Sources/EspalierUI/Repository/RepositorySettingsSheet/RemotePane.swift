@@ -30,7 +30,7 @@ struct RemotePane: View {
         if let remote {
             Form {
                 // The labels in the form's column; the fields are capsules.
-                LabeledContent("Primary Remote Repository (\(remote.name)) URL") {
+                LabeledContent("Remote (\(remote.name))") {
                     TextField("Primary Remote Repository (\(remote.name)) URL", text: $url, prompt: Text("Remote URL").fieldPrompt())
                         .labelsHidden()
                         .autocorrectionDisabled(true)

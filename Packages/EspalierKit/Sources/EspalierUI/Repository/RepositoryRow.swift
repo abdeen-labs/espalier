@@ -313,7 +313,9 @@ struct RepositoryStatusIndicators: View {
     @Environment(\.motion) private var motion
 
     var body: some View {
-        if content.showsStatus {
+        // Nothing to show takes no room: an owner before it ends at the
+        // row's edge.
+        if content.showsStatus, content.changedFileCount > 0 || content.ahead > 0 || content.behind > 0 {
             HStack(spacing: Metrics.grid) {
                 if content.changedFileCount > 0 {
                     Text(verbatim: content.changedFileCount > 999 ? "999+" : formatCount(content.changedFileCount, numberFormat))

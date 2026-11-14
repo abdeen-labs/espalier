@@ -27,8 +27,13 @@ extension Metrics {
     public enum BranchPicker {
         /// The popover's width.
         public static let popoverWidth: CGFloat = 380
-        /// The popover's list height.
+        /// The tallest the popover's filter and list get.
         public static let popoverListHeight: CGFloat = 340
+        /// The shortest they get: room for the message when nothing matches.
+        public static let popoverMinimumHeight: CGFloat = 200
+        /// The filter's row over the list, its hairline included: a regular
+        /// control inset 12 above and below.
+        public static let popoverFilterHeight: CGFloat = Metrics.ControlHeight.regular + 2 * Metrics.insetMedium + 1
         /// A picker's list height inside a sheet.
         public static let sheetListHeight: CGFloat = 300
     }

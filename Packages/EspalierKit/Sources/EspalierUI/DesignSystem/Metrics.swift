@@ -363,7 +363,7 @@ public enum Metrics {
         public static let descriptionMaximumLines = 8
         /// Popovers anchored in the composer (author, AI setup, models).
         public static let popoverWidth: CGFloat = 300
-        /// The hook output popover.
+        /// The hook output popover: its width, and the tallest it gets.
         public static let hookOutputWidth: CGFloat = 520
         public static let hookOutputHeight: CGFloat = 260
     }

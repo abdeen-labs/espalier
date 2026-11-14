@@ -54,7 +54,7 @@ public struct TerminalOutputView: View {
 /// Two views on top of each other, as tall as the first is at the width
 /// given, at most `maximumHeight`: the first measures, the second fills
 /// the space.
-private struct CappedHeightLayout: Layout {
+struct CappedHeightLayout: Layout {
     let maximumHeight: CGFloat
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

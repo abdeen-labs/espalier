@@ -597,6 +597,9 @@ public struct ComposerView: View {
                 if content.showsLengthHint {
                     SummaryLengthHint()
                 }
+                if footerIsOnlyAuthor {
+                    authorButton
+                }
             }
             .padding(.horizontal, Metrics.Composer.cardPadding)
             .padding(.top, Metrics.Composer.summaryTopPadding)
@@ -628,8 +631,10 @@ public struct ComposerView: View {
             if content.showsCoAuthors(draft) {
                 coAuthorsSection
             }
-            Hairline()
-            footer(showsSparkle: true)
+            if !footerIsOnlyAuthor {
+                Hairline()
+                footer(showsSparkle: true)
+            }
         }
         .surface(Color(espalier: Palette.cardFill), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
         // A field's ring, on the card's edge, while one of its fields has
@@ -734,17 +739,28 @@ public struct ComposerView: View {
                 ) { options = $0 }
             }
             Spacer(minLength: Metrics.insetSmall)
-            AuthorAvatarButton(
-                content.author,
-                canOpenRepositorySettings: content.canOpenRepositorySettings,
-                onOpenGitSettings: actions.openGitSettings,
-                onOpenRepositorySettings: actions.openRepositorySettings,
-                onUpdateEmail: actions.updateEmail
-            )
+            authorButton
         }
         .padding(.leading, Metrics.Composer.footerPadding)
         .padding(.trailing, Metrics.Composer.cardPadding)
         .frame(height: Metrics.Composer.footerHeight)
+    }
+
+    /// Whether the card's footer would hold the author alone (a merge's
+    /// message, with no AI button, co-authors, or options): the author then
+    /// sits after the summary, and the card has no footer.
+    private var footerIsOnlyAuthor: Bool {
+        content.sparkle == .hidden && !content.showsCoAuthorsToggle && !content.showsCommitOptions
+    }
+
+    private var authorButton: some View {
+        AuthorAvatarButton(
+            content.author,
+            canOpenRepositorySettings: content.canOpenRepositorySettings,
+            onOpenGitSettings: actions.openGitSettings,
+            onOpenRepositorySettings: actions.openRepositorySettings,
+            onUpdateEmail: actions.updateEmail
+        )
     }
 
     /// The fields' context menu items: co-authors, and generating a message.

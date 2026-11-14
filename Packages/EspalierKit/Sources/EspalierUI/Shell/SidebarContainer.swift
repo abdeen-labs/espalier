@@ -971,6 +971,7 @@ struct SidebarFilterField: View {
         )
         .controlSize(.regular)
         .environment(\.searchFieldIsRaised, PaneCards.floats)
+        .environment(\.searchFieldIsOnSidebar, surface == nil)
         .padding(.horizontal, Metrics.Sidebar.rowInset)
         .padding(.vertical, Metrics.insetSmall)
         .background {

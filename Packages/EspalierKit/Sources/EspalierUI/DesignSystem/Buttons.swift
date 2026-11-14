@@ -2,7 +2,8 @@
 // size: quiet (the theme's quiet control fill, with the ring and small
 // shadow where the theme raises them, medium weight),
 // prominent (the deeper accent, white semibold; one per area), and
-// secondary (the soft fill, no shadow: Cancel in sheets, Undo). The sync
+// secondary (the soft fill, no shadow: Cancel in sheets, Undo). A prominent
+// button with the destructive role (Delete, Discard) is red. The sync
 // button's split variant adds a chevron menu. With keyboard focus, each
 // shows Espalier's ring (`FocusRing`) 1 point outside its shape.
 
@@ -33,7 +34,7 @@ private struct CapsuleButtonDrawing: ButtonStyle {
     let kind: CapsuleButtonKind
 
     func makeBody(configuration: Configuration) -> some View {
-        CapsuleButtonBody(kind: kind, label: configuration.label, isPressed: configuration.isPressed)
+        CapsuleButtonBody(kind: kind, label: configuration.label, isPressed: configuration.isPressed, isDestructive: configuration.role == .destructive)
     }
 }
 
@@ -58,6 +59,8 @@ struct CapsuleButtonAppearance {
     /// Whether a quiet capsule draws flat on the `field` fill, in a card
     /// (`PaneCards.drawsQuietFlat`).
     var isFlat = false
+    /// Whether the button has the destructive role: a prominent one is red.
+    var isDestructive = false
 
     var height: CGFloat {
         Metrics.ControlHeight.height(for: controlSize)
@@ -82,18 +85,24 @@ struct CapsuleButtonAppearance {
 
     /// The title's color.
     var foreground: Color {
-        kind == .prominent ? .prominentText : .text
+        switch kind {
+        case .prominent: isDestructive ? .white : .prominentText
+        case .quiet, .secondary: .text
+        }
     }
 
     /// The symbol's color: secondary text on quiet and secondary capsules.
     var symbolColor: Color {
-        kind == .prominent ? .prominentText : .text2
+        switch kind {
+        case .prominent: isDestructive ? .white : .prominentText
+        case .quiet, .secondary: .text2
+        }
     }
 
     var fill: Color {
         switch kind {
         case .quiet: isFlat ? .field : Color(nsColor: Theme.current.quietControl)
-        case .prominent: Color(nsColor: Palette.button)
+        case .prominent: Color(nsColor: isDestructive ? Palette.destructiveButton : Palette.button)
         case .secondary: .soft
         }
     }
@@ -135,6 +144,7 @@ struct CapsuleButtonBody<Label: View>: View {
     let kind: CapsuleButtonKind
     let label: Label
     let isPressed: Bool
+    var isDestructive = false
     @Environment(\.controlSize) private var controlSize
     @Environment(\.isEnabled) private var isEnabled
     /// Whether the button has keyboard focus.
@@ -151,7 +161,8 @@ struct CapsuleButtonBody<Label: View>: View {
             isPressed: isPressed,
             isHovered: isHovered,
             isEnabled: isEnabled,
-            isFlat: PaneCards.drawsQuietFlat(isInPaneCard: isInPaneCard)
+            isFlat: PaneCards.drawsQuietFlat(isInPaneCard: isInPaneCard),
+            isDestructive: isDestructive
         )
         label
             .labelStyle(CapsuleLabelStyle(symbolColor: appearance.symbolColor))

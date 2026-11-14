@@ -26,6 +26,8 @@ public struct BranchPopover: View {
     @Environment(WindowContext.self) private var context
     @Environment(\.closeEnclosingPopover) private var closePopover
     @State private var selection: Branch?
+    /// The height of the list's rows with the filter empty.
+    @State private var listHeight: CGFloat?
 
     public init(repository: RepositoryModel) {
         self.repository = repository
@@ -60,7 +62,8 @@ public struct BranchPopover: View {
                     BranchContextMenu.content(ref: branch.ref, context: context)
                 }
             )
-            .frame(height: Metrics.BranchPicker.popoverListHeight)
+            .frame(height: pickerHeight)
+            .environment(\.unfilteredBranchListHeight, $listHeight)
             if let current = repository.gitState.tip.branch {
                 Hairline()
                 // The prompt and the merge button crossfade in place as the
@@ -86,6 +89,16 @@ public struct BranchPopover: View {
             // one; switching branches, on the current branch.
             selection = method == nil ? repository.gitState.tip.branch : repository.history.defaultComparableBranch
         }
+    }
+
+    /// The picker's height: its filter over its branches, between the room
+    /// the empty message needs and the popover's tallest.
+    private var pickerHeight: CGFloat {
+        let tallest = Metrics.BranchPicker.popoverListHeight
+        guard let listHeight else {
+            return tallest
+        }
+        return min(max(Metrics.BranchPicker.popoverFilterHeight + listHeight, Metrics.BranchPicker.popoverMinimumHeight), tallest)
     }
 
     /// New Branch…, beside the filter; its shortcut is in its tooltip.

@@ -44,6 +44,9 @@ extension EnvironmentValues {
     /// rather than on the `field` fill: on the floating layout's backdrop,
     /// beside quiet capsules.
     @Entry public var searchFieldIsRaised = false
+    /// Whether a capsule search field sits on the sidebar's surface, which
+    /// is as light as the `field` fill: it's drawn as a wash instead.
+    @Entry public var searchFieldIsOnSidebar = false
 }
 
 /// A capsule search or filter field: a magnifying glass, the field, and a
@@ -64,6 +67,7 @@ public struct CapsuleSearchField: View {
     @State private var focusRequests = 0
     @Environment(\.controlSize) private var controlSize
     @Environment(\.searchFieldIsRaised) private var isRaised
+    @Environment(\.searchFieldIsOnSidebar) private var isOnSidebar
     @Environment(\.motion) private var motion
 
     /// - Parameters:
@@ -127,6 +131,8 @@ public struct CapsuleSearchField: View {
                 // backdrop.
                 Color.clear
                     .surface(.quiet, elevation: .quiet)
+            } else if isOnSidebar {
+                Capsule(style: .circular).fill(Color(espalier: Palette.hover))
             } else {
                 Capsule(style: .circular).fill(.field)
             }

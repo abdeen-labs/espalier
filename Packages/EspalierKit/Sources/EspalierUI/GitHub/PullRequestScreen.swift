@@ -1,7 +1,7 @@
 // The pull request place. Left: the overview (title, Draft, "#142 opened 2
 // days ago by octo", the branches, Check Out through the uncommitted changes
-// decision or "Checked Out" for the current branch's, View on GitHub, Check
-// Out in New Worktree…, the checks with their steps, and the description in
+// decision or "Checked Out" for the current branch's, New Worktree…, View
+// on GitHub, the checks with their steps, and the description in
 // Markdown). Right: the changes since the merge base when the pull request's
 // head is in the repository (`pullRequestChanges`), else "Changes Not
 // Available" with a quiet Check Out (the overview's is the prominent one).
@@ -362,32 +362,41 @@ struct PullRequestOverviewView: View {
         }
     }
 
-    /// Check Out (or "Checked Out"), View on GitHub, and Check Out in New
-    /// Worktree…, on a second line when the column is too narrow for them.
+    /// Check Out (or "Checked Out"), New Worktree…, and View on GitHub, the
+    /// last on a second line when the column is too narrow for them.
     private var buttons: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: Metrics.insetSmall) {
                 checkOutButtons
-                worktreeButton
+                viewOnGitHubButton
             }
             VStack(alignment: .leading, spacing: Metrics.insetSmall) {
                 HStack(spacing: Metrics.insetSmall) {
                     checkOutButtons
                 }
-                worktreeButton
+                viewOnGitHubButton
             }
         }
     }
 
-    /// Check Out, the area's prominent button, or the plain "Checked Out"
-    /// when it's the current branch's pull request; and View on GitHub.
+    /// Check Out, the area's prominent button, or "Checked Out" with its
+    /// check when it's the current branch's pull request; and New
+    /// Worktree….
     @ViewBuilder
     private var checkOutButtons: some View {
         if content.isCurrentBranch {
-            Text("Checked Out")
-                .font(Typography.row)
-                .foregroundStyle(.text2)
-                .fixedSize()
+            Label {
+                Text("Checked Out")
+            } icon: {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color(espalier: Palette.success))
+            }
+            .font(Typography.button)
+            .foregroundStyle(.text2)
+            .frame(height: Metrics.ControlHeight.regular)
+            .padding(.trailing, Metrics.grid)
+            .fixedSize()
+            .accessibilityElement(children: .combine)
         } else {
             Button("Check Out", action: actions.checkOut)
                 .buttonStyle(.prominent)
@@ -395,21 +404,23 @@ struct PullRequestOverviewView: View {
                 .fixedSize()
                 .tooltip(actions.checkOutRefusal)
         }
+        if let checkOutInNewWorktree = actions.checkOutInNewWorktree {
+            Button("New Worktree…", action: checkOutInNewWorktree)
+                .buttonStyle(.quiet)
+                .fixedSize()
+                .tooltip("Check out this pull request in a new worktree")
+                .accessibilityLabel("Check Out in New Worktree…")
+        }
+    }
+
+    @ViewBuilder
+    private var viewOnGitHubButton: some View {
         if let url = content.url {
             Button(content.viewOnGitHubTitle) {
                 actions.open(url)
             }
             .buttonStyle(.quiet)
             .fixedSize()
-        }
-    }
-
-    @ViewBuilder
-    private var worktreeButton: some View {
-        if let checkOutInNewWorktree = actions.checkOutInNewWorktree {
-            Button("Check Out in New Worktree…", action: checkOutInNewWorktree)
-                .buttonStyle(.quiet)
-                .fixedSize()
         }
     }
 
@@ -472,7 +483,7 @@ struct PullRequestChangesView: View {
                         .tooltip(refusal)
                     }
                 case .failed(let error):
-                    CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
+                    CenteredMessage(error.title(or: "Couldn't Load Changes"), systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
                 case .loaded:
                     if let empty = changes.emptyMessage {
                         CenteredMessage(empty.title, systemImage: "arrow.trianglehead.pull", description: empty.message)
@@ -644,7 +655,7 @@ struct ChangedFilesList: View {
                     }
                 }
             } else if let error = selection.changeset.failure {
-                CenteredMessage(error.title, systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
+                CenteredMessage(error.title(or: "Couldn't Load Changes"), systemImage: "exclamationmark.triangle", description: error.message, tint: Color(espalier: Palette.warningMark))
                     .fillingSpace()
             } else {
                 DelayedProgressView()

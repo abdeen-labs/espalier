@@ -343,6 +343,13 @@ nonisolated public enum BranchPickerStyle: Sendable, Equatable {
     case embedded
 }
 
+extension EnvironmentValues {
+    /// Where the branch popover's list writes its rows' height while its
+    /// filter is empty: the popover is as tall as its branches, and keeps
+    /// that height while a filter leaves fewer.
+    @Entry var unfilteredBranchListHeight: Binding<CGFloat?>?
+}
+
 /// The picker's look, value-driven: the filter field, the grouped list (the
 /// default and recent branches unlabeled at its top, each later group under
 /// its label), and the empty state. Rows draw their own selection in the
@@ -369,6 +376,7 @@ struct BranchPickerList: View {
     /// The branch the pointer highlighted last in the popover, which the
     /// list doesn't scroll to.
     @State private var hoveredRef: String?
+    @Environment(\.unfilteredBranchListHeight) private var unfilteredListHeight
 
     init(
         content: BranchPickerContent,
@@ -503,6 +511,11 @@ struct BranchPickerList: View {
                 // A label brings its own room above it.
                 .padding(.top, firstUnlabeledRef == nil ? 0 : Metrics.ListRow.inset)
                 .padding(.bottom, Metrics.ListRow.inset)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    if filter.isEmpty {
+                        unfilteredListHeight?.wrappedValue = height
+                    }
+                }
             }
             .onChange(of: selection?.ref) {
                 if let ref = selection?.ref, ref != hoveredRef {

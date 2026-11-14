@@ -273,7 +273,7 @@ struct IntegrationsForm: View {
                 }
             }
 
-            SettingsSection("Shell") {
+            SettingsSection("Terminal") {
                 SettingsRow("Shell", description: "Used by Open in Terminal.", labelsControl: true) {
                     IntegrationPicker(title: "Shell", popUp: content.shell, configureTitle: "Configure Custom Shell…", selection: Binding {
                         content.shell.selection

@@ -75,8 +75,8 @@ nonisolated struct StashColumnContent: Sendable, Equatable {
     }
 }
 
-/// The stash's header, as high as the diff's: the title, when there's room
-/// for it, then Restore, Apply, and Discard….
+/// The stash's header, as high as the diff's: the title, shortened or left
+/// out when there's no room for it, then Restore, Apply, and Discard….
 struct StashHeader: View {
     let content: StashColumnContent
     var restore: @MainActor () -> Void = {}
@@ -85,15 +85,11 @@ struct StashHeader: View {
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
-            // Shown whole or not at all: a narrow column leaves the room to
-            // the buttons.
+            // Shown whole, as "Stash" in a narrower column, or not at all:
+            // the narrowest column leaves the room to the buttons.
             ViewThatFits(in: .horizontal) {
-                Text("Stashed Changes")
-                    .font(Typography.row.weight(.semibold))
-                    .foregroundStyle(.text)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .accessibilityAddTraits(.isHeader)
+                title("Stashed Changes")
+                title("Stash")
                 Color.clear
                     .frame(width: 0, height: 0)
             }
@@ -120,6 +116,16 @@ struct StashHeader: View {
         .controlSize(.small)
         .padding(.horizontal, FileRowMetrics.contentInset)
         .frame(height: Metrics.PaneHeader.height)
+    }
+
+    private func title(_ title: String) -> some View {
+        Text(title)
+            .font(Typography.row.weight(.semibold))
+            .foregroundStyle(.text)
+            .lineLimit(1)
+            .fixedSize()
+            .accessibilityLabel("Stashed Changes")
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -301,7 +307,7 @@ public struct StashScreen: View {
             case .loaded(let loaded):
                 files = .loaded(StashColumnContent.files(loaded, filter: filter), total: loaded.count)
             case .failed(let error):
-                files = .failed(title: error.title, message: error.message)
+                files = .failed(title: error.title(or: "Couldn't Load Stash"), message: error.message)
             case .idle, .loading:
                 files = .loading
             }
