@@ -20,7 +20,9 @@ nonisolated public enum Elevation: Sendable, CaseIterable {
     /// Sheets.
     case sheet
 
-    /// The 1-point ring around the shape: black 8% (white 9% in dark).
+    /// The 1-point ring around the shape: black 8% (white 9% in dark). A
+    /// sheet's is drawn in dark alone, white 10%, where its shadow doesn't
+    /// show.
     public var ring: NSColor? {
         switch self {
         case .card, .quiet, .floating:
@@ -29,7 +31,10 @@ nonisolated public enum Elevation: Sendable, CaseIterable {
                 highContrastLight: NSColor.black.withAlphaComponent(0.3), highContrastDark: NSColor.white.withAlphaComponent(0.35)
             )
         case .sheet:
-            nil
+            .espalierDynamic(
+                light: .clear, dark: NSColor.white.withAlphaComponent(0.10),
+                highContrastLight: NSColor.black.withAlphaComponent(0.3), highContrastDark: NSColor.white.withAlphaComponent(0.35)
+            )
         }
     }
 
