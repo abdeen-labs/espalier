@@ -16,6 +16,22 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.5.5] - 2026-11-14
+
+### Changed
+
+- Islands and Pop color code in their own colors: muted in Islands, bright in Pop. In Frost, operators and punctuation are gray.
+- A branch no longer takes a color close to the current branch's. With the Volt palette no other branch is green, and with Iris none is blue or violet.
+- In Islands and Pop, the default branch is teal or cyan beside a green accent, so it stands apart from the current branch.
+- Buttons that delete or discard something are crimson beside an orange accent, such as Tangerine, so they don't look like the main button.
+- Sheets and alerts have a faint outline in dark mode, so they stand out from the dimmed window behind them.
+
+### Fixed
+
+- In a fork, Preview Pull Request and Create Pull Request started from the fork's own default branch. They start from the parent repository's now.
+- In Islands in light mode, a diff's added lines were hard to tell from its hunk headers.
+- In Islands and Pop in dark mode, the selected side of a control like Simple | Graph barely stood out.
+
 ## [1.5.4] - 2026-11-14
 
 ### Changed
@@ -218,7 +234,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5.4...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5.5...HEAD
+[1.5.5]: https://github.com/abdeen-labs/espalier/compare/v1.5.4...v1.5.5
 [1.5.4]: https://github.com/abdeen-labs/espalier/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/abdeen-labs/espalier/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/abdeen-labs/espalier/compare/v1.5.1...v1.5.2
