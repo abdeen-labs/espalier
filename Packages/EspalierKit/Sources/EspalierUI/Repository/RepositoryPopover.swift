@@ -68,13 +68,21 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
         return nil
     }
 
-    /// A group's header: "Recent", the owner, the host, "Other".
+    /// A group's header: "Recent", the owner, the host, "Other". Where a
+    /// host has more than one account, the owner or host, then whose
+    /// repositories they are: "octo-org – @joe", or "octo-org –
+    /// Unassociated" for those with no account.
     static func title(of group: RepositoryListGroup) -> String {
-        switch group {
+        let title = switch group {
         case .recent: "Recent"
-        case .dotcom(let owner): owner.login
-        case .enterprise(let host): host
+        case .dotcom(let owner, _): owner.login
+        case .enterprise(let host, _): host
         case .other: "Other"
+        }
+        return switch group.account {
+        case nil: title
+        case .login(let login): "\(title) \u{2013} @\(login)"
+        case .unassociated: "\(title) \u{2013} Unassociated"
         }
     }
 
@@ -83,7 +91,7 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
     static func mark(of group: RepositoryListGroup) -> ListGroupMark {
         switch group {
         case .recent: .symbol("clock")
-        case .dotcom(let owner): .owner(AvatarUser(owner: owner))
+        case .dotcom(let owner, _): .owner(AvatarUser(owner: owner))
         case .enterprise: .symbol("server.rack")
         case .other: .symbol("folder")
         }

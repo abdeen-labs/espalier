@@ -24,7 +24,7 @@ struct RepositoryListGroupingTests {
     }
 
     private func owner(_ group: RepositoryListGroupItems) -> String? {
-        if case .dotcom(let owner) = group.identifier {
+        if case .dotcom(let owner, _) = group.identifier {
             return owner.login
         }
         return nil
@@ -188,6 +188,75 @@ struct RepositoryListGroupingTests {
         #expect(grouped[0].items.map(\.id) == [.repository(first.id), .repository(second.id)])
         let reversed = groupRepositories([.repository(second), .repository(first)], [:], [])
         #expect(reversed[0].items.map(\.id) == [.repository(second.id), .repository(first.id)])
+    }
+
+    // MARK: Accounts
+
+    /// A repository of `owner` assigned to `account`, at /r/`name`.
+    private func repository(_ name: String, owner: String, account: String?, endpoint: String? = nil) -> RepositoryListEntry {
+        .repository(RepositoryRecord(
+            path: "/r/\(name)",
+            gitHubRepository: gitHubRepoFixture(owner: owner, name: name, endpoint: endpoint),
+            accountLogin: account
+        ))
+    }
+
+    @Test("a host with two accounts splits each owner's group by account: by login ignoring case, then those with none; other hosts stay whole")
+    func groupsByAccount() {
+        let dotCom = getDotComAPIEndpoint()
+        let enterprise = "https://ghe.io/api/v3"
+        let entries = [
+            repository("a", owner: "octo-org", account: "work"),
+            repository("b", owner: "octo-org", account: "joe"),
+            repository("c", owner: "octo-org", account: nil),
+            repository("d", owner: "octo-org", account: "JOE"),
+            // An owner whose login starts another's stays ahead of it,
+            // whatever the accounts.
+            repository("e", owner: "octo", account: "work"),
+            repository("f", owner: "o", account: "joe", endpoint: enterprise),
+            repository("/r/g"),
+        ]
+        let accounts = [
+            AccountIdentity(endpoint: dotCom, login: "joe"),
+            AccountIdentity(endpoint: dotCom, login: "work"),
+            AccountIdentity(endpoint: enterprise, login: "joe"),
+        ]
+
+        let grouped = groupRepositories(entries, [:], [], accounts)
+
+        #expect(grouped.map(owner) == ["octo", "octo-org", "octo-org", "octo-org", nil, nil])
+        #expect(grouped.map(\.identifier.account) == [.login("work"), .login("joe"), .login("work"), .unassociated, nil, nil])
+        #expect(grouped.map { $0.items.compactMap(path) } == [["/r/e"], ["/r/b", "/r/d"], ["/r/a"], ["/r/c"], ["/r/f"], ["/r/g"]])
+        #expect(Set(grouped.map(\.id)).count == grouped.count)
+    }
+
+    @Test("a host is split by the accounts its repositories are assigned to, signed in or not; one account, however it's written, splits nothing")
+    func multiAccountHosts() {
+        let assignedToTwo = [repository("a", owner: "o", account: "joe"), repository("b", owner: "o", account: "work")]
+        #expect(groupRepositories(assignedToTwo, [:], []).map(\.identifier.account) == [.login("joe"), .login("work")])
+
+        let oneAccount = [repository("a", owner: "o", account: "joe"), repository("b", owner: "o", account: nil)]
+        let signedIn = [AccountIdentity(endpoint: getDotComAPIEndpoint(), login: "Joe")]
+        let grouped = groupRepositories(oneAccount, [:], [], signedIn)
+        #expect(grouped.map(\.identifier.account) == [nil])
+        #expect(grouped[0].items.count == 2)
+    }
+
+    @Test("the app model splits a host's groups once it has two accounts signed in")
+    @MainActor
+    func appModelAccounts() async throws {
+        let harness = try AppHarness()
+        let app = await harness.loadedApp()
+        app.insertRecord(RepositoryRecord(path: "/r/a", gitHubRepository: gitHubRepoFixture(owner: "o", name: "a"), accountLogin: "mona"))
+        #expect(app.repositoryListGroups.map(\.identifier.account) == [nil])
+
+        func account(_ login: String, id: Int) -> Account {
+            Account(login: login, endpoint: getDotComAPIEndpoint(), token: "token", emails: [], avatarURL: "", id: id, name: login)
+        }
+        try await harness.signIn([account("mona", id: 1), account("lisa", id: 2)], to: app)
+
+        #expect(app.repositoryListGroups.map(\.identifier.account) == [.login("mona")])
+        await app.idle()
     }
 
     @Test("the app model groups its repositories, clones, indicators, and recents")

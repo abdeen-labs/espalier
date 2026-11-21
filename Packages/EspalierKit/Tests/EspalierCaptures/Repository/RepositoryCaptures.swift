@@ -1,5 +1,5 @@
-// The repository flows' screens: the rows; the popover in its card, and
-// empty; Get Started's actions, and signed in with the clone list;
+// The repository flows' screens: the rows; the popover in its card, empty,
+// and by account; Get Started's actions, and signed in with the clone list;
 // the clone list by owner, and none; Clone with a URL whose folder has files,
 // GitHub.com's list with two Enterprise accounts signed in too, and with
 // one account; Create empty, filled over a folder with a README, and
@@ -141,6 +141,49 @@ struct RepositoryCaptures {
                 )
             },
             named: "popover-long",
+            area: area
+        )
+    }
+
+    @Test("the popover with two accounts on GitHub.com: each owner's repositories by account, then those with none")
+    func popoverAccounts() {
+        typealias Row = RepositoryCaptureFixtures
+        func group(_ owner: String, _ account: RepositoryListGroupAccount, _ rows: [RepositoryRowContent]) -> RepositoryPopoverContent.Group {
+            let group = RepositoryListGroup.dotcom(owner: Owner(login: owner, endpoint: getDotComAPIEndpoint(), id: nil), account: account)
+            return RepositoryPopoverContent.Group(
+                id: getGroupKey(group),
+                title: RepositoryPopoverContent.title(of: group),
+                mark: Row.ownerMark(owner),
+                rows: rows
+            )
+        }
+        let groups = [
+            group("joe", .login("joe"), [
+                Row.row("dotfiles", icon: .private),
+                Row.row("espalier", isCurrent: true, changed: 3),
+            ]),
+            group("octo-org", .login("joe"), [
+                Row.row("website", icon: .private),
+            ]),
+            group("octo-org", .login("joe-work"), [
+                Row.row("api", icon: .private, ahead: 1),
+                Row.row("mobile-android", icon: .private),
+            ]),
+            group("octo-org", .unassociated, [
+                Row.row("handbook"),
+            ]),
+        ]
+        let maxHeight = Metrics.Window.defaultHeight - Metrics.Toolbar.height - Metrics.insetLarge * 2
+        capture(
+            RepositoryCaptureFixtures.popoverCard {
+                RepositoryPopoverView(
+                    content: RepositoryPopoverContent(worktrees: [], groups: groups, hasRepositories: true),
+                    filter: .constant(""),
+                    highlighted: .constant(.entry(groups[0].rows[1].id, group: groups[0].id)),
+                    maxHeight: maxHeight
+                )
+            },
+            named: "popover-accounts",
             area: area
         )
     }

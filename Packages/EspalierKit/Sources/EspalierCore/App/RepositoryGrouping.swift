@@ -7,28 +7,60 @@ import GitKit
 
 // MARK: - The repository list
 
+/// Whose repositories a group holds, on a host with more than one account.
+public enum RepositoryListGroupAccount: Hashable, Sendable {
+    /// The repositories assigned to the account with this login.
+    case login(String)
+    /// The repositories with no account assigned.
+    case unassociated
+}
+
 /// A group of the repository list.
 public enum RepositoryListGroup: Hashable, Sendable {
     /// The recently selected repositories, when there are more than seven.
     case recent
-    /// GitHub.com repositories of one owner.
-    case dotcom(owner: Owner)
+    /// GitHub.com repositories of one owner; where GitHub.com has more than
+    /// one account, those of them `account` says.
+    case dotcom(owner: Owner, account: RepositoryListGroupAccount? = nil)
     /// GitHub Enterprise repositories of one host (`host` includes a
-    /// non-default port).
-    case enterprise(host: String)
+    /// non-default port); where the host has more than one account, those
+    /// of them `account` says.
+    case enterprise(host: String, account: RepositoryListGroupAccount? = nil)
     /// Every other repository, and the clones in progress.
     case other
+
+    /// Whose repositories the group holds, when its host has more than one
+    /// account.
+    public var account: RepositoryListGroupAccount? {
+        switch self {
+        case .dotcom(_, let account), .enterprise(_, let account): account
+        case .recent, .other: nil
+        }
+    }
 }
 
-/// Returns a unique grouping key (string) for a repository group. Doubles as
-/// a sorting key: the keys' order, ignoring case (`compareIgnoringCase`), is
-/// the order in which the groups will be displayed in the repository list.
-public func getGroupKey(_ group: RepositoryListGroup) -> String {
+/// A group's key without its account. Doubles as a sorting key: the keys'
+/// order, ignoring case (`compareIgnoringCase`), is the order in which the
+/// groups will be displayed in the repository list.
+private func getBaseGroupKey(_ group: RepositoryListGroup) -> String {
     switch group {
     case .recent: "0:recent"
-    case .dotcom(let owner): "1:dotcom:\(owner.login)"
-    case .enterprise(let host): "2:enterprise:\(host)"
+    case .dotcom(let owner, _): "1:dotcom:\(owner.login)"
+    case .enterprise(let host, _): "2:enterprise:\(host)"
     case .other: "3:other"
+    }
+}
+
+/// Returns a unique grouping key (string) for a repository group: its key
+/// without the account, then the account's login, ignoring case. Among the
+/// groups of one owner or host, the keys' order is the order they're
+/// displayed in: by login, then the one without an account.
+public func getGroupKey(_ group: RepositoryListGroup) -> String {
+    let key = getBaseGroupKey(group)
+    switch group.account {
+    case nil: return key
+    case .login(let login): return "\(key):\"\(JSCompat.toLowerCase(login))\""
+    case .unassociated: return "\(key):null"
     }
 }
 
@@ -110,17 +142,24 @@ let recentRepositoriesThreshold = 7
 /// the rest. Groups are in their keys' case-sensitive order; items in each
 /// group sort by title, ignoring case.
 ///
+/// Where a host has more than one account, among those signed in and those
+/// its repositories are assigned to, each of its groups holds one account's
+/// repositories, or those with none.
+///
 /// - Parameters:
 ///   - repositories: The repositories, then the clones in progress.
 ///   - localRepositoryStateLookup: The indicators, for the badges.
 ///   - recentRepositories: The recently selected repositories.
+///   - accounts: The accounts signed in.
 public func groupRepositories(
     _ repositories: [RepositoryListEntry],
     _ localRepositoryStateLookup: [RepositoryID: RepositoryIndicator],
-    _ recentRepositories: [RepositoryID]
+    _ recentRepositories: [RepositoryID],
+    _ accounts: [AccountIdentity] = []
 ) -> [RepositoryListGroupItems] {
     let includeRecentGroup = repositories.count > recentRepositoriesThreshold
     let recentSet = includeRecentGroup ? Set(recentRepositories) : nil
+    let multiAccountEndpoints = multiAccountEndpoints(repositories, accounts)
 
     var keys: [String] = []
     var groups: [String: (group: RepositoryListGroup, repositories: [RepositoryListEntry])] = [:]
@@ -137,7 +176,7 @@ public func groupRepositories(
         if case .repository(let record) = repository, recentSet?.contains(record.id) == true {
             addToGroup(.recent, repository)
         }
-        addToGroup(groupForRepository(repository), repository)
+        addToGroup(groupForRepository(repository, multiAccountEndpoints), repository)
     }
 
     // Titles in every group but the recent one, whose repositories are by
@@ -152,25 +191,52 @@ public func groupRepositories(
         }
     }
 
+    // By owner or host first, so one's groups stay together whatever their
+    // accounts' logins.
     return keys
-        .sorted { compareIgnoringCase($0, $1) < 0 }
-        .compactMap { key in
-            groups[key].map { group in
-                RepositoryListGroupItems(
-                    identifier: group.group,
-                    items: toSortedListItems(group.group, group.repositories, localRepositoryStateLookup, allNames: allNames)
-                )
+        .compactMap { groups[$0] }
+        .map { (base: getBaseGroupKey($0.group), key: getGroupKey($0.group), group: $0) }
+        .sorted { x, y in
+            switch compareIgnoringCase(x.base, y.base) {
+            case 0: compareIgnoringCase(x.key, y.key) < 0
+            case let result: result < 0
             }
+        }
+        .map { keyed in
+            RepositoryListGroupItems(
+                identifier: keyed.group.group,
+                items: toSortedListItems(keyed.group.group, keyed.group.repositories, localRepositoryStateLookup, allNames: allNames)
+            )
         }
 }
 
-private func groupForRepository(_ repository: RepositoryListEntry) -> RepositoryListGroup {
+private func groupForRepository(_ repository: RepositoryListEntry, _ multiAccountEndpoints: Set<String>) -> RepositoryListGroup {
     if case .repository(let record) = repository, let gitHubRepository = record.gitHubRepository {
+        let account: RepositoryListGroupAccount? = multiAccountEndpoints.contains(JSCompat.toLowerCase(gitHubRepository.endpoint))
+            ? record.accountLogin.map(RepositoryListGroupAccount.login) ?? .unassociated
+            : nil
         return isDotCom(gitHubRepository.endpoint)
-            ? .dotcom(owner: gitHubRepository.owner)
-            : .enterprise(host: hostForEndpoint(gitHubRepository.endpoint))
+            ? .dotcom(owner: gitHubRepository.owner, account: account)
+            : .enterprise(host: hostForEndpoint(gitHubRepository.endpoint), account: account)
     }
     return .other
+}
+
+/// The endpoints, lowercased, with more than one account: the accounts
+/// signed in, and those repositories are assigned to, by login ignoring
+/// case.
+private func multiAccountEndpoints(_ repositories: [RepositoryListEntry], _ accounts: [AccountIdentity]) -> Set<String> {
+    var loginsByEndpoint: [String: Set<String>] = [:]
+    func retain(_ identity: AccountIdentity) {
+        loginsByEndpoint[JSCompat.toLowerCase(identity.endpoint), default: []].insert(JSCompat.toLowerCase(identity.login))
+    }
+    accounts.forEach(retain)
+    for case .repository(let record) in repositories {
+        if let identity = record.accountIdentity {
+            retain(identity)
+        }
+    }
+    return Set(loginsByEndpoint.filter { $0.value.count > 1 }.keys)
 }
 
 /// `new URL(getHTMLURL(endpoint)).host`: the host name, lowercased, with a
@@ -298,7 +364,8 @@ extension AppModel {
         groupRepositories(
             repositories.map(RepositoryListEntry.repository) + clones.clones.map(RepositoryListEntry.clone),
             indicators,
-            recentRepositoryIDs
+            recentRepositoryIDs,
+            accounts.accounts.map(\.identity)
         )
     }
 
