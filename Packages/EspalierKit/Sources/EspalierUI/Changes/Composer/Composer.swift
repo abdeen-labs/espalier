@@ -298,7 +298,7 @@ extension ComposerContent {
                 options: commit.options,
                 isEnabled: !isCommitting && !isGenerating && !isAssistedRunning,
                 isAssisted: assisted != nil,
-                pushesAfterCommitting: commit.pushesAfterAssistedCommits
+                pushesAfterCommitting: commit.pushesAfterCommitting
             ),
             hook: hook,
             button: button,
@@ -406,7 +406,7 @@ public struct ComposerActions {
     public var setSpellChecking: (Bool) -> Void = { _ in }
     /// Manual or Assisted.
     public var setMode: (CommitMode) -> Void = { _ in }
-    /// Push After Committing, for assisted commits.
+    /// Push After Committing.
     public var togglePushAfterCommitting: () -> Void = {}
     public var cancelAssisted: () -> Void = {}
     public var retryAssistedUndo: () -> Void = {}
@@ -1027,7 +1027,7 @@ struct ComposerController {
         actions.setSpellChecking = { [context] isOn in context.app.preferences.commitSpellcheckEnabled = isOn }
         actions.setMode = { mode in repository.commit.setMode(mode) }
         actions.togglePushAfterCommitting = {
-            repository.commit.setPushesAfterAssistedCommits(!repository.commit.pushesAfterAssistedCommits)
+            repository.commit.setPushesAfterCommitting(!repository.commit.pushesAfterCommitting)
         }
         actions.cancelAssisted = { repository.commit.cancelAssistedCommit() }
         actions.retryAssistedUndo = { Task { await retryAssistedUndo() } }
@@ -1064,7 +1064,9 @@ struct ComposerController {
     }
 
     /// Commits through the presenter, which asks the commit's gates. After a
-    /// commit the filter's text clears.
+    /// commit the filter's text clears, and with Push After Committing on
+    /// the branch is pushed as the Push command pushes it: a failure is the
+    /// push's own error, with its Retry.
     ///
     /// VoiceOver hears "Committing" once git runs (past the gates'
     /// questions), and "Committed to main" when it succeeds, which
@@ -1094,6 +1096,14 @@ struct ComposerController {
         }
         if result != nil, context.repository === repository {
             context.state.searchText = ""
+        }
+        if let push = result?.push {
+            let outcome = await context.presenter.perform { answers throws(OperationError) in
+                try await repository.sync.push(push, confirmed: answers.confirmed)
+            }
+            if let outcome {
+                context.presenter.report(.push(outcome, repositoryID: repository.id))
+            }
         }
     }
 

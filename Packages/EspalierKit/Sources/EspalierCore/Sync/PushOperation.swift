@@ -59,8 +59,11 @@ extension SyncModel {
     ///   `cancelled(.hookAborted)`, and the tags stay queued.
     /// - A repository without a remote can't push:
     ///   `.publishRepositoryRequired`.
+    /// - A push for one branch (`PushRequest.branch`) pushes nothing once
+    ///   another branch is current, and its Retry asks for the same branch.
     ///
-    /// - Throws: preconditions (an unborn branch, a detached HEAD);
+    /// - Throws: preconditions (an unborn branch, a detached HEAD, a branch
+    ///   other than the one the push is for);
     ///   `.pushRejectedNonFastForward` with "Fetch" when the remote has
     ///   commits the branch doesn't, or a lease finds the remote branch
     ///   moved; the other push errors
@@ -100,6 +103,12 @@ extension SyncModel {
         await refreshGitHubRepositoryIfNeeded()
 
         let state = repository.gitState
+        // A push for one branch pushes nothing once another is current.
+        if let expected = request.branch {
+            guard case .valid(let current) = state.tip, JSCompat.strictEquals(current.ref, expected) else {
+                throw precondition("The current branch changed, so nothing was pushed.", kind)
+            }
+        }
         guard let remote = state.remotes.currentRemote else {
             return .publishRepositoryRequired
         }

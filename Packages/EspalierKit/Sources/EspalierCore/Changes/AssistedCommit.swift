@@ -94,21 +94,6 @@ extension CommitModel {
         "commit-mode-\(id)"
     }
 
-    /// The `UserDefaults` key of whether a repository's assisted commits
-    /// are pushed.
-    static func assistedCommitPushKey(_ id: RepositoryID) -> String {
-        "assisted-commit-push-\(id)"
-    }
-
-    func loadAssistedCommitPreferences() {
-        guard let repository else {
-            return
-        }
-        let store = PreferenceStore(repository.environment.defaults.defaults)
-        mode = (store.defaults.string(forKey: Self.commitModeKey(repository.id))).flatMap(CommitMode.init(rawValue:)) ?? .manual
-        pushesAfterAssistedCommits = store.getBoolean(Self.assistedCommitPushKey(repository.id), false)
-    }
-
     /// Chooses how the next commit is made, for this repository from now
     /// on. The draft stays as it is.
     public func setMode(_ mode: CommitMode) {
@@ -119,21 +104,11 @@ extension CommitModel {
         repository.environment.defaults.defaults.set(mode.rawValue, forKey: Self.commitModeKey(repository.id))
     }
 
-    /// Chooses whether assisted commits are pushed once they're made, for
-    /// this repository from now on.
-    public func setPushesAfterAssistedCommits(_ pushes: Bool) {
-        guard let repository, pushes != pushesAfterAssistedCommits else {
-            return
-        }
-        pushesAfterAssistedCommits = pushes
-        PreferenceStore(repository.environment.defaults.defaults).setBoolean(Self.assistedCommitPushKey(repository.id), pushes)
-    }
-
     // MARK: Committing with AI
 
     /// Splits the included changes (every file whose selection isn't none)
     /// into commits with AI and makes them, then pushes them when
-    /// `pushesAfterAssistedCommits` is on.
+    /// `pushesAfterCommitting` is on.
     ///
     /// The model (the commit message feature's) sees only the frozen
     /// selection: opaque IDs for its hunks and whole changes, and their
@@ -219,7 +194,7 @@ extension CommitModel {
         let rules = CommitMessageGenerator.commitMessageRules(repository.gitHub.repoRules)
         let environment = repository.environment
         let record = repository.record
-        let pushes = pushesAfterAssistedCommits
+        let pushes = pushesAfterCommitting
         let ai = app.ai
 
         assistedRunID &+= 1

@@ -1,7 +1,8 @@
-// The composer's Options menu: Amend Last Commit, then the commit options:
-// Bypass Commit Hooks, Add Signed-off-by Trailer, and Allow Empty Commit,
-// which resets after each commit. Committing with AI, Push After Committing
-// takes Amend Last Commit's place.
+// The composer's Options menu: Amend Last Commit and Push After Committing,
+// then the commit options: Bypass Commit Hooks, Add Signed-off-by Trailer,
+// and Allow Empty Commit, which resets after each commit. Committing with AI
+// there's no Amend Last Commit; while amending, Push After Committing is
+// dimmed, since an amend isn't pushed.
 
 import EspalierCore
 import GitKit
@@ -15,9 +16,9 @@ nonisolated public struct CommitOptionsContent: Sendable, Equatable {
     public var options: CommitOptions
     /// Whether the options can change (not while committing).
     public var isEnabled: Bool
-    /// Committing with AI: no amending, and the push choice.
+    /// Committing with AI: no amending.
     public var isAssisted: Bool
-    /// Whether assisted commits are pushed once they're made.
+    /// Whether commits are pushed once they're made.
     public var pushesAfterCommitting: Bool
 
     public init(
@@ -38,7 +39,7 @@ nonisolated public struct CommitOptionsContent: Sendable, Equatable {
 
     /// Whether every option is off (the button looks plain).
     public var isDefault: Bool {
-        !isAmending && !options.skipHooks && !options.signOff && !options.allowEmpty && !(isAssisted && pushesAfterCommitting)
+        !isAmending && !options.skipHooks && !options.signOff && !options.allowEmpty && !pushesAfterCommitting
     }
 }
 
@@ -54,7 +55,7 @@ public struct CommitOptionsMenu: View {
 
     /// - Parameters:
     ///   - onToggleAmend: Starts or stops amending the last commit.
-    ///   - onTogglePush: Turns pushing after assisted commits on or off.
+    ///   - onTogglePush: Turns Push After Committing on or off.
     ///   - onChange: Applies the commit options.
     public init(
         _ content: CommitOptionsContent,
@@ -70,12 +71,12 @@ public struct CommitOptionsMenu: View {
 
     public var body: some View {
         PullDownButton("Commit Options") {
-            if content.isAssisted {
-                MenuToggle("Push After Committing", isOn: content.pushesAfterCommitting, action: onTogglePush)
-            } else {
+            if !content.isAssisted {
                 MenuToggle("Amend Last Commit", isOn: content.isAmending, action: onToggleAmend)
                     .disabled(!content.canToggleAmend)
             }
+            MenuToggle("Push After Committing", isOn: content.pushesAfterCommitting, action: onTogglePush)
+                .disabled(content.isAmending)
             MenuDivider()
             option("Bypass Commit Hooks", \.skipHooks)
             option("Add Signed-off-by Trailer", \.signOff)

@@ -214,15 +214,15 @@ struct AssistedCommitModelTests {
         let fixture = try await fixture()
         let commit = fixture.model.commit
         commit.setMode(.assisted)
-        commit.setPushesAfterAssistedCommits(true)
+        commit.setPushesAfterCommitting(true)
         let defaults = fixture.harness.defaults.defaults
         #expect(defaults.string(forKey: CommitModel.commitModeKey(fixture.model.id)) == "assisted")
 
         defaults.set("manual", forKey: CommitModel.commitModeKey(fixture.model.id))
-        defaults.set(false, forKey: CommitModel.assistedCommitPushKey(fixture.model.id))
-        commit.loadAssistedCommitPreferences()
+        defaults.set(false, forKey: CommitModel.pushAfterCommitKey(fixture.model.id))
+        commit.loadPreferences()
         #expect(commit.mode == .manual)
-        #expect(!commit.pushesAfterAssistedCommits)
+        #expect(!commit.pushesAfterCommitting)
     }
 
     @Test("pushes the commits when asked to, keeping them when there's nowhere to push")
@@ -236,7 +236,7 @@ struct AssistedCommitModelTests {
         }
         try fixture.addProvider()
         fixture.server.answer(onePerPath)
-        fixture.model.commit.setPushesAfterAssistedCommits(true)
+        fixture.model.commit.setPushesAfterCommitting(true)
         await fixture.refresh()
 
         let result = try await fixture.model.commit.commitAssisted()
@@ -254,7 +254,7 @@ struct AssistedCommitModelTests {
         let fixture = try await fixture()
         try fixture.addProvider()
         fixture.server.answer(onePerPath)
-        fixture.model.commit.setPushesAfterAssistedCommits(true)
+        fixture.model.commit.setPushesAfterCommitting(true)
 
         let result = try await fixture.model.commit.commitAssisted()
         await fixture.settle()

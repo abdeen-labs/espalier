@@ -60,10 +60,15 @@ public struct CommitResult: Sendable, Equatable {
     public let sha: String
     /// Whether it amended the previous tip.
     public let amended: Bool
+    /// The push to make now, with Push After Committing on: of the branch
+    /// the commit was made on. Nil for an amend, for a commit made outside
+    /// a branch, and during a merge, cherry-pick, or revert.
+    public let push: PushRequest?
 
-    public init(sha: String, amended: Bool) {
+    public init(sha: String, amended: Bool, push: PushRequest? = nil) {
         self.sha = sha
         self.amended = amended
+        self.push = push
     }
 }
 
@@ -87,9 +92,9 @@ public final class CommitModel: RepositoryFeature {
     /// (AssistedCommit.swift). Remembered per repository; the draft stays
     /// as it is in either.
     public internal(set) var mode: CommitMode = .manual
-    /// Whether assisted commits are pushed once they're made. Remembered per
-    /// repository.
-    public internal(set) var pushesAfterAssistedCommits = false
+    /// Whether a commit is pushed once it's made, from the draft or with AI:
+    /// Push After Committing. Remembered per repository.
+    public internal(set) var pushesAfterCommitting = false
     /// The assisted commit run.
     public internal(set) var assisted: AssistedCommitState = .idle
     /// The recovery to try again after an assisted commit couldn't undo all
@@ -115,7 +120,34 @@ public final class CommitModel: RepositoryFeature {
 
     func attach(to repository: RepositoryModel) {
         self.repository = repository
-        loadAssistedCommitPreferences()
+        loadPreferences()
+    }
+
+    // MARK: Preferences
+
+    /// The `UserDefaults` key of whether a repository's commits are pushed.
+    static func pushAfterCommitKey(_ id: RepositoryID) -> String {
+        "push-after-commit-\(id)"
+    }
+
+    /// Loads the repository's commit mode and Push After Committing.
+    func loadPreferences() {
+        guard let repository else {
+            return
+        }
+        let store = PreferenceStore(repository.environment.defaults.defaults)
+        mode = (store.defaults.string(forKey: Self.commitModeKey(repository.id))).flatMap(CommitMode.init(rawValue:)) ?? .manual
+        pushesAfterCommitting = store.getBoolean(Self.pushAfterCommitKey(repository.id), false)
+    }
+
+    /// Chooses whether commits are pushed once they're made, for this
+    /// repository from now on.
+    public func setPushesAfterCommitting(_ pushes: Bool) {
+        guard let repository, pushes != pushesAfterCommitting else {
+            return
+        }
+        pushesAfterCommitting = pushes
+        PreferenceStore(repository.environment.defaults.defaults).setBoolean(Self.pushAfterCommitKey(repository.id), pushes)
     }
 
     /// Whether quitting would lose a commit message the user wrote: the
@@ -159,6 +191,11 @@ public final class CommitModel: RepositoryFeature {
     /// amending comes back). An amend that changed the tip records the branch
     /// as rewritten (it needs a force push).
     ///
+    /// With Push After Committing on, the result asks for a push of the
+    /// branch the commit was made on (`CommitResult.push`), which the caller
+    /// makes as any push. Not for an amend, which needs a force push, nor
+    /// outside a branch, nor during a merge, cherry-pick, or revert.
+    ///
     /// - Throws: `.precondition` when there's nothing to commit, and while a
     ///   rebase is in progress; `.confirmationRequired` for a gate;
     ///   `busy(.commit)` while another local operation runs or the last
@@ -183,6 +220,7 @@ public final class CommitModel: RepositoryFeature {
         let options = options
         let amending = amending
         let amendingUpstreamTip = amendingUpstreamTip
+        let push = pushAfterCommit(in: repository)
         let descriptor = OperationDescriptor(kind: .commit, gitContext: .commit, refreshOptions: .clearPartialSelections)
         let sha = try await repository.perform(descriptor) { ctx in
             let message = try await formatCommitMessage(ctx.repository, context)
@@ -211,7 +249,24 @@ public final class CommitModel: RepositoryFeature {
            !JSCompat.strictEquals(branch.tip.sha, amended.sha) {
             await repository.operations.recordRewrite(of: branch, previousTip: amended.sha, upstreamTip: amendingUpstreamTip)
         }
-        return CommitResult(sha: sha, amended: amending != nil)
+        return CommitResult(sha: sha, amended: amending != nil, push: push)
+    }
+
+    /// The push Push After Committing asks for after a commit that starts
+    /// now: of the current branch, which an unborn branch's first commit
+    /// makes.
+    private func pushAfterCommit(in repository: RepositoryModel) -> PushRequest? {
+        guard pushesAfterCommitting, amending == nil, repository.gitState.inProgress == nil else {
+            return nil
+        }
+        switch repository.gitState.tip {
+        case .valid(let branch):
+            return PushRequest(branch: branch.ref)
+        case .unborn(let ref):
+            return PushRequest(branch: "refs/heads/\(ref)")
+        case .detached, .unknown:
+            return nil
+        }
     }
 
     /// The commit made lands: leaves amend mode, clears allow-empty, and

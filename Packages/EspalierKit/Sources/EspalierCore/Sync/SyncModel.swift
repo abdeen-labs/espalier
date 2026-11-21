@@ -20,9 +20,14 @@ public struct PushRequest: Sendable, Equatable {
     /// amend. Asks first while the `confirmForcePush` preference is on:
     /// `.forcePush`.
     public var forceWithLease = false
+    /// The branch the push is for, by its ref (`refs/heads/main`): once
+    /// another branch is current, nothing is pushed. Nil pushes whichever
+    /// branch is current.
+    public var branch: String?
 
-    public init(forceWithLease: Bool = false) {
+    public init(forceWithLease: Bool = false, branch: String? = nil) {
         self.forceWithLease = forceWithLease
+        self.branch = branch
     }
 }
 

@@ -1,8 +1,8 @@
 // These drive `SyncModel.push` against local bare remotes: publishing a
 // branch, tags, force with lease and its confirmation, the lease refusing
 // unfetched commits, a retry that keeps its options, a rejected push and
-// its Fetch recovery, the fetch after the push failing, preconditions, and
-// the pre-push hook.
+// its Fetch recovery, the fetch after the push failing, preconditions, a
+// push for one branch while another is current, and the pre-push hook.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -379,6 +379,53 @@ struct PushOperationTests {
             try await fixture.model.sync.push(PushRequest(forceWithLease: true))
         }
         #expect(preconditionMessage(error) != nil)
+        await fixture.app.idle()
+    }
+
+    @Test("a push for one branch pushes nothing once another branch is current")
+    func pushForAnotherBranch() async throws {
+        let fixture = try await makeSelectedRepository { local in
+            try await commitFile(local, "a.txt", "a\n")
+            try await runGit(["checkout", "-q", "-b", "other"], local)
+        }
+        let seed = try await fixture.remoteTip("main")
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.model.sync.push(PushRequest(branch: "refs/heads/main"))
+        }
+
+        #expect(preconditionMessage(error) != nil)
+        #expect(try await fixture.remoteTip("main") == seed)
+        #expect(try await fixture.remoteTip("other") == nil)
+        await fixture.app.idle()
+    }
+
+    @Test("a failed push for one branch retries for that branch: refused on another, pushed on its own")
+    func retryKeepsBranch() async throws {
+        let fixture = try await makeSelectedRepository { local in
+            try await commitFile(local, "a.txt", "a\n")
+            try await runGit(["branch", "other"], local)
+        }
+        let seed = try await fixture.remoteTip("main")
+        let preReceive = POSIXPath.join(fixture.remote.path, "hooks", "pre-receive")
+        try writeScript(preReceive, "#!/bin/sh\necho 'not now' >&2\nexit 1\n")
+        let failure = await #expect(throws: OperationError.self) {
+            try await fixture.model.sync.push(PushRequest(branch: "refs/heads/main"))
+        }
+        let retry = try #require(failure?.retry)
+        try FileManager.default.removeItem(atPath: preReceive)
+
+        try await runGit(["checkout", "-q", "other"], fixture.local)
+        await fixture.model.refresh(.full, reason: .user)
+        let refused = await #expect(throws: OperationError.self) { try await retry.perform(in: fixture.app) }
+        #expect(preconditionMessage(refused) != nil)
+        #expect(try await fixture.remoteTip("main") == seed)
+        #expect(try await fixture.remoteTip("other") == nil)
+
+        try await runGit(["checkout", "-q", "main"], fixture.local)
+        await fixture.model.refresh(.full, reason: .user)
+        try await retry.perform(in: fixture.app)
+        #expect(try await fixture.remoteTip("main") == (try await fixture.head()))
         await fixture.app.idle()
     }
 

@@ -2,7 +2,7 @@
 // commit button at the narrowest column, a merge's message (committed by the
 // operation panel's button), the summary's and the description's focus
 // tint, the last
-// commit, committing, a hook running and its output, a warning that stops
+// commit, committing, Push After Committing on, a hook running and its output, a warning that stops
 // the commit and one that can be bypassed, the model's failure, co-authors
 // with the author's warning and message rules. Then the sparkle's states,
 // its setup popover, the consent sheet, the author's popover, and the
@@ -85,6 +85,17 @@ struct ChangesComposerCaptures {
             isReadOnly: true
         )
         capture(values.composer(committing, draft: CommitDraft(summary: "Fix crash on open")), named: "composer-committing", area: area)
+    }
+
+    @Test("Push After Committing on: the Options button filled")
+    func pushAfterCommitting() {
+        let content = ComposerContent(
+            author: values.author,
+            sparkle: .ready(model: "GPT-5"),
+            options: CommitOptionsContent(pushesAfterCommitting: true),
+            button: values.button()
+        )
+        capture(values.composer(content, draft: CommitDraft(summary: "Fix crash on open")), named: "composer-push-after-committing", area: area)
     }
 
     @Test("a hook running, and its output")

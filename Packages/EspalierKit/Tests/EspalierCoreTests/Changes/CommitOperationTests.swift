@@ -248,6 +248,88 @@ struct CommitOperationTests {
         await app.idle()
     }
 
+    // MARK: Push After Committing
+
+    @Test("with Push After Committing on, a commit asks for a push of its branch, which puts it on the remote")
+    func pushAfterCommitting() async throws {
+        let fixture = try await makeSelectedRepository()
+        fixture.model.commit.setPushesAfterCommitting(true)
+        try fixture.write("a.txt", "a\n")
+        await fixture.model.refresh(.status, reason: .user)
+
+        let result = try await fixture.model.commit.commit()
+        let push = try #require(result.push)
+        #expect(push == PushRequest(branch: "refs/heads/main"))
+        // The commit itself pushes nothing.
+        #expect(try await fixture.remoteTip("main") != result.sha)
+
+        _ = try await fixture.model.sync.push(push)
+        #expect(try await fixture.remoteTip("main") == result.sha)
+        await fixture.app.idle()
+    }
+
+    /// A commit Push After Committing leaves unpushed.
+    enum UnpushedCommit: Sendable {
+        case off, amend, detachedHead, merge
+    }
+
+    @Test("a commit asks for no push", arguments: [
+        NamedCase("with Push After Committing off", UnpushedCommit.off),
+        // An amend needs a force push.
+        NamedCase("amending the last commit", .amend),
+        NamedCase("on a detached HEAD", .detachedHead),
+        NamedCase("finishing a merge", .merge),
+    ])
+    func noPushAfterCommitting(_ testCase: NamedCase<UnpushedCommit>) async throws {
+        let kind = testCase.value
+        let fixture = try await makeSelectedRepository { local in
+            switch kind {
+            case .merge:
+                try await runGit(["checkout", "-q", "-b", "feature"], local)
+                try await commitFile(local, "feature.txt", "feature\n")
+                try await runGit(["checkout", "-q", "main"], local)
+                try await runGit(["merge", "-q", "--no-ff", "--no-commit", "feature"], local)
+            case .detachedHead:
+                try await runGit(["checkout", "-q", "--detach", "HEAD"], local)
+            case .off, .amend:
+                break
+            }
+        }
+        let commit = fixture.model.commit
+        commit.setPushesAfterCommitting(kind != .off)
+        if kind == .amend {
+            let tip = try #require(try await getCommit(fixture.local, "HEAD"))
+            commit.setAmending(tip)
+        }
+        if kind != .merge {
+            try fixture.write("a.txt", "a\n")
+            await fixture.model.refresh(.status, reason: .user)
+        }
+        commit.draft.summary = "Add a"
+
+        let result = try await commit.commit()
+
+        #expect(result.push == nil)
+        await fixture.app.idle()
+    }
+
+    @Test("an unborn branch's first commit asks for a push of the branch it makes")
+    func pushAfterFirstCommit() async throws {
+        let local = try setupEmptyRepository("main")
+        let harness = try AppHarness(responder: PromptResponder.failing())
+        let app = await harness.loadedApp()
+        let repository = try await harness.addAndSelect(local, to: app)
+        repository.commit.setPushesAfterCommitting(true)
+        try harness.write("a.txt", "a\n", in: local)
+        await repository.refresh(.status, reason: .user)
+
+        let result = try await repository.commit.commit()
+
+        #expect(result.push == PushRequest(branch: "refs/heads/main"))
+        #expect(repository.gitState.tip.branch?.ref == "refs/heads/main")
+        await app.idle()
+    }
+
     @Test("a commit while another local operation runs is busy")
     func busy() async throws {
         let (harness, app, repository, local) = try await makeRepository()
