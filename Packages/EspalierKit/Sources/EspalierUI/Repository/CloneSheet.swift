@@ -2,8 +2,9 @@
 // filter, selection, and problem. GitHub lists the repositories of the
 // account chosen in its pop-up, which lists every signed-in account by host
 // (GitHub.com's first, then each GitHub Enterprise host's) and starts on the
-// account last chosen in this session, else the first; without an account it
-// signs in to GitHub.com or GitHub Enterprise and chooses the new account.
+// account last chosen in this session, else the first; with one account
+// there's no pop-up, and without an account it signs in to GitHub.com or
+// GitHub Enterprise and chooses the new account.
 // The local path follows the URL (`clonePath(_:afterURLChangeFrom:to:)`), a
 // leading `~` in it is the home folder, with its checks (`validateClonePath`)
 // and its warning (`clonePathWarning`). Clone takes the tab and the account
@@ -389,20 +390,22 @@ struct CloneForm: View {
         }
     }
 
-    /// The accounts' pop-up and the chosen account's repositories; without
-    /// an account, the call to action.
+    /// The accounts' pop-up, with more than one account signed in, and the
+    /// chosen account's repositories; without an account, the call to action.
     @ViewBuilder
     private var accountRepositories: some View {
         if let account = model.account {
-            AccountPicker(accounts: model.accounts, selection: Binding(
-                get: { account.identity },
-                set: { identity in
-                    if let identity {
-                        model.chooseAccount(identity)
+            if model.accounts.count > 1 {
+                AccountPicker(accounts: model.accounts, selection: Binding(
+                    get: { account.identity },
+                    set: { identity in
+                        if let identity {
+                            model.chooseAccount(identity)
+                        }
                     }
-                }
-            ))
-            .frame(maxWidth: .infinity, alignment: .leading)
+                ))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
             AccountRepositoryList(
                 account: account,
                 filter: Binding(get: { model.current.filter }, set: { model.setFilter($0) }),

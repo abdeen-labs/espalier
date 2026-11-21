@@ -1,12 +1,12 @@
 // The repository flows' screens: the rows; the popover in its card, and
-// empty; Get Started's actions, and signed in with the clone list; the
-// clone list by owner, and none; Clone with a URL whose folder has files,
-// and GitHub.com's list with two Enterprise accounts signed in too; Create
-// empty, filled over a folder with a README, and failed; Publish with
-// organizations, with accounts on two servers and none chosen yet, and with
-// one chosen and an error; Repository Settings' panes, and the remote's
-// account; a row's context menu and its Account submenu; Alias; Open With;
-// and the missing, unsafe, and cloning states.
+// empty; Get Started's actions, and signed in with the clone list;
+// the clone list by owner, and none; Clone with a URL whose folder has files,
+// GitHub.com's list with two Enterprise accounts signed in too, and with
+// one account; Create empty, filled over a folder with a README, and
+// failed; Publish with organizations, with accounts on two servers and
+// none chosen yet, and with one chosen and an error; Repository Settings'
+// panes, and the remote's account; a row's context menu and its Account
+// submenu; Alias; Open With; and the missing, unsafe, and cloning states.
 // Leaf views take fixed values; the sheets' forms run on a hermetic app,
 // with real repositories and folders where they read one.
 
@@ -231,6 +231,22 @@ struct RepositoryCaptures {
             let model = CloneSheetModel(app: app, savedSource: .gitHub)
             model.select("https://github.com/octo-org/website", url: "https://github.com/octo-org/website.git")
             capture(CloneForm(model: model).windowEnvironment(context), named: "clone-github", area: area)
+            await app.idle()
+        }
+    }
+
+    @Test("Clone: GitHub.com's list with one account signed in, and no pop-up")
+    func cloneGitHubOneAccount() async throws {
+        try await withIsolatedGitConfig { _ in
+            let harness = try AppHarness()
+            let account = AccountCaptureFixtures.dotCom
+            let app = try await AccountCaptureFixtures.app(harness, signedIn: [account])
+            app.preferences.lastCloneLocation = "/Users/joe/Developer"
+            await RepositoryCaptureFixtures.loadRepositories(app, harness: harness, for: account)
+            let context = AccountCaptureFixtures.context(app)
+            let model = CloneSheetModel(app: app, savedSource: .gitHub)
+            model.select("https://github.com/octo-org/website", url: "https://github.com/octo-org/website.git")
+            capture(CloneForm(model: model).windowEnvironment(context), named: "clone-github-one-account", area: area)
             await app.idle()
         }
     }
