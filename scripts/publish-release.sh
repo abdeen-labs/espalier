@@ -23,6 +23,8 @@
 #   SPARKLE_BIN      The folder with Sparkle's generate_appcast and
 #                    generate_keys (default: the newest in Xcode's
 #                    DerivedData for Espalier).
+#   DMGBUILD         dmgbuild, which makes the DMG
+#                    (default: ~/.venvs/tools/bin/dmgbuild).
 #   FIRST_RELEASE=1  Starts a new appcast when the feed has none. Only for
 #                    the first release.
 #   UPLOAD=0         Makes the DMG and the signed appcast in dist/ and stops:
@@ -145,6 +147,11 @@ fi
   fail "can't find Sparkle's tools. Open Espalier.xcodeproj in Xcode so it resolves Sparkle, or set SPARKLE_BIN."
 echo "Sparkle's tools: $sparkle_bin"
 
+# dmgbuild makes the DMG and lays out its window as scripts/dmg says.
+dmgbuild="${DMGBUILD:-$HOME/.venvs/tools/bin/dmgbuild}"
+[[ -x "$dmgbuild" ]] ||
+  fail "can't find dmgbuild at $dmgbuild. Install it (docs/RELEASING.md, One-time setup), or set DMGBUILD."
+
 # Signing with any other key would break updates for every installed copy.
 keychain_key="$("$sparkle_bin/generate_keys" --account "$sparkle_account" -p)" ||
   fail "the Keychain has no Sparkle key under the account \"$sparkle_account\""
@@ -193,10 +200,9 @@ if [[ -f "$appcast" ]]; then
   fi
 fi
 
-# The DMG: the app and a link to Applications. LZMA (ULMO) makes the bundled
-# git about a quarter smaller than zlib (UDZO). A DMG from an earlier run is
-# kept when it holds this same app, so a run after a failure uploads the
-# same file.
+# The DMG: the app and a link to Applications, in the window scripts/dmg
+# lays out. A DMG from an earlier run is kept when it holds this same app,
+# so a run after a failure uploads the same file.
 mkdir -p "$dist"
 if [[ -f "$dmg" ]]; then
   diskutil image attach --readOnly --nobrowse --mountPoint "$mount" "$dmg" >/dev/null
@@ -207,11 +213,21 @@ fi
 if [[ -f "$dmg" ]]; then
   echo "dist/$dmg_name already holds this app."
 else
-  stage="$work/dmg"
-  mkdir "$stage"
-  ditto "$app" "$stage/Espalier.app"
-  ln -s /Applications "$stage/Applications"
-  hdiutil create -quiet -volname Espalier -srcfolder "$stage" -fs HFS+ -format ULMO "$dmg"
+  "$dmgbuild" -s "$root/scripts/dmg/settings.py" -D app="$app" \
+    -D background="$root/scripts/dmg/background.png" Espalier "$dmg" || {
+    rm -f "$dmg"
+    fail "dmgbuild couldn't make the DMG"
+  }
+  # People run the copy in the DMG: it's the exported app, and Gatekeeper
+  # takes it.
+  diskutil image attach --readOnly --nobrowse --mountPoint "$mount" "$dmg" >/dev/null
+  if [[ "$(cdhash "$mount/Espalier.app")" != "$(cdhash "$app")" ]] ||
+    ! spctl --assess --type execute "$mount/Espalier.app"; then
+    hdiutil detach -quiet "$mount"
+    rm -f "$dmg"
+    fail "the app in the new DMG isn't the exported app, intact"
+  fi
+  hdiutil detach -quiet "$mount"
   echo "Made dist/$dmg_name."
 fi
 

@@ -51,6 +51,9 @@ app; `scripts/publish-release.sh` packages and publishes it.
    credentials from the update host's service.
 4. **Push access to the tap** over SSH:
    `git@github.com:abdeen-labs/homebrew-tap.git`.
+5. **dmgbuild**, which makes the DMG and lays out its window, in the tools
+   venv: `~/.venvs/tools/bin/python -m pip install dmgbuild`. The script
+   runs `~/.venvs/tools/bin/dmgbuild`, or `DMGBUILD`.
 
 ## Cutting a release
 
@@ -84,12 +87,15 @@ app; `scripts/publish-release.sh` packages and publishes it.
 - the checkout has changes, or HEAD isn't `origin/main`;
 - the version's tag names another commit;
 - the tap can't be reached;
+- dmgbuild isn't installed;
 - the Keychain's Sparkle key isn't the app's;
 - the build number isn't higher than every one in the feed.
 
-It refuses to replace a published DMG with different contents, uploads the
-DMG before the appcast, reads each back through the update host, tags
-`v<version>`, and then sets the cask's version and SHA-256 and pushes the tap.
+It checks that the app in a new DMG is the exported one and that Gatekeeper
+accepts it, refuses to replace a published DMG with different contents,
+uploads the DMG before the appcast, reads each back through the update host,
+tags `v<version>`, and then sets the cask's version and SHA-256 and pushes
+the tap.
 
 ## When publishing stops partway
 
@@ -99,3 +105,11 @@ matches, the appcast's entry for the version is replaced, the tag is made
 when it's missing, and the cask is left alone when it's already at the
 version. A published DMG is never replaced: to ship a different
 build, raise the version and archive again.
+
+## The DMG's window
+
+`scripts/dmg/settings.py` is the DMG's layout for dmgbuild: the window's
+size, the icons' places, and the picture behind them.
+`scripts/dmg/draw-background.swift` draws that picture, `background.png` and
+`background@2x.png`: run it after changing it, and commit what it writes.
+The icons' places are in both files.

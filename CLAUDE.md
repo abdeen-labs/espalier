@@ -38,7 +38,8 @@ Packages/EspalierKit/        All real code, in one library product named Espalie
   Tests/EspalierCaptures/    Captures: views drawn to PNGs to look at.
 scripts/                     fetch-git.sh, embed-git.sh, git-version, git-checksums, capture.sh,
                              readme-images.sh (the README's images, from the Showcase captures),
-                             publish-release.sh, changelog.sh (docs/RELEASING.md).
+                             publish-release.sh, changelog.sh, dmg/ for the DMG's window
+                             (docs/RELEASING.md).
 Vendor/git/                  The bundled git (gitignored, installed by scripts/fetch-git.sh).
 docs/                        Design, releasing.
 ```
