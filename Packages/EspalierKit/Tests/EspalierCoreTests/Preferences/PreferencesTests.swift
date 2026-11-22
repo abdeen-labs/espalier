@@ -34,6 +34,7 @@ struct PreferencesTests {
         \.confirmCommitFilteredChanges,
         \.confirmCommitMessageOverride,
         \.confirmWorktreeRemoval,
+        \.confirmQuitWithUnfinishedMessage,
         \.showCommitLengthWarning,
         \.repositoryIndicatorsEnabled,
         \.commitSpellcheckEnabled,

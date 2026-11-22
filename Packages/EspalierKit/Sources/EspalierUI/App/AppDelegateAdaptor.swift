@@ -150,18 +150,24 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Asks first when an operation the user started runs or a commit
-    /// message would be lost, then stops the app model.
+    /// message would be lost, then stops the app model. Quitting with "Do
+    /// not show this message again" on turns
+    /// `confirmQuitWithUnfinishedMessage` off.
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let launched else {
             return .terminateNow
         }
-        let alert = isTerminating ? nil : QuitGuard.reasons(launched.model).alert(launched.model.preferences.numberFormat)
+        let preferences = launched.model.preferences
+        let alert = isTerminating ? nil : QuitGuard.reasons(launched.model).alert(preferences.numberFormat)
         Task {
             if let alert {
                 let response = await presentQuitAlert(alert)
                 guard response.buttonIndex == 0 else {
                     sender.reply(toApplicationShouldTerminate: false)
                     return
+                }
+                if response.isSuppressed {
+                    preferences.confirmQuitWithUnfinishedMessage = false
                 }
             }
             isTerminating = true

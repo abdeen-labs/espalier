@@ -1,6 +1,7 @@
 // The quit guard: quitting asks first when an operation the user started
-// that writes to a repository is still running, or when a commit message
-// would be lost (drafts live in memory).
+// that writes to a repository is still running, or, while
+// `confirmQuitWithUnfinishedMessage` is on, when a commit message would be
+// lost (drafts live in memory).
 
 import EspalierCore
 import GitKit
@@ -21,6 +22,12 @@ nonisolated public struct QuitGuardReasons: Sendable, Equatable {
     /// Whether quitting can go ahead without asking.
     public var isEmpty: Bool {
         runningOperation == nil && repositoriesWithUnfinishedMessages.isEmpty
+    }
+
+    /// Whether the alert offers "Do not show this message again": only when
+    /// a commit message is all there is to lose.
+    public var isSuppressible: Bool {
+        runningOperation == nil && !repositoriesWithUnfinishedMessages.isEmpty
     }
 
     /// The alert, its counts in `numberFormat`, or nil when there's nothing
@@ -51,7 +58,8 @@ nonisolated public struct QuitGuardReasons: Sendable, Equatable {
         return AlertContent(
             title: title,
             message: messages.joined(separator: "\n\n"),
-            buttons: [AlertContent.Button("Quit Anyway", role: .destructive), AlertContent.Button("Cancel", role: .cancel)]
+            buttons: [AlertContent.Button("Quit Anyway", role: .destructive), AlertContent.Button("Cancel", role: .cancel)],
+            suppressionTitle: isSuppressible ? AlertContent.doNotShowAgain : nil
         )
     }
 }
@@ -63,17 +71,19 @@ public enum QuitGuard {
     /// started that writes to a repository (`writesToRepository`: quitting
     /// during a fetch or a push leaves nothing unfinished), and the
     /// repositories whose commit message would be lost
-    /// (`repositoriesWithUnfinishedDrafts`), by display name, in list order.
-    /// A clone in progress counts too: quitting cancels it.
+    /// (`repositoriesWithUnfinishedDrafts`, while
+    /// `confirmQuitWithUnfinishedMessage` is on), by display name, in list
+    /// order. A clone in progress counts too: quitting cancels it.
     public static func reasons(_ app: AppModel) -> QuitGuardReasons {
         let running = app.runningMutations
             .filter { !$0.operation.isBackgroundTask && $0.operation.kind.writesToRepository }
             .sorted { $0.operation.startedAt < $1.operation.startedAt }
         let names = Dictionary(app.repositories.map { ($0.id, $0.displayName) }, uniquingKeysWith: { first, _ in first })
         let isCloning = app.clones.clones.contains { $0.phase != .cancelling }
+        let drafts = app.preferences.confirmQuitWithUnfinishedMessage ? app.repositoriesWithUnfinishedDrafts : []
         return QuitGuardReasons(
             runningOperation: running.first?.operation.kind ?? (isCloning ? .clone : nil),
-            repositoriesWithUnfinishedMessages: app.repositoriesWithUnfinishedDrafts.compactMap { names[$0] }
+            repositoriesWithUnfinishedMessages: drafts.compactMap { names[$0] }
         )
     }
 }

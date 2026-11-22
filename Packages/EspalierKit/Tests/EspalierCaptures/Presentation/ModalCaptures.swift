@@ -45,6 +45,8 @@ struct ModalCaptures {
         capture(card(try confirmation("discardChanges")), named: "alert-critical", area: area)
         let quit = try #require(QuitGuardReasons(runningOperation: .rebase, repositoriesWithUnfinishedMessages: ["espalier"]).alert(Capture.numberFormat))
         capture(card(quit), named: "alert-destructive", area: area)
+        let quitDraft = try #require(QuitGuardReasons(repositoriesWithUnfinishedMessages: ["espalier"]).alert(Capture.numberFormat))
+        capture(card(quitDraft), named: "alert-quitUnfinishedMessage", area: area)
         let push = AlertContent(
             title: "Push Local Changes?",
             message: "feature/login has 3 local commits that haven't been pushed. Push them before opening the pull request?",

@@ -16,6 +16,7 @@ public enum PreferenceKey {
     public static let confirmCommitFilteredChanges = "confirmCommitFilteredChangesKey"
     public static let confirmCommitMessageOverride = "confirmCommitMessageOverride"
     public static let confirmWorktreeRemoval = "confirmWorktreeRemoval"
+    public static let confirmQuitWithUnfinishedMessage = "confirm-quit-with-unfinished-message"
 
     // Behavior.
     public static let uncommittedChangesStrategy = "uncommittedChangesStrategyKind"
@@ -233,6 +234,7 @@ public final class Preferences {
         confirmCommitFilteredChanges = store.getBoolean(PreferenceKey.confirmCommitFilteredChanges, true)
         confirmCommitMessageOverride = store.getBoolean(PreferenceKey.confirmCommitMessageOverride, true)
         confirmWorktreeRemoval = store.getBoolean(PreferenceKey.confirmWorktreeRemoval, true)
+        confirmQuitWithUnfinishedMessage = store.getBoolean(PreferenceKey.confirmQuitWithUnfinishedMessage, true)
 
         uncommittedChangesStrategy = store.getEnum(PreferenceKey.uncommittedChangesStrategy, UncommittedChangesStrategy.self)
             ?? defaultUncommittedChangesStrategy
@@ -342,6 +344,12 @@ public final class Preferences {
     /// Confirm deleting a worktree (`confirmWorktreeRemoval`).
     public var confirmWorktreeRemoval: Bool {
         didSet { write(PreferenceKey.confirmWorktreeRemoval, confirmWorktreeRemoval, oldValue) }
+    }
+
+    /// Confirm quitting while a commit message would be lost
+    /// (`confirm-quit-with-unfinished-message`).
+    public var confirmQuitWithUnfinishedMessage: Bool {
+        didSet { write(PreferenceKey.confirmQuitWithUnfinishedMessage, confirmQuitWithUnfinishedMessage, oldValue) }
     }
 
     // MARK: Behavior

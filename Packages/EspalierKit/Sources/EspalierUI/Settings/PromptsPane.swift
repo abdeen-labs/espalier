@@ -1,4 +1,4 @@
-// Settings ▸ Prompts: the ten confirmations, what switching branches does
+// Settings ▸ Prompts: the confirmations, what switching branches does
 // with uncommitted changes, and the commit length warning. Each change is
 // written at once (`Preferences`).
 
@@ -37,6 +37,7 @@ enum PromptSettings {
         ("Replacing a message with a generated one", \.confirmCommitMessageOverride),
         ("Removing worktrees", \.confirmWorktreeRemoval),
         ("Committing changes hidden by a filter", \.confirmCommitFilteredChanges),
+        ("Quitting with an unfinished commit message", \.confirmQuitWithUnfinishedMessage),
     ]
 
     /// The switch-branch choices.
