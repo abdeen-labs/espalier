@@ -16,6 +16,14 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.5.6] - 2026-11-21
+
+### Changed
+
+- Push After Committing works for every commit, not only ones made with AI. It's in Commit Options, under Amend Last Commit, and each repository has its own setting. Nothing is pushed after amending.
+- With more than one GitHub account on the same server, the repository list groups each owner's repositories by the account they use, such as "octo-org – @joe" and "octo-org – @joe-work".
+- Clone's GitHub tab shows the account pop-up only when more than one account is signed in.
+
 ## [1.5.5] - 2026-11-14
 
 ### Changed
@@ -234,7 +242,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5.5...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5.6...HEAD
+[1.5.6]: https://github.com/abdeen-labs/espalier/compare/v1.5.5...v1.5.6
 [1.5.5]: https://github.com/abdeen-labs/espalier/compare/v1.5.4...v1.5.5
 [1.5.4]: https://github.com/abdeen-labs/espalier/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/abdeen-labs/espalier/compare/v1.5.2...v1.5.3
