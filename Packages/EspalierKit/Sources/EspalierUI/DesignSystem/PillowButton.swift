@@ -53,21 +53,26 @@ private struct PillowButtonBody<Label: View>: View {
     }
 }
 
-/// Stands the pillow on its lip and sinks it as it's pressed.
+/// Stands the pillow on its lip and sinks it as it's pressed. While the
+/// pillow is disabled, the lip tucks up under it and fades with it; it
+/// comes and goes over 0.12 s as the pillow turns on and off.
 private struct PillowLip: ViewModifier {
     let isPressed: Bool
     let isEnabled: Bool
+    @Environment(\.motion) private var motion
 
     func body(content: Content) -> some View {
-        let depth = isEnabled ? Metrics.PillowButtons.lip : 0
+        let depth = Metrics.PillowButtons.lip
         content
-            .offset(y: isPressed ? depth * 0.7 : 0)
+            .offset(y: isPressed && isEnabled ? depth * 0.7 : 0)
             .pressMotion(isPressed)
             .background {
                 if depth > 0 {
                     RoundedRectangle(cornerRadius: Metrics.PillowButtons.radius, style: .continuous)
                         .fill(Color(nsColor: Metrics.PillowButtons.lipColor))
-                        .offset(y: depth)
+                        .offset(y: isEnabled ? depth : 0)
+                        .opacity(isEnabled ? 1 : 0)
+                        .animation(motion.animation(Motion.mark), value: isEnabled)
                 }
             }
     }
