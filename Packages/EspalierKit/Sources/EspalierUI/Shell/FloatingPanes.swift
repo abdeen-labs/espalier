@@ -1,11 +1,11 @@
-// The floating cards layout (`PaneLayout.floatingCards`, Islands). The
+// The floating cards layout (`PaneLayout.floatingCards`, Default and Islands). The
 // window is the theme's backdrop: the toolbar and the sidebar sit on it with
 // no hairlines, and each pane is a card floating on it, the `background`
 // fill in a rounded rectangle (the card radius) with the raised ring and
-// soft shadow, everything inside clipped to it. Cards are 8 apart, with no
-// margin above them (the toolbar's band ends where they start), 2 after the
-// sidebar, and 10 at the window's edges; as the sidebar shows and hides,
-// they follow its edge and stop 10 from the window's.
+// soft shadow, everything inside clipped to it. Cards are 10 apart, with no
+// margin above them (the toolbar's band ends where they start), 4 after the
+// sidebar, and 12 at the window's edges; as the sidebar shows and hides,
+// they follow its edge and stop 12 from the window's.
 //
 // A card is drawn `inset` inside its frame, the room its ring and shadow
 // draw in, so frames are laid out with that much less space around them
@@ -29,7 +29,7 @@ enum PaneCards {
     }
 
     /// The space between two cards.
-    static let gap: CGFloat = 8
+    static let gap: CGFloat = 10
 
     /// The room a card keeps inside its frame, on every side, for its ring
     /// and shadow.
@@ -39,13 +39,13 @@ enum PaneCards {
     static let frameGap = gap - 2 * inset
 
     /// The margin around cards' frames at the window's edges: the cards are
-    /// 10 from them.
-    static let windowEdgeMargin = 10 - inset
+    /// 12 from them.
+    static let windowEdgeMargin = 12 - inset
 
     /// The detail area's margins around its cards' frames: the cards are
-    /// none below the toolbar, 2 after the sidebar, and 10 from the
+    /// none below the toolbar, 4 after the sidebar, and 12 from the
     /// window's trailing and bottom edges.
-    static let frameMargins = EdgeInsets(top: -inset, leading: 2 - inset, bottom: windowEdgeMargin, trailing: windowEdgeMargin)
+    static let frameMargins = EdgeInsets(top: -inset, leading: 4 - inset, bottom: windowEdgeMargin, trailing: windowEdgeMargin)
 
     /// A card's corner radius.
     static var radius: CGFloat {

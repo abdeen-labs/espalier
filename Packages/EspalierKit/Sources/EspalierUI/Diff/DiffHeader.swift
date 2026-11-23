@@ -39,9 +39,10 @@ struct DiffHeader<Options: View>: View {
     @ViewBuilder var options: () -> Options
     @Environment(\.motion) private var motion
 
-    /// The row's height on one line.
+    /// The row's height on one line: the pane headers', so their
+    /// hairlines line up.
     static var height: CGFloat {
-        40
+        Metrics.PaneHeader.height
     }
 
     var body: some View {
@@ -80,7 +81,7 @@ struct DiffHeader<Options: View>: View {
     private var path: some View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
             Text(content.fileName)
-                .font(Typography.row.weight(.medium))
+                .font(Typography.sans(.title3, weight: .bold))
                 .foregroundStyle(.text)
                 .lineLimit(1)
                 .layoutPriority(1)

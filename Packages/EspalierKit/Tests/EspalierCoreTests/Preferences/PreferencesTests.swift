@@ -187,10 +187,10 @@ struct PreferencesTests {
         defer { temporary.remove() }
         let preferences = Preferences(store: PreferenceStore(temporary.defaults))
         #expect(preferences.designTheme == .default)
-        #expect(preferences.designPalette == .iris)
+        #expect(preferences.designPalette == .blueberry)
         #expect(preferences.designBackground == .own)
-        #expect(preferences.appFont == .geist)
-        #expect(preferences.codeFont == .geistMono)
+        #expect(preferences.appFont == .allo)
+        #expect(preferences.codeFont == .mapleMono)
 
         preferences.designPalette = .plum
         preferences.designBackground = .warm
@@ -217,10 +217,10 @@ struct PreferencesTests {
         temporary.defaults.set("atkinson", forKey: "code-font")
         let unknown = Preferences(store: PreferenceStore(temporary.defaults))
         #expect(unknown.designTheme == .default)
-        #expect(unknown.designPalette == .iris)
+        #expect(unknown.designPalette == .blueberry)
         #expect(unknown.designBackground == .own)
-        #expect(unknown.appFont == .geist)
-        #expect(unknown.codeFont == .geistMono)
+        #expect(unknown.appFont == .allo)
+        #expect(unknown.codeFont == .mapleMono)
     }
 
     @Test("changes the hooks and credential helper settings that GitKit and the trampoline read")

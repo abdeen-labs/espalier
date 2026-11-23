@@ -271,23 +271,23 @@ func capture(
 }
 
 extension Look {
-    /// The look's name in captures: "default" for Default in Iris, its
-    /// own backgrounds, in Geist and Geist Mono; else the theme, then the
+    /// The look's name in captures: "default" for Default in Blueberry, its
+    /// own backgrounds, in Allo and Maple Mono; else the theme, then the
     /// palette, the background tint, the app font, and the code font when
     /// they aren't the defaults ("default-slate", "default-warm",
     /// "islands-lagoon-fixel", "islands-plum-sfmono").
     var captureName: String {
         var parts = [theme.rawValue]
-        if palette != .iris {
+        if palette != .blueberry {
             parts.append(palette.rawValue)
         }
         if background != .own {
             parts.append(background.rawValue)
         }
-        if appFont != .geist {
+        if appFont != .allo {
             parts.append(appFont.rawValue)
         }
-        if codeFont != .geistMono {
+        if codeFont != .mapleMono {
             parts.append(codeFont.rawValue)
         }
         return parts.joined(separator: "-")
@@ -301,10 +301,10 @@ extension Look {
             fatalError("ESPALIER_CAPTURE_LOOK=\(name) doesn't start with a theme")
         }
         parts.removeFirst()
-        var palette = DesignPalette.iris
+        var palette = DesignPalette.blueberry
         var background = BackgroundTint.own
-        var appFont = AppFont.geist
-        var codeFont = CodeFont.geistMono
+        var appFont = AppFont.allo
+        var codeFont = CodeFont.mapleMono
         for part in parts {
             if let named = DesignPalette(rawValue: part) {
                 palette = named

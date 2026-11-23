@@ -148,9 +148,9 @@ public struct ChangesHeader: View {
         .frame(height: Metrics.PaneHeader.height)
     }
 
-    /// The count's font: the row font, semibold.
+    /// The count's font: the pane title's, 15 and bold.
     static var titleFont: NSFont {
-        AppKitTypography.row(weight: .semibold)
+        AppKitTypography.sans(.title3, weight: .bold)
     }
 }
 

@@ -1,9 +1,10 @@
 # Espalier's look
 
-The visual design I chose: a flat, precise skeleton with
-personality. New UI follows it. The values are `DesignSystem`'s tokens.
-This describes Default, the theme a new install opens in, in Iris, Geist,
-and Geist Mono; Islands changes what its tokens say (Themes, below).
+Playful, creamy, and intuitive: cream cards on oat, warm espresso ink,
+round type, and soft controls you want to press. New UI follows it. The
+values are `DesignSystem`'s tokens. This describes Default, the theme a new
+install opens in, in Blueberry, Allo, and Maple Mono; Islands changes what
+its tokens say (Themes, below).
 
 ## Principles
 
@@ -11,17 +12,19 @@ and Geist Mono; Islands changes what its tokens say (Themes, below).
   personality: not elaborate, and not default controls with minimal
   touches. The system's own pieces (the window's chrome, Quick Look, the
   open and save panels) stay macOS's.
-- **Flat.** Hairline dividers, and soft shadows only on things that float
+- **Soft.** Hairline dividers, and soft shadows on things that float
   (menus, popovers, tooltips, sheets, alerts, toasts, the operation
-  capsule). The main window is glass around one inset card.
+  capsule) and on the panes, cream cards floating on the oat backdrop.
 - **Rounded.** Controls are capsules (buttons, the location control, search
   fields, segmented controls, chips); ref tags, rows, cards, and sheets have
-  rounded corners.
+  generous rounded corners.
+- **Tactile.** Capsule buttons stand on a lip, a deeper shade of their
+  fill, and sink onto it as they're pressed.
 - **What floats is a card:** menus, popovers, and tooltips with the
   floating ring and shadow; sheets and alerts centered in the window over a
   neutral scrim.
 - **Selection is Espalier's own:** a selected row draws its tint in its
-  rounded shape (a neutral wash): `selectableRow(isSelected:)` in a SwiftUI
+  rounded shape (a butter-yellow highlight, like a highlighter on paper): `selectableRow(isSelected:)` in a SwiftUI
   list, a row view's `drawSelection` in an AppKit table.
 - **The focus ring is Espalier's:** an accent ring in the control's own
   shape (`FocusRing`).
@@ -31,15 +34,18 @@ and Geist Mono; Islands changes what its tokens say (Themes, below).
   down while open.
 - **Text to copy** is `Text` that can be selected; multi-line text to edit
   is a `TextEditor` on the `field` fill or a card.
+- **Places have tiles:** Changes and History in the sidebar draw their
+  symbols on colored tiles (apricot and teal).
 - **Branch colors:** the current branch is the accent, the default branch
-  cyan; the others cycle through orange, pink, violet, blue, and green,
+  teal; the others cycle through apricot, plum, grape, blue, and leaf,
   skipping those near the accent. A track keeps its color for its line of
   development.
 - **Buttons come in three styles:** quiet, prominent (one per area), and
   secondary (Cancel in sheets, Undo). A prominent button that deletes or
   discards is red.
-- **SF Symbols** for every icon; the app font for text (Geist by
-  default); the code font (Geist Mono by default) for what's monospaced.
+- **SF Symbols** for every icon; the app font for text (Allo, at its
+  roundest, by default); the code font (Maple Mono by default) for what's
+  monospaced. Pane titles are 15 and bold, commit titles 20 and bold.
 
 ## Themes, colors, and fonts
 
@@ -51,17 +57,17 @@ palette and background. Views use the tokens, which read the current look.
 
 - **A palette** is an accent color and the colors made from it: links,
   the prominent fill, and selected items' tints. Each is a hue of its own:
-  System (the Mac's accent color), Iris (the default) and Slate (made for
-  Default), Lagoon and Plum (made for Islands), and Tangerine, Magenta, and
+  System (the Mac's accent color), Blueberry (the default) and Slate (made
+  for Default), Lagoon and Plum (made for Islands), and Tangerine, Magenta, and
   Volt. A theme's default branch and renamed colors give way to others
   beside an accent near their hue.
 
-- **Default** is quiet and precise: near-white and near-black with almost
-  no hue, a neutral wash for every selection, ink for the prominent action,
-  flat pills, one accent for focus and links, and lists that fade out at an
-  edge with more beyond it. The window is glass: one plain blur with its
-  tint, the chrome a wash lighter, the inset card a panel darker, and lines,
-  hover, selection, and fields as washes on it.
+- **Default** is playful and creamy: cream cards floating on oat (cocoa
+  on dark roast in dark), espresso text, the butter highlight for every
+  selection, the palette's accent for the prominent action, focus, and
+  links, raised pillow controls with bold titles, round file badges, a
+  thick graph with round dots, status colors from an orchard (leaf, tomato,
+  honey, grape), and lists that fade out at an edge with more beyond it.
 - **Islands** is calm and friendly: the panes float as cards on a sage
   backdrop (the floating layout), with soft pills and bold titles.
 - **A background tint** (Neutral, Warm, Cool, Sage, Rose, Lavender) gives

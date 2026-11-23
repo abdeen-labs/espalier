@@ -1,7 +1,7 @@
 // The main window's chrome in the inset card layout (InsetCard.swift): the
 // toolbar's band, the sidebar or the rail, and the margins around the card
 // are the theme's backdrop. Where the backdrop is glass
-// (`Theme.backdropGlass`, Default's), it's built in three layers:
+// (`Theme.backdropGlass`; no theme's now), it's built in three layers:
 // a plain blur of what's behind the window (`PlainBlurView`), the backdrop
 // color at the glass's opacity over it, and the glass's wash over that.
 // Reduce Transparency and Increase Contrast give the backdrop color alone,

@@ -212,7 +212,7 @@ struct PlacesSectionRows: View {
             ChangesPlaceRow(content: changes, isSelected: selection == .changes)
                 .sidebarRow(.changes)
                 .tag(SidebarPlace.changes)
-            SidebarRowLabel("History", systemImage: "clock.arrow.circlepath", isSelected: selection == .history)
+            SidebarRowLabel("History", systemImage: "clock.arrow.circlepath", tile: .historyTile, isSelected: selection == .history)
                 .sidebarRow(.history)
                 .tag(SidebarPlace.history)
         }
@@ -289,7 +289,7 @@ struct ChangesPlaceRow: View {
 
     var body: some View {
         let fade = motion.animates ? AnyTransition.opacity : .identity
-        SidebarRowLabel("Changes", systemImage: "plus.forwardslash.minus", isSelected: isSelected) {
+        SidebarRowLabel("Changes", systemImage: "plus.forwardslash.minus", tile: .changesTile, isSelected: isSelected) {
             if content.hasConflicts || content.badge != nil {
                 // The count and the warning crossfade in place.
                 ZStack(alignment: .trailing) {
@@ -315,11 +315,12 @@ struct ChangesPlaceRow: View {
 // MARK: - Rows
 
 /// A sidebar row's look: a symbol (the accent when the row is selected,
-/// secondary text otherwise), the title (medium when selected), and what
-/// trails it.
+/// secondary text otherwise), or the symbol on a colored tile (the places),
+/// the title (medium when selected), and what trails it.
 struct SidebarRowLabel<Trailing: View>: View {
     private let title: String
     private let systemImage: String
+    private let tile: Color?
     private let isSelected: Bool
     private let isEmphasized: Bool
     private let truncationMode: Text.TruncationMode
@@ -333,9 +334,12 @@ struct SidebarRowLabel<Trailing: View>: View {
     ///   - truncationMode: Where a long title is cut: the middle for names
     ///     (a branch's start and end both tell), the tail for text read
     ///     from its start.
+    ///   - tile: The color of the tile the symbol is drawn on; nil draws
+    ///     the symbol alone.
     init(
         _ title: String,
         systemImage: String,
+        tile: Color? = nil,
         isSelected: Bool = false,
         isEmphasized: Bool = false,
         truncationMode: Text.TruncationMode = .middle,
@@ -343,6 +347,7 @@ struct SidebarRowLabel<Trailing: View>: View {
     ) {
         self.title = title
         self.systemImage = systemImage
+        self.tile = tile
         self.isSelected = isSelected
         self.isEmphasized = isEmphasized
         self.truncationMode = truncationMode
@@ -352,11 +357,15 @@ struct SidebarRowLabel<Trailing: View>: View {
     var body: some View {
         let isSelected = isSelected || isRowSelected
         HStack(spacing: Metrics.insetSmall) {
-            Image(systemName: systemImage)
-                .font(Typography.row)
-                .foregroundStyle(.sidebarRowIcon(isSelected: isSelected))
-                .frame(width: Metrics.Sidebar.symbolWidth)
-                .accessibilityHidden(true)
+            if let tile {
+                PlaceTile(systemImage: systemImage, color: tile)
+            } else {
+                Image(systemName: systemImage)
+                    .font(Typography.row)
+                    .foregroundStyle(.sidebarRowIcon(isSelected: isSelected))
+                    .frame(width: Metrics.Sidebar.symbolWidth)
+                    .accessibilityHidden(true)
+            }
             Text(title)
                 .font(SidebarRowFont.title(isSelected: isSelected, isEmphasized: isEmphasized))
                 .foregroundStyle(.sidebarRowText(isSelected: isSelected))
@@ -366,6 +375,26 @@ struct SidebarRowLabel<Trailing: View>: View {
             trailing
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A place's symbol on its colored tile: a rounded square of the place's
+/// color with the symbol in white, a little larger than a symbol alone.
+struct PlaceTile: View {
+    let systemImage: String
+    let color: Color
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: Metrics.Sidebar.tileRadius, style: .continuous)
+            .fill(color.gradient)
+            .frame(width: Metrics.Sidebar.tileSize, height: Metrics.Sidebar.tileSize)
+            .overlay {
+                Image(systemName: systemImage)
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: Metrics.Sidebar.symbolWidth)
+            .accessibilityHidden(true)
     }
 }
 

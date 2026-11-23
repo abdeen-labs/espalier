@@ -1,6 +1,6 @@
 // Palettes: the accent color and the colors made from it, on every design
-// theme, each a hue of its own: System, the Mac's accent color; Iris and
-// Slate, made for Default; Lagoon and Plum, made for Islands; and
+// theme, each a hue of its own: System, the Mac's accent color; Blueberry
+// and Slate, made for Default; Lagoon and Plum, made for Islands; and
 // Tangerine, Magenta, and Volt. A palette is the accent; its ink, for
 // links and counts in the accent's color (a little deeper in light,
 // lighter in dark); its deep ink, for a selected item's title on the
@@ -8,7 +8,7 @@
 // the accent (a checkbox's check). What a palette doesn't set is made from
 // its accent in OKLCH, so the Mac's accent color (System) has all of it
 // whichever color it is. Each theme takes what it uses (Theme.swift):
-// Default the accent, Islands the inks and the prominent fill too.
+// Default and Islands take the accent, the inks, and the prominent fill.
 
 import AppKit
 import EspalierCore
@@ -67,9 +67,17 @@ nonisolated struct PaletteColors: Sendable {
             // The Mac's accent color, deepened for prominent fills under
             // white text.
             PaletteColors(palette, accent: .controlAccentColor, prominent: systemProminent, marks: .white)
-        case .iris:
-            // Default's: a cool blue-violet.
-            PaletteColors(palette, accent: ThemeColor.fixed(0x5B43E8, 0x8B7CF6))
+        case .blueberry:
+            // Default's: a juicy blue, with cream text and marks on it.
+            PaletteColors(
+                palette,
+                accent: ThemeColor.fixed(0x3D5BD9, 0x8FA2FF),
+                ink: ThemeColor.fixed(0x3350C9, 0xA3B2FF),
+                deepInk: ThemeColor.fixed(0x253E9E, 0xC4CEFF),
+                prominent: ThemeColor.fixed(0x3D5BD9, 0x7F94FF),
+                prominentText: ThemeColor.fixed(0xFFF9EE, 0x16130F),
+                marks: .color(ThemeColor.fixed(0xFFF9EE, 0x16130F))
+            )
         case .slate:
             // Default's: a steel blue-gray, nearly as quiet as Default's
             // surfaces.
@@ -84,7 +92,7 @@ nonisolated struct PaletteColors: Sendable {
                 prominent: ThemeColor.fixed(0x0A6F80, 0x0E8094)
             )
         case .plum:
-            // Islands': a deep purple, between Iris and Magenta.
+            // Islands': a deep purple, between Blueberry and Magenta.
             PaletteColors(palette, accent: ThemeColor.fixed(0x781E98, 0xCA8DEF))
         case .tangerine:
             // Dark text and marks on the bright orange.

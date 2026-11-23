@@ -46,7 +46,7 @@ struct ThemeBranchColorTests {
         let candidates: [NSColor] = [.hex(0x0F766E), .hex(0x16A34A)]
         #expect(Theme.indexApart(from: gray, candidates, clearance: Theme.trunkClearance) == 0)
         // Iris leaves out the tones near it; gray leaves none out.
-        let theme = Theme.named(.default, palette: .iris)
+        let theme = Theme.named(.default, palette: .blueberry)
         let besideIris = theme.branchTones(accent: theme.accent)
         let besideGray = theme.branchTones(accent: gray)
         #expect(besideGray.count > besideIris.count)

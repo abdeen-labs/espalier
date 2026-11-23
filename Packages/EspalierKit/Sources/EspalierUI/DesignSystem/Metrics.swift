@@ -24,12 +24,12 @@ public enum Metrics {
     /// Corner radii, four of them, the theme's but for sheets'; controls
     /// are capsules.
     public enum Radius {
-        /// Checkboxes and key caps (Default's 5).
+        /// Checkboxes and key caps (Default's 6).
         public static var small: CGFloat { Theme.current.radii.small }
         /// Every list row: sidebar items, file rows, picker rows, and
-        /// History's simple rows (Default's 8).
+        /// History's simple rows (Default's 12).
         public static var row: CGFloat { Theme.current.radii.row }
-        /// Cards, banners, action lists, and lists in sheets (Default's 12).
+        /// Cards, banners, action lists, and lists in sheets (Default's 18).
         public static var card: CGFloat { Theme.current.radii.card }
         /// Sheets and popovers.
         public static let sheet: CGFloat = 22
@@ -71,9 +71,9 @@ public enum Metrics {
         /// Sidebar items.
         public static let sidebar: CGFloat = 28
         /// File rows in Changes (`FileList.rowHeight` follows the text size).
-        public static let file: CGFloat = 30
+        public static let file: CGFloat = 34
         /// History rows (`Graph.rowHeight` follows the text size).
-        public static let history: CGFloat = 32
+        public static let history: CGFloat = 36
     }
 
     /// The file status badge (M, A, D, R).
@@ -144,6 +144,9 @@ public enum Metrics {
         /// A repository or worktree row's glyph column, and a section
         /// header button's side.
         public static let glyphSize: CGFloat = 18
+        /// A place's tile (Changes, History): its side and corner radius.
+        public static let tileSize: CGFloat = 18
+        public static let tileRadius: CGFloat = 5.5
     }
 
     /// The main window.
@@ -197,19 +200,19 @@ public enum Metrics {
 
     /// The history graph.
     public enum Graph {
-        /// The row height: `ceil(lineHeight(.body) × 2)`, 32 at the default
+        /// The row height: `ceil(lineHeight(.body) × 2.25)`, 36 at the default
         /// text size, from SF Pro's line height at the app font's body size
         /// (`AppKitTypography.bodyLayoutLineHeight`).
         public static var rowHeight: CGFloat {
-            ceil(AppKitTypography.bodyLayoutLineHeight * 2)
+            ceil(AppKitTypography.bodyLayoutLineHeight * 2.25)
         }
 
         /// The row height for a body font.
         public static func rowHeight(for font: NSFont) -> CGFloat {
-            ceil(NSLayoutManager().defaultLineHeight(for: font) * 2)
+            ceil(NSLayoutManager().defaultLineHeight(for: font) * 2.25)
         }
 
-        /// Lane pitch P: the theme's (Default's 15).
+        /// Lane pitch P: the theme's (Default's 17).
         public static var lanePitch: CGFloat { Theme.current.graph.lanePitch }
         /// The pitch past `maxUncompressedLanes` lanes.
         public static let compressedLanePitch: CGFloat = 9
@@ -225,7 +228,7 @@ public enum Metrics {
         /// node stays clear of the lines beside it.
         public static let compressedNodeScale: CGFloat = 0.65
         /// Lines have round caps and joins, the trunk's and the branches'
-        /// alike, in the theme's width (Default's 2).
+        /// alike, in the theme's width (Default's 3).
         public static var trackStroke: CGFloat { Theme.current.graph.lineWidth }
         /// Added to every stroke under Increase Contrast.
         public static let increaseContrastStroke: CGFloat = 0.5
@@ -304,11 +307,11 @@ public enum Metrics {
     /// The Changes list: an AppKit table with fixed rows, so applying a
     /// status costs only the rows on screen.
     public enum FileList {
-        /// The row height: `ceil(lineHeight(.body) × 1.875)`, 30 at the
+        /// The row height: `ceil(lineHeight(.body) × 2.125)`, 34 at the
         /// default text size, from SF Pro's line height at the app font's
         /// body size.
         public static var rowHeight: CGFloat {
-            ceil(AppKitTypography.bodyLayoutLineHeight * 1.875)
+            ceil(AppKitTypography.bodyLayoutLineHeight * 2.125)
         }
 
         /// The status letter's square, and a conflicted file's symbol.
@@ -318,7 +321,7 @@ public enum Metrics {
     /// The header row atop a column (Changes, the stash, History) and atop
     /// the diff: one height, so their hairlines line up.
     public enum PaneHeader {
-        public static let height: CGFloat = 40
+        public static let height: CGFloat = 46
     }
 
     /// The Changes column's composer: the commit message card and the

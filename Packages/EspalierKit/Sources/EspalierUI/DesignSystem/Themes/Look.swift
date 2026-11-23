@@ -24,7 +24,7 @@ nonisolated public struct Look: Sendable, Hashable {
     /// What's drawn monospaced.
     public var codeFont: CodeFont
 
-    public init(theme: DesignTheme = .default, palette: DesignPalette = .iris, background: BackgroundTint = .own, appFont: AppFont = .geist, codeFont: CodeFont = .geistMono) {
+    public init(theme: DesignTheme = .default, palette: DesignPalette = .blueberry, background: BackgroundTint = .own, appFont: AppFont = .allo, codeFont: CodeFont = .mapleMono) {
         self.theme = theme
         self.palette = palette
         self.background = background
@@ -32,7 +32,7 @@ nonisolated public struct Look: Sendable, Hashable {
         self.codeFont = codeFont
     }
 
-    /// Default in Iris, its own backgrounds, in Geist and Geist Mono: the
+    /// Default in Blueberry, its own backgrounds, in Allo and Maple Mono: the
     /// look a new install opens in.
     public static let `default` = Look()
 

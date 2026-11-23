@@ -7,8 +7,9 @@ import SwiftUI
 ///
 /// The current branch's track takes the accent color; the trunk (track 0,
 /// the default branch's line) is the theme's default-branch color,
-/// Default's cyan (green beside a blue or teal accent). Other tracks take
-/// the theme's tones (Default's are orange, pink, violet, blue, and green),
+/// Default's teal (leaf green beside a teal or cyan accent). Other tracks
+/// take the theme's tones (Default's are apricot, plum, grape, blue, and
+/// leaf),
 /// without the entries near the accent's hue. A track a local branch
 /// starts takes that branch's color (`BranchColors`), so a line, its
 /// branch's tag, and its sidebar dot agree; other tracks take entry

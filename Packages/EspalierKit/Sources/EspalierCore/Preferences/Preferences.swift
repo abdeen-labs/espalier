@@ -123,14 +123,14 @@ public enum DesignTheme: String, Sendable, Hashable, CaseIterable {
 public enum DesignPalette: String, Sendable, Hashable, CaseIterable {
     /// The Mac's accent color.
     case system
-    case iris, slate
+    case blueberry, slate
     case lagoon, plum
     case tangerine, magenta, volt
 
     /// The theme the palette is made for, if any.
     public var theme: DesignTheme? {
         switch self {
-        case .iris, .slate: .default
+        case .blueberry, .slate: .default
         case .lagoon, .plum: .islands
         case .system, .tangerine, .magenta, .volt: nil
         }
@@ -149,6 +149,8 @@ public enum BackgroundTint: String, Sendable, Hashable, CaseIterable {
 /// The app font: every piece of the interface's text. The raw values are
 /// the ones stored.
 public enum AppFont: String, Sendable, Hashable, CaseIterable {
+    /// Allo, at its roundest: the font a new install opens in.
+    case allo
     /// SF Pro, the system's.
     case sf
     /// Fixel Text.
@@ -165,6 +167,8 @@ public enum AppFont: String, Sendable, Hashable, CaseIterable {
 /// code, terminal output). The raw values are the ones stored, apart from
 /// `AppFont`'s.
 public enum CodeFont: String, Sendable, Hashable, CaseIterable {
+    /// Maple Mono NL: the code font a new install opens in.
+    case mapleMono = "maplemono"
     /// SF Mono, the system's.
     case sfMono = "sfmono"
     /// Geist Mono.
@@ -454,7 +458,7 @@ public final class Preferences {
         }
     }
 
-    /// The palette (`design-palette`; Iris by default), on every design
+    /// The palette (`design-palette`; Blueberry by default), on every design
     /// theme.
     public var designPalette: DesignPalette {
         didSet {
@@ -495,9 +499,9 @@ public final class Preferences {
         store.getEnum(PreferenceKey.designTheme, DesignTheme.self) ?? .default
     }
 
-    /// The palette stored in `store`; an unknown one is Iris.
+    /// The palette stored in `store`; an unknown one is Blueberry.
     public static func storedDesignPalette(in store: PreferenceStore) -> DesignPalette {
-        store.getEnum(PreferenceKey.designPalette, DesignPalette.self) ?? .iris
+        store.getEnum(PreferenceKey.designPalette, DesignPalette.self) ?? .blueberry
     }
 
     /// The background tint stored in `store`; an unknown one is the
@@ -506,14 +510,14 @@ public final class Preferences {
         store.getEnum(PreferenceKey.designBackground, BackgroundTint.self) ?? .own
     }
 
-    /// The app font stored in `store`; an unknown one is Geist.
+    /// The app font stored in `store`; an unknown one is Allo.
     public static func storedAppFont(in store: PreferenceStore) -> AppFont {
-        store.getEnum(PreferenceKey.appFont, AppFont.self) ?? .geist
+        store.getEnum(PreferenceKey.appFont, AppFont.self) ?? .allo
     }
 
-    /// The code font stored in `store`; an unknown one is Geist Mono.
+    /// The code font stored in `store`; an unknown one is Maple Mono.
     public static func storedCodeFont(in store: PreferenceStore) -> CodeFont {
-        store.getEnum(PreferenceKey.codeFont, CodeFont.self) ?? .geistMono
+        store.getEnum(PreferenceKey.codeFont, CodeFont.self) ?? .mapleMono
     }
 
     /// Underline links (`underline-links`).

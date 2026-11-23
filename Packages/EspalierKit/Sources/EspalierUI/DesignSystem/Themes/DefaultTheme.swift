@@ -1,15 +1,13 @@
-// Default: quiet and precise. Near-white and near-black surfaces with almost
-// no hue, a neutral wash for every selection, ink (near-black, near-white
-// in dark) for the one prominent action and the current branch's tag, and
-// the palette's accent kept for focus, links, checkboxes, and the current
-// branch's line. Flat pills, sentence-case labels, small radii, a fine graph
-// of dots, code in a soft palette, and lists that fade out at an edge with
-// more beyond it. The main window is glass: the backdrop color at 80% over
-// a plain blur of what's behind the window, with a 5% wash for the chrome,
-// around one inset card (`PaneLayout.insetCard`) that's a panel, the
-// background at 40% over the glass, the panes in it clear. Lines, hover,
-// selection, fields, and hunk headers are washes, so they read the same on
-// the glass wherever they are.
+// Default: playful and creamy. The panes are cream cards floating on an
+// oat backdrop (`PaneLayout.floatingCards`), warm espresso ink for text,
+// and a butter-yellow highlight, like a highlighter on paper, for every
+// selection. The palette's accent is the one prominent action, focus,
+// links, checkboxes, and the current branch. Controls are soft, raised
+// pillows with bold titles; section labels are bold and as written; radii
+// are generous, file badges round, ref tags soft pills, and the graph is
+// drawn in thick strokes with round dots. In dark, the cream turns to
+// cocoa and the highlight to a warm honey glow. Status and branch colors
+// are an orchard's: leaf, tomato, honey, grape, plum, and teal.
 
 import AppKit
 import EspalierCore
@@ -20,90 +18,95 @@ nonisolated extension ThemeDefinition {
         ThemeDefinition(
             theme: .default,
             palette: palette.palette,
-            background: ThemeColor.surface(0xFFFFFF, 0x0A0A0A),
-            sidebar: ThemeColor.surface(0xEBEBED, 0x171717),
-            // Washes: the fields' ink, the hunk headers' blue-gray, the
-            // hover, and the lines.
-            field: ThemeColor.wash(.black, 0.035, .white, 0.035),
-            hunk: ThemeColor.wash(.hex(0x3A5378), 0.07, .hex(0x7592BD), 0.05),
-            hover: ThemeColor.wash(.hex(0x1A1A1A), 0.06, .hex(0xEBEBEB), 0.11),
-            line: ThemeColor.wash(.black, 0.10, .white, 0.08),
-            line2: ThemeColor.wash(.black, 0.17, .white, 0.14),
-            quiet: ThemeColor.surface(0xFFFFFF, 0x1C1C1E),
-            soft: ThemeColor.fill(0xEAEAEC, 0x232325),
-            // Quiet controls are flat pills on the field's gray; the
-            // selected segment is a card raised off its track.
-            quietControl: ThemeColor.fill(0xEAEAEC, 0x222224),
-            quietControlIsRaised: false,
-            segmentSelection: ThemeColor.surface(0xFFFFFF, 0x333336),
-            scrim: .espalierDynamic(light: NSColor.black.withAlphaComponent(0.2), dark: NSColor.black.withAlphaComponent(0.6)),
-            // The chrome: the backdrop color at 80% over the blur, and a
-            // 5% wash over that.
-            backdrop: ThemeColor.surface(0xF3F3F5, 0x0D0D0D),
-            backdropGlass: GlassStyle(opacity: 0.8, wash: ThemeColor.wash(.hex(0x1A1A1A), 0.05, .hex(0xEBEBEB), 0.05)),
-            raisedShadow: .espalierDynamic(light: NSColor.black.withAlphaComponent(0.08), dark: .clear),
-            raisedRing: .espalierDynamic(light: NSColor.black.withAlphaComponent(0.06), dark: NSColor.white.withAlphaComponent(0.08)),
-            text: ThemeColor.text(0x303035, 0xE8E8EA),
-            text2: ThemeColor.text2(0x62626A, 0xA9A9AE),
-            text3: ThemeColor.text3(0x8B8B93, 0x6F6F75, text2: (0x62626A, 0xA9A9AE)),
+            background: ThemeColor.surface(0xFFFBF3, 0x2A231D),
+            // The sidebar sits on the backdrop.
+            sidebar: ThemeColor.surface(0xF2EADB, 0x1D1814),
+            field: ThemeColor.fill(0xF5EDDF, 0x352C25),
+            hunk: ThemeColor.surface(0xF4EEE6, 0x30281F),
+            hover: ThemeColor.wash(.hex(0x6B4A22), 0.06, .hex(0xFFE7C2), 0.06),
+            line: ThemeColor.line(0xEEE4D3, 0x3A3029),
+            line2: ThemeColor.line2(0xE0D3BE, 0x463A31),
+            quiet: ThemeColor.surface(0xFFFBF3, 0x322A23),
+            soft: ThemeColor.fill(0xF0E6D5, 0x352C25),
+            // Quiet controls are cream pillows raised off the oat, flat on
+            // the field fill in a card.
+            quietControl: ThemeColor.surface(0xFFFDF8, 0x3A3028),
+            segmentSelection: ThemeColor.surface(0xFFFDF8, 0x40352C),
+            scrim: .espalierDynamic(light: NSColor.hex(0x3A2A18, alpha: 0.22), dark: NSColor.black.withAlphaComponent(0.5)),
+            backdrop: ThemeColor.surface(0xF2EADB, 0x1D1814),
+            raisedShadow: .espalierDynamic(light: NSColor.hex(0x6B4A22, alpha: 0.10), dark: NSColor.black.withAlphaComponent(0.35)),
+            raisedRing: .espalierDynamic(light: NSColor.hex(0x6B4A22, alpha: 0.07), dark: NSColor.hex(0xFFE7C2, alpha: 0.06)),
+            text: ThemeColor.text(0x2B2119, 0xF6ECDF),
+            text2: ThemeColor.text2(0x7A6858, 0xBCAA97),
+            text3: ThemeColor.text3(0xAA9784, 0x806F60, text2: (0x7A6858, 0xBCAA97)),
             accent: palette.accent,
-            // Every selection is the same neutral wash as the sidebar's.
-            selection: DefaultColor.selection,
-            prominent: ThemeColor.fixed(0x232328, 0xEBEBEF),
-            prominentText: ThemeColor.fixed(0xFFFFFF, 0x0A0A0A),
+            linkBase: palette.ink,
+            accentFaintAlpha: (0.06, 0.10),
+            accentMidAlpha: (0.18, 0.26),
+            textSelectionAlpha: (0.18, 0.28),
+            // Every selection is the butter highlight.
+            selection: DefaultColor.butter,
+            prominent: palette.prominent,
+            prominentText: palette.prominentText,
             marks: palette.marks,
-            add: ThemeColor.fixed(0x15803D, 0x34D399),
-            delete: ThemeColor.fixed(0xDC2626, 0xF87171),
-            modified: ThemeColor.fixed(0xA16207, 0xFACC15),
-            renamed: DefaultColor.violet,
-            renamedNearAccent: DefaultColor.blue,
-            conflictOurs: DefaultColor.cyan,
-            conflictTheirs: DefaultColor.orange,
+            add: DefaultColor.leaf,
+            delete: DefaultColor.tomato,
+            modified: DefaultColor.honey,
+            renamed: DefaultColor.grape,
+            renamedNearAccent: DefaultColor.plum,
+            conflictOurs: DefaultColor.teal,
+            conflictTheirs: DefaultColor.apricot,
+            // Added and deleted lines a third again as strong in light, so
+            // they read on the cream.
+            diffLineStrength: (1.35, 1.1),
             syntaxColors: [
-                .keyword: DefaultColor.iris,
-                .string: ThemeColor.fixed(0x15803D, 0x34D399),
-                .comment: ThemeColor.fixed(0x6B7280, 0x8A8A92),
-                .number: ThemeColor.fixed(0xA16207, 0xFACC15),
-                .type: DefaultColor.violet,
-                .function: DefaultColor.blue,
-                .operatorOrPunctuation: ThemeColor.fixed(0x52525B, 0xA1A1AA),
+                .keyword: DefaultColor.plum,
+                .string: DefaultColor.leaf,
+                .comment: ThemeColor.fixed(0xA08A73, 0x8C7A69),
+                .number: DefaultColor.apricot,
+                .type: DefaultColor.teal,
+                .function: palette.ink,
+                .operatorOrPunctuation: ThemeColor.fixed(0x8A7764, 0xA8978A),
             ],
-            // Cyan; green beside a blue or teal accent.
+            // Teal; leaf beside a teal or cyan accent.
             branches: [
-                BranchTones(trunk: DefaultColor.cyan, tones: [.orange, .pink, .violet, .blue, .green]),
-                BranchTones(trunk: DefaultColor.green, tones: [.orange, .pink, .violet, .blue, .cyan]),
+                BranchTones(trunk: DefaultColor.teal, tones: [.orange, .pink, .violet, .blue, .green]),
+                BranchTones(trunk: DefaultColor.leafTone, tones: [.orange, .pink, .violet, .blue, .cyan]),
             ],
             toneColors: DefaultColor.toneColors,
-            sidebarSelection: DefaultColor.selection,
-            sidebarSelectionIcon: ThemeColor.text(0x303035, 0xE8E8EA),
-            sectionLabel: SectionLabelStyle(isUppercase: false, size: 12, weight: .medium, tracking: 0),
-            radii: ThemeRadii(row: 8, card: 12, small: 5, tag: 5),
-            commitTitle: TitleStyle(size: 16, weight: .semibold),
-            buttonWeights: ButtonWeights(quiet: .regular, prominent: .medium),
-            graph: GraphStyle(lineWidth: 2, lanePitch: 15),
-            refTag: RefTagStyle(alpha: (0.10, 0.16), textMix: (0.30, 0.15), ink: 0x000000),
-            statusBadgeShape: .roundedSquare,
-            paneLayout: .insetCard,
-            // Lists fade out at an edge with more beyond it, over a
-            // 24-point band, instead of ending at a hard cut.
+            sidebarSelection: DefaultColor.butter,
+            sidebarSelectionText: ThemeColor.text(0x2B2119, 0xFFF2DA),
+            sidebarSelectionIcon: palette.accent,
+            sidebarSelectionIsBold: true,
+            sectionLabel: SectionLabelStyle(isUppercase: false, size: 12, weight: .bold, tracking: 0),
+            radii: ThemeRadii(row: 12, card: 18, small: 6, tag: 9),
+            commitTitle: TitleStyle(size: 20, weight: .bold),
+            buttonWeights: ButtonWeights(quiet: .semibold, prominent: .bold),
+            graph: GraphStyle(lineWidth: 3, lanePitch: 17),
+            refTag: RefTagStyle(alpha: (0.16, 0.24), textMix: (0.38, 0.20), ink: 0x2B2119),
+            statusBadgeShape: .circle,
+            avatarShape: .circle,
+            paneLayout: .floatingCards,
+            controls: ControlStyle(prominentShadow: nil, flatInCards: true, lip: 3),
             scrollEdgeFade: 24
         )
     }
 }
 
-/// Default's branch and code colors, light and dark.
+/// Default's status, branch, and code colors, light and dark.
 nonisolated private enum DefaultColor {
-    static let iris = ThemeColor.fixed(0x5B43E8, 0x8B7CF6)
-    static let violet = ThemeColor.fixed(0x7E22CE, 0xC084FC)
-    static let blue = ThemeColor.fixed(0x2563EB, 0x60A5FA)
-    static let cyan = ThemeColor.fixed(0x0E7490, 0x22D3EE)
-    static let green = ThemeColor.fixed(0x15803D, 0x4ADE80)
-    static let orange = ThemeColor.fixed(0xC2410C, 0xFB923C)
-    static let pink = ThemeColor.fixed(0xBE185D, 0xF472B6)
+    static let leaf = ThemeColor.fixed(0x2F8A4C, 0x7FD49A)
+    static let tomato = ThemeColor.fixed(0xD8432F, 0xFF8B78)
+    static let honey = ThemeColor.fixed(0xB97800, 0xF5C451)
+    static let grape = ThemeColor.fixed(0x8A4FD0, 0xC59BFF)
+    static let plum = ThemeColor.fixed(0xC2347F, 0xF57FB8)
+    static let teal = ThemeColor.fixed(0x13858A, 0x5ECFCF)
+    static let apricot = ThemeColor.fixed(0xD9690F, 0xFFA35C)
+    static let blue = ThemeColor.fixed(0x3D6FE0, 0x86A8FF)
+    static let leafTone = ThemeColor.fixed(0x3B9152, 0x86D79E)
 
-    static let toneColors = ToneColors(pink: pink, violet: violet, orange: orange, green: green, blue: blue, cyan: cyan)
+    static let toneColors = ToneColors(pink: plum, violet: grape, orange: apricot, green: leafTone, blue: blue, cyan: teal)
 
-    /// Every selection: one neutral wash, near-black 10% (near-white
-    /// 16% in dark).
-    static let selection = ThemeColor.wash(.hex(0x1A1A1A), 0.10, .hex(0xEBEBEB), 0.16)
+    /// Every selection: a butter-yellow highlight (a honey glow in dark).
+    static let butter = ThemeColor.wash(.hex(0xFFC21A), 0.30, .hex(0xFFB830), 0.17)
 }

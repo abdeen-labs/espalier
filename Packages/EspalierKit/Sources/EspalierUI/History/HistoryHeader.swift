@@ -174,7 +174,7 @@ struct BranchNameLabel: View {
                 .imageScale(.small)
                 .foregroundStyle(.text3)
             Text(name)
-                .font(Typography.row.weight(.semibold))
+                .font(Typography.sans(.title3, weight: .bold))
                 .foregroundStyle(.text)
                 .lineLimit(1)
                 .truncationMode(.middle)

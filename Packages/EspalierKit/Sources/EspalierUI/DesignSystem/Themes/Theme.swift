@@ -56,15 +56,15 @@ nonisolated public final class Theme: Sendable {
     public let segmentSelection: NSColor
     /// The dim over a window behind a sheet or an alert.
     public let scrim: NSColor
-    /// What the panes float on in the floating cards layout (Islands), and
-    /// what the card is inset in in the inset card layout (Default).
+    /// What the panes float on in the floating cards layout, and
+    /// what the card is inset in in the inset card layout.
     public let backdrop: NSColor
     /// The backdrop as glass, in the main window's inset card layout: the
     /// backdrop color over a blur of what's behind the window; nil is the
     /// backdrop color, opaque.
     public let backdropGlass: GlassStyle?
     /// Whether the content's card is glass too: the inset card on the
-    /// backdrop's glass (Default's), its fill `cardFill` over the glass and
+    /// backdrop's glass, its fill `cardFill` over the glass and
     /// its panes clear, so the glass shows through the whole window.
     public let cardIsGlass: Bool
     /// What the panes in the main window's content fill with: clear where
@@ -75,7 +75,7 @@ nonisolated public final class Theme: Sendable {
     /// behind it; else `background`.
     public let cardFill: NSColor
     /// A raised card's soft shadow and ring: a selected segment on its
-    /// track, Islands' floating panes.
+    /// track, the floating panes.
     public let raisedShadow: NSColor
     public let raisedRing: NSColor
 
@@ -397,7 +397,7 @@ nonisolated extension Theme {
     }
 
     /// `theme` in `palette`, its backgrounds in `background`, made once.
-    public static func named(_ theme: DesignTheme, palette: DesignPalette = .iris, background: BackgroundTint = .own) -> Theme {
+    public static func named(_ theme: DesignTheme, palette: DesignPalette = .blueberry, background: BackgroundTint = .own) -> Theme {
         let key = ThemeKey(theme: theme, palette: palette, background: background)
         if let made = ThemeCache.themes.withLock({ $0[key] }) {
             return made
@@ -434,10 +434,10 @@ nonisolated private enum ThemeCache {
 
 /// How the panes sit in the window.
 nonisolated public enum PaneLayout: Sendable, Equatable {
-    /// Cards floating on the backdrop (Islands).
+    /// Cards floating on the backdrop (Default and Islands).
     case floatingCards
     /// One card inset in the backdrop, the panes in it edge to edge and
-    /// divided by hairlines (Default).
+    /// divided by hairlines.
     case insetCard
 }
 
@@ -513,12 +513,16 @@ nonisolated public struct ControlStyle: Sendable, Equatable {
     /// The shadow under a prominent capsule; nil for none.
     public var prominentShadow: NSColor?
     /// Whether a quiet capsule in a floating card is drawn flat on the
-    /// `field` fill, with no ring or shadow (Islands): the raised capsules
+    /// `field` fill, with no ring or shadow: the raised capsules
     /// are the ones on the backdrop.
     public var flatInCards: Bool
+    /// How far a capsule button stands on its lip, a deeper shade of its
+    /// fill below it, in points: pressing the button sinks it onto the lip.
+    /// 0 for none.
+    public var lip: CGFloat = 0
 
-    /// No prominent shadow, and quiet capsules the same in a card as out
-    /// of one.
+    /// No prominent shadow, no lip, and quiet capsules the same in a card
+    /// as out of one.
     public static let standard = ControlStyle(prominentShadow: nil, flatInCards: false)
 }
 

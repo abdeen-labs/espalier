@@ -26,10 +26,10 @@ TREE = [
 TIPS = [(124, 44), (124, 130)]
 FRUIT = (108, 87)
 
-LIGHT = dict(name="Espalier", top="#F6F2FF", bottom="#E1D6FF",
-             ink_top="#3A2380", ink_bottom="#24145C", fruit="#8B5CF6", glow="#B48CFF")
-DARK = dict(name="Espalier", top="#221A33", bottom="#0B0712",
-            ink_top="#F6F1FF", ink_bottom="#DCCFF7", fruit="#C996FF", glow="#B48CFF")
+LIGHT = dict(name="Espalier", top="#FFF8EA", bottom="#F2E2C4",
+             ink_top="#4A3528", ink_bottom="#2B2119", fruit="#3D5BD9", glow="#FFC21A")
+DARK = dict(name="Espalier", top="#2A221B", bottom="#120E0B",
+            ink_top="#FFF6E6", ink_bottom="#EFDDC2", fruit="#8FA2FF", glow="#FFB830")
 
 
 def svg(p, background):

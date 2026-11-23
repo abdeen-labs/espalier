@@ -131,11 +131,11 @@ public enum DiffColors {
 
     /// Conflict marker rows (`<<<<<<<`, `=======`, `>>>>>>>`).
     public static var conflictMarker: NSColor { Theme.current.diff.conflictMarker }
-    /// Our side of a conflict: the theme's (Default's cyan).
+    /// Our side of a conflict: the theme's (Default's teal).
     public static var ours: NSColor { Theme.current.diff.ours }
     /// The common ancestor's lines, between ours and theirs: neutral.
     public static let base = Palette.tint(.systemGray, light: 0.09, dark: 0.12)
-    /// Their side of a conflict: the theme's (Default's orange).
+    /// Their side of a conflict: the theme's (Default's apricot).
     public static var theirs: NSColor { Theme.current.diff.theirs }
 
     /// A conflict block's lines, in a conflicted file drawn as blocks: its

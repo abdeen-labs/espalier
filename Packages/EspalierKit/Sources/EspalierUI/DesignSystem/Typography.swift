@@ -27,8 +27,8 @@ public enum Typography {
     public static var subheadline: Font { sans(.subheadline) }
     /// Meta lines: "Maya Chen · 12 min ago · 4 files" (11).
     public static var meta: Font { sans(.subheadline) }
-    /// A commit's title in its details: the theme's (Default's is 16,
-    /// semibold).
+    /// A commit's title in its details: the theme's (Default's is 20,
+    /// bold).
     public static var commitSummary: Font {
         let title = Theme.current.commitTitle
         return sans(size: title.size, weight: title.weight, relativeTo: .title3)
@@ -43,7 +43,7 @@ public enum Typography {
     /// A Settings row's title (13, medium).
     public static var rowTitle: Font { sans(.body, weight: .medium) }
     /// Section labels, in the theme's size and weight (Default's 12,
-    /// medium): use `SectionLabel`, which adds the case and the tracking.
+    /// bold): use `SectionLabel`, which adds the case and the tracking.
     public static var sectionLabel: Font {
         let label = Theme.current.sectionLabel
         return sans(size: label.size, weight: label.weight, relativeTo: .caption)
@@ -87,10 +87,10 @@ public enum Typography {
     /// the keys' symbols.
     public static let keyCap: Font = .caption.weight(.medium)
     /// Quiet and secondary buttons' titles (13, in the theme's weight:
-    /// Default's regular; 12 when small).
+    /// Default's semibold; 12 when small).
     public static var button: Font { sans(.body, weight: Theme.current.buttonWeights.quiet) }
     /// Prominent buttons' titles (13, in the theme's weight: Default's
-    /// medium).
+    /// bold).
     public static var prominentButton: Font { sans(.body, weight: Theme.current.buttonWeights.prominent) }
     /// Small buttons' titles (12, in the quiet weight).
     public static var smallButton: Font { sans(.callout, weight: Theme.current.buttonWeights.quiet) }
@@ -320,7 +320,7 @@ extension NSFont {
 }
 
 /// A section label in the theme's style (Default's: as written, 12
-/// medium, tertiary), and its count in the mono ("Branches 5").
+/// bold), in secondary text, and its count in the mono ("Branches 5").
 public struct SectionLabel: View {
     private let title: String
     private let count: Int?
@@ -344,7 +344,7 @@ public struct SectionLabel: View {
                     .opacity(0.8)
             }
         }
-        .foregroundStyle(.text3)
+        .foregroundStyle(.text2)
         .lineLimit(1)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(count.map { "\(title), \(formatCount($0, numberFormat))" } ?? title)

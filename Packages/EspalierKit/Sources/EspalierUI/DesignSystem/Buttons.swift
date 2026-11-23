@@ -4,8 +4,10 @@
 // prominent (the deeper accent, white semibold; one per area), and
 // secondary (the soft fill, no shadow: Cancel in sheets, Undo). A prominent
 // button with the destructive role (Delete, Discard) is red. The sync
-// button's split variant adds a chevron menu. With keyboard focus, each
-// shows Espalier's ring (`FocusRing`) 1 point outside its shape.
+// button's split variant adds a chevron menu. Where the theme gives
+// controls a lip (Default's), each capsule stands on a deeper shade of its
+// fill and sinks onto it as it's pressed. With keyboard focus, each shows
+// Espalier's ring (`FocusRing`) 1 point outside its shape.
 
 import AppKit
 import SwiftUI
@@ -113,6 +115,32 @@ struct CapsuleButtonAppearance {
         kind == .quiet && !isFlat && Theme.current.quietControlIsRaised ? .quiet : nil
     }
 
+    /// The lip the capsule stands on, a deeper shade of its fill, where
+    /// the theme draws one: under prominent and secondary capsules, and
+    /// quiet ones that are raised; none while disabled.
+    var lip: Color? {
+        guard Theme.current.controls.lip > 0, isEnabled else {
+            return nil
+        }
+        let base: NSColor? = switch kind {
+        case .prominent: isDestructive ? Palette.destructiveButton : Palette.button
+        case .secondary: Theme.current.soft
+        case .quiet: isFlat ? nil : Theme.current.quietControl
+        }
+        guard let base else {
+            return nil
+        }
+        let kind = kind
+        let line2 = Theme.current.line2
+        return Color(nsColor: NSColor.espalierDynamic { variant in
+            let resolved = base.resolved(in: variant)
+            if kind == .quiet {
+                return line2.resolved(in: variant).withAlphaComponent(1).blended(withFraction: 0.35, of: resolved) ?? resolved
+            }
+            return resolved.blended(withFraction: variant.isDark ? 0.45 : 0.3, of: .black) ?? resolved
+        })
+    }
+
     /// The theme's shadow under a prominent capsule, if any.
     var shadow: NSColor? {
         kind == .prominent ? Theme.current.controls.prominentShadow : nil
@@ -184,7 +212,36 @@ struct CapsuleButtonBody<Label: View>: View {
             .contentShape(Capsule(style: .circular))
             .opacity(appearance.opacity)
             .focusRing(isFocused, in: Capsule(style: .circular))
+            .onLip(appearance.lip, isPressed: isPressed)
             .onHover { isHovered = $0 }
+    }
+}
+
+extension View {
+    /// Stands the capsule on its lip, a capsule of `lip`'s color the
+    /// theme's lip depth below it; pressing sinks it most of the way down
+    /// at once, and it eases back up. Nil draws the capsule as it is.
+    func onLip(_ lip: Color?, isPressed: Bool) -> some View {
+        modifier(CapsuleLipModifier(lip: lip, isPressed: isPressed))
+    }
+}
+
+private struct CapsuleLipModifier: ViewModifier {
+    let lip: Color?
+    let isPressed: Bool
+
+    func body(content: Content) -> some View {
+        let depth = lip == nil ? 0 : Theme.current.controls.lip
+        content
+            .offset(y: isPressed ? depth * 0.7 : 0)
+            .pressMotion(isPressed)
+            .background {
+                if let lip {
+                    Capsule(style: .circular)
+                        .fill(lip)
+                        .offset(y: depth)
+                }
+            }
     }
 }
 
@@ -324,6 +381,7 @@ public struct SplitCapsuleButton<Label: View>: View {
         )
         .opacity(appearance.opacity)
         .focusRing(focusedPart == .main, in: Capsule(style: .circular))
+        .onLip(appearance.lip, isPressed: isPressed || isMenuOpen)
     }
 }
 

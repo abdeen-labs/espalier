@@ -92,6 +92,33 @@ nonisolated struct BundledFace: Sendable, Hashable {
         isMono: false
     )
 
+    /// Allo, its roundness pinned at 100 in the bundled file; its optical
+    /// size follows the point size.
+    static let allo = BundledFace(
+        family: "Allo Variable",
+        names: [
+            100: "AlloVariable-Thin", 200: "AlloVariable-ExtraLight", 300: "AlloVariable-Light",
+            400: "AlloVariable-Regular", 500: "AlloVariable-Medium", 600: "AlloVariable-SemiBold",
+            700: "AlloVariable-Bold", 800: "AlloVariable-ExtraBold", 900: "AlloVariable-Black",
+        ],
+        isVariable: true,
+        fixedAxes: [:],
+        regularWeight: 400,
+        isMono: false
+    )
+
+    /// Maple Mono NL: Maple Mono without ligatures. Its variable font has
+    /// no named instances' PostScript names, so every weight is the
+    /// Regular, set on the weight axis.
+    static let mapleMono = BundledFace(
+        family: "Maple Mono NL",
+        names: [400: "MapleMonoNL-Regular"],
+        isVariable: true,
+        fixedAxes: [:],
+        regularWeight: 400,
+        isMono: true
+    )
+
     static let geistMono = BundledFace(
         family: "Geist Mono",
         names: [400: "GeistMono-Regular", 500: "GeistMono-Medium", 600: "GeistMono-SemiBold", 700: "GeistMono-Bold", 800: "GeistMono-ExtraBold", 900: "GeistMono-Black"],
@@ -232,6 +259,7 @@ extension AppFont {
     nonisolated var face: BundledFace? {
         switch self {
         case .sf: nil
+        case .allo: .allo
         case .fixel: .fixelText
         case .atkinson: .atkinsonNext
         case .martian: .martianGrotesk
@@ -243,6 +271,7 @@ extension AppFont {
     nonisolated var scale: CGFloat {
         switch self {
         case .sf, .fixel, .geist: 1
+        case .allo: 1.02
         case .atkinson: 1.04
         case .martian: 0.88
         }
@@ -251,6 +280,7 @@ extension AppFont {
     /// The font's name in Settings.
     public var title: String {
         switch self {
+        case .allo: "Allo"
         case .sf: "SF Pro"
         case .fixel: "Fixel Text"
         case .atkinson: "Atkinson Hyperlegible Next"
@@ -265,6 +295,7 @@ extension CodeFont {
     nonisolated var face: BundledFace? {
         switch self {
         case .sfMono: nil
+        case .mapleMono: .mapleMono
         case .geistMono: .geistMono
         case .atkinsonMono: .atkinsonMono
         }
@@ -274,6 +305,7 @@ extension CodeFont {
     nonisolated var scale: CGFloat {
         switch self {
         case .sfMono, .geistMono: 1
+        case .mapleMono: 1.04
         case .atkinsonMono: 1.02
         }
     }
@@ -281,6 +313,7 @@ extension CodeFont {
     /// The font's name in Settings.
     public var title: String {
         switch self {
+        case .mapleMono: "Maple Mono"
         case .sfMono: "SF Mono"
         case .geistMono: "Geist Mono"
         case .atkinsonMono: "Atkinson Hyperlegible Mono"

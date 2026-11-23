@@ -146,8 +146,8 @@ nonisolated public enum Palette {
     public static var hunk: NSColor { Theme.current.hunk }
     /// A hovered row.
     public static var hover: NSColor { Theme.current.hover }
-    /// The sidebar's selected item: Default's is a neutral wash, Islands' a
-    /// wash of the accent.
+    /// The sidebar's selected item: Default's is the butter highlight,
+    /// Islands' a wash of the accent.
     public static var sidebarSelection: NSColor { Theme.current.sidebarSelection }
     /// Dividers and hairlines.
     public static var line: NSColor { Theme.current.line }
@@ -172,7 +172,7 @@ nonisolated public enum Palette {
     // MARK: Text input
 
     /// Selected text where the text has focus: a wash of the accent
-    /// (Default's 16%, 24% in dark).
+    /// (Default's 18%, 28% in dark).
     public static var textSelection: NSColor { Theme.current.textSelection }
     /// Selected text where the text doesn't have focus, or its window isn't
     /// key: a neutral wash, black 8% (white 8% in dark).
@@ -193,7 +193,7 @@ nonisolated public enum Palette {
     /// Links: the theme's link color, else the accent.
     public static var link: NSColor { Theme.current.link }
 
-    /// Selected rows and chips: Default's neutral wash; Islands' is the
+    /// Selected rows and chips: Default's butter highlight; Islands' is the
     /// accent at 10% (14% in dark).
     public static var accentSoft: NSColor { Theme.current.accentSoft }
 
@@ -202,11 +202,10 @@ nonisolated public enum Palette {
     public static var accentFaint: NSColor { Theme.current.accentFaint }
 
     /// The diff's included line number cells: the accent at 16% (24% in
-    /// dark).
+    /// dark; Default's 18% and 26%).
     public static var accentMid: NSColor { Theme.current.accentMid }
 
-    /// The prominent fill, one action per area: Default's is ink, Islands'
-    /// the palette's.
+    /// The prominent fill, one action per area: the palette's.
     public static var button: NSColor { Theme.current.prominent }
     /// The text on the prominent fill.
     public static var buttonText: NSColor { Theme.current.prominentText }
@@ -306,4 +305,14 @@ extension ShapeStyle where Self == Color {
     public static var accentSoft: Color { Color(nsColor: Palette.accentSoft) }
     public static var quiet: Color { Color(nsColor: Palette.quiet) }
     public static var soft: Color { Color(nsColor: Palette.soft) }
+    /// The places' tiles in the sidebar: Changes apricot, History teal.
+    public static var changesTile: Color { Color(nsColor: Palette.changesTile) }
+    public static var historyTile: Color { Color(nsColor: Palette.historyTile) }
+}
+
+extension Palette {
+    /// Changes' tile: apricot.
+    nonisolated public static let changesTile = NSColor.espalierDynamic(light: .hex(0xF0862A), dark: .hex(0xD9741A))
+    /// History's tile: teal.
+    nonisolated public static let historyTile = NSColor.espalierDynamic(light: .hex(0x1C9C9A), dark: .hex(0x178685))
 }
