@@ -69,8 +69,8 @@ app; `scripts/publish-release.sh` packages and publishes it.
 4. **Archive**: Product ▸ Archive. The first time, macOS asks to let
    `codesign` use the Developer ID key: Always Allow.
 5. **Export**: in the Organizer, Distribute App ▸ Direct Distribution. Xcode
-   notarizes and staples the app. Put the exported `Espalier.app` at the
-   checkout's root (it's ignored by git).
+   notarizes and staples the app. Export `Espalier.app` to
+   `~/Developer/exports`.
 6. **Publish**: `scripts/publish-release.sh`. The first release runs with
    `FIRST_RELEASE=1`, since the feed has no appcast yet. `UPLOAD=0` stops
    after making `dist/Espalier-<version>.dmg` and the signed
