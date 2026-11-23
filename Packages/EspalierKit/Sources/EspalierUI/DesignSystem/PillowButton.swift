@@ -32,6 +32,7 @@ private struct PillowButtonBody<Label: View>: View {
     let isPressed: Bool
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.isFocused) private var isFocused
+    @Environment(\.motion) private var motion
     @State private var isHovered = false
 
     var body: some View {
@@ -46,20 +47,23 @@ private struct PillowButtonBody<Label: View>: View {
                     .allowsHitTesting(false)
             )
             .contentShape(shape)
-            .opacity(isEnabled ? 1 : Palette.disabledOpacity)
             .focusRing(isFocused, in: shape)
             .modifier(PillowLip(isPressed: isPressed, isEnabled: isEnabled))
+            // The pillow and its lip fade as one, so the lip tucked under a
+            // disabled pillow doesn't show through it; turning on and off,
+            // the fade and the lip move together over 0.12 s.
+            .compositingGroup()
+            .opacity(isEnabled ? 1 : Palette.disabledOpacity)
+            .animation(motion.animation(Motion.mark), value: isEnabled)
             .onHover { isHovered = $0 }
     }
 }
 
 /// Stands the pillow on its lip and sinks it as it's pressed. While the
-/// pillow is disabled, the lip tucks up under it and fades with it; it
-/// comes and goes over 0.12 s as the pillow turns on and off.
+/// pillow is disabled, the lip is tucked up under it.
 private struct PillowLip: ViewModifier {
     let isPressed: Bool
     let isEnabled: Bool
-    @Environment(\.motion) private var motion
 
     func body(content: Content) -> some View {
         let depth = Metrics.PillowButtons.lip
@@ -71,8 +75,6 @@ private struct PillowLip: ViewModifier {
                     RoundedRectangle(cornerRadius: Metrics.PillowButtons.radius, style: .continuous)
                         .fill(Color(nsColor: Metrics.PillowButtons.lipColor))
                         .offset(y: isEnabled ? depth : 0)
-                        .opacity(isEnabled ? 1 : 0)
-                        .animation(motion.animation(Motion.mark), value: isEnabled)
                 }
             }
     }
