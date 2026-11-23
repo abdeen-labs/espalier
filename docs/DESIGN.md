@@ -2,8 +2,8 @@
 
 The visual design I chose: a flat, precise skeleton with
 personality. New UI follows it. The values are `DesignSystem`'s tokens.
-This describes Classic, the default theme, in Geist and Geist Mono; the
-other themes change what their tokens say (Themes, below).
+This describes Default, the theme a new install opens in, in Iris, Geist,
+and Geist Mono; Islands changes what its tokens say (Themes, below).
 
 ## Principles
 
@@ -11,19 +11,18 @@ other themes change what their tokens say (Themes, below).
   personality: not elaborate, and not default controls with minimal
   touches. The system's own pieces (the window's chrome, Quick Look, the
   open and save panels) stay macOS's.
-- **Flat.** Opaque surfaces, hairline dividers, and soft shadows only on
-  things that float (menus, popovers, tooltips, sheets, alerts, toasts, the
-  operation capsule).
+- **Flat.** Hairline dividers, and soft shadows only on things that float
+  (menus, popovers, tooltips, sheets, alerts, toasts, the operation
+  capsule). The main window is glass around one inset card.
 - **Rounded.** Controls are capsules (buttons, the location control, search
-  fields, segmented controls, ref tags, chips); rows, cards, and sheets have
-  generous corners.
+  fields, segmented controls, chips); ref tags, rows, cards, and sheets have
+  rounded corners.
 - **What floats is a card:** menus, popovers, and tooltips with the
   floating ring and shadow; sheets and alerts centered in the window over a
   neutral scrim.
 - **Selection is Espalier's own:** a selected row draws its tint in its
-  rounded shape (the soft accent; the sidebar's neutral wash):
-  `selectableRow(isSelected:)` in a SwiftUI list, a row view's
-  `drawSelection` in an AppKit table.
+  rounded shape (a neutral wash): `selectableRow(isSelected:)` in a SwiftUI
+  list, a row view's `drawSelection` in an AppKit table.
 - **The focus ring is Espalier's:** an accent ring in the control's own
   shape (`FocusRing`).
 - **Links are the accent** (`Palette.link`) in the text's own font,
@@ -33,9 +32,9 @@ other themes change what their tokens say (Themes, below).
 - **Text to copy** is `Text` that can be selected; multi-line text to edit
   is a `TextEditor` on the `field` fill or a card.
 - **Branch colors:** the current branch is the accent, the default branch
-  teal; the others cycle through pink, violet, orange, green, blue, and
-  cyan, skipping those near the accent. A track keeps its color for
-  its line of development.
+  cyan; the others cycle through orange, pink, violet, blue, and green,
+  skipping those near the accent. A track keeps its color for its line of
+  development.
 - **Buttons come in three styles:** quiet, prominent (one per area), and
   secondary (Cancel in sheets, Undo). A prominent button that deletes or
   discards is red.
@@ -44,34 +43,30 @@ other themes change what their tokens say (Themes, below).
 
 ## Themes, colors, and fonts
 
-Settings ▸ Appearance picks a theme (Classic, Frost, Islands, Pop), a
-palette, a background tint, the appearance, the app font, and the code
-font, each apart from the others. The theme is how the app looks; the
+Settings ▸ Appearance picks a theme (Default or Islands), a palette, a
+background tint, the appearance, the app font, and the code font, each
+apart from the others. The theme is how the app looks; the
 palette and the background are its colors, and every theme takes every
 palette and background. Views use the tokens, which read the current look.
 
 - **A palette** is an accent color and the colors made from it: links,
-  labels, the prominent fill, and selected items' tints. Each is made for
-  one theme and each is a hue of its own: System (the Mac's accent color)
-  for Classic, Iris and Slate for Frost, Lagoon and Plum for Islands, and
-  Tangerine, Magenta, and Volt for Pop. A theme's default branch, renamed,
-  and deleted colors give way to others beside an accent near their hue.
+  the prominent fill, and selected items' tints. Each is a hue of its own:
+  System (the Mac's accent color), Iris (the default) and Slate (made for
+  Default), Lagoon and Plum (made for Islands), and Tangerine, Magenta, and
+  Volt. A theme's default branch and renamed colors give way to others
+  beside an accent near their hue.
 
-- **Frost** is quiet and precise: near-white and near-black
-  with almost no hue, a neutral wash for every selection, ink for the
-  prominent action, flat pills, one accent for focus and links, and lists
-  that fade out at an edge with more beyond it. The window is
-  glass: one plain blur with its tint, the chrome a wash lighter, the inset
-  card a panel darker, and lines, hover, selection, and fields as washes
-  on it.
+- **Default** is quiet and precise: near-white and near-black with almost
+  no hue, a neutral wash for every selection, ink for the prominent action,
+  flat pills, one accent for focus and links, and lists that fade out at an
+  edge with more beyond it. The window is glass: one plain blur with its
+  tint, the chrome a wash lighter, the inset card a panel darker, and lines,
+  hover, selection, and fields as washes on it.
 - **Islands** is calm and friendly: the panes float as cards on a sage
   backdrop (the floating layout), with soft pills and bold titles.
-- **Pop** is bright and confident: a sidebar tinted with the accent, a bar
-  beside the selected row, and saturated color in solid shapes.
 - **A background tint** (Neutral, Warm, Cool, Sage, Rose, Lavender) gives
-  any theme's surfaces its hue in place of the theme's own, faint on white
-  and stronger toward gray, each surface as light as before. Pop's sidebar
-  keeps its accent. The other themes can also take Classic's backgrounds.
+  a theme's surfaces its hue in place of the theme's own, faint on white
+  and stronger toward gray, each surface as light as before.
 
 ## Motion
 

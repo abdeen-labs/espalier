@@ -7,8 +7,8 @@ import SwiftUI
 ///
 /// The current branch's track takes the accent color; the trunk (track 0,
 /// the default branch's line) is the theme's default-branch color,
-/// Classic's teal (green beside a teal accent). Other tracks take the
-/// theme's tones (Classic's are pink, violet, orange, green, blue, and cyan),
+/// Default's cyan (green beside a blue or teal accent). Other tracks take
+/// the theme's tones (Default's are orange, pink, violet, blue, and green),
 /// without the entries near the accent's hue. A track a local branch
 /// starts takes that branch's color (`BranchColors`), so a line, its
 /// branch's tag, and its sidebar dot agree; other tracks take entry
@@ -19,24 +19,7 @@ public enum TrackPalette {
     /// (`Theme.toneColors`).
     nonisolated public enum Tone: String, CaseIterable, Sendable {
         case pink, violet, orange, green, blue, cyan
-
-        /// Classic's shade, light and dark: Tailwind's 600 and 400
-        /// shades.
-        public var color: NSColor {
-            switch self {
-            case .pink: .espalierDynamic(light: .hex(0xDB2777), dark: .hex(0xF472B6))
-            case .violet: .espalierDynamic(light: .hex(0x7C3AED), dark: .hex(0xA78BFA))
-            case .orange: .espalierDynamic(light: .hex(0xEA580C), dark: .hex(0xFB923C))
-            case .green: .espalierDynamic(light: .hex(0x16A34A), dark: .hex(0x4ADE80))
-            case .blue: .espalierDynamic(light: .hex(0x2563EB), dark: .hex(0x60A5FA))
-            case .cyan: .espalierDynamic(light: .hex(0x0891B2), dark: .hex(0x22D3EE))
-            }
-        }
     }
-
-    /// Classic's branch palette, in order, before the accent's neighbors are
-    /// skipped.
-    nonisolated public static let tones: [Tone] = [.pink, .violet, .orange, .green, .blue, .cyan]
 
     /// The default branch's color: the current theme's trunk.
     nonisolated public static var trunk: NSColor {

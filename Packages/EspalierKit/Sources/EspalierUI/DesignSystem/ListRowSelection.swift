@@ -24,15 +24,11 @@ extension View {
     /// a context menu's target (`contextMenuRow(_:)`), the target's ring. Put
     /// `.listRowBackground(Color.clear)` and the row insets on it as the
     /// list needs.
-    ///
-    /// - Parameter showsSelectionBar: A file list's row: selected, it shows
-    ///   the theme's bar at its leading edge, as History's and the sidebar's
-    ///   do (`SelectionBar`).
-    public func selectableRow(isSelected: Bool, showsSelectionBar: Bool = false) -> some View {
+    public func selectableRow(isSelected: Bool) -> some View {
         padding(.horizontal, Metrics.ListRow.horizontalPadding)
             .frame(minHeight: Metrics.ListRow.height)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(SelectableRowBackground(isSelected: isSelected, showsSelectionBar: showsSelectionBar))
+            .background(SelectableRowBackground(isSelected: isSelected))
             .turnsRowHighlightOff()
             .contentShape(RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
     }
@@ -69,17 +65,11 @@ extension Metrics {
 /// ring while it's a context menu's target.
 private struct SelectableRowBackground: View {
     let isSelected: Bool
-    let showsSelectionBar: Bool
     @Environment(\.isContextMenuTarget) private var isContextMenuTarget
 
     var body: some View {
         RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
             .fill(isSelected ? AnyShapeStyle(.accentSoft) : AnyShapeStyle(.clear))
-            .overlay {
-                if isSelected, showsSelectionBar {
-                    SelectionBar()
-                }
-            }
             .contextTargetRing(isContextMenuTarget)
     }
 }
@@ -193,63 +183,14 @@ private struct ListHighlightStyler: NSViewRepresentable {
     }
 }
 
-// MARK: - Selection marks
-
-extension Metrics {
-    /// The bar some themes (Pop) draw at a selected row's leading edge.
-    public enum SelectionBar {
-        public static let width: CGFloat = 3
-        /// Its inset from the row's top and bottom.
-        public static let verticalInset: CGFloat = 7
-        public static let cornerRadius: CGFloat = 1.5
-    }
-}
-
-/// The bar in the accent at a selected row's leading edge, in themes that
-/// draw one (`Theme.selectionBar`). Put it over the row's selection, in the
-/// selection's frame.
-struct SelectionBar: View {
-    var body: some View {
-        if Theme.current.selectionBar {
-            RoundedRectangle(cornerRadius: Metrics.SelectionBar.cornerRadius, style: .continuous)
-                .fill(Color.accent)
-                .frame(width: Metrics.SelectionBar.width)
-                .padding(.vertical, Metrics.SelectionBar.verticalInset)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .accessibilityHidden(true)
-        }
-    }
-}
-
-/// The selection bar for AppKit rows.
-@MainActor
-enum SelectionBarDrawing {
-    /// Draws the bar at the leading edge of `rect`, a selected row's
-    /// selection, when the theme has one.
-    static func draw(in rect: CGRect) {
-        guard Theme.current.selectionBar, rect.height > Metrics.SelectionBar.verticalInset * 2 else {
-            return
-        }
-        let bar = CGRect(
-            x: rect.minX,
-            y: rect.minY + Metrics.SelectionBar.verticalInset,
-            width: Metrics.SelectionBar.width,
-            height: rect.height - Metrics.SelectionBar.verticalInset * 2
-        )
-        Palette.accent.setFill()
-        NSBezierPath(roundedRect: bar, xRadius: Metrics.SelectionBar.cornerRadius, yRadius: Metrics.SelectionBar.cornerRadius).fill()
-    }
-}
+// MARK: - The sidebar's selection
 
 /// The sidebar's selected row: the theme's selection fill in the row's
-/// shape, and the accent bar at its leading edge (Pop).
+/// shape.
 struct SidebarSelectionFill: View {
     var body: some View {
         RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
             .fill(Color(nsColor: Theme.current.sidebarSelection))
-            .overlay {
-                SelectionBar()
-            }
     }
 }
 
@@ -263,8 +204,8 @@ extension ShapeStyle where Self == Color {
         return Color(nsColor: text)
     }
 
-    /// A sidebar row's symbol: the theme's selection symbol color (Classic's
-    /// accent) while the row is selected, else secondary text.
+    /// A sidebar row's symbol: the theme's selection symbol color while the
+    /// row is selected, else secondary text.
     static func sidebarRowIcon(isSelected: Bool) -> Color {
         isSelected ? Color(nsColor: Theme.current.sidebarSelectionIcon) : .text2
     }
@@ -272,24 +213,12 @@ extension ShapeStyle where Self == Color {
     /// A sidebar row's count (Changes', a stash's, a branch's behind count,
     /// a pull request's number): the theme's selection text while the row
     /// is selected in a theme whose counts take it
-    /// (`sidebarSelectionTintsCounts`), else the sidebar's tertiary text.
+    /// (`sidebarSelectionTintsCounts`), else tertiary text.
     static func sidebarRowCount(isSelected: Bool) -> Color {
         let theme = Theme.current
         if isSelected, theme.sidebarSelectionTintsCounts, let text = theme.sidebarSelectionText {
             return Color(nsColor: text)
         }
-        return .sidebarText3
-    }
-
-    /// The sidebar's tertiary text: the theme's (`Theme.sidebarText3`), else
-    /// tertiary text.
-    static var sidebarText3: Color {
-        Theme.current.sidebarText3.map { Color(nsColor: $0) } ?? .text3
-    }
-
-    /// An ahead count ("↑2"): the theme's (`Theme.aheadText`), else the
-    /// accent.
-    static var aheadText: Color {
-        Theme.current.aheadText.map { Color(nsColor: $0) } ?? .accent
+        return .text3
     }
 }

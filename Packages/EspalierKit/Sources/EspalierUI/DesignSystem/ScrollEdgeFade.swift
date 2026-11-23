@@ -1,5 +1,5 @@
 // A scrolling list's content fading out at an edge with more beyond it, in
-// a theme with a scroll edge fade (`Theme.scrollEdgeFade`, Frost's): no
+// a theme with a scroll edge fade (`Theme.scrollEdgeFade`, Default's): no
 // fade at the top while the list is at its top, nor at the bottom at its
 // end. Each edge's band is as deep as the content past the edge (a table's
 // rows, not its padding), up to the theme's, so the fade comes in as the

@@ -111,32 +111,15 @@ public enum ApplicationTheme: String, Sendable, Hashable, CaseIterable {
 /// (`ApplicationTheme`), the app font, and the code font. The raw values are
 /// the ones stored.
 public enum DesignTheme: String, Sendable, Hashable, CaseIterable {
-    /// The look Espalier had before themes.
-    case classic
-    case frost
+    /// The theme a new install opens in.
+    case `default`
     case islands
-    case pop
-
-    /// The theme's background tints, in the order Settings shows them:
-    /// every tint, and Classic's backgrounds on the other themes.
-    public var backgrounds: [BackgroundTint] {
-        switch self {
-        case .classic: BackgroundTint.allCases.filter { $0 != .classic }
-        case .frost, .islands, .pop: BackgroundTint.allCases
-        }
-    }
-
-    /// The background tint the theme draws for `tint`: `tint` where the
-    /// theme offers it, else the theme's own.
-    public func backgroundDrawn(for tint: BackgroundTint) -> BackgroundTint {
-        backgrounds.contains(tint) ? tint : .own
-    }
 }
 
 /// Espalier's palette: the accent color and the colors made from it (links,
 /// the prominent fill, selected items' tints), on every design theme. Each
-/// is made for one theme (`theme`), and each is a hue of its own. In the
-/// order Settings shows them, by theme; the raw values are the ones stored.
+/// is a hue of its own, and some are made for a theme (`theme`). In the
+/// order Settings shows them; the raw values are the ones stored.
 public enum DesignPalette: String, Sendable, Hashable, CaseIterable {
     /// The Mac's accent color.
     case system
@@ -144,25 +127,22 @@ public enum DesignPalette: String, Sendable, Hashable, CaseIterable {
     case lagoon, plum
     case tangerine, magenta, volt
 
-    /// The theme the palette is made for.
-    public var theme: DesignTheme {
+    /// The theme the palette is made for, if any.
+    public var theme: DesignTheme? {
         switch self {
-        case .system: .classic
-        case .iris, .slate: .frost
+        case .iris, .slate: .default
         case .lagoon, .plum: .islands
-        case .tangerine, .magenta, .volt: .pop
+        case .system, .tangerine, .magenta, .volt: nil
         }
     }
 }
 
 /// The tint of a design theme's backgrounds: its panes, sidebar, fields, and
-/// lines. The raw values are the ones stored.
+/// lines, in the order Settings shows them. The raw values are the ones
+/// stored.
 public enum BackgroundTint: String, Sendable, Hashable, CaseIterable {
     /// The theme's own backgrounds.
     case own
-    /// Classic's backgrounds, on the other themes
-    /// (`DesignTheme.backgrounds`).
-    case classic
     case neutral, warm, cool, sage, rose, lavender
 }
 
@@ -466,7 +446,7 @@ public final class Preferences {
         store.getEnum(PreferenceKey.theme, ApplicationTheme.self) ?? .system
     }
 
-    /// The design theme (`design-theme`; Classic by default).
+    /// The design theme (`design-theme`; Default by default).
     public var designTheme: DesignTheme {
         didSet {
             guard designTheme != oldValue else { return }
@@ -474,7 +454,7 @@ public final class Preferences {
         }
     }
 
-    /// The palette (`design-palette`; System by default), on every design
+    /// The palette (`design-palette`; Iris by default), on every design
     /// theme.
     public var designPalette: DesignPalette {
         didSet {
@@ -483,19 +463,13 @@ public final class Preferences {
         }
     }
 
-    /// The background tint chosen (`design-background`; the theme's own by
-    /// default), on every design theme. A theme that doesn't offer it draws
-    /// its own (`designThemeBackground`).
+    /// The background tint (`design-background`; the theme's own by
+    /// default), on every design theme.
     public var designBackground: BackgroundTint {
         didSet {
             guard designBackground != oldValue else { return }
             store.setEnum(PreferenceKey.designBackground, designBackground)
         }
-    }
-
-    /// The background tint the design theme draws.
-    public var designThemeBackground: BackgroundTint {
-        designTheme.backgroundDrawn(for: designBackground)
     }
 
     /// The app font (`app-font`; Geist by default).
@@ -514,16 +488,16 @@ public final class Preferences {
         }
     }
 
-    /// The design theme stored in `store`; an unknown one is Classic. The
+    /// The design theme stored in `store`; an unknown one is Default. The
     /// app applies it before the model loads, so its first windows open in
     /// it.
     public static func storedDesignTheme(in store: PreferenceStore) -> DesignTheme {
-        store.getEnum(PreferenceKey.designTheme, DesignTheme.self) ?? .classic
+        store.getEnum(PreferenceKey.designTheme, DesignTheme.self) ?? .default
     }
 
-    /// The palette stored in `store`; an unknown one is System.
+    /// The palette stored in `store`; an unknown one is Iris.
     public static func storedDesignPalette(in store: PreferenceStore) -> DesignPalette {
-        store.getEnum(PreferenceKey.designPalette, DesignPalette.self) ?? .system
+        store.getEnum(PreferenceKey.designPalette, DesignPalette.self) ?? .iris
     }
 
     /// The background tint stored in `store`; an unknown one is the

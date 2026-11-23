@@ -15,9 +15,8 @@
 // a list that fits doesn't scroll, and a longer one never scrolls past its
 // ends. The filter clears as it closes.
 //
-// The rail is flat: the `sidebar` color with a hairline on its trailing
-// edge (on the backdrop with none in the floating and inset card layouts),
-// its icons 36 square with the row radius, the hover wash under the pointer
+// The rail is the `sidebar` color (clear in the inset card layout, where
+// it's on the detail column's backdrop), its icons 36 square with the row radius, the hover wash under the pointer
 // and on the icon whose popover is open, and the selected one in the
 // sidebar's selection with its symbol in the selection's color.
 //
@@ -175,12 +174,6 @@ struct SidebarRail: View {
         .frame(maxHeight: .infinity, alignment: .top)
         // The inset card layout's rail is on the detail column's backdrop.
         .background(Color(espalier: InsetCard.isOn ? .clear : Palette.sidebar))
-        .overlay(alignment: .trailing) {
-            // The floating layout's rail sits on the backdrop, beside the
-            // cards, and the inset card layout's beside the card.
-            Hairline(.vertical)
-                .opacity(Theme.current.paneLayout.chromeIsBackdrop ? 0 : 1)
-        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Sidebar")
     }

@@ -1,7 +1,7 @@
 // A graph row's own drawing: the selection, the ring while its context menu
 // is open, and the drop and reorder feedback, as every History row draws
 // them (`HistoryRowDrawing`). It tells its cell when it's selected, so the
-// rings fill with the selection's tint.
+// nodes' gaps fill with the selection's tint.
 
 import AppKit
 
@@ -87,7 +87,6 @@ final class GraphRowView: NSTableRowView, ContextMenuTargetRowView {
             joinsAbove: isPreviousRowSelected,
             joinsBelow: isNextRowSelected
         ).fill()
-        SelectionBarDrawing.draw(in: HistoryRowDrawing.selectionRect(in: bounds))
     }
 
     // MARK: Drop feedback

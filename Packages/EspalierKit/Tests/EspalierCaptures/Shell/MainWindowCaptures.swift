@@ -8,7 +8,7 @@
 // Tags popovers.
 // The window stays up while its split view, toolbar, and diff finish, so
 // it's drawn in the run's look: `--look islands-lagoon` shows the panes as
-// cards on the backdrop, and `--look frost-iris` in one card inset in the
+// cards on the backdrop, and `--look default` in one card inset in the
 // glass chrome (which an offscreen window can't blur).
 
 import AppKit

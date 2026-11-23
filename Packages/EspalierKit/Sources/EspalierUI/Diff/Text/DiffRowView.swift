@@ -29,7 +29,7 @@ final class DiffRowView: NSTableRowView {
         true
     }
 
-    // Opaque but where the pane is clear (`Palette.pane`, Frost).
+    // Opaque but where the pane is clear (`Palette.pane`, Default).
     override var isOpaque: Bool {
         !Theme.current.cardIsGlass
     }

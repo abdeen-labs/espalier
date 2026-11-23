@@ -7,22 +7,20 @@
 // traffic lights, toolbar customization) and makes each piece opaque:
 //
 // - The sidebar's content is opaque: the list hides its scroll background
-//   and fills its column, under the titlebar too, with `Palette.sidebar`,
-//   with a hairline on its trailing edge (with the chrome's backdrop and
-//   no hairline in the inset card layout). The Liquid Glass behind it
-//   never shows.
+//   and fills its column, under the titlebar too, with `Palette.sidebar`
+//   (with the chrome's backdrop in the inset card layout). The Liquid Glass
+//   behind it never shows.
 // - The titlebar is transparent (`titlebarAppearsTransparent`), so the
 //   detail column draws the toolbar's band itself (`toolbarBand()`): the
-//   `background` color and a hairline below, in the content's own colors
-//   (the backdrop and no hairline in the floating layout; the backdrop, as
-//   glass in Frost, in the inset card layout: ChromeBackdrop.swift).
+//   backdrop in the floating layout; the backdrop, as glass in Default, in
+//   the inset card layout (ChromeBackdrop.swift).
 // - No toolbar item sits on a glass platter: SwiftUI's items hide theirs
 //   (`sharedBackgroundVisibility(.hidden)`), and the items SwiftUI adds on
 //   its own (the sidebar toggle) are made borderless as the toolbar adds
 //   them (`NSToolbarItem.isBordered`, which is what hides the platter).
-// - The window's own background is what the columns paint (the backdrop
-//   in the floating and inset card layouts), following the look, so what a
-//   moving column uncovers (the floating panes' nudge) matches it.
+// - The window's own background is what the columns paint (the backdrop),
+//   following the look, so what a moving column uncovers (the floating
+//   panes' nudge) matches it.
 
 import AppKit
 import SwiftUI
@@ -57,8 +55,7 @@ enum FlatWindowChrome {
     }
 
     /// Makes `window`'s titlebar transparent, so the content draws the
-    /// toolbar's band; the hairline below it is the content's too. Its
-    /// background follows the look from then on.
+    /// toolbar's band. Its background follows the look from then on.
     static func apply(to window: NSWindow) {
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
@@ -76,37 +73,30 @@ enum FlatWindowChrome {
         }
     }
 
-    /// The window's background: the backdrop in the floating and inset
-    /// card layouts, else `background`, as the columns paint.
+    /// The window's background: the backdrop, as the columns paint.
     private static func applyBackground(to window: NSWindow) {
-        let theme = Theme.current
-        window.backgroundColor = theme.paneLayout.chromeIsBackdrop ? theme.backdrop : Palette.background
+        window.backgroundColor = Theme.current.backdrop
     }
 }
 
-/// The toolbar's band over a column: the `background` color from the top
-/// of the window to the bottom of the toolbar, with a hairline as its last
-/// point. The content keeps to the safe area below it. In the floating
-/// layout the column and its band are the backdrop, with no hairline; in
-/// the inset card layout they're the chrome's backdrop (`ChromeBackdrop`),
-/// and the band draws nothing over the content, which keeps to its card.
+/// The toolbar's band over a column: the backdrop from the top of the
+/// window to a point above the bottom of the toolbar, where a floating
+/// card's ring starts. The content keeps to the safe area below it. In the
+/// floating layout the column and its band are the backdrop; in the inset
+/// card layout they're the chrome's backdrop (`ChromeBackdrop`), and the
+/// band draws nothing over the content, which keeps to its card.
 struct ToolbarBand: ViewModifier {
     func body(content: Content) -> some View {
-        let layout = Theme.current.paneLayout
-        let fill = layout.chromeIsBackdrop ? Theme.current.backdrop : Palette.background
+        let theme = Theme.current
         content
-            .background(ChromeSurface(fill).ignoresSafeArea())
+            .background(ChromeSurface(theme.backdrop).ignoresSafeArea())
             .overlay(alignment: .top) {
                 GeometryReader { proxy in
                     let height = proxy.safeAreaInsets.top
-                    VStack(spacing: 0) {
-                        Color(espalier: layout == .insetCard ? .clear : fill)
-                            .frame(height: max(height - 1, 0))
-                        Hairline()
-                            .opacity(layout.chromeIsBackdrop ? 0 : 1)
-                    }
-                    .frame(height: height)
-                    .offset(y: -height)
+                    Color(espalier: theme.paneLayout == .insetCard ? .clear : theme.backdrop)
+                        .frame(height: max(height - 1, 0))
+                        .frame(height: height, alignment: .top)
+                        .offset(y: -height)
                 }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
@@ -115,7 +105,7 @@ struct ToolbarBand: ViewModifier {
 }
 
 extension View {
-    /// Draws the flat toolbar's band over this column.
+    /// Draws the toolbar's band over this column.
     func toolbarBand() -> some View {
         modifier(ToolbarBand())
     }

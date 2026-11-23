@@ -19,7 +19,7 @@ struct SimpleListPresentation: Equatable {
     var hasRemote = true
     /// The search, while there is a query: rows that don't match dim.
     var search: HistorySearch?
-    /// HEAD's commit: its node is the bold ring and its title semibold.
+    /// HEAD's commit: its node is the bigger dot and its title semibold.
     var headSHA: String?
     /// The GitHub endpoint avatars load from.
     var avatarEndpoint: String?

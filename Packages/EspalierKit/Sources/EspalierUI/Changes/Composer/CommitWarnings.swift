@@ -392,9 +392,8 @@ extension AttributedString {
 }
 
 extension View {
-    /// The links in the warnings' text in the link color (`Palette.link`);
-    /// Classic's in the system's tint, its accent.
+    /// The links in the warnings' text in the link color (`Palette.link`).
     fileprivate func composerLinkTint() -> some View {
-        tint(Theme.current.theme == .classic ? nil : Color(nsColor: Palette.link))
+        tint(Color(nsColor: Palette.link))
     }
 }

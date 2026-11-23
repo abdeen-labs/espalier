@@ -77,7 +77,6 @@ final class SimpleRowView: NSTableRowView, ContextMenuTargetRowView {
             joinsAbove: isPreviousRowSelected,
             joinsBelow: isNextRowSelected
         ).fill()
-        SelectionBarDrawing.draw(in: HistoryRowDrawing.selectionRect(in: bounds))
     }
 
     /// Selected text keeps its colors on `accent soft`.

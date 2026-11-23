@@ -410,8 +410,8 @@ final class CommitRowCellView: NSTableCellView {
 
     // MARK: Selection
 
-    /// Whether the row is selected (`GraphRowView` says): rings fill with
-    /// the selection's tint. Text keeps its colors on the soft selection.
+    /// Whether the row is selected (`GraphRowView` says): the node's gap
+    /// fills with the selection's tint. Text keeps its colors on the soft selection.
     var isSelectedRow = false {
         didSet {
             guard isSelectedRow != oldValue else {

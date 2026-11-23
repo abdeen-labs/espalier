@@ -1,5 +1,5 @@
-// The colors of syntax tokens in diffs: eight styles on system colors
-// (Classic's), or the theme's own (`Theme.syntaxColors`).
+// The colors of syntax tokens in diffs: the theme's own
+// (`Theme.syntaxColors`), and the text color for a style it has none for.
 
 import AppKit
 import Synchronization
@@ -11,19 +11,6 @@ public enum TokenTheme {
         colors(in: Theme.current)[Int(style.rawValue)]
     }
 
-    /// Each style's system tone.
-    static func tone(for style: TokenStyle) -> SystemTone? {
-        switch style {
-        case .keyword: .purple
-        case .string: .red
-        case .comment: .gray
-        case .number: .blue
-        case .type: .teal
-        case .function: .indigo
-        case .operatorOrPunctuation, .plain: nil
-        }
-    }
-
     /// Each theme's colors, by style, worked out once.
     private static let cache = Mutex<[ObjectIdentifier: [NSColor]]>([:])
 
@@ -33,9 +20,7 @@ public enum TokenTheme {
             return colors
         }
         let colors = TokenStyle.allCases.map { style in
-            // Operators, punctuation, and plain text have no tone: the
-            // theme's text color.
-            theme.syntaxColors[style] ?? tone(for: style)?.base ?? theme.text
+            theme.syntaxColors[style] ?? theme.text
         }
         cache.withLock { $0[key] = colors }
         return colors

@@ -35,7 +35,7 @@ struct AIResolutionChanges: View {
                         .foregroundStyle(.text2)
                 }
                 .padding(.vertical, Metrics.grid)
-                .selectableRow(isSelected: path == selectedPath, showsSelectionBar: true)
+                .selectableRow(isSelected: path == selectedPath)
                 .tooltip(path)
                 .tag(path)
                 .listRowInsets(Metrics.ListRow.insets(isFirst: path == paths.first, isLast: path == paths.last))

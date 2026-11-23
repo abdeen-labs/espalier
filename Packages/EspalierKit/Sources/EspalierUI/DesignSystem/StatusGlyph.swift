@@ -61,8 +61,7 @@ nonisolated public enum FileStatusKind: String, CaseIterable, Sendable {
 }
 
 /// A file's status badge: its letter in the status color on a 15% tint, in
-/// a 17-point square with radius 6 (Classic's; a theme can fill it with the
-/// status color, and make it a circle).
+/// a 17-point square with radius 6, or a circle, as the theme has it.
 public struct StatusGlyph: View {
     private let kind: FileStatusKind
     @Environment(\.colorSchemeContrast) private var contrast

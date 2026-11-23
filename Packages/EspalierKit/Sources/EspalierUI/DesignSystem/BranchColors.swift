@@ -8,7 +8,7 @@ import AppKit
 /// The colors of a repository's branches.
 ///
 /// The current branch is the accent; the default branch is the trunk's
-/// color (Classic's teal). Every other local branch takes the palette entry its name hashes
+/// color. Every other local branch takes the palette entry its name hashes
 /// to, or, when a branch before it (by name) already has that entry, the
 /// next free one; once every entry is taken, the next branch starts over
 /// with its own entry. A remote branch has the color of the local branch

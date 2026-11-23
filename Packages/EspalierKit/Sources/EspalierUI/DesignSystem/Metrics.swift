@@ -24,12 +24,12 @@ public enum Metrics {
     /// Corner radii, four of them, the theme's but for sheets'; controls
     /// are capsules.
     public enum Radius {
-        /// Checkboxes and key caps (Classic's 5).
+        /// Checkboxes and key caps (Default's 5).
         public static var small: CGFloat { Theme.current.radii.small }
         /// Every list row: sidebar items, file rows, picker rows, and
-        /// History's simple rows (Classic's 9).
+        /// History's simple rows (Default's 8).
         public static var row: CGFloat { Theme.current.radii.row }
-        /// Cards, banners, action lists, and lists in sheets (Classic's 14).
+        /// Cards, banners, action lists, and lists in sheets (Default's 12).
         public static var card: CGFloat { Theme.current.radii.card }
         /// Sheets and popovers.
         public static let sheet: CGFloat = 22
@@ -85,7 +85,7 @@ public enum Metrics {
         /// The badge's corner radius in the current theme: the rounded
         /// square's, or half its side for a circle.
         public static var radius: CGFloat {
-            Theme.current.statusBadge.shape == .circle ? size / 2 : cornerRadius
+            Theme.current.statusBadgeShape == .circle ? size / 2 : cornerRadius
         }
     }
 
@@ -126,7 +126,7 @@ public enum Metrics {
         public static let barSegment: CGFloat = 0.3
     }
 
-    /// The window's toolbar: flat, with a hairline below.
+    /// The window's toolbar.
     public enum Toolbar {
         public static let height: CGFloat = 52
         /// The search field's width.
@@ -209,7 +209,7 @@ public enum Metrics {
             ceil(NSLayoutManager().defaultLineHeight(for: font) * 2)
         }
 
-        /// Lane pitch P: the theme's (Classic's 16).
+        /// Lane pitch P: the theme's (Default's 15).
         public static var lanePitch: CGFloat { Theme.current.graph.lanePitch }
         /// The pitch past `maxUncompressedLanes` lanes.
         public static let compressedLanePitch: CGFloat = 9
@@ -221,22 +221,11 @@ public enum Metrics {
         public static let trailingInset: CGFloat = 6
         public static let minimumColumnWidth: CGFloat = 36
         public static let maximumColumnWidth: CGFloat = 186
-        /// A commit is a ring: the radius of the stroke's center line, and
-        /// the stroke.
-        public static let nodeRadius: CGFloat = 5.25
-        public static let nodeStroke: CGFloat = 3
-        /// A merge commit is a small ring.
-        public static let mergeNodeRadius: CGFloat = 3.5
-        public static let mergeNodeStroke: CGFloat = 2.5
-        /// The current tip is a bold ring with a dot in it.
-        public static let headNodeRadius: CGFloat = 7.5
-        public static let headNodeStroke: CGFloat = 3.25
-        public static let headDotRadius: CGFloat = 2.75
         /// Nodes shrink by this much past `maxUncompressedLanes` lanes, so a
-        /// ring stays clear of the lines beside it.
+        /// node stays clear of the lines beside it.
         public static let compressedNodeScale: CGFloat = 0.65
         /// Lines have round caps and joins, the trunk's and the branches'
-        /// alike, in the theme's width (Classic's 3).
+        /// alike, in the theme's width (Default's 2).
         public static var trackStroke: CGFloat { Theme.current.graph.lineWidth }
         /// Added to every stroke under Increase Contrast.
         public static let increaseContrastStroke: CGFloat = 0.5

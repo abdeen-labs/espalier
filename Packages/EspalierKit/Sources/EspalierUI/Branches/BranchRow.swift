@@ -1,7 +1,7 @@
 // A branch's row in the sidebar's Branches section: the name (the current
 // branch's semibold, the one way it's marked; the default branch's dot is
-// the trunk's color, Classic's teal, and its tooltip says it's the
-// default), the branch's pull request, and how it compares with its
+// the trunk's color, and its tooltip says it's the default), the branch's
+// pull request, and how it compares with its
 // upstream ("↑2 ↓3", a dashed circle for not published, or its upstream
 // gone), in the same form on every row. Value-driven: `BranchRowContent`
 // is built from the models by `BranchesSectionContent`.
@@ -268,9 +268,8 @@ public struct BranchRow: View {
     }
 }
 
-/// The trailing comparison: "↑2" in the theme's ahead color (Classic's
-/// accent) and "↓3" as the sidebar's counts are
-/// (`sidebarRowCount(isSelected:)`), in SF Mono; a dashed circle, "Not
+/// The trailing comparison: "↑2" in the accent and "↓3" as the sidebar's
+/// counts are (`sidebarRowCount(isSelected:)`), in SF Mono; a dashed circle, "Not
 /// published" in its tooltip, for a branch that isn't published; a
 /// crossed-out cloud, with a tooltip, for a branch whose upstream is gone
 /// from its remote. Each takes one form whatever the row's width. Where
@@ -295,7 +294,7 @@ struct BranchTrackingView: View {
                     if ahead > 0 {
                         Text("↑\(BranchTracking.formatCompactCount(ahead, numberFormat))")
                             .font(Typography.aheadCount)
-                            .foregroundStyle(.aheadText)
+                            .foregroundStyle(.accent)
                             .contentTransition(motion.animates ? .numericText() : .identity)
                     }
                     if behind > 0 {

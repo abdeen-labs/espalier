@@ -22,7 +22,6 @@ final class RowAvatarView: NSView {
     fileprivate var monograms: MonogramCache?
     private var monogramVariant: AppearanceVariant?
     fileprivate var monogramShape: AvatarShape?
-    fileprivate var monogramTone: MonogramTone?
 
     fileprivate struct Identity: Equatable {
         var user: AvatarUser
@@ -86,7 +85,6 @@ final class RowAvatarView: NSView {
         self.monograms = monograms
         monogramVariant = variant
         monogramShape = Theme.current.avatarShape
-        monogramTone = Theme.current.monogramTone
         imageLayer.contents = monograms.image(
             name: identity.user.name,
             email: identity.user.email,
@@ -137,15 +135,14 @@ final class RowAvatarView: NSView {
     }
 }
 
-/// Monogram images by initials, color, size, appearance, and the theme's
-/// tone, drawn once each.
+/// Monogram images by initials, color, size, appearance, and shape, drawn
+/// once each.
 final class MonogramCache {
     private var images: [String: CGImage] = [:]
 
     func image(name: String, email: String, pointSize: CGFloat, scale: CGFloat, variant: AppearanceVariant, shape: AvatarShape = .circle) -> CGImage? {
         let hue = Monogram.hue(name: name, email: email)
-        let tone = Theme.current.monogramTone.map { "\($0.lightness)\($0.chroma)" } ?? ""
-        let key = "\(Monogram.initials(name: name, email: email))|\(hue)|\(pointSize)|\(scale)|\(variant.isDark)|\(shape)|\(tone)"
+        let key = "\(Monogram.initials(name: name, email: email))|\(hue)|\(pointSize)|\(scale)|\(variant.isDark)|\(shape)"
         if let image = images[key] {
             return image
         }
@@ -158,11 +155,10 @@ final class MonogramCache {
 }
 
 extension RowAvatarView: LookChangeObserving {
-    /// A monogram takes the look's avatar shape, as the image's mask does,
-    /// and its tone.
+    /// A monogram takes the look's avatar shape, as the image's mask does.
     func lookDidChange() {
         imageLayer.cornerRadius = AvatarClipShape.cornerRadius(Theme.current.avatarShape, side: min(bounds.width, bounds.height))
-        if let identity, let monograms, monogramShape != Theme.current.avatarShape || monogramTone != Theme.current.monogramTone {
+        if let identity, let monograms, monogramShape != Theme.current.avatarShape {
             showMonogram(identity, from: monograms)
         }
     }

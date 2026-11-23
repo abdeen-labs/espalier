@@ -28,8 +28,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/classic-dark.webp">
-    <img src=".github/readme/classic-light.webp" alt="Espalier showing a repository's branch sidebar, color-coded commit graph, and selected commit diff">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/default-dark.webp">
+    <img src=".github/readme/default-light.webp" alt="Espalier showing a repository's branch sidebar, color-coded commit graph, and selected commit diff">
   </picture>
 </p>
 
@@ -53,26 +53,18 @@
   using OpenAI, Anthropic, Azure OpenAI, or a local model on your Mac. API
   keys stay in your Keychain, and nothing is sent unless you configure a
   provider.
-- **Customizable interface.** Choose from four themes (Classic, Frost,
-  Islands, and Pop), tweak background tints, pick your UI and code fonts, and
-  match your Mac's light or dark appearance.
+- **Customizable interface.** Choose between two themes (Default and
+  Islands), tweak background tints, pick your UI and code fonts, and match
+  your Mac's light or dark appearance.
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/frost-dark.webp">
-    <img src=".github/readme/frost-light.webp" alt="Espalier using the Frost theme" width="32%">
-  </picture>
-  <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/readme/islands-dark.webp">
-    <img src=".github/readme/islands-light.webp" alt="Espalier using the Islands theme" width="32%">
-  </picture>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/pop-dark.webp">
-    <img src=".github/readme/pop-light.webp" alt="Espalier using the Pop theme" width="32%">
+    <img src=".github/readme/islands-light.webp" alt="Espalier using the Islands theme" width="64%">
   </picture>
 </p>
 
-<p align="center"><sub>The Frost, Islands, and Pop themes</sub></p>
+<p align="center"><sub>The Islands theme</sub></p>
 
 ## Building
 

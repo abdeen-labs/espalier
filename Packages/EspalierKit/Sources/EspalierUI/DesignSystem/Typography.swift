@@ -27,7 +27,7 @@ public enum Typography {
     public static var subheadline: Font { sans(.subheadline) }
     /// Meta lines: "Maya Chen · 12 min ago · 4 files" (11).
     public static var meta: Font { sans(.subheadline) }
-    /// A commit's title in its details: the theme's (Classic's is 15,
+    /// A commit's title in its details: the theme's (Default's is 16,
     /// semibold).
     public static var commitSummary: Font {
         let title = Theme.current.commitTitle
@@ -42,8 +42,8 @@ public enum Typography {
     public static var paneTitle: Font { sans(.headline) }
     /// A Settings row's title (13, medium).
     public static var rowTitle: Font { sans(.body, weight: .medium) }
-    /// Section labels, in the theme's size and weight (Classic's 10,
-    /// semibold): use `SectionLabel`, which adds the case and the tracking.
+    /// Section labels, in the theme's size and weight (Default's 12,
+    /// medium): use `SectionLabel`, which adds the case and the tracking.
     public static var sectionLabel: Font {
         let label = Theme.current.sectionLabel
         return sans(size: label.size, weight: label.weight, relativeTo: .caption)
@@ -61,7 +61,7 @@ public enum Typography {
         return Font.custom(mono.name(for: 500), size: size * Look.current.codeFont.scale, relativeTo: .caption)
     }
     /// The tracking of section labels: the theme's, in ems of their size
-    /// (Classic's 0.07 em of 10 points).
+    /// (Islands' 0.08 em of 10 points).
     public static var sectionLabelTracking: CGFloat {
         let label = Theme.current.sectionLabel
         return label.size * label.tracking
@@ -87,10 +87,10 @@ public enum Typography {
     /// the keys' symbols.
     public static let keyCap: Font = .caption.weight(.medium)
     /// Quiet and secondary buttons' titles (13, in the theme's weight:
-    /// Classic's medium; 12 when small).
+    /// Default's regular; 12 when small).
     public static var button: Font { sans(.body, weight: Theme.current.buttonWeights.quiet) }
-    /// Prominent buttons' titles (13, in the theme's weight: Classic's
-    /// semibold).
+    /// Prominent buttons' titles (13, in the theme's weight: Default's
+    /// medium).
     public static var prominentButton: Font { sans(.body, weight: Theme.current.buttonWeights.prominent) }
     /// Small buttons' titles (12, in the quiet weight).
     public static var smallButton: Font { sans(.callout, weight: Theme.current.buttonWeights.quiet) }
@@ -319,9 +319,8 @@ extension NSFont {
     }
 }
 
-/// A section label in the theme's style (Classic's: uppercase, 10
-/// semibold with 0.07 em tracking, tertiary), and its count in the mono
-/// ("BRANCHES 5").
+/// A section label in the theme's style (Default's: as written, 12
+/// medium, tertiary), and its count in the mono ("Branches 5").
 public struct SectionLabel: View {
     private let title: String
     private let count: Int?
@@ -345,7 +344,7 @@ public struct SectionLabel: View {
                     .opacity(0.8)
             }
         }
-        .foregroundStyle(Color(nsColor: style.color ?? Palette.text3))
+        .foregroundStyle(.text3)
         .lineLimit(1)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(count.map { "\(title), \(formatCount($0, numberFormat))" } ?? title)

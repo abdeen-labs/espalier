@@ -186,34 +186,26 @@ struct PreferencesTests {
         let temporary = try TemporaryDefaults()
         defer { temporary.remove() }
         let preferences = Preferences(store: PreferenceStore(temporary.defaults))
-        #expect(preferences.designTheme == .classic)
-        #expect(preferences.designPalette == .system)
+        #expect(preferences.designTheme == .default)
+        #expect(preferences.designPalette == .iris)
         #expect(preferences.designBackground == .own)
         #expect(preferences.appFont == .geist)
         #expect(preferences.codeFont == .geistMono)
 
-        preferences.designPalette = .tangerine
+        preferences.designPalette = .plum
         preferences.designBackground = .warm
-        preferences.designTheme = .frost
         preferences.designTheme = .islands
         // A palette and background chosen on one theme are every theme's.
-        #expect(preferences.designPalette == .tangerine)
-        #expect(preferences.designThemeBackground == .warm)
-        preferences.designBackground = .classic
+        #expect(preferences.designPalette == .plum)
+        #expect(preferences.designBackground == .warm)
         preferences.appFont = .atkinson
         preferences.codeFont = .atkinsonMono
         #expect(storedKeys(temporary) == ["design-theme", "design-palette", "design-background", "app-font", "code-font"])
 
         let reloaded = Preferences(store: PreferenceStore(temporary.defaults))
         #expect(reloaded.designTheme == .islands)
-        #expect(reloaded.designPalette == .tangerine)
-        #expect(reloaded.designThemeBackground == .classic)
-        // Classic draws its own backgrounds for Classic's, and keeps the
-        // choice for the other themes.
-        reloaded.designTheme = .classic
-        #expect(reloaded.designThemeBackground == .own)
-        reloaded.designTheme = .pop
-        #expect(reloaded.designThemeBackground == .classic)
+        #expect(reloaded.designPalette == .plum)
+        #expect(reloaded.designBackground == .warm)
         #expect(reloaded.appFont == .atkinson)
         #expect(reloaded.codeFont == .atkinsonMono)
 
@@ -224,8 +216,8 @@ struct PreferencesTests {
         // A font of the other kind isn't one of these.
         temporary.defaults.set("atkinson", forKey: "code-font")
         let unknown = Preferences(store: PreferenceStore(temporary.defaults))
-        #expect(unknown.designTheme == .classic)
-        #expect(unknown.designPalette == .system)
+        #expect(unknown.designTheme == .default)
+        #expect(unknown.designPalette == .iris)
         #expect(unknown.designBackground == .own)
         #expect(unknown.appFont == .geist)
         #expect(unknown.codeFont == .geistMono)

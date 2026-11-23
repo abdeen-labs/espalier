@@ -1,9 +1,8 @@
 // A compact gallery of what the themes and fonts change, in light and
 // dark: the sidebar with its selection and a section label, a few graph
 // rows, two History rows with ref tags (one selected), the buttons, a
-// commit's title, and file badges. Each theme in each palette, each
-// background tint on Classic, Classic's backgrounds on the other themes, and
-// each app font and code font on Classic.
+// commit's title, and file badges. Each theme in each palette, and each
+// background tint, app font, and code font on Default.
 
 import AppKit
 import EspalierCore
@@ -24,22 +23,17 @@ struct ThemeGalleryCaptures {
         capture(ThemeGallery(), named: "gallery", area: area, look: look)
     }
 
-    @Test("each background tint on Classic", arguments: DesignTheme.classic.backgrounds.filter { $0 != .own })
+    @Test("each background tint on Default", arguments: BackgroundTint.allCases.filter { $0 != .own })
     func backgrounds(_ background: BackgroundTint) {
         capture(ThemeGallery(), named: "gallery", area: area, look: Look(background: background))
     }
 
-    @Test("Classic's backgrounds on the other themes", arguments: [DesignTheme.frost, .islands, .pop])
-    func classicBackgrounds(_ theme: DesignTheme) {
-        capture(ThemeGallery(), named: "gallery", area: area, look: Look(theme: theme, background: .classic))
-    }
-
-    @Test("each app font on Classic", arguments: [AppFont.sf, .fixel, .atkinson, .martian])
+    @Test("each app font on Default", arguments: [AppFont.sf, .fixel, .atkinson, .martian])
     func appFonts(_ font: AppFont) {
         capture(ThemeGallery(), named: "gallery", area: area, look: Look(appFont: font))
     }
 
-    @Test("each code font on Classic", arguments: [CodeFont.sfMono, .atkinsonMono])
+    @Test("each code font on Default", arguments: [CodeFont.sfMono, .atkinsonMono])
     func codeFonts(_ font: CodeFont) {
         capture(ThemeGallery(), named: "gallery", area: area, look: Look(codeFont: font))
     }
@@ -185,7 +179,7 @@ private struct GalleryHistoryRow: View {
             Spacer(minLength: 0)
         }
         .frame(height: Metrics.RowHeight.history)
-        .selectableRow(isSelected: isSelected, showsSelectionBar: true)
+        .selectableRow(isSelected: isSelected)
         .frame(width: 380)
     }
 }

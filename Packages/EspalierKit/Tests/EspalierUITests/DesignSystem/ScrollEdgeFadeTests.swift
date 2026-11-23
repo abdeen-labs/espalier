@@ -1,7 +1,7 @@
 // Which edges of a scrolling list fade, and how deep, at a scroll position:
 // none at an end, a band that grows with the content past an edge up to the
 // look's, measured inside the content insets; a scroll view's mask, there
-// while an edge fades in Frost, following the scroll, and gone in a look
+// while an edge fades in Default, following the scroll, and gone in a look
 // without the fade; and a row scrolled into view, clear of the fade.
 
 import AppKit
@@ -60,19 +60,19 @@ struct ScrollEdgeFadeTests {
         #expect(bands == position.bands)
     }
 
-    @Test("in Frost the mask is there while an edge fades and follows the scroll; a look without the fade has none")
+    @Test("in Default the mask is there while an edge fades and follows the scroll; a look without the fade has none")
     func mask() throws {
         let scrollView = NSScrollView(frame: CGRect(x: 0, y: 0, width: 300, height: 300))
         scrollView.documentView = FlippedDocument(frame: CGRect(x: 0, y: 0, width: 300, height: 1_000))
         let clipView = scrollView.contentView
-        let fade = Look.with(Look(theme: .frost)) {
+        let fade = Look.with(.default) {
             ScrollEdgeFade(scrollView)
         }
         #expect(fade.bands == ScrollEdgeFadeBands(top: 0, bottom: 24))
         let layer = try #require(clipView.layer)
         let mask = try #require(layer.mask)
 
-        Look.with(Look(theme: .frost)) {
+        Look.with(.default) {
             clipView.scroll(to: CGPoint(x: 0, y: 400))
         }
         #expect(fade.bands == ScrollEdgeFadeBands(top: 24, bottom: 24))
@@ -80,13 +80,13 @@ struct ScrollEdgeFadeTests {
         #expect(mask.frame == layer.bounds)
         #expect(mask.frame.minY == 400)
 
-        Look.with(Look(theme: .frost)) {
+        Look.with(.default) {
             clipView.scroll(to: CGPoint(x: 0, y: 0))
         }
         #expect(fade.bands == ScrollEdgeFadeBands(top: 0, bottom: 24))
         #expect(mask.frame == layer.bounds)
 
-        Look.with(.classic) {
+        Look.with(Look(theme: .islands)) {
             fade.update()
         }
         #expect(fade.bands == .none)
@@ -108,22 +108,22 @@ struct ScrollEdgeFadeTests {
         scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 30, right: 0)
         scrollView.documentView = table
         table.frame = CGRect(x: 0, y: 0, width: 300, height: 150)
-        let fade = Look.with(Look(theme: .frost)) {
+        let fade = Look.with(.default) {
             ScrollEdgeFade(scrollView)
         }
         #expect(fade.bands == .none)
 
         rows.count = 8
-        Look.with(Look(theme: .frost)) {
+        Look.with(.default) {
             table.reloadData()
             fade.update()
         }
         #expect(fade.bands == ScrollEdgeFadeBands(top: 0, bottom: 24))
     }
 
-    @Test("a file selected below the list scrolls into view clear of the fade in Frost, to the list's edge in Classic", arguments: [
-        NamedCase("Frost", (look: Look(theme: .frost), clearance: CGFloat(24))),
-        NamedCase("Classic", (look: Look.classic, clearance: CGFloat(0))),
+    @Test("a file selected below the list scrolls into view clear of the fade in Default, to the list's edge in Islands", arguments: [
+        NamedCase("Default", (look: Look.default, clearance: CGFloat(24))),
+        NamedCase("Islands", (look: Look(theme: .islands), clearance: CGFloat(0))),
     ])
     func selectionClearsTheFade(_ testCase: NamedCase<(look: Look, clearance: CGFloat)>) {
         let controller = HistoryFileListController()

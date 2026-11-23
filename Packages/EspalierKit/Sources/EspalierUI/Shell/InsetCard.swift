@@ -1,7 +1,7 @@
-// The inset card layout (`PaneLayout.insetCard`, Frost). The window's
-// chrome is the backdrop (`ChromeBackdrop`, glass in Frost): the toolbar's
+// The inset card layout (`PaneLayout.insetCard`, Default). The window's
+// chrome is the backdrop (`ChromeBackdrop`, glass in Default): the toolbar's
 // band, the sidebar or the rail, and the margins around the card, with no
-// hairlines. The content is one card on it, the `cardFill` (in Frost, the
+// hairlines. The content is one card on it, the `cardFill` (in Default, the
 // background at 40% over the glass, the panes in it clear) in a rounded
 // rectangle (radius 10) with a 1-point ring in the `line` color inside
 // its edge, everything inside clipped to it: 8 from the window's
@@ -9,7 +9,7 @@
 // where the card starts), and none after the sidebar or the rail (whose
 // rows keep their own inset); as the sidebar shows and hides, the card
 // follows its edge and stops 8 from the window's. The panes in it lie edge
-// to edge, divided by hairlines, as in the flat layout.
+// to edge, divided by hairlines.
 //
 // With Commit Info showing, the card spans the detail's column and the
 // inspector's: the detail's part has the leading corners and no ring on its
@@ -54,15 +54,6 @@ enum InsetCard {
         /// Commit Info's part: the trailing corners, its leading ring the
         /// hairline before it.
         case trailing
-    }
-}
-
-extension PaneLayout {
-    /// Whether the window's chrome is the theme's backdrop, with no
-    /// hairlines between it and the panes: the floating and inset card
-    /// layouts.
-    var chromeIsBackdrop: Bool {
-        self != .flat
     }
 }
 

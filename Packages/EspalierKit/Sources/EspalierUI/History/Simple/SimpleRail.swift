@@ -1,11 +1,11 @@
 // The rail of History's simple list: the branch as one line. Each row draws
 // its part of one line in the branch's color, with the graph's nodes: HEAD's
-// commit a bold ring with a dot, other commits rings, merge commits small
-// rings. Whether a commit is pushed shows by its title, as in the graph. From
+// commit a bigger dot with a hole, other commits dots, merge commits dots
+// with a hole. Whether a commit is pushed shows by its title, as in the graph. From
 // the commit where the branch started, the line takes the base's color, so
 // where it began shows without a heading. A merge has a stub in the merged
 // branch's color that leaves on a short diagonal and fades out; expanded, the
-// merged commits sit on that stub, 16 to the right, with small rings, and it
+// merged commits sit on that stub, 16 to the right, with a merge's dots, and it
 // fades out below the last of them. Every color is a branch's
 // (`BranchColors`), so the rail matches the sidebar and the graph.
 
@@ -19,13 +19,13 @@ struct SimpleRail: Equatable {
     enum Node: Equatable {
         /// No node: the row is the status line under a merge's commits.
         case none
-        /// HEAD's commit: a bold ring with a dot.
+        /// HEAD's commit: a bigger dot with a hole.
         case head
-        /// A commit: a ring.
+        /// A commit: a dot.
         case commit
-        /// A merge commit: a small ring.
+        /// A merge commit: a dot with a hole.
         case merge
-        /// A commit a merge brought in, on the merge's stub: a small ring.
+        /// A commit a merge brought in, on the merge's stub: a merge's dot.
         case merged
     }
 
@@ -219,7 +219,7 @@ enum SimpleRailRenderer {
                 colors[color] = color.cgColor
             }
             let variant = AppearanceVariant.of(appearance)
-            // Clear on a clear pane (Frost's), where the row's fill behind
+            // Clear on a clear pane (Default's), where the row's fill behind
             // the rail shows.
             let base = Palette.pane.resolved(in: variant)
             background = (isSelected && !Theme.current.cardIsGlass ? ColorContrast.composite(Palette.accentSoft.resolved(in: variant), over: base) : base).cgColor
@@ -276,40 +276,14 @@ enum SimpleRailRenderer {
         }
         let center = CGPoint(x: rail.node == .merged ? x1 : x0, y: middle)
         let opacity = rail.isDimmed ? graph.searchDimming : 1
-        func circle(_ radius: CGFloat) -> CGRect {
-            CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
-        }
-        let nodeStyle = Theme.current.graph.node
         let size: GraphNodeSize? = switch rail.node {
         case .none: nil
         case .head: .head
         case .commit: .commit
         case .merge, .merged: .merge
         }
-        if let size, let dot = GraphDot(size, style: nodeStyle) {
+        if let size, let dot = GraphDot(size) {
             dot.draw(at: center, color: nodeColor, background: background, opacity: opacity, scale: 1, extraStroke: extraStroke, in: context)
-            return
-        }
-        func ring(radius: CGFloat, width: CGFloat) {
-            let width = width + extraStroke
-            // Filled with the background, so the lines stop at it.
-            context.knockOutEllipse(in: circle(radius + width / 2), background: background)
-            context.setAlpha(opacity)
-            context.setStrokeColor(nodeColor)
-            context.setLineWidth(width)
-            context.strokeEllipse(in: circle(radius))
-        }
-        switch rail.node {
-        case .none:
-            break
-        case .head:
-            ring(radius: graph.headNodeRadius, width: graph.headNodeStroke)
-            context.setFillColor(nodeColor)
-            context.fillEllipse(in: circle(graph.headDotRadius))
-        case .commit:
-            ring(radius: graph.nodeRadius, width: graph.nodeStroke)
-        case .merge, .merged:
-            ring(radius: graph.mergeNodeRadius, width: graph.mergeNodeStroke)
         }
     }
 

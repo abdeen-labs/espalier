@@ -208,7 +208,7 @@ private struct MenuRowView: View {
                 .font(Typography.sectionLabel)
                 .tracking(Typography.sectionLabelTracking)
                 .textCase(Theme.current.sectionLabel.isUppercase ? .uppercase : nil)
-                .foregroundStyle(Color(nsColor: Theme.current.sectionLabel.color ?? Palette.text3))
+                .foregroundStyle(.text3)
                 .lineLimit(1)
                 .padding(.leading, Metrics.Menu.rowPadding + leadingColumnsWidth)
                 .padding(.trailing, Metrics.Menu.rowPadding)

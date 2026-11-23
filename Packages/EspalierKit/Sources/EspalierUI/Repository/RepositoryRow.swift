@@ -333,7 +333,7 @@ struct RepositoryStatusIndicators: View {
                         if content.ahead > 0 {
                             Text(verbatim: "↑\(formatCount(content.ahead, numberFormat))")
                                 .font(Typography.aheadCount)
-                                .foregroundStyle(.aheadText)
+                                .foregroundStyle(.accent)
                                 .contentTransition(motion.animates ? .numericText() : .identity)
                                 .motion(Motion.kindChange, value: content.ahead)
                         }

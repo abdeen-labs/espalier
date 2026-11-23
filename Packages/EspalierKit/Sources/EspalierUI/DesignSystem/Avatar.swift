@@ -5,7 +5,7 @@
 import GitHubKit
 import SwiftUI
 
-/// An avatar in the theme's shape (a circle in Classic): the environment's
+/// An avatar in the theme's shape (a circle in Default): the environment's
 /// loader's image, or a monogram.
 public struct Avatar: View {
     private let identity: AvatarUser

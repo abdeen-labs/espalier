@@ -392,23 +392,16 @@ private struct FillingSegmentsLayout: Layout {
     }
 }
 
-/// The selected segment's capsule: a quiet capsule with its ring and small
-/// shadow, or the theme's segment selection, raised as the sidebar's card
-/// is.
+/// The selected segment's capsule: the theme's segment selection, raised by
+/// the theme's raised shadow and ring.
 private struct SegmentSelection: View {
     var body: some View {
         let theme = Theme.current
         let shape = Capsule(style: .circular)
-        if let fill = theme.segmentSelection {
-            shape
-                .fill(Color(nsColor: fill))
-                .shadow(color: Color(nsColor: theme.raisedShadow), radius: 1, y: 1)
-                .overlay(shape.strokeBorder(Color(nsColor: theme.raisedRing), lineWidth: 1))
-        } else {
-            shape
-                .fill(.clear)
-                .surface(.quiet, elevation: .quiet)
-        }
+        shape
+            .fill(Color(nsColor: theme.segmentSelection))
+            .shadow(color: Color(nsColor: theme.raisedShadow), radius: 1, y: 1)
+            .overlay(shape.strokeBorder(Color(nsColor: theme.raisedRing), lineWidth: 1))
     }
 }
 

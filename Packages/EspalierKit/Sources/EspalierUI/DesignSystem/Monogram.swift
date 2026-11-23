@@ -39,31 +39,29 @@ nonisolated public enum Monogram {
         return CGFloat(hash % 360) / 360
     }
 
-    /// The person's color: their hue in the theme's tone
-    /// (`Theme.monogramTone`), else Classic's.
+    /// The person's color: their hue in a muted tone.
     public static func color(name: String, email: String = "") -> NSColor {
         let hue = hue(name: name, email: email)
-        let tone = Theme.current.monogramTone
-        return .espalierDynamic(
-            light: shade(hue, tone: tone, isDark: false),
-            dark: shade(hue, tone: tone, isDark: true)
-        )
+        return .espalierDynamic(light: shade(hue, isDark: false), dark: shade(hue, isDark: true))
     }
 
     /// The person's color as it resolves in `variant`.
     public static func color(name: String, email: String = "", in variant: AppearanceVariant) -> NSColor {
-        shade(hue(name: name, email: email), tone: Theme.current.monogramTone, isDark: variant.isDark)
+        shade(hue(name: name, email: email), isDark: variant.isDark)
     }
 
-    /// `hue` (0 to 1, as HSB measures it) in `tone`, or in Classic's: the
-    /// OKLCH hue of that hue's pure color, at the tone's lightness and
-    /// chroma.
-    static func shade(_ hue: CGFloat, tone: MonogramTone?, isDark: Bool) -> NSColor {
-        let tone = tone ?? .classic
+    /// The colors' OKLCH lightness and chroma (as much chroma as sRGB holds
+    /// at the hue), in light and dark.
+    private static let lightness: (light: Double, dark: Double) = (0.64, 0.52)
+    private static let chroma: (light: Double, dark: Double) = (0.12, 0.09)
+
+    /// `hue` (0 to 1, as HSB measures it) as a monogram's color: the OKLCH
+    /// hue of that hue's pure color, at the monograms' lightness and chroma.
+    static func shade(_ hue: CGFloat, isDark: Bool) -> NSColor {
         let pure = NSColor(colorSpace: .sRGB, hue: hue, saturation: 1, brightness: 1, alpha: 1)
         return OKLCH.color(
-            lightness: Double(isDark ? tone.lightness.dark : tone.lightness.light),
-            chroma: Double(isDark ? tone.chroma.dark : tone.chroma.light),
+            lightness: isDark ? lightness.dark : lightness.light,
+            chroma: isDark ? chroma.dark : chroma.light,
             hue: OKLCH.hue(of: pure)
         )
     }
@@ -96,7 +94,7 @@ nonisolated struct AvatarClipShape: Shape {
     }
 }
 
-/// A monogram in the avatar's shape (a circle in Classic): initials on the
+/// A monogram in the avatar's shape (a circle in Default): initials on the
 /// person's color, or a person glyph when there are no initials.
 public struct MonogramView: View {
     private let initials: String

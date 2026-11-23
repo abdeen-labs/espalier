@@ -633,7 +633,7 @@ struct ChangedFilesList: View {
                     )) {
                         ForEach(files, id: \.id) { file in
                             ChangedFileRow(content: ChangedFileRowContent(file))
-                                .selectableRow(isSelected: file.id == selection.file?.id, showsSelectionBar: true)
+                                .selectableRow(isSelected: file.id == selection.file?.id)
                                 .contextMenuRow(file.id)
                                 .tag(file.id)
                                 .listRowInsets(Metrics.ListRow.insets(isFirst: file.id == files.first?.id, isLast: file.id == files.last?.id))

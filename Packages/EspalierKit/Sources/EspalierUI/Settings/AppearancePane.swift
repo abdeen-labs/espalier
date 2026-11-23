@@ -1,4 +1,4 @@
-// Settings ▸ Appearance: the theme (Classic, Frost, Islands, Pop) and the
+// Settings ▸ Appearance: the theme (Default or Islands) and the
 // app font; colors (the palette, System's the Mac's accent color, on any
 // theme; the background tint; the appearance, System, Light, or Dark); code
 // (the code font, its text size, the diff's tab size), dates and numbers,
@@ -120,8 +120,8 @@ struct AppearanceForm: View {
                 // The chosen palette's name, and the background's below,
                 // crossfade with the swatch's motion.
                 .contentTransition(motion.animates ? .opacity : .identity)
-                SettingsRow("Background", description: preferences.designThemeBackground.title) {
-                    SwatchPicker("Background", values: preferences.designTheme.backgrounds, selection: designBackground, title: \.title) { tint in
+                SettingsRow("Background", description: preferences.designBackground.title) {
+                    SwatchPicker("Background", values: BackgroundTint.allCases, selection: $preferences.designBackground, title: \.title) { tint in
                         Theme.named(preferences.designTheme, palette: preferences.designPalette, background: tint).backgroundSwatch
                     }
                 }
@@ -232,16 +232,6 @@ struct AppearanceForm: View {
 
     private static func title(_ format: TimeFormatPattern) -> String {
         AppearanceSettings.formatTitle(example: format.example, pattern: format.rawValue)
-    }
-
-    /// The background tint: the one the theme draws, setting the one
-    /// chosen.
-    private var designBackground: Binding<BackgroundTint> {
-        Binding {
-            preferences.designThemeBackground
-        } set: { tint in
-            preferences.designBackground = tint
-        }
     }
 
     /// The date format, the default when none (or an unknown one) is

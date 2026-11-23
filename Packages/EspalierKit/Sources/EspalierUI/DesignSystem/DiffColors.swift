@@ -131,11 +131,11 @@ public enum DiffColors {
 
     /// Conflict marker rows (`<<<<<<<`, `=======`, `>>>>>>>`).
     public static var conflictMarker: NSColor { Theme.current.diff.conflictMarker }
-    /// Our side of a conflict: the theme's (Classic's mint).
+    /// Our side of a conflict: the theme's (Default's cyan).
     public static var ours: NSColor { Theme.current.diff.ours }
     /// The common ancestor's lines, between ours and theirs: neutral.
-    public static let base = SystemTone.gray.tint(light: 0.09, dark: 0.12)
-    /// Their side of a conflict: the theme's (Classic's orange).
+    public static let base = Palette.tint(.systemGray, light: 0.09, dark: 0.12)
+    /// Their side of a conflict: the theme's (Default's orange).
     public static var theirs: NSColor { Theme.current.diff.theirs }
 
     /// A conflict block's lines, in a conflicted file drawn as blocks: its
@@ -152,7 +152,7 @@ public enum DiffColors {
 
     /// The common ancestor's block header: neutral, a step stronger than
     /// its lines (`base`).
-    public static let baseBlockHeader = SystemTone.gray.tint(light: 0.15, dark: 0.20)
+    public static let baseBlockHeader = Palette.tint(.systemGray, light: 0.15, dark: 0.20)
     /// The common ancestor's block header's name: quieter than a branch's.
     public static var baseBlockName: NSColor { Palette.text2 }
 

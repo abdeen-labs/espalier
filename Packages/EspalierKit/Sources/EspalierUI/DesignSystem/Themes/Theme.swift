@@ -2,15 +2,14 @@
 // shape, and mark Espalier draws with that differs between looks.
 // `Palette`, `DiffColors`, `TrackPalette`, `Typography`, and `Metrics` read
 // the current theme (`Theme.current`), so views never pick a theme
-// themselves. Each theme is defined in its own file (ClassicTheme.swift,
-// FrostTheme.swift, IslandsTheme.swift, PopTheme.swift) as a
-// `ThemeDefinition` made from a palette's colors (Palettes.swift), which a
-// background tint re-hues (BackgroundTints.swift); the colors and marks
-// derived from it (status colors, diff tints, branch colors) are worked out
-// once per theme, palette, and tint. A theme's trunk, renamed, and deletion
-// colors give way to others where the palette's accent is near their hue,
-// and the branch tones near the accent are left out, so the current
-// branch, the default branch, and file statuses stay apart in every
+// themselves. Each theme is defined in its own file (DefaultTheme.swift,
+// IslandsTheme.swift) as a `ThemeDefinition` made from a palette's colors
+// (Palettes.swift), which a background tint re-hues (BackgroundTints.swift);
+// the colors and marks derived from it (status colors, diff tints, branch
+// colors) are worked out once per theme, palette, and tint. A theme's trunk
+// and renamed colors give way to others where the palette's accent is near
+// their hue, and the branch tones near the accent are left out, so the
+// current branch, the default branch, and file statuses stay apart in every
 // palette. Hues are OKLCH's, which puts colors that look alike near each
 // other.
 
@@ -52,21 +51,20 @@ nonisolated public final class Theme: Sendable {
     /// do, or lie flat.
     public let quietControl: NSColor
     public let quietControlIsRaised: Bool
-    /// The segmented control's selected segment: nil is a quiet capsule
-    /// with its ring and small shadow; else this fill, raised by
+    /// The segmented control's selected segment: this fill, raised by
     /// `raisedShadow` and `raisedRing`.
-    public let segmentSelection: NSColor?
+    public let segmentSelection: NSColor
     /// The dim over a window behind a sheet or an alert.
     public let scrim: NSColor
     /// What the panes float on in the floating cards layout (Islands), and
-    /// what the card is inset in in the inset card layout (Frost).
+    /// what the card is inset in in the inset card layout (Default).
     public let backdrop: NSColor
     /// The backdrop as glass, in the main window's inset card layout: the
     /// backdrop color over a blur of what's behind the window; nil is the
     /// backdrop color, opaque.
     public let backdropGlass: GlassStyle?
     /// Whether the content's card is glass too: the inset card on the
-    /// backdrop's glass (Frost's), its fill `cardFill` over the glass and
+    /// backdrop's glass (Default's), its fill `cardFill` over the glass and
     /// its panes clear, so the glass shows through the whole window.
     public let cardIsGlass: Bool
     /// What the panes in the main window's content fill with: clear where
@@ -139,8 +137,8 @@ nonisolated public final class Theme: Sendable {
 
     /// The diff's line and change tints, markers, and find match.
     public let diff: DiffTints
-    /// Syntax tokens' colors, by style; a style missing here is its system
-    /// tone (the text color for operators and punctuation).
+    /// Syntax tokens' colors, by style; a style missing here is the text
+    /// color.
     public let syntaxColors: [TokenStyle: NSColor]
 
     // MARK: Branches
@@ -151,7 +149,7 @@ nonisolated public final class Theme: Sendable {
     /// for an accent near the trunk's hue, in order.
     private let branches: [BranchTones]
     /// Each tone as lines, dots, and tags draw it.
-    let toneColors: [TrackPalette.Tone: NSColor]
+    private let toneColors: ToneColors
 
     // MARK: Selection
 
@@ -162,20 +160,11 @@ nonisolated public final class Theme: Sendable {
     public let sidebarSelectionIcon: NSColor
     /// A selected row in History's and the file lists.
     public let listSelection: NSColor
-    /// Whether a selected row shows a bar in the accent at its leading
-    /// edge: the sidebar, History, and the file lists.
-    public let selectionBar: Bool
     /// Whether the sidebar's selected item's title is bold (else medium).
     public let sidebarSelectionIsBold: Bool
     /// Whether the sidebar's selected item's counts take its title's
     /// color, `sidebarSelectionText`.
     public let sidebarSelectionTintsCounts: Bool
-    /// The sidebar's tertiary text: its counts, pull request numbers, and
-    /// header buttons; nil is tertiary text.
-    public let sidebarText3: NSColor?
-    /// The ahead count ("↑2") in the sidebar and the repository list; nil
-    /// is the accent.
-    public let aheadText: NSColor?
 
     // MARK: Type and shape
 
@@ -190,10 +179,8 @@ nonisolated public final class Theme: Sendable {
 
     public let graph: GraphStyle
     public let refTag: RefTagStyle
-    public let statusBadge: StatusBadgeStyle
+    public let statusBadgeShape: StatusBadgeShape
     public let avatarShape: AvatarShape
-    /// Monograms' colors; nil is Classic's muted tones.
-    public let monogramTone: MonogramTone?
     /// How the panes sit in the window.
     public let paneLayout: PaneLayout
     /// Capsule controls' surfaces.
@@ -219,7 +206,7 @@ nonisolated public final class Theme: Sendable {
         quietControlIsRaised = definition.quietControlIsRaised
         segmentSelection = definition.segmentSelection
         scrim = definition.scrim
-        backdrop = definition.backdrop ?? definition.background
+        backdrop = definition.backdrop
         backdropGlass = definition.backdropGlass
         raisedShadow = definition.raisedShadow
         raisedRing = definition.raisedRing
@@ -268,7 +255,7 @@ nonisolated public final class Theme: Sendable {
         } : background
         link = definition.linkBase ?? accent
 
-        let delete = Theme.apart(from: accent, [definition.delete, definition.deleteNearAccent].compactMap { $0 }, clearance: Theme.nearAccentHue)
+        let delete = definition.delete
         let renamed = Theme.apart(from: accent, [definition.renamed, definition.renamedNearAccent].compactMap { $0 }, clearance: Theme.nearAccentHue)
         add = definition.add
         self.delete = delete
@@ -288,20 +275,8 @@ nonisolated public final class Theme: Sendable {
             }
             return (kind, color)
         })
-        switch definition.statusBadge.fill {
-        case .tinted:
-            statusForegrounds = statusColors
-            statusBackgrounds = statusColors.mapValues { Palette.tint($0, light: Palette.statusTint.light, dark: Palette.statusTint.dark) }
-        case .solid:
-            statusBackgrounds = statusColors.mapValues { color in
-                NSColor.espalierDynamic { variant in color.resolved(in: variant) }
-            }
-            statusForegrounds = statusColors.mapValues { color in
-                NSColor.espalierDynamic { variant in
-                    Theme.legibleText(on: color.resolved(in: variant), light: .white, dark: .hex(0x111116))
-                }
-            }
-        }
+        statusForegrounds = statusColors
+        statusBackgrounds = statusColors.mapValues { Palette.tint($0, light: Palette.statusTint.light, dark: Palette.statusTint.dark) }
         checksColors = [
             .success: definition.add,
             .failure: delete,
@@ -314,19 +289,14 @@ nonisolated public final class Theme: Sendable {
 
         trunk = Theme.apart(from: accent, definition.branches.map(\.trunk), clearance: Theme.trunkClearance)
         branches = definition.branches
-        toneColors = Dictionary(uniqueKeysWithValues: TrackPalette.Tone.allCases.map { tone in
-            (tone, definition.toneColors[tone] ?? tone.color)
-        })
+        toneColors = definition.toneColors
 
         sidebarSelection = definition.sidebarSelection
         sidebarSelectionText = definition.sidebarSelectionText
         sidebarSelectionIcon = definition.sidebarSelectionIcon ?? accent
         listSelection = accentSoft
-        selectionBar = definition.selectionBar
         sidebarSelectionIsBold = definition.sidebarSelectionIsBold
         sidebarSelectionTintsCounts = definition.sidebarSelectionTintsCounts
-        sidebarText3 = definition.sidebarText3
-        aheadText = definition.aheadText
 
         sectionLabel = definition.sectionLabel
         radii = definition.radii
@@ -334,9 +304,8 @@ nonisolated public final class Theme: Sendable {
         buttonWeights = definition.buttonWeights
         graph = definition.graph
         refTag = definition.refTag
-        statusBadge = definition.statusBadge
+        statusBadgeShape = definition.statusBadgeShape
         avatarShape = definition.avatarShape
-        monogramTone = definition.monogramTone
         paneLayout = definition.paneLayout
         controls = definition.controls
         scrollEdgeFade = definition.scrollEdgeFade
@@ -344,7 +313,7 @@ nonisolated public final class Theme: Sendable {
 
     /// A tone's color as lines, dots, and tags draw it in this theme.
     func color(of tone: TrackPalette.Tone) -> NSColor {
-        toneColors[tone] ?? tone.color
+        toneColors[tone]
     }
 
     /// The tones branches other than the current and default ones take
@@ -409,11 +378,6 @@ nonisolated public final class Theme: Sendable {
     /// degrees.
     static let trunkClearance = 50.0
 
-    /// White or `dark` on `fill`, whichever reads better.
-    static func legibleText(on fill: NSColor, light: NSColor, dark: NSColor) -> NSColor {
-        ColorContrast.ratio(light, fill) >= ColorContrast.ratio(dark, fill) ? light : dark
-    }
-
     /// Below this contrast on the accent, white marks give way to the
     /// background (`onAccent`, in a theme that sets none): only a
     /// near-white accent, none of the Mac's.
@@ -432,10 +396,8 @@ nonisolated extension Theme {
         return named(look.theme, palette: look.palette, background: look.background)
     }
 
-    /// `theme` in `palette`, its backgrounds in `background` (its own when
-    /// not one it offers), made once.
-    public static func named(_ theme: DesignTheme, palette: DesignPalette = .system, background: BackgroundTint = .own) -> Theme {
-        let background = theme.backgroundDrawn(for: background)
+    /// `theme` in `palette`, its backgrounds in `background`, made once.
+    public static func named(_ theme: DesignTheme, palette: DesignPalette = .iris, background: BackgroundTint = .own) -> Theme {
         let key = ThemeKey(theme: theme, palette: palette, background: background)
         if let made = ThemeCache.themes.withLock({ $0[key] }) {
             return made
@@ -452,10 +414,8 @@ nonisolated extension Theme {
 
     private static func definition(_ theme: DesignTheme, palette: PaletteColors) -> ThemeDefinition {
         switch theme {
-        case .classic: .classic(palette)
-        case .frost: .frost(palette)
+        case .default: .default(palette)
         case .islands: .islands(palette)
-        case .pop: .pop(palette)
         }
     }
 }
@@ -474,12 +434,10 @@ nonisolated private enum ThemeCache {
 
 /// How the panes sit in the window.
 nonisolated public enum PaneLayout: Sendable, Equatable {
-    /// Edge to edge, divided by hairlines.
-    case flat
     /// Cards floating on the backdrop (Islands).
     case floatingCards
     /// One card inset in the backdrop, the panes in it edge to edge and
-    /// divided by hairlines (Frost).
+    /// divided by hairlines (Default).
     case insetCard
 }
 
@@ -501,8 +459,6 @@ nonisolated public struct SectionLabelStyle: Sendable, Equatable {
     public var weight: Font.Weight
     /// Letter spacing, in ems.
     public var tracking: CGFloat
-    /// The color; nil is tertiary text.
-    public var color: NSColor?
 }
 
 /// Corner radii.
@@ -513,8 +469,8 @@ nonisolated public struct ThemeRadii: Sendable, Equatable {
     public var card: CGFloat
     /// Checkboxes and key caps.
     public var small: CGFloat
-    /// Ref tags: nil is a capsule.
-    public var tag: CGFloat?
+    /// Ref tags.
+    public var tag: CGFloat
 }
 
 /// A title's size at the default text size, and its weight.
@@ -525,68 +481,25 @@ nonisolated public struct TitleStyle: Sendable, Equatable {
 
 /// The history graph's look.
 nonisolated public struct GraphStyle: Sendable, Equatable {
-    /// How a commit is drawn.
-    public enum Node: Sendable, Equatable {
-        /// A ring filled with the row's background (Classic).
-        case ring
-        /// A filled dot with a gap around it.
-        case dot
-        /// A filled dot; the current commit with a soft halo (Pop).
-        case haloedDot
-    }
-
     /// The lines' width.
     public var lineWidth: CGFloat
     /// The space between lanes.
     public var lanePitch: CGFloat
-    public var node: Node
 }
 
-/// Ref tags' look.
-nonisolated public struct RefTagStyle: Sendable, Equatable {
-    public enum Fill: Sendable, Equatable {
-        /// The branch's color at an alpha, the text in it, mixed toward
-        /// `ink` (light) or white (dark) by the fraction given; nil keeps
-        /// the branch's color (Classic).
-        case tinted(alpha: (light: CGFloat, dark: CGFloat), textMix: (light: CGFloat, dark: CGFloat)?, ink: UInt32)
-        /// The branch's color, solid: deepened by `darken` with white text
-        /// in light, as it is with dark text in dark.
-        case solid(darken: CGFloat)
-
-        public static func == (lhs: Fill, rhs: Fill) -> Bool {
-            switch (lhs, rhs) {
-            case let (.tinted(a, b, c), .tinted(d, e, f)):
-                a == d && b?.light == e?.light && b?.dark == e?.dark && c == f
-            case let (.solid(a), .solid(b)):
-                a == b
-            default:
-                false
-            }
-        }
-    }
-
-    public var fill: Fill
-    /// The current branch's tag: the accent with white text (Classic), or
-    /// the prominent fill and its text.
-    public var currentUsesProminent: Bool
+/// A local branch's ref tag: the branch's color at an alpha, the text in the
+/// branch's color mixed toward `ink` (light) or white (dark) by a fraction.
+/// The current branch's tag is the prominent fill and its text.
+nonisolated public struct RefTagStyle: Sendable {
+    public var alpha: (light: CGFloat, dark: CGFloat)
+    public var textMix: (light: CGFloat, dark: CGFloat)
+    public var ink: UInt32
 }
 
-/// The file status badge's look.
-nonisolated public struct StatusBadgeStyle: Sendable, Equatable {
-    public enum Fill: Sendable, Equatable {
-        /// The status color at 15%, its letter in the status color.
-        case tinted
-        /// The status color, its letter white or dark.
-        case solid
-    }
-
-    public enum Shape: Sendable, Equatable {
-        case roundedSquare
-        case circle
-    }
-
-    public var fill: Fill
-    public var shape: Shape
+/// The file status badge's shape.
+nonisolated public enum StatusBadgeShape: Sendable, Equatable {
+    case roundedSquare
+    case circle
 }
 
 /// The avatar's shape.
@@ -604,7 +517,8 @@ nonisolated public struct ControlStyle: Sendable, Equatable {
     /// are the ones on the backdrop.
     public var flatInCards: Bool
 
-    /// Classic's: no prominent shadow; quiet capsules raised everywhere.
+    /// No prominent shadow, and quiet capsules the same in a card as out
+    /// of one.
     public static let standard = ControlStyle(prominentShadow: nil, flatInCards: false)
 }
 
@@ -613,23 +527,6 @@ nonisolated public struct ButtonWeights: Sendable, Equatable {
     /// Quiet and secondary buttons'.
     public var quiet: Font.Weight
     public var prominent: Font.Weight
-
-    /// Medium, and semibold for the prominent fill.
-    public static let classic = ButtonWeights(quiet: .medium, prominent: .semibold)
-}
-
-/// Monograms' colors: the person's hue at an OKLCH lightness and chroma
-/// (as much chroma as sRGB holds at that hue), in light and dark.
-nonisolated public struct MonogramTone: Sendable, Equatable {
-    public var lightness: (light: CGFloat, dark: CGFloat)
-    public var chroma: (light: CGFloat, dark: CGFloat)
-
-    /// Classic's muted tones.
-    public static let classic = MonogramTone(lightness: (0.64, 0.52), chroma: (0.12, 0.09))
-
-    public static func == (lhs: MonogramTone, rhs: MonogramTone) -> Bool {
-        lhs.lightness == rhs.lightness && lhs.chroma == rhs.chroma
-    }
 }
 
 // MARK: - Definitions
@@ -641,6 +538,27 @@ nonisolated struct BranchTones: Sendable {
     var tones: [TrackPalette.Tone]
 }
 
+/// A theme's shade of each tone.
+nonisolated struct ToneColors: Sendable {
+    var pink: NSColor
+    var violet: NSColor
+    var orange: NSColor
+    var green: NSColor
+    var blue: NSColor
+    var cyan: NSColor
+
+    subscript(tone: TrackPalette.Tone) -> NSColor {
+        switch tone {
+        case .pink: pink
+        case .violet: violet
+        case .orange: orange
+        case .green: green
+        case .blue: blue
+        case .cyan: cyan
+        }
+    }
+}
+
 /// What a theme file defines from a palette; `Theme` derives the rest.
 nonisolated struct ThemeDefinition: Sendable {
     var theme: DesignTheme
@@ -650,9 +568,6 @@ nonisolated struct ThemeDefinition: Sendable {
 
     var background: NSColor
     var sidebar: NSColor
-    /// Whether a background tint re-hues the sidebar; Pop's keeps its
-    /// accent.
-    var sidebarTakesTint = true
     var field: NSColor
     var hunk: NSColor
     var hover: NSColor
@@ -663,12 +578,12 @@ nonisolated struct ThemeDefinition: Sendable {
     /// Nil is `quiet`.
     var quietControl: NSColor?
     var quietControlIsRaised = true
-    var segmentSelection: NSColor?
+    var segmentSelection: NSColor
     var scrim: NSColor
-    var backdrop: NSColor?
+    var backdrop: NSColor
     var backdropGlass: GlassStyle?
-    var raisedShadow: NSColor = .espalierDynamic(light: NSColor.black.withAlphaComponent(0.1), dark: NSColor.black.withAlphaComponent(0.3))
-    var raisedRing: NSColor = .espalierDynamic(light: NSColor.black.withAlphaComponent(0.05), dark: NSColor.white.withAlphaComponent(0.06))
+    var raisedShadow: NSColor
+    var raisedRing: NSColor
 
     var text: NSColor
     var text2: NSColor
@@ -691,56 +606,49 @@ nonisolated struct ThemeDefinition: Sendable {
     var marks: AccentMarks
 
     var add: NSColor
-    /// Deletions; `deleteNearAccent` in its place for an accent near its
-    /// hue (`Theme.awayFromAccent`), and the same for renamed files.
     var delete: NSColor
-    var deleteNearAccent: NSColor?
     var modified: NSColor
+    /// Renamed files; `renamedNearAccent` in its place for an accent near
+    /// its hue (`Theme.apart(from:_:clearance:)`).
     var renamed: NSColor
     var renamedNearAccent: NSColor?
     /// A conflict's sides in the diff: ours and theirs.
-    var conflictOurs: NSColor = SystemTone.mint.base
-    var conflictTheirs: NSColor = SystemTone.orange.base
+    var conflictOurs: NSColor
+    var conflictTheirs: NSColor
     /// What the diff's added and deleted lines' tints are multiplied by.
     var diffLineStrength: (light: CGFloat, dark: CGFloat) = (1, 1)
-    /// Syntax tokens' colors; a style missing here is its system tone
-    /// (the text color for operators and punctuation).
-    var syntaxColors: [TokenStyle: NSColor] = [:]
+    /// Syntax tokens' colors; a style missing here is the text color.
+    var syntaxColors: [TokenStyle: NSColor]
 
     /// The trunk and the other branches' tones, then those in their place
     /// for an accent near the trunk's hue, in order: the first whose trunk
     /// stands apart from the accent is drawn.
     var branches: [BranchTones]
-    /// The tones' colors; a tone missing here is Classic's.
-    var toneColors: [TrackPalette.Tone: NSColor] = [:]
+    var toneColors: ToneColors
 
     var sidebarSelection: NSColor
     var sidebarSelectionText: NSColor?
     /// Nil is the accent.
     var sidebarSelectionIcon: NSColor?
-    var selectionBar = false
     var sidebarSelectionIsBold = false
     var sidebarSelectionTintsCounts = false
-    var sidebarText3: NSColor?
-    var aheadText: NSColor?
 
     var sectionLabel: SectionLabelStyle
     var radii: ThemeRadii
     var commitTitle: TitleStyle
-    var buttonWeights = ButtonWeights.classic
+    var buttonWeights: ButtonWeights
     var graph: GraphStyle
     var refTag: RefTagStyle
-    var statusBadge: StatusBadgeStyle
+    var statusBadgeShape: StatusBadgeShape
     var avatarShape: AvatarShape = .circle
-    var monogramTone: MonogramTone?
-    var paneLayout: PaneLayout = .flat
+    var paneLayout: PaneLayout
     var controls: ControlStyle = .standard
     var scrollEdgeFade: CGFloat = 0
 }
 
 /// A theme's colors from its light and dark values, with Increase Contrast
-/// derived the way Classic's are: lines and secondary text stronger, washes
-/// 1.6 times as opaque.
+/// derived from them: lines and secondary text stronger, washes 1.6 times
+/// as opaque.
 nonisolated enum ThemeColor {
     /// A surface: the same under Increase Contrast.
     static func surface(_ light: UInt32, _ dark: UInt32) -> NSColor {

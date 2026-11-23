@@ -82,9 +82,9 @@ nonisolated public struct RefCapsuleContent: Sendable, Hashable, Identifiable {
 }
 
 /// How a capsule is painted, from its kind, track color, and the theme's
-/// tags: the current branch filled in the accent (or the theme's prominent
-/// fill); other local branches tinted in their track color (or filled with
-/// it); remote branches outlined, with a cloud; tags neutral, with a tag.
+/// tags: the current branch filled with the theme's prominent fill; other
+/// local branches tinted in their track color; remote branches outlined,
+/// with a cloud; tags neutral, with a tag.
 struct RefCapsuleStyle {
     var fill: NSColor?
     var stroke: NSColor?
@@ -93,7 +93,7 @@ struct RefCapsuleStyle {
     /// The symbol before the name.
     var symbol: String?
 
-    /// A local branch's tint and a remote branch's outline.
+    /// A tag's tint and a remote branch's outline.
     static let tintAlpha: CGFloat = 0.14
     static let outlineAlpha: CGFloat = 0.45
 
@@ -102,29 +102,17 @@ struct RefCapsuleStyle {
         let track = palette.color(forRef: content).resolved(in: variant)
         switch content.kind {
         case .currentBranch, .currentBranchWithUpstream, .detachedHead:
-            let solidText = theme.refTag.currentUsesProminent ? theme.prominentText.resolved(in: variant) : NSColor.white
-            fill = (theme.refTag.currentUsesProminent ? theme.prominent : palette.current).resolved(in: variant)
+            let solidText = theme.prominentText.resolved(in: variant)
+            fill = theme.prominent.resolved(in: variant)
             stroke = nil
             text = solidText
             secondaryText = solidText.withAlphaComponent(0.75)
             symbol = nil
         case .localBranch, .localBranchWithUpstream:
-            switch theme.refTag.fill {
-            case .tinted(let alpha, let textMix, let ink):
-                fill = track.withAlphaComponent(variant.isDark ? alpha.dark : alpha.light)
-                if let textMix {
-                    let fraction = variant.isDark ? textMix.dark : textMix.light
-                    text = track.blended(withFraction: fraction, of: variant.isDark ? .white : .hex(ink)) ?? track
-                } else {
-                    text = track
-                }
-                secondaryText = text.withAlphaComponent(0.7)
-            case .solid(let darken):
-                let solid = variant.isDark ? track : (track.blended(withFraction: darken, of: .black) ?? track)
-                fill = solid
-                text = variant.isDark ? .hex(0x111116) : .white
-                secondaryText = text.withAlphaComponent(0.75)
-            }
+            let tag = theme.refTag
+            fill = track.withAlphaComponent(variant.isDark ? tag.alpha.dark : tag.alpha.light)
+            text = track.blended(withFraction: variant.isDark ? tag.textMix.dark : tag.textMix.light, of: variant.isDark ? .white : .hex(tag.ink)) ?? track
+            secondaryText = text.withAlphaComponent(0.7)
             stroke = nil
             symbol = nil
         case .remoteBranch:
@@ -150,10 +138,10 @@ struct RefCapsuleStyle {
 
 // MARK: - SwiftUI
 
-/// A ref tag's shape: a capsule, or the theme's rounded rectangle.
+/// A ref tag's shape: the theme's rounded rectangle.
 nonisolated struct RefTagShape: InsettableShape {
-    /// The theme's corner radius; nil for a capsule.
-    var cornerRadius: CGFloat?
+    /// The theme's corner radius.
+    var cornerRadius: CGFloat
     var inset: CGFloat = 0
 
     init() {
@@ -162,13 +150,10 @@ nonisolated struct RefTagShape: InsettableShape {
 
     /// The corner radius of a tag `height` high in the current theme.
     static func radius(height: CGFloat) -> CGFloat {
-        min(Theme.current.radii.tag ?? height / 2, height / 2)
+        min(Theme.current.radii.tag, height / 2)
     }
 
     func path(in rect: CGRect) -> Path {
-        guard let cornerRadius else {
-            return Capsule(style: .circular).inset(by: inset).path(in: rect)
-        }
         let radius = max(min(cornerRadius, rect.height / 2) - inset, 0)
         return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect.insetBy(dx: inset, dy: inset))
     }

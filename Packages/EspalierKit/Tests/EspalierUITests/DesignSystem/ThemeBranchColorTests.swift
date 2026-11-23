@@ -45,7 +45,11 @@ struct ThemeBranchColorTests {
         let gray = NSColor(srgbRed: 0.55, green: 0.55, blue: 0.55, alpha: 1)
         let candidates: [NSColor] = [.hex(0x0F766E), .hex(0x16A34A)]
         #expect(Theme.indexApart(from: gray, candidates, clearance: Theme.trunkClearance) == 0)
-        let classic = Theme.named(.classic, palette: .iris)
-        #expect(classic.branchTones(accent: gray) == TrackPalette.tones)
+        // Iris leaves out the tones near it; gray leaves none out.
+        let theme = Theme.named(.default, palette: .iris)
+        let besideIris = theme.branchTones(accent: theme.accent)
+        let besideGray = theme.branchTones(accent: gray)
+        #expect(besideGray.count > besideIris.count)
+        #expect(Set(besideIris).isSubset(of: besideGray))
     }
 }

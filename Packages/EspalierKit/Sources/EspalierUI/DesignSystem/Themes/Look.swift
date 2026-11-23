@@ -24,18 +24,17 @@ nonisolated public struct Look: Sendable, Hashable {
     /// What's drawn monospaced.
     public var codeFont: CodeFont
 
-    /// A look; a background the theme doesn't offer is its own.
-    public init(theme: DesignTheme = .classic, palette: DesignPalette = .system, background: BackgroundTint = .own, appFont: AppFont = .geist, codeFont: CodeFont = .geistMono) {
+    public init(theme: DesignTheme = .default, palette: DesignPalette = .iris, background: BackgroundTint = .own, appFont: AppFont = .geist, codeFont: CodeFont = .geistMono) {
         self.theme = theme
         self.palette = palette
-        self.background = theme.backgroundDrawn(for: background)
+        self.background = background
         self.appFont = appFont
         self.codeFont = codeFont
     }
 
-    /// Classic in the Mac's accent color, its own backgrounds, in Geist and
-    /// Geist Mono: the default look.
-    public static let classic = Look()
+    /// Default in Iris, its own backgrounds, in Geist and Geist Mono: the
+    /// look a new install opens in.
+    public static let `default` = Look()
 
     /// The look the current task draws in: its own (`with(_:operation:)`),
     /// else the process's.
@@ -61,7 +60,7 @@ nonisolated public final class LookCenter: Observable, Sendable {
     public static let shared = LookCenter()
 
     private let registrar = ObservationRegistrar()
-    private let stored = Mutex(Look.classic)
+    private let stored = Mutex(Look.default)
 
     init() {}
 

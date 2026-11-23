@@ -1,5 +1,5 @@
 // Settings ▸ Appearance's theme, palette, and background pickers, Espalier's
-// own controls. The theme is four cards, each a small preview of its theme
+// own controls. The theme is two cards, each a small preview of its theme
 // in the chosen palette and background (the sidebar with its selection, a
 // selected row, the prominent capsule) with the theme's name under it; the
 // chosen card has the focus-ring-style accent ring. The palettes and the
@@ -14,10 +14,8 @@ extension DesignTheme {
     /// The theme's name in Settings.
     var title: String {
         switch self {
-        case .classic: "Classic"
-        case .frost: "Frost"
+        case .default: "Default"
         case .islands: "Islands"
-        case .pop: "Pop"
         }
     }
 }
@@ -31,7 +29,13 @@ extension DesignPalette {
     /// What Settings says of the palette under its row's title: its name
     /// and the theme it's made for, and for System, whose color it is.
     var summary: String {
-        self == .system ? "Your Mac's accent color" : "\(title), made for \(theme.title)"
+        if self == .system {
+            return "Your Mac's accent color"
+        }
+        guard let theme else {
+            return title
+        }
+        return "\(title), made for the \(theme.title) theme"
     }
 }
 
@@ -40,7 +44,6 @@ extension BackgroundTint {
     var title: String {
         switch self {
         case .own: "Default"
-        case .classic: "Classic"
         case .neutral: "Neutral"
         case .warm: "Warm"
         case .cool: "Cool"
@@ -76,7 +79,7 @@ extension Metrics {
     }
 }
 
-/// The four themes as cards.
+/// The themes as cards.
 struct ThemeCardPicker: View {
     @Binding var selection: DesignTheme
     /// The palette and the background tint the cards are drawn in.
@@ -168,11 +171,6 @@ struct ThemePreview: View {
                         bar(Color(nsColor: theme.sidebarSelectionText ?? theme.text3), width: 14)
                             .padding(.leading, 5)
                     }
-                    .overlay(alignment: .leading) {
-                        if theme.selectionBar {
-                            Capsule().fill(Color(nsColor: theme.accent)).frame(width: 2, height: 6)
-                        }
-                    }
                     .frame(height: 11)
                 bar(Color(nsColor: theme.text3), width: 18)
                     .padding(.leading, 5)
@@ -212,8 +210,6 @@ struct ThemePreview: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
                 switch layout {
-                case .flat:
-                    Color(nsColor: theme.background)
                 case .floatingCards:
                     // A card on the backdrop.
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
@@ -225,13 +221,9 @@ struct ThemePreview: View {
                         .strokeBorder(Color(nsColor: theme.line), lineWidth: 1)
                 }
             }
-            .padding(layout.chromeIsBackdrop ? EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 4) : EdgeInsets())
+            .padding(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 4))
         }
-        .background {
-            if layout.chromeIsBackdrop {
-                Color(nsColor: theme.backdrop)
-            }
-        }
+        .background(Color(nsColor: theme.backdrop))
         .accessibilityHidden(true)
     }
 

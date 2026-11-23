@@ -245,8 +245,6 @@ private struct SidebarPaneMarginsModifier: ViewModifier {
     /// The margins with the detail's leading edge `minX` from the window's.
     private func margins(minX: CGFloat) -> EdgeInsets {
         switch Theme.current.paneLayout {
-        case .flat:
-            return EdgeInsets()
         case .floatingCards:
             var margins = PaneCards.frameMargins
             margins.leading = max(PaneCards.frameMargins.leading, PaneCards.windowEdgeMargin - minX)
@@ -447,10 +445,9 @@ final class PaneSplitView: NSSplitView, LookChangeObserving {
 }
 
 /// Hides the window's split view dividers (the sidebar's and the
-/// inspector's) in the floating layout, where the backdrop's gaps divide
-/// the columns, and in the inset card layout, where the card's ring does;
-/// flat, they show as AppKit draws them. It sits in the background of the
-/// window's content and looks after the splits in it.
+/// inspector's): in the floating layout the backdrop's gaps divide the
+/// columns, and in the inset card layout the card's ring does. It sits in
+/// the background of the window's content and looks after the splits in it.
 struct WindowDividerStyler: NSViewRepresentable {
     func makeNSView(context: Context) -> StylerView {
         StylerView()
@@ -460,9 +457,7 @@ struct WindowDividerStyler: NSViewRepresentable {
         view.apply()
     }
 
-    final class StylerView: NSView, LookChangeObserving {
-        /// The dividers it hid, shown again once the layout is flat.
-        private let hiddenDividers = NSHashTable<NSView>.weakObjects()
+    final class StylerView: NSView {
         private var observer: (any NSObjectProtocol)?
 
         isolated deinit {
@@ -495,21 +490,9 @@ struct WindowDividerStyler: NSViewRepresentable {
             apply()
         }
 
-        func lookDidChange() {
-            apply()
-        }
-
         /// Hides every divider of the window's own splits (`SplitView`'s
-        /// draw their own) while the chrome is the backdrop; shows the ones
-        /// it hid once flat.
+        /// draw their own).
         func apply() {
-            guard Theme.current.paneLayout.chromeIsBackdrop else {
-                for divider in hiddenDividers.allObjects {
-                    divider.alphaValue = 1
-                }
-                hiddenDividers.removeAllObjects()
-                return
-            }
             guard let content = window?.contentView else {
                 return
             }
@@ -521,14 +504,13 @@ struct WindowDividerStyler: NSViewRepresentable {
         /// A divider, and the edge AppKit draws beside the sidebar.
         private static let dividerClasses: Set<String> = ["NSSplitDividerView", "_NSSplitViewShadowView"]
 
-        /// Hides `splitView`'s dividers while the chrome is the backdrop.
+        /// Hides `splitView`'s dividers.
         private func style(_ splitView: NSSplitView) {
-            guard Theme.current.paneLayout.chromeIsBackdrop, !(splitView is PaneSplitView) else {
+            guard !(splitView is PaneSplitView) else {
                 return
             }
             for divider in splitView.subviews where Self.dividerClasses.contains(NSStringFromClass(type(of: divider))) && divider.alphaValue != 0 {
                 divider.alphaValue = 0
-                hiddenDividers.add(divider)
             }
         }
 

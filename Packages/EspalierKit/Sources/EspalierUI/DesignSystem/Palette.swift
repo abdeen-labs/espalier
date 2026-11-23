@@ -1,7 +1,6 @@
 // Espalier's colors. Every color is a dynamic NSColor with light, dark, and
 // Increase Contrast variants, resolved where they're drawn, and comes from
-// the current design theme (Themes/). Classic's surfaces, lines, and text
-// are fixed values and its accent is the system's accent color.
+// the current design theme (Themes/).
 
 import AppKit
 import SwiftUI
@@ -126,41 +125,6 @@ nonisolated public enum ColorContrast {
     }
 }
 
-/// System colors, which syntax tokens and a few fills use.
-nonisolated public enum SystemTone: String, CaseIterable, Sendable {
-    case red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple, pink, brown, gray
-
-    /// The system color.
-    public var base: NSColor {
-        switch self {
-        case .red: .systemRed
-        case .orange: .systemOrange
-        case .yellow: .systemYellow
-        case .green: .systemGreen
-        case .mint: .systemMint
-        case .teal: .systemTeal
-        case .cyan: .systemCyan
-        case .blue: .systemBlue
-        case .indigo: .systemIndigo
-        case .purple: .systemPurple
-        case .pink: .systemPink
-        case .brown: .systemBrown
-        case .gray: .systemGray
-        }
-    }
-
-    /// A translucent fill of the tone; Increase Contrast multiplies the
-    /// alpha by 1.6.
-    public func tint(light lightAlpha: CGFloat, dark darkAlpha: CGFloat) -> NSColor {
-        Palette.tint(base, light: lightAlpha, dark: darkAlpha)
-    }
-
-    /// The hue of the plain light shade, 0 to 1.
-    public var hue: CGFloat {
-        base.resolved(in: .light).hueComponent
-    }
-}
-
 /// Espalier's colors: the current theme's (`Theme.current`). A SwiftUI
 /// body that reads one draws again when the look changes.
 nonisolated public enum Palette {
@@ -169,10 +133,10 @@ nonisolated public enum Palette {
     /// Content panes and the toolbar.
     public static var background: NSColor { Theme.current.background }
     /// What the panes in the main window's content fill with: clear in
-    /// Frost, whose card is glass, else `background`.
+    /// Default, whose card is glass, else `background`.
     public static var pane: NSColor { Theme.current.pane }
     /// The content's card, and a card on a pane (the commit message):
-    /// `background`, at 40% over the glass in Frost.
+    /// `background`, at 40% over the glass in Default.
     public static var cardFill: NSColor { Theme.current.cardFill }
     /// The sidebar.
     public static var sidebar: NSColor { Theme.current.sidebar }
@@ -182,8 +146,8 @@ nonisolated public enum Palette {
     public static var hunk: NSColor { Theme.current.hunk }
     /// A hovered row.
     public static var hover: NSColor { Theme.current.hover }
-    /// The sidebar's selected item: Classic's is a neutral wash, black 6.5%
-    /// (white 5% in dark); `accentSoft` is the selection everywhere else.
+    /// The sidebar's selected item: Default's is a neutral wash, Islands' a
+    /// wash of the accent.
     public static var sidebarSelection: NSColor { Theme.current.sidebarSelection }
     /// Dividers and hairlines.
     public static var line: NSColor { Theme.current.line }
@@ -208,7 +172,7 @@ nonisolated public enum Palette {
     // MARK: Text input
 
     /// Selected text where the text has focus: a wash of the accent
-    /// (Classic's 16%, 24% in dark).
+    /// (Default's 16%, 24% in dark).
     public static var textSelection: NSColor { Theme.current.textSelection }
     /// Selected text where the text doesn't have focus, or its window isn't
     /// key: a neutral wash, black 8% (white 8% in dark).
@@ -223,14 +187,14 @@ nonisolated public enum Palette {
 
     // MARK: Accent
 
-    /// Selection, checkboxes, included lines: Classic's is the system
-    /// accent.
+    /// Selection, checkboxes, included lines: the palette's accent.
     public static var accent: NSColor { Theme.current.accent }
 
     /// Links: the theme's link color, else the accent.
     public static var link: NSColor { Theme.current.link }
 
-    /// Selected rows and chips: the accent at 9% (14% in dark).
+    /// Selected rows and chips: Default's neutral wash; Islands' is the
+    /// accent at 10% (14% in dark).
     public static var accentSoft: NSColor { Theme.current.accentSoft }
 
     /// The commit message field that has focus: the accent at 6% (10% in
@@ -241,9 +205,8 @@ nonisolated public enum Palette {
     /// dark).
     public static var accentMid: NSColor { Theme.current.accentMid }
 
-    /// The prominent fill, one action per area: Classic's is a deeper
-    /// accent under white text, `#0064E1` for the default blue in light,
-    /// the accent itself in dark.
+    /// The prominent fill, one action per area: Default's is ink, Islands'
+    /// the palette's.
     public static var button: NSColor { Theme.current.prominent }
     /// The text on the prominent fill.
     public static var buttonText: NSColor { Theme.current.prominentText }

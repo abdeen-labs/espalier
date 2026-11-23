@@ -1,6 +1,6 @@
 // Lists scrolled partway, with more beyond both their edges: History's graph
 // and simple list, the sidebar, Changes' files, and a commit's files. In a
-// look with a scroll edge fade (`--look frost-iris`) each fades out at both
+// look with a scroll edge fade (`--look default`) each fades out at both
 // edges over what's behind it; in the others they end at their edges.
 
 import AppKit

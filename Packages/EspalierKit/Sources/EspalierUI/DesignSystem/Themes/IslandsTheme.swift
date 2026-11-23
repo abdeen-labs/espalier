@@ -70,13 +70,13 @@ nonisolated extension ThemeDefinition {
             sidebarSelectionText: palette.deepInk,
             sidebarSelectionIsBold: true,
             sidebarSelectionTintsCounts: true,
-            sectionLabel: SectionLabelStyle(isUppercase: true, size: 10, weight: .bold, tracking: 0.08, color: nil),
+            sectionLabel: SectionLabelStyle(isUppercase: true, size: 10, weight: .bold, tracking: 0.08),
             radii: ThemeRadii(row: 10, card: 14, small: 5, tag: 6),
             commitTitle: TitleStyle(size: 18, weight: .bold),
             buttonWeights: ButtonWeights(quiet: .bold, prominent: .bold),
-            graph: GraphStyle(lineWidth: 3.25, lanePitch: 17, node: .dot),
-            refTag: RefTagStyle(fill: .tinted(alpha: (0.14, 0.22), textMix: (0.30, 0.25), ink: 0x0C1410), currentUsesProminent: true),
-            statusBadge: StatusBadgeStyle(fill: .tinted, shape: .circle),
+            graph: GraphStyle(lineWidth: 3.25, lanePitch: 17),
+            refTag: RefTagStyle(alpha: (0.14, 0.22), textMix: (0.30, 0.25), ink: 0x0C1410),
+            statusBadgeShape: .circle,
             avatarShape: .roundedSquare,
             paneLayout: .floatingCards,
             controls: ControlStyle(prominentShadow: NSColor.black.withAlphaComponent(0.14), flatInCards: true)
@@ -95,8 +95,5 @@ nonisolated private enum IslandsColor {
     static let mint = ThemeColor.fixed(0x2E8A6E, 0x5CC7A0)
     static let red = ThemeColor.fixed(0xC23A2B, 0xF0877A)
 
-    static let toneColors: [TrackPalette.Tone: NSColor] = [
-        .orange: orange, .pink: rose, .blue: periwinkle,
-        .violet: violet, .cyan: sea, .green: green,
-    ]
+    static let toneColors = ToneColors(pink: rose, violet: violet, orange: orange, green: green, blue: periwinkle, cyan: sea)
 }

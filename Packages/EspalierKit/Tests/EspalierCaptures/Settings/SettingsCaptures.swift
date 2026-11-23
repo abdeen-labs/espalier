@@ -69,10 +69,9 @@ struct SettingsCaptures {
     }
 
     @Test("Appearance in a look of its own: a theme in a palette, its fonts; the pane a card on the backdrop in Islands", arguments: [
-        Look(theme: .frost, palette: .iris, appFont: .fixel, codeFont: .sfMono),
+        Look(palette: .slate, appFont: .fixel, codeFont: .sfMono),
         Look(theme: .islands, palette: .lagoon),
         Look(theme: .islands, palette: .plum),
-        Look(theme: .pop),
     ])
     func appearanceTheme(_ look: Look) throws {
         let harness = try AppHarness()

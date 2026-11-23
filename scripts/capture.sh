@@ -1,19 +1,19 @@
 #!/bin/zsh
 # Draws Espalier's views to PNGs to look at: every capture, or those whose
-# suite or name matches FILTER (a regular expression), in LOOK (Classic by
+# suite or name matches FILTER (a regular expression), in LOOK (Default by
 # default; "all" for each palette on the theme it's made for). Prints the
 # folder.
 #
 #   scripts/capture.sh [--look LOOK] [--out FOLDER] [FILTER]
 #
-# LOOK is spelled as the settings store it: frost-iris, pop-magenta-fixel,
-# islands-lagoon-warm, classic-sfmono. FOLDER defaults to .captures in
+# LOOK is spelled as the settings store it: default-slate, islands-plum-fixel,
+# islands-lagoon-warm, default-sfmono. FOLDER defaults to .captures in
 # the checkout; it's emptied first.
 
 set -euo pipefail
 
 root=${0:A:h:h}
-look=classic
+look=default
 out=$root/.captures
 filter=
 
@@ -27,8 +27,7 @@ while (( $# )); do
 done
 
 if [[ $look == all ]]; then
-    looks=(classic frost-iris frost-slate islands-lagoon islands-plum
-        pop-tangerine pop-magenta pop-volt)
+    looks=(default default-slate islands-lagoon islands-plum)
 else
     looks=($look)
 fi

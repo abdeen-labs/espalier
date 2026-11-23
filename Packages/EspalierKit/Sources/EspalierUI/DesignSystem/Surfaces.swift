@@ -2,7 +2,7 @@
 // that float (toasts, the operation capsule, popovers, sheets) cast a
 // shadow, and quiet capsule buttons a small one, as push buttons do. Cards
 // in a pane have the ring alone. No glass or materials of Espalier's own
-// but Frost's window chrome (ChromeBackdrop.swift).
+// but Default's window chrome (ChromeBackdrop.swift).
 
 import AppKit
 import SwiftUI

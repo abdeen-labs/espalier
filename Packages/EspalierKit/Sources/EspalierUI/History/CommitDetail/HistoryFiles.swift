@@ -331,7 +331,6 @@ final class HistoryFileRowView: NSTableRowView, ContextMenuTargetRowView {
     override func drawSelection(in dirtyRect: NSRect) {
         Palette.accentSoft.setFill()
         HistoryRowDrawing.selectionPath(in: bounds, isFlipped: isFlipped, joinsAbove: false, joinsBelow: false).fill()
-        SelectionBarDrawing.draw(in: HistoryRowDrawing.selectionRect(in: bounds))
     }
 
     override func draw(_ dirtyRect: NSRect) {

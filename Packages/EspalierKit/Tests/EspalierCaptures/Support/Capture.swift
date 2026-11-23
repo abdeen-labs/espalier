@@ -5,10 +5,10 @@
 // `<folder>/<look>/<Area>/<name>-<light|dark>.png`.
 //
 // ESPALIER_CAPTURE_LOOK=<theme>[-<color>][-<background>][-<app font>]
-// [-<code font>], as the settings store them ("frost-iris",
-// "islands-lagoon-warm-fixel", "pop-tangerine-atkinson-geistmono"), draws
-// every capture in that look instead of Classic's; a capture made in a
-// look of its own (`look:`) keeps it, and its name says which.
+// [-<code font>], as the settings store them ("default-slate",
+// "islands-lagoon-warm-fixel", "islands-plum-atkinson-sfmono"), draws
+// every capture in that look instead of the default one; a capture made in
+// a look of its own (`look:`) keeps it, and its name says which.
 //
 // SwiftUI views go into an `NSHostingView` in an offscreen key window with
 // an explicit appearance; AppKit views go straight into the same kind of
@@ -74,11 +74,11 @@ enum Capture {
         return URL(exactFilePath: path, isDirectory: true)
     }()
 
-    /// The look captures draw in: ESPALIER_CAPTURE_LOOK's, else Classic.
+    /// The look captures draw in: ESPALIER_CAPTURE_LOOK's, else the default.
     /// It's made the process's too, so views that read the process's look
     /// draw in it.
     static let look: Look = {
-        let look = ProcessInfo.processInfo.environment["ESPALIER_CAPTURE_LOOK"].map(Look.init(captureName:)) ?? .classic
+        let look = ProcessInfo.processInfo.environment["ESPALIER_CAPTURE_LOOK"].map(Look.init(captureName:)) ?? .default
         LookCenter.shared.look = look
         return look
     }()
@@ -271,14 +271,14 @@ func capture(
 }
 
 extension Look {
-    /// The look's name in captures: "classic" for Classic in System, its
+    /// The look's name in captures: "default" for Default in Iris, its
     /// own backgrounds, in Geist and Geist Mono; else the theme, then the
     /// palette, the background tint, the app font, and the code font when
-    /// they aren't the defaults ("frost-iris", "classic-warm",
-    /// "islands-lagoon-fixel", "pop-tangerine-sfmono").
+    /// they aren't the defaults ("default-slate", "default-warm",
+    /// "islands-lagoon-fixel", "islands-plum-sfmono").
     var captureName: String {
         var parts = [theme.rawValue]
-        if palette != .system {
+        if palette != .iris {
             parts.append(palette.rawValue)
         }
         if background != .own {
@@ -301,7 +301,7 @@ extension Look {
             fatalError("ESPALIER_CAPTURE_LOOK=\(name) doesn't start with a theme")
         }
         parts.removeFirst()
-        var palette = DesignPalette.system
+        var palette = DesignPalette.iris
         var background = BackgroundTint.own
         var appFont = AppFont.geist
         var codeFont = CodeFont.geistMono

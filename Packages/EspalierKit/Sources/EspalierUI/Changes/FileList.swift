@@ -598,7 +598,6 @@ final class FileTableRowView: NSTableRowView, ContextMenuTargetRowView {
     override func drawSelection(in dirtyRect: NSRect) {
         Palette.accentSoft.setFill()
         selectionPath(in: bounds.insetBy(dx: FileRowMetrics.inset, dy: 0)).fill()
-        SelectionBarDrawing.draw(in: bounds.insetBy(dx: FileRowMetrics.inset, dy: 0))
     }
 
     override func draw(_ dirtyRect: NSRect) {

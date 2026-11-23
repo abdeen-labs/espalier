@@ -1,8 +1,8 @@
 #!/bin/bash
 # Makes the README's images in .github/readme: the app icon, and History
-# from the Showcase captures in Classic, Frost, Islands, and Pop, light
-# and dark. Each window gets rounded corners, a hairline, and a shadow, so
-# it stands apart from GitHub's page.
+# from the Showcase captures in Default and Islands, light and dark. Each
+# window gets rounded corners, a hairline, and a shadow, so it stands apart
+# from GitHub's page.
 #
 #   scripts/readme-images.sh
 #
@@ -44,13 +44,13 @@ frame() {
     -background none -layers merge +repage "$3"
 }
 
-# Classic is the README's large window; the other themes sit in a row below it.
-looks=(classic frost-iris islands-lagoon pop-magenta)
+# Default is the README's large window; Islands sits below it.
+looks=(default islands-lagoon)
 for look in "${looks[@]}"; do
   "$root/scripts/capture.sh" --look "$look" --out "$work/$look" ShowcaseCaptures >/dev/null
   theme="${look%%-*}"
-  width=960
-  [[ "$theme" == classic ]] && width=2000
+  width=1280
+  [[ "$theme" == default ]] && width=2000
   for appearance in light dark; do
     frame "$work/$look/$look/Showcase/history-$appearance.png" "$appearance" "$work/$theme-$appearance.png"
     cwebp -quiet -q 82 -m 6 -sharp_yuv -resize "$width" 0 "$work/$theme-$appearance.png" -o "$out/$theme-$appearance.webp"

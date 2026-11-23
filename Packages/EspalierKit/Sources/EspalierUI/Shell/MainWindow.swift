@@ -147,11 +147,6 @@ struct InspectorColumn: View {
             .insetCard(.trailing)
             .padding(InsetCard.isOn ? InsetCard.inspectorMargins : EdgeInsets())
             .toolbarBand()
-            // Below the toolbar, which spans the inspector too.
-            .overlay(alignment: .leading) {
-                Hairline(.vertical)
-                    .opacity(Theme.current.paneLayout.chromeIsBackdrop ? 0 : 1)
-            }
     }
 }
 

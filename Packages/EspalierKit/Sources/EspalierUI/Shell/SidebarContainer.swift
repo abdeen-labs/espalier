@@ -7,9 +7,8 @@
 // the previous repository until the selected one has loaded
 // (`SidebarSectionsHold`).
 //
-// The sidebar is flat: the `sidebar` color with a hairline on its trailing
-// edge (the chrome's backdrop with none in the inset card layout:
-// ChromeBackdrop.swift), the theme's section labels after their chevrons
+// The sidebar is the `sidebar` color (the chrome's backdrop in the inset
+// card layout: ChromeBackdrop.swift), the theme's section labels after their chevrons
 // (a collapsed section's with its count), rows 28 high with the row radius,
 // hairline dividers between groups of a section's rows, and the selected
 // item in the theme's sidebar selection
@@ -85,13 +84,6 @@ struct SidebarContainer: View {
             SidebarFilterField()
         }
         .background(ChromeSurface(Palette.sidebar).ignoresSafeArea())
-        .overlay(alignment: .trailing) {
-            // The floating layout's sidebar sits on the backdrop, beside
-            // the cards, and the inset card layout's is the backdrop.
-            Hairline(.vertical)
-                .ignoresSafeArea()
-                .opacity(Theme.current.paneLayout.chromeIsBackdrop ? 0 : 1)
-        }
     }
 
     /// The places a click, a menu, or Return acts on: while the sections
@@ -830,9 +822,6 @@ extension EnvironmentValues {
     /// The expansion of the `SidebarSection` whose header this is, which
     /// the header's chevron toggles.
     @Entry var sidebarSectionExpansion: Binding<Bool>?
-    /// Whether this is in a sidebar section header's accessory, whose
-    /// buttons are the sidebar's tertiary text.
-    @Entry var isInSidebarSectionHeader = false
 }
 
 /// A section's header: the theme's section label and what trails it (New
@@ -873,8 +862,7 @@ struct SidebarSectionHeader<Accessory: View>: View {
             Spacer(minLength: Metrics.grid)
             accessory
                 .font(Typography.subheadline.weight(.semibold))
-                .foregroundStyle(.sidebarText3)
-                .environment(\.isInSidebarSectionHeader, true)
+                .foregroundStyle(.text3)
         }
         // The chevron in the list's disclosure column, else the label
         // aligned with the rows' symbols; what trails it, with their
@@ -904,7 +892,7 @@ private struct SidebarSectionChevron: View {
             Image(systemName: "chevron.right")
                 .font(Typography.row.weight(.semibold))
                 .imageScale(.small)
-                .foregroundStyle(.sidebarText3)
+                .foregroundStyle(.text3)
                 .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 .motion(Motion.leave, value: isExpanded)
                 .frame(width: Metrics.Sidebar.disclosureChevronWidth, height: Metrics.Sidebar.glyphSize)
@@ -937,14 +925,13 @@ private struct SidebarHeaderButtonBody<Label: View>: View {
     let isPressed: Bool
     /// Whether the button has keyboard focus.
     @Environment(\.isFocused) private var isFocused
-    @Environment(\.isInSidebarSectionHeader) private var isInSidebarSectionHeader
     @Environment(\.isMenuOpen) private var isMenuOpen
 
     var body: some View {
         let isPressed = self.isPressed || isMenuOpen
         label
             .font(Typography.subheadline.weight(.semibold))
-            .foregroundStyle(isInSidebarSectionHeader ? Color.sidebarText3 : Color.text3)
+            .foregroundStyle(.text3)
             .frame(width: Metrics.Sidebar.glyphSize, height: Metrics.Sidebar.glyphSize)
             .contentShape(Rectangle())
             .opacity(isPressed ? 0.6 : 1)

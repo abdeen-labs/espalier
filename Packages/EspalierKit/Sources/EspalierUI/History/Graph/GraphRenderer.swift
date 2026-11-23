@@ -1,7 +1,7 @@
 // Drawing one row of the history graph with Core Graphics. The lanes come
 // from EspalierCore's `CommitGraphLayout`. The graph is a transit map:
-// 3-point lines with round caps and joins, rings for commits, and a line
-// that changes lanes (a merge leaving its node, a branch joining its parent)
+// lines in the theme's width with round caps and joins, dots for commits,
+// and a line that changes lanes (a merge leaving its node, a branch joining its parent)
 // does so on a short diagonal centered on the boundary between two rows.
 // Each row draws its half of such a diagonal, from where its neighbors say
 // the line crosses, so a column of rows reads as one picture.
@@ -13,9 +13,9 @@ import GitKit
 /// How a row's node is drawn.
 nonisolated struct GraphNode: Sendable, Equatable {
     enum Shape: Sendable, Equatable {
-        /// A commit: a ring.
+        /// A commit: a dot.
         case commit
-        /// A merge commit: a small ring.
+        /// A merge commit: a dot with a hole.
         case merge
         /// The working copy: a dashed ring when there are changes, a faint
         /// ring when it's clean.
@@ -23,7 +23,7 @@ nonisolated struct GraphNode: Sendable, Equatable {
     }
 
     var shape: Shape
-    /// The current tip (HEAD's commit): a bold ring with a dot in it.
+    /// The current tip (HEAD's commit): a bigger dot with a hole.
     var isCurrentTip: Bool
 
     init(shape: Shape, isCurrentTip: Bool = false) {
@@ -206,8 +206,8 @@ extension GraphRowDrawing {
 /// How a row's graph is emphasized: selection, a hovered or focused track,
 /// search dimming, and a node outline.
 nonisolated struct GraphEmphasis: Sendable, Equatable {
-    /// The row is selected: rings are filled with the selection's color
-    /// rather than the background.
+    /// The row is selected: a node's gap and hole are filled with the
+    /// selection's color rather than the background.
     var isSelected = false
     /// The track drawn at full strength while others are dimmed.
     var emphasizedTrack: Int?
@@ -234,9 +234,9 @@ final class GraphColors {
     private let current: CGColor
     private let named: [Int: CGColor]
     private let others: [CGColor]
-    /// What fills a ring: the row's background, or a selected row's; clear
-    /// on a clear pane (Frost's), where the row's fill behind the graph
-    /// shows.
+    /// What fills a node's gap and hole: the row's background, or a
+    /// selected row's; clear on a clear pane (Default's), where the row's
+    /// fill behind the graph shows.
     let background: CGColor
     let selectedBackground: CGColor
 
@@ -322,7 +322,7 @@ enum GraphRenderer {
         let dashPhase = (CGFloat(drawing.index) * height).truncatingRemainder(dividingBy: Metrics.Graph.dash.reduce(0, +))
 
         // Lines first, then stubs, then the node on top. Lines run to the
-        // node's center, and its filled ring covers their ends.
+        // node's center, and its gap covers their ends.
         for edge in row.edges {
             var pen = Pen(edge.track, emphasis: emphasis, geometry: geometry, colors: colors, dashed: drawing.dashed?.contains(edge) == true)
             pen.dashPhase = dashPhase
@@ -586,8 +586,9 @@ enum GraphRenderer {
 
     // MARK: Nodes
 
-    /// A ring filled with the row's background (so the lines under it stop
-    /// at it); the current tip's bold, with a dot in it.
+    /// A dot with a gap of the row's background around it (so the lines
+    /// under it stop at it); the working copy's a ring filled with the row's
+    /// background, dashed while it has changes.
     private static func drawNode(
         _ node: GraphNode,
         row: CommitGraphRow,
@@ -598,13 +599,12 @@ enum GraphRenderer {
         in context: CGContext
     ) {
         let size = node.size
-        let ring = geometry.ring(size)
         let color = colors.color(forTrack: row.track)
         let opacity = nodeOpacity(row, emphasis: emphasis)
         context.saveGState()
         defer { context.restoreGState() }
 
-        if let dot = GraphDot(size, style: geometry.nodeStyle) {
+        if let dot = GraphDot(size) {
             dot.draw(
                 at: center,
                 color: color,
@@ -623,31 +623,23 @@ enum GraphRenderer {
             return
         }
 
-        // The fill is opaque whatever the node's opacity (and whatever the
-        // pens left on the context), so dimmed rings still hide the lines'
-        // ends.
+        // The working copy's ring. The fill is opaque whatever the node's
+        // opacity (and whatever the pens left on the context), so a dimmed
+        // ring still hides the lines' ends.
+        let ring = geometry.workingCopyRing
         context.setAlpha(1)
         context.knockOutEllipse(in: circle(center, ring.radius + ring.stroke / 2), background: emphasis.isSelected ? colors.selectedBackground : colors.background)
 
         context.setAlpha(opacity)
         context.setStrokeColor(color)
         context.setLineWidth(ring.stroke)
-        switch node.shape {
-        case .workingCopy(let isDirty):
-            if isDirty {
-                context.setLineDash(phase: 0, lengths: Metrics.Graph.dash)
-                context.strokeEllipse(in: circle(center, ring.radius))
-                context.setLineDash(phase: 0, lengths: [])
-            } else {
-                context.setAlpha(opacity * Metrics.Graph.cleanWorkingCopyOpacity)
-                context.strokeEllipse(in: circle(center, ring.radius))
-            }
-        case .commit, .merge:
+        if node.shape == .workingCopy(isDirty: true) {
+            context.setLineDash(phase: 0, lengths: Metrics.Graph.dash)
             context.strokeEllipse(in: circle(center, ring.radius))
-        }
-        if node.isCurrentTip {
-            context.setFillColor(color)
-            context.fillEllipse(in: circle(center, Metrics.Graph.headDotRadius * geometry.nodeScale))
+            context.setLineDash(phase: 0, lengths: [])
+        } else {
+            context.setAlpha(opacity * Metrics.Graph.cleanWorkingCopyOpacity)
+            context.strokeEllipse(in: circle(center, ring.radius))
         }
 
         if emphasis.outlinesNode {
@@ -665,7 +657,7 @@ enum GraphRenderer {
     }
 
     /// The radius of the outline that marks a node (a stub's other end, a
-    /// jump's target): just outside its ring.
+    /// jump's target): just outside its gap.
     static func outlineRadius(for size: GraphNodeSize, geometry: GraphGeometry) -> CGFloat {
         geometry.clearance(size) + Metrics.Graph.targetOutline / 2 + 1.5
     }

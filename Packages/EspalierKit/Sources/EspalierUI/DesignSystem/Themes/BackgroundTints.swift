@@ -1,26 +1,23 @@
 // Background tints: a design theme's opaque surfaces (the panes, sidebar,
-// fields, hunk headers, lines, cards, and controls' fills; not Pop's
-// sidebar, which keeps its accent) in the tint's hue, each at its own
-// luminance, so text reads on them as it does on the theme's own. A
-// surface's chroma grows with its depth (away from white in light, away
-// from black in dark), as the themes' own tints do; a surface too near
-// white to carry the hue is as light as the hue allows. Neutral takes the
-// hue away. Classic puts Classic's surfaces in place of another theme's,
-// its sidebar's color for the backdrop. Translucent washes (hover,
-// selection, the scrim) stay as they are and take the tint from what's
-// under them; text, status colors, and the palette's colors stay as they
-// are. Hue and chroma are OKLCH's.
+// fields, hunk headers, lines, cards, and controls' fills) in the tint's
+// hue, each at its own luminance, so text reads on them as it does on the
+// theme's own. A surface's chroma grows with its depth (away from white in
+// light, away from black in dark), as the themes' own tints do; a surface
+// too near white to carry the hue is as light as the hue allows. Neutral
+// takes the hue away. Translucent washes (hover, selection, the scrim) stay
+// as they are and take the tint from what's under them; text, status
+// colors, and the palette's colors stay as they are. Hue and chroma are
+// OKLCH's.
 
 import AppKit
 import EspalierCore
 import Synchronization
 
 nonisolated extension BackgroundTint {
-    /// The tint's hue, in degrees; nil for the theme's own, Classic's, and
-    /// Neutral.
+    /// The tint's hue, in degrees; nil for the theme's own and Neutral.
     var hue: Double? {
         switch self {
-        case .own, .classic, .neutral: nil
+        case .own, .neutral: nil
         case .warm: 75
         case .cool: 250
         case .sage: 150
@@ -46,18 +43,13 @@ nonisolated extension ThemeDefinition {
         guard tint != .own else {
             return self
         }
-        guard tint != .classic else {
-            return withClassicSurfaces
-        }
         func tinted(_ color: NSColor) -> NSColor {
             OKLCH.tinted(color, tint)
         }
         var definition = self
         definition.tint = tint
         definition.background = tinted(background)
-        if sidebarTakesTint {
-            definition.sidebar = tinted(sidebar)
-        }
+        definition.sidebar = tinted(sidebar)
         definition.field = tinted(field)
         definition.hunk = tinted(hunk)
         definition.line = tinted(line)
@@ -65,29 +57,9 @@ nonisolated extension ThemeDefinition {
         definition.quiet = tinted(quiet)
         definition.soft = tinted(soft)
         definition.quietControl = quietControl.map(tinted)
-        definition.segmentSelection = segmentSelection.map(tinted)
-        definition.backdrop = backdrop.map(tinted)
+        definition.segmentSelection = tinted(segmentSelection)
+        definition.backdrop = tinted(backdrop)
         definition.sidebarSelection = tinted(sidebarSelection)
-        return definition
-    }
-
-    /// The definition with Classic's surfaces, and Classic's sidebar for
-    /// the backdrop.
-    private var withClassicSurfaces: ThemeDefinition {
-        let classic = ThemeDefinition.classic(.named(palette))
-        var definition = self
-        definition.tint = .classic
-        definition.background = classic.background
-        if sidebarTakesTint {
-            definition.sidebar = classic.sidebar
-        }
-        definition.field = classic.field
-        definition.hunk = classic.hunk
-        definition.line = classic.line
-        definition.line2 = classic.line2
-        definition.quiet = classic.quiet
-        definition.soft = classic.soft
-        definition.backdrop = backdrop.map { _ in classic.sidebar }
         return definition
     }
 }
@@ -233,7 +205,7 @@ nonisolated enum OKLCH {
         NSColor.espalierDynamic { variant in
             let source = color.resolved(in: variant)
             let adjustment = variant.isDark ? dark : light
-            return derived(from: source, .adjusted(adjustment)) {
+            return derived(from: source, adjustment) {
                 let lab = lab(linear(source))
                 let lightness = switch adjustment.lightness {
                 case let .by(change): lab.lightness + change
@@ -250,41 +222,19 @@ nonisolated enum OKLCH {
         adjusted(color, light: adjustment, dark: adjustment)
     }
 
-    /// A faint color in `color`'s hue as each appearance resolves it, at
-    /// `light`'s or `dark`'s lightness and chroma; less chroma for a color
-    /// with little of its own (graphite).
-    static func hueTint(of color: NSColor, light: (lightness: Double, chroma: Double), dark: (lightness: Double, chroma: Double)) -> NSColor {
-        NSColor.espalierDynamic { variant in
-            let source = color.resolved(in: variant)
-            let tint = variant.isDark ? dark : light
-            return derived(from: source, .hueTint(lightness: tint.lightness, chroma: tint.chroma)) {
-                let share = min(chroma(of: source) / fullTintChroma, 1)
-                return Self.color(lightness: tint.lightness, chroma: tint.chroma * share, hue: hue(of: source))
-            }
-        }
-    }
-
-    /// The chroma at which a color gives `hueTint(of:light:dark:)` all of
-    /// its chroma; the palettes' accents have at least this much.
-    private static let fullTintChroma = 0.09
-
-    private enum Derivation: Hashable {
-        case adjusted(Adjustment)
-        case hueTint(lightness: Double, chroma: Double)
-    }
-
     private struct DerivedKey: Hashable {
         let red: CGFloat
         let green: CGFloat
         let blue: CGFloat
-        let derivation: Derivation
+        let adjustment: Adjustment
     }
 
     private static let derivedColors = Mutex<[DerivedKey: NSColor]>([:])
 
-    /// The color `make` derives from the sRGB color `source`, made once.
-    private static func derived(from source: NSColor, _ derivation: Derivation, make: () -> NSColor) -> NSColor {
-        let key = DerivedKey(red: source.redComponent, green: source.greenComponent, blue: source.blueComponent, derivation: derivation)
+    /// The color `make` derives from the sRGB color `source` for
+    /// `adjustment`, made once.
+    private static func derived(from source: NSColor, _ adjustment: Adjustment, make: () -> NSColor) -> NSColor {
+        let key = DerivedKey(red: source.redComponent, green: source.greenComponent, blue: source.blueComponent, adjustment: adjustment)
         if let made = derivedColors.withLock({ $0[key] }) {
             return made
         }
