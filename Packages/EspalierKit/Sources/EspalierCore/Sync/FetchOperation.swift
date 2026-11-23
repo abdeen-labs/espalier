@@ -36,9 +36,9 @@ public struct FetchRetry: RetryableOperation {
 extension SyncModel {
     // MARK: Intents
 
-    /// Fetches the current remote, the default remote, and a fork's upstream
-    /// remote, fast-forwards other branches to their upstreams, and returns
-    /// after the repository's refresh.
+    /// Fetches the current remote, the default remote, a fork's upstream
+    /// remote, and the user's other remotes, fast-forwards other branches to
+    /// their upstreams, and returns after the repository's refresh.
     ///
     /// A remote that fails doesn't stop the others; the first failure is
     /// thrown after the rest ran, with a Retry that fetches again.
@@ -98,7 +98,7 @@ extension SyncModel {
             if let explicitRemotes {
                 remotes = explicitRemotes
             } else {
-                remotes = try await remotesToFetch(ctx.repository, tip: tip, record: record)
+                remotes = try await remotesToFetch(ctx.repository, tip: tip, record: record, includingOthers: true)
             }
             try await fetchAndFastForward(remotes, in: ctx)
         }
@@ -125,7 +125,7 @@ extension SyncModel {
         let record = repository.record
         let descriptor = OperationDescriptor(kind: .fetch, lanes: [.network], policy: .background, refreshAfter: .full)
         let ran: Void? = try await repository.performIfIdle(descriptor) { ctx in
-            let remotes = try await remotesToFetch(ctx.repository, tip: tip, record: record)
+            let remotes = try await remotesToFetch(ctx.repository, tip: tip, record: record, includingOthers: true)
             try await fetchAndFastForward(remotes, in: ctx)
         }
         guard ran != nil else {
@@ -161,7 +161,7 @@ extension SyncModel {
         )
         do {
             let result = try await repository.performIfIdle(descriptor) { ctx -> AheadBehind? in
-                let remotes = try await remotesToFetch(ctx.repository, tip: tip, record: record)
+                let remotes = try await remotesToFetch(ctx.repository, tip: tip, record: record, includingOthers: false)
                 _ = await fetchRemotes(remotes, repository: ctx.repository, isBackgroundTask: true, progress: ctx.progress)
                 return await aheadBehindOfCurrentBranch(ctx.repository, tip: tip)
             }
@@ -227,10 +227,13 @@ extension SyncModel {
 // MARK: - Primitives (the network lane is held)
 
 /// The remotes a fetch fetches, in order: the current branch's remote,
-/// then the default remote, then a fork's upstream remote, each once.
-/// Loaded fresh, so a repository that wasn't refreshed in full (one the
-/// indicator updater fetches) fetches the right ones.
-func remotesToFetch(_ repository: Repository, tip: Tip, record: RepositoryRecord) async throws -> [Remote] {
+/// then the default remote, then a fork's upstream remote, each once; with
+/// `includingOthers`, then the user's other remotes in `getRemotes`' order,
+/// but the fork remotes Espalier added (`getForkRemoteNames`), which are
+/// fetched as a pull request needs them. Loaded fresh, so a repository that
+/// wasn't refreshed in full (one the indicator updater fetches) fetches the
+/// right ones.
+func remotesToFetch(_ repository: Repository, tip: Tip, record: RepositoryRecord, includingOthers: Bool) async throws -> [Remote] {
     let remotes = try await getRemotes(repository)
     let defaultRemote = findDefaultRemote(remotes)
     let currentRemote = tip.branch?.resolvingRemotes(remotes.map(\.name)).upstreamRemoteName.flatMap { name in
@@ -238,8 +241,15 @@ func remotesToFetch(_ repository: Repository, tip: Tip, record: RepositoryRecord
     } ?? defaultRemote
     let upstreamRemote = record.gitHubRepository?.parent.flatMap { findUpstreamRemote($0, remotes) }
 
+    var others: [Remote] = []
+    if includingOthers, remotes.count > 1 {
+        // Marks that can't be read hide no remote: all are fetched.
+        let forkRemoteNames = (try? await getForkRemoteNames(repository)) ?? []
+        others = remotes.filter { !forkRemoteNames.contains(ExactString($0.name)) }
+    }
+
     var unique: [Remote] = []
-    for remote in [currentRemote, defaultRemote, upstreamRemote].compactMap({ $0 })
+    for remote in [currentRemote, defaultRemote, upstreamRemote].compactMap({ $0 }) + others
         where !unique.contains(where: { JSCompat.strictEquals($0.name, remote.name) }) {
         unique.append(remote)
     }

@@ -88,16 +88,21 @@ extension OperationError {
     }
 
     /// A line before git's message saying what failed: why a commit couldn't
-    /// be signed and what to do, or the delete-worktree failure's "Couldn't
-    /// delete the worktree <name>."
+    /// be signed and what to do, the delete-worktree failure's "Couldn't
+    /// delete the worktree <name>.", or, for one of the remotes a push also
+    /// goes to, "Couldn't push to <name>."
     private var leadMessage: String? {
         if let explanation = signingFailureExplanation {
             return explanation
         }
-        guard retry?.kind == .removeWorktree, let name = retry?.displayName else {
+        guard let name = retry?.displayName else {
             return nil
         }
-        return "Couldn't delete the worktree \(name)."
+        switch retry?.kind {
+        case .removeWorktree?: return "Couldn't delete the worktree \(name)."
+        case .push?: return "Couldn't push to \(name)."
+        default: return nil
+        }
     }
 
     /// The button that closes the alert: "Close", "Cancel" where the alert

@@ -48,6 +48,89 @@ struct RemoteOperationTests {
         await fixture.app.idle()
     }
 
+    // MARK: Adding and removing remotes
+
+    @Test("adding a remote trims its name and URL and refreshes the remotes")
+    func addRemote() async throws {
+        let fixture = try await makeSelectedRepository()
+        let mirror = try await makeEmptyBareRemote()
+
+        try await fixture.model.sync.addRemote(named: " mirror ", url: "  \(mirror.path)\n")
+
+        #expect(try await remoteURLs(fixture.local) == ["origin": fixture.remote.path, "mirror": mirror.path])
+        #expect(fixture.model.gitState.remotes.all.map(\.name) == ["mirror", "origin"])
+        #expect(fixture.model.gitState.remotes.otherPushRemotes == [Remote(name: "mirror", url: mirror.path)])
+        #expect(fixture.model.gitState.remotes.defaultRemote?.name == "origin")
+        await fixture.app.idle()
+    }
+
+    @Test("a remote isn't added", arguments: [
+        NamedCase("without a name", (name: "  ", url: "https://example.com/app.git", refusedByGit: false)),
+        NamedCase("without a URL", (name: "mirror", url: "\n", refusedByGit: false)),
+        NamedCase("under a name a remote has", (name: "origin", url: "https://example.com/app.git", refusedByGit: false)),
+        NamedCase("under a name git refuses", (name: "not a name", url: "https://example.com/app.git", refusedByGit: true)),
+    ])
+    func addRemoteRefused(_ testCase: NamedCase<(name: String, url: String, refusedByGit: Bool)>) async throws {
+        let fixture = try await makeSelectedRepository()
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.model.sync.addRemote(named: testCase.value.name, url: testCase.value.url)
+        }
+
+        #expect(error?.operation == .setRemoteURL)
+        #expect((preconditionMessage(error) == nil) == testCase.value.refusedByGit)
+        #expect((error?.gitFailure != nil) == testCase.value.refusedByGit)
+        #expect(try await remoteURLs(fixture.local) == ["origin": fixture.remote.path])
+        await fixture.app.idle()
+    }
+
+    @Test("removing a remote removes its branches, the tracking of the branch that tracked one, and its mark; commits stay")
+    func removeRemote() async throws {
+        let mirror = try await makeEmptyBareRemote()
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["remote", "add", "mirror", mirror.path], local)
+            try await runGit(["checkout", "-q", "-b", "feature"], local)
+            try await commitFile(local, "feature.txt", "feature\n")
+            try await runGit(["push", "-q", "-u", "mirror", "feature"], local)
+        }
+        try await fixture.model.sync.setPushDestination("origin", true)
+        let head = try await fixture.head()
+        #expect(fixture.model.gitState.tip.branch?.upstream == "mirror/feature")
+        #expect(fixture.model.gitState.remotes.currentRemote?.name == "mirror")
+
+        try await fixture.model.sync.removeRemote("mirror")
+
+        #expect(try await remoteURLs(fixture.local) == ["origin": fixture.remote.path])
+        #expect(fixture.model.gitState.remotes.all.map(\.name) == ["origin"])
+        #expect(fixture.model.gitState.remotes.currentRemote?.name == "origin")
+        #expect(try await fixture.localSHA("refs/remotes/mirror/feature") == nil)
+        #expect(fixture.model.gitState.tip.branch?.upstream == nil)
+        #expect(try await fixture.head() == head)
+        #expect(fixture.model.sync.action == .publishBranch(remote: "origin", isGitHubRepository: false))
+        // The other remote keeps its mark, and is the branch's own now.
+        #expect(try await getPushDestinationNames(fixture.local) == ["origin"].exactSet)
+        #expect(fixture.model.gitState.remotes.additionalPushRemotes.isEmpty)
+        await fixture.app.idle()
+    }
+
+    @Test("removing the last remote leaves the repository to publish; one it doesn't have isn't removed")
+    func removeLastRemote() async throws {
+        let fixture = try await makeSelectedRepository()
+
+        let error = await #expect(throws: OperationError.self) {
+            try await fixture.model.sync.removeRemote("nope")
+        }
+        #expect(preconditionMessage(error) != nil)
+        #expect(try await remoteURLs(fixture.local) == ["origin": fixture.remote.path])
+
+        try await fixture.model.sync.removeRemote("origin")
+
+        #expect(try await remoteURLs(fixture.local).isEmpty)
+        #expect(fixture.model.gitState.remotes == RemotesSnapshot())
+        #expect(fixture.model.sync.action == .publishRepository)
+        await fixture.app.idle()
+    }
+
     // MARK: A fork's upstream remote
 
     @Test("a fork without an upstream remote gets one pointing at its parent")

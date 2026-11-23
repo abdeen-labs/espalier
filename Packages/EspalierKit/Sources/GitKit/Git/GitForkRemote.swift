@@ -26,6 +26,16 @@ public func markForkRemote(_ repository: Repository, _ name: String) async throw
 /// - Throws: When the configuration can't be read, a mark that isn't a
 ///   boolean included.
 public func getForkRemoteNames(_ repository: Repository) async throws -> Set<ExactString> {
+    try await getMarkedRemoteNames(repository, variable: forkRemoteMarkVariable, action: "getForkRemoteNames")
+}
+
+/// The names of the remotes whose `remote.<name>.<variable>` git reads as
+/// true in the repository's own configuration. Global and system
+/// configuration don't count.
+///
+/// - Throws: When the configuration can't be read, a mark that isn't a
+///   boolean included.
+func getMarkedRemoteNames(_ repository: Repository, variable markVariable: String, action: String) async throws -> Set<ExactString> {
     var options = GitExecutionOptions(
         // Git returns 1 when no keys match.
         successExitCodes: [0, 1]
@@ -34,11 +44,11 @@ public func getForkRemoteNames(_ repository: Repository) async throws -> Set<Exa
     // UTF-8 locale.
     options.addsDefaultLocale = false
     // Keys are matched with their section and variable names lowercased.
-    let variable = forkRemoteMarkVariable.lowercased()
+    let variable = markVariable.lowercased()
     let result = try await git(
         ["config", "--local", "--null", "--type", "bool", "--get-regexp", "^remote\\..+\\.\(variable)$"],
         repository.path,
-        "getForkRemoteNames",
+        action,
         options: options
     )
 
@@ -52,7 +62,7 @@ public func getForkRemoteNames(_ repository: Repository) async throws -> Set<Exa
         guard value == "true" else {
             continue
         }
-        // The name between `remote.` and `.espalierfork`.
+        // The name between `remote.` and the variable.
         let key = entry[entry.startIndex..<separator]
         let nameStart = key.startIndex + "remote.".utf8.count
         let nameEnd = separator - ".\(variable)".utf8.count

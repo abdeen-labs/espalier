@@ -236,8 +236,9 @@ enum ShellActions {
             guard let context, let repository = context.repository else {
                 return
             }
-            let outcome = await context.presenter.perform { _ throws(OperationError) in
-                try await repository.sync.publishBranch()
+            // With several remotes, a branch that tracks none asks which.
+            let outcome = await context.presenter.perform { answers throws(OperationError) in
+                try await repository.sync.publishBranch(choosing: answers.publishRemote)
             }
             finish(outcome, in: context)
         }
@@ -245,20 +246,40 @@ enum ShellActions {
 
     /// What a push leaves to the window (`PushOutcome`): a repository
     /// without a remote is published first; a fetch that failed after the
-    /// push is shown as its own error, with its Retry. VoiceOver hears
-    /// "Push complete" once the push is done.
+    /// push is shown as its own error, with its Retry. A push that also
+    /// went to other remotes shows a toast naming those that took it
+    /// ("Pushed main to origin and mirror"), and each one that didn't as
+    /// its own error, with its Retry. VoiceOver hears "Push complete" once
+    /// the push is done.
     static func finish(_ outcome: PushOutcome?, in context: WindowContext) {
         switch outcome {
         case .publishRepositoryRequired?:
             context.actions.perform(.publishRepository)
-        case .pushed(_, _, _, let fetchFailure)?:
+        case .pushed(let branch, let remote, _, let fetchFailure, let additional)?:
             context.announcer.announce("Push complete")
+            if let toast = pushToast(branch: branch, remote: remote, additional: additional) {
+                context.presenter.show(toast)
+            }
             if let fetchFailure {
                 context.presenter.present(fetchFailure)
+            }
+            for failure in additional.compactMap(\.failure) {
+                context.presenter.present(failure)
             }
         case nil:
             break
         }
+    }
+
+    /// The toast for a push that other remotes took too: the branch, its
+    /// own remote, and those ("Pushed main to origin, mirror, and backup").
+    /// Nil when it went to no other remote, or none of them took it.
+    static func pushToast(branch: String, remote: String, additional: [AdditionalPush]) -> Toast? {
+        let taken = additional.filter { $0.failure == nil }.map(\.remote)
+        guard !taken.isEmpty else {
+            return nil
+        }
+        return Toast("Pushed \(branch) to \(([remote] + taken).formatted(.list(type: .and)))")
     }
 
     // MARK: Edit

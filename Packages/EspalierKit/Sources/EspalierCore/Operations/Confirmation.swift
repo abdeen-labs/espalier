@@ -466,7 +466,8 @@ extension Confirmation {
 /// `DecisionAnswer`: checkout is called again with an explicit argument
 /// (`strategy:`); an editor answer is saved as the editor, and the intent
 /// called again; initializing Git LFS is called again with the answer about
-/// the hooks in its way (`replacingHooks:`).
+/// the hooks in its way (`replacingHooks:`); publishing a branch is called
+/// again with the remote chosen (`choosing:`).
 public enum Decision: Sendable, Equatable {
     /// Switching branches with uncommitted changes and the "ask" strategy:
     /// leave the changes on the current branch (stash them there) or bring
@@ -489,12 +490,19 @@ public enum Decision: Sendable, Equatable {
     ///   order initializing takes them.
     case replaceLFSHooks([LFSHooksToReplace])
 
+    /// Publishing a branch that tracks no remote in a repository with
+    /// several: which remote it goes to, and tracks.
+    ///
+    /// - Parameter remotes: The user's remotes, the current one first.
+    case publishRemote(branch: String, remotes: [Remote])
+
     /// The dialog's title.
     public var title: String {
         switch self {
         case .uncommittedChanges: "Switch Branch"
         case .externalEditor: "Choose an Editor"
         case .replaceLFSHooks: "Replace Hooks?"
+        case .publishRemote: "Publish Branch"
         }
     }
 
@@ -507,15 +515,18 @@ public enum Decision: Sendable, Equatable {
             "Espalier found more than one editor on your Mac. Which one should it open repositories and files in?"
         case .replaceLFSHooks:
             "Git LFS replaces these hooks:\n\nThe old hooks are moved to the Trash."
+        case .publishRemote(let branch, _):
+            "Which remote should \(branch) be published to? The branch will track it from then on."
         }
     }
 
     /// The answers to `uncommittedChanges`. Each one's `strategy` is the
     /// argument to pass back. An editor's answers are its `editors`; the
-    /// hooks in Git LFS's way are replaced or not.
+    /// hooks in Git LFS's way are replaced or not; a branch is published to
+    /// one of its `remotes`.
     public var choices: [DecisionChoice] {
         switch self {
-        case .externalEditor, .replaceLFSHooks:
+        case .externalEditor, .replaceLFSHooks, .publishRemote:
             []
         case .uncommittedChanges(let currentBranch, let targetBranch):
             [
@@ -539,6 +550,7 @@ public enum Decision: Sendable, Equatable {
         case .uncommittedChanges: "Switch Branch"
         case .externalEditor: "Open"
         case .replaceLFSHooks: "Replace Hooks"
+        case .publishRemote: "Publish Branch"
         }
     }
 }
@@ -551,6 +563,8 @@ public enum DecisionAnswer: Sendable, Equatable {
     case editor(String)
     /// Whether to replace the hooks in Git LFS's way (`replaceLFSHooks`).
     case replaceLFSHooks(LFSHooksAnswer)
+    /// The remote to publish the branch to, by name (`publishRemote`).
+    case remote(String)
 }
 
 /// One answer to a `Decision`.

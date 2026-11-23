@@ -395,6 +395,30 @@ struct RepositoryCaptures {
         }
     }
 
+    @Test("Repository Settings: several remotes; then one taken off the list and one being added")
+    func settingsRemotes() async throws {
+        try await withIsolatedGitConfig { _ in
+            let harness = try AppHarness()
+            let app = try await AccountCaptureFixtures.app(harness)
+            let fixture = try await setupTwoCommitRepo()
+            _ = try await runGit(["remote", "add", "origin", "https://github.com/joe/espalier.git"], fixture)
+            _ = try await runGit(["remote", "add", "mirror", "git@gitlab.com:joe/espalier.git"], fixture)
+            _ = try await runGit(["remote", "add", "backup", "ssh://backup.example.com/srv/git/espalier.git"], fixture)
+            let repository = try await harness.addAndSelect(fixture, to: app)
+
+            let model = RepositorySettingsModel(repository: repository, app: app)
+            await model.load()
+            model.pane = .remote
+            capture(RepositorySettingsForm(model: model), named: "settings-remotes", area: area)
+
+            model.removeRemote(model.remotes[1].id)
+            model.addRemote()
+            model.remotes[2].name = "archive"
+            capture(RepositorySettingsForm(model: model), named: "settings-remotes-editing", area: area)
+            await app.idle()
+        }
+    }
+
     @Test("Repository Settings: the remote's account, of two signed in to GitHub.com")
     func settingsAccount() async throws {
         try await withIsolatedGitConfig { _ in

@@ -28,6 +28,12 @@ public struct PushRetry: RetryableOperation {
         .push
     }
 
+    /// The remote a push to one remote alone is for, which its error names
+    /// ("Couldn't push to mirror.").
+    public var displayName: String? {
+        request.onlyRemote
+    }
+
     @discardableResult
     @MainActor
     public func perform(in app: AppModel) async throws(OperationError) -> OperationOutcome {
@@ -42,11 +48,21 @@ public struct PushRetry: RetryableOperation {
     }
 }
 
+/// Where publishing a branch that tracks no remote sends it.
+enum PublishTarget: Sendable, Equatable {
+    /// The current remote, without asking.
+    case currentRemote
+    /// The remote the user chose, by name; nil until they have, which asks
+    /// when the repository has several.
+    case chosen(String?)
+}
+
 extension SyncModel {
     /// Pushes the current branch to its remote with the tags queued to push
-    /// (`branches.tagsToPush`), then fetches that remote, fast-forwards other
-    /// branches to their upstreams, and returns after the repository's
-    /// refresh.
+    /// (`branches.tagsToPush`), then to the remotes a push also goes to
+    /// (`RemotesSnapshot.additionalPushRemotes`), then fetches the branch's
+    /// remote, fast-forwards other branches to their upstreams, and returns
+    /// after the repository's refresh.
     ///
     /// - A branch without an upstream is published: `--set-upstream`.
     /// - `forceWithLease` force pushes with a lease, asking first while
@@ -61,9 +77,16 @@ extension SyncModel {
     ///   `.publishRepositoryRequired`.
     /// - A push for one branch (`PushRequest.branch`) pushes nothing once
     ///   another branch is current, and its Retry asks for the same branch.
+    /// - The remotes a push also goes to get the branch once its own remote
+    ///   took it, under the same name there, with the same tags, and forced
+    ///   with git's default lease when the push is; the branch's upstream
+    ///   stays as it is. One that fails doesn't stop the others: the outcome
+    ///   has each one's error, with a Retry that pushes to it alone
+    ///   (`PushRequest.onlyRemote`).
     ///
     /// - Throws: preconditions (an unborn branch, a detached HEAD, a branch
-    ///   other than the one the push is for);
+    ///   other than the one the push is for, a remote to push to alone that's
+    ///   gone);
     ///   `.pushRejectedNonFastForward` with "Fetch" when the remote has
     ///   commits the branch doesn't, or a lease finds the remote branch
     ///   moved; the other push errors
@@ -71,16 +94,34 @@ extension SyncModel {
     ///   keeps the request.
     @discardableResult
     public func push(_ request: PushRequest = PushRequest(), confirmed: Set<ConfirmationKind> = []) async throws(OperationError) -> PushOutcome {
-        try await push(request, confirmed: confirmed, kind: .push)
+        try await push(request, confirmed: confirmed, kind: .push, publishTo: .currentRemote)
     }
 
-    /// Publishes the current branch: pushes it and sets its upstream.
+    /// Publishes the current branch: pushes it to the current remote and
+    /// sets its upstream.
     @discardableResult
     public func publishBranch() async throws(OperationError) -> PushOutcome {
-        try await push(PushRequest(), confirmed: [], kind: .publishBranch)
+        try await push(PushRequest(), confirmed: [], kind: .publishBranch, publishTo: .currentRemote)
     }
 
-    private func push(_ request: PushRequest, confirmed: Set<ConfirmationKind>, kind: OperationKind) async throws(OperationError) -> PushOutcome {
+    /// Publishes the current branch to the remote the user chose, named
+    /// `remoteName`, and sets its upstream. Without a choice, a branch that
+    /// tracks no remote in a repository with several asks first:
+    /// `.publishRemote` with the user's remotes, the current one first. A
+    /// branch that tracks a remote is pushed there.
+    ///
+    /// - Throws: A precondition when the chosen remote is gone.
+    @discardableResult
+    public func publishBranch(choosing remoteName: String?) async throws(OperationError) -> PushOutcome {
+        try await push(PushRequest(), confirmed: [], kind: .publishBranch, publishTo: .chosen(remoteName))
+    }
+
+    private func push(
+        _ request: PushRequest,
+        confirmed: Set<ConfirmationKind>,
+        kind: OperationKind,
+        publishTo: PublishTarget
+    ) async throws(OperationError) -> PushOutcome {
         guard let repository, let app = repository.app else {
             throw notInList(kind)
         }
@@ -109,10 +150,17 @@ extension SyncModel {
                 throw precondition("The current branch changed, so nothing was pushed.", kind)
             }
         }
-        guard let remote = state.remotes.currentRemote else {
+        guard let currentRemote = state.remotes.currentRemote else {
             return .publishRepositoryRequired
         }
         let branch = try currentBranch(for: kind)
+
+        if let onlyRemote = request.onlyRemote {
+            return try await push(branch, onlyTo: onlyRemote, request: request, confirmed: confirmed, kind: kind)
+        }
+
+        let remote = try publishRemote(for: branch, current: currentRemote, target: publishTo, kind: kind)
+        let additional = state.remotes.additionalPushRemotes(besides: branch.upstreamRemoteName.flatMap { $0.isEmpty ? nil : $0 } ?? remote.name)
 
         let descriptor = OperationDescriptor(
             kind: kind,
@@ -129,6 +177,7 @@ extension SyncModel {
             try await self.pushPrimitive(
                 branch,
                 to: remote,
+                additional: additional,
                 forceWithLease: request.forceWithLease,
                 leaseTip: leaseTip,
                 in: ctx,
@@ -142,11 +191,100 @@ extension SyncModel {
             repository.operations.forgetRewrite(of: branch)
         }
         let fetchFailure = await classifyFetchFailure(result.fetchFailure)
+        var additionalPushes: [AdditionalPush] = []
+        for push in result.additional {
+            let failure = await classifyAdditionalFailure(
+                push.failure,
+                remote: push.remote,
+                branch: branch,
+                request: request,
+                tags: result.tags,
+                confirmed: confirmed
+            )
+            additionalPushes.append(AdditionalPush(remote: push.remote, failure: failure))
+        }
         // Branch protection refreshes after pushing, so a new branch reports
         // as protected at once.
         await repository.gitHub.refreshBranchProtection()
         await repository.awaitOperationRefresh(covering: .full)
-        return .pushed(branch: branch.name, remote: result.remoteName, tags: result.tags, fetchFailure: fetchFailure)
+        return .pushed(
+            branch: branch.name,
+            remote: result.remoteName,
+            tags: result.tags,
+            fetchFailure: fetchFailure,
+            additional: additionalPushes
+        )
+    }
+
+    /// The remote a push of `branch` goes to: `current`, or for a branch
+    /// that tracks no remote being published to a remote of the user's
+    /// choice, that one.
+    ///
+    /// - Throws: `.publishRemote` when the user hasn't chosen and the
+    ///   repository has several remotes of theirs; a precondition when the
+    ///   one they chose is gone.
+    private func publishRemote(
+        for branch: Branch,
+        current: Remote,
+        target: PublishTarget,
+        kind: OperationKind
+    ) throws(OperationError) -> Remote {
+        guard case .chosen(let chosen) = target, let repository else {
+            return current
+        }
+        // A branch that tracks a remote (its remote branch gone, say) is
+        // pushed there.
+        if let tracked = branch.upstreamRemoteName, !tracked.isEmpty {
+            return current
+        }
+        let remotes = repository.gitState.remotes.userRemotes
+        if let chosen {
+            guard let remote = remotes.first(where: { JSCompat.strictEquals($0.name, chosen) }) else {
+                throw precondition("The remote \(chosen) is no longer in this repository.", kind)
+            }
+            return remote
+        }
+        guard remotes.count > 1 else {
+            return current
+        }
+        let ordered = remotes.filter { JSCompat.strictEquals($0.name, current.name) }
+            + remotes.filter { !JSCompat.strictEquals($0.name, current.name) }
+        throw OperationError(
+            .decisionRequired(.publishRemote(branch: branch.name, remotes: ordered)),
+            operation: kind,
+            repositoryID: repository.id
+        )
+    }
+
+    /// Pushes `branch` to the remote named `remoteName` alone, as a push
+    /// that also goes there does: under the branch's name on its own remote,
+    /// with `request.onlyRemoteTags`, the branch's upstream left as it is.
+    private func push(
+        _ branch: Branch,
+        onlyTo remoteName: String,
+        request: PushRequest,
+        confirmed: Set<ConfirmationKind>,
+        kind: OperationKind
+    ) async throws(OperationError) -> PushOutcome {
+        guard let repository else {
+            throw notInList(kind)
+        }
+        guard let remote = repository.gitState.remotes.userRemotes.first(where: { JSCompat.strictEquals($0.name, remoteName) }) else {
+            throw precondition("The remote \(remoteName) is no longer in this repository.", kind)
+        }
+        let tags = request.onlyRemoteTags
+        let descriptor = OperationDescriptor(
+            kind: kind,
+            lanes: [.network],
+            retry: PushRetry(repositoryID: repository.id, request: request, confirmed: confirmed.intersection([.forcePush])),
+            refreshAfter: .full,
+            showsProgressUntilRefreshed: true
+        )
+        try await repository.perform(descriptor) { ctx in
+            try await self.pushAdditional(branch, to: remote, tags: tags, forceWithLease: request.forceWithLease, in: ctx, progress: ctx.progress)
+        }
+        await repository.awaitOperationRefresh(covering: .full)
+        return .pushed(branch: branch.name, remote: remote.name, tags: tags, fetchFailure: nil)
     }
 
     /// What `pushPrimitive` did.
@@ -157,18 +295,23 @@ extension SyncModel {
         let tags: [String]
         /// The fetch after the push failed.
         let fetchFailure: (any Error)?
+        /// The remotes the push also went to, in order, with their failures.
+        var additional: [(remote: String, failure: (any Error)?)] = []
     }
 
-    /// One push and what follows it: the push with the queued tags (0-0.643
-    /// of `progress`), then taking the pushed tags off the queue, fetching
-    /// the remote (-0.9), and fast-forwarding other branches ("Refreshing
-    /// Repository", -0.95). The network lane is held.
+    /// One push and what follows it: the push with the queued tags, then
+    /// taking the pushed tags off the queue, the push to each of
+    /// `additional` (together 0-0.643 of `progress`, in equal shares),
+    /// fetching the remote (-0.9), and fast-forwarding other branches
+    /// ("Refreshing Repository", -0.95). The network lane is held.
     ///
     /// - Throws: The push's error; the fetch's is returned instead, since
-    ///   the push succeeded.
+    ///   the push succeeded, and so are those of the pushes to `additional`.
+    ///   A push to one of `additional` that's cancelled ends the operation.
     func pushPrimitive(
         _ branch: Branch,
         to remote: Remote,
+        additional: [Remote] = [],
         forceWithLease: Bool,
         leaseTip: String? = nil,
         in ctx: OperationContext,
@@ -196,9 +339,11 @@ extension SyncModel {
         let scale = (1 / (pushWeight + fetchWeight)) * (1 - refreshWeight)
         pushWeight *= scale
         fetchWeight *= scale
+        // Each remote pushed to takes an equal share of the push's.
+        let pushShare = pushWeight / Double(additional.count + 1)
 
         let tags = repository.record.tagsToPush
-        let pushProgress = progress.scaled(from: 0, to: pushWeight)
+        let pushProgress = progress.scaled(from: 0, to: pushShare)
         // The branch's name from its ref, which GitKit's `push` pushes as
         // `refs/heads/<name>`: the branch list names a branch that shares
         // its name with a tag `heads/<name>`.
@@ -220,6 +365,22 @@ extension SyncModel {
 
         removePushedTags(tags)
 
+        var additionalPushes: [(remote: String, failure: (any Error)?)] = []
+        for (index, other) in additional.enumerated() {
+            let share = progress.scaled(from: pushShare * Double(index + 1), to: pushShare * Double(index + 2))
+            do {
+                try await pushAdditional(branch, to: other, tags: tags, forceWithLease: forceWithLease, in: ctx, progress: share)
+                additionalPushes.append((other.name, nil))
+            } catch {
+                // Stop ends the whole push, not just this remote's.
+                if Task.isCancelled {
+                    throw error
+                }
+                SyncModel.logFailure("Pushing to \(other.name) failed", error)
+                additionalPushes.append((other.name, error))
+            }
+        }
+
         let fetchFailure = await fetchRemotes(
             [safeRemote],
             repository: ctx.repository,
@@ -236,7 +397,40 @@ extension SyncModel {
         await fastForwardOtherBranches(ctx.repository)
         progress.send(.generic(GenericProgress(value: refreshStartProgress + refreshWeight * 0.5, title: refreshingRepositoryTitle)))
 
-        return PushResult(remoteName: safeRemote.name, tags: tags, fetchFailure: fetchFailure)
+        return PushResult(remoteName: safeRemote.name, tags: tags, fetchFailure: fetchFailure, additional: additionalPushes)
+    }
+
+    /// Pushes `branch` to `remote`, one of the remotes a push also goes to:
+    /// to the branch of the name it has on its own remote (its own name
+    /// while it has no upstream), with `tags`, forced with git's default
+    /// lease (the remote-tracking branch) when `forceWithLease`. The
+    /// branch's upstream stays as it is. The network lane is held.
+    func pushAdditional(
+        _ branch: Branch,
+        to remote: Remote,
+        tags: [String],
+        forceWithLease: Bool,
+        in ctx: OperationContext,
+        progress: ProgressSink
+    ) async throws {
+        let localName = branchNameFromRef(branch)
+        // A remote branch's name, always given: without one `push` would
+        // set the branch's upstream to this remote.
+        let remoteBranch = branch.upstreamWithoutRemote.flatMap { $0.isEmpty ? nil : $0 } ?? localName
+        try await GitKit.push(
+            ctx.repository,
+            remote,
+            localName,
+            remoteBranch,
+            tags.isEmpty ? nil : tags,
+            PushOptions(
+                forceWithLease: forceWithLease,
+                onHookProgress: ctx.hooks.onHookProgress,
+                onHookFailure: ctx.hooks.onHookFailure,
+                onTerminalOutputAvailable: ctx.hooks.onTerminalOutputAvailable
+            ),
+            progressCallback: { progress.send(.push($0)) }
+        )
     }
 
     /// Takes the pushed tags off the queue. A tag queued while the push ran
@@ -269,6 +463,50 @@ extension SyncModel {
             descriptor: OperationDescriptor(kind: .fetch, lanes: [.network], retry: FetchRetry(repositoryID: repository.id)),
             record: repository.record,
             context: context
+        )
+    }
+
+    /// The push to `remote`, one of those a push also goes to, failed: its
+    /// error as a push's, with a Retry that pushes `branch` to that remote
+    /// alone with `tags`, forced as `request` is. The Retry is offered as a
+    /// recovery, after any the error has: the branch's own remote took the
+    /// push, so only this one is left to do again.
+    private func classifyAdditionalFailure(
+        _ error: (any Error)?,
+        remote: String,
+        branch: Branch,
+        request: PushRequest,
+        tags: [String],
+        confirmed: Set<ConfirmationKind>
+    ) async -> OperationError? {
+        guard let error, let repository else {
+            return nil
+        }
+        var context = ClassificationContext()
+        context.hasAccountForRepository = repository.app?.accounts.account(for: repository.record) != nil
+        let retry = PushRetry(
+            repositoryID: repository.id,
+            request: PushRequest(forceWithLease: request.forceWithLease, branch: branch.ref, onlyRemote: remote, onlyRemoteTags: tags),
+            confirmed: confirmed.intersection([.forcePush])
+        )
+        let classified = await ErrorClassifier.classify(
+            error,
+            descriptor: OperationDescriptor(kind: .push, lanes: [.network], retry: retry),
+            record: repository.record,
+            context: context
+        )
+        guard !classified.isCancellation else {
+            return classified
+        }
+        return OperationError(
+            classified.reason,
+            operation: classified.operation,
+            repositoryID: classified.repositoryID,
+            retry: retry,
+            isBackgroundTask: classified.isBackgroundTask,
+            underlying: classified.underlying,
+            gitContext: classified.gitContext,
+            recoveries: classified.recoveries + [.retry(retry)]
         )
     }
 }

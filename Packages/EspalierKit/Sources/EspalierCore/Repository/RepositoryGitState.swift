@@ -116,19 +116,52 @@ public struct RemotesSnapshot: Sendable, Equatable {
     /// configuration marks (`getForkRemoteNames`): their branches are hidden
     /// and they're pruned once unused. Empty when the marks can't be read.
     public var forkRemoteNames: Set<ExactString>
+    /// The names of the remotes marked as ones a push also goes to
+    /// (`getPushDestinationNames`). Empty when the marks can't be read.
+    public var pushDestinationNames: Set<ExactString>
 
     public init(
         all: [Remote] = [],
         defaultRemote: Remote? = nil,
         currentRemote: Remote? = nil,
         upstreamRemote: Remote? = nil,
-        forkRemoteNames: Set<ExactString> = []
+        forkRemoteNames: Set<ExactString> = [],
+        pushDestinationNames: Set<ExactString> = []
     ) {
         self.all = all
         self.defaultRemote = defaultRemote
         self.currentRemote = currentRemote
         self.upstreamRemote = upstreamRemote
         self.forkRemoteNames = forkRemoteNames
+        self.pushDestinationNames = pushDestinationNames
+    }
+
+    /// The remotes the user set up: all but Espalier's fork remotes.
+    public var userRemotes: [Remote] {
+        all.filter { !forkRemoteNames.contains(ExactString($0.name)) }
+    }
+
+    /// The remotes a push can also go to: the user's, but the current one,
+    /// which the current branch pushes to anyway.
+    public var otherPushRemotes: [Remote] {
+        userRemotes.filter { remote in
+            !(currentRemote.map { JSCompat.strictEquals($0.name, remote.name) } ?? false)
+        }
+    }
+
+    /// The remotes a push also goes to, after the current one: those of
+    /// `otherPushRemotes` marked as push destinations.
+    public var additionalPushRemotes: [Remote] {
+        additionalPushRemotes(besides: currentRemote?.name)
+    }
+
+    /// The remotes a push to the remote named `primary` also goes to: the
+    /// user's remotes marked as push destinations, but that one.
+    public func additionalPushRemotes(besides primary: String?) -> [Remote] {
+        userRemotes.filter { remote in
+            pushDestinationNames.contains(ExactString(remote.name))
+                && !(primary.map { JSCompat.strictEquals($0, remote.name) } ?? false)
+        }
     }
 }
 

@@ -332,7 +332,7 @@ struct PushOperationTests {
 
         let outcome = try await fixture.model.sync.push()
 
-        guard case .pushed("main", "origin", [], let fetchFailure?) = outcome else {
+        guard case .pushed("main", "origin", [], let fetchFailure?, _) = outcome else {
             Issue.record("Unexpected outcome \(outcome)")
             return
         }

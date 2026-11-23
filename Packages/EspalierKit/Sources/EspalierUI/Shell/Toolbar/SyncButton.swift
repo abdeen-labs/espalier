@@ -1,10 +1,12 @@
 // The sync button, a split button whose chevron lists the alternatives.
 // `SyncAction` decides the state, read in one function
 // (`SyncButtonState.make`); this file adds what the button shows besides:
-// the counts, the last fetch, the background failure, and Stop while a push,
-// pull, or fetch hangs.
+// the counts, the last fetch, the background failure, Stop while a push,
+// pull, or fetch hangs, and, in a repository with several remotes, the
+// remotes a push also goes to.
 
 import EspalierCore
+import EspalierSupport
 import GitHubKit
 import GitKit
 import SwiftUI
@@ -53,6 +55,18 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
                 false
             }
         }
+
+        /// Whether the state is one of a branch that pushes to a remote,
+        /// now or once it has commits: a fetch, a pull, a push, or
+        /// publishing the branch; while one runs, the state whose action
+        /// runs.
+        nonisolated var pushesToRemote: Bool {
+            switch self {
+            case .fetchUnborn, .fetch, .publishBranch, .forcePush, .pull, .push: true
+            case .progress(_, _, _, let shown): shown?.pushesToRemote ?? false
+            case .loading, .publishRepository, .detachedHead: false
+            }
+        }
     }
 
     public var kind: Kind
@@ -66,19 +80,25 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
     /// Whether Stop shows beside the button: a push, pull, or fetch hangs,
     /// and stopping it would stop something (`SyncModel.offersStop`).
     public var offersStop: Bool
+    /// The repository's other remotes, each a push also goes to or not
+    /// (`RemotesSnapshot.otherPushRemotes`): the menu's Also Push To. Empty
+    /// with one remote, and where the button has none to push to.
+    public var destinations: [SyncPushDestination]
 
     public init(
         kind: Kind,
         lastFetched: Date? = nil,
         backgroundFailure: BackgroundFailureSummary? = nil,
         asksBeforeForcePush: Bool = true,
-        offersStop: Bool = false
+        offersStop: Bool = false,
+        destinations: [SyncPushDestination] = []
     ) {
         self.kind = kind
         self.lastFetched = lastFetched
         self.backgroundFailure = backgroundFailure
         self.asksBeforeForcePush = asksBeforeForcePush
         self.offersStop = offersStop
+        self.destinations = destinations
     }
 
     /// The state whose label the button shows: while a push, pull, or fetch
@@ -90,16 +110,29 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
 
     /// The button's title: while an operation that isn't one of the
     /// button's runs, the operation's.
+    /// A push names the remotes it also goes to: "Push origin and mirror",
+    /// or "Push origin and 2 More".
     public var title: String {
         switch kind {
-        case .progress(let title, _, _, let shown): shown.map { SyncButtonState(kind: $0).title } ?? title
+        case .progress(let title, _, _, let shown): shown.map { SyncButtonState(kind: $0, destinations: destinations).title } ?? title
         case .loading: ""
         case .publishRepository: "Publish Repository"
-        case .fetchUnborn(let remote), .fetch(let remote): "Fetch \(remote)"
+        case .fetchUnborn, .fetch: "Fetch"
         case .detachedHead, .publishBranch: "Publish Branch"
-        case .forcePush(let remote, _, _): "Force Push \(remote)"
+        case .forcePush(let remote, _, _): "Force Push \(remote)\(alsoPushedTo)"
         case .pull(let remote, let withRebase, _, _, _): withRebase ? "Pull \(remote) with Rebase" : "Pull \(remote)"
-        case .push(let remote, _, _): "Push \(remote)"
+        case .push(let remote, _, _): "Push \(remote)\(alsoPushedTo)"
+        }
+    }
+
+    /// What follows a push's remote in its title: the one other remote it
+    /// goes to (" and mirror"), or how many (" and 2 More").
+    private var alsoPushedTo: String {
+        let names = destinations.filter(\.isOn).map(\.name)
+        switch names.count {
+        case 0: return ""
+        case 1: return " and \(names[0])"
+        default: return " and \(names.count) More"
         }
     }
 
@@ -260,10 +293,11 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
         }
     }
 
-    /// Whether the button has its chevron: with alternatives or a
-    /// background failure, as the state whose action runs had it.
+    /// Whether the button has its chevron: with alternatives, a background
+    /// failure, or other remotes to push to, as the state whose action runs
+    /// had it.
     public var hasMenu: Bool {
-        shownKind != nil && (!menuItems.isEmpty || backgroundFailure != nil)
+        shownKind != nil && (!menuItems.isEmpty || backgroundFailure != nil || !destinations.isEmpty)
     }
 
     /// While a push, pull, or fetch runs: `settled`, the state the button
@@ -282,7 +316,8 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
             lastFetched: settled.lastFetched,
             backgroundFailure: settled.backgroundFailure,
             asksBeforeForcePush: settled.asksBeforeForcePush,
-            offersStop: offersStop
+            offersStop: offersStop,
+            destinations: settled.destinations
         )
     }
 
@@ -291,12 +326,17 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
     /// Stop is offered.
     @MainActor
     public static func make(_ repository: RepositoryModel, preferences: Preferences) -> SyncButtonState {
-        SyncButtonState(
-            kind: kind(repository.sync.action, repository: repository),
+        let kind = kind(repository.sync.action, repository: repository)
+        let remotes = repository.gitState.remotes
+        return SyncButtonState(
+            kind: kind,
             lastFetched: repository.gitState.lastFetched,
             backgroundFailure: repository.lastBackgroundFailure.map(BackgroundFailureSummary.init),
             asksBeforeForcePush: preferences.confirmForcePush,
-            offersStop: repository.sync.offersStop
+            offersStop: repository.sync.offersStop,
+            destinations: kind.pushesToRemote ? remotes.otherPushRemotes.map { remote in
+                SyncPushDestination(name: remote.name, isOn: remotes.pushDestinationNames.contains(ExactString(remote.name)))
+            } : []
         )
     }
 
@@ -363,6 +403,19 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
     }
 }
 
+/// One of the repository's other remotes in the sync button's menu, and
+/// whether a push also goes to it.
+nonisolated public struct SyncPushDestination: Sendable, Equatable {
+    /// The remote's name.
+    public var name: String
+    public var isOn: Bool
+
+    public init(name: String, isOn: Bool) {
+        self.name = name
+        self.isOn = isOn
+    }
+}
+
 /// An item in the sync button's menu.
 nonisolated public enum SyncMenuItem: Sendable, Equatable {
     case fetch(remote: String)
@@ -413,6 +466,7 @@ public struct SyncButtonView: View {
     private let state: SyncButtonState
     private let onPrimary: () -> Void
     private let onMenuItem: (SyncMenuItem) -> Void
+    private let onToggleDestination: (SyncPushDestination) -> Void
     private let onShowFailure: () -> Void
     private let onStop: () -> Void
     @Environment(\.dateTimeFormatting) private var formatting
@@ -424,16 +478,20 @@ public struct SyncButtonView: View {
     /// crossfade can reach: more than the widest capsule.
     private static let crossfadeReach: CGFloat = 640
 
+    /// - Parameter onToggleDestination: A remote of Also Push To was
+    ///   chosen: the push goes to it too, or no longer does.
     public init(
         _ state: SyncButtonState,
         onPrimary: @escaping () -> Void = {},
         onMenuItem: @escaping (SyncMenuItem) -> Void = { _ in },
+        onToggleDestination: @escaping (SyncPushDestination) -> Void = { _ in },
         onShowFailure: @escaping () -> Void = {},
         onStop: @escaping () -> Void = {}
     ) {
         self.state = state
         self.onPrimary = onPrimary
         self.onMenuItem = onMenuItem
+        self.onToggleDestination = onToggleDestination
         self.onShowFailure = onShowFailure
         self.onStop = onStop
     }
@@ -547,14 +605,24 @@ public struct SyncButtonView: View {
         }
     }
 
-    /// The chevron's menu: the alternatives under the last fetch, and the
-    /// background failure.
+    /// The chevron's menu: the alternatives under the last fetch, the
+    /// repository's other remotes under Also Push To, checked where a push
+    /// goes to them too, and the background failure.
     @MenuBuilder
-    private func menu(detail: String) -> MenuContent {
+    func menu(detail: String) -> MenuContent {
         MenuSection(detail) {
             for item in state.menuItems {
                 MenuAction(item.title, systemImage: item.systemImage, subtitle: item.description) {
                     onMenuItem(item)
+                }
+            }
+        }
+        if !state.destinations.isEmpty {
+            MenuSection("Also Push To") {
+                for destination in state.destinations {
+                    MenuToggle(destination.name, isOn: destination.isOn) {
+                        onToggleDestination(destination)
+                    }
                 }
             }
         }
@@ -715,6 +783,7 @@ public struct SyncButtonGroup: View {
     private let scope: AnyHashable?
     private let onPrimary: () -> Void
     private let onMenuItem: (SyncMenuItem) -> Void
+    private let onToggleDestination: (SyncPushDestination) -> Void
     private let onShowFailure: () -> Void
     private let onStop: () -> Void
     /// The width the group last had with something to show.
@@ -737,6 +806,7 @@ public struct SyncButtonGroup: View {
         scope: AnyHashable? = nil,
         onPrimary: @escaping () -> Void = {},
         onMenuItem: @escaping (SyncMenuItem) -> Void = { _ in },
+        onToggleDestination: @escaping (SyncPushDestination) -> Void = { _ in },
         onShowFailure: @escaping () -> Void = {},
         onStop: @escaping () -> Void = {}
     ) {
@@ -744,6 +814,7 @@ public struct SyncButtonGroup: View {
         self.scope = scope
         self.onPrimary = onPrimary
         self.onMenuItem = onMenuItem
+        self.onToggleDestination = onToggleDestination
         self.onShowFailure = onShowFailure
         self.onStop = onStop
     }
@@ -765,8 +836,15 @@ public struct SyncButtonGroup: View {
             }
             // Over a wider capsule crossfading out as the button narrows.
             .zIndex(1)
-            SyncButtonView(shown, onPrimary: onPrimary, onMenuItem: onMenuItem, onShowFailure: onShowFailure, onStop: onStop)
-                .controlSize(.large)
+            SyncButtonView(
+                shown,
+                onPrimary: onPrimary,
+                onMenuItem: onMenuItem,
+                onToggleDestination: onToggleDestination,
+                onShowFailure: onShowFailure,
+                onStop: onStop
+            )
+            .controlSize(.large)
         }
         .motion(Motion.kindChange, value: shown.showsStop)
         .frame(width: isLoading ? shownWidth : nil)
@@ -848,6 +926,12 @@ struct SyncButton: View {
             switch item {
             case .fetch: context.actions.perform(.fetch)
             case .forcePush: context.actions.perform(.forcePush)
+            }
+        }, onToggleDestination: { destination in
+            Task {
+                await context.presenter.perform { _ throws(OperationError) in
+                    try await repository.sync.setPushDestination(destination.name, !destination.isOn)
+                }
             }
         }, onShowFailure: {
             isShowingFailure = true

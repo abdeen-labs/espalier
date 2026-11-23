@@ -144,35 +144,75 @@ struct FetchOperationTests {
         await fixture.app.idle()
     }
 
-    @Test("fetches the current branch's remote, then the default remote, then a fork's upstream, each once")
+    @Test("fetches the current branch's remote, then the default remote, then a fork's upstream, each once; then, for a full fetch, the user's other remotes")
     func remotesInOrder() async throws {
         let local = Repository(path: try setupEmptyRepository().path)
         try await runGit(["remote", "add", "origin", "https://github.com/mona/app.git"], local)
         try await runGit(["remote", "add", "upstream", "https://github.com/octocat/app.git"], local)
         try await runGit(["remote", "add", "another", "https://example.com/app.git"], local)
+        try await runGit(["remote", "add", "espalier-hubot", "https://github.com/hubot/app.git"], local)
+        try await markForkRemote(local, "espalier-hubot")
         let parent = ModelFixtures.gitHubRepository(owner: "octocat", name: "app", dbID: 2)
         let fork = ModelFixtures.gitHubRepository(owner: "mona", name: "app", dbID: 1, parent: parent)
         let record = ModelFixtures.record(path: local.path, gitHubRepository: fork)
+        // What a fetch for the repository list's indicator fetches, and what
+        // a full fetch does.
+        func names(_ tip: Tip, _ record: RepositoryRecord) async throws -> (indicator: [String], full: [String]) {
+            (
+                try await remotesToFetch(local, tip: tip, record: record, includingOthers: false).map(\.name),
+                try await remotesToFetch(local, tip: tip, record: record, includingOthers: true).map(\.name)
+            )
+        }
 
         let tracking = Tip.valid(branch: ModelFixtures.branch("main", upstream: "another/main"))
-        #expect(try await remotesToFetch(local, tip: tracking, record: record).map(\.name) == ["another", "origin", "upstream"])
+        #expect(try await names(tracking, record) == (["another", "origin", "upstream"], ["another", "origin", "upstream"]))
 
         let untracked = Tip.valid(branch: ModelFixtures.branch("main"))
-        #expect(try await remotesToFetch(local, tip: untracked, record: record).map(\.name) == ["origin", "upstream"])
+        #expect(try await names(untracked, record) == (["origin", "upstream"], ["origin", "upstream", "another"]))
 
-        // Not a fork: no upstream remote.
+        // Not a fork: no upstream remote, but as another of the user's.
         let plain = ModelFixtures.record(path: local.path, gitHubRepository: parent)
-        #expect(try await remotesToFetch(local, tip: .unborn(ref: "main"), record: plain).map(\.name) == ["origin"])
+        #expect(try await names(.unborn(ref: "main"), plain) == (["origin"], ["origin", "another", "upstream"]))
 
         // A branch tracking a remote that's gone fetches the default.
         let gone = Tip.valid(branch: ModelFixtures.branch("main", upstream: "gone/main"))
-        #expect(try await remotesToFetch(local, tip: gone, record: plain).map(\.name) == ["origin"])
+        #expect(try await names(gone, plain) == (["origin"], ["origin", "another", "upstream"]))
+
+        // A fork remote Espalier added is fetched only as the current
+        // branch's.
+        let forkBranch = Tip.valid(branch: ModelFixtures.branch("main", upstream: "espalier-hubot/main"))
+        #expect(try await names(forkBranch, plain) == (["espalier-hubot", "origin"], ["espalier-hubot", "origin", "another", "upstream"]))
 
         // A remote whose name has a slash, read from the remotes it loads
         // (a status-only refresh made the tip without them).
         try await runGit(["remote", "add", "team/alice", "https://example.com/alice/app.git"], local)
         let slash = Tip.valid(branch: ModelFixtures.branch("main", upstream: "team/alice/main"))
-        #expect(try await remotesToFetch(local, tip: slash, record: plain).map(\.name) == ["team/alice", "origin"])
+        #expect(try await names(slash, plain) == (["team/alice", "origin"], ["team/alice", "origin", "another", "upstream"]))
+    }
+
+    @Test("a fetch brings in the user's other remotes' branches; a fetch for the repository list's indicator doesn't")
+    func otherRemotes() async throws {
+        let mirror = try await makeEmptyBareRemote()
+        // Its HEAD names `main`, so a clone of it commits there.
+        try await runGit(["symbolic-ref", "HEAD", "refs/heads/main"], mirror)
+        let fixture = try await makeSelectedRepository { local in
+            try await runGit(["remote", "add", "mirror", mirror.path], local)
+            try await runGit(["push", "-q", "mirror", "main"], local)
+        }
+        let theirs = try await pushCommitFromAnotherClone(mirror, path: "theirs.txt", contents: "theirs\n")
+        #expect(try await fixture.localSHA("refs/remotes/mirror/main") != theirs)
+
+        // No fetch yet, so the indicator's is due.
+        guard case .fetched = await fixture.model.sync.fetchForIndicator(lastPush: nil) else {
+            Issue.record("The indicator's fetch didn't run")
+            return
+        }
+        #expect(try await fixture.localSHA("refs/remotes/mirror/main") != theirs)
+
+        try await fixture.model.sync.fetch()
+
+        #expect(try await fixture.localSHA("refs/remotes/mirror/main") == theirs)
+        await fixture.app.idle()
     }
 
     @Test("a remote that fails doesn't stop the others; the first failure is thrown afterwards, with a Retry")

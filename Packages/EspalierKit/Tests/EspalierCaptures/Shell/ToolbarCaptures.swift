@@ -32,6 +32,13 @@ struct ToolbarCaptures {
         capture(SyncButtonView(state).padding(Metrics.insetMedium), named: name, area: "SyncButton")
     }
 
+    @Test("the sync button's menu with other remotes: the alternatives, then Also Push To", arguments: ["8-push-also", "9-fetch-also"])
+    func syncMenu(name: String) throws {
+        let state = try Self.syncState(name)
+        let content = SyncButtonView(state).menu(detail: state.detail(now: Date()))
+        capture(MenuCard(level: MenuLevel(content: content)), named: "\(name)-menu", area: "SyncButton")
+    }
+
     @Test("the sync group once Stop shows, in the last fetch's place", arguments: ["1-progress", "1-progress-starting"])
     func syncGroupWithStop(name: String) throws {
         var state = try Self.syncState(name)

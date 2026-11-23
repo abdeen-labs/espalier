@@ -24,10 +24,20 @@ public struct PushRequest: Sendable, Equatable {
     /// another branch is current, nothing is pushed. Nil pushes whichever
     /// branch is current.
     public var branch: String?
+    /// A remote to push to alone, by name: one of those a push also goes to
+    /// (`AdditionalPush`'s Retry). The branch's own remote and the others
+    /// are left out, the branch's upstream stays as it is, and the queued
+    /// tags stay queued.
+    public var onlyRemote: String?
+    /// The tags to push with the branch to `onlyRemote`: those the push
+    /// being retried sent to the branch's own remote.
+    public var onlyRemoteTags: [String]
 
-    public init(forceWithLease: Bool = false, branch: String? = nil) {
+    public init(forceWithLease: Bool = false, branch: String? = nil, onlyRemote: String? = nil, onlyRemoteTags: [String] = []) {
         self.forceWithLease = forceWithLease
         self.branch = branch
+        self.onlyRemote = onlyRemote
+        self.onlyRemoteTags = onlyRemoteTags
     }
 }
 
@@ -35,10 +45,26 @@ public struct PushRequest: Sendable, Equatable {
 public enum PushOutcome: Sendable, Equatable {
     /// `branch` was pushed to `remote` with `tags`. `fetchFailure` is set when
     /// fetching the remote afterwards failed (the push itself succeeded); it's
-    /// shown with its own Retry, which fetches.
-    case pushed(branch: String, remote: String, tags: [String], fetchFailure: OperationError?)
+    /// shown with its own Retry, which fetches. `additional` has the remotes
+    /// the push also went to (`RemotesSnapshot.additionalPushRemotes`), in
+    /// order, each with what its push did.
+    case pushed(branch: String, remote: String, tags: [String], fetchFailure: OperationError?, additional: [AdditionalPush] = [])
     /// The repository has no remote: it must be published first. Nothing ran.
     case publishRepositoryRequired
+}
+
+/// What pushing to one of the remotes a push also goes to did.
+public struct AdditionalPush: Sendable, Equatable {
+    /// The remote's name.
+    public let remote: String
+    /// Nil when the remote took the push. Otherwise its error, shown with
+    /// its own Retry, which pushes to this remote alone.
+    public let failure: OperationError?
+
+    public init(remote: String, failure: OperationError? = nil) {
+        self.remote = remote
+        self.failure = failure
+    }
 }
 
 /// Publishing a repository to GitHub: the repository to create and where.

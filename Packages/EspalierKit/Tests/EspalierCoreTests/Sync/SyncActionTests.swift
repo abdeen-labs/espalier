@@ -27,7 +27,7 @@ struct SyncActionTests {
         fixture.model.gitState.tip = .valid(branch: ModelFixtures.branch(branch, sha: sha, upstream: upstream))
     }
 
-    @Test("starts as Fetch origin for a repository that is up to date")
+    @Test("starts as Fetch for a repository that is up to date")
     func upToDate() async throws {
         let fixture = try await makeRepository()
         let action = fixture.model.sync.action

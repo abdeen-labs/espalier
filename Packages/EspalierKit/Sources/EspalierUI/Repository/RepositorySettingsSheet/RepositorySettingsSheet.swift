@@ -1,15 +1,44 @@
-// Repository Settings (⌥⌘,): Remote (with the account of a GitHub
+// Repository Settings (⌥⌘,): Remotes (with the account of a GitHub
 // repository), Ignored Files, Git Config, and Fork Behavior for forks; one
-// Save that applies what changed in order (the account, the remote's URL,
-// the .gitignore, the fork's target, the author) and lists what failed,
-// staying open then. Each write is a state-layer intent:
-// `updateRepositoryAccount`, `setRemoteURL`, `saveGitIgnore`,
+// Save that applies what changed in order (the account, the remotes
+// removed, the remotes' URLs, the remotes added, the .gitignore, the fork's
+// target, the author) and lists what failed, staying open then. Each write
+// is a state-layer intent: `updateRepositoryAccount`, `removeRemote`,
+// `setRemoteURL`, `addRemote`, `saveGitIgnore`,
 // `setForkContributionTarget`, and `saveGitAuthor`.
 
 import EspalierCore
+import EspalierSupport
 import GitHubKit
 import GitKit
 import SwiftUI
+
+/// A remote as the Remotes pane edits it.
+nonisolated struct RemoteDraft: Identifiable, Equatable, Sendable {
+    let id: UUID
+    /// The remote's name in the repository; nil for one being added.
+    var existingName: String?
+    /// The name: the remote's own, or the new one's as typed.
+    var name: String
+    var url: String
+
+    init(id: UUID = UUID(), existingName: String? = nil, name: String = "", url: String = "") {
+        self.id = id
+        self.existingName = existingName
+        self.name = name
+        self.url = url
+    }
+
+    /// Whether the remote is being added.
+    var isNew: Bool {
+        existingName == nil
+    }
+
+    /// Whether the remote is one being added with nothing typed yet.
+    var isBlank: Bool {
+        isNew && JSCompat.trim(name).isEmpty && JSCompat.trim(url).isEmpty
+    }
+}
 
 /// A pane of Repository Settings.
 nonisolated enum RepositorySettingsPane: String, CaseIterable, Sendable, Identifiable {
@@ -21,7 +50,7 @@ nonisolated enum RepositorySettingsPane: String, CaseIterable, Sendable, Identif
 
     var title: String {
         switch self {
-        case .remote: "Remote"
+        case .remote: "Remotes"
         case .ignoredFiles: "Ignored Files"
         case .gitConfig: "Git Config"
         case .forkBehavior: "Fork Behavior"
@@ -36,12 +65,13 @@ final class RepositorySettingsModel {
     @ObservationIgnored let app: AppModel
     var pane: RepositorySettingsPane = .remote
 
-    // MARK: Remote
+    // MARK: Remotes
 
-    /// The current branch's remote, else the default one, when the sheet
-    /// opened.
-    let remote: Remote?
-    var remoteURL: String
+    /// The user's remotes when the sheet opened, the current one first, as
+    /// edited since, then those being added.
+    var remotes: [RemoteDraft]
+    /// The names of the remotes removed in the sheet, in order.
+    private(set) var removedRemoteNames: [String] = []
 
     /// The login of the account chosen for the repository (nil: none), as
     /// it was when the sheet opened until another is chosen.
@@ -93,11 +123,52 @@ final class RepositorySettingsModel {
     init(repository: RepositoryModel, app: AppModel) {
         self.repository = repository
         self.app = app
-        let remote = repository.gitState.remotes.currentRemote
-        self.remote = remote
-        remoteURL = remote?.url ?? ""
+        remotes = Self.drafts(for: repository.gitState.remotes)
         accountLogin = repository.record.accountLogin
         forkTarget = getForkContributionTarget(repository.record)
+    }
+
+    /// The user's remotes as the pane lists them: the current one first,
+    /// then the others in their order.
+    private static func drafts(for remotes: RemotesSnapshot) -> [RemoteDraft] {
+        let current = remotes.currentRemote?.name
+        let isCurrent = { (remote: Remote) in current.map { JSCompat.strictEquals($0, remote.name) } ?? false }
+        let listed = remotes.userRemotes.filter(isCurrent) + remotes.userRemotes.filter { !isCurrent($0) }
+        return listed.map { RemoteDraft(existingName: $0.name, name: $0.name, url: $0.url) }
+    }
+
+    /// Adds an empty remote to fill in.
+    func addRemote() {
+        remotes.append(RemoteDraft())
+    }
+
+    /// Takes the remote `id` off the list: one being added is forgotten; one
+    /// of the repository's is removed on Save.
+    func removeRemote(_ id: RemoteDraft.ID) {
+        guard let index = remotes.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        if let name = remotes[index].existingName {
+            removedRemoteNames.append(name)
+        }
+        remotes.remove(at: index)
+    }
+
+    /// What about the remotes stops Save: one without a name or a URL, or a
+    /// name two of them would share. A new remote with neither isn't in
+    /// Save's way: Save leaves it out.
+    var remotesProblem: String? {
+        var names: Set<ExactString> = []
+        for remote in remotes where !remote.isBlank {
+            let name = JSCompat.trim(remote.name)
+            if name.isEmpty || JSCompat.trim(remote.url).isEmpty {
+                return remote.isNew ? "A new remote needs a name and a URL." : "The remote \(name) needs a URL."
+            }
+            if !names.insert(ExactString(name)).inserted {
+                return "Two remotes can't share the name \(name)."
+            }
+        }
+        return nil
     }
 
     /// The API endpoint of the repository's GitHub repository, if it has
@@ -181,7 +252,7 @@ final class RepositorySettingsModel {
     }
 
     var canSave: Bool {
-        isLoaded && !isSaving && authorNameProblem == nil
+        isLoaded && !isSaving && authorNameProblem == nil && remotesProblem == nil
     }
 
     /// Reads the .gitignore and the author settings.
@@ -224,13 +295,7 @@ final class RepositorySettingsModel {
             }
         }
 
-        if let remote {
-            do throws(OperationError) {
-                try await repository.sync.setRemoteURL(remoteURL, for: remote.name)
-            } catch {
-                errors.append("Couldn't set the remote URL: \(error.message)")
-            }
-        }
+        errors += await saveRemotes()
 
         if ignoreTextHasChanged, let ignoreText {
             do throws(OperationError) {
@@ -255,6 +320,49 @@ final class RepositorySettingsModel {
 
         self.errors = errors
         return errors.isEmpty
+    }
+}
+
+extension RepositorySettingsModel {
+    /// Applies the remotes' changes: those removed, then the URLs of those
+    /// kept, then those added, but the ones with nothing typed, which leave
+    /// the list. What's applied leaves the changes to make, so a Save after
+    /// one that failed applies only the rest.
+    ///
+    /// - Returns: What failed.
+    fileprivate func saveRemotes() async -> [String] {
+        var errors: [String] = []
+        remotes.removeAll(where: \.isBlank)
+
+        for name in removedRemoteNames {
+            do throws(OperationError) {
+                try await repository.sync.removeRemote(name)
+                removedRemoteNames.removeAll { JSCompat.strictEquals($0, name) }
+            } catch {
+                errors.append("Couldn't remove the remote \(name): \(error.message)")
+            }
+        }
+
+        for remote in remotes {
+            do throws(OperationError) {
+                if let name = remote.existingName {
+                    // An unchanged URL changes nothing.
+                    try await repository.sync.setRemoteURL(remote.url, for: name)
+                } else {
+                    let name = JSCompat.trim(remote.name)
+                    try await repository.sync.addRemote(named: name, url: remote.url)
+                    if let index = remotes.firstIndex(where: { $0.id == remote.id }) {
+                        remotes[index].existingName = name
+                        remotes[index].name = name
+                    }
+                }
+            } catch {
+                errors.append(remote.isNew
+                    ? "Couldn't add the remote \(JSCompat.trim(remote.name)): \(error.message)"
+                    : "Couldn't set the URL of the remote \(remote.name): \(error.message)")
+            }
+        }
+        return errors
     }
 }
 
@@ -323,13 +431,16 @@ struct RepositorySettingsForm: View {
                 switch model.pane {
                 case .remote:
                     RemotePane(
-                        remote: model.remote,
-                        url: $model.remoteURL,
+                        remotes: $model.remotes,
+                        hasRemovedRemotes: !model.removedRemoteNames.isEmpty,
+                        problem: model.remotesProblem,
                         account: model.endpoint == nil ? nil : RemotePaneAccount(
                             accounts: model.accountChoices,
                             signedOutLogin: model.signedOutLogin,
                             login: $model.accountLogin
                         ),
+                        add: { model.addRemote() },
+                        remove: { model.removeRemote($0) },
                         publish: publish
                     )
                 case .ignoredFiles:

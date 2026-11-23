@@ -18,8 +18,8 @@ public enum SyncAction: Sendable, Equatable {
     case loading
     /// 2. The repository has no remote: "Publish Repository".
     case publishRepository
-    /// 3. and 6. "Fetch <remote>": the branch is unborn, or there's nothing
-    /// to push or pull.
+    /// 3. and 6. "Fetch": the branch is unborn, or there's nothing to push
+    /// or pull.
     case fetch(remote: String)
     /// 4. HEAD is detached: "Publish Branch", disabled.
     case detachedHead(rebaseInProgress: Bool)
@@ -44,8 +44,8 @@ public enum SyncAction: Sendable, Equatable {
             nil
         case .publishRepository:
             "Publish Repository"
-        case .fetch(let remote):
-            "Fetch \(remote)"
+        case .fetch:
+            "Fetch"
         case .detachedHead, .publishBranch:
             "Publish Branch"
         case .forcePush(let remote, _, _):

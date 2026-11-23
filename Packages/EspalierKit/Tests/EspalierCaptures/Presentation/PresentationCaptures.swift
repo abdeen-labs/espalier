@@ -13,6 +13,7 @@ import AppKit
 import EspalierCore
 import SwiftUI
 import Testing
+import GitKit
 @testable import EspalierUI
 
 @Suite("Presentation", .captures) @MainActor
@@ -36,6 +37,16 @@ struct PresentationCaptures {
         let name = "uncommittedChanges"
         let decision = try #require(UIFixtures.decisions.first { $0.name == name }?.decision)
         capture(DecisionSheet(decision) { _ in }, named: name, area: "Decisions")
+    }
+
+    @Test("the question of which remote a branch is published to")
+    func publishRemoteDecision() {
+        let remotes = [
+            Remote(name: "origin", url: "https://github.com/joe/espalier.git"),
+            Remote(name: "mirror", url: "git@gitlab.com:joe/espalier.git"),
+        ]
+        let decision = Decision.publishRemote(branch: "feature/login", remotes: remotes)
+        capture(PublishRemoteDecisionSheet(decision, remotes: remotes) { _ in }, named: "publishRemote", area: "Decisions")
     }
 
     @Test("the editor question, before and after one is picked")

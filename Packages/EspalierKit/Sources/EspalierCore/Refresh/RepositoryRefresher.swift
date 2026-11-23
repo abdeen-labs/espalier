@@ -143,15 +143,21 @@ final class RepositoryRefresher {
         // 4. Remotes.
         if scope.contains(.remotes) {
             do {
-                let (remotes, forkRemoteNames) = try await environment.withRuntimes {
-                    (try await getRemotes(repository), await loadForkRemoteNames(repository))
+                let (remotes, forkRemoteNames, pushDestinationNames) = try await environment.withRuntimes {
+                    (try await getRemotes(repository), await loadForkRemoteNames(repository), await loadPushDestinationNames(repository))
                 }
                 guard token.isCurrent else { return }
                 // The current branch's upstream remote, with these remotes.
                 if case .valid(let branch) = state.tip {
                     assign(\.tip, .valid(branch: branch.resolvingRemotes(remotes.map(\.name))), in: state)
                 }
-                let snapshot = remotesSnapshot(remotes, forkRemoteNames: forkRemoteNames, tip: state.tip, record: model.record)
+                let snapshot = remotesSnapshot(
+                    remotes,
+                    forkRemoteNames: forkRemoteNames,
+                    pushDestinationNames: pushDestinationNames,
+                    tip: state.tip,
+                    record: model.record
+                )
                 assign(\.remotes, snapshot, in: state)
                 applied.insert(.remotes)
             } catch {
@@ -321,11 +327,12 @@ final class RepositoryRefresher {
 
     // MARK: Remotes
 
-    /// The remotes: all, default, current, upstream, and Espalier's fork
-    /// remotes.
+    /// The remotes: all, default, current, upstream, Espalier's fork
+    /// remotes, and those a push also goes to.
     private func remotesSnapshot(
         _ remotes: [Remote],
         forkRemoteNames: Set<ExactString>,
+        pushDestinationNames: Set<ExactString>,
         tip: Tip,
         record: RepositoryRecord
     ) -> RemotesSnapshot {
@@ -345,7 +352,8 @@ final class RepositoryRefresher {
             defaultRemote: defaultRemote,
             currentRemote: currentRemote,
             upstreamRemote: upstreamRemote,
-            forkRemoteNames: forkRemoteNames
+            forkRemoteNames: forkRemoteNames,
+            pushDestinationNames: pushDestinationNames
         )
     }
 
@@ -491,6 +499,18 @@ private func loadForkRemoteNames(_ repository: Repository) async -> Set<ExactStr
         return try await getForkRemoteNames(repository)
     } catch {
         logger.error("Could not read the fork remotes' marks: \(error.localizedDescription, privacy: .public)")
+        return []
+    }
+}
+
+/// The remotes marked as ones a push also goes to; none when the marks
+/// can't be read, so a push goes only to the branch's own remote.
+@concurrent
+private func loadPushDestinationNames(_ repository: Repository) async -> Set<ExactString> {
+    do {
+        return try await getPushDestinationNames(repository)
+    } catch {
+        logger.error("Could not read the push destinations' marks: \(error.localizedDescription, privacy: .public)")
         return []
     }
 }

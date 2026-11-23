@@ -276,7 +276,24 @@ enum UIFixtures {
             ("7-pull", SyncButtonState(kind: .pull(remote: "origin", withRebase: false, aheadBehind: AheadBehind(ahead: 0, behind: 3), tagsToPush: 0, canForcePush: false), lastFetched: lastFetched)),
             ("7-pull-diverged", SyncButtonState(kind: .pull(remote: "origin", withRebase: true, aheadBehind: AheadBehind(ahead: 2, behind: 3), tagsToPush: 0, canForcePush: true), lastFetched: lastFetched)),
             ("8-push", SyncButtonState(kind: .push(remote: "origin", aheadBehind: AheadBehind(ahead: 2, behind: 0), tagsToPush: 1), lastFetched: lastFetched)),
+            // With other remotes: the push names the one it also goes to,
+            // and the chevron shows with nothing else to offer.
+            ("8-push-also", SyncButtonState(
+                kind: .push(remote: "origin", aheadBehind: AheadBehind(ahead: 2, behind: 0), tagsToPush: 0),
+                lastFetched: lastFetched,
+                destinations: [SyncPushDestination(name: "backup", isOn: false), SyncPushDestination(name: "mirror", isOn: true)]
+            )),
+            ("8-push-also-several", SyncButtonState(
+                kind: .push(remote: "origin", aheadBehind: AheadBehind(ahead: 2, behind: 0), tagsToPush: 0),
+                lastFetched: lastFetched,
+                destinations: [SyncPushDestination(name: "backup", isOn: true), SyncPushDestination(name: "mirror", isOn: true)]
+            )),
             ("9-fetch", SyncButtonState(kind: .fetch(remote: "origin"), lastFetched: lastFetched)),
+            ("9-fetch-also", SyncButtonState(
+                kind: .fetch(remote: "origin"),
+                lastFetched: lastFetched,
+                destinations: [SyncPushDestination(name: "backup", isOn: false), SyncPushDestination(name: "mirror", isOn: true)]
+            )),
             ("9-fetch-failure", SyncButtonState(
                 kind: .fetch(remote: "origin"),
                 lastFetched: lastFetched,

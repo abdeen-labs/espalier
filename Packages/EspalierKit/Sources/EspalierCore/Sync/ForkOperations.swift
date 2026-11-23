@@ -135,7 +135,7 @@ extension SyncModel {
                 if JSCompat.strictEquals(defaultRemote.name, upstreamRemoteName) {
                     try await renameRemote(ctx.repository, upstreamRemoteName, "origin")
                     progress.renamedUpstream = true
-                    try await addRemote(ctx.repository, upstreamRemoteName, defaultRemote.url)
+                    try await GitKit.addRemote(ctx.repository, upstreamRemoteName, defaultRemote.url)
                     try await GitKit.setRemoteURL(ctx.repository, "origin", fork.cloneURL)
                     return .converted
                 }
@@ -212,7 +212,7 @@ extension SyncModel {
                 let branches = try await getBranches(ctx.repository)
                 let remotesToPrune = findForkedRemotesToPrune(remotes, forkRemoteNames: forkRemoteNames, openPullRequests, branches)
                 for remote in remotesToPrune {
-                    try await removeRemote(ctx.repository, remote.name)
+                    try await GitKit.removeRemote(ctx.repository, remote.name)
                 }
                 return remotesToPrune.count
             }

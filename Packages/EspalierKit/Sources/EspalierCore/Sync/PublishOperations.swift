@@ -57,7 +57,7 @@ extension SyncModel {
                 throw OperationError(.api(apiFailure(from: error)), operation: .publishRepository, repositoryID: id, underlying: error)
             }
 
-            let origin = try await addRemote(ctx.repository, "origin", apiRepository.cloneURL)
+            let origin = try await GitKit.addRemote(ctx.repository, "origin", apiRepository.cloneURL)
             self.associate(apiRepository, endpoint: request.account.endpoint, assigning: request.account.login)
 
             // skip pushing if the current branch is a detached HEAD or the

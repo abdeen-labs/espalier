@@ -1,10 +1,12 @@
 // The decisions as sheets: Switch Branch's radio choices with an explicit
-// default, and the editor's pop-up of the installed editors, with none
-// chosen until the user picks one. Replacing the hooks in Git LFS's way is
-// an alert (`LFSAlerts.replaceHooksAlert`). The copy is the state layer's
-// `Decision`.
+// default, the editor's pop-up of the installed editors, with none
+// chosen until the user picks one, and Publish Branch's radio choice of the
+// repository's remotes, the current one first and chosen. Replacing the
+// hooks in Git LFS's way is an alert (`LFSAlerts.replaceHooksAlert`). The
+// copy is the state layer's `Decision`.
 
 import EspalierCore
+import EspalierSupport
 import GitKit
 import SwiftUI
 
@@ -82,6 +84,36 @@ struct EditorDecisionSheet: View {
     }
 }
 
+/// The publish decision's sheet: the question, and one radio row per remote
+/// with its URL, the first chosen.
+struct PublishRemoteDecisionSheet: View {
+    let decision: Decision
+    let remotes: [Remote]
+    let onAnswer: (String?) -> Void
+    @State private var selection: ExactString
+
+    init(_ decision: Decision, remotes: [Remote], onAnswer: @escaping (String?) -> Void) {
+        self.decision = decision
+        self.remotes = remotes
+        self.onAnswer = onAnswer
+        _selection = State(initialValue: ExactString(remotes.first?.name ?? ""))
+    }
+
+    var body: some View {
+        SheetScaffold(decision.title, message: decision.message) {
+            ChoiceList(
+                decision.message,
+                selection: $selection,
+                choices: remotes.map { ChoiceListItem($0.name, description: $0.url, value: ExactString($0.name)) }
+            )
+        } buttons: {
+            SheetButtons(decision.confirmButton, cancel: { onAnswer(nil) }) {
+                onAnswer(selection.value)
+            }
+        }
+    }
+}
+
 /// Shows the presenter's decisions.
 @MainActor
 enum DecisionHost {
@@ -116,6 +148,10 @@ enum DecisionHost {
             case .externalEditor(let editors):
                 EditorDecisionSheet(pending.decision, editors: editors) { name in
                     answer(name.map(DecisionAnswer.editor))
+                }
+            case .publishRemote(_, let remotes):
+                PublishRemoteDecisionSheet(pending.decision, remotes: remotes) { name in
+                    answer(name.map(DecisionAnswer.remote))
                 }
             case .replaceLFSHooks:
                 // An alert, above.

@@ -25,6 +25,9 @@ nonisolated public struct IntentAnswers: Sendable, Equatable {
     /// The decision's answer about the hooks in Git LFS's way
     /// (`replaceLFSHooks`).
     public var lfsHooks: LFSHooksAnswer?
+    /// The decision's answer: the remote to publish the branch to, by name
+    /// (`publishRemote`).
+    public var publishRemote: String?
 
     public init() {}
 }
@@ -195,6 +198,7 @@ public final class WindowPresenter {
                     // Hooks that changed since the answer are asked about
                     // again.
                     case .replaceLFSHooks(let repositories): answers.lfsHooks?.asked == repositories
+                    case .publishRemote: answers.publishRemote != nil
                     }
                     guard !isAnswered else {
                         logger.error("An intent asked again for a decision it was given")
@@ -211,6 +215,8 @@ public final class WindowPresenter {
                         app?.integrations.selectEditor(name)
                     case .replaceLFSHooks(let answer):
                         answers.lfsHooks = answer
+                    case .remote(let name):
+                        answers.publishRemote = name
                     }
 
                 case .cancelled:

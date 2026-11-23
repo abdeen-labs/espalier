@@ -29,6 +29,76 @@ extension SyncModel {
         await repository.awaitOperationRefresh(covering: .remotes)
     }
 
+    /// Adds a remote named `name` at `url`, both trimmed, then refreshes the
+    /// remotes.
+    ///
+    /// Holds the network lane, as `setRemoteURL` does.
+    ///
+    /// - Throws: A precondition for an empty name or URL, or a name a
+    ///   remote already has; git's error for a name it refuses.
+    public func addRemote(named name: String, url: String) async throws(OperationError) {
+        guard let repository else {
+            throw notInList(.setRemoteURL)
+        }
+        let trimmedName = JSCompat.trim(name)
+        let trimmedURL = JSCompat.trim(url)
+        guard !trimmedName.isEmpty, !trimmedURL.isEmpty else {
+            throw precondition("A remote needs a name and a URL.", .setRemoteURL)
+        }
+        guard !repository.gitState.remotes.all.contains(where: { JSCompat.strictEquals($0.name, trimmedName) }) else {
+            throw precondition("This repository already has a remote named \(trimmedName).", .setRemoteURL)
+        }
+        let descriptor = OperationDescriptor(kind: .setRemoteURL, lanes: [.network], refreshAfter: .remotes)
+        try await repository.perform(descriptor) { ctx in
+            _ = try await GitKit.addRemote(ctx.repository, trimmedName, trimmedURL)
+        }
+        await repository.awaitOperationRefresh(covering: .remotes)
+    }
+
+    /// Removes the remote named `remoteName`, then refreshes in full: git
+    /// removes its remote branches, the tracking of the branches that track
+    /// them, and its marks with it. Local branches and commits stay.
+    ///
+    /// Holds the network lane, as `setRemoteURL` does.
+    ///
+    /// - Throws: A precondition when the repository has no such remote.
+    public func removeRemote(_ remoteName: String) async throws(OperationError) {
+        guard let repository else {
+            throw notInList(.setRemoteURL)
+        }
+        guard repository.gitState.remotes.all.contains(where: { JSCompat.strictEquals($0.name, remoteName) }) else {
+            throw precondition("The remote \(remoteName) is no longer in this repository.", .setRemoteURL)
+        }
+        let descriptor = OperationDescriptor(kind: .setRemoteURL, lanes: [.network], refreshAfter: .full)
+        try await repository.perform(descriptor) { ctx in
+            try await GitKit.removeRemote(ctx.repository, remoteName)
+        }
+        await repository.awaitOperationRefresh(covering: .full)
+    }
+
+    /// Makes the remote named `remoteName` one a push also goes to
+    /// (`RemotesSnapshot.additionalPushRemotes`), or no longer one, then
+    /// refreshes the remotes. The repository's worktrees share the choice.
+    ///
+    /// Holds the network lane, so the remotes a running push goes to don't
+    /// change under it.
+    ///
+    /// - Throws: A precondition when the repository has no such remote of
+    ///   the user's.
+    public func setPushDestination(_ remoteName: String, _ isDestination: Bool) async throws(OperationError) {
+        guard let repository else {
+            throw notInList(.setRemoteURL)
+        }
+        guard repository.gitState.remotes.userRemotes.contains(where: { JSCompat.strictEquals($0.name, remoteName) }) else {
+            throw precondition("The remote \(remoteName) is no longer in this repository.", .setRemoteURL)
+        }
+        let descriptor = OperationDescriptor(kind: .setRemoteURL, lanes: [.network], refreshAfter: .remotes)
+        try await repository.perform(descriptor) { ctx in
+            try await GitKit.setPushDestination(ctx.repository, remoteName, isDestination)
+        }
+        await repository.awaitOperationRefresh(covering: .remotes)
+    }
+
     /// Points the `upstream` remote at the fork's parent, then refreshes.
     public func updateUpstreamRemote() async throws(OperationError) {
         guard let repository else {
@@ -97,7 +167,7 @@ extension SyncModel {
                 guard let url = parent.cloneURL else {
                     return .matches
                 }
-                try await addRemote(ctx.repository, upstreamRemoteName, url)
+                try await GitKit.addRemote(ctx.repository, upstreamRemoteName, url)
                 return .added
             }
         } catch {
