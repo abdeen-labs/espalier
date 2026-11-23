@@ -1,16 +1,17 @@
 // Ported in part from desktop/app/src/ui/repositories-list/repositories-list.tsx
 //
 // The location control's repository popover (⌘T), the window's one
-// switcher, as desktop's Current Repository foldout: the filter and the Add
-// menu (Clone, Create, Add) across the top, then the selected repository's
-// worktrees (with more than one, with "Always show worktree list" on, or
+// switcher, as desktop's Current Repository foldout: a header
+// ("Repositories" in bold, and the Add menu: Clone, Create, Add) and the
+// filter across the top, then the selected repository's worktrees under
+// their label (with more than one, with "Always show worktree list" on, or
 // after Show Worktrees) with New Worktree…, and the repositories in groups
 // (Recent with more than seven repositories, then GitHub.com owners,
 // Enterprise hosts, Other) with their status, or "No Matching
 // Repositories". Each group's header leads with its mark in the rows'
-// glyph column: the owner's avatar, or a symbol for the worktrees, Recent,
-// a host, and Other. It's as tall as its rows, up to the window's height under
-// the toolbar, and keeps that height while a filter leaves fewer rows.
+// glyph column: the owner's avatar, or a symbol for Recent, a host, and
+// Other. It's as tall as its rows, up to the window's height under the
+// toolbar, and keeps that height while a filter leaves fewer rows.
 // Arrow keys move through the rows from the filter field and Return
 // switches; a click switches. Each row has desktop's context menu.
 
@@ -96,9 +97,6 @@ nonisolated struct RepositoryPopoverContent: Sendable, Equatable {
         case .other: .symbol("folder")
         }
     }
-
-    /// The worktrees' mark, as their header leads with it.
-    static let worktreesMark = ListGroupMark.symbol("rectangle.stack")
 
     /// The content for the app's repository list and the selected
     /// repository's worktrees, both filtered.
@@ -220,6 +218,12 @@ struct RepositoryPopoverView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            PickerHeader("Repositories") {
+                RepositoryAddMenu()
+                    .controlSize(.small)
+            }
+            .padding(.horizontal, Metrics.insetMedium)
+            .padding(.top, Metrics.insetMedium)
             HStack(spacing: Metrics.insetSmall) {
                 TextField("Filter", text: $filter, prompt: Text("Filter").fieldPrompt())
                     .textFieldStyle(.capsule(systemImage: "magnifyingglass"))
@@ -241,18 +245,19 @@ struct RepositoryPopoverView: View {
                         hovered = nil
                         highlighted = content.rowIDs.first
                     }
-                RepositoryAddMenu()
             }
             .padding(Metrics.insetMedium)
 
             Hairline()
 
             if content.rowIDs.isEmpty {
-                CenteredMessage(
-                    content.hasRepositories ? "No Matching Repositories" : "No Repositories",
+                PickerEmptyState(
+                    content.hasRepositories ? "No repositories match “\(filter)”" : "No Repositories Yet",
+                    message: content.hasRepositories
+                        ? "Try another part of its name, or its owner."
+                        : "Clone one, create one, or add one from your Mac with Add.",
                     systemImage: content.hasRepositories ? "magnifyingglass" : "folder"
                 )
-                .fillingSpace()
             } else {
                 rows
             }
@@ -283,7 +288,7 @@ struct RepositoryPopoverView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     if !content.worktrees.isEmpty {
                         Group {
-                            ListGroupLabel("Worktrees", mark: RepositoryPopoverContent.worktreesMark) {
+                            WorktreesGroupLabel {
                                 if let newWorktree {
                                     Button(action: newWorktree) {
                                         Image(systemName: "plus")
@@ -342,7 +347,7 @@ struct RepositoryPopoverView: View {
     }
 
     /// A row: a click activates it, the pointer highlights it, and it has
-    /// its context menu.
+    /// its context menu. Rows are roomy.
     private func row<RowLabel: View>(
         _ id: RepositoryPopoverRowID,
         @ViewBuilder label: () -> RowLabel,
@@ -353,6 +358,7 @@ struct RepositoryPopoverView: View {
             activate(id)
         } label: {
             label()
+                .frame(minHeight: Metrics.Pickers.rowHeight)
                 .selectableRow(isSelected: isHighlighted)
         }
         .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
@@ -381,6 +387,32 @@ struct RepositoryPopoverView: View {
             return
         }
         self.highlighted = rows[min(max(index + offset, 0), rows.count - 1)]
+    }
+}
+
+/// The worktrees' label: their symbol, "Worktrees" in bold, and New
+/// Worktree….
+struct WorktreesGroupLabel<Accessory: View>: View {
+    @ViewBuilder let accessory: Accessory
+
+    var body: some View {
+        HStack(spacing: Metrics.insetSmall) {
+            Image(systemName: PlaceIdentity.worktrees.systemImage)
+                .font(Typography.secondary)
+                .foregroundStyle(.text3)
+                .frame(width: Metrics.Sidebar.glyphSize)
+                .accessibilityHidden(true)
+            Text("Worktrees")
+                .font(Typography.secondary.weight(.bold))
+                .foregroundStyle(.text)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: Metrics.grid)
+            accessory
+        }
+        .frame(minHeight: Metrics.PaletteList.labelHeight)
+        .padding(.horizontal, Metrics.ListRow.horizontalPadding)
+        .padding(.top, Metrics.PaletteList.groupSpacing)
     }
 }
 

@@ -1,7 +1,6 @@
-// A list of actions in one card (radius 14): each row a symbol in a soft
-// circle, a title and an optional line under it, and its key cap or a
-// chevron, with hairlines between rows and a hover wash. Get Started uses
-// it.
+// A list of actions in one cream card: each row its symbol in secondary
+// text, a title and an optional line under it, and its key cap or a
+// chevron, set apart by space, with a hover wash. Get Started uses it.
 
 import AppKit
 import SwiftUI
@@ -16,7 +15,14 @@ public struct ActionListItem: Identifiable {
     public let keyCap: String?
     public let action: () -> Void
 
-    public init(id: String? = nil, systemImage: String, title: String, subtitle: String? = nil, keyCap: String? = nil, action: @escaping () -> Void) {
+    public init(
+        id: String? = nil,
+        systemImage: String,
+        title: String,
+        subtitle: String? = nil,
+        keyCap: String? = nil,
+        action: @escaping () -> Void
+    ) {
         self.id = id ?? title
         self.systemImage = systemImage
         self.title = title
@@ -35,17 +41,13 @@ public struct ActionList: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                if index > 0 {
-                    Hairline()
-                        .padding(.leading, Metrics.ActionList.dividerInset)
-                }
+        VStack(spacing: Metrics.ActionList.rowSpacing) {
+            ForEach(items) { item in
                 ActionListRow(item: item)
             }
         }
         .padding(Metrics.ActionList.inset)
-        .cardSurface()
+        .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
     }
 }
 
@@ -56,11 +58,14 @@ private struct ActionListRow: View {
     var body: some View {
         Button(action: item.action) {
             HStack(spacing: Metrics.insetMedium) {
-                IconCircle(item.systemImage, size: Metrics.ActionList.iconSize, tint: .accent)
+                Image(systemName: item.systemImage)
+                    .font(.system(size: Metrics.ActionList.symbolSize))
+                    .foregroundStyle(.text2)
+                    .frame(width: Metrics.ActionList.symbolWidth)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(item.title)
-                        .font(Typography.row.weight(.medium))
+                        .font(Typography.row.weight(.semibold))
                         .foregroundStyle(.text)
                     if let subtitle = item.subtitle {
                         Text(subtitle)
@@ -98,14 +103,15 @@ extension Metrics {
     /// The action list's card.
     public enum ActionList {
         /// Inside the card, around the rows.
-        public static let inset: CGFloat = 6
-        public static let rowHeight: CGFloat = 52
+        public static let inset: CGFloat = 8
+        /// Between rows.
+        public static let rowSpacing: CGFloat = 2
+        public static let rowHeight: CGFloat = 48
         public static let rowPadding: CGFloat = 10
-        /// The soft circle's diameter.
-        public static let iconSize: CGFloat = 30
+        /// The symbol's point size, and the column it's centered in.
+        public static let symbolSize: CGFloat = 18
+        public static let symbolWidth: CGFloat = 24
         /// A row's chevron without a shortcut.
         public static let chevronSize: CGFloat = 11
-        /// Hairlines start where the titles do.
-        public static let dividerInset: CGFloat = rowPadding + iconSize + Metrics.insetMedium
     }
 }

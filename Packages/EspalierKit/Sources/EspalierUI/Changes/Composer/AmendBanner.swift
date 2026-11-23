@@ -12,23 +12,19 @@ public struct AmendBanner: View {
     }
 
     public var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
-            Image(systemName: "pencil.circle.fill")
-                .foregroundStyle(Color.accent)
-                .accessibilityHidden(true)
+        // A banner in the accent.
+        SoftBanner(color: Palette.accent) {
+            SoftBannerSymbol("pencil", color: Palette.accent)
+        } message: {
             LinkedText(Self.message)
                 .font(Typography.secondary)
-                .foregroundStyle(.text2)
+                .foregroundStyle(.text)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .environment(\.openURL, OpenURLAction { _ in
                     onStopAmending()
                     return .handled
                 })
         }
-        .padding(.horizontal, Metrics.Composer.cardPadding)
-        .padding(.vertical, Metrics.insetSmall)
-        .surface(.quiet, elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityAction(named: "Stop Amending", onStopAmending)
     }

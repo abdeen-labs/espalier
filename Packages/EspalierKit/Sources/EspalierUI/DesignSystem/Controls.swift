@@ -117,14 +117,14 @@ public struct CapsuleSearchField: View {
             // its own top, so one measured a little shorter or taller (as a
             // field can be for a moment) would otherwise draw its text
             // lower or higher.
-            .padding(.top, (Metrics.ControlHeight.height(for: controlSize) - Metrics.CapsuleField.lineHeight) / 2)
+            .padding(.top, ((isRaised ? raisedAppearance.capsuleHeight : Metrics.ControlHeight.height(for: controlSize)) - Metrics.CapsuleField.lineHeight) / 2)
             .frame(maxHeight: .infinity, alignment: .top)
             trailing
         }
         .motion(Motion.mark, value: trailingKind)
         .padding(.leading, 12)
         .padding(.trailing, 8)
-        .frame(height: Metrics.ControlHeight.height(for: controlSize))
+        .frame(height: isRaised ? raisedAppearance.capsuleHeight : Metrics.ControlHeight.height(for: controlSize))
         .background {
             if isRaised {
                 // A quiet capsule, as the controls beside it on the
@@ -143,6 +143,10 @@ public struct CapsuleSearchField: View {
         .overlay {
             CapsuleFocusRing(isFocused: hasFocus)
         }
+        // Raised, it stands on the lip the quiet capsules beside it stand
+        // on, inside the control's height, so its top and bottom line up
+        // with theirs.
+        .onLip(isRaised ? raisedAppearance.lip : nil, isPressed: false)
         .contentShape(Capsule(style: .circular))
         .onTapGesture {
             focus()
@@ -153,6 +157,11 @@ public struct CapsuleSearchField: View {
                 focusRequest = false
             }
         }
+    }
+
+    /// A raised field's look: a quiet capsule's at the field's size.
+    private var raisedAppearance: CapsuleButtonAppearance {
+        CapsuleButtonAppearance(kind: .quiet, controlSize: controlSize)
     }
 
     /// Focuses the field, through SwiftUI and AppKit both.

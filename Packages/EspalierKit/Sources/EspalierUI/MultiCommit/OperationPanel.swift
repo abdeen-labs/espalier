@@ -527,10 +527,12 @@ struct OperationPanelView: View {
         } else {
             let isResolved: Bool = if case .conflicts = content.state { content.isResolved } else { false }
             Image(systemName: isResolved ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .font(.system(size: Metrics.OperationPanel.symbolSize))
                 .foregroundStyle(Color(espalier: isResolved ? Palette.success : Palette.warningMark))
                 // A symbol replace plays whatever the transaction says.
                 .contentTransition(motion.animates ? .symbolEffect(.replace) : .identity)
                 .motion(Motion.arrive, value: isResolved)
+                .accessibilityElement()
                 .accessibilityLabel("Warning")
                 .accessibilityHidden(isResolved)
         }
@@ -643,5 +645,7 @@ extension Metrics {
     enum OperationPanel {
         /// A running operation's progress bar.
         static let progressWidth: CGFloat = 120
+        /// The symbol that leads the panel while it waits on the user.
+        static let symbolSize: CGFloat = 17
     }
 }

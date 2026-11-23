@@ -1,8 +1,8 @@
 // Commit Info, the inspector: what the commit's header doesn't show, as
-// label and value rows divided by hairlines. When it was authored and
-// committed in full (and by whom, when the committer isn't the author), its
-// parents (which select them), the branches pointing at it (its tags are in
-// the header), its co-authors, and its other trailers. The message, the
+// soft cards. When it was authored and committed in full (and by whom,
+// when the committer isn't the author), its parents (which select them),
+// the branches pointing at it (its tags are in the header), its
+// co-authors, and its other trailers. The message, the
 // author, and the ID are the header's.
 
 import EspalierCore
@@ -79,16 +79,17 @@ extension CommitInfoContent {
 }
 
 extension Metrics {
-    /// Commit Info's rows.
+    /// Commit Info's cards.
     enum CommitInfo {
-        /// The labels' column.
-        static let labelWidth: CGFloat = 88
+        /// Between the cards.
+        static let cardSpacing: CGFloat = 10
     }
 }
 
-/// Commit Info for one commit: a row per fact, hairlines between. A branch
-/// made or deleted at the commit fades in or out of its row, the rows
-/// below moving with it (`CommitInspector` keeps another commit's info
+/// Commit Info for one commit: a card per kind of fact (dates, parents,
+/// branches, co-authors, trailers), each under its heading. A branch made
+/// or deleted at the commit fades in or out of its card, the cards below
+/// moving with it (`CommitInspector` keeps another commit's info
 /// from animating).
 struct CommitInfoView: View {
     let content: CommitInfoContent
@@ -101,36 +102,35 @@ struct CommitInfoView: View {
 
     var body: some View {
         ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 0) {
-                row("Authored") {
-                    Text(fullDate(content.authoredDate))
-                        .textSelection(.enabled)
-                    if !content.authorEmail.isEmpty {
-                        address(content.authorEmail)
-                            .foregroundStyle(.text2)
+            VStack(alignment: .leading, spacing: Metrics.CommitInfo.cardSpacing) {
+                card("Dates") {
+                    fact("Authored") {
+                        Text(fullDate(content.authoredDate))
+                            .textSelection(.enabled)
+                        if !content.authorEmail.isEmpty {
+                            address(content.authorEmail)
+                                .foregroundStyle(.text2)
+                        }
                     }
-                }
-                Hairline()
-                row("Committed") {
-                    Text(fullDate(content.committedDate))
-                        .textSelection(.enabled)
-                    if let committer = content.committer {
-                        address(committer.email.isEmpty ? "by \(committer.name)" : "by \(committer.name) <\(committer.email)>")
-                            .foregroundStyle(.text2)
+                    fact("Committed") {
+                        Text(fullDate(content.committedDate))
+                            .textSelection(.enabled)
+                        if let committer = content.committer {
+                            address(committer.email.isEmpty ? "by \(committer.name)" : "by \(committer.name) <\(committer.email)>")
+                                .foregroundStyle(.text2)
+                        }
                     }
                 }
                 if !content.parents.isEmpty {
-                    Hairline()
-                    row(content.parents.count == 1 ? "Parent" : "Parents") {
+                    card(content.parents.count == 1 ? "Parent" : "Parents") {
                         ForEach(content.parents) { parent in
                             parentLink(parent)
                         }
                     }
                 }
                 if !content.branches.isEmpty {
-                    Group {
-                        Hairline()
-                        row(content.branches.count == 1 ? "Branch" : "Branches") {
+                    card(content.branches.count == 1 ? "Branch" : "Branches") {
+                        RefPillFlow(spacing: Metrics.Pill.spacing) {
                             ForEach(content.branches) { ref in
                                 RefCapsule(ref, palette: palette)
                                     .transition(motion.animates ? .opacity : .identity)
@@ -140,49 +140,65 @@ struct CommitInfoView: View {
                     .transition(motion.animates ? .opacity : .identity)
                 }
                 if !content.coAuthors.isEmpty {
-                    Hairline()
-                    row("Co-Authors") {
+                    card("Co-Authors") {
                         ForEach(content.coAuthors, id: \.self) { coAuthor in
                             address(coAuthor)
                         }
                     }
                 }
-                ForEach(content.trailers) { trailer in
-                    Hairline()
-                    row(trailer.token) {
-                        if trailer.isAddress {
-                            address(trailer.value)
-                        } else {
-                            Text(trailer.value)
-                                .textSelection(.enabled)
+                if !content.trailers.isEmpty {
+                    card("Trailers") {
+                        ForEach(content.trailers) { trailer in
+                            fact(trailer.token) {
+                                if trailer.isAddress {
+                                    address(trailer.value)
+                                } else {
+                                    Text(trailer.value)
+                                        .textSelection(.enabled)
+                                }
+                            }
                         }
                     }
                 }
             }
-            .padding(.horizontal, Metrics.insetLarge)
-            .padding(.vertical, Metrics.grid)
+            .padding(Metrics.insetMedium)
             .motion(Motion.arrive, value: content.branches)
             .unbouncedScrollContent()
         }
         .scrollBounceBehavior(.basedOnSize)
     }
 
-    /// A row: the label in its column, the value beside it.
-    private func row<Value: View>(_ label: String, @ViewBuilder value: () -> Value) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: Metrics.insetMedium) {
-            Text(label)
+    /// A card: its heading, then what it says.
+    private func card<Content: View>(_ heading: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: Metrics.insetSmall) {
+            Text(heading)
+                .font(Typography.cardHeading)
                 .foregroundStyle(.text3)
-                .lineLimit(2)
-                .frame(width: Metrics.CommitInfo.labelWidth, alignment: .leading)
-            VStack(alignment: .leading, spacing: Metrics.grid) {
-                value()
-            }
-            .foregroundStyle(.text)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+            content()
         }
         .font(Typography.secondary)
-        .padding(.vertical, Metrics.insetSmall)
+        .foregroundStyle(.text)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Metrics.insetMedium)
+        .cardSurface()
+        .accessibilityElement(children: .contain)
+    }
+
+    /// A fact in a card: its label above its value.
+    private func fact<Value: View>(_ label: String, @ViewBuilder value: () -> Value) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .fontWeight(.semibold)
+                .foregroundStyle(.text)
+                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 2) {
+                value()
+            }
+            .foregroundStyle(.text2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// An email address, or a name with one, on one line: its middle cut

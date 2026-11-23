@@ -244,17 +244,10 @@ nonisolated public enum Palette {
     /// Warning marks (the conflict triangle).
     public static var warningMark: NSColor { Theme.current.warningMark }
 
-    /// The fill behind a file status's letter: 15%.
-    static let statusTint: (light: CGFloat, dark: CGFloat) = (0.15, 0.15)
 
     /// The color of a file status's letter.
     public static func statusForeground(_ kind: FileStatusKind) -> NSColor {
         Theme.current.statusForegrounds[kind] ?? text
-    }
-
-    /// The fill behind a file status's letter.
-    public static func statusBackground(_ kind: FileStatusKind) -> NSColor {
-        Theme.current.statusBackgrounds[kind] ?? field
     }
 
     /// The color of a checks status glyph.
@@ -299,14 +292,4 @@ extension ShapeStyle where Self == Color {
     public static var accentSoft: Color { Color(nsColor: Palette.accentSoft) }
     public static var quiet: Color { Color(nsColor: Palette.quiet) }
     public static var soft: Color { Color(nsColor: Palette.soft) }
-    /// The places' tiles in the sidebar: Changes apricot, History teal.
-    public static var changesTile: Color { Color(nsColor: Palette.changesTile) }
-    public static var historyTile: Color { Color(nsColor: Palette.historyTile) }
-}
-
-extension Palette {
-    /// Changes' tile: apricot.
-    nonisolated public static let changesTile = NSColor.espalierDynamic(light: .hex(0xF0862A), dark: .hex(0xD9741A))
-    /// History's tile: teal.
-    nonisolated public static let historyTile = NSColor.espalierDynamic(light: .hex(0x1C9C9A), dark: .hex(0x178685))
 }

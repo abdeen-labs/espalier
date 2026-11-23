@@ -149,7 +149,7 @@ private struct GallerySidebar: View {
         content()
             .environment(\.isSidebarRowSelected, isSelected)
             .padding(.horizontal, Metrics.Sidebar.rowPadding)
-            .frame(height: Metrics.RowHeight.sidebar)
+            .frame(height: Metrics.SidebarRows.height)
             .background {
                 if isSelected {
                     SidebarSelectionFill()
@@ -178,7 +178,7 @@ private struct GalleryHistoryRow: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
-        .frame(height: Metrics.RowHeight.history)
+        .frame(height: Metrics.HistoryRows.height)
         .selectableRow(isSelected: isSelected)
         .frame(width: 380)
     }
@@ -188,7 +188,7 @@ private struct GalleryHistoryRow: View {
 /// and the default branch.
 private struct GalleryGraph: NSViewRepresentable {
     static let width: CGFloat = 70
-    static var height: CGFloat { Metrics.Graph.rowHeight * CGFloat(rows.count) }
+    static var height: CGFloat { Metrics.HistoryRows.height * CGFloat(rows.count) }
 
     static let commits = graphCommits("""
         f2 f1
@@ -220,7 +220,7 @@ private final class GalleryGraphView: NSView {
         }
         let rows = GalleryGraph.rows
         let layout = graphLayout(GalleryGraph.commits, GalleryGraph.options)
-        let geometry = GraphGeometry(rowHeight: Metrics.Graph.rowHeight, laneCount: layout.laneCount)
+        let geometry = GraphGeometry(rowHeight: Metrics.HistoryRows.height, laneCount: layout.laneCount)
         let headRow = rows.firstIndex { $0.drawing.node.isCurrentTip }
         let palette = TrackPalette.Resolved(currentTrack: headRow.map { rows[$0].drawing.row.track })
         let colors = GraphColors(palette: palette, appearance: effectiveAppearance)

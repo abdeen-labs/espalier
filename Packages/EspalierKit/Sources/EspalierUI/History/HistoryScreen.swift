@@ -412,7 +412,7 @@ struct HistoryListPane: View {
                     if history.commitSHAs.isEmpty, !history.isLoading {
                         // An unborn branch: the working copy, and nothing below.
                         PlaceholderNote("No history")
-                            .padding(.top, Metrics.Graph.rowHeight * 2)
+                            .padding(.top, Metrics.HistoryRows.height * 2)
                     }
                 }
         }

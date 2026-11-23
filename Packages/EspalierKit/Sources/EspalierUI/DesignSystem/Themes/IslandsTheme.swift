@@ -71,12 +71,11 @@ nonisolated extension ThemeDefinition {
             sidebarSelectionIsBold: true,
             sidebarSelectionTintsCounts: true,
             sectionLabel: SectionLabelStyle(isUppercase: true, size: 10, weight: .bold, tracking: 0.08),
-            radii: ThemeRadii(row: 10, card: 14, small: 5, tag: 6),
+            radii: ThemeRadii(row: 10, card: 14, small: 5),
             commitTitle: TitleStyle(size: 18, weight: .bold),
             buttonWeights: ButtonWeights(quiet: .bold, prominent: .bold),
             graph: GraphStyle(lineWidth: 3.25, lanePitch: 17),
             refTag: RefTagStyle(alpha: (0.14, 0.22), textMix: (0.30, 0.25), ink: 0x0C1410),
-            statusBadgeShape: .circle,
             avatarShape: .roundedSquare,
             controls: ControlStyle(prominentShadow: NSColor.black.withAlphaComponent(0.14), flatInCards: true)
         )

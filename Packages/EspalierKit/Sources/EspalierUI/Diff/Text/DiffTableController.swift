@@ -704,8 +704,10 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
         var widest = 0
         for (index, row) in document.rows.enumerated() {
             switch row.kind {
-            case .hunk, .noNewline:
+            case .noNewline:
                 continue
+            case .hunk:
+                heights[index] = DiffTableMetrics.hunkHeight(lineHeight: lineHeight)
             case .conflictHeader:
                 heights[index] = DiffTableMetrics.conflictHeaderHeight(lineHeight: lineHeight)
             case .context, .added, .deleted, .modified:
@@ -1354,6 +1356,9 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             case .expansion(let hunk, let kind):
                 button = (hunk, kind)
                 tooltip = kind.title
+            case .hunkHeader(let hunk), .hunkCheckbox(let hunk):
+                // git's own header line, which the pill puts in words.
+                tooltip = hunkHeaderText(hunk)
             case .conflictButton(let header):
                 conflictButton = header
             default:
@@ -1385,6 +1390,16 @@ final class DiffTableController: NSObject, NSTableViewDataSource, NSTableViewDel
             crossfade(rows: leaving, duration: Motion.hoverOut)
             crossfade(rows: hoverRows(block: block, line: line?.row, buttonHunk: button?.hunk, conflictHeader: conflictButton), duration: Motion.hoverIn)
         }
+    }
+
+    /// A hunk's header line as git wrote it ("@@ -18,6 +19,8 @@ init()"),
+    /// for its tooltip; nil for the dummy hunk at the bottom.
+    private func hunkHeaderText(_ hunk: Int) -> String? {
+        guard document.hunks.indices.contains(hunk), !document.hunks[hunk].isBottomDummy else {
+            return nil
+        }
+        let line = Int(document.rows[document.hunks[hunk].row].before)
+        return document.lines.indices.contains(line) ? document.lines[line].text : nil
     }
 
     /// Finds what's under the pointer again: the rows changed under a

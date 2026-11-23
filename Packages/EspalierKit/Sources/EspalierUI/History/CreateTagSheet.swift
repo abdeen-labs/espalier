@@ -70,7 +70,7 @@ struct CreateTagForm: View {
                         .font(Typography.secondary)
                         .foregroundStyle(.text3)
                 } else {
-                    HStack(spacing: Metrics.RefCapsule.spacing) {
+                    HStack(spacing: Metrics.Pill.spacing) {
                         ForEach(content.previousTags, id: \.self) { tag in
                             RefCapsule(RefCapsuleContent(name: tag, kind: .tag))
                         }

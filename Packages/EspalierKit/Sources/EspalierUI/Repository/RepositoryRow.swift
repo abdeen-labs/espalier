@@ -249,7 +249,7 @@ struct RepositoryRow: View {
 
 /// The row's glyph column, under its group's mark: a missing repository's
 /// glyph, a clone's ring, in Recent the owner's avatar (a folder for a
-/// repository not on GitHub), else empty.
+/// repository not on GitHub), else nothing.
 struct RepositoryRowGlyph: View {
     let content: RepositoryRowContent
 
@@ -304,8 +304,8 @@ struct RepositoryKindMark: View {
     }
 }
 
-/// The changed files count and the ahead and behind counts, with their
-/// tooltips. A count that changes while the list shows rolls to its new
+/// The changed files count in an apricot pill, and the ahead and behind
+/// counts in pills (the ahead in the accent's tint), with their tooltips. A count that changes while the list shows rolls to its new
 /// value over 0.2 s.
 struct RepositoryStatusIndicators: View {
     let content: RepositoryRowContent
@@ -318,29 +318,20 @@ struct RepositoryStatusIndicators: View {
         if content.showsStatus, content.changedFileCount > 0 || content.ahead > 0 || content.behind > 0 {
             HStack(spacing: Metrics.grid) {
                 if content.changedFileCount > 0 {
-                    Text(verbatim: content.changedFileCount > 999 ? "999+" : formatCount(content.changedFileCount, numberFormat))
-                        .font(Typography.tinyCount)
-                        .foregroundStyle(.text2)
+                    CountPill(content.changedFileCount > 999 ? "999+" : formatCount(content.changedFileCount, numberFormat), color: PlaceIdentity.changes.color)
                         .contentTransition(motion.animates ? .numericText() : .identity)
-                        .padding(.horizontal, Metrics.grid + 1)
-                        .padding(.vertical, 1)
-                        .background(Capsule(style: .circular).fill(.field))
                         .motion(Motion.kindChange, value: content.changedFileCount)
                         .tooltip(RepositoryRowContent.changesTooltip)
                 }
                 if let tooltip = content.aheadBehindTooltip(numberFormat) {
                     HStack(spacing: Metrics.grid) {
                         if content.ahead > 0 {
-                            Text(verbatim: "↑\(formatCount(content.ahead, numberFormat))")
-                                .font(Typography.aheadCount)
-                                .foregroundStyle(.accent)
+                            CountPill("↑\(formatCount(content.ahead, numberFormat))", color: Palette.accent)
                                 .contentTransition(motion.animates ? .numericText() : .identity)
                                 .motion(Motion.kindChange, value: content.ahead)
                         }
                         if content.behind > 0 {
-                            Text(verbatim: "↓\(formatCount(content.behind, numberFormat))")
-                                .font(Typography.secondaryCount)
-                                .foregroundStyle(.text3)
+                            CountPill("↓\(formatCount(content.behind, numberFormat))")
                                 .contentTransition(motion.animates ? .numericText() : .identity)
                                 .motion(Motion.kindChange, value: content.behind)
                         }

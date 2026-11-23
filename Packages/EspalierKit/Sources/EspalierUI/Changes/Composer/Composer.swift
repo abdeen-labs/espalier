@@ -30,7 +30,7 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
     public var lastCommit: LastCommitContent?
     public var isAmending: Bool
     public var author: AuthorIdentityContent
-    /// "Summary (required)", or "Update README.md" with one file.
+    /// "What did you change?", or "Update README.md" with one file.
     public var summaryPlaceholder: String
     /// The lightbulb: the summary is longer than 50 characters.
     public var showsLengthHint: Bool
@@ -126,8 +126,9 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
         self.assisted = assisted
     }
 
-    /// The summary's placeholder when the commit doesn't name one file.
-    public static let defaultPlaceholder = "Summary (required)"
+    /// The summary's placeholder when the commit doesn't name one file: a
+    /// plain prompt.
+    public static let defaultPlaceholder = "What did you change?"
 }
 
 /// A failed generation, as the line under the fields shows it.
@@ -508,15 +509,12 @@ public struct ComposerView: View {
             if let lastCommit = content.lastCommit {
                 // Grows in after a commit over 0.22 s and leaves over 0.15
                 // s (Changes' column sets the motion).
-                VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-                    Hairline()
-                    LastCommitRow(lastCommit, onUndo: actions.undo)
-                }
-                .barTransition()
+                LastCommitRow(lastCommit, onUndo: actions.undo)
+                    .barTransition()
             }
         }
         .padding(.horizontal, Metrics.Composer.horizontalPadding)
-        .padding(.top, Metrics.insetMedium)
+        .padding(.top, Metrics.insetSmall)
         .padding(.bottom, Metrics.Composer.horizontalPadding)
         .onChange(of: focusRequest) {
             focusBridge.focusSummary()
@@ -555,10 +553,9 @@ public struct ComposerView: View {
             if content.showsCoAuthors(draft) {
                 coAuthorsSection
             }
-            Hairline()
             footer(showsSparkle: false)
         }
-        .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+        .noteCard()
     }
 
     /// The model choice the assisted card asked for, on the sparkle's
@@ -570,10 +567,11 @@ public struct ComposerView: View {
         )
     }
 
-    /// The commit message card: the summary (semibold), a divider, and the
-    /// description; the co-authors under another divider while they show;
-    /// then a footer with the AI button, co-authors, and the commit options
-    /// on the left and the author on the right.
+    /// The commit message as a note card: the summary large and bold, the
+    /// description under it, the co-authors under them while they show,
+    /// and tucked into the card's footer the AI button, co-authors, and the
+    /// commit options on the left and the author on the right. No rules:
+    /// the field with focus has a soft wash of its own.
     private var card: some View {
         VStack(spacing: 0) {
             HStack(spacing: Metrics.insetSmall) {
@@ -602,14 +600,12 @@ public struct ComposerView: View {
                 }
             }
             .padding(.horizontal, Metrics.Composer.cardPadding)
-            .padding(.top, Metrics.Composer.summaryTopPadding)
-            .padding(.bottom, Metrics.insetSmall)
+            .padding(.top, Metrics.NoteCard.summaryTopPadding)
+            .padding(.bottom, Metrics.NoteCard.summaryBottomPadding)
             .background {
                 focusTint(behind: .summary)
             }
             .fieldRegion()
-            Hairline()
-                .padding(.horizontal, Metrics.Composer.cardPadding)
             DescriptionEditor(
                 text: descriptionBinding,
                 isEditable: !content.isReadOnly,
@@ -632,14 +628,13 @@ public struct ComposerView: View {
                 coAuthorsSection
             }
             if !footerIsOnlyAuthor {
-                Hairline()
                 footer(showsSparkle: true)
             }
         }
-        .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+        .noteCard()
         // A field's ring, on the card's edge, while one of its fields has
         // focus.
-        .focusRing(markedField != nil, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous), outset: 0)
+        .focusRing(markedField != nil, in: RoundedRectangle(cornerRadius: Metrics.NoteCard.radius, style: .continuous), outset: 0)
         .contextMenuCard {
             for item in menuItems {
                 MenuAction(item.title, action: item.action)
@@ -652,8 +647,6 @@ public struct ComposerView: View {
     /// (`coAuthorsBinding`).
     private var coAuthorsSection: some View {
         VStack(spacing: 0) {
-            Hairline()
-                .padding(.horizontal, Metrics.Composer.cardPadding)
             CoAuthorsField(
                 authors: $draft.coAuthors,
                 isEditable: !content.isReadOnly,
@@ -679,16 +672,16 @@ public struct ComposerView: View {
         return focusBridge.focusedField
     }
 
-    /// The faint accent tint over `field`'s whole part of the card while it
-    /// has focus, from the card's edges to the dividers; the summary's top
-    /// corners are the card's. It fades in over 0.15 s and out over 0.1 s,
-    /// and crossfades to the other field.
+    /// The faint accent wash behind `field` while it has focus: a soft
+    /// rounded patch inset in the card, like a highlighter's. It fades in
+    /// over 0.15 s and out over 0.1 s, and crossfades to the other field.
     private func focusTint(behind field: ComposerField) -> some View {
-        let corner = field == .summary ? Metrics.Radius.card : 0
-        return ZStack {
+        ZStack {
             if markedField == field {
-                UnevenRoundedRectangle(topLeadingRadius: corner, topTrailingRadius: corner, style: .continuous)
+                RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
                     .fill(Color(espalier: Palette.accentFaint))
+                    .padding(.horizontal, Metrics.NoteCard.focusInset)
+                    .padding(.top, field == .summary ? Metrics.NoteCard.focusInset : 0)
                     .transition(motion.animates ? .opacity : .identity)
             }
         }
@@ -836,9 +829,29 @@ public struct ComposerView: View {
         return true
     }
 
-    /// The summary's font: the row font, semibold.
+    /// The summary's font: large and bold, as a pane's title.
     private static var summaryFont: NSFont {
-        AppKitTypography.row(weight: .semibold)
+        AppKitTypography.sans(.title3, weight: .bold)
+    }
+}
+
+extension View {
+    /// The composer's note card: a cream card on the column with the
+    /// card's ring and shadow and a generous radius.
+    func noteCard() -> some View {
+        surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.NoteCard.radius, style: .continuous))
+    }
+}
+
+extension Metrics {
+    /// The composer's note card.
+    public enum NoteCard {
+        public static let radius: CGFloat = 18
+        /// Above the summary, and between it and the description.
+        public static let summaryTopPadding: CGFloat = 12
+        public static let summaryBottomPadding: CGFloat = 2
+        /// How far the focused field's wash sits inside the card.
+        public static let focusInset: CGFloat = 4
     }
 }
 
@@ -856,29 +869,34 @@ struct AIFailureLine: View {
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
-            Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(Color(espalier: Palette.error))
-                .accessibilityHidden(true)
-            // The message takes the room the button leaves before it wraps.
+        // A tomato banner; the message takes the room the button leaves
+        // before it wraps.
+        SoftBanner(color: Palette.error) {
+            SoftBannerSymbol("sparkles", color: Palette.error)
+        } message: {
             Text(failure.message)
-                .font(Typography.secondary)
-                .foregroundStyle(Color(espalier: Palette.error))
+                .font(Typography.secondary.weight(.medium))
+                .foregroundStyle(.text)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            switch failure.recovery {
-            case .tryAgain:
-                Button("Try Again", action: onTryAgain)
-                    .buttonStyle(.quiet)
-                    .controlSize(.small)
-            case .openSettings:
-                Button("Open AI Settings…", action: onOpenSettings)
-                    .buttonStyle(.quiet)
-                    .controlSize(.small)
-            }
+        } accessory: {
+            recoveryButton
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Couldn't generate a commit message: \(failure.message)")
+    }
+
+    @ViewBuilder
+    private var recoveryButton: some View {
+        switch failure.recovery {
+        case .tryAgain:
+            Button("Try Again", action: onTryAgain)
+                .buttonStyle(.quiet)
+                .controlSize(.small)
+        case .openSettings:
+            Button("Open AI Settings…", action: onOpenSettings)
+                .buttonStyle(.quiet)
+                .controlSize(.small)
+        }
     }
 }
 

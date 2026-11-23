@@ -18,7 +18,8 @@ struct ChangesHeaderCaptures {
         func content(_ fileCount: Int, shown: Int? = nil, included: Int, includeAll: Bool?) -> ChangesHeaderContent {
             ChangesHeaderContent(
                 title: ChangesHeaderContent.title(fileCount: fileCount, visibleCount: shown ?? fileCount, numberFormat: defaultNumberFormat),
-                included: fileCount == 0 ? "" : ChangesHeaderContent.included(count: included, numberFormat: defaultNumberFormat),
+                included: fileCount == 0 ? "" : ChangesHeaderContent.included(count: included, of: fileCount, numberFormat: defaultNumberFormat),
+                includedCount: included,
                 includeAll: includeAll,
                 isIncludeAllEnabled: fileCount > 0,
                 filter: FilterMenuContent(),

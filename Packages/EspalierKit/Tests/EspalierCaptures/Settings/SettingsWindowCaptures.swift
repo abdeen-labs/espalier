@@ -45,7 +45,7 @@ private final class SettingsWindowStage {
 
     init(appearance: CaptureAppearance, @ViewBuilder content: () -> some View) {
         _ = Capture.look
-        let size = CGSize(width: Metrics.SettingsWindow.width, height: Metrics.SettingsWindow.height)
+        let size = CGSize(width: Metrics.SettingsCards.windowWidth, height: Metrics.SettingsWindow.height)
         let controller = NSHostingController(rootView: Capture.prepared(content().frame(width: size.width, height: size.height)))
         controller.sceneBridgingOptions = [.toolbars]
         window = CaptureWindow(

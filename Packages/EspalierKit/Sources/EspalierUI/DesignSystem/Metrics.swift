@@ -66,33 +66,8 @@ public enum Metrics {
         }
     }
 
-    /// Row heights at the default text size.
-    public enum RowHeight {
-        /// Sidebar items.
-        public static let sidebar: CGFloat = 28
-        /// File rows in Changes (`FileList.rowHeight` follows the text size).
-        public static let file: CGFloat = 34
-        /// History rows (`Graph.rowHeight` follows the text size).
-        public static let history: CGFloat = 36
-    }
-
-    /// The file status badge (M, A, D, R).
-    public enum StatusBadge {
-        public static let size: CGFloat = 17
-        /// A rounded square's corner radius.
-        public static let cornerRadius: CGFloat = 6
-
-        /// The badge's corner radius in the current theme: the rounded
-        /// square's, or half its side for a circle.
-        public static var radius: CGFloat {
-            Theme.current.statusBadgeShape == .circle ? size / 2 : cornerRadius
-        }
-    }
-
-    /// Checkboxes.
-    public enum Checkbox {
-        public static let size: CGFloat = 15
-    }
+    /// Checkboxes (Checkbox.swift).
+    public enum Checkbox {}
 
     /// Progress: the arc (`ArcProgress`, `ArcProgressView`) and the bar
     /// (`CapsuleProgressBar`), each a mark on a faint track of its own
@@ -131,6 +106,8 @@ public enum Metrics {
         public static let height: CGFloat = 52
         /// The search field's width.
         public static let searchWidth: CGFloat = 250
+        /// Between the search field and the sync button after it.
+        public static let searchSpacing: CGFloat = 10
     }
 
     /// The sidebar.
@@ -144,9 +121,6 @@ public enum Metrics {
         /// A repository or worktree row's glyph column, and a section
         /// header button's side.
         public static let glyphSize: CGFloat = 18
-        /// A place's tile (Changes, History): its side and corner radius.
-        public static let tileSize: CGFloat = 18
-        public static let tileRadius: CGFloat = 5.5
     }
 
     /// The main window.
@@ -200,18 +174,6 @@ public enum Metrics {
 
     /// The history graph.
     public enum Graph {
-        /// The row height: `ceil(lineHeight(.body) × 2.25)`, 36 at the default
-        /// text size, from SF Pro's line height at the app font's body size
-        /// (`AppKitTypography.bodyLayoutLineHeight`).
-        public static var rowHeight: CGFloat {
-            ceil(AppKitTypography.bodyLayoutLineHeight * 2.25)
-        }
-
-        /// The row height for a body font.
-        public static func rowHeight(for font: NSFont) -> CGFloat {
-            ceil(NSLayoutManager().defaultLineHeight(for: font) * 2.25)
-        }
-
         /// Lane pitch P: the theme's (Default's 17).
         public static var lanePitch: CGFloat { Theme.current.graph.lanePitch }
         /// The pitch past `maxUncompressedLanes` lanes.
@@ -313,9 +275,6 @@ public enum Metrics {
         public static var rowHeight: CGFloat {
             ceil(AppKitTypography.bodyLayoutLineHeight * 2.125)
         }
-
-        /// The status letter's square, and a conflicted file's symbol.
-        public static let statusGlyphSize: CGFloat = StatusBadge.size
     }
 
     /// The header row atop a column (Changes, the stash, History) and atop
@@ -417,25 +376,16 @@ public enum Metrics {
     /// The Settings window: a sidebar of panes, and the pane under its
     /// header band.
     public enum SettingsWindow {
-        /// The window's size; a pane taller than the window scrolls.
-        public static let width: CGFloat = 720
+        /// The window's height; a pane taller than the window scrolls.
         public static let height: CGFloat = 680
-        /// The sidebar's width.
-        public static let sidebarWidth: CGFloat = 180
         /// The band at the sidebar's top, where the window's buttons sit,
         /// and the pane's header band: both as high as the main window's
         /// toolbar.
         public static let headerHeight: CGFloat = 52
-        /// The pane's content and header inset from its sides.
-        public static let contentInset: CGFloat = 20
-        /// Space above the pane's first section and below its last.
+        /// Space above the pane's first section.
         public static let contentTopInset: CGFloat = 6
-        public static let contentBottomInset: CGFloat = 20
-        /// Space above and below a section label.
-        public static let sectionLabelTop: CGFloat = 18
+        /// Space below a section label.
         public static let sectionLabelBottom: CGFloat = 4
-        /// Space above a section without a label.
-        public static let untitledSectionTop: CGFloat = 8
         /// A row: at least 46 high with the hairline under it, its content
         /// 9 from its top and bottom, 16 between its text and its control.
         public static let rowHeight: CGFloat = 45

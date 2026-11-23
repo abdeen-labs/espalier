@@ -2,7 +2,8 @@
 // diff, and History share, each in light and dark: the sheet scaffold with
 // its capsule fields, text area, choices, and buttons, also in Slate and
 // in the Mac's accent color; the status bar's tones with the
-// step indicator; the action list; and menus drawn as capsules.
+// step indicator; the action list; centered messages; and menus drawn as
+// capsules.
 
 import AppKit
 import EspalierCore
@@ -84,7 +85,7 @@ struct SheetComponentCaptures {
         capture(view, named: "statusBar", area: area)
     }
 
-    @Test("the action list: rows with symbols in circles, key caps, a chevron, and a line under a title")
+    @Test("the action list: rows with symbols, key caps, a chevron, and a line under a title")
     func actionList() {
         let view = ActionList([
             ActionListItem(systemImage: "arrow.down.circle", title: "Clone a Repository from the Internet…", keyCap: "⇧⌘O") {},
@@ -94,6 +95,20 @@ struct SheetComponentCaptures {
         .frame(width: 420)
         .padding(Metrics.insetLarge)
         capture(view, named: "actionList", area: area)
+    }
+
+    @Test("centered messages: a place's own, a large one tinted, and a pane's plain one")
+    func centeredMessages() {
+        let view = HStack(spacing: Metrics.insetLarge) {
+            CenteredMessage("No Stashed Changes", systemImage: "tray", description: "Stash changes to set them aside for later.", isLarge: true) {
+                Button("Stash All Changes") {}
+                    .buttonStyle(.prominent)
+            }
+            CenteredMessage("Couldn't Load History", systemImage: "exclamationmark.triangle", description: "The repository couldn't be read.", tint: Color(espalier: Palette.warningMark), isLarge: true)
+            CenteredMessage("The file is empty", systemImage: "doc")
+        }
+        .frame(width: 980, height: 360)
+        capture(view, named: "centeredMessages", area: area)
     }
 
     @Test("menus drawn as capsules: quiet, small, and with a symbol")

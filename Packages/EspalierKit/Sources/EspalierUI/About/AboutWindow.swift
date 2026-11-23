@@ -1,5 +1,5 @@
-// About Espalier, a window of its own: the icon, the name, the version and
-// build, the line about GitHub Desktop, and Acknowledgements…, which opens
+// About Espalier, a window of its own: the icon drawn from its art, the
+// name in display type, the version and build, the line about GitHub Desktop, and Acknowledgements…, which opens
 // the Acknowledgements window.
 
 import AppKit
@@ -25,6 +25,11 @@ nonisolated struct AboutContent: Sendable, Equatable {
     }
 }
 
+extension Typography {
+    /// About's name: display type, 30 bold.
+    static var aboutTitle: Font { display(size: 30) }
+}
+
 /// The About window's layout.
 struct AboutView: View {
     let content: AboutContent
@@ -32,12 +37,10 @@ struct AboutView: View {
 
     var body: some View {
         VStack(spacing: Metrics.insetSmall) {
-            Image(nsImage: NSApplication.shared.applicationIconImage)
-                .resizable()
-                .frame(width: Metrics.About.iconSize, height: Metrics.About.iconSize)
-                .accessibilityHidden(true)
+            AppIconArt(size: Metrics.About.iconSize)
+                .padding(.bottom, Metrics.insetSmall)
             Text("Espalier")
-                .font(Typography.welcomeTitle)
+                .font(Typography.aboutTitle)
                 .foregroundStyle(.text)
             MonoChip(content.versionLine, isSelectable: true)
             Text("A native Mac Git client, originally rooted in GitHub Desktop.")

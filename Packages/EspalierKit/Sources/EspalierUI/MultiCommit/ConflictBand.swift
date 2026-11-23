@@ -58,9 +58,6 @@ struct ConflictBand: View {
         .frame(minHeight: Metrics.ControlHeight.small + 2 * Metrics.insetSmall)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(espalier: tone.fill).motion(Motion.arrive, value: tone))
-        .overlay(alignment: .bottom) {
-            Hairline()
-        }
         .accessibilityElement(children: .contain)
         .motion(Motion.kindChange, value: content)
         // A band of its own for each file, so showing another file's
@@ -74,29 +71,32 @@ struct ConflictBand: View {
         content.isUnresolved ? .attention : .ready
     }
 
-    /// The file's state: in the modified color while it needs the user
-    /// (the operation panel has the warning), its count rolling, after the
-    /// check once resolved.
+    /// The file's state after its status tile: the conflicted tile and the
+    /// state in the modified color while it needs the user (the operation
+    /// panel has the warning), its count rolling; the resolved tile, a
+    /// check, once it doesn't.
     private var state: some View {
         // Stacked, so the one leaving and the one arriving crossfade in
         // place.
         ZStack(alignment: .leading) {
             if content.isUnresolved {
-                Text(content.status)
-                    .font(Typography.secondary)
-                    .foregroundStyle(Color(espalier: Palette.warning))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(motion.animates ? .numericText() : .identity)
-            } else {
-                Label {
-                    Text(content.status)
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color(espalier: Palette.success))
+                HStack(spacing: Metrics.insetSmall) {
+                    StatusGlyph(.conflicted)
                         .accessibilityHidden(true)
+                    Text(content.status)
+                        .font(Typography.secondary.weight(.semibold))
+                        .foregroundStyle(Color(espalier: Palette.warning))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(motion.animates ? .numericText() : .identity)
                 }
-                .font(Typography.secondary)
+            } else {
+                HStack(spacing: Metrics.insetSmall) {
+                    StatusGlyph(.resolved)
+                        .accessibilityHidden(true)
+                    Text(content.status)
+                        .font(Typography.secondary.weight(.medium))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
     }

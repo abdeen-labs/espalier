@@ -114,7 +114,7 @@ struct RefOverflowList: View {
     var palette = TrackPalette.Resolved()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.RefCapsule.spacing) {
+        VStack(alignment: .leading, spacing: Metrics.Pill.spacing) {
             ForEach(refs) { ref in
                 RefCapsule(ref, palette: palette)
             }

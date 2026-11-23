@@ -1,6 +1,6 @@
-// The diff's header: the file name and folder, a rename's "old → new"
-// line, the added and removed line counts, Open in <Editor>, and the
-// options menu. Unified and Split are in the options menu (and the View
+// The diff's header: the file's status tile, its name in bold and its
+// folder, a rename's "old → new" line, the added and removed line counts
+// as pills, Open in <Editor>, and the options menu. Unified and Split are in the options menu (and the View
 // menu); an image diff's modes are above its images. The counts roll over
 // 0.2 s as the same file's diff reloads; another file's show at once.
 
@@ -31,8 +31,9 @@ nonisolated struct DiffHeaderContent: Sendable, Equatable {
     }
 }
 
-/// The diff's header row: the name, the folder in tertiary text, the counts
-/// in SF Mono (zero counts left out), Open in <Editor>, and the options.
+/// The diff's header row: the status tile, the name in bold, the folder in
+/// tertiary text, the counts as pills (zero counts left out), Open in
+/// <Editor>, and the options.
 struct DiffHeader<Options: View>: View {
     let content: DiffHeaderContent
     var openInEditor: @MainActor () -> Void = {}
@@ -65,12 +66,13 @@ struct DiffHeader<Options: View>: View {
             }
             .frame(minHeight: Self.height)
             if let oldPath = content.oldPath {
-                Text("\(oldPath) \u{2192} \(content.path)")
+                Text("\(content.status == .copied ? "Copied" : "Renamed") from \(oldPath)")
                     .font(Typography.meta)
                     .foregroundStyle(.text3)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .tooltip("\(oldPath) \u{2192} \(content.path)")
+                    .padding(.leading, Metrics.StatusTile.header + Metrics.insetSmall)
                     .padding(.bottom, Metrics.insetSmall)
             }
         }
@@ -79,21 +81,23 @@ struct DiffHeader<Options: View>: View {
     }
 
     private var path: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
-            Text(content.fileName)
-                .font(Typography.sans(.title3, weight: .bold))
-                .foregroundStyle(.text)
-                .lineLimit(1)
-                .layoutPriority(1)
-            if !content.directory.isEmpty {
-                Text(content.directory)
-                    .font(Typography.secondary)
-                    .foregroundStyle(.text3)
+        HStack(spacing: Metrics.insetSmall) {
+            StatusGlyph(content.status, size: Metrics.StatusTile.header)
+            HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
+                Text(content.fileName)
+                    .font(Typography.paneHeading)
+                    .foregroundStyle(.text)
                     .lineLimit(1)
-                    .truncationMode(.head)
+                    .layoutPriority(1)
+                if !content.directory.isEmpty {
+                    Text(content.directory)
+                        .font(Typography.secondary)
+                        .foregroundStyle(.text3)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
             }
         }
-        .tooltip(content.status.title)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(content.path), \(content.status.title)")
     }
@@ -101,7 +105,7 @@ struct DiffHeader<Options: View>: View {
     @ViewBuilder
     private var stats: some View {
         if let added = content.addedLines, let deleted = content.deletedLines, added + deleted > 0 {
-            HistoryLineCounts(added: added, deleted: deleted)
+            LineCountPills(added: added, deleted: deleted)
                 .contentTransition(motion.animates ? .numericText() : .identity)
                 .motion(Motion.kindChange, value: [added, deleted])
                 .padding(.trailing, Metrics.grid)

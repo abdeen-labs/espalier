@@ -13,6 +13,11 @@
 
 import SwiftUI
 
+extension Typography {
+    /// A popover's title: display type, 15 bold.
+    public static var popoverTitle: Font { display(size: 15) }
+}
+
 extension Metrics.Popover {
     /// Between a popover's card and its anchor.
     public static let gap: CGFloat = 6

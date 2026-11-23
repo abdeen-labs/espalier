@@ -90,13 +90,13 @@ struct GetStartedActions: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetLarge + Metrics.grid) {
-            VStack(alignment: .leading, spacing: Metrics.grid) {
+            VStack(alignment: .leading, spacing: Metrics.insetSmall) {
                 Text("Let's get started!")
                     .font(Typography.welcomeTitle)
                     .foregroundStyle(.text)
                     .accessibilityAddTraits(.isHeader)
                 Text("Add a repository to Espalier to start collaborating")
-                    .font(Typography.row)
+                    .font(Typography.welcomeBody)
                     .foregroundStyle(.text2)
             }
             ActionList([
@@ -107,7 +107,7 @@ struct GetStartedActions: View {
                     action: clone
                 ),
                 ActionListItem(
-                    systemImage: "plus",
+                    systemImage: "plus.circle",
                     title: "Create a New Repository on Your Mac…",
                     keyCap: ActionKind.newRepository.shortcut?.symbols,
                     action: create

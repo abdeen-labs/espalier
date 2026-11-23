@@ -1,21 +1,21 @@
-// A centered message: a symbol in a soft circle, a title, a line about it,
-// and its actions below. Every centered empty or failure state uses it:
-// Changes' empty state, the diff's states (binary, too large, no content
-// changes, a failed load), no repository selected, a missing repository, a
-// launch failure, and the history's and pull requests' empty and failed
-// loads.
+// A centered message: a large plain symbol (in tertiary text, or the
+// message's tint), a bold title in display type, a plain sentence about
+// it, and its actions below. Every centered empty or failure state uses it: Changes' empty state, the diff's states (binary,
+// too large, no content changes, a failed load), no repository selected, a
+// missing repository, a launch failure, and the history's and pull
+// requests' empty and failed loads.
 
 import SwiftUI
 
 extension Typography {
-    /// A centered message's title (15, semibold).
-    static var messageTitle: Font { sans(.title3, weight: .semibold) }
-    /// A large centered message's title (17, semibold).
-    static var largeMessageTitle: Font { sans(.title2, weight: .semibold) }
+    /// A centered message's title: display type, 17 bold.
+    static var messageTitle: Font { display(size: 17) }
+    /// A large centered message's title: display type, 22 bold.
+    static var largeMessageTitle: Font { display(size: 22) }
 }
 
-/// A centered message: a symbol in a soft circle, a title, a description,
-/// and actions below.
+/// A centered message: a large symbol, a title, a description, and actions
+/// below.
 public struct CenteredMessage<Actions: View>: View {
     private let title: String
     private let systemImage: String
@@ -28,8 +28,8 @@ public struct CenteredMessage<Actions: View>: View {
     /// - Parameters:
     ///   - tint: The symbol's color (the check of "No local changes" is
     ///     green, a failure's warning the modified color); nil for
-    ///     secondary text.
-    ///   - isLarge: A place's own message (the larger circle and title)
+    ///     tertiary text.
+    ///   - isLarge: A place's own message (the larger symbol and title)
     ///     rather than a pane's.
     ///   - maximumWidth: The widest the title, the description, and the
     ///     actions get.
@@ -74,20 +74,17 @@ public struct CenteredMessage<Actions: View>: View {
     }
 
     public var body: some View {
-        let circle = isLarge ? CenteredMessageMetrics.largeCircle : CenteredMessageMetrics.circle
         VStack(spacing: 0) {
             Image(systemName: systemImage)
-                .font(.system(size: circle * CenteredMessageMetrics.symbolScale, weight: .semibold))
-                .foregroundStyle(tint ?? .text2)
-                .frame(width: circle, height: circle)
-                .background(Circle().fill(.field))
+                .font(.system(size: isLarge ? CenteredMessageMetrics.largeSymbol : CenteredMessageMetrics.symbol, weight: .regular))
+                .foregroundStyle(tint ?? .text3)
                 .accessibilityHidden(true)
             Text(title)
                 .font(isLarge ? Typography.largeMessageTitle : Typography.messageTitle)
                 .foregroundStyle(.text)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, Metrics.insetLarge)
+                .padding(.top, CenteredMessageMetrics.titleTopPadding)
                 .accessibilityAddTraits(.isHeader)
             if let description {
                 LinkedText(description)
@@ -95,10 +92,10 @@ public struct CenteredMessage<Actions: View>: View {
                     .foregroundStyle(.text2)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, Metrics.grid)
+                    .padding(.top, CenteredMessageMetrics.descriptionTopPadding)
             }
             actions
-                .padding(.top, Metrics.insetLarge)
+                .padding(.top, CenteredMessageMetrics.actionsTopPadding)
         }
         .frame(maxWidth: maximumWidth)
         .padding(Metrics.insetLarge)
@@ -109,11 +106,13 @@ public struct CenteredMessage<Actions: View>: View {
 /// A centered message's sizes. The cloning view, centered too, shares its
 /// widest width.
 public enum CenteredMessageMetrics {
-    /// The soft circle's diameter: a place's message, and a pane's.
-    static let largeCircle: CGFloat = 56
-    static let circle: CGFloat = 44
-    /// The symbol's size, as a fraction of the circle's.
-    static let symbolScale: CGFloat = 0.4
+    /// The symbol's point size: a place's message, and a pane's.
+    static let largeSymbol: CGFloat = 44
+    static let symbol: CGFloat = 36
+    /// Above the title, the description, and the actions.
+    static let titleTopPadding: CGFloat = 14
+    static let descriptionTopPadding: CGFloat = 6
+    static let actionsTopPadding: CGFloat = 20
     /// The widest a centered message gets.
     public static let maximumWidth: CGFloat = 620
 }

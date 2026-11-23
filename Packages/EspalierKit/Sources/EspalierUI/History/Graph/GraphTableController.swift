@@ -142,7 +142,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
         // (`GraphRowView`).
         tableView.style = .plain
         tableView.focusRingType = .none
-        tableView.rowHeight = Metrics.Graph.rowHeight
+        tableView.rowHeight = Metrics.HistoryRows.height
         tableView.usesAutomaticRowHeights = false
         tableView.intercellSpacing = .zero
         tableView.allowsMultipleSelection = true
@@ -1216,7 +1216,7 @@ final class GraphTableController: NSObject, NSTableViewDataSource, NSTableViewDe
     /// The look changed: the rows' height, the lanes, the colors, and the
     /// rows' fonts follow it.
     @objc private func lookDidChange(_ notification: Notification) {
-        tableView.rowHeight = Metrics.Graph.rowHeight
+        tableView.rowHeight = Metrics.HistoryRows.height
         tableView.backgroundColor = Palette.background
         scrollView.backgroundColor = Palette.background
         style.geometry = GraphGeometry(rowHeight: tableView.rowHeight, laneCount: lanesSeen, increaseContrast: isIncreasedContrast)

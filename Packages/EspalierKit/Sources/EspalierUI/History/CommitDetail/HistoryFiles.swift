@@ -404,7 +404,7 @@ final class HistoryFileCellView: NSTableCellView {
     }
 }
 
-/// A file's row: the status badge, the name, its folder (so two files of
+/// A file's row: the status tile, the name, its folder (so two files of
 /// one name tell apart), and its counts. The name stays whole while the
 /// folder, cut from its start, takes the room left (`FileLabelLayout`).
 struct HistoryFileRow: View {
@@ -467,6 +467,48 @@ struct HistoryLineCounts: View {
     }
 }
 
+/// "+10 −2" as two candy pills joined in one capsule: each count in its
+/// diff color on a tint of it; zero counts left out. Headers show it.
+struct LineCountPills: View {
+    let added: Int
+    let deleted: Int
+    @Environment(\.numberFormat) private var numberFormat
+
+    var body: some View {
+        HStack(spacing: Metrics.LineCountPills.spacing) {
+            if added > 0 {
+                part("+\(formatCount(added, numberFormat))", color: DiffColors.addedMarker)
+            }
+            if deleted > 0 {
+                part("\u{2212}\(formatCount(deleted, numberFormat))", color: DiffColors.deletedMarker)
+            }
+        }
+        .clipShape(Capsule())
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: "\(formatCount(added, numberFormat)) added lines, \(formatCount(deleted, numberFormat)) removed lines"))
+    }
+
+    private func part(_ text: String, color: NSColor) -> some View {
+        Text(verbatim: text)
+            .font(Typography.count.weight(.bold))
+            .foregroundStyle(Color(espalier: color))
+            .lineLimit(1)
+            .padding(.horizontal, Metrics.LineCountPills.padding)
+            .frame(height: Metrics.LineCountPills.height)
+            .background(Color(espalier: Palette.tint(color, light: 0.14, dark: 0.2)))
+    }
+}
+
+extension Metrics {
+    /// The joined line count pills.
+    enum LineCountPills {
+        static let height: CGFloat = 22
+        static let padding: CGFloat = 8
+        static let spacing: CGFloat = 2
+    }
+}
+
 /// The label over the files: "CHANGED FILES 3", and the lines added and
 /// removed, in a row as high as the list's header. The label is always
 /// whole; the line counts show when there's room for them.
@@ -484,6 +526,7 @@ struct CommitFilesHeader: View {
                 // Shown whole or not at all: a narrow column leaves the
                 // room to the label.
                 ViewThatFits(in: .horizontal) {
+                    LineCountPills(added: summary.linesAdded, deleted: summary.linesDeleted)
                     HistoryLineCounts(added: summary.linesAdded, deleted: summary.linesDeleted)
                     Color.clear
                         .frame(width: 0, height: 0)

@@ -75,7 +75,7 @@ nonisolated struct PullRequestRowContent: Sendable, Equatable {
 }
 
 /// A pull request in the sidebar: its checks (or the pull request symbol,
-/// in the accent while selected), its number, its title (the current
+/// in the pull requests' plum, the accent while selected), its number, its title (the current
 /// branch's semibold, a selected one medium), and Draft for a draft. The
 /// checks changing state replace their glyph's symbol over 0.15 s.
 struct PullRequestRow: View {
@@ -95,7 +95,7 @@ struct PullRequestRow: View {
                         .tooltip(content.checksTooltip)
                 } else {
                     Image(systemName: PullRequestGlyph.systemImage)
-                        .foregroundStyle(.sidebarRowIcon(isSelected: isSelected))
+                        .foregroundStyle(isSelected ? Color.sidebarRowIcon(isSelected: true) : Color(nsColor: PlaceIdentity.pullRequests.color))
                 }
             }
             .font(Typography.secondary)

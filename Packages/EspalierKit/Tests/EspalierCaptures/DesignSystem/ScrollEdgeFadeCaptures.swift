@@ -34,7 +34,7 @@ struct ScrollEdgeFadeCaptures {
                     selection: GraphSelection(shas: history.selection.shas, isWorkingCopy: history.isWorkingCopySelected),
                     reorderInsertionRow: nil
                 )
-                stage.scroll(by: Metrics.Graph.rowHeight * 6.5)
+                stage.scroll(by: Metrics.HistoryRows.height * 6.5)
                 return stage.image
             }
             await fixture.settle()

@@ -139,8 +139,10 @@ public struct ChoiceList<Value: Hashable>: View {
     }
 }
 
-/// A radio mark: 15 points; the accent with a dot in the theme's marks
-/// color (`onAccent`) when chosen, else a `line2` ring on the quiet fill.
+/// A radio mark, as chunky as a checkbox: 18 points; the accent with a dot
+/// in the theme's marks color (`onAccent`) when chosen, else a thick
+/// `line2` ring on the content background. Chosen, it pops as a checkbox
+/// does.
 public struct RadioMark: View {
     private let isSelected: Bool
     @Environment(\.motion) private var motion
@@ -154,7 +156,7 @@ public struct RadioMark: View {
             // The fill crossfades and the dot fades and scales in over
             // 0.15 s.
             Circle()
-                .fill(isSelected ? Color.accent : Color.quiet)
+                .fill(isSelected ? Color.accent : Color(espalier: Palette.background))
             if isSelected {
                 Circle()
                     .fill(Color(nsColor: Theme.current.onAccent))
@@ -162,12 +164,17 @@ public struct RadioMark: View {
                     .transition(motion.animates ? .scale(scale: 0.6).combined(with: .opacity) : .identity)
             } else {
                 Circle()
-                    .strokeBorder(.line2, lineWidth: 1)
+                    .strokeBorder(.line2, lineWidth: Metrics.Checkbox.rim)
                     .transition(motion.animates ? .opacity : .identity)
             }
         }
         .motion(Motion.leave, value: isSelected)
-        .frame(width: Metrics.Checkbox.size, height: Metrics.Checkbox.size)
+        .frame(width: CheckboxDrawing.size, height: CheckboxDrawing.size)
+        .phaseAnimator(Motion.CheckboxPop.scales, trigger: isSelected) { content, scale in
+            content.scaleEffect(isSelected ? scale : 1)
+        } animation: { _ in
+            motion.animates ? .easeOut(duration: Motion.CheckboxPop.duration / Double(Motion.CheckboxPop.scales.count - 1)) : nil
+        }
         .accessibilityHidden(true)
     }
 }
@@ -181,6 +188,6 @@ extension Metrics {
         /// Between the radio mark and the title.
         public static let markSpacing: CGFloat = 10
         /// The dot inside a chosen radio mark.
-        public static let dotSize: CGFloat = 6
+        public static let dotSize: CGFloat = 7
     }
 }

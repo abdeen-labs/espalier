@@ -114,11 +114,12 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
     }
 }
 
-/// The commit button: the full-width prominent capsule, 34 high, with its
-/// shortcut on the right. A long branch name gives way in the middle, so
-/// the button never grows past its column; the count rolls over 0.2 s as
-/// files are included or leave. The button and its working capsule (the arc
-/// and "Committing…") crossfade over 0.2 s as work starts and ends.
+/// The commit button: a big full-width pillow, 44 high, that names the
+/// branch as a candy pill, with its shortcut on the right. A long branch
+/// name gives way in the middle, so the button never grows past its column;
+/// the count rolls over 0.2 s as files are included or leave. The button
+/// and its working pillow (the arc and "Committing…") crossfade over 0.2 s
+/// as work starts and ends.
 public struct CommitButton: View {
     private let content: CommitButtonContent
     private let action: () -> Void
@@ -142,8 +143,7 @@ public struct CommitButton: View {
                     ArcProgress(.small, tint: Palette.buttonText)
                     label
                 }
-                .frame(maxWidth: .infinity)
-                .capsuleChrome(.prominent)
+                .pillowChrome()
                 .accessibilityElement(children: .ignore)
                 .accessibilityAddTraits(.isButton)
                 .tooltip(content.help)
@@ -168,20 +168,23 @@ public struct CommitButton: View {
                                     .frame(maxWidth: .infinity)
                                 shortcut(symbols)
                             }
+                            // The narrowest: the shortcut leaves the branch
+                            // its room.
+                            label
+                                .frame(maxWidth: .infinity)
                         }
                     } else {
                         label
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.prominent)
+                .buttonStyle(.pillow)
                 .disabled(!content.isEnabled)
                 .tooltip(content.help)
                 .accessibilityLabel(content.title)
                 .transition(fade)
             }
         }
-        .controlSize(.extraLarge)
     }
 
     /// ⌘↩, which Commit Changes runs: it presses Commit, or runs Commit
@@ -198,23 +201,21 @@ public struct CommitButton: View {
             .accessibilityHidden(true)
     }
 
-    /// The title: the words keep their room and the branch gives way, in
-    /// the middle. Its count rolls to a new one.
+    /// The title: the words keep their room and the branch, in its candy
+    /// pill, gives way in the middle. Its count rolls to a new one.
     private var label: some View {
         let parts = content.titleParts
         return Group {
             if let branch = parts.branch {
-                HStack(spacing: 0) {
+                HStack(spacing: Metrics.CommitButton.pillSpacing) {
                     Text(parts.lead)
                         .layoutPriority(2)
-                    // The space leads the branch's text: a trailing one
-                    // would be trimmed.
-                    Text(verbatim: " " + branch)
-                        .fontWeight(.bold)
-                        .truncationMode(.middle)
+                    BranchPill(branch)
                         .layoutPriority(1)
                     if !parts.trail.isEmpty {
-                        Text(parts.trail)
+                        // "…" and " with AI" follow the pill; their space
+                        // is the stack's.
+                        Text(parts.trail.trimmingCharacters(in: .whitespaces))
                             .layoutPriority(2)
                     }
                 }
@@ -226,5 +227,42 @@ public struct CommitButton: View {
         }
         .contentTransition(motion.animates ? .numericText() : .identity)
         .motion(Motion.kindChange, value: content.fileCount)
+    }
+}
+
+/// The branch on the commit button: a candy pill of the button's own text
+/// color on the prominent fill, the branch symbol, and the name, which
+/// gives way in the middle.
+private struct BranchPill: View {
+    let name: String
+
+    init(_ name: String) {
+        self.name = name
+    }
+
+    var body: some View {
+        HStack(spacing: Metrics.TintedPill.symbolSpacing) {
+            Image(systemName: PlaceIdentity.branches.systemImage)
+                .imageScale(.small)
+                .fontWeight(.bold)
+            Text(verbatim: name)
+                .fontWeight(.bold)
+                .truncationMode(.middle)
+        }
+        .foregroundStyle(Color.prominentText)
+        .padding(.horizontal, Metrics.CommitButton.pillPadding)
+        .padding(.vertical, Metrics.TintedPill.verticalPadding + 1)
+        .background(Capsule(style: .continuous).fill(Color.prominentText.opacity(Metrics.CommitButton.pillOpacity)))
+    }
+}
+
+extension Metrics {
+    /// The commit button's branch pill.
+    public enum CommitButton {
+        /// Between the words and the pill.
+        public static let pillSpacing: CGFloat = 6
+        public static let pillPadding: CGFloat = 9
+        /// The pill's fill: the button's text color at this opacity.
+        public static let pillOpacity: Double = 0.2
     }
 }

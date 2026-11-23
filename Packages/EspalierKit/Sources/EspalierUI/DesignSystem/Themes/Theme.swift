@@ -111,9 +111,8 @@ nonisolated public final class Theme: Sendable {
     public let error: NSColor
     public let success: NSColor
     public let warningMark: NSColor
-    /// A file status's letter and its fill.
+    /// A file status's letter color.
     let statusForegrounds: [FileStatusKind: NSColor]
-    let statusBackgrounds: [FileStatusKind: NSColor]
     /// A checks state's glyph.
     let checksColors: [ChecksState: NSColor]
 
@@ -163,7 +162,6 @@ nonisolated public final class Theme: Sendable {
 
     public let graph: GraphStyle
     public let refTag: RefTagStyle
-    public let statusBadgeShape: StatusBadgeShape
     public let avatarShape: AvatarShape
     /// Capsule controls' surfaces.
     public let controls: ControlStyle
@@ -251,7 +249,6 @@ nonisolated public final class Theme: Sendable {
             return (kind, color)
         })
         statusForegrounds = statusColors
-        statusBackgrounds = statusColors.mapValues { Palette.tint($0, light: Palette.statusTint.light, dark: Palette.statusTint.dark) }
         checksColors = [
             .success: definition.add,
             .failure: delete,
@@ -279,7 +276,6 @@ nonisolated public final class Theme: Sendable {
         buttonWeights = definition.buttonWeights
         graph = definition.graph
         refTag = definition.refTag
-        statusBadgeShape = definition.statusBadgeShape
         avatarShape = definition.avatarShape
         controls = definition.controls
         scrollEdgeFade = definition.scrollEdgeFade
@@ -422,8 +418,6 @@ nonisolated public struct ThemeRadii: Sendable, Equatable {
     public var card: CGFloat
     /// Checkboxes and key caps.
     public var small: CGFloat
-    /// Ref tags.
-    public var tag: CGFloat
 }
 
 /// A title's size at the default text size, and its weight.
@@ -447,12 +441,6 @@ nonisolated public struct RefTagStyle: Sendable {
     public var alpha: (light: CGFloat, dark: CGFloat)
     public var textMix: (light: CGFloat, dark: CGFloat)
     public var ink: UInt32
-}
-
-/// The file status badge's shape.
-nonisolated public enum StatusBadgeShape: Sendable, Equatable {
-    case roundedSquare
-    case circle
 }
 
 /// The avatar's shape.
@@ -595,7 +583,6 @@ nonisolated struct ThemeDefinition: Sendable {
     var buttonWeights: ButtonWeights
     var graph: GraphStyle
     var refTag: RefTagStyle
-    var statusBadgeShape: StatusBadgeShape
     var avatarShape: AvatarShape = .circle
     var controls: ControlStyle = .standard
     var scrollEdgeFade: CGFloat = 0

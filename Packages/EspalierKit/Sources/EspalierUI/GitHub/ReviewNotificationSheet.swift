@@ -184,6 +184,7 @@ struct ReviewNotificationView: View {
         VStack(alignment: .leading, spacing: Metrics.insetMedium) {
             HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
                 Image(systemName: PullRequestGlyph.systemImage)
+                    .font(Typography.sheetTitle)
                     .foregroundStyle(.text2)
                     .accessibilityHidden(true)
                 Text(content.pullRequestTitle)

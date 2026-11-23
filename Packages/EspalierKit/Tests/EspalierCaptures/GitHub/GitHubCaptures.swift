@@ -112,7 +112,7 @@ struct GitHubCaptures {
         return SettingsLayout(selection: .constant(.accounts)) {
             AccountsForm(content: content, actions: actions)
         }
-        .frame(width: Metrics.SettingsWindow.width)
+        .frame(width: Metrics.SettingsCards.windowWidth)
     }
 
     // MARK: A repository's account

@@ -11,7 +11,7 @@ extension Metrics.Graph {
     static let dash: [CGFloat] = [2, 2]
     /// The working copy is a ring: the radius of its stroke's center line,
     /// and its stroke, thinner than a line, so its dashes read as dashes.
-    static let workingCopyRadius: CGFloat = 5.25
+    static let workingCopyRadius: CGFloat = 6
     static let workingCopyStroke: CGFloat = 2
     /// A dimmed track's opacity while another track is hovered.
     static let hoverDimming: CGFloat = 0.4
@@ -27,10 +27,10 @@ extension Metrics.Graph {
     /// A node is a dot: a commit's, a merge's (with a hole), the current
     /// tip's, and the hole's radius in each, with a gap of the row's
     /// background around them.
-    static let dotRadius: CGFloat = 5
-    static let headDotNodeRadius: CGFloat = 6.5
-    static let mergeHoleRadius: CGFloat = 2.25
-    static let headHoleRadius: CGFloat = 2.5
+    static let dotRadius: CGFloat = 6
+    static let headDotNodeRadius: CGFloat = 7.5
+    static let mergeHoleRadius: CGFloat = 2.5
+    static let headHoleRadius: CGFloat = 3
     static let dotGap: CGFloat = 2
 }
 
@@ -68,10 +68,10 @@ struct GraphGeometry: Equatable {
     let lineWidth: CGFloat
 
     /// - Parameters:
-    ///   - rowHeight: The row height (`Metrics.Graph.rowHeight`).
+    ///   - rowHeight: The row height (`Metrics.HistoryRows.height`).
     ///   - laneCount: The most lanes any row seen so far uses.
     ///   - increaseContrast: Whether Increase Contrast is on.
-    init(rowHeight: CGFloat = Metrics.Graph.rowHeight, laneCount: Int, increaseContrast: Bool = false) {
+    init(rowHeight: CGFloat = Metrics.HistoryRows.height, laneCount: Int, increaseContrast: Bool = false) {
         self.rowHeight = rowHeight
         self.laneCount = max(laneCount, 1)
         let compressed = self.laneCount > Metrics.Graph.maxUncompressedLanes

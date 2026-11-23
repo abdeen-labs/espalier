@@ -341,7 +341,7 @@ struct ConfigureGitStep: View {
             .controlSize(.large)
             .frame(width: Metrics.Welcome.formWidth)
         }
-        .padding(Metrics.insetLarge * 2)
+        .welcomeCard(step: .configureGit)
         .barMotion(model.lockFile != nil)
         .task {
             await model.load()

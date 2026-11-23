@@ -1,9 +1,9 @@
 // Ported in part from desktop/app/src/ui/branches/branches-container.tsx
 //
 // The location control's branch popover (⌘B), the branch switcher, laid
-// out as desktop's: the filter with New Branch… (⇧⌘N) beside it, then the
-// branches, whose click or Return checks the highlighted branch out
-// through the Switch Branch decision (the current branch, highlighted as
+// out as desktop's: a header ("Branches" in bold, and New Branch…
+// (⇧⌘N)), the filter, then the branches, whose click or Return checks the
+// highlighted branch out through the Switch Branch decision (the current branch, highlighted as
 // the popover opens, only closes it), and whose right-click opens the
 // sidebar's branch menu; a filter that matches nothing offers Create New
 // Branch. Along the bottom, "Choose a branch to merge into <current>"
@@ -39,6 +39,13 @@ public struct BranchPopover: View {
         // What the list picks a branch for; nil while it switches branches.
         let method = context.state.branchPopoverMethod
         VStack(spacing: 0) {
+            PickerHeader(method == nil ? "Branches" : "Choose a Branch") {
+                if method == nil {
+                    newBranchButton
+                }
+            }
+            .padding(.horizontal, Metrics.insetMedium)
+            .padding(.top, Metrics.insetMedium)
             BranchPicker(
                 repository: repository,
                 selection: $selection,
@@ -57,7 +64,6 @@ public struct BranchPopover: View {
                 } : nil,
                 candidates: method == nil ? nil : repository.history.comparableBranches,
                 style: .popover,
-                filterAccessory: method == nil ? AnyView(newBranchButton) : nil,
                 branchMenu: { [context] branch in
                     BranchContextMenu.content(ref: branch.ref, context: context)
                 }
@@ -101,7 +107,7 @@ public struct BranchPopover: View {
         return min(max(Metrics.BranchPicker.popoverFilterHeight + listHeight, Metrics.BranchPicker.popoverMinimumHeight), tallest)
     }
 
-    /// New Branch…, beside the filter; its shortcut is in its tooltip.
+    /// New Branch…, in the header; its shortcut is in its tooltip.
     private var newBranchButton: some View {
         Button {
             close()
@@ -110,6 +116,7 @@ public struct BranchPopover: View {
             Label(ActionKind.newBranch.title, systemImage: "plus")
         }
         .buttonStyle(.quiet)
+        .controlSize(.small)
         .fixedSize()
         .tooltip([ActionKind.newBranch.title, ActionKind.newBranch.shortcut?.symbols].compactMap(\.self).joined(separator: " "))
         .disabled(!context.actions.canPerform(.newBranch(startPoint: nil)))

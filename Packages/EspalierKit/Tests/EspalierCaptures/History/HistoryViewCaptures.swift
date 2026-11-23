@@ -352,7 +352,7 @@ struct HistoryViewCaptures {
     func dragImage() {
         for (name, count) in [("dragImage-one", 1), ("dragImage-several", 12)] {
             EspalierCaptures.capture(named: name, area: area) { appearance in
-                let rowSize = CGSize(width: 300, height: Metrics.Graph.rowHeight)
+                let rowSize = CGSize(width: 300, height: Metrics.HistoryRows.height)
                 let layout = CommitDragImage.Layout(rowSize: rowSize, count: count, numberFormat: Capture.numberFormat)
                 let row = Capture.render(DragImageRow().frame(width: rowSize.width, height: rowSize.height), size: rowSize, appearance: appearance)
                 let image = CommitDragImage.image(rowImage: row, layout: layout, appearance: appearance.appearance, scale: Capture.scale)

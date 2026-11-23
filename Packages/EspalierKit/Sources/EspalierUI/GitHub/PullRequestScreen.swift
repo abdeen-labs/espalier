@@ -1,10 +1,11 @@
-// The pull request place. Left: the overview (title, Draft, "#142 opened 2
-// days ago by octo", the branches, Check Out through the uncommitted changes
-// decision or "Checked Out" for the current branch's, New Worktree…, View
-// on GitHub, the checks with their steps, and the description in
-// Markdown). Right: the changes since the merge base when the pull request's
-// head is in the repository (`pullRequestChanges`), else "Changes Not
-// Available" with a quiet Check Out (the overview's is the prominent one).
+// The pull request place. Left: the overview, as cards (the title,
+// Draft, "#142 opened 2 days ago by octo", the branches as pills, Check
+// Out through the uncommitted changes decision or "Checked Out" for the
+// current branch's, New Worktree…, View on GitHub, the checks with their
+// steps, and the description in Markdown, each in its own card). Right:
+// the changes since the merge base when the pull request's head is in the
+// repository (`pullRequestChanges`), else "Changes Not Available" with a
+// quiet Check Out (the overview's is the prominent one).
 // A link's pull request is the one GitHub returned for it; another that
 // isn't open (a notification's) loads from GitHub.
 
@@ -303,7 +304,8 @@ struct PullRequestOverview: View {
     }
 }
 
-/// The overview: header, actions, checks, and description.
+/// The overview, as cards: the header (the title, who opened it when, the
+/// branches as pills, and the actions), the checks, and the description.
 struct PullRequestOverviewView: View {
     let content: PullRequestOverviewContent
     let checks: ChecksContent
@@ -313,15 +315,18 @@ struct PullRequestOverviewView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Metrics.insetMedium) {
-                header
-                buttons
-                Hairline()
+            VStack(alignment: .leading, spacing: Metrics.PullRequestOverview.cardSpacing) {
+                VStack(alignment: .leading, spacing: Metrics.insetMedium) {
+                    header
+                    buttons
+                }
+                .overviewCard()
                 checksSection
-                Hairline()
+                    .overviewCard()
                 descriptionSection
+                    .overviewCard()
             }
-            .padding(Metrics.insetLarge)
+            .padding(Metrics.insetMedium)
             .frame(maxWidth: .infinity, alignment: .leading)
             .unbouncedScrollContent()
         }
@@ -332,7 +337,7 @@ struct PullRequestOverviewView: View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
             HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
                 Text(content.title)
-                    .font(Typography.commitSummary)
+                    .font(Typography.commitTitle)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                 if content.isDraft {
@@ -340,22 +345,27 @@ struct PullRequestOverviewView: View {
                 }
             }
             HStack(spacing: Metrics.grid) {
-                Text(verbatim: "#\(content.number) opened")
+                Text(verbatim: "#\(content.number)")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.text)
+                Text("opened")
                 RelativeTimeText(content.created)
                 Text("by")
                 Avatar(content.authorAvatar)
                 Text(content.author)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.text)
             }
             .font(Typography.secondary)
             .foregroundStyle(.text2)
             .accessibilityElement(children: .combine)
             HStack(spacing: Metrics.grid) {
-                QuietCapsule(content.base, isName: true)
+                NamePill(content.base, color: PlaceIdentity.branches.color)
                 Image(systemName: "arrow.left")
-                    .font(Typography.subheadline)
-                    .foregroundStyle(.text2)
+                    .font(Typography.subheadline.weight(.bold))
+                    .foregroundStyle(.text3)
                     .accessibilityLabel("from")
-                QuietCapsule(content.head, isName: true)
+                NamePill(content.head, color: PlaceIdentity.pullRequests.color)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(content.head) into \(content.base)")
@@ -426,7 +436,10 @@ struct PullRequestOverviewView: View {
 
     private var checksSection: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-            SectionLabel("Checks")
+            Text("Checks")
+                .font(Typography.cardHeading)
+                .foregroundStyle(.text3)
+                .accessibilityAddTraits(.isHeader)
             if !checks.isEmpty, !(checks.isLoading && checks.overall == nil) {
                 ChecksHeader(content: checks, actions: actions.checks)
             }
@@ -436,7 +449,10 @@ struct PullRequestOverviewView: View {
 
     private var descriptionSection: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-            SectionLabel("Description")
+            Text("Description")
+                .font(Typography.cardHeading)
+                .foregroundStyle(.text3)
+                .accessibilityAddTraits(.isHeader)
             if let description {
                 if description.isEmpty {
                     Text("No description provided.")
@@ -446,6 +462,24 @@ struct PullRequestOverviewView: View {
                 }
             }
         }
+    }
+}
+
+extension Metrics {
+    /// A pull request's overview.
+    enum PullRequestOverview {
+        /// Between the cards.
+        static let cardSpacing: CGFloat = 10
+    }
+}
+
+private extension View {
+    /// One of the overview's cards: its content inset on the card's
+    /// surface, as wide as the column.
+    func overviewCard() -> some View {
+        frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Metrics.insetLarge)
+            .cardSurface()
     }
 }
 
@@ -714,7 +748,11 @@ struct ChangedFilesHeader: View {
                 .lineLimit(1)
             Spacer(minLength: Metrics.grid)
             if linesAdded > 0 || linesDeleted > 0 {
-                HistoryLineCounts(added: linesAdded, deleted: linesDeleted)
+                // Pills while they fit, else plain.
+                ViewThatFits(in: .horizontal) {
+                    LineCountPills(added: linesAdded, deleted: linesDeleted)
+                    HistoryLineCounts(added: linesAdded, deleted: linesDeleted)
+                }
             }
         }
         .padding(.horizontal, Metrics.insetMedium)

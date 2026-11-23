@@ -272,9 +272,9 @@ final class SimpleRowCellView: NSTableCellView {
             if previous.isMerge, previous.sha == content.sha, previous.isExpanded != content.isExpanded {
                 turnDisclosure(expanding: content.isExpanded)
             }
-            avatarView.show(nil, pointSize: Metrics.CommitRow.rowAvatarSize, avatars: nil, monograms: monograms, scale: scale)
+            avatarView.show(nil, pointSize: Metrics.HistoryRows.avatarSize, avatars: nil, monograms: monograms, scale: scale)
         } else {
-            avatarView.show(content.avatarUser, pointSize: Metrics.CommitRow.rowAvatarSize, avatars: avatars, monograms: monograms, scale: scale)
+            avatarView.show(content.avatarUser, pointSize: Metrics.HistoryRows.avatarSize, avatars: avatars, monograms: monograms, scale: scale)
         }
         let alpha: CGFloat = content.isDimmed ? Metrics.Graph.searchDimming : 1
         for view in dimmableViews {
@@ -341,7 +341,7 @@ final class SimpleRowCellView: NSTableCellView {
         railView.frame = CGRect(x: row.selectionInset, y: 0, width: metrics.railWidth, height: height)
 
         // The avatar, or a merge's symbol in its circle.
-        let avatar = row.rowAvatarSize
+        let avatar = Metrics.HistoryRows.avatarSize
         let avatarX = railView.frame.maxX + row.spacing + (content.isIndented ? metrics.mergedIndent : 0)
         let avatarFrame = CGRect(x: avatarX, y: ((height - avatar) / 2).rounded(), width: avatar, height: avatar)
         avatarView.frame = avatarFrame
@@ -357,9 +357,9 @@ final class SimpleRowCellView: NSTableCellView {
             trailing -= metrics.disclosureWidth + row.spacing
         }
         timeLabel.frame = CGRect(
-            x: trailing - row.timeWidth,
+            x: trailing - Metrics.HistoryRows.timeWidth,
             y: ((height - Self.timeHeight) / 2).rounded(),
-            width: row.timeWidth,
+            width: Metrics.HistoryRows.timeWidth,
             height: Self.timeHeight
         )
         trailing = timeLabel.frame.minX - row.spacing
@@ -487,7 +487,7 @@ final class SimpleStatusCellView: NSTableCellView {
         let row = Metrics.CommitRow.self
         railView.frame = CGRect(x: row.selectionInset, y: 0, width: metrics.railWidth, height: bounds.height)
         // Lined up with the merge's commits' titles.
-        let leading = railView.frame.maxX + row.spacing + metrics.mergedIndent + row.rowAvatarSize + row.spacing
+        let leading = railView.frame.maxX + row.spacing + metrics.mergedIndent + Metrics.HistoryRows.avatarSize + row.spacing
         let height = ceil(label.intrinsicContentSize.height)
         label.frame = CGRect(
             x: leading,

@@ -1,35 +1,67 @@
-// The frame Espalier's sheets share: the title and an optional line under
-// it, the content, and the buttons, on the flat `background`. Cancel is a
-// secondary capsule, the default button the prominent one. `ModalPresenter`
-// shows it in a card on the window's modal layer, named by the title for
-// VoiceOver.
+// The frame Espalier's sheets share: a header (the title in display type
+// and an optional line under it), the content, and the buttons, on the
+// cream `background`. Cancel is a secondary capsule, the default button the
+// prominent one. `ModalPresenter` shows it in a card on the window's modal
+// layer, named by the title for VoiceOver.
 
 import AppKit
 import SwiftUI
 
 extension Metrics.Sheet {
     /// Around a sheet's content.
-    public static let padding: CGFloat = 20
-    /// Between the title, the content, and the buttons.
-    public static let spacing: CGFloat = 16
+    public static let padding: CGFloat = 24
+    /// Between the header, the content, and the buttons.
+    public static let spacing: CGFloat = 20
     /// Between the title and the line under it.
     public static let titleSpacing: CGFloat = 4
     /// Between groups inside the content (a field and its label, choices).
-    public static let groupSpacing: CGFloat = 6
+    public static let groupSpacing: CGFloat = 8
 }
 
 extension Typography {
-    /// A sheet's or a welcome step's title (15, semibold).
-    public static var sheetTitle: Font { sans(.title3, weight: .semibold) }
-    /// A label above a field or a group in a sheet (12, medium, secondary
+    /// A sheet's, an alert's, or a welcome step's title: display type, 17
+    /// bold.
+    public static var sheetTitle: Font { display(size: 17) }
+    /// The line under a sheet's title (13, secondary text).
+    public static var sheetMessage: Font { row }
+    /// A label above a field or a group in a sheet (12, semibold, secondary
     /// text).
-    public static var fieldLabel: Font { sans(.callout, weight: .medium) }
-    /// The welcome flow's and Get Started's headings (26, bold).
-    public static var welcomeTitle: Font { sans(.largeTitle, weight: .bold) }
+    public static var fieldLabel: Font { sans(.callout, weight: .semibold) }
+    /// The welcome flow's and Get Started's headings: display type, 34
+    /// bold.
+    public static var welcomeTitle: Font { display(size: 34) }
 }
 
-/// A sheet: its title, an optional line under it, the content, and a row
-/// of buttons at the bottom right.
+/// A sheet's header: the title in display type and the line under it.
+public struct SheetHeader: View {
+    private let title: String
+    private let message: String?
+
+    public init(_ title: String, message: String? = nil) {
+        self.title = title
+        self.message = message
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.Sheet.titleSpacing) {
+            Text(title)
+                .font(Typography.sheetTitle)
+                .foregroundStyle(.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            if let message {
+                Text(message)
+                    .font(Typography.sheetMessage)
+                    .foregroundStyle(.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A sheet: its header, the content, and a row of buttons at the bottom
+/// right.
 ///
 /// Put `SheetButtons` in the button row for Cancel and a default button,
 /// or capsule buttons of your own (`.secondary` for Cancel, `.prominent`
@@ -61,19 +93,7 @@ public struct SheetScaffold<Content: View, Buttons: View>: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: Metrics.Sheet.spacing) {
-            VStack(alignment: .leading, spacing: Metrics.Sheet.titleSpacing) {
-                Text(title)
-                    .font(Typography.sheetTitle)
-                    .foregroundStyle(.text)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-                if let message {
-                    Text(message)
-                        .font(Typography.row)
-                        .foregroundStyle(.text2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            SheetHeader(title, message: message)
             content
             HStack(spacing: Metrics.insetSmall) {
                 buttons

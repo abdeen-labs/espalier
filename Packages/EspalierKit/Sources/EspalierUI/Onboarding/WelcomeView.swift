@@ -2,8 +2,9 @@
 // `has-shown-welcome-flow` is set: the welcome copy, Sign In to GitHub.com
 // and to GitHub Enterprise, "New to GitHub? Create your free account.", and
 // Skip This Step, which goes on to Configure Git, whose Finish ends the flow
-// (`endWelcomeFlow()`). Signing in goes through the sign-in sheet; once it
-// signs in, Configure Git follows. One step crossfades into the next over
+// (`endWelcomeFlow()`). Each step is a cream card on the backdrop, the
+// steps' dots at its top. Signing in goes through the sign-in sheet; once
+// it signs in, Configure Git follows. One step crossfades into the next over
 // 0.22 s.
 
 import EspalierCore
@@ -12,7 +13,7 @@ import GitKit
 import SwiftUI
 
 /// The welcome flow's steps (the sign-in sheet signs in).
-nonisolated enum WelcomeStep: Sendable, Equatable {
+nonisolated enum WelcomeStep: Sendable, Hashable {
     case start
     case configureGit
 }
@@ -25,10 +26,8 @@ struct WelcomeStart: View {
 
     var body: some View {
         VStack(spacing: Metrics.Welcome.sectionSpacing) {
-            Image(nsImage: NSApplication.shared.applicationIconImage)
-                .resizable()
-                .frame(width: Metrics.Welcome.iconSize, height: Metrics.Welcome.iconSize)
-                .accessibilityHidden(true)
+            AppIconArt(size: Metrics.Welcome.iconSize)
+                .padding(.top, Metrics.WelcomeCard.iconLift)
             WelcomeHeading(
                 title: "Welcome to Espalier",
                 message: "Sign in to GitHub.com or GitHub Enterprise to work with your remotes and pull requests, or skip this step to jump straight into your local repositories."
@@ -57,20 +56,22 @@ struct WelcomeStart: View {
             }
             .font(Typography.secondary)
         }
-        .padding(Metrics.insetLarge * 2)
+        .welcomeCard(step: .start)
     }
 }
 
-/// A welcome step's heading: the title, and the line under it.
+/// A welcome step's heading: the title in display type, and the line
+/// under it.
 struct WelcomeHeading: View {
     let title: String
     let message: String
 
     var body: some View {
-        VStack(spacing: Metrics.insetSmall) {
+        VStack(spacing: Metrics.insetMedium) {
             Text(title)
                 .font(Typography.welcomeTitle)
                 .foregroundStyle(.text)
+                .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
             Text(message)
                 .font(Typography.welcomeBody)
@@ -79,6 +80,78 @@ struct WelcomeHeading: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: Metrics.Welcome.textWidth)
         }
+    }
+}
+
+extension View {
+    /// A welcome step's frame: the step on a cream card, the steps' dots at
+    /// its top, centered on the oat backdrop, scrolling when the window is
+    /// shorter than the card.
+    func welcomeCard(step: WelcomeStep) -> some View {
+        modifier(WelcomeCardModifier(step: step))
+    }
+}
+
+private struct WelcomeCardModifier: ViewModifier {
+    let step: WelcomeStep
+
+    func body(content: Content) -> some View {
+        GeometryReader { proxy in
+            ScrollView(.vertical) {
+                VStack(spacing: Metrics.WelcomeCard.dotsSpacing) {
+                    WelcomeStepDots(step: step)
+                    content
+                }
+                .padding(.horizontal, Metrics.WelcomeCard.horizontalPadding)
+                .padding(.vertical, Metrics.WelcomeCard.verticalPadding)
+                .surface(Color(espalier: Palette.background), elevation: .floating, in: RoundedRectangle(cornerRadius: Metrics.WelcomeCard.radius, style: .continuous))
+                .padding(Metrics.WelcomeCard.margin)
+                .frame(minWidth: proxy.size.width, minHeight: proxy.size.height)
+                .unbouncedScrollContent()
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicators(.automatic)
+        }
+        .background(Color(espalier: Theme.current.backdrop))
+    }
+}
+
+/// Where the welcome flow is, as dots: the current step a wide pill in the
+/// accent, the other a dot. VoiceOver reads "Step 1 of 2".
+struct WelcomeStepDots: View {
+    let step: WelcomeStep
+
+    var body: some View {
+        let steps: [WelcomeStep] = [.start, .configureGit]
+        HStack(spacing: Metrics.WelcomeCard.dotSpacing) {
+            ForEach(steps, id: \.self) { each in
+                Capsule(style: .circular)
+                    .fill(each == step ? Color.accent : Color(espalier: Palette.line2))
+                    .frame(width: each == step ? Metrics.WelcomeCard.currentDotWidth : Metrics.WelcomeCard.dotSize, height: Metrics.WelcomeCard.dotSize)
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Step \((steps.firstIndex(of: step) ?? 0) + 1) of \(steps.count)")
+    }
+}
+
+extension Metrics {
+    /// The welcome flow's card.
+    public enum WelcomeCard {
+        /// Inside the card.
+        public static let horizontalPadding: CGFloat = 48
+        public static let verticalPadding: CGFloat = 32
+        /// Around the card, on the backdrop.
+        public static let margin: CGFloat = 24
+        public static let radius: CGFloat = 32
+        /// The steps' dots: their size, the current one's width, between
+        /// them, and below them.
+        public static let dotSize: CGFloat = 8
+        public static let currentDotWidth: CGFloat = 24
+        public static let dotSpacing: CGFloat = 6
+        public static let dotsSpacing: CGFloat = 20
+        /// Space above the icon, under the dots.
+        public static let iconLift: CGFloat = 4
     }
 }
 
@@ -116,7 +189,7 @@ public struct WelcomeView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(espalier: Palette.background))
+        .background(Color(espalier: Theme.current.backdrop))
         .onAppear {
             if flow == nil {
                 flow = WelcomeFlow(app: context.app, presenter: context.presenter)

@@ -85,7 +85,7 @@ struct HistoryTableCaptures {
         sourceLocation: SourceLocation = #_sourceLocation
     ) {
         let history = fixture.history
-        let size = CGSize(width: width, height: CGFloat(history.graph.count) * Metrics.Graph.rowHeight)
+        let size = CGSize(width: width, height: CGFloat(history.graph.count) * Metrics.HistoryRows.height)
         capture(named: name, area: area, sourceLocation: sourceLocation) { appearance in
             let controller = GraphTableController()
             controller.avatarLoader = MonogramAvatarLoader()

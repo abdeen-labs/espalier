@@ -136,8 +136,8 @@ extension Tip {
     }
 }
 
-/// The warning above the commit button: a symbol and the text with its
-/// links.
+/// The warning above the commit button: a friendly banner with its symbol
+/// and the text with its links.
 public struct CommitWarningView: View {
     private let warning: CommitWarning
     private let onLink: (URL) -> Void
@@ -150,13 +150,17 @@ public struct CommitWarningView: View {
         self.onLink = onLink
     }
 
+    /// A banner: tomato for rules the user can't bypass, honey otherwise.
     public var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
-            Image(systemName: warning.isError ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                .foregroundStyle(Color(espalier: warning.isError ? Palette.error : Palette.warning))
+        let color = warning.isError ? Palette.error : Palette.warningMark
+        SoftBanner(color: color) {
+            SoftBannerSymbol(warning.isError ? "xmark.octagon.fill" : "exclamationmark.triangle.fill", color: color)
+                .accessibilityElement()
                 .accessibilityLabel(warning.isError ? "Error" : "Warning")
+        } message: {
             Text(warning.message)
                 .font(Typography.secondary)
+                .foregroundStyle(.text)
                 .fixedSize(horizontal: false, vertical: true)
                 .composerLinkTint()
                 .environment(\.openURL, OpenURLAction { url in

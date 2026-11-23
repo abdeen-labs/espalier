@@ -98,21 +98,19 @@ struct ChangesColumn: View {
         )
         FileList(repository: repository)
         .safeAreaBar(edge: .top, spacing: 0) {
-            VStack(spacing: 0) {
-                ChangesHeader(
-                    ChangesHeaderContent.make(repository, numberFormat: context.app.preferences.numberFormat),
-                    onIncludeAll: { include in
-                        repository.changes.setVisibleFilesIncluded(include)
-                    },
-                    onFilterChange: { filter in
-                        repository.changes.filter = filter
-                    },
-                    onClearFilters: controller.clearFilters
-                )
-                .contextMenuCard { [context] in
-                    ChangesHeaderMenu.content(repository: repository, context: context)
-                }
-                Hairline()
+            // No rule under it: the list fades out under the header.
+            ChangesHeader(
+                ChangesHeaderContent.make(repository, numberFormat: context.app.preferences.numberFormat),
+                onIncludeAll: { include in
+                    repository.changes.setVisibleFilesIncluded(include)
+                },
+                onFilterChange: { filter in
+                    repository.changes.filter = filter
+                },
+                onClearFilters: controller.clearFilters
+            )
+            .contextMenuCard { [context] in
+                ChangesHeaderMenu.content(repository: repository, context: context)
             }
         }
         .safeAreaBar(edge: .bottom, spacing: 0) {
@@ -278,34 +276,30 @@ struct ChangesFooter: View {
     var body: some View {
         let changes = repository.changes
         let controller = ChangesController(context: context, repository: repository)
+        // Soft cards stacked under the files, no rules between them.
         VStack(spacing: 0) {
             if layout.showsHiddenNote {
-                VStack(spacing: 0) {
-                    Hairline()
-                    HiddenChangesNote(
-                        count: changes.includedFilesHiddenByFilter.count,
-                        numberFormat: context.app.preferences.numberFormat,
-                        onShow: controller.showIncludedFiles
-                    )
-                }
+                HiddenChangesNote(
+                    count: changes.includedFilesHiddenByFilter.count,
+                    numberFormat: context.app.preferences.numberFormat,
+                    onShow: controller.showIncludedFiles
+                )
+                .padding(.horizontal, Metrics.Composer.horizontalPadding)
+                .padding(.top, Metrics.insetSmall)
                 .barTransition()
             }
             if layout.stashCount > 0 {
-                VStack(spacing: 0) {
-                    Hairline()
-                    StashedChangesRow(count: layout.stashCount) {
-                        context.actions.perform(.toggleStashedChanges)
-                    }
+                StashedChangesRow(count: layout.stashCount) {
+                    context.actions.perform(.toggleStashedChanges)
                 }
+                .padding(.horizontal, Metrics.Composer.horizontalPadding)
+                .padding(.top, Metrics.insetSmall)
                 .barTransition()
             }
             switch layout.bottom {
             case .composer, .merge:
-                VStack(spacing: 0) {
-                    Hairline()
-                    Composer(repository: repository)
-                }
-                .barTransition()
+                Composer(repository: repository)
+                    .barTransition()
             case .none:
                 EmptyView()
             }

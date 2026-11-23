@@ -1,9 +1,9 @@
-// A stash entry's place: a header as high as the diff's with the title,
-// Restore, Apply, and Discard…; the stash's files in the Changes table's
-// rows, without checkboxes; under them the branch (or git's message), the
-// count, and what Restore and Apply do; and the selected file's read-only
-// diff. Any entry shows, and restores or applies onto the current working
-// directory. The toolbar search filters the files; when it hides the
+// A stash entry's place: a header with the title, the branch the stash
+// came from (or git's message), and the count; the stash's files in the
+// Changes table's rows, without checkboxes; under them a soft card with
+// what Restore and Apply do, and Restore, Apply, and Discard…; and the
+// selected file's read-only diff. Any entry shows, and restores or applies
+// onto the current working directory. The toolbar search filters the files; when it hides the
 // selected file, the first file it lists is selected, or none when it lists
 // none (`filteredSelection`).
 //
@@ -66,8 +66,22 @@ nonisolated struct StashColumnContent: Sendable, Equatable {
         return origin
     }
 
+    /// The branch the entry was stashed on: its marker's, else the one in
+    /// git's message.
+    var originBranch: String? {
+        branch ?? StashEntry.branch(inMessage: message)
+    }
+
+    /// "4 files", once they've loaded (the count in `numberFormat`).
+    func fileCount(_ numberFormat: NumberFormat) -> String? {
+        if case .loaded(_, let total) = files {
+            return StashFilesSummary.files(total, numberFormat)
+        }
+        return nil
+    }
+
     /// What Restore and Apply do.
-    static let explanation = "Restore will move your stashed files to the Changes list. Apply will copy them there and keep the stash."
+    static let explanation = "Restore moves these files to the Changes list. Apply copies them there and keeps the stash."
 
     /// The stash's files matching `filter` (its path, ignoring case).
     static func files(_ files: [CommittedFileChange], filter: String) -> [CommittedFileChange] {
@@ -75,86 +89,110 @@ nonisolated struct StashColumnContent: Sendable, Equatable {
     }
 }
 
-/// The stash's header, as high as the diff's: the title, shortened or left
-/// out when there's no room for it, then Restore, Apply, and Discard….
+/// The stash's header: "Stashed Changes" in bold, and
+/// under the title where the stash came from, its branch as a candy pill
+/// (or git's message), and how many files; the arc while it's restored,
+/// applied, or discarded.
 struct StashHeader: View {
     let content: StashColumnContent
-    var restore: @MainActor () -> Void = {}
-    var apply: @MainActor () -> Void = {}
-    var discard: @MainActor () -> Void = {}
+    @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
-        HStack(spacing: Metrics.insetSmall) {
-            // Shown whole, as "Stash" in a narrower column, or not at all:
-            // the narrowest column leaves the room to the buttons.
-            ViewThatFits(in: .horizontal) {
-                title("Stashed Changes")
-                title("Stash")
-                Color.clear
-                    .frame(width: 0, height: 0)
+        HStack(spacing: Metrics.insetSmall + Metrics.grid / 2) {
+            VStack(alignment: .leading, spacing: Metrics.ChangesHeader.pillSpacing) {
+                Text("Stashed Changes")
+                    .font(Typography.paneHeading)
+                    .foregroundStyle(.text)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+                origin
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if content.isBusy {
                 ArcProgress(.small)
                     .accessibilityLabel("Working")
             }
-            Button("Restore", action: restore)
-                .buttonStyle(.prominent)
-                .disabled(!content.canRestore)
-                .tooltip((content.canRestore ? nil : content.applyRefusal) ?? "Move your stashed files to the Changes list")
-                .fixedSize()
-            Button("Apply", action: apply)
-                .buttonStyle(.quiet)
-                .disabled(!content.canApply)
-                .tooltip((content.canApply ? nil : content.applyRefusal) ?? "Copy your stashed files to the Changes list and keep the stash")
-                .fixedSize()
-            Button("Discard…", action: discard)
-                .buttonStyle(.quiet)
-                .disabled(!content.canDiscard)
-                .fixedSize()
         }
-        .controlSize(.small)
-        .padding(.horizontal, FileRowMetrics.contentInset)
-        .frame(height: Metrics.PaneHeader.height)
+        .padding(.leading, FileRowMetrics.contentInset)
+        .padding(.trailing, Metrics.insetMedium)
+        .padding(.vertical, Metrics.ChangesHeader.verticalPadding)
+        .frame(minHeight: Metrics.PaneHeader.height)
     }
 
-    private func title(_ title: String) -> some View {
-        Text(title)
-            .font(Typography.row.weight(.semibold))
-            .foregroundStyle(.text)
-            .lineLimit(1)
-            .fixedSize()
-            .accessibilityLabel("Stashed Changes")
-            .accessibilityAddTraits(.isHeader)
+    /// "On [main] 4 files", or git's message for a stash made elsewhere.
+    private var origin: some View {
+        HStack(spacing: Metrics.grid + 2) {
+            if let branch = content.originBranch {
+                Text("On")
+                    .foregroundStyle(.text2)
+                TintedPill(branch, systemImage: PlaceIdentity.branches.systemImage, color: PlaceIdentity.branches.color)
+                    .layoutPriority(-1)
+            } else {
+                Text(content.message)
+                    .foregroundStyle(.text2)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .layoutPriority(-1)
+            }
+            if let count = content.fileCount(numberFormat) {
+                Text(count)
+                    .foregroundStyle(.text3)
+                    .fixedSize()
+            }
+        }
+        .font(Typography.secondary)
+        .lineLimit(1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(content.subtitle(numberFormat))
     }
 }
 
-/// Under the stash's files: the branch (or git's message) and the count,
-/// and what Restore and Apply do.
+/// Under the stash's files, on a soft card: what Restore and Apply do, and
+/// Restore, Apply, and Discard….
 struct StashFooter: View {
     let content: StashColumnContent
-    @Environment(\.numberFormat) private var numberFormat
+    var restore: @MainActor () -> Void = {}
+    var apply: @MainActor () -> Void = {}
+    var discard: @MainActor () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.grid / 2) {
-            Text(content.subtitle(numberFormat))
-                .font(Typography.meta)
-                .foregroundStyle(.text2)
-                .lineLimit(1)
-                .truncationMode(.middle)
+        VStack(alignment: .leading, spacing: Metrics.insetMedium) {
             Text(StashColumnContent.explanation)
-                .font(Typography.meta)
-                .foregroundStyle(.text3)
+                .font(Typography.secondary)
+                .foregroundStyle(.text2)
                 .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: Metrics.insetSmall) {
+                Button("Restore", action: restore)
+                    .buttonStyle(.prominent)
+                    .disabled(!content.canRestore)
+                    .tooltip((content.canRestore ? nil : content.applyRefusal) ?? "Move your stashed files to the Changes list")
+                    .fixedSize()
+                Button("Apply", action: apply)
+                    .buttonStyle(.quiet)
+                    .disabled(!content.canApply)
+                    .tooltip((content.canApply ? nil : content.applyRefusal) ?? "Copy your stashed files to the Changes list and keep the stash")
+                    .fixedSize()
+                Spacer(minLength: 0)
+                Button("Discard…", action: discard)
+                    .buttonStyle(.quiet)
+                    .disabled(!content.canDiscard)
+                    .fixedSize()
+            }
         }
+        .padding(Metrics.insetMedium)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, FileRowMetrics.contentInset)
-        .padding(.vertical, Metrics.insetSmall)
-        .accessibilityElement(children: .combine)
+        .background(
+            RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
+                .fill(Color(espalier: Palette.field))
+        )
+        .padding(.horizontal, Metrics.Composer.horizontalPadding)
+        .padding(.top, Metrics.insetSmall)
+        .padding(.bottom, Metrics.Composer.horizontalPadding)
     }
 }
 
-/// The stash's column: the header over its files, and the footer.
+/// The stash's column: the header over its files, and the footer's card
+/// with the stash's actions.
 struct StashColumn: View {
     let content: StashColumnContent
     var restore: @MainActor () -> Void = {}
@@ -165,12 +203,10 @@ struct StashColumn: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            StashHeader(content: content, restore: restore, apply: apply, discard: discard)
-            Hairline()
+            StashHeader(content: content)
             files
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Hairline()
-            StashFooter(content: content)
+            StashFooter(content: content, restore: restore, apply: apply, discard: discard)
         }
         .background(Color(espalier: Palette.background))
         .frame(maxHeight: .infinity, alignment: .top)

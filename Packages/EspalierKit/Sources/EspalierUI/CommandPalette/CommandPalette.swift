@@ -2,12 +2,12 @@
 // card, centered across the main window a little way below the toolbar.
 // Along its top the search field, with the magnifying glass and ⌘K; then
 // the results under their sections' labels (Actions, Repositories,
-// Branches), each row with its symbol, its title with the characters the
-// query matched in the accent, what trails it (an action's menu, a
-// repository's owner or folder), a check mark for a checked item, and its
-// shortcut; along the bottom the keys: ↑↓ Navigate, ↩ Open, esc Close.
+// Branches), each roomy row with its symbol in secondary text, its title
+// with the characters the query matched in the accent, what trails it (an
+// action's menu, a repository's owner or folder), a check mark for a
+// checked item, and its shortcut; along the bottom the keys: ↑↓ Navigate, ↩ Open, esc Close.
 // The card keeps one size, so typing never moves it; nothing matching
-// shows "No Results".
+// says so, with what to try.
 //
 // Typing filters, and the first row is highlighted. The arrow keys move
 // the highlight at once, scrolling it into view; the pointer moves it as
@@ -23,13 +23,17 @@ import SwiftUI
 extension Metrics {
     /// The command palette.
     public enum CommandPalette {
-        public static let width: CGFloat = 560
+        public static let width: CGFloat = 580
         /// The search field's band.
-        public static let headerHeight: CGFloat = 48
+        public static let headerHeight: CGFloat = 54
         /// The results, which scroll inside this height.
-        public static let resultsHeight: CGFloat = 360
+        public static let resultsHeight: CGFloat = 380
         /// The keys' band.
-        public static let footerHeight: CGFloat = 34
+        public static let footerHeight: CGFloat = 36
+        /// A row.
+        public static let rowHeight: CGFloat = 36
+        /// A row's symbol column.
+        public static let rowSymbolWidth: CGFloat = 20
         /// What trails a row's title is cut in its middle past this width.
         public static let detailMaximumWidth: CGFloat = 220
         /// Between a key hint's caps and its label, and between hints.
@@ -50,8 +54,8 @@ extension Metrics {
 }
 
 extension Typography {
-    /// The palette's search text (15).
-    static var paletteField: Font { sans(.title3) }
+    /// The palette's search text (17, medium).
+    static var paletteField: Font { sans(.title2, weight: .medium) }
 }
 
 /// Where the main window's palette opens: a strip across the window under
@@ -130,9 +134,9 @@ struct CommandPaletteView: View {
 
     private var header: some View {
         @Bindable var model = model
-        return HStack(spacing: Metrics.insetSmall + 2) {
+        return HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall + 2) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(.text3)
                 .accessibilityHidden(true)
             TextField("Search", text: $model.query, prompt: Text("Search actions, repositories, and branches").fieldPrompt())
@@ -174,12 +178,11 @@ struct CommandPaletteView: View {
     @ViewBuilder
     private var results: some View {
         if model.sections.isEmpty {
-            CenteredMessage(
-                "No Results",
-                systemImage: "magnifyingglass",
-                description: "Try the name of an action, a repository, or a branch."
+            PickerEmptyState(
+                "Nothing matches “\(model.query)”",
+                message: "Try the name of an action, a repository, or a branch.",
+                systemImage: "magnifyingglass"
             )
-            .fillingSpace()
         } else {
             ScrollViewReader { proxy in
                 OverflowScrollView {
@@ -272,9 +275,9 @@ private enum PaletteScrollID: Hashable {
     case row(CommandPaletteItem.ID)
 }
 
-/// One row: the symbol, the title with its matched characters in the
-/// accent, what trails it, a check mark, and the shortcut, on the neutral
-/// wash while highlighted.
+/// One row: the symbol, the title with its matched characters
+/// in the accent, what trails it, a check mark, and the shortcut, on the
+/// butter highlight while highlighted.
 struct CommandPaletteRowView: View {
     let row: CommandPaletteRow
     let isHighlighted: Bool
@@ -284,14 +287,14 @@ struct CommandPaletteRowView: View {
 
     var body: some View {
         let item = row.item
-        HStack(spacing: Metrics.insetSmall) {
+        HStack(spacing: Metrics.insetSmall + 2) {
             Image(systemName: item.systemImage)
                 .font(Typography.row)
                 .foregroundStyle(.text2)
-                .frame(width: Metrics.Sidebar.glyphSize)
+                .frame(width: Metrics.CommandPalette.rowSymbolWidth)
                 .accessibilityHidden(true)
             Text(title)
-                .font(Typography.row)
+                .font(Typography.row.weight(.medium))
                 .foregroundStyle(.text)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -315,8 +318,8 @@ struct CommandPaletteRowView: View {
                 KeyCap(shortcut)
             }
         }
-        .padding(.horizontal, Metrics.ListRow.horizontalPadding)
-        .frame(minHeight: Metrics.ListRow.height)
+        .padding(.horizontal, Metrics.ListRow.horizontalPadding - 2)
+        .frame(minHeight: Metrics.CommandPalette.rowHeight)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)

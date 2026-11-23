@@ -32,7 +32,7 @@ public struct SettingsView: View {
                 }
             }
         }
-        .frame(width: Metrics.SettingsWindow.width, height: Metrics.SettingsWindow.height)
+        .frame(width: Metrics.SettingsCards.windowWidth, height: Metrics.SettingsWindow.height)
         .background(SettingsWindowChromeReader())
         .lookFont()
     }
@@ -81,9 +81,9 @@ struct SettingsPanes: View {
 }
 
 /// The window's layout: the sidebar of panes on the left; on the right,
-/// the header band with the selected pane's name, then the pane. It fills
-/// the window, under its transparent titlebar too. The band sits on the
-/// backdrop with no hairline, and the pane is a card.
+/// the header band with the selected pane's name, then the pane,
+/// whose groups are cream cards on the backdrop. It fills the window, under
+/// its transparent titlebar too.
 struct SettingsLayout<Pane: View>: View {
     @Binding var selection: SettingsTab
     private let pane: Pane
@@ -97,7 +97,7 @@ struct SettingsLayout<Pane: View>: View {
         HStack(spacing: 0) {
             SettingsSidebar(selection: $selection)
             VStack(spacing: 0) {
-                SettingsHeader(title: selection.title)
+                SettingsHeader(tab: selection)
                 pane
                     .id(selection)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -105,15 +105,9 @@ struct SettingsLayout<Pane: View>: View {
                     // the titlebar when the pointer is over it, blurring the
                     // header band; the pane needs none.
                     .scrollEdgeEffectHidden(true, for: .top)
-                    // The pane's scroll view reaches up under the header
-                    // band, as high as the titlebar, its content inset by
-                    // as much; clipped to the pane, content scrolls out of
-                    // sight at the band's edge instead of over the name.
+                    // Clipped to the pane, content scrolls out of sight at
+                    // the band's edge instead of over the name.
                     .clipped()
-                    // The pane is a card on the backdrop, under the band, as
-                    // the main window's are.
-                    .paneCard()
-                    .paneMargins()
             }
             .background(Color(espalier: Theme.current.backdrop))
         }
@@ -127,30 +121,29 @@ struct SettingsLayout<Pane: View>: View {
     }
 }
 
-/// The pane's header band: its name (13 bold, the headline), as high as
-/// the main window's toolbar.
+/// The pane's header band: its name in display type, as high as the main
+/// window's toolbar.
 struct SettingsHeader: View {
-    let title: String
+    let tab: SettingsTab
 
     var body: some View {
-        Text(title)
-            .font(Typography.paneTitle)
+        Text(tab.title)
+            .font(Typography.settingsPaneTitle)
             .foregroundStyle(.text)
             .lineLimit(1)
-            .padding(.horizontal, Metrics.SettingsWindow.contentInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .accessibilityAddTraits(.isHeader)
+            .padding(.horizontal, Metrics.SettingsCards.pageInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .frame(height: Metrics.SettingsWindow.headerHeight)
     }
 }
 
-/// The sidebar: the eight panes as the main window's sidebar draws its
-/// places, rows 28 high with the row radius, the selected one in the
-/// sidebar's selection with its symbol in the theme's selection symbol
-/// color. It's one stop in the key view loop: the
-/// up and down arrows choose a pane. Like the main window's sidebar, it
-/// draws no ring while it has focus. VoiceOver reads each row as a button,
-/// the chosen one selected.
+/// The sidebar: the eight panes as tiled rows, as System Settings lists
+/// its panes, each a symbol on its colored tile beside the name, the
+/// selected one in the sidebar's selection. It's one stop in the key view
+/// loop: the up and down arrows choose a pane. Like the main window's
+/// sidebar, it draws no ring while it has focus. VoiceOver reads each row
+/// as a button, the chosen one selected.
 struct SettingsSidebar: View {
     @Binding var selection: SettingsTab
     @State private var hovered: SettingsTab?
@@ -164,7 +157,7 @@ struct SettingsSidebar: View {
         }
         .padding(.top, Metrics.SettingsWindow.headerHeight + Metrics.SettingsSidebar.topSpacing)
         .padding(.horizontal, Metrics.Sidebar.rowInset)
-        .frame(width: Metrics.SettingsWindow.sidebarWidth)
+        .frame(width: Metrics.SettingsCards.sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Color(espalier: Palette.sidebar))
         .focusable()
@@ -182,32 +175,40 @@ struct SettingsSidebar: View {
     private func row(_ tab: SettingsTab) -> some View {
         let isSelected = tab == selection
         let shape = RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-        return SidebarRowLabel(tab.title, systemImage: tab.systemImage, isSelected: isSelected)
-            .padding(.horizontal, Metrics.Sidebar.rowPadding)
-            .frame(height: Metrics.RowHeight.sidebar)
-            // Hover fades (in 0.08 s, out 0.15 s); choosing a pane is
-            // instant, as selection is.
-            .background(shape.fill(fill(for: tab)).hoverMotion(hovered == tab))
-            .background {
-                if isSelected {
-                    SidebarSelectionFill()
-                }
+        return HStack(spacing: Metrics.insetMedium - 2) {
+            PlaceTile(systemImage: tab.tileSymbol, color: tab.tileColor, size: Metrics.SettingsCards.sidebarTile)
+            Text(tab.title)
+                .font(isSelected ? Typography.row.weight(.semibold) : Typography.row)
+                .foregroundStyle(.sidebarRowText(isSelected: isSelected))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, Metrics.SettingsSidebar.rowPadding)
+        .frame(height: Metrics.SettingsCards.sidebarRowHeight)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Hover fades (in 0.08 s, out 0.15 s); choosing a pane is
+        // instant, as selection is.
+        .background(shape.fill(fill(for: tab)).hoverMotion(hovered == tab))
+        .background {
+            if isSelected {
+                SidebarSelectionFill()
             }
-            .contentShape(shape)
-            .onTapGesture {
-                selection = tab
+        }
+        .contentShape(shape)
+        .onTapGesture {
+            selection = tab
+        }
+        .onHover { isInside in
+            if isInside {
+                hovered = tab
+            } else if hovered == tab {
+                hovered = nil
             }
-            .onHover { isInside in
-                if isInside {
-                    hovered = tab
-                } else if hovered == tab {
-                    hovered = nil
-                }
-            }
-            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-            .accessibilityAction {
-                selection = tab
-            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction {
+            selection = tab
+        }
     }
 
     private func fill(for tab: SettingsTab) -> Color {
@@ -231,12 +232,45 @@ struct SettingsSidebar: View {
     }
 }
 
+extension SettingsTab {
+    /// The pane's tile color, as System Settings colors its panes.
+    var tileColor: NSColor {
+        switch self {
+        case .accounts: TileColor.blueberry
+        case .git: TileColor.apricot
+        case .integrations: TileColor.honey
+        case .appearance: TileColor.plum
+        case .notifications: TileColor.tomato
+        case .prompts: TileColor.teal
+        case .ai: TileColor.grape
+        case .advanced: TileColor.slate
+        }
+    }
+
+    /// The symbol on the pane's tile: the pane's symbol, filled where it
+    /// has a filled form.
+    var tileSymbol: String {
+        switch self {
+        case .accounts: "person.fill"
+        case .git: systemImage
+        case .integrations: "hammer.fill"
+        case .appearance: "paintbrush.fill"
+        case .notifications: "bell.fill"
+        case .prompts: "text.bubble.fill"
+        case .ai: systemImage
+        case .advanced: "gearshape.fill"
+        }
+    }
+}
+
 extension Metrics {
     /// The Settings window's sidebar.
     public enum SettingsSidebar {
         /// Between rows.
-        public static let rowSpacing: CGFloat = 1
+        public static let rowSpacing: CGFloat = 2
         /// Between the top band and the first row.
         public static let topSpacing: CGFloat = 2
+        /// Inside a row, before its tile.
+        public static let rowPadding: CGFloat = 6
     }
 }

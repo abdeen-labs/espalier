@@ -35,6 +35,14 @@ public enum Typography {
     }
     /// Headings inside panes and sheets.
     public static var heading: Font { sans(.headline) }
+    /// A pane's title in its header (15, bold).
+    public static var paneHeading: Font { sans(.title3, weight: .bold) }
+    /// Display type for big moments (empty states, welcome, a sheet's
+    /// title): the sans at `size`, bold unless a weight is given, relative
+    /// to the title style so the Mac's text size applies.
+    public static func display(size: CGFloat, weight: Font.Weight = .bold) -> Font {
+        sans(size: size, weight: weight, relativeTo: .title)
+    }
     /// A heading within a block of text, such as a section of the model's
     /// conflict summary (12, semibold).
     public static var textHeading: Font { sans(.callout, weight: .semibold) }
@@ -387,5 +395,33 @@ extension NSFont.Weight {
         case .black: self = .black
         default: self = .regular
         }
+    }
+}
+
+// MARK: - History and the diff
+
+extension Typography {
+    /// A name on a candy pill (a branch, a tag, a remote): the sans at 11,
+    /// bold.
+    public static var namePill: Font { sans(.subheadline, weight: .bold) }
+    /// A SHA on its pill: the mono at 11, semibold.
+    public static var shaPill: Font { mono(size: 11, weight: .semibold) }
+    /// A commit's title in its header card: display type, 22 bold.
+    public static var commitTitle: Font { display(size: 22) }
+    /// A card's small heading (Commit Info's "Dates", "Parents"): 11,
+    /// bold, in the sans.
+    public static var cardHeading: Font { sans(.subheadline, weight: .bold) }
+}
+
+extension AppKitTypography {
+    /// A name on a candy pill, as the graph's rows draw it: the sans at
+    /// 11, bold.
+    public static var namePill: NSFont {
+        sans(.subheadline, weight: .bold)
+    }
+
+    /// A hunk header's pill ("Lines 19–26"): the sans at 11, semibold.
+    public static var hunkLabel: NSFont {
+        sans(.subheadline, weight: .semibold)
     }
 }

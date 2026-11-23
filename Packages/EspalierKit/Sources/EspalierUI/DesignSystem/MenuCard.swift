@@ -1,21 +1,26 @@
-// Espalier's menu card: a floating card on the `quiet` fill with the
-// floating ring and shadow, radius 14, its rows inside a 5-point inset
-// with the row radius. Rows are 24 high: a check column
-// (only in a menu with checkable items), a leading symbol in secondary
-// text, the title (the error color for a destructive item) with an
-// optional subtitle under it, and a chevron for a submenu. The highlighted
-// row, under the pointer or the keyboard, is the soft accent in its
-// rounded shape, its text staying primary; it fades from row to row under
-// the pointer, as hover does, and moves at once with the keyboard. Disabled
-// rows fade, are never highlighted, and show why as their tooltip when
-// they say. Section headers look like the app's section labels;
-// dividers are hairlines inset from the card's edges. A menu taller than
-// the screen scrolls, never past its ends, its rows fading out toward an
-// end with more past it as that end comes in. The card fades and grows very
-// slightly from its anchor as it opens, except under Reduce Motion and
-// offscreen.
+// Espalier's menu card: a cream card on the `quiet` fill with the floating
+// ring and shadow, the card radius, its rows inside a 6-point inset with
+// the row radius. Rows are 30 high: a check column (only in a menu with
+// checkable items), a leading symbol in secondary text, the title (the
+// error color for a destructive item) with an optional subtitle under it,
+// and a chevron for a submenu.
+// The highlighted row, under the pointer or the keyboard, is the butter
+// highlight (the soft accent) in its rounded shape, its text staying
+// primary; it fades from row to row under the pointer, as hover does, and
+// moves at once with the keyboard. Disabled rows fade, are never
+// highlighted, and show why as their tooltip when they say. Section
+// headers are soft titles, as written; dividers are faint rules inset from
+// the card's edges. A menu taller than the screen scrolls, never past its
+// ends, its rows fading out toward an end with more past it as that end
+// comes in. The card fades and grows very slightly from its anchor as it
+// opens, except under Reduce Motion and offscreen.
 
 import SwiftUI
+
+extension Typography {
+    /// A menu's section header: 11, semibold, as written.
+    static var menuHeader: Font { sans(.subheadline, weight: .semibold) }
+}
 
 /// One row of a menu card.
 struct MenuRow: Identifiable {
@@ -205,9 +210,7 @@ private struct MenuRowView: View {
                 }
         case .header(let text):
             Text(text)
-                .font(Typography.sectionLabel)
-                .tracking(Typography.sectionLabelTracking)
-                .textCase(Theme.current.sectionLabel.isUppercase ? .uppercase : nil)
+                .font(Typography.menuHeader)
                 .foregroundStyle(.text3)
                 .lineLimit(1)
                 .padding(.leading, Metrics.Menu.rowPadding + leadingColumnsWidth)
@@ -216,11 +219,11 @@ private struct MenuRowView: View {
                 .padding(.bottom, Metrics.Menu.headerBottomPadding)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .divider:
-            // The card's ring color: the panes' line color is the card's
-            // own fill in dark.
-            Rectangle()
+            // A soft rounded rule in the card's ring color: the panes' line
+            // color is the card's own fill in dark.
+            Capsule(style: .circular)
                 .fill(Color(nsColor: Elevation.floating.ring ?? Palette.line))
-                .frame(height: 1)
+                .frame(height: Metrics.Menu.dividerThickness)
                 .padding(.horizontal, Metrics.Menu.dividerInset - Metrics.Menu.inset)
                 .padding(.vertical, Metrics.Menu.dividerSpacing)
         }
@@ -358,18 +361,18 @@ extension Metrics {
     /// Menus: the card, its rows, and where it opens.
     public enum Menu {
         /// The card's padding around its rows.
-        public static let inset: CGFloat = 5
+        public static let inset: CGFloat = 6
         /// An item row's height (one line).
-        public static let rowHeight: CGFloat = 24
+        public static let rowHeight: CGFloat = 30
         /// Space inside a row before its first column and after its last.
-        public static let rowPadding: CGFloat = 8
+        public static let rowPadding: CGFloat = 10
         /// Space between a row's columns.
-        public static let columnSpacing: CGFloat = 6
+        public static let columnSpacing: CGFloat = 8
         /// The check column.
         public static let checkColumnWidth: CGFloat = 12
         public static let checkSize: CGFloat = 11
         /// The leading symbol column.
-        public static let symbolColumnWidth: CGFloat = 16
+        public static let symbolColumnWidth: CGFloat = 20
         /// The least space between a title and the chevron or the card's
         /// edge.
         public static let trailingSpacing: CGFloat = 16
@@ -385,14 +388,16 @@ extension Metrics {
         /// A title is cut in its middle past this width.
         public static let titleMaximumWidth: CGFloat = 380
         /// A section header's space above and below its text.
-        public static let headerTopPadding: CGFloat = 6
-        public static let headerBottomPadding: CGFloat = 3
+        public static let headerTopPadding: CGFloat = 8
+        public static let headerBottomPadding: CGFloat = 4
         /// A divider's inset from the card's edges, and its space above
         /// and below.
-        public static let dividerInset: CGFloat = 10
-        public static let dividerSpacing: CGFloat = 4
+        public static let dividerInset: CGFloat = 14
+        public static let dividerSpacing: CGFloat = 5
+        /// A divider's thickness.
+        public static let dividerThickness: CGFloat = 1
         /// The narrowest a card gets.
-        public static let minimumWidth: CGFloat = 120
+        public static let minimumWidth: CGFloat = 160
         /// Between a pull-down or pop-up and its menu.
         public static let gap: CGFloat = 4
         /// A menu stays this far in from the screen's visible edges.

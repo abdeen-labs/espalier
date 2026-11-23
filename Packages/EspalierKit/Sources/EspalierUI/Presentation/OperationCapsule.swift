@@ -101,9 +101,12 @@ extension OperationCapsuleContent {
     }
 }
 
-/// The floating capsule: progress while an operation runs, or the note
-/// that it waits for the user, with a button that goes to Changes. It can't
-/// be dismissed while the operation exists.
+
+/// The floating pillow: progress while an operation runs, or the note that
+/// it waits for the user, with a button that goes to Changes. Its badge says
+/// which: honey and turning while work runs, apricot while it waits on
+/// conflicts or a rebase in between, slate for what only git can finish.
+/// It can't be dismissed while the operation exists.
 public struct OperationCapsule: View {
     private let content: OperationCapsuleContent
     private let onView: () -> Void
@@ -118,66 +121,102 @@ public struct OperationCapsule: View {
     }
 
     public var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Metrics.Pillow.height / 2, style: .continuous)
         Group {
             switch content {
             case .running(let title, let detail, let progress):
-                VStack(alignment: .leading, spacing: Metrics.grid) {
-                    HStack(spacing: Metrics.insetSmall) {
-                        // It turns while work runs; still with Reduce Motion.
-                        Image(systemName: "arrow.trianglehead.2.clockwise.rotate.90")
-                            .symbolEffect(.rotate, options: .repeat(.continuous), isActive: !motion.reduceMotion)
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                        Text(runningText(title: title, detail: detail))
-                            .font(Typography.row)
+                HStack(spacing: Metrics.Pillow.spacing) {
+                    RunningTile()
+                    VStack(alignment: .leading, spacing: Metrics.OperationPillow.lineSpacing) {
+                        Text(title)
+                            .font(Typography.pillowMessage)
+                            .foregroundStyle(.text)
                             .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                    if let progress {
-                        CapsuleProgressBar(value: progress)
+                        if let detail, !detail.isEmpty {
+                            Text(detail)
+                                .font(Typography.pillowDetail)
+                                .foregroundStyle(.text2)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        if let progress {
+                            CapsuleProgressBar(value: progress, tint: TileMood.running.color)
+                                .frame(minWidth: Metrics.OperationPillow.progressMinimumWidth)
+                                .padding(.top, Metrics.OperationPillow.progressTopPadding)
+                        }
                     }
                 }
-                .padding(.horizontal, Metrics.insetMedium)
+                .padding(.leading, (Metrics.Pillow.height - Metrics.Tiles.floating) / 2)
+                .padding(.trailing, Metrics.Pillow.height / 2)
                 .padding(.vertical, Metrics.insetSmall)
                 .accessibilityElement(children: .combine)
 
             case .conflicted(let message):
-                waiting(message: message, buttonTitle: "View Conflicts")
+                waiting(message: message, mood: .waiting, systemImage: "exclamationmark.triangle", buttonTitle: "View Conflicts")
 
             case .interrupted(let message):
-                waiting(message: message, buttonTitle: "View Rebase")
+                waiting(message: message, mood: .waiting, systemImage: "pause", buttonTitle: "View Rebase")
 
             case .unsupported(let message):
-                waiting(message: message, buttonTitle: "Open in Terminal")
+                waiting(message: message, mood: .notice, systemImage: "terminal", buttonTitle: "Open in Terminal")
             }
         }
-        .frame(minHeight: Metrics.Floating.height)
+        .frame(minHeight: Metrics.Pillow.height)
         .floatingWidth()
-        .floatingSurface()
+        .pillowSurface(in: shape)
     }
 
-    /// An operation waiting for the user: the warning, the message, and the
+    /// An operation waiting for the user: its badge, the message, and the
     /// button that shows it in Changes.
-    private func waiting(message: String, buttonTitle: String) -> some View {
-        HStack(spacing: Metrics.insetSmall) {
-            WarningGlyph()
+    private func waiting(message: String, mood: TileMood, systemImage: String, buttonTitle: String) -> some View {
+        HStack(spacing: Metrics.Pillow.spacing) {
+            MoodBadge(mood: mood, systemImage: systemImage)
+                .accessibilityElement()
+                .accessibilityLabel("Warning")
             Text(message)
-                .font(Typography.row)
+                .font(Typography.pillowMessage)
+                .foregroundStyle(.text)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
             Button(buttonTitle, action: onView)
                 .buttonStyle(.prominent)
                 .controlSize(.regular)
         }
-        .padding(.leading, Metrics.insetMedium)
-        .padding(.trailing, Metrics.insetSmall)
+        .padding(.leading, (Metrics.Pillow.height - Metrics.Tiles.floating) / 2)
+        .padding(.trailing, (Metrics.Pillow.height - Metrics.ControlHeight.regular) / 2)
         .padding(.vertical, Metrics.insetSmall)
     }
+}
 
-    private func runningText(title: String, detail: String?) -> String {
-        guard let detail, !detail.isEmpty else {
-            return title
-        }
-        return "\(title) — \(detail)"
+/// The running badge: a soft honey circle, its arrows turning while work
+/// runs; still with Reduce Motion.
+private struct RunningTile: View {
+    @Environment(\.motion) private var motion
+
+    var body: some View {
+        let size = Metrics.Tiles.floating
+        let color = TileMood.running.color
+        Circle()
+            .fill(Color(nsColor: Palette.tint(color, light: Metrics.Tiles.softAlpha.light, dark: Metrics.Tiles.softAlpha.dark)))
+            .frame(width: size, height: size)
+            .overlay {
+                Image(systemName: "arrow.trianglehead.2.clockwise.rotate.90")
+                    .font(.system(size: size * Metrics.PlaceTiles.symbolRatio, weight: .heavy))
+                    .foregroundStyle(Color(nsColor: color))
+                    .symbolEffect(.rotate, options: .repeat(.continuous), isActive: !motion.reduceMotion)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+extension Metrics {
+    /// The operation capsule's running pillow.
+    public enum OperationPillow {
+        /// Between its title, its detail, and its progress.
+        public static let lineSpacing: CGFloat = 2
+        /// Above the progress bar.
+        public static let progressTopPadding: CGFloat = 4
+        /// The progress bar is at least this wide.
+        public static let progressMinimumWidth: CGFloat = 220
     }
 }

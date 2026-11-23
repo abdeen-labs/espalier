@@ -1,7 +1,8 @@
 // The pieces every Settings pane is made of: the page, which scrolls under
-// the pane's header; sections with an uppercase label; flat rows split by
-// hairlines, each with its title and an optional description on the left
-// and its control on the right; rows for a message or for buttons alone;
+// the pane's header; sections as cream cards on the backdrop, each under
+// its bold title; roomy rows inside the card, split by hairlines, each with
+// its title and an optional description on the left and its control on
+// the right; rows for a message or for buttons alone;
 // the "Local" badge; a row's "⋯" menu; and the fade of what a change shows
 // or hides. Messages under a control are `FieldMessage`s, as in sheets.
 
@@ -10,7 +11,7 @@ import SwiftUI
 
 // MARK: - Page and sections
 
-/// A pane's content: its sections, split by hairlines, inset from the
+/// A pane's content: its sections' cards, spaced apart, inset from the
 /// pane's edges, scrolling when the pane is taller than the window, never
 /// past its ends.
 struct SettingsPage<Content: View>: View {
@@ -22,19 +23,12 @@ struct SettingsPage<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                Group(subviews: content) { sections in
-                    ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
-                        if index > 0 {
-                            Hairline()
-                        }
-                        section
-                    }
-                }
+            VStack(alignment: .leading, spacing: Metrics.SettingsCards.sectionSpacing) {
+                content
             }
-            .padding(.horizontal, Metrics.SettingsWindow.contentInset)
+            .padding(.horizontal, Metrics.SettingsCards.pageInset)
             .padding(.top, Metrics.SettingsWindow.contentTopInset)
-            .padding(.bottom, Metrics.SettingsWindow.contentBottomInset)
+            .padding(.bottom, Metrics.SettingsCards.pageInset)
             .frame(maxWidth: .infinity, alignment: .leading)
             .unbouncedScrollContent(fadesEdges: true)
         }
@@ -42,13 +36,13 @@ struct SettingsPage<Content: View>: View {
     }
 }
 
-/// A section: its uppercase label (as the main window's sidebar labels
-/// its sections), then its rows, split by hairlines.
+/// A section: its title, then its rows in a cream card, split by
+/// hairlines.
 struct SettingsSection<Content: View>: View {
     private let title: String?
     private let content: Content
 
-    /// - Parameter title: The label; nil for a section that needs none (a
+    /// - Parameter title: The title; nil for a section that needs none (a
     ///   pane's one main switch).
     init(_ title: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -56,26 +50,61 @@ struct SettingsSection<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: Metrics.SettingsCards.labelSpacing) {
             if let title {
-                SectionLabel(title)
-                    .padding(.top, Metrics.SettingsWindow.sectionLabelTop)
-                    .padding(.bottom, Metrics.SettingsWindow.sectionLabelBottom)
-            } else {
-                Color.clear
-                    .frame(height: Metrics.SettingsWindow.untitledSectionTop)
-                    .accessibilityHidden(true)
+                Text(title)
+                    .font(Typography.settingsSectionTitle)
+                    .foregroundStyle(.text2)
+                    .padding(.leading, Metrics.SettingsCards.labelInset)
+                    .accessibilityAddTraits(.isHeader)
             }
-            Group(subviews: content) { rows in
-                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                    if index > 0 {
-                        Hairline()
+            VStack(alignment: .leading, spacing: 0) {
+                Group(subviews: content) { rows in
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        if index > 0 {
+                            Hairline()
+                        }
+                        row
                     }
-                    row
                 }
             }
+            .padding(.horizontal, Metrics.SettingsCards.rowInset)
+            .padding(.vertical, Metrics.SettingsCards.cardVerticalInset)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
         }
     }
+}
+
+extension Metrics {
+    /// Settings' groups as cream cards on the backdrop.
+    public enum SettingsCards {
+        /// Around the page's cards.
+        public static let pageInset: CGFloat = 24
+        /// Between one group and the next.
+        public static let sectionSpacing: CGFloat = 22
+        /// Between a group's title and its card, and the title's inset
+        /// from the card's edge.
+        public static let labelSpacing: CGFloat = 8
+        public static let labelInset: CGFloat = 4
+        /// Inside a card: beside its rows, and above the first and below
+        /// the last.
+        public static let rowInset: CGFloat = 16
+        public static let cardVerticalInset: CGFloat = 4
+        /// The window's width.
+        public static let windowWidth: CGFloat = 760
+        /// The sidebar: its width, its rows' height, and their tiles.
+        public static let sidebarWidth: CGFloat = 200
+        public static let sidebarRowHeight: CGFloat = 34
+        public static let sidebarTile: CGFloat = 22
+    }
+}
+
+extension Typography {
+    /// A Settings group's title over its card (13, bold, as written).
+    static var settingsSectionTitle: Font { sans(.body, weight: .bold) }
+    /// A Settings pane's name in its header: display type, 22 bold.
+    static var settingsPaneTitle: Font { display(size: 22) }
 }
 
 // MARK: - Rows

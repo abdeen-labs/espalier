@@ -304,7 +304,7 @@ struct ChecksHeader: View {
             .font(.title3)
             VStack(alignment: .leading, spacing: 2) {
                 Text(content.title)
-                    .font(Typography.heading)
+                    .font(Typography.popoverTitle)
                 if !content.summary.isEmpty {
                     Text(content.summary)
                         .font(Typography.secondary)
@@ -424,7 +424,7 @@ struct ChecksStandBy: View {
     var body: some View {
         VStack(spacing: Metrics.grid) {
             Text("Stand By")
-                .font(Typography.heading)
+                .font(Typography.popoverTitle)
             Text("Check runs incoming!")
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)

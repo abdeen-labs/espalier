@@ -539,6 +539,7 @@ struct BranchPickerList: View {
             onActivate?(branch)
         } label: {
             row(branch, in: group)
+                .frame(minHeight: Metrics.Pickers.rowHeight)
                 .selectableRow(isSelected: isHighlighted)
         }
         .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
@@ -602,15 +603,23 @@ struct BranchPickerList: View {
         }
     }
 
-    /// "No Matching Branches" for a filter, with Create New Branch… when the
-    /// picker offers it; "No Branches" without one.
+    /// "No branches match “x”" for a filter, offering Create New Branch…
+    /// when the picker does; "No Branches Yet" without one. The branch
+    /// symbol leads.
     private var noBranches: some View {
         let isFiltered = !content.filter.isEmpty
         let offersCreate = onCreateBranch != nil && isFiltered
-        return CenteredMessage(
-            isFiltered ? "No Matching Branches" : "No Branches",
-            systemImage: isFiltered ? "magnifyingglass" : "arrow.trianglehead.branch",
-            description: offersCreate ? "Do you want to create a new branch instead?" : nil
+        let message: String? = if offersCreate {
+            "You can make a new branch with that name."
+        } else if isFiltered {
+            "Try another part of its name."
+        } else {
+            "This repository has no branches to show."
+        }
+        return PickerEmptyState(
+            isFiltered ? "No branches match “\(content.filter)”" : "No Branches Yet",
+            message: message,
+            systemImage: isFiltered ? "magnifyingglass" : PlaceIdentity.branches.systemImage
         ) {
             if offersCreate {
                 Button("Create New Branch…") {
@@ -619,7 +628,6 @@ struct BranchPickerList: View {
                 .buttonStyle(.quiet)
             }
         }
-        .fillingSpace()
     }
 
     private var selectedRef: Binding<String?> {
@@ -659,8 +667,9 @@ private struct EmbeddedListChrome: ViewModifier {
     }
 }
 
-/// A branch in the picker: its dot in the glyph column, under its group's
-/// mark, its name (the current one semibold), how the current branch
+/// A branch in the picker: its candy dot in the glyph column, under its
+/// group's mark, its name (the current one, haloed, in a candy pill of its
+/// color: you are here), how the current branch
 /// compares with it (Compare's list), and the date of its last commit; its
 /// tooltip is its name, and says when it's the default branch, as the
 /// sidebar's row does.
@@ -675,18 +684,23 @@ struct BranchPickerRow: View {
     @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
+        let color = dotColor ?? TrackPalette.color(forBranch: branch.name, isCurrent: isCurrent, isDefault: false)
         HStack(spacing: Metrics.insetSmall) {
-            Circle()
-                .fill(Color(nsColor: dotColor ?? TrackPalette.color(forBranch: branch.name, isCurrent: isCurrent, isDefault: false)))
-                .frame(width: Metrics.Sidebar.dotSize, height: Metrics.Sidebar.dotSize)
+            CandyDot(color, isHere: isCurrent)
                 .frame(width: Metrics.Sidebar.glyphSize)
-                .accessibilityHidden(true)
-            Text(branch.name)
-                .font(isCurrent ? Typography.row.weight(.semibold) : Typography.row)
-                .foregroundStyle(.text)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .accessibilityLabel(accessibilityName)
+            Group {
+                if isCurrent {
+                    CandyPill(branch.name, color: color, size: .regular)
+                } else {
+                    Text(branch.name)
+                        .font(Typography.row)
+                        .foregroundStyle(.text)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityName)
             Spacer(minLength: Metrics.insetSmall)
             if let counts, let text = counts.text(numberFormat) {
                 Text(text)

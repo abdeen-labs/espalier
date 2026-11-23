@@ -4,9 +4,10 @@
 // AppKit views have `setTooltip(_:)` and tooltip areas
 // (`TooltipAreas.swift`); `TooltipCenter` decides when a card shows.
 //
-// The card: the text in secondary type and color on the `quiet` fill, with
-// the floating ring and a smaller shadow than a menu's, the row radius,
-// padded 6 by 8, wrapping at 280 points.
+// The card: a small cream pill, the text in secondary type and primary
+// color on the `quiet` fill, with the floating ring and a smaller shadow
+// than a menu's, padded 6 by 11, wrapping at 280 points into a rounded
+// card.
 
 import AppKit
 import SwiftUI
@@ -66,11 +67,11 @@ struct TooltipCard: View {
 
     var body: some View {
         let dark = colorScheme == .dark
-        let shape = RoundedRectangle(cornerRadius: Metrics.Tooltip.cornerRadius, style: .continuous)
+        let shape = PillShape(maximumRadius: Metrics.Tooltip.cornerRadius)
         TooltipTextLayout(maximumWidth: Metrics.Tooltip.maximumWidth - 2 * Metrics.Tooltip.horizontalPadding) {
             Text(verbatim: text)
                 .font(Typography.secondary)
-                .foregroundStyle(.text2)
+                .foregroundStyle(.text)
         }
         .padding(.horizontal, Metrics.Tooltip.horizontalPadding)
         .padding(.vertical, Metrics.Tooltip.verticalPadding)
@@ -92,6 +93,30 @@ struct TooltipCard: View {
         }
         .padding(EdgeInsets(Metrics.Tooltip.shadowInsets))
         .accessibilityHidden(true)
+    }
+}
+
+/// A rounded rectangle whose corners are half its height, up to
+/// `maximumRadius`: a pill while it's one line high, a rounded card when
+/// it's taller.
+nonisolated public struct PillShape: InsettableShape {
+    let maximumRadius: CGFloat
+    var inset: CGFloat = 0
+
+    public init(maximumRadius: CGFloat) {
+        self.maximumRadius = maximumRadius
+    }
+
+    public func path(in rect: CGRect) -> Path {
+        let rect = rect.insetBy(dx: inset, dy: inset)
+        let radius = max(0, min(rect.height / 2, maximumRadius - inset))
+        return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect)
+    }
+
+    public func inset(by amount: CGFloat) -> PillShape {
+        var copy = self
+        copy.inset += amount
+        return copy
     }
 }
 
@@ -119,12 +144,12 @@ extension Metrics {
     /// Tooltips: the card and where it shows.
     public enum Tooltip {
         /// Space around the text inside the card.
-        public static let horizontalPadding: CGFloat = 8
+        public static let horizontalPadding: CGFloat = 11
         public static let verticalPadding: CGFloat = 6
         /// The widest a card gets; its text wraps to stay inside.
         public static let maximumWidth: CGFloat = 280
-        /// The card's corner radius: a row's.
-        public static var cornerRadius: CGFloat { Radius.row }
+        /// The most a card's corner radius gets: one line is a pill.
+        public static let cornerRadius: CGFloat = 14
         /// Between the cursor, or the area the card is for, and the card.
         public static let gap: CGFloat = 4
         /// The cursor reaches at most this far below the pointer's hotspot.

@@ -131,8 +131,11 @@ struct PushProtectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetMedium) {
-            HStack(spacing: Metrics.insetMedium) {
-                IconCircle("exclamationmark.shield.fill", size: Metrics.StateIcon.size, tint: Color(espalier: Palette.error))
+            HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
+                Image(systemName: "exclamationmark.shield.fill")
+                    .font(Typography.sheetTitle)
+                    .foregroundStyle(Color(espalier: Palette.error))
+                    .accessibilityHidden(true)
                 Text(title)
                     .font(Typography.sheetTitle)
                     .foregroundStyle(.text)

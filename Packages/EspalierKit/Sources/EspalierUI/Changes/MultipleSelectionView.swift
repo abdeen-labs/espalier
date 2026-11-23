@@ -26,8 +26,8 @@ nonisolated public struct MultipleSelectionContent: Sendable, Equatable {
     }
 }
 
-/// Several selected files: their count, Include, Exclude, and Discard
-/// Changes….
+/// Several selected files: a plain symbol, their count, a line about
+/// what can be done with them, and Include, Exclude, and Discard Changes….
 public struct MultipleSelectionView: View {
     private let content: MultipleSelectionContent
     private let onInclude: () -> Void
@@ -47,18 +47,46 @@ public struct MultipleSelectionView: View {
     }
 
     public var body: some View {
-        CenteredMessage(content.title, systemImage: "doc.on.doc") {
+        VStack(spacing: 0) {
+            Image(systemName: "doc.on.doc")
+                .font(.system(size: CenteredMessageMetrics.largeSymbol))
+                .foregroundStyle(.text3)
+                .padding(.bottom, Metrics.MultipleSelection.symbolSpacing)
+                .accessibilityHidden(true)
+            Text(content.title)
+                .font(Typography.display(size: Metrics.MultipleSelection.titleSize))
+                .foregroundStyle(.text)
+                .accessibilityAddTraits(.isHeader)
+            Text("Include them in the commit, leave them out, or discard their changes.")
+                .font(Typography.row)
+                .foregroundStyle(.text2)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Metrics.insetSmall)
             HStack(spacing: Metrics.insetSmall) {
-                Button("Include", action: onInclude)
+                Button("Include", systemImage: "checkmark", action: onInclude)
                     .disabled(!content.canChangeInclusion)
-                Button("Exclude", action: onExclude)
+                Button("Exclude", systemImage: "minus", action: onExclude)
                     .disabled(!content.canChangeInclusion)
-                Button("Discard Changes…", action: onDiscard)
+                Button("Discard Changes…", systemImage: "trash", action: onDiscard)
                     .disabled(!content.canDiscard)
             }
             .buttonStyle(.quiet)
             .fixedSize()
+            .padding(.top, Metrics.MultipleSelection.buttonsSpacing)
         }
+        .frame(maxWidth: Metrics.MultipleSelection.width)
+        .padding(Metrics.insetLarge)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+extension Metrics {
+    /// Several selected files' view.
+    public enum MultipleSelection {
+        public static let width: CGFloat = 440
+        public static let symbolSpacing: CGFloat = 14
+        public static let titleSize: CGFloat = 20
+        public static let buttonsSpacing: CGFloat = 18
     }
 }

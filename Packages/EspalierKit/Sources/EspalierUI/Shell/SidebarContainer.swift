@@ -1,21 +1,20 @@
 // The sidebar's column, in the hidden style (Settings ▸ Appearance ▸
 // Sidebar; the icons style's rail is SidebarRail.swift). It shows the
-// current repository's places you select (Changes, History, branches, pull
-// requests, tags, stashes), and a filter field at the bottom, as in Xcode's
-// navigators; the repository popover switches repositories and worktrees. Each section after the first is a
-// feature's view. After a switch, the repository's sections keep showing
-// the previous repository until the selected one has loaded
-// (`SidebarSectionsHold`).
+// current repository's places you select (Changes, History, branches, pull requests, tags, stashes),
+// and a filter field at the bottom, as in Xcode's navigators. Each section
+// after the first is a feature's view. After a switch, the repository's
+// sections keep showing the previous repository until the selected one has
+// loaded (`SidebarSectionsHold`).
 //
-// The sidebar is the `sidebar` color, the theme's section labels after
-// their chevrons (a collapsed section's with its count), rows 28 high with
-// the row radius, hairline dividers between groups of a section's rows, and
-// the selected item in the theme's sidebar selection
-// (`Palette.sidebarSelection`), its title in the selected weight
-// (`SidebarRowFont`) and its symbol in the theme's selection symbol color
-// (the list's own selection drawing is off before it first draws:
-// `SidebarListStyler`). Selected branch, tag, stash, and pull request rows
-// take the selected weight too (`isSidebarRowSelected`).
+// The sidebar is the `sidebar` color. Changes and History lead on their
+// tiles, in bold; each section after them leads with its chevron and its
+// name in bold (a collapsed section's count in a pill). Rows are roomy with the row radius, groups of a section's rows
+// are set apart by space, and the selected item is on the theme's sidebar
+// selection (`Palette.sidebarSelection`, the butter highlight), its title
+// in the selected weight (`SidebarRowFont`) and its symbol in the theme's
+// selection symbol color (the list's own selection drawing is off before
+// it first draws: `SidebarListStyler`). Selected branch, tag, stash, and
+// pull request rows take the selected weight too (`isSidebarRowSelected`).
 //
 // A section's rows ease in and out as its chevron turns; a collapsed
 // section's count and the Changes count roll to a new value over 0.2 s, and
@@ -211,7 +210,7 @@ struct PlacesSectionRows: View {
             ChangesPlaceRow(content: changes, isSelected: selection == .changes)
                 .sidebarRow(.changes)
                 .tag(SidebarPlace.changes)
-            SidebarRowLabel("History", systemImage: "clock.arrow.circlepath", tile: .historyTile, isSelected: selection == .history)
+            SidebarRowLabel("History", systemImage: "clock.arrow.circlepath", place: .history, isSelected: selection == .history)
                 .sidebarRow(.history)
                 .tag(SidebarPlace.history)
         }
@@ -278,8 +277,8 @@ nonisolated struct ChangesPlaceRowContent: Sendable, Hashable {
     }
 }
 
-/// The Changes row: its count in SF Mono, or a warning while conflicts
-/// exist. The count rolls to a new value, and the count and the warning
+/// The Changes row: its count in an apricot pill, or a warning while
+/// conflicts exist. The count rolls to a new value, and the count and the warning
 /// fade in and out, over 0.2 s.
 struct ChangesPlaceRow: View {
     let content: ChangesPlaceRowContent
@@ -288,7 +287,7 @@ struct ChangesPlaceRow: View {
 
     var body: some View {
         let fade = motion.animates ? AnyTransition.opacity : .identity
-        SidebarRowLabel("Changes", systemImage: "plus.forwardslash.minus", tile: .changesTile, isSelected: isSelected) {
+        SidebarRowLabel("Changes", systemImage: "plus.forwardslash.minus", place: .changes, isSelected: isSelected) {
             if content.hasConflicts || content.badge != nil {
                 // The count and the warning crossfade in place.
                 ZStack(alignment: .trailing) {
@@ -297,9 +296,7 @@ struct ChangesPlaceRow: View {
                             .tooltip("Conflicts")
                             .transition(fade)
                     } else if let badge = content.badge {
-                        Text(badge)
-                            .font(Typography.count)
-                            .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
+                        CountPill(badge, color: PlaceIdentity.changes.color)
                             .contentTransition(motion.animates ? .numericText(value: Double(content.changedFileCount)) : .identity)
                             .transition(fade)
                     }
@@ -314,12 +311,14 @@ struct ChangesPlaceRow: View {
 // MARK: - Rows
 
 /// A sidebar row's look: a symbol (the accent when the row is selected,
-/// secondary text otherwise), or the symbol on a colored tile (the places),
-/// the title (medium when selected), and what trails it.
+/// the row's tint or secondary text otherwise), or its place's tile and the
+/// title in bold (Changes and History), the title (bold when
+/// selected), and what trails it.
 struct SidebarRowLabel<Trailing: View>: View {
     private let title: String
     private let systemImage: String
-    private let tile: Color?
+    private let place: PlaceIdentity?
+    private let tint: NSColor?
     private let isSelected: Bool
     private let isEmphasized: Bool
     private let truncationMode: Text.TruncationMode
@@ -333,12 +332,15 @@ struct SidebarRowLabel<Trailing: View>: View {
     ///   - truncationMode: Where a long title is cut: the middle for names
     ///     (a branch's start and end both tell), the tail for text read
     ///     from its start.
-    ///   - tile: The color of the tile the symbol is drawn on; nil draws
-    ///     the symbol alone.
+    ///   - place: The place whose tile the row draws in place of the
+    ///     symbol; nil draws the symbol alone.
+    ///   - tint: The symbol's color while the row isn't selected (a tag's
+    ///     honey); nil for secondary text.
     init(
         _ title: String,
         systemImage: String,
-        tile: Color? = nil,
+        place: PlaceIdentity? = nil,
+        tint: NSColor? = nil,
         isSelected: Bool = false,
         isEmphasized: Bool = false,
         truncationMode: Text.TruncationMode = .middle,
@@ -346,7 +348,8 @@ struct SidebarRowLabel<Trailing: View>: View {
     ) {
         self.title = title
         self.systemImage = systemImage
-        self.tile = tile
+        self.place = place
+        self.tint = tint
         self.isSelected = isSelected
         self.isEmphasized = isEmphasized
         self.truncationMode = truncationMode
@@ -355,18 +358,18 @@ struct SidebarRowLabel<Trailing: View>: View {
 
     var body: some View {
         let isSelected = isSelected || isRowSelected
-        HStack(spacing: Metrics.insetSmall) {
-            if let tile {
-                PlaceTile(systemImage: systemImage, color: tile)
+        HStack(spacing: place == nil ? Metrics.insetSmall : Metrics.SidebarRows.placeSpacing) {
+            if let place {
+                PlaceTile(place, size: Metrics.SidebarRows.placeTile)
             } else {
                 Image(systemName: systemImage)
                     .font(Typography.row)
-                    .foregroundStyle(.sidebarRowIcon(isSelected: isSelected))
+                    .foregroundStyle(symbolStyle(isSelected: isSelected))
                     .frame(width: Metrics.Sidebar.symbolWidth)
                     .accessibilityHidden(true)
             }
             Text(title)
-                .font(SidebarRowFont.title(isSelected: isSelected, isEmphasized: isEmphasized))
+                .font(place == nil ? SidebarRowFont.title(isSelected: isSelected, isEmphasized: isEmphasized) : Typography.row.weight(.bold))
                 .foregroundStyle(.sidebarRowText(isSelected: isSelected))
                 .lineLimit(1)
                 .truncationMode(truncationMode)
@@ -375,37 +378,25 @@ struct SidebarRowLabel<Trailing: View>: View {
         }
         .accessibilityElement(children: .combine)
     }
-}
 
-/// A place's symbol on its colored tile: a rounded square of the place's
-/// color with the symbol in white, a little larger than a symbol alone.
-struct PlaceTile: View {
-    let systemImage: String
-    let color: Color
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: Metrics.Sidebar.tileRadius, style: .continuous)
-            .fill(color.gradient)
-            .frame(width: Metrics.Sidebar.tileSize, height: Metrics.Sidebar.tileSize)
-            .overlay {
-                Image(systemName: systemImage)
-                    .font(.system(size: 9.5, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: Metrics.Sidebar.symbolWidth)
-            .accessibilityHidden(true)
+    /// The symbol's color: the selection's, else the row's tint or
+    /// secondary text.
+    private func symbolStyle(isSelected: Bool) -> Color {
+        if !isSelected, let tint {
+            return Color(nsColor: tint)
+        }
+        return .sidebarRowIcon(isSelected: isSelected)
     }
 }
 
-/// A quiet divider between groups of a section's rows (the branches that
-/// lead the Branches section, and its Other and Remote Branches): a hairline
-/// across the rows' content, in a short row of its own that takes no hover
-/// or selection.
+/// A quiet gap between groups of a section's rows (the branches that lead
+/// the Branches section, and its Other and Remote Branches): a short row of
+/// space of its own that takes no hover or selection.
 struct SidebarDivider: View {
     var body: some View {
-        Hairline()
+        Color.clear
             .frame(maxWidth: .infinity)
-            .padding(.vertical, Metrics.grid)
+            .frame(height: Metrics.SidebarRows.groupGap)
             .selectionDisabled()
             .accessibilityHidden(true)
     }
@@ -443,6 +434,25 @@ final class SidebarHover {
     var row: AnyHashable?
 }
 
+extension Metrics {
+    /// The sidebar's roomy rows.
+    public enum SidebarRows {
+        /// A row's content, at least: the list adds its own insets.
+        public static let contentHeight: CGFloat = 26
+        /// A row's height, the list's insets included.
+        public static let height: CGFloat = 34
+        /// Changes' and History's tiles, and the space after them.
+        public static let placeTile: CGFloat = 22
+        public static let placeSpacing: CGFloat = 10
+        /// The room above a section's header.
+        public static let headerTop: CGFloat = 8
+        /// The room below a section's header.
+        public static let headerBottom: CGFloat = 3
+        /// The gap between groups of a section's rows.
+        public static let groupGap: CGFloat = 6
+    }
+}
+
 extension Metrics.Sidebar {
     /// The column a row's symbol or dot sits in, so titles line up.
     public static let symbolWidth: CGFloat = 16
@@ -455,7 +465,7 @@ extension Metrics.Sidebar {
 }
 
 extension View {
-    /// A sidebar row: 28 high, its background the sidebar's selection or
+    /// A sidebar row: roomy, its background the sidebar's selection or
     /// the hover wash, inset 10 from the sidebar's edges with the row radius.
     ///
     /// - Parameters:
@@ -542,7 +552,7 @@ private struct SidebarRowModifier: ViewModifier {
                     .frame(width: 0, height: 0)
                     .accessibilityHidden(true)
             }
-            .frame(minHeight: Metrics.RowHeight.sidebar - 8)
+            .frame(minHeight: Metrics.SidebarRows.contentHeight)
             .listRowBackground(SidebarRowBackground(place: place, id: id, isDropTarget: isDropTarget))
             .onHover { isInside in
                 guard let id, let hover else {
@@ -852,24 +862,27 @@ extension EnvironmentValues {
     @Entry var sidebarSectionExpansion: Binding<Bool>?
 }
 
-/// A section's header: the theme's section label and what trails it (New
-/// Branch's plus). In a `SidebarSection` that collapses, a chevron is
-/// always before the label, as the list's own chevron is before a
-/// disclosure row's symbol, and the label has the section's count while
-/// it's collapsed ("TAGS 3"), so a collapsed section doesn't read as empty.
-/// Without a chevron, the label lines up with the rows' symbols. The count
-/// fades in and out as the chevron turns, and rolls to a new value over 0.2
-/// s as the section's rows change; the filter's changes draw at once.
+/// A section's header: its name in bold, and what trails it (New Branch's
+/// plus). In a `SidebarSection` that collapses, a chevron is always before
+/// the name, as the list's own chevron is before a disclosure row's symbol,
+/// and a pill after the name has the section's count while it's collapsed,
+/// so a collapsed section doesn't read as empty. Without a chevron, the
+/// name lines up with the rows' symbols. The
+/// count fades in and out as the chevron turns, and rolls to a new value
+/// over 0.2 s as the section's rows change; the filter's changes draw at
+/// once.
 struct SidebarSectionHeader<Accessory: View>: View {
     private let title: String
     private let count: Int?
     private let accessory: Accessory
     @Environment(\.sidebarSectionExpansion) private var expansion
     @Environment(\.motion) private var motion
+    @Environment(\.numberFormat) private var numberFormat
     @Environment(WindowContext.self) private var context: WindowContext?
 
-    /// - Parameter count: The section's rows, which the label shows while
-    ///   the section is collapsed; nil shows none.
+    /// - Parameters:
+    ///   - count: The section's rows, which the header shows while the
+    ///     section is collapsed; nil shows none.
     init(_ title: String, count: Int? = nil, @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
         self.title = title
         self.count = count
@@ -877,26 +890,40 @@ struct SidebarSectionHeader<Accessory: View>: View {
     }
 
     var body: some View {
+        let shownCount = expansion?.wrappedValue == false ? count : nil
         HStack(spacing: Metrics.grid) {
             HStack(spacing: 0) {
                 if let expansion {
                     SidebarSectionChevron(title: title, isExpanded: expansion)
                 }
-                SectionLabel(title, count: expansion?.wrappedValue == false ? count : nil)
-                    .contentTransition(motion.animates ? .numericText() : .identity)
-                    .transaction(value: context?.state.sidebarFilter) { $0.animation = nil }
-                    .motion(Motion.kindChange, value: count)
+                HStack(spacing: Metrics.insetSmall) {
+                    Text(title)
+                        .font(Typography.sans(size: 14, weight: .bold, relativeTo: .headline))
+                        .foregroundStyle(.text)
+                        .lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
+                    if let shownCount {
+                        CountPill(formatCount(shownCount, numberFormat))
+                            .contentTransition(motion.animates ? .numericText() : .identity)
+                            .transition(motion.animates ? .opacity : .identity)
+                            .accessibilityLabel("\(formatCount(shownCount, numberFormat)) items")
+                    }
+                }
+                .transaction(value: context?.state.sidebarFilter) { $0.animation = nil }
+                .motion(Motion.kindChange, value: shownCount)
             }
             Spacer(minLength: Metrics.grid)
             accessory
                 .font(Typography.subheadline.weight(.semibold))
                 .foregroundStyle(.text3)
         }
-        // The chevron in the list's disclosure column, else the label
+        // The chevron in the list's disclosure column, else the name
         // aligned with the rows' symbols; what trails it, with their
         // trailing counts.
         .padding(.leading, expansion == nil ? Metrics.grid : 0)
         .padding(.trailing, Metrics.Sidebar.rowInset)
+        .padding(.top, Metrics.SidebarRows.headerTop)
+        .padding(.bottom, Metrics.SidebarRows.headerBottom)
         .contentShape(Rectangle())
     }
 }

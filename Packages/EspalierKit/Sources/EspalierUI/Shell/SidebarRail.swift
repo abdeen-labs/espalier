@@ -1,11 +1,11 @@
 // The sidebar's icons style (Settings ▸ Appearance ▸ Sidebar ▸ Icons): a
 // rail at the window's leading edge, below the toolbar, in place of the
-// sidebar's column. Changes and History are its first icons, Changes with
-// its count on a quiet capsule (a warning while conflicts exist); after a
-// hairline, an icon for each section the repository's sidebar shows
-// (Branches, Pull Requests, Tags, Stashes), which opens the section in a
-// popover beside it. A section's icon is selected while one of its places
-// is.
+// sidebar's column. Changes and History come first, each its place's tile,
+// Changes with its count in an apricot pill (a warning while conflicts
+// exist); after a little space, a plain symbol for each section the
+// repository's sidebar shows (Branches, Pull Requests, Tags, Stashes),
+// which opens the section in a popover beside it. A section's icon is
+// selected while one of its places is.
 //
 // A popover holds the sidebar's filter over the section's list, on the
 // popover's `background`, its rows as the sidebar has them (selecting a
@@ -15,10 +15,10 @@
 // a list that fits doesn't scroll, and a longer one never scrolls past its
 // ends. The filter clears as it closes.
 //
-// The rail is the `sidebar` color, its icons 36 square with the row
+// The rail is the `sidebar` color, its icons 40 square with the row
 // radius, the hover wash under the pointer and on the icon whose popover is
-// open, and the selected one in the sidebar's selection with its symbol in
-// the selection's color.
+// open, and the selected one on the sidebar's selection, the butter
+// highlight.
 //
 // The hover wash fades. Changes' count rolls to a new value over 0.2 s, and
 // its capsule and the warning fade in and out. A section's icon fades in
@@ -34,15 +34,19 @@ import SwiftUI
 extension Metrics {
     /// The icons style's rail.
     public enum Rail {
-        public static let width: CGFloat = 52
+        public static let width: CGFloat = 56
         /// An icon's side.
-        public static let item: CGFloat = 36
+        public static let item: CGFloat = 40
+        /// Changes' and History's tiles, and a section's symbol's point
+        /// size.
+        public static let tile: CGFloat = 26
+        public static let symbolSize: CGFloat = 17
         /// The space between icons.
         public static let spacing: CGFloat = 4
         /// The space above the first icon.
         public static let topInset: CGFloat = 8
-        /// The hairline between History and the sections.
-        public static let dividerWidth: CGFloat = 20
+        /// The space between History and the sections.
+        public static let groupGap: CGFloat = 10
         /// A popover's width: the sidebar's ideal.
         public static let popoverWidth: CGFloat = Column.sidebar.ideal + 40
         /// The tallest a popover's list gets before it scrolls.
@@ -67,12 +71,13 @@ enum RailSection: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    var systemImage: String {
+    /// The section's place, whose symbol is its icon.
+    var place: PlaceIdentity {
         switch self {
-        case .branches: "arrow.trianglehead.branch"
-        case .pullRequests: PullRequestGlyph.systemImage
-        case .tags: "tag"
-        case .stashes: "tray.full"
+        case .branches: .branches
+        case .pullRequests: .pullRequests
+        case .tags: .tags
+        case .stashes: .stashes
         }
     }
 
@@ -148,15 +153,15 @@ struct SidebarRail: View {
                 }
                 RailButton(
                     "History",
-                    systemImage: "clock.arrow.circlepath",
+                    icon: .tile(.history),
                     shortcut: ActionKind.showHistory.shortcut?.symbols,
                     isSelected: place == .history
                 ) {
                     context.select(.history)
                 }
-                Hairline()
-                    .frame(width: Metrics.Rail.dividerWidth)
-                    .padding(.vertical, Metrics.Rail.spacing)
+                Color.clear
+                    .frame(height: Metrics.Rail.groupGap)
+                    .accessibilityHidden(true)
                 ForEach(sections) { section in
                     RailSectionButton(section: section, repository: repository)
                         .barTransition()
@@ -198,7 +203,7 @@ private struct ChangesRailButton: View {
         let fade = motion.animates ? AnyTransition.opacity : .identity
         RailButton(
             "Changes",
-            systemImage: "plus.forwardslash.minus",
+            icon: .tile(.changes),
             shortcut: ActionKind.showChanges.shortcut?.symbols,
             accessibilityValue: accessibilityValue,
             isSelected: isSelected,
@@ -209,13 +214,9 @@ private struct ChangesRailButton: View {
                     .font(.system(size: 10))
                     .transition(fade)
             } else if let badge = content.badge {
-                Text(badge)
-                    .font(Typography.tinyCount)
-                    .foregroundStyle(.text2)
+                CountPill(badge, color: PlaceIdentity.changes.color)
+                    .background(Capsule(style: .circular).fill(Color(espalier: Palette.sidebar)))
                     .contentTransition(motion.animates ? .numericText(value: Double(content.changedFileCount)) : .identity)
-                    .padding(.horizontal, 4)
-                    .frame(minWidth: 16, minHeight: 16)
-                    .surface(.quiet, elevation: .quiet)
                     .transition(fade)
             }
         }
@@ -240,7 +241,7 @@ private struct RailSectionButton: View {
     var body: some View {
         RailButton(
             section.title,
-            systemImage: section.systemImage,
+            icon: .symbol(section.place.systemImage),
             isOpen: context.state.railPopover == section,
             isSelected: section.contains(context.state.place)
         ) {
@@ -270,13 +271,20 @@ private struct RailSectionButton: View {
     }
 }
 
-/// A rail icon: its symbol in a 36-point square, the hover wash under the
-/// pointer and while its popover is open, the sidebar's selection while
-/// selected, and what it badges at its top trailing corner. Its tooltip is
-/// its title and shortcut.
+/// What a rail icon shows: a place's tile (Changes, History) or a plain
+/// symbol (a section).
+enum RailIcon {
+    case tile(PlaceIdentity)
+    case symbol(String)
+}
+
+/// A rail icon: its tile or symbol in a 40-point square, the hover wash
+/// under the pointer and while its popover is open, the sidebar's selection
+/// while selected, and what it badges at its top trailing corner. Its
+/// tooltip is its title and shortcut.
 struct RailButton<Badge: View>: View {
     private let title: String
-    private let systemImage: String
+    private let icon: RailIcon
     private let shortcut: String?
     private let accessibilityValue: String?
     private let isOpen: Bool
@@ -290,7 +298,7 @@ struct RailButton<Badge: View>: View {
     ///   - isOpen: Whether the popover it opens is open.
     init(
         _ title: String,
-        systemImage: String,
+        icon: RailIcon,
         shortcut: String? = nil,
         accessibilityValue: String? = nil,
         isOpen: Bool = false,
@@ -299,7 +307,7 @@ struct RailButton<Badge: View>: View {
         @ViewBuilder badge: () -> Badge = { EmptyView() }
     ) {
         self.title = title
-        self.systemImage = systemImage
+        self.icon = icon
         self.shortcut = shortcut
         self.accessibilityValue = accessibilityValue
         self.isOpen = isOpen
@@ -312,9 +320,7 @@ struct RailButton<Badge: View>: View {
         let shape = RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
         let isWashed = isHovered || isOpen
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 15))
-                .foregroundStyle(.sidebarRowIcon(isSelected: isSelected))
+            iconView
                 .frame(width: Metrics.Rail.item, height: Metrics.Rail.item)
                 .background {
                     shape
@@ -334,7 +340,7 @@ struct RailButton<Badge: View>: View {
         .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
         .overlay(alignment: .topTrailing) {
             badge
-                .offset(x: 4, y: -4)
+                .offset(x: 6, y: -3)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
@@ -343,6 +349,19 @@ struct RailButton<Badge: View>: View {
         .accessibilityLabel(title)
         .accessibilityValue(accessibilityValue ?? "")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private var iconView: some View {
+        switch icon {
+        case .tile(let place):
+            PlaceTile(place, size: Metrics.Rail.tile)
+        case .symbol(let systemImage):
+            Image(systemName: systemImage)
+                .font(.system(size: Metrics.Rail.symbolSize))
+                .foregroundStyle(Color.sidebarRowIcon(isSelected: isSelected))
+                .accessibilityHidden(true)
+        }
     }
 }
 
@@ -412,14 +431,14 @@ struct RailSectionPopover: View {
         if let listHeight {
             return listHeight
         }
-        return CGFloat(section.estimatedRowCount(in: repository, filter: context.state.sidebarFilter)) * Metrics.RowHeight.sidebar
+        return CGFloat(section.estimatedRowCount(in: repository, filter: context.state.sidebarFilter)) * Metrics.SidebarRows.height
             + Metrics.insetMedium
     }
 
     /// The list's height: its rows', at least a row and at most
     /// `popoverMaxHeight`.
     private var height: CGFloat {
-        min(max(rowsHeight, Metrics.RowHeight.sidebar), Metrics.Rail.popoverMaxHeight)
+        min(max(rowsHeight, Metrics.SidebarRows.height), Metrics.Rail.popoverMaxHeight)
     }
 
     /// Whether the rows fit: a list that fits doesn't scroll.

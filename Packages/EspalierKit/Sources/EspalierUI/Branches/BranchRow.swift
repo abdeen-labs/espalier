@@ -1,9 +1,10 @@
-// A branch's row in the sidebar's Branches section: the name (the current
-// branch's semibold, the one way it's marked; the default branch's dot is
-// the trunk's color, and its tooltip says it's the default), the branch's
-// pull request, and how it compares with its
-// upstream ("↑2 ↓3", a dashed circle for not published, or its upstream
-// gone), in the same form on every row. Value-driven: `BranchRowContent`
+// A branch's row in the sidebar's Branches section: a candy dot in the
+// branch's color and its name (the branch you're on as a candy pill, its
+// dot haloed: "you are here"; the default branch's dot is the trunk's
+// color, and its tooltip says it's the default), the branch's pull request,
+// and how it compares with its upstream ("↑2" and "↓3" in pills, a dashed
+// circle for not published, or its upstream gone), in the same form on
+// every row. Value-driven: `BranchRowContent`
 // is built from the models by `BranchesSectionContent`.
 
 import EspalierCore
@@ -210,9 +211,9 @@ nonisolated struct BranchRowMarks: Equatable {
     }
 }
 
-/// A branch's row: a dot in its branch color, its name (the current one
-/// semibold, a selected one medium), the pull request glyph, and its
-/// comparison with its upstream; its tooltip is its name, and says when
+/// A branch's row: a candy dot in its branch color, its name (the current
+/// one in a candy pill of its color with its dot haloed, a selected one
+/// bold), the pull request glyph, and its comparison with its upstream; its tooltip is its name, and says when
 /// it's the default branch. A change to what the row already showed
 /// moves over 0.2 s (`BranchRowMarks.animates(from:)`): the counts roll,
 /// the glyphs fade in and out, the checks' symbol is replaced, and what's
@@ -236,19 +237,24 @@ public struct BranchRow: View {
 
     public var body: some View {
         let marks = BranchRowMarks(content)
+        let color = dotColor ?? content.fallbackColor
         HStack(spacing: Metrics.insetSmall) {
-            Circle()
-                .fill(Color(nsColor: dotColor ?? content.fallbackColor))
-                .frame(width: Metrics.Sidebar.dotSize, height: Metrics.Sidebar.dotSize)
+            CandyDot(color, isHere: content.isCurrent)
                 .frame(width: Metrics.Sidebar.symbolWidth)
-                .accessibilityHidden(true)
-            Text(content.title)
-                .font(SidebarRowFont.title(isSelected: isSelected, isEmphasized: content.isCurrent))
-                .foregroundStyle(.sidebarRowText(isSelected: isSelected))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                // The name first; what follows takes the room left.
-                .layoutPriority(1)
+            Group {
+                if content.isCurrent {
+                    // You are here: the name in a pill of its color.
+                    CandyPill(content.title, color: color, size: .regular)
+                } else {
+                    Text(content.title)
+                        .font(SidebarRowFont.title(isSelected: isSelected))
+                        .foregroundStyle(.sidebarRowText(isSelected: isSelected))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            // The name first; what follows takes the room left.
+            .layoutPriority(1)
             HStack(spacing: Metrics.insetSmall) {
                 if let pullRequest = content.pullRequest {
                     PullRequestBadgeGlyph(pullRequest)
@@ -268,9 +274,8 @@ public struct BranchRow: View {
     }
 }
 
-/// The trailing comparison: "↑2" in the accent and "↓3" as the sidebar's
-/// counts are (`sidebarRowCount(isSelected:)`), in SF Mono; a dashed circle, "Not
-/// published" in its tooltip, for a branch that isn't published; a
+/// The trailing comparison: "↑2" in a pill of the accent's tint and "↓3"
+/// in a neutral pill; a dashed circle, "Not published" in its tooltip, for a branch that isn't published; a
 /// crossed-out cloud, with a tooltip, for a branch whose upstream is gone
 /// from its remote. Each takes one form whatever the row's width. Where
 /// the row animates a change, the counts roll.
@@ -292,15 +297,11 @@ struct BranchTrackingView: View {
             if tracking.countsText(numberFormat) != nil {
                 HStack(spacing: Metrics.grid) {
                     if ahead > 0 {
-                        Text("↑\(BranchTracking.formatCompactCount(ahead, numberFormat))")
-                            .font(Typography.aheadCount)
-                            .foregroundStyle(.accent)
+                        CountPill("↑\(BranchTracking.formatCompactCount(ahead, numberFormat))", color: Palette.accent)
                             .contentTransition(motion.animates ? .numericText() : .identity)
                     }
                     if behind > 0 {
-                        Text("↓\(BranchTracking.formatCompactCount(behind, numberFormat))")
-                            .font(Typography.secondaryCount)
-                            .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
+                        CountPill("↓\(BranchTracking.formatCompactCount(behind, numberFormat))")
                             .contentTransition(motion.animates ? .numericText() : .identity)
                     }
                 }

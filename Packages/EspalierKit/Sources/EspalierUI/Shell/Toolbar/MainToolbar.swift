@@ -50,6 +50,7 @@ struct MainToolbar: CustomizableToolbarContent {
 
         ToolbarItem(id: "espalier.search", placement: .primaryAction) {
             ToolbarSearchField()
+                .padding(.trailing, Metrics.Toolbar.searchSpacing)
         }
         .customizationBehavior(.disabled)
         .sharedBackgroundVisibility(.hidden)

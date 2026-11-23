@@ -8,6 +8,7 @@
 import AppKit
 import EspalierCore
 import Foundation
+import GitKit
 import Observation
 import SwiftUI
 import Testing
@@ -113,5 +114,48 @@ struct ToolbarCaptures {
     func locationControl(name: String) throws {
         let state = try #require(UIFixtures.locationStates.first { $0.name == name }?.state)
         capture(LocationControlView(state).padding(Metrics.insetMedium), named: name, area: "LocationControl")
+    }
+
+    /// A branch two commits ahead and one behind its upstream, in a
+    /// feature's color.
+    private static let aheadBehindLocation = LocationControlState(
+        repository: .repository(name: "harbor", path: "/Users/joe/Developer/harbor"),
+        branch: .branch(name: "feature/charts"),
+        aheadBehind: AheadBehind(ahead: 2, behind: 1)
+    )
+
+    @Test("the location control on a branch ahead of and behind its upstream, in the branch's color")
+    func locationControlCounts() {
+        capture(
+            LocationControlView(Self.aheadBehindLocation, branchColor: PlaceIdentity.grape).padding(Metrics.insetMedium),
+            named: "branch-ahead-behind",
+            area: "LocationControl"
+        )
+    }
+
+    @Test("Changes | History: Changes with its count, History, conflicts, and another place")
+    func placeTabs() {
+        let tabs = VStack(alignment: .leading, spacing: Metrics.insetMedium) {
+            PlaceTabs(selection: .changes, changes: ChangesPlaceRowContent(changedFileCount: 3, hasConflicts: false))
+            PlaceTabs(selection: .history, changes: ChangesPlaceRowContent(changedFileCount: 12, hasConflicts: false))
+            PlaceTabs(selection: .changes, changes: ChangesPlaceRowContent(changedFileCount: 2, hasConflicts: true))
+            PlaceTabs(selection: .stash(sha: "a1b2c3d"), changes: ChangesPlaceRowContent(changedFileCount: 0, hasConflicts: false))
+        }
+        .padding(Metrics.insetMedium)
+        .background(Color(nsColor: Palette.sidebar))
+        capture(tabs, named: "tabs", area: "PlaceSwitcher")
+    }
+
+    @Test("the sync group: where the branch stands and the last fetch beside the button", arguments: ["9-fetch", "8-push", "7-pull-diverged"])
+    func syncGroup(name: String) throws {
+        let state = try Self.syncState(name)
+        capture(SyncButtonGroup(state).padding(Metrics.insetMedium), named: "\(name)-group", area: "SyncButton")
+    }
+}
+
+private extension PlaceIdentity {
+    /// A feature branch's color.
+    static var grape: NSColor {
+        PlaceIdentity.stashes.color
     }
 }

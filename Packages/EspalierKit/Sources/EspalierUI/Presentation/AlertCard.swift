@@ -1,8 +1,8 @@
 // Espalier's alert, drawn as a card like the compact confirmation sheets:
-// the title (after the warning glyph when critical), the message in
-// secondary text (paragraphs, and "• " lines as a list), the "Do not show
-// this message again" checkbox, and the buttons in a row at the bottom
-// right. The first button is the default, a prominent capsule (Return); a
+// the title in display type (after the warning glyph when critical), the
+// message in secondary text (paragraphs, and "• " lines as a list), the
+// "Do not show this message again" checkbox, and the buttons in a row at
+// the bottom right. The first button is the default, a prominent capsule (Return); a
 // cancel-role button is a secondary capsule (Escape and ⌘.); the others are
 // quiet. The buttons read right to left in `AlertContent.buttons`' order.
 // The card is as wide as a compact sheet, or as its buttons.
@@ -127,6 +127,7 @@ struct AlertCard: View {
         }
     }
 
+    /// The title, after the warning glyph when the alert is critical.
     private func title(_ content: AlertContent) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
             if content.severity == .critical {

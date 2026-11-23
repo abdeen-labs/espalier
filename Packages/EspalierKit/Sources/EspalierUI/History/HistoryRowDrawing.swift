@@ -41,7 +41,7 @@ enum HistoryRowDrawing {
         let top = joinsAbove ? 0 : radius
         let bottom = joinsBelow ? 0 : radius
         // A flipped view's top is its minimum y.
-        return roundedRect(rect, minYRadius: isFlipped ? top : bottom, maxYRadius: isFlipped ? bottom : top)
+        return NSBezierPath.roundedEnds(rect, minYRadius: isFlipped ? top : bottom, maxYRadius: isFlipped ? bottom : top)
     }
 
     /// The selection's rectangle in a row's `bounds`: inset from the list's
@@ -84,14 +84,14 @@ enum HistoryRowDrawing {
             .foregroundColor: Palette.buttonText,
         ])
         let size = text.size()
-        let padding = Metrics.RefCapsule.horizontalPadding
+        let padding = Metrics.Pill.horizontalPadding
         let width = min(size.width + padding * 2, bounds.width / 2)
         let trailing = bounds.maxX - Metrics.CommitRow.selectionInset - Metrics.CommitRow.trailingPadding
         let badge = CGRect(
             x: trailing - width,
-            y: bounds.midY - Metrics.RefCapsule.height / 2,
+            y: bounds.midY - Metrics.Pill.height / 2,
             width: width,
-            height: Metrics.RefCapsule.height
+            height: Metrics.Pill.height
         )
         Palette.button.setFill()
         NSBezierPath(roundedRect: badge, xRadius: badge.height / 2, yRadius: badge.height / 2).fill()
@@ -117,30 +117,5 @@ enum HistoryRowDrawing {
         ring.lineWidth = ringStroke
         Palette.accent.setStroke()
         ring.stroke()
-    }
-
-    /// `rect` with the corners at its minimum y rounded by `minYRadius` and
-    /// those at its maximum y by `maxYRadius`.
-    private static func roundedRect(_ rect: CGRect, minYRadius: CGFloat, maxYRadius: CGFloat) -> NSBezierPath {
-        let path = NSBezierPath()
-        path.move(to: CGPoint(x: rect.minX + minYRadius, y: rect.minY))
-        path.line(to: CGPoint(x: rect.maxX - minYRadius, y: rect.minY))
-        if minYRadius > 0 {
-            path.appendArc(from: CGPoint(x: rect.maxX, y: rect.minY), to: CGPoint(x: rect.maxX, y: rect.minY + minYRadius), radius: minYRadius)
-        }
-        path.line(to: CGPoint(x: rect.maxX, y: rect.maxY - maxYRadius))
-        if maxYRadius > 0 {
-            path.appendArc(from: CGPoint(x: rect.maxX, y: rect.maxY), to: CGPoint(x: rect.maxX - maxYRadius, y: rect.maxY), radius: maxYRadius)
-        }
-        path.line(to: CGPoint(x: rect.minX + maxYRadius, y: rect.maxY))
-        if maxYRadius > 0 {
-            path.appendArc(from: CGPoint(x: rect.minX, y: rect.maxY), to: CGPoint(x: rect.minX, y: rect.maxY - maxYRadius), radius: maxYRadius)
-        }
-        path.line(to: CGPoint(x: rect.minX, y: rect.minY + minYRadius))
-        if minYRadius > 0 {
-            path.appendArc(from: CGPoint(x: rect.minX, y: rect.minY), to: CGPoint(x: rect.minX + minYRadius, y: rect.minY), radius: minYRadius)
-        }
-        path.close()
-        return path
     }
 }

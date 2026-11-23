@@ -1,6 +1,6 @@
 // Small views the repository sheets share: a folder field with Choose…, a
-// call to action (a symbol, a line, and a button), and the sign-in call to
-// action, whose new account the sheet chooses.
+// call to action (a plain symbol, a line, and a button), and the
+// sign-in call to action, whose new account the sheet chooses.
 
 import AppKit
 import EspalierCore
@@ -37,7 +37,7 @@ struct AccountsSignInPrompt: View {
     @Environment(WindowContext.self) private var context
 
     var body: some View {
-        SheetCallToAction(systemImage: "person.crop.circle", message: "Sign in to your GitHub account to access your repositories.") {
+        SheetCallToAction(systemImage: "person.fill", message: "Sign in to your GitHub account to access your repositories.") {
             VStack(spacing: Metrics.insetSmall) {
                 Button("Sign In…") {
                     signIn(nil)
@@ -63,8 +63,8 @@ struct AccountsSignInPrompt: View {
     }
 }
 
-/// A call to action in a sheet's area: a symbol in a soft circle, a line,
-/// and a button (signing in, publishing).
+/// A call to action in a sheet's area: a plain symbol, a line, and a button
+/// (signing in, publishing).
 struct SheetCallToAction<Action: View>: View {
     let systemImage: String
     let message: String
@@ -72,7 +72,9 @@ struct SheetCallToAction<Action: View>: View {
 
     var body: some View {
         VStack(spacing: Metrics.insetMedium) {
-            IconCircle(systemImage, size: Metrics.StateIcon.callToActionSize)
+            Image(systemName: systemImage)
+                .font(.system(size: CenteredMessageMetrics.symbol))
+                .foregroundStyle(.text3)
                 .accessibilityHidden(true)
             Text(message)
                 .font(Typography.row)

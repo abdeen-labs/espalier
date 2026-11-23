@@ -27,6 +27,10 @@ nonisolated public struct DiffTints: Sendable {
     public let addedMarker: NSColor
     /// The "−" marker: delete.
     public let deletedMarker: NSColor
+    /// An added line's number: add at 70%; a deleted line's: delete at
+    /// 70%.
+    public let addedNumber: NSColor
+    public let deletedNumber: NSColor
     /// The current find match: the accent at 32% (45% in dark), as the text
     /// selection it becomes when find closes.
     public let currentFindMatch: NSColor
@@ -50,6 +54,8 @@ nonisolated public struct DiffTints: Sendable {
         excludedDeletedLine = tint(delete, light: 0.025, dark: 0.04)
         addedMarker = add
         deletedMarker = delete
+        addedNumber = Palette.tint(add, light: 0.7, dark: 0.7)
+        deletedNumber = Palette.tint(delete, light: 0.7, dark: 0.7)
         currentFindMatch = NSColor.espalierDynamic { variant in
             let resolved = accent.resolved(in: variant)
             let alpha: CGFloat = variant.isDark ? 0.45 : 0.32
@@ -83,11 +89,14 @@ public enum DiffColors {
     /// The "−" marker: delete.
     public static var deletedMarker: NSColor { Theme.current.diff.deletedMarker }
 
-    /// Hunk header rows, and git's header line in them.
-    public static var hunkHeaderBackground: NSColor { Palette.hunk }
-    public static var hunkHeaderText: NSColor { Palette.text2 }
-    /// A hunk header's expansion buttons, and one under the pointer, on a
-    /// wash.
+    /// A hunk header's pill ("Lines 19–26"), its label, and the function
+    /// context after it.
+    public static var hunkPill: NSColor { Palette.hunk }
+    public static var hunkPillText: NSColor { Palette.text2 }
+    public static var hunkContext: NSColor { Palette.text3 }
+    /// A hunk header's expansion buttons: a chevron on a pillow of the
+    /// hunk's color, and one under the pointer, the wash over its pillow.
+    public static var expansionPillow: NSColor { Palette.hunk }
     public static var expansionButton: NSColor { Palette.text2 }
     public static var expansionButtonHovered: NSColor { Palette.text }
     public static let expansionButtonHover = NSColor.espalierDynamic(
@@ -95,13 +104,16 @@ public enum DiffColors {
         highContrastLight: NSColor.black.withAlphaComponent(0.13), highContrastDark: NSColor.white.withAlphaComponent(0.16)
     )
 
-    /// Line numbers.
+    /// Line numbers: context lines' in tertiary text, changed lines' in a
+    /// soft add or delete.
     public static var lineNumber: NSColor { Palette.text3 }
+    public static var addedLineNumber: NSColor { Theme.current.diff.addedNumber }
+    public static var deletedLineNumber: NSColor { Theme.current.diff.deletedNumber }
     /// The missing-newline note and its symbol.
     public static var quietMark: NSColor { Palette.text3 }
 
-    /// An included changed line's number cells: the accent at 16% (24% in
-    /// dark).
+    /// The pill behind an included run of changed lines' numbers: the
+    /// accent at 16% (24% in dark).
     public static var includedNumberCell: NSColor { Palette.accentMid }
     /// The handle beside a changed line the commit includes: the accent.
     public static var includedHandle: NSColor { Palette.accent }

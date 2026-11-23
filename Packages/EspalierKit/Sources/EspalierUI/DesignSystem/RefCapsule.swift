@@ -1,7 +1,9 @@
-// Ref tags, capsules in SF Mono drawn in their commit's track color so names
-// and lines visibly belong together. One content type, two renderers:
-// SwiftUI for headers and the inspector, AppKit drawing for the graph's
-// table cells.
+// Ref tags, candy pills: a name in bold sans on a tint of its color, the
+// text in the color's deep shade, fully rounded. Branches take their
+// commit's track color, so names and lines visibly belong together; the
+// current branch is filled with the accent; tags are honey, as the Tags
+// place is. One content type, two renderers: SwiftUI for headers and the
+// inspector, AppKit drawing for the graph's table cells.
 
 import AppKit
 import GitKit
@@ -83,8 +85,8 @@ nonisolated public struct RefCapsuleContent: Sendable, Hashable, Identifiable {
 
 /// How a capsule is painted, from its kind, track color, and the theme's
 /// tags: the current branch filled with the theme's prominent fill; other
-/// local branches tinted in their track color; remote branches outlined,
-/// with a cloud; tags neutral, with a tag.
+/// local branches a tint of their track color; remote branches a fainter
+/// tint, with a cloud; tags a tint of honey, with a tag.
 struct RefCapsuleStyle {
     var fill: NSColor?
     var stroke: NSColor?
@@ -93,69 +95,67 @@ struct RefCapsuleStyle {
     /// The symbol before the name.
     var symbol: String?
 
-    /// A tag's tint and a remote branch's outline.
-    static let tintAlpha: CGFloat = 0.14
-    static let outlineAlpha: CGFloat = 0.45
+    /// A remote branch's tint, as a fraction of a local branch's.
+    static let remoteTintScale: CGFloat = 0.6
+
+    /// A candy pill of `color` (resolved in `variant`): a tint of it, and
+    /// the text in its deep shade, in the theme's strengths.
+    static func candy(_ color: NSColor, variant: AppearanceVariant, tintScale: CGFloat = 1) -> (fill: NSColor, text: NSColor) {
+        let style = Theme.current.refTag
+        let fill = color.withAlphaComponent((variant.isDark ? style.alpha.dark : style.alpha.light) * tintScale)
+        let text = color.blended(withFraction: variant.isDark ? style.textMix.dark : style.textMix.light, of: variant.isDark ? .white : .hex(style.ink)) ?? color
+        return (fill, text)
+    }
 
     init(_ content: RefCapsuleContent, palette: TrackPalette.Resolved, variant: AppearanceVariant) {
         let theme = Theme.current
+        func candy(_ color: NSColor, tintScale: CGFloat = 1) -> (fill: NSColor, text: NSColor) {
+            Self.candy(color, variant: variant, tintScale: tintScale)
+        }
         let track = palette.color(forRef: content).resolved(in: variant)
+        stroke = nil
         switch content.kind {
         case .currentBranch, .currentBranchWithUpstream, .detachedHead:
             let solidText = theme.prominentText.resolved(in: variant)
             fill = theme.prominent.resolved(in: variant)
-            stroke = nil
             text = solidText
             secondaryText = solidText.withAlphaComponent(0.75)
             symbol = nil
         case .localBranch, .localBranchWithUpstream:
-            let tag = theme.refTag
-            fill = track.withAlphaComponent(variant.isDark ? tag.alpha.dark : tag.alpha.light)
-            text = track.blended(withFraction: variant.isDark ? tag.textMix.dark : tag.textMix.light, of: variant.isDark ? .white : .hex(tag.ink)) ?? track
+            (fill, text) = candy(track)
             secondaryText = text.withAlphaComponent(0.7)
-            stroke = nil
             symbol = nil
         case .remoteBranch:
-            fill = nil
-            stroke = track.withAlphaComponent(Self.outlineAlpha)
-            text = track
-            secondaryText = track.withAlphaComponent(0.7)
-            symbol = "cloud"
+            (fill, text) = candy(track, tintScale: Self.remoteTintScale)
+            secondaryText = text.withAlphaComponent(0.7)
+            symbol = RefCapsuleRenderer.symbol(for: content.kind)
         case .tag:
-            let neutral = Palette.text2.resolved(in: variant)
-            fill = neutral.withAlphaComponent(Self.tintAlpha)
-            stroke = nil
-            text = neutral
-            secondaryText = neutral
-            symbol = "tag"
+            (fill, text) = candy(PlaceIdentity.tags.color.resolved(in: variant))
+            secondaryText = text
+            symbol = RefCapsuleRenderer.symbol(for: content.kind)
         }
         if variant.isHighContrast {
             // Increase Contrast outlines every capsule, fully opaque.
-            stroke = content.kind == .tag ? Palette.text2.resolved(in: variant) : (fill == nil ? track : stroke ?? track)
+            stroke = text
         }
     }
 }
 
 // MARK: - SwiftUI
 
-/// A ref tag's shape: the theme's rounded rectangle.
+/// A ref tag's shape: a capsule.
 nonisolated struct RefTagShape: InsettableShape {
-    /// The theme's corner radius.
-    var cornerRadius: CGFloat
     var inset: CGFloat = 0
 
-    init() {
-        cornerRadius = Theme.current.radii.tag
-    }
+    init() {}
 
-    /// The corner radius of a tag `height` high in the current theme.
+    /// The corner radius of a tag `height` high: half of it.
     static func radius(height: CGFloat) -> CGFloat {
-        min(Theme.current.radii.tag, height / 2)
+        height / 2
     }
 
     func path(in rect: CGRect) -> Path {
-        let radius = max(min(cornerRadius, rect.height / 2) - inset, 0)
-        return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect.insetBy(dx: inset, dy: inset))
+        Capsule(style: .continuous).path(in: rect.insetBy(dx: inset, dy: inset))
     }
 
     func inset(by amount: CGFloat) -> RefTagShape {
@@ -181,10 +181,10 @@ public struct RefCapsule: View {
 
     public var body: some View {
         let style = RefCapsuleStyle(content, palette: palette, variant: variant)
-        HStack(spacing: Metrics.RefCapsule.glyphSpacing) {
+        HStack(spacing: Metrics.Pill.glyphSpacing) {
             if let symbol = style.symbol {
                 Image(systemName: symbol)
-                    .font(.system(size: 9.5, weight: .semibold))
+                    .font(.system(size: Metrics.Pill.symbolSize, weight: .bold))
                     .foregroundStyle(Color(nsColor: style.text))
             }
             Text(content.title)
@@ -196,10 +196,10 @@ public struct RefCapsule: View {
                     .foregroundStyle(Color(nsColor: style.secondaryText))
             }
         }
-        .font(Typography.refCapsule)
+        .font(Typography.namePill)
         .lineLimit(1)
-        .padding(.horizontal, Metrics.RefCapsule.horizontalPadding)
-        .frame(height: Metrics.RefCapsule.height)
+        .padding(.horizontal, Metrics.Pill.horizontalPadding)
+        .frame(height: Metrics.Pill.height)
         .background {
             if let fill = style.fill {
                 RefTagShape().fill(Color(nsColor: fill))
@@ -234,14 +234,14 @@ public struct RefCapsuleList: View {
     @State private var isShowingOverflow = false
     @Environment(\.numberFormat) private var numberFormat
 
-    public init(_ refs: [RefCapsuleContent], maximumVisible: Int = Metrics.RefCapsule.maximumVisible, palette: TrackPalette.Resolved = TrackPalette.Resolved()) {
+    public init(_ refs: [RefCapsuleContent], maximumVisible: Int = Metrics.Pill.maximumVisible, palette: TrackPalette.Resolved = TrackPalette.Resolved()) {
         self.refs = refs
         self.maximumVisible = maximumVisible
         self.palette = palette
     }
 
     public var body: some View {
-        HStack(spacing: Metrics.RefCapsule.spacing) {
+        HStack(spacing: Metrics.Pill.spacing) {
             ForEach(refs.prefix(maximumVisible)) { ref in
                 RefCapsule(ref, palette: palette)
             }
@@ -252,14 +252,14 @@ public struct RefCapsuleList: View {
                     Text(verbatim: "+\(formatCount(refs.count - maximumVisible, numberFormat))")
                         .font(Typography.tinyCount)
                         .foregroundStyle(.text2)
-                        .padding(.horizontal, Metrics.RefCapsule.horizontalPadding)
-                        .frame(height: Metrics.RefCapsule.height)
+                        .padding(.horizontal, Metrics.Pill.horizontalPadding)
+                        .frame(height: Metrics.Pill.height)
                         .background(RefTagShape().fill(.field))
                 }
                 .buttonStyle(.bare(.capsule))
                 .accessibilityLabel(Text(verbatim: "\(formatCount(refs.count - maximumVisible, numberFormat)) more refs"))
                 .popoverCard(isPresented: $isShowingOverflow, title: "More Refs") {
-                    VStack(alignment: .leading, spacing: Metrics.RefCapsule.spacing) {
+                    VStack(alignment: .leading, spacing: Metrics.Pill.spacing) {
                         ForEach(refs.dropFirst(maximumVisible)) { ref in
                             RefCapsule(ref, palette: palette)
                         }
@@ -292,7 +292,7 @@ public enum RefCapsuleRenderer {
     public static func layout(
         _ refs: [RefCapsuleContent],
         maximumWidth: CGFloat = .greatestFiniteMagnitude,
-        maximumVisible: Int = Metrics.RefCapsule.maximumVisible,
+        maximumVisible: Int = Metrics.Pill.maximumVisible,
         numberFormat: NumberFormat
     ) -> [Item] {
         func overflowText(_ count: Int) -> String {
@@ -300,7 +300,7 @@ public enum RefCapsuleRenderer {
         }
         var items: [Item] = []
         var x: CGFloat = 0
-        let height = Metrics.RefCapsule.height
+        let height = Metrics.Pill.height
         var shown = 0
         for ref in refs {
             guard shown < maximumVisible else {
@@ -308,12 +308,12 @@ public enum RefCapsuleRenderer {
             }
             let width = capsuleWidth(ref)
             let remaining = refs.count - shown - 1
-            let reserve = remaining > 0 ? overflowWidth(overflowText(remaining)) + Metrics.RefCapsule.spacing : 0
+            let reserve = remaining > 0 ? overflowWidth(overflowText(remaining)) + Metrics.Pill.spacing : 0
             if x + width + reserve > maximumWidth, shown > 0 {
                 break
             }
             items.append(Item(content: ref, overflowCount: 0, overflowText: "", frame: CGRect(x: x, y: 0, width: width, height: height)))
-            x += width + Metrics.RefCapsule.spacing
+            x += width + Metrics.Pill.spacing
             shown += 1
         }
         if shown < refs.count {
@@ -364,11 +364,11 @@ public enum RefCapsuleRenderer {
             path.lineWidth = 1
             path.stroke()
         }
-        var x = frame.minX + Metrics.RefCapsule.horizontalPadding
+        var x = frame.minX + Metrics.Pill.horizontalPadding
         if let symbol = style.symbol, let glyph = symbolImage(symbol, color: style.text) {
             let size = glyph.size
             glyph.draw(in: CGRect(x: x, y: frame.midY - size.height / 2, width: size.width, height: size.height))
-            x += size.width + Metrics.RefCapsule.glyphSpacing
+            x += size.width + Metrics.Pill.glyphSpacing
         }
         let title = NSAttributedString(string: content.title, attributes: attributes(style.text))
         drawText(title, x: x, in: frame)
@@ -377,9 +377,9 @@ public enum RefCapsuleRenderer {
             // The divider and the remote, spaced as the SwiftUI capsule
             // spaces its parts.
             let divider = NSAttributedString(string: dividerText, attributes: attributes(style.secondaryText))
-            x += Metrics.RefCapsule.glyphSpacing
+            x += Metrics.Pill.glyphSpacing
             drawText(divider, x: x, in: frame)
-            x += divider.size().width + Metrics.RefCapsule.glyphSpacing
+            x += divider.size().width + Metrics.Pill.glyphSpacing
             drawText(NSAttributedString(string: remote, attributes: attributes(style.secondaryText)), x: x, in: frame)
         }
     }
@@ -392,7 +392,7 @@ public enum RefCapsuleRenderer {
             .font: AppKitTypography.tinyCount,
             .foregroundColor: Palette.text2.resolved(in: variant),
         ])
-        drawText(text, x: frame.minX + Metrics.RefCapsule.horizontalPadding, in: frame)
+        drawText(text, x: frame.minX + Metrics.Pill.horizontalPadding, in: frame)
     }
 
     private static func drawText(_ text: NSAttributedString, x: CGFloat, in frame: CGRect) {
@@ -403,15 +403,15 @@ public enum RefCapsuleRenderer {
     // MARK: Measuring
 
     private static func capsuleWidth(_ content: RefCapsuleContent) -> CGFloat {
-        var width = Metrics.RefCapsule.horizontalPadding * 2
+        var width = Metrics.Pill.horizontalPadding * 2
         if let symbol = symbol(for: content.kind), let glyph = symbolImage(symbol, color: .labelColor) {
-            width += glyph.size.width + Metrics.RefCapsule.glyphSpacing
+            width += glyph.size.width + Metrics.Pill.glyphSpacing
         }
         // The text's parts, rounded up once, as they're drawn one after
         // another.
         var text = NSAttributedString(string: content.title, attributes: attributes(.labelColor)).size().width
         if let remote = content.remoteSuffix {
-            text += Metrics.RefCapsule.glyphSpacing * 2
+            text += Metrics.Pill.glyphSpacing * 2
             text += NSAttributedString(string: dividerText, attributes: attributes(.labelColor)).size().width
             text += NSAttributedString(string: remote, attributes: attributes(.labelColor)).size().width
         }
@@ -423,26 +423,164 @@ public enum RefCapsuleRenderer {
 
     private static func overflowWidth(_ string: String) -> CGFloat {
         let text = NSAttributedString(string: string, attributes: [.font: AppKitTypography.tinyCount])
-        return ceil(text.size().width) + Metrics.RefCapsule.horizontalPadding * 2
+        return ceil(text.size().width) + Metrics.Pill.horizontalPadding * 2
     }
 
     private static func attributes(_ color: NSColor) -> [NSAttributedString.Key: Any] {
-        [.font: AppKitTypography.refCapsule, .foregroundColor: color]
+        [.font: AppKitTypography.namePill, .foregroundColor: color]
     }
 
     /// The symbol before a kind's name.
-    private static func symbol(for kind: RefCapsuleContent.Kind) -> String? {
+    static func symbol(for kind: RefCapsuleContent.Kind) -> String? {
         switch kind {
-        case .remoteBranch: "cloud"
-        case .tag: "tag"
+        case .remoteBranch: "cloud.fill"
+        case .tag: "tag.fill"
         default: nil
         }
     }
 
     private static func symbolImage(_ name: String, color: NSColor) -> NSImage? {
-        let configuration = NSImage.SymbolConfiguration(pointSize: 9.5, weight: .semibold)
+        let configuration = NSImage.SymbolConfiguration(pointSize: Metrics.Pill.symbolSize, weight: .bold)
             .applying(.init(paletteColors: [color]))
         return NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(configuration)
+    }
+}
+
+/// A name that isn't a ref here (a pull request's branches): a candy pill
+/// of `color`, its tint behind the name in the color's deep shade.
+struct NamePill: View {
+    private let name: String
+    private let color: NSColor
+    @Environment(\.colorScheme) private var colorScheme
+
+    init(_ name: String, color: NSColor) {
+        self.name = name
+        self.color = color
+    }
+
+    var body: some View {
+        let variant: AppearanceVariant = colorScheme == .dark ? .dark : .light
+        let (fill, text) = RefCapsuleStyle.candy(color.resolved(in: variant), variant: variant)
+        Text(verbatim: name)
+            .font(Typography.namePill)
+            .foregroundStyle(Color(nsColor: text))
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .padding(.horizontal, Metrics.Pill.horizontalPadding)
+            .frame(height: Metrics.Pill.height)
+            .background(RefTagShape().fill(Color(nsColor: fill)))
+            .tooltip(name)
+    }
+}
+
+/// A candy pill AppKit rows draw (the working copy's "3 changed files"):
+/// `text` on a tint of `color`, in its deep shade.
+final class PillLabelView: NSView {
+    var text = "" {
+        didSet {
+            if text != oldValue {
+                needsDisplay = true
+            }
+        }
+    }
+
+    var color: NSColor = PlaceIdentity.changes.color {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    override var isFlipped: Bool {
+        true
+    }
+
+    /// The pill's width for its text.
+    var fittingWidth: CGFloat {
+        ceil(NSAttributedString(string: text, attributes: [.font: AppKitTypography.namePill]).size().width) + Metrics.Pill.horizontalPadding * 2
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let variant = AppearanceVariant.of(effectiveAppearance)
+        let (fill, ink) = RefCapsuleStyle.candy(color.resolved(in: variant), variant: variant)
+        fill.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
+        let string = NSAttributedString(string: text, attributes: [.font: AppKitTypography.namePill, .foregroundColor: ink])
+        let size = string.size()
+        string.draw(
+            with: CGRect(x: Metrics.Pill.horizontalPadding, y: (bounds.height - size.height) / 2, width: max(bounds.width - Metrics.Pill.horizontalPadding * 2, 0), height: size.height),
+            options: [.truncatesLastVisibleLine, .usesLineFragmentOrigin]
+        )
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+}
+
+/// Pills laid out in lines, wrapping to the next where the width runs out.
+struct RefPillFlow: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(subviews, width: proposal.width ?? .infinity)
+        let width = rows.map { $0.width }.max() ?? 0
+        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(subviews, width: bounds.width) {
+            var x = bounds.minX
+            for index in row.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(width: min(size.width, bounds.width), height: size.height))
+                x += min(size.width, bounds.width) + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private struct Row {
+        var indices: [Int] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
+        var rows: [Row] = []
+        var row = Row()
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let itemWidth = min(size.width, width)
+            let needed = row.indices.isEmpty ? itemWidth : row.width + spacing + itemWidth
+            if needed > width, !row.indices.isEmpty {
+                rows.append(row)
+                row = Row()
+            }
+            row.width = row.indices.isEmpty ? itemWidth : row.width + spacing + itemWidth
+            row.height = max(row.height, size.height)
+            row.indices.append(index)
+        }
+        if !row.indices.isEmpty {
+            rows.append(row)
+        }
+        return rows
+    }
+}
+
+extension Metrics {
+    /// Candy pills: ref tags, and the counts and SHAs beside them.
+    public enum Pill {
+        public static let height: CGFloat = 20
+        public static let horizontalPadding: CGFloat = 8
+        public static let spacing: CGFloat = 4
+        /// At most this many ref pills, then "+N".
+        public static let maximumVisible = 3
+        public static let glyphSpacing: CGFloat = 3
+        /// The symbol before a remote branch's or a tag's name.
+        public static let symbolSize: CGFloat = 9
     }
 }

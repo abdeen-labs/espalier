@@ -43,13 +43,14 @@ public struct BackgroundFailureDetails: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-            Label {
-                Text(summary.menuTitle)
-                    .font(Typography.heading)
-                    .foregroundStyle(.text)
-            } icon: {
+            HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
                 WarningGlyph()
+                    .font(Typography.popoverTitle)
+                Text(summary.menuTitle)
+                    .font(Typography.popoverTitle)
+                    .foregroundStyle(.text)
             }
+            .padding(.bottom, Metrics.grid / 2)
             MessageBlocks(summary.message)
                 .font(Typography.secondary)
                 .foregroundStyle(.text2)

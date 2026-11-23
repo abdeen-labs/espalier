@@ -79,12 +79,11 @@ nonisolated extension ThemeDefinition {
             sidebarSelectionIcon: palette.accent,
             sidebarSelectionIsBold: true,
             sectionLabel: SectionLabelStyle(isUppercase: false, size: 12, weight: .bold, tracking: 0),
-            radii: ThemeRadii(row: 12, card: 18, small: 6, tag: 9),
+            radii: ThemeRadii(row: 12, card: 18, small: 6),
             commitTitle: TitleStyle(size: 20, weight: .bold),
             buttonWeights: ButtonWeights(quiet: .semibold, prominent: .bold),
             graph: GraphStyle(lineWidth: 3, lanePitch: 17),
             refTag: RefTagStyle(alpha: (0.16, 0.24), textMix: (0.38, 0.20), ink: 0x2B2119),
-            statusBadgeShape: .circle,
             avatarShape: .circle,
             controls: ControlStyle(prominentShadow: nil, flatInCards: true, lip: 3),
             scrollEdgeFade: 24

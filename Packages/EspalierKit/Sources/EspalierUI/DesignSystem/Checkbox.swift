@@ -1,7 +1,9 @@
-// Espalier's checkbox, 15 with radius 5. Off, it's an empty box with a
-// `line2` border on the content background; on or mixed, it's filled with
-// the accent with a check or dash in the theme's marks color (`onAccent`,
-// white but on a near-white accent). One drawing, three renderers: Core
+// Espalier's checkbox: chunky, 18 with radius 6, a little key you press.
+// Off, it's the content background in a `line2` rim that's thicker along
+// the bottom; on or mixed, it's the accent standing on a lip a shade deeper,
+// with a bold check or dash in the theme's marks color (`onAccent`, white
+// but on a near-white accent). Toggled, it pops: it swells and settles back
+// (none with Reduce Motion). One drawing, three renderers: Core
 // Graphics for tables that draw their rows (the diff's hunk headers), an
 // `NSButton` for AppKit rows and headers (a checkbox to VoiceOver, mixed
 // state included), and a SwiftUI view, which a `Toggle` takes with the
@@ -49,7 +51,7 @@ nonisolated public enum CheckboxState: Sendable, Equatable, CaseIterable {
 public enum CheckboxDrawing {
     /// The box's side.
     public static var size: CGFloat {
-        Metrics.Checkbox.size
+        Metrics.Checkbox.box
     }
 
     /// Draws a checkbox filling `rect` (a square, `size` on a side) in the
@@ -73,28 +75,32 @@ public enum CheckboxDrawing {
         if !isEnabled {
             context.setAlpha(Palette.disabledOpacity)
         }
-        let radius = Metrics.Radius.small * rect.width / size
+        let scale = rect.width / size
+        let radius = Metrics.Checkbox.radius * scale
+        let box = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        // The rim (and the lip under the face), then the face on it.
+        let face = faceRect(in: rect, state: state, scale: scale, flipped: flipped)
+        let faceRadius = max(radius - Metrics.Checkbox.rim * scale, 1)
         switch state {
         case .off:
-            let box = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: radius - 0.5, yRadius: radius - 0.5)
+            Palette.line2.setFill()
+            box.fill()
             Palette.background.setFill()
-            box.fill()
-            Palette.line2.setStroke()
-            box.lineWidth = 1
-            box.stroke()
+            NSBezierPath(roundedRect: face, xRadius: faceRadius, yRadius: faceRadius).fill()
         case .on, .mixed:
-            let box = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-            Palette.accent.setFill()
+            lipColor.setFill()
             box.fill()
+            Palette.accent.setFill()
+            NSBezierPath(roundedRect: face, xRadius: radius, yRadius: radius).fill()
             Theme.current.onAccent.setStroke()
             let mark = NSBezierPath()
-            mark.lineWidth = 1.75 * rect.width / size
+            mark.lineWidth = Metrics.Checkbox.markWidth * scale
             mark.lineCapStyle = .round
             mark.lineJoinStyle = .round
             for (index, point) in markPoints(state).enumerated() {
                 let location = CGPoint(
-                    x: rect.minX + point.x * rect.width,
-                    y: flipped ? rect.minY + point.y * rect.height : rect.maxY - point.y * rect.height
+                    x: face.minX + point.x * face.width,
+                    y: flipped ? face.minY + point.y * face.height : face.maxY - point.y * face.height
                 )
                 if index == 0 {
                     mark.move(to: location)
@@ -106,7 +112,30 @@ public enum CheckboxDrawing {
         }
         if isPressed {
             NSColor.black.withAlphaComponent(Metrics.Checkbox.pressedOpacity).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            box.fill()
+        }
+    }
+
+    /// The box's face: inside the rim when off; on or mixed, the whole box
+    /// but the lip along its bottom, which it stands on.
+    static func faceRect(in rect: CGRect, state: CheckboxState, scale: CGFloat = 1, flipped: Bool) -> CGRect {
+        let lip = Metrics.Checkbox.lip * scale
+        switch state {
+        case .off:
+            let rim = Metrics.Checkbox.rim * scale
+            let inset = rect.insetBy(dx: rim, dy: rim)
+            return CGRect(x: inset.minX, y: flipped ? inset.minY : inset.minY + lip, width: inset.width, height: inset.height - lip)
+        case .on, .mixed:
+            return CGRect(x: rect.minX, y: flipped ? rect.minY : rect.minY + lip, width: rect.width, height: rect.height - lip)
+        }
+    }
+
+    /// The lip under a checked box: the accent, a shade deeper.
+    static var lipColor: NSColor {
+        let accent = Palette.accent
+        return NSColor.espalierDynamic { variant in
+            let resolved = accent.resolved(in: variant)
+            return resolved.blended(withFraction: variant.isDark ? 0.45 : 0.3, of: .black) ?? resolved
         }
     }
 
@@ -239,8 +268,9 @@ public final class CheckboxButton: NSButton {
     }
 
     /// Sets the state; when `animated` and motion runs here, the old box
-    /// crossfades into the new one over 0.15 s. Owners animate only a change
-    /// of the same item's state, never a row reused for another.
+    /// crossfades into the new one over 0.15 s, and a box without a drawn
+    /// title pops. Owners animate only a change of the same item's state,
+    /// never a row reused for another.
     public func setState(_ newState: NSControl.StateValue, animated: Bool) {
         let old = CheckboxState(state)
         state = newState
@@ -250,6 +280,34 @@ public final class CheckboxButton: NSButton {
         Motion.crossfade(layer, duration: Motion.leave)
         // Drawn now, so the crossfade takes this change of contents.
         displayIfNeeded()
+        if !drawsTitle || title.isEmpty {
+            pop()
+        }
+    }
+
+    /// Swells the box and lets it settle back, about its center: the
+    /// button's whole layer scales, so only a button that draws no title
+    /// pops.
+    private func pop() {
+        guard let layer else {
+            return
+        }
+        let box = boxRect
+        // The layer's origin is its anchor; the box is centered vertically,
+        // so its middle is the same whichever way y grows.
+        let center = CGPoint(x: box.midX, y: bounds.height / 2)
+        func scaled(_ scale: CGFloat) -> NSValue {
+            var transform = CATransform3DMakeTranslation(center.x, center.y, 0)
+            transform = CATransform3DScale(transform, scale, scale, 1)
+            transform = CATransform3DTranslate(transform, -center.x, -center.y, 0)
+            return NSValue(caTransform3D: transform)
+        }
+        let animation = CAKeyframeAnimation(keyPath: "transform")
+        animation.values = Motion.CheckboxPop.scales.map(scaled)
+        animation.keyTimes = Motion.CheckboxPop.keyTimes.map { NSNumber(value: $0) }
+        animation.duration = Motion.CheckboxPop.duration
+        animation.timingFunctions = Array(repeating: Motion.timingFunction, count: Motion.CheckboxPop.scales.count - 1)
+        layer.add(animation, forKey: "pop")
     }
 
     public override func draw(_ dirtyRect: NSRect) {
@@ -286,27 +344,43 @@ public struct CheckboxMark: View {
     }
 
     public var body: some View {
-        let size = Metrics.Checkbox.size
-        let shape = RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .circular)
-        ZStack {
-            // The fill crossfades, and the mark fades and scales in, over
-            // 0.15 s.
-            shape.fill(state == .off ? Color(espalier: Palette.background) : Color.accent)
-            if state == .off {
-                shape.strokeBorder(.line2, lineWidth: 1)
-                    .transition(motion.animates ? .opacity : .identity)
-            } else {
+        let size = CheckboxDrawing.size
+        let box = CGRect(x: 0, y: 0, width: size, height: size)
+        let face = CheckboxDrawing.faceRect(in: box, state: state, flipped: true)
+        let radius = Metrics.Checkbox.radius
+        let faceRadius = state == .off ? max(radius - Metrics.Checkbox.rim, 1) : radius
+        ZStack(alignment: .topLeading) {
+            // The rim and face crossfade, and the mark fades and scales in,
+            // over 0.15 s.
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(state == .off ? Color.line2 : Color(nsColor: CheckboxDrawing.lipColor))
+            RoundedRectangle(cornerRadius: faceRadius, style: .continuous)
+                .fill(state == .off ? Color(espalier: Palette.background) : Color.accent)
+                .frame(width: face.width, height: face.height)
+                .offset(x: face.minX, y: face.minY)
+            if state != .off {
                 Path { path in
-                    let points = CheckboxDrawing.markPoints(state).map { CGPoint(x: $0.x * size, y: $0.y * size) }
+                    let points = CheckboxDrawing.markPoints(state).map {
+                        CGPoint(x: face.minX + $0.x * face.width, y: face.minY + $0.y * face.height)
+                    }
                     path.addLines(points)
                 }
-                .stroke(Color(nsColor: Theme.current.onAccent), style: StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round))
+                .stroke(
+                    Color(nsColor: Theme.current.onAccent),
+                    style: StrokeStyle(lineWidth: Metrics.Checkbox.markWidth, lineCap: .round, lineJoin: .round)
+                )
                 .id(state)
                 .transition(motion.animates ? .scale(scale: 0.6).combined(with: .opacity) : .identity)
             }
         }
         .motion(Motion.leave, value: state)
         .frame(width: size, height: size)
+        // Toggled, the box swells and settles back.
+        .phaseAnimator(Motion.CheckboxPop.scales, trigger: state) { content, scale in
+            content.scaleEffect(scale)
+        } animation: { _ in
+            motion.animates ? .easeOut(duration: Motion.CheckboxPop.duration / Double(Motion.CheckboxPop.scales.count - 1)) : nil
+        }
         .opacity(isEnabled ? 1 : Palette.disabledOpacity)
         .accessibilityHidden(true)
     }
@@ -387,11 +461,11 @@ private struct CheckboxToggleButtonBody<Label: View>: View {
             CheckboxMark(state)
                 .overlay {
                     // A press darkens the box at once and eases back.
-                    RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .circular)
+                    RoundedRectangle(cornerRadius: Metrics.Checkbox.radius, style: .continuous)
                         .fill(.black.opacity(isPressed ? Metrics.Checkbox.pressedOpacity : 0))
                         .pressMotion(isPressed)
                 }
-                .focusRing(isFocused, in: RoundedRectangle(cornerRadius: Metrics.Radius.small, style: .circular))
+                .focusRing(isFocused, in: RoundedRectangle(cornerRadius: Metrics.Checkbox.radius, style: .continuous))
                 .alignmentGuide(.firstTextBaseline) { dimensions in
                     // The box's center on the label's first line's middle.
                     dimensions[VerticalAlignment.center] + markOffset
@@ -409,8 +483,29 @@ private struct CheckboxToggleButtonBody<Label: View>: View {
 }
 
 extension Metrics.Checkbox {
+    /// The box's side.
+    public static let box: CGFloat = 18
+    /// The box's corner radius.
+    public static let radius: CGFloat = 6
+    /// An empty box's rim.
+    public static let rim: CGFloat = 1.5
+    /// The lip along the bottom: under a checked box's face, and thickening
+    /// an empty box's rim.
+    public static let lip: CGFloat = 1.5
+    /// The check's and the dash's stroke.
+    public static let markWidth: CGFloat = 2.25
     /// Between the box and its title.
     public static let titleSpacing: CGFloat = 8
     /// Darkens the box while the mouse is down on it.
     public static let pressedOpacity: Double = 0.12
+}
+
+extension Motion {
+    /// A toggled checkbox's pop: it swells, dips a little under its size,
+    /// and settles.
+    public enum CheckboxPop {
+        nonisolated public static let scales: [CGFloat] = [1, 1.18, 0.96, 1]
+        nonisolated public static let keyTimes: [Double] = [0, 0.35, 0.7, 1]
+        nonisolated public static let duration: TimeInterval = 0.3
+    }
 }

@@ -45,15 +45,18 @@ struct CloningForm: View {
 
     var body: some View {
         VStack(spacing: Metrics.insetMedium) {
-            IconCircle("arrow.down", size: Metrics.StateIcon.size, tint: .accent)
+            Image(systemName: "arrow.down.circle")
+                .font(.system(size: CenteredMessageMetrics.largeSymbol))
+                .foregroundStyle(.text3)
+                .padding(.bottom, Metrics.grid)
                 .accessibilityHidden(true)
             Text("Cloning \(content.name)")
-                .font(Typography.sheetTitle)
+                .font(Typography.largeMessageTitle)
                 .foregroundStyle(.text)
                 .lineLimit(1)
                 .truncationMode(.middle)
             // A segment sweeps until git reports how far it has got.
-            CapsuleProgressBar(value: content.progress > 0 ? content.progress : nil)
+            CapsuleProgressBar(value: content.progress > 0 ? content.progress : nil, tint: Palette.accent)
                 .accessibilityLabel("Cloning \(content.name)")
             // The line crossfades (0.15 s) as the clone moves on to
             // cancelling or adding; git's lines replace each other at once.

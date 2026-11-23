@@ -12,30 +12,55 @@ its tokens say (Themes, below).
   personality: not elaborate, and not default controls with minimal
   touches. The system's own pieces (the window's chrome, Quick Look, the
   open and save panels) stay macOS's.
-- **Soft.** Hairline dividers, and soft shadows on things that float
-  (menus, popovers, tooltips, sheets, alerts, toasts, the operation
-  capsule) and on the panes, cream cards floating on the oat backdrop.
-- **Rounded.** Controls are capsules (buttons, the location control, search
-  fields, segmented controls, chips); ref tags, rows, cards, and sheets have
-  generous rounded corners.
+- **Soft objects, not lines.** The panes are cream cards floating on the
+  oat backdrop; inside them, cards, pills, and space group things rather
+  than rules. Soft shadows on things that float (menus, popovers,
+  tooltips, sheets, alerts, toasts, the operation capsule).
+- **Rounded and concentric.** Controls are capsules (buttons, the location
+  control, search fields, segmented controls, chips); rows, cards, and
+  sheets have generous rounded corners. What sits in a capsule's end is
+  round and inset alike on every side (the location control's branch
+  pill, a toast's badge and close button).
 - **Tactile.** Capsule buttons stand on a lip, a deeper shade of their
-  fill, and sink onto it as they're pressed.
+  fill, inside the control's height, and sink onto it as they're pressed;
+  checkboxes are chunky and pop as they're toggled.
 - **What floats is a card:** menus, popovers, and tooltips with the
   floating ring and shadow; sheets and alerts centered in the window over a
-  neutral scrim.
+  neutral scrim, led by a bold title. Toasts and the
+  operation capsule are pillows with a round, soft badge that says what
+  happened.
 - **Selection is Espalier's own:** a selected row draws its tint in its
-  rounded shape (a butter-yellow highlight, like a highlighter on paper): `selectableRow(isSelected:)` in a SwiftUI
-  list, a row view's `drawSelection` in an AppKit table.
+  rounded shape (a butter-yellow highlight, like a highlighter on
+  paper): `selectableRow(isSelected:)` in a SwiftUI list, a row view's
+  `drawSelection` in an AppKit table.
 - **The focus ring is Espalier's:** an accent ring in the control's own
   shape (`FocusRing`).
 - **Links are the accent** (`Palette.link`) in the text's own font,
   underlined while the pointer is on them.
 - **Disclosure is a chevron** before the label, right while closed and
   down while open.
-- **Text to copy** is `Text` that can be selected; multi-line text to edit
-  is a `TextEditor` on the `field` fill or a card.
-- **Places have tiles:** Changes and History in the sidebar draw their
-  symbols on colored tiles (apricot and teal).
+- **Text to copy** is `Text` that can be selected, or a pill that copies
+  (a commit's SHA); multi-line text to edit is a `TextEditor` on the
+  `field` fill or a card.
+- **Every place has a color** (`PlaceIdentity`): Changes apricot, History
+  teal, Branches blueberry, Tags honey, Stashes grape, Pull Requests plum,
+  Worktrees leaf, Remotes slate. Only Changes and History show as tiles,
+  in the sidebar and the toolbar's tabs; Settings' panes have tiles in its
+  sidebar. Elsewhere a symbol is plain, in secondary text or a status
+  color.
+- **Names are candy pills:** branches, tags, remotes, and counts are
+  fully rounded pills in a tint of their color, the current branch's
+  filled with the accent.
+- **A file's status is a tile** in a tint of its color with its letter (A,
+  M, D, R, C, U), bold, in the code font.
+- **Plain sentences:** "3 files changed", "All in the commit", "Push to
+  origin", "Up to date with origin"; a diff's hunk is "Lines 19–26" with
+  its context, git's own header in its tooltip.
+- **Pane headers are a bold title;** a commit opens with a header card.
+  Empty states are a large plain symbol, a bold title, a sentence, and the
+  actions that help.
+- **The diff's changes are highlighter blocks,** rounded and inset, and
+  its included lines a rounded pill in the gutter.
 - **Branch colors:** the current branch is the accent, the default branch
   teal; the others cycle through apricot, plum, grape, blue, and leaf,
   skipping those near the accent. A track keeps its color for its line of
@@ -65,8 +90,8 @@ palette and background. Views use the tokens, which read the current look.
 - **Default** is playful and creamy: cream cards floating on oat (cocoa
   on dark roast in dark), espresso text, the butter highlight for every
   selection, the palette's accent for the prominent action, focus, and
-  links, raised pillow controls with bold titles, round file badges, a
-  thick graph with round dots, status colors from an orchard (leaf, tomato,
+  links, raised pillow controls with bold titles, a thick graph with round
+  dots, status colors from an orchard (leaf, tomato,
   honey, grape), and lists that fade out at an edge with more beyond it.
 - **Islands** is calm and friendly: the panes float as cards on a sage
   backdrop (the floating layout), with soft pills and bold titles.

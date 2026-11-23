@@ -73,16 +73,39 @@ enum DiffTableMetrics {
     static let textInset: CGFloat = 4
     /// Space after the text.
     static let trailingInset: CGFloat = 8
-    /// A hovered expansion button's wash: inset from the button's cell, and
-    /// its corners.
-    static let expansionHoverInset: CGFloat = 2
-    static let expansionHoverRadius: CGFloat = 5
     /// The fewest columns a wrapped line gets.
     static let minimumColumns = 8
     /// The point size of gutter symbols, relative to the code font.
     static let symbolScale: CGFloat = 0.85
     /// The missing-newline symbol's.
     static let noNewlineSymbolScale: CGFloat = 0.7
+
+    /// Added and deleted lines are highlighter blocks: inset this far from
+    /// the half's trailing edge (and reaching this far before the marker),
+    /// with these corners where a run starts and ends, and a sliver of
+    /// background between two runs that meet.
+    static let blockInset: CGFloat = 6
+    static let blockRadius: CGFloat = 7
+    static let blockGap: CGFloat = 1
+    /// The included-lines pill in the numbers' gutter, and the handle's
+    /// pill: inset from their cells' sides.
+    static let gutterPillInset: CGFloat = 3
+    static let handlePillInset: CGFloat = 1.5
+    /// A hunk header's room above and below its pill, the pill's height
+    /// past the code's line, and the space inside it before and after the
+    /// label.
+    static let hunkVerticalPadding: CGFloat = 6
+    static let hunkPillPadding: CGFloat = 9
+    /// Between the pill and the function context after it.
+    static let hunkContextSpacing: CGFloat = 8
+    /// An expansion button's pillow: inset from its share of the gutter.
+    static let expansionPillowInset: CGFloat = 3
+
+    /// A hunk header's height: a line of the code's with room above and
+    /// below, so hunks read as separate passages.
+    static func hunkHeight(lineHeight: CGFloat) -> CGFloat {
+        lineHeight + 2 * hunkVerticalPadding
+    }
 }
 
 /// Where things are in a row, for a table width.

@@ -170,11 +170,11 @@ struct BranchNameLabel: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.grid) {
-            Image(systemName: "arrow.trianglehead.branch")
-                .imageScale(.small)
+            Image(systemName: PlaceIdentity.branches.systemImage)
+                .font(Typography.secondary)
                 .foregroundStyle(.text3)
             Text(name)
-                .font(Typography.sans(.title3, weight: .bold))
+                .font(Typography.paneHeading)
                 .foregroundStyle(.text)
                 .lineLimit(1)
                 .truncationMode(.middle)

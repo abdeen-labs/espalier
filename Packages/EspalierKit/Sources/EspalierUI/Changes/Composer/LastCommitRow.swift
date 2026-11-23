@@ -45,8 +45,8 @@ extension LastCommitContent {
     }
 }
 
-/// "Committed 2 minutes ago", the summary, and Undo. Another commit's row
-/// crossfades in (Changes' column sets the motion).
+/// "Committed 2 minutes ago", the summary, and Undo, on a soft card.
+/// Another commit's card crossfades in (Changes' column sets the motion).
 public struct LastCommitRow: View {
     private let content: LastCommitContent
     private let onUndo: () -> Void
@@ -72,14 +72,20 @@ public struct LastCommitRow: View {
         }
     }
 
+    /// A soft card: the commit symbol, when and what was committed, and Undo.
     private var row: some View {
-        HStack(spacing: Metrics.insetSmall) {
+        HStack(spacing: Metrics.SoftBanner.spacing) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: Metrics.SoftBanner.symbolSize, weight: .semibold))
+                .foregroundStyle(.text2)
+                .frame(width: Metrics.SoftBanner.mark)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Metrics.grid / 2) {
                 CommittedDateText(date: content.date)
                     .font(Typography.meta)
                     .foregroundStyle(.text3)
                 Text(content.summary)
-                    .font(Typography.row.weight(.medium))
+                    .font(Typography.row.weight(.semibold))
                     .foregroundStyle(.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -94,6 +100,13 @@ public struct LastCommitRow: View {
             .disabled(!content.isUndoEnabled)
             .tooltip(content.undoHelp)
         }
+        .padding(.leading, Metrics.SoftBanner.leadingPadding)
+        .padding(.trailing, Metrics.SoftBanner.trailingPadding)
+        .padding(.vertical, Metrics.insetSmall)
+        .background(
+            RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
+                .fill(Color(espalier: Palette.field))
+        )
     }
 }
 

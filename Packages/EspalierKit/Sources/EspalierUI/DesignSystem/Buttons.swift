@@ -64,8 +64,15 @@ struct CapsuleButtonAppearance {
     /// Whether the button has the destructive role: a prominent one is red.
     var isDestructive = false
 
+    /// The control's height, its lip included, so a button lines up with
+    /// a field of its size beside it.
     var height: CGFloat {
         Metrics.ControlHeight.height(for: controlSize)
+    }
+
+    /// The capsule's own height: the control's, less the lip below it.
+    var capsuleHeight: CGFloat {
+        height - (lip == nil ? 0 : Theme.current.controls.lip)
     }
 
     var horizontalPadding: CGFloat {
@@ -117,9 +124,10 @@ struct CapsuleButtonAppearance {
 
     /// The lip the capsule stands on, a deeper shade of its fill, where
     /// the theme draws one: under prominent and secondary capsules, and
-    /// quiet ones that are raised; none while disabled.
+    /// quiet ones that are raised. A disabled capsule keeps it, faded with
+    /// the rest, so its height doesn't change.
     var lip: Color? {
-        guard Theme.current.controls.lip > 0, isEnabled else {
+        guard Theme.current.controls.lip > 0 else {
             return nil
         }
         let base: NSColor? = switch kind {
@@ -198,8 +206,8 @@ struct CapsuleButtonBody<Label: View>: View {
             .foregroundStyle(appearance.foreground)
             .lineLimit(1)
             .padding(.horizontal, appearance.horizontalPadding)
-            .frame(height: appearance.height)
-            .frame(minWidth: appearance.height)
+            .frame(height: appearance.capsuleHeight)
+            .frame(minWidth: appearance.capsuleHeight)
             .surface(appearance.fill, elevation: appearance.elevation)
             .capsuleShadow(appearance.shadow)
             .motion(Motion.kindChange, value: kind)
@@ -219,8 +227,10 @@ struct CapsuleButtonBody<Label: View>: View {
 
 extension View {
     /// Stands the capsule on its lip, a capsule of `lip`'s color the
-    /// theme's lip depth below it; pressing sinks it most of the way down
-    /// at once, and it eases back up. Nil draws the capsule as it is.
+    /// theme's lip depth below it, inside the view's frame: the frame is
+    /// that much taller, so the capsule and its lip together take the
+    /// control's height. Pressing sinks it most of the way down at once,
+    /// and it eases back up. Nil draws the capsule as it is.
     func onLip(_ lip: Color?, isPressed: Bool) -> some View {
         modifier(CapsuleLipModifier(lip: lip, isPressed: isPressed))
     }
@@ -242,6 +252,7 @@ private struct CapsuleLipModifier: ViewModifier {
                         .offset(y: depth)
                 }
             }
+            .padding(.bottom, depth)
     }
 }
 
@@ -359,7 +370,7 @@ public struct SplitCapsuleButton<Label: View>: View {
         .foregroundStyle(appearance.foreground)
         .lineLimit(1)
         .padding(.trailing, 3)
-        .frame(height: appearance.height)
+        .frame(height: appearance.capsuleHeight)
         .background {
             MenuPlacementAnchor(holder: capsule)
                 .accessibilityHidden(true)

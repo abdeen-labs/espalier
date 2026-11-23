@@ -30,7 +30,7 @@ struct SettingsCaptures {
     /// header band, and the pane, as tall as its content.
     private func window(_ tab: SettingsTab, @ViewBuilder pane: () -> some View) -> some View {
         SettingsLayout(selection: .constant(tab), pane: pane)
-            .frame(width: Metrics.SettingsWindow.width)
+            .frame(width: Metrics.SettingsCards.windowWidth)
     }
 
     /// A hermetic app with a fixed number and time format, whatever this

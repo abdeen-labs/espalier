@@ -221,7 +221,19 @@ struct ChangesComposerCaptures {
         ]
         for (name, primary) in primaries {
             let content = SuggestionsContent(primary: primary, editorTitle: name == "none" ? nil : "Open in Xcode", isGitHub: true)
-            capture(NoChangesSuggestions(content), named: "suggestions-\(name)", area: area, size: CGSize(width: 640, height: 520))
+            capture(NoChangesSuggestions(content), named: "suggestions-\(name)", area: area, size: CGSize(width: 640, height: 560))
         }
+    }
+
+    // MARK: Several files
+
+    @Test("several files selected: their actions, and while committing")
+    func multipleSelection() {
+        let title = MultipleSelectionContent.title(count: 3, numberFormat: defaultNumberFormat)
+        capture(MultipleSelectionView(MultipleSelectionContent(title: title)), named: "multiple-selection", area: area, size: CGSize(width: 640, height: 420))
+        capture(
+            MultipleSelectionView(MultipleSelectionContent(title: title, canChangeInclusion: false, canDiscard: false)),
+            named: "multiple-selection-committing", area: area, size: CGSize(width: 640, height: 420)
+        )
     }
 }

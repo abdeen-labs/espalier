@@ -1,17 +1,21 @@
 // Drawing one row of the diff table. A row view draws its whole row: the
-// tints (added and deleted lines, faint for a line left out, conflict
-// regions), the line numbers (while lines can be staged, an included
-// changed line's number cells are tinted with the accent), the handle
-// beside changed lines (the accent for a line the commit includes, `line2`
-// for one left out), the "+" and "−" markers, intra-line ranges, find's
-// matches, the text selection, and the text with syntax colors, faded on a
-// line left out. Hunk headers are `hunk` rows: the expansion buttons in the
-// numbers' gutter, the checkbox, and git's header line in the code font. A
-// conflicted file drawn as blocks tints each block's lines with its
-// branch's color, under a header row in a stronger tint: the side's name in
-// its color, and its Use <branch>'s Version button, a small quiet capsule
-// at the trailing edge (the common ancestor's block is neutral, without
-// one).
+// highlighter blocks behind added and deleted lines (faint for a line left
+// out) and conflict regions, inset from the edges and rounded where a run
+// starts and ends, each row drawing its part of the run's shape; the line
+// numbers, soft (a changed line's in its add or delete color; while lines
+// can be staged, an included run's numbers sit on an accent pill); the
+// handle beside changed lines, a pill down each change block (the accent
+// for a line the commit includes, `line2` for one left out); the "+" and
+// "−" markers, intra-line ranges, find's matches, the text selection, and
+// the text with syntax colors, faded on a line left out. Hunk headers are
+// `hunk` rows, taller than a line: the expansion buttons as chevrons on
+// pillows in the numbers' gutter, the checkbox, then a soft pill saying
+// which lines the hunk shows ("Lines 19–26") and git's function context
+// after it (git's own header line is the row's tooltip). A conflicted file
+// drawn as blocks gives each block its branch's color, a rounded card
+// under a header row in a stronger tint: the side's name in its color, and
+// its Use <branch>'s Version button at the trailing edge (the common
+// ancestor's block is neutral, without one).
 // Text is drawn with Core Text at monospace columns: runs of printable
 // ASCII as one line, other characters glyph by glyph at their columns, so
 // wide and fallback glyphs never shift the columns hit-testing assumes.
@@ -150,22 +154,31 @@ struct DiffRowRenderer {
         let half = geometry.half(side)
         let included = controller.isIncluded(line: line)
 
-        // The tint.
-        if let tint = tint(for: documentLine, included: included) {
-            tint.setFill()
-            rect(spanning: half.extent).fill(using: .sourceOver)
+        // The highlighter block, this row's part of its run.
+        if let kind = blockKind(ofLine: line) {
+            fillBlock(
+                blockExtent(half, kind: kind),
+                color: color(of: kind),
+                joinsAbove: joins(kind, row: row - 1, side: side),
+                joinsBelow: joins(kind, row: row + 1, side: side)
+            )
         }
 
         // Line numbers: while lines can be staged, a changed line's cells
         // show whether it's included.
         if let included, documentLine.isChange {
-            drawNumberCells(half, included: included, isHovered: isGutterHovered(side: side, documentRow: documentRow))
+            drawNumberCells(half, side: side, included: included, isHovered: isGutterHovered(side: side, documentRow: documentRow))
+        }
+        let numberColor = switch documentLine.type {
+        case .add: DiffColors.addedLineNumber
+        case .delete: DiffColors.deletedLineNumber
+        case .context, .hunk: DiffColors.lineNumber
         }
         if let oldNumber = half.oldNumber, documentLine.oldNumber > 0, documentLine.type != .add {
-            drawNumber(documentLine.oldNumber, in: oldNumber)
+            drawNumber(documentLine.oldNumber, color: numberColor, in: oldNumber)
         }
         if let newNumber = half.newNumber, documentLine.newNumber > 0, documentLine.type != .delete {
-            drawNumber(documentLine.newNumber, in: newNumber)
+            drawNumber(documentLine.newNumber, color: numberColor, in: newNumber)
         }
 
         // The marker.
@@ -181,12 +194,39 @@ struct DiffRowRenderer {
         drawText(line: line, side: side, half: half, excluded: included == false)
     }
 
-    /// The fill behind a line: added or deleted, faint when left out; a
-    /// conflicted file's regions instead (in blocks, each side's branch's
-    /// color).
-    private func tint(for line: DocumentLine, included: Bool?) -> NSColor? {
-        if let conflict = line.conflict {
-            if let blocks = controller.shownContent?.conflicts, document.isWorkingFile {
+    // MARK: Highlighter blocks
+
+    /// What a line's block is: added or deleted (faint when left out), or a
+    /// conflicted file's region.
+    private enum BlockKind: Equatable {
+        case added(excluded: Bool)
+        case deleted(excluded: Bool)
+        case conflict(ConflictRegion)
+    }
+
+    /// The block behind a line, or nil for a context line.
+    private func blockKind(ofLine line: Int) -> BlockKind? {
+        let documentLine = document.lines[line]
+        if let conflict = documentLine.conflict {
+            return .conflict(conflict)
+        }
+        switch documentLine.type {
+        case .add: return .added(excluded: controller.isIncluded(line: line) == false)
+        case .delete: return .deleted(excluded: controller.isIncluded(line: line) == false)
+        case .context, .hunk: return nil
+        }
+    }
+
+    /// A block's fill: added or deleted, faint when left out; a conflicted
+    /// file's regions (in blocks, each side's branch's color).
+    private func color(of kind: BlockKind) -> NSColor {
+        switch kind {
+        case .added(let excluded):
+            return excluded ? DiffColors.excludedAddedLine : DiffColors.addedLine
+        case .deleted(let excluded):
+            return excluded ? DiffColors.excludedDeletedLine : DiffColors.deletedLine
+        case .conflict(let conflict):
+            if isConflictBlocks, let blocks = controller.shownContent?.conflicts {
                 switch conflict {
                 case .marker: return DiffColors.conflictMarker
                 case .ours: return DiffColors.conflictBlockLine(blocks.ours.color)
@@ -201,23 +241,79 @@ struct DiffRowRenderer {
             case .theirs: return DiffColors.theirs
             }
         }
-        switch line.type {
-        case .add:
-            return included == false ? DiffColors.excludedAddedLine : DiffColors.addedLine
-        case .delete:
-            return included == false ? DiffColors.excludedDeletedLine : DiffColors.deletedLine
-        case .context, .hunk:
+    }
+
+    /// A conflicted file drawn as blocks, under their headers.
+    private var isConflictBlocks: Bool {
+        controller.shownContent?.conflicts != nil && document.isWorkingFile
+    }
+
+    /// The line a row shows on a side, when the row is a line's.
+    private func line(inRow other: Int, side: DiffColumn) -> Int? {
+        guard document.rows.indices.contains(other) else {
+            return nil
+        }
+        let documentRow = document.rows[other]
+        switch documentRow.kind {
+        case .context, .added, .deleted, .modified:
+            return document.isSplit ? documentRow.line(side) : documentRow.unifiedLine
+        case .hunk, .noNewline, .conflictHeader:
             return nil
         }
     }
 
+    /// Whether the block on a side of this row runs on into another row:
+    /// that row's line has a block of the same kind (a conflict block's
+    /// first line joins its header above).
+    private func joins(_ kind: BlockKind, row other: Int, side: DiffColumn) -> Bool {
+        if case .conflict = kind, isConflictBlocks, other < row, document.rows.indices.contains(other),
+           document.rows[other].kind == .conflictHeader {
+            return true
+        }
+        guard let line = line(inRow: other, side: side) else {
+            return false
+        }
+        return blockKind(ofLine: line) == kind
+    }
+
+    /// Where a half's block runs: from just before the marker to a little
+    /// short of the half's end, the numbers left on the background; a
+    /// conflict block's across the whole half, its numbers too.
+    private func blockExtent(_ half: DiffRowGeometry.Half, kind: BlockKind) -> ClosedRange<CGFloat> {
+        let inset = DiffTableMetrics.blockInset
+        if case .conflict = kind, isConflictBlocks {
+            return (half.extent.lowerBound + inset)...max(half.extent.lowerBound + inset, half.extent.upperBound - inset)
+        }
+        let lower = half.marker.lowerBound - DiffTableMetrics.textInset
+        let upper = half.text.upperBound + DiffTableMetrics.trailingInset - inset
+        return lower...max(lower, upper)
+    }
+
+    /// Fills this row's part of a block: its ends rounded where the run
+    /// starts or ends there, with a sliver of background between runs that
+    /// meet.
+    private func fillBlock(_ range: ClosedRange<CGFloat>, color: NSColor, joinsAbove: Bool, joinsBelow: Bool) {
+        var block = rect(spanning: range)
+        let gap = DiffTableMetrics.blockGap
+        if !joinsAbove {
+            block.origin.y += gap
+            block.size.height -= gap
+        }
+        if !joinsBelow {
+            block.size.height -= gap
+        }
+        let radius = DiffTableMetrics.blockRadius
+        color.setFill()
+        NSBezierPath.roundedEnds(block, minYRadius: joinsAbove ? 0 : radius, maxYRadius: joinsBelow ? 0 : radius).fill()
+    }
+
     /// Whether a click would toggle a changed line on a side of this row:
     /// the pointer is on its numbers, or on its block's handle.
-    private func isGutterHovered(side: DiffColumn, documentRow: DocumentRow) -> Bool {
+    private func isGutterHovered(side: DiffColumn, documentRow: DocumentRow, row: Int? = nil) -> Bool {
         if documentRow.block >= 0, controller.hoveredBlock == Int(documentRow.block) {
             return true
         }
-        guard let hovered = controller.hoveredLine, hovered.row == row else {
+        guard let hovered = controller.hoveredLine, hovered.row == row ?? self.row else {
             return false
         }
         return !document.isSplit || hovered.column == side
@@ -240,10 +336,11 @@ struct DiffRowRenderer {
         CGRect(x: divider, y: 0, width: 1, height: bounds.height).fill()
     }
 
-    /// The handle beside a row's changed lines while lines can be staged:
-    /// the accent for a line the commit includes, `line2` for one left out
-    /// (a split row whose two lines differ shows each in its half of the
-    /// bar), washed while the pointer is on its block's handle.
+    /// The handle beside a row's changed lines while lines can be staged: a
+    /// pill down the change block, rounded at its first and last rows, the
+    /// accent for a line the commit includes, `line2` for one left out (a
+    /// split row whose two lines differ shows each in its half of the
+    /// pill), washed while the pointer is on its block's handle.
     private func drawHandle(_ documentRow: DocumentRow) {
         guard let handle = geometry.handle, documentRow.isChange else {
             return
@@ -255,20 +352,37 @@ struct DiffRowRenderer {
         guard let first = states.first, let last = states.last else {
             return
         }
-        let bar = rect(spanning: handle)
+        func inBlock(_ other: Int) -> Bool {
+            documentRow.block >= 0 && document.rows.indices.contains(other) && document.rows[other].block == documentRow.block
+        }
+        let joinsAbove = inBlock(row - 1)
+        let joinsBelow = inBlock(row + 1)
+        var bar = rect(spanning: handle).insetBy(dx: DiffTableMetrics.handlePillInset, dy: 0)
+        if !joinsAbove {
+            bar.origin.y += DiffTableMetrics.blockGap
+            bar.size.height -= DiffTableMetrics.blockGap
+        }
+        if !joinsBelow {
+            bar.size.height -= DiffTableMetrics.blockGap
+        }
+        let radius = bar.width / 2
+        let pill = NSBezierPath.roundedEnds(bar, minYRadius: joinsAbove ? 0 : radius, maxYRadius: joinsBelow ? 0 : radius)
         if first == last {
             handleColor(first).setFill()
-            bar.fill()
+            pill.fill()
         } else {
             let (left, right) = bar.divided(atDistance: bar.width / 2, from: .minXEdge)
-            handleColor(first).setFill()
-            left.fill()
-            handleColor(last).setFill()
-            right.fill()
+            for (part, included) in [(left, first), (right, last)] {
+                NSGraphicsContext.saveGraphicsState()
+                part.clip()
+                handleColor(included).setFill()
+                pill.fill()
+                NSGraphicsContext.restoreGraphicsState()
+            }
         }
         if documentRow.block >= 0, controller.hoveredBlock == Int(documentRow.block) {
             DiffColors.gutterHover.setFill()
-            bar.fill(using: .sourceOver)
+            pill.fill()
         }
     }
 
@@ -279,23 +393,27 @@ struct DiffRowRenderer {
     // MARK: Hunk headers
 
     /// A hunk header: the expansion buttons in the numbers' gutter, the
-    /// checkbox while lines can be staged, then git's header line.
+    /// checkbox while lines can be staged, then the pill saying which lines
+    /// the hunk shows, and git's function context.
     private func drawHunk(_ documentRow: DocumentRow) {
-        DiffColors.hunkHeaderBackground.setFill()
-        bounds.fill()
-
         let hunkIndex = Int(documentRow.hunk)
         let hunk = document.hunks[hunkIndex]
+        // A line's height, centered in the taller row: the pills' band.
+        let band = CGRect(x: 0, y: ((bounds.height - font.lineHeight) / 2).rounded(), width: bounds.width, height: font.lineHeight)
+
         let buttons = DiffHunkButton.buttons(for: hunk.expansionType)
-        for (button, rect) in zip(buttons, geometry.expansionButtonRects(count: buttons.count, rowHeight: bounds.height)) {
+        for (button, cell) in zip(buttons, geometry.expansionButtonRects(count: buttons.count, rowHeight: bounds.height)) {
             let isHovered = controller.hoveredButton.map { $0.hunk == hunkIndex && $0.button == button } ?? false
+            let inset = min(DiffTableMetrics.expansionPillowInset, max((cell.width - band.height) / 2, 1))
+            let pillow = CGRect(x: cell.minX + inset, y: band.minY, width: max(cell.width - inset * 2, 0), height: band.height)
+            let shape = NSBezierPath(roundedRect: pillow, xRadius: min(pillow.height, pillow.width) / 2, yRadius: min(pillow.height, pillow.width) / 2)
+            DiffColors.expansionPillow.setFill()
+            shape.fill()
             if isHovered {
-                DiffColors.expansionButtonHover.setFill()
-                let inset = rect.insetBy(dx: DiffTableMetrics.expansionHoverInset, dy: DiffTableMetrics.expansionHoverInset)
-                let radius = DiffTableMetrics.expansionHoverRadius
-                NSBezierPath(roundedRect: inset, xRadius: radius, yRadius: radius).fill()
+                DiffColors.gutterHover.setFill()
+                shape.fill()
             }
-            drawSymbol(button.systemImage, color: isHovered ? DiffColors.expansionButtonHovered : DiffColors.expansionButton, in: rect, weight: .semibold)
+            drawSymbol(button.systemImage, color: isHovered ? DiffColors.expansionButtonHovered : DiffColors.expansionButton, in: pillow, weight: .bold)
         }
 
         if let checkbox = geometry.hunkCheckbox, let inclusion = controller.inclusion(ofHunk: hunk) {
@@ -320,15 +438,27 @@ struct DiffRowRenderer {
             return
         }
         let index = Int(documentRow.before)
-        let header = controller.textCache.header(
+        let labelFont = AppKitTypography.hunkLabel
+        let header = controller.textCache.hunkHeader(
             line: index,
-            text: document.lines[index].text,
-            color: DiffColors.hunkHeaderText,
-            font: controller.codeFont
+            words: {
+                HunkHeaderWords(header: hunk.header, text: document.lines[index].text, isBottomDummy: hunk.isBottomDummy, numberFormat: controller.numberFormat)
+            },
+            labelFont: labelFont,
+            labelColor: DiffColors.hunkPillText,
+            contextFont: controller.codeFont,
+            contextColor: DiffColors.hunkContext
         )
         context.saveGState()
         context.clip(to: CGRect(x: start, y: 0, width: end - start, height: bounds.height))
-        drawLine(header, x: start, baseline: font.baseline)
+        let padding = DiffTableMetrics.hunkPillPadding
+        let pill = CGRect(x: start, y: band.minY, width: header.labelWidth + padding * 2, height: band.height)
+        DiffColors.hunkPill.setFill()
+        NSBezierPath(roundedRect: pill, xRadius: pill.height / 2, yRadius: pill.height / 2).fill()
+        drawLine(header.label, x: pill.minX + padding, baseline: band.minY + centeredBaseline(of: labelFont, in: band.height))
+        if let functionContext = header.context {
+            drawLine(functionContext, x: pill.maxX + DiffTableMetrics.hunkContextSpacing, baseline: band.minY + font.baseline)
+        }
         context.restoreGState()
     }
 
@@ -346,8 +476,14 @@ struct DiffRowRenderer {
             return
         }
         let side = blocks.side(header.side)
-        (side.map { DiffColors.conflictBlockHeader($0.color) } ?? DiffColors.baseBlockHeader).setFill()
-        bounds.fill(using: .sourceOver)
+        // The top of the block's card, its lines' part of it below.
+        let inset = DiffTableMetrics.blockInset
+        fillBlock(
+            inset...max(inset, geometry.width - inset),
+            color: side.map { DiffColors.conflictBlockHeader($0.color) } ?? DiffColors.baseBlockHeader,
+            joinsAbove: false,
+            joinsBelow: header.lineCount > 0
+        )
 
         let button = controller.conflictButtonRect(ofRow: row, rowHeight: bounds.height)
         let nameStart = geometry.before.text.lowerBound
@@ -578,28 +714,49 @@ struct DiffRowRenderer {
 
     // MARK: Gutter pieces
 
-    /// A changed line's number cells while lines can be staged: tinted
-    /// with the accent over the background while the commit includes the
-    /// line, the whole row high so included lines join into one band; a
-    /// wash over them while a click there or on the block's handle would
-    /// toggle the line.
-    private func drawNumberCells(_ half: DiffRowGeometry.Half, included: Bool, isHovered: Bool) {
-        let cells = rect(spanning: half.gutter)
+    /// A changed line's number cells while lines can be staged: an accent
+    /// pill behind an included run's numbers, each row drawing its part, so
+    /// included lines join into one pill; a wash in the same shape while a
+    /// click there or on the block's handle would toggle the line.
+    private func drawNumberCells(_ half: DiffRowGeometry.Half, side: DiffColumn, included: Bool, isHovered: Bool) {
+        let cells = rect(spanning: half.gutter).insetBy(dx: DiffTableMetrics.gutterPillInset, dy: 0)
+        func pill(joining joins: (Int) -> Bool) -> NSBezierPath {
+            let joinsAbove = joins(row - 1)
+            let joinsBelow = joins(row + 1)
+            var shape = cells
+            if !joinsAbove {
+                shape.origin.y += DiffTableMetrics.blockGap
+                shape.size.height -= DiffTableMetrics.blockGap
+            }
+            if !joinsBelow {
+                shape.size.height -= DiffTableMetrics.blockGap
+            }
+            let radius = DiffTableMetrics.blockRadius
+            return NSBezierPath.roundedEnds(shape, minYRadius: joinsAbove ? 0 : radius, maxYRadius: joinsBelow ? 0 : radius)
+        }
         if included {
-            Palette.background.setFill()
-            cells.fill()
             DiffColors.includedNumberCell.setFill()
-            cells.fill(using: .sourceOver)
+            pill { other in
+                guard let line = line(inRow: other, side: side) else {
+                    return false
+                }
+                return document.lines[line].isChange && controller.isIncluded(line: line) == true
+            }.fill()
         }
         if isHovered {
             DiffColors.gutterHover.setFill()
-            cells.fill(using: .sourceOver)
+            pill { other in
+                guard let line = line(inRow: other, side: side), document.lines[line].isChange else {
+                    return false
+                }
+                return isGutterHovered(side: side, documentRow: document.rows[other], row: other)
+            }.fill()
         }
     }
 
     /// A line number, right-aligned in its column.
-    private func drawNumber(_ number: Int, in range: ClosedRange<CGFloat>) {
-        let line = controller.textCache.number(number, color: DiffColors.lineNumber, font: numberFont)
+    private func drawNumber(_ number: Int, color: NSColor, in range: ClosedRange<CGFloat>) {
+        let line = controller.textCache.number(number, color: color, font: numberFont)
         let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
         drawLine(line, x: (range.upperBound - DiffTableMetrics.numberPadding - width).rounded(), baseline: font.baseline)
     }
@@ -627,12 +784,19 @@ struct DiffRowRenderer {
 
     // MARK: The cursor
 
+    /// The keyboard's line cursor: a highlighter over its rows, inset
+    /// from the edges, rounded where its run starts and ends.
     private func drawCursor() {
         guard let rows = controller.cursorRows, rows.contains(row) else {
             return
         }
+        let joinsAbove = rows.contains(row - 1)
+        let joinsBelow = rows.contains(row + 1)
+        let inset = DiffTableMetrics.handlePillInset
+        let shape = bounds.insetBy(dx: inset, dy: 0)
+        let radius = DiffTableMetrics.blockRadius
         DiffColors.cursor.setFill()
-        bounds.fill(using: .sourceOver)
+        NSBezierPath.roundedEnds(shape, minYRadius: joinsAbove ? 0 : radius, maxYRadius: joinsBelow ? 0 : radius).fill()
     }
 
     // MARK: Attributes

@@ -1,6 +1,6 @@
 // The call to action on a branch's Ahead, the one place a merge, a squash
-// and merge, or a rebase between the current branch and another starts: the
-// status line saying what the method would do (`CompareModel.statusMessage`)
+// and merge, or a rebase between the current branch and another starts, on
+// a card: the status line saying what the method would do (`CompareModel.statusMessage`)
 // with its symbol, and the method's split button, whose menu switches the
 // method. The Branch menu's commands, their shortcuts, the branch rows'
 // menus, and the branch popover's merge all lead here (BranchActions).
@@ -53,7 +53,7 @@ struct MergeCallToActionActions {
 }
 
 /// The status line and the method's split button, prominent as the place's
-/// one action.
+/// one action, together on a card.
 struct MergeCallToAction: View {
     let content: MergeCallToActionContent
     var actions = MergeCallToActionActions()
@@ -67,6 +67,10 @@ struct MergeCallToAction: View {
                 start: actions.start
             )
         }
+        .padding(.leading, Metrics.insetMedium)
+        .padding(.trailing, Metrics.insetSmall)
+        .padding(.vertical, Metrics.insetSmall)
+        .cardSurface()
     }
 }
 

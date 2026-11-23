@@ -1,6 +1,6 @@
 // The sidebar's Pull Requests section, for a GitHub repository with a
 // matching account: the open pull requests newest first, a spinner while
-// they refresh, "No Open Pull Requests" when there are none, Refresh Pull
+// they refresh, "No pull requests are open." when there are none, Refresh Pull
 // Requests, and the row menu (Check Out, Check Out in New Worktree…, View
 // Pull Request on GitHub). Rows filter with the sidebar's filter (title,
 // number, or author), keep their checks loaded while they show, and take
@@ -28,9 +28,10 @@ public struct PullRequestsSection: View {
             SidebarSection(id: "pullRequests") {
                 if pullRequests.isEmpty {
                     if filter.isEmpty, !gitHub.isLoadingPullRequests {
-                        Text("No Open Pull Requests")
+                        Text("No pull requests are open.")
                             .font(Typography.row)
                             .foregroundStyle(.text3)
+                            .padding(.leading, Metrics.grid)
                             .selectionDisabled()
                             .sidebarRow(nil)
                     }

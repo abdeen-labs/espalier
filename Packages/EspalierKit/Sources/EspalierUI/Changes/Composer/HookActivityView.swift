@@ -60,33 +60,47 @@ public struct HookActivityView: View {
     }
 
     public var body: some View {
-        // One line when it fits; else the buttons go under the text.
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: Metrics.insetSmall) {
-                status
-                    .fixedSize()
-                Spacer(minLength: Metrics.insetSmall)
-                buttons
-            }
-            VStack(alignment: .leading, spacing: Metrics.grid) {
-                status
+        // A banner in the status's color; one line when it fits, else the
+        // buttons go under the text.
+        SoftBanner(color: color) {
+            statusGlyph
+        } message: {
+            ViewThatFits(in: .horizontal) {
                 HStack(spacing: Metrics.insetSmall) {
-                    Spacer(minLength: 0)
+                    status
+                        .fixedSize()
+                    Spacer(minLength: Metrics.insetSmall)
                     buttons
+                }
+                VStack(alignment: .leading, spacing: Metrics.grid) {
+                    status
+                    HStack(spacing: Metrics.insetSmall) {
+                        Spacer(minLength: 0)
+                        buttons
+                    }
                 }
             }
         }
+        .motion(Motion.leave, value: content.status)
         .accessibilityElement(children: .contain)
     }
 
-    private var status: some View {
-        HStack(spacing: Metrics.insetSmall) {
-            statusGlyph
-            Text(content.text)
-                .font(Typography.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+    /// The banner's color: the accent while the hook runs, then leaf or
+    /// tomato.
+    private var color: NSColor {
+        switch content.status {
+        case .running: Palette.accent
+        case .finished: Palette.success
+        case .failed: Palette.error
         }
+    }
+
+    private var status: some View {
+        Text(content.text)
+            .font(Typography.secondary.weight(.medium))
+            .foregroundStyle(.text)
+            .lineLimit(1)
+            .truncationMode(.middle)
     }
 
     private var buttons: some View {
@@ -116,18 +130,14 @@ public struct HookActivityView: View {
         return ZStack {
             switch content.status {
             case .running:
-                ArcProgress(.mini)
+                ArcProgress(.small, tint: Palette.accent)
                     .accessibilityHidden(true)
                     .transition(fade)
             case .finished:
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color(espalier: Palette.success))
-                    .accessibilityHidden(true)
+                SoftBannerSymbol("checkmark.circle.fill", color: Palette.success)
                     .transition(fade)
             case .failed:
-                Image(systemName: "xmark.octagon.fill")
-                    .foregroundStyle(Color(espalier: Palette.error))
-                    .accessibilityHidden(true)
+                SoftBannerSymbol("xmark.circle.fill", color: Palette.error)
                     .transition(fade)
             }
         }

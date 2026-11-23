@@ -1,7 +1,9 @@
 // Espalier's flat surfaces and shadows. Surfaces are opaque; only things
 // that float (toasts, the operation capsule, popovers, sheets) cast a
 // shadow, and quiet capsule buttons a small one, as push buttons do. Cards
-// in a pane have the ring alone. No glass or materials of Espalier's own.
+// in a pane have the ring alone. Toasts and the operation capsule are
+// pillows, standing on a lip as buttons do. No glass or materials of
+// Espalier's own.
 
 import AppKit
 import SwiftUI
@@ -11,7 +13,8 @@ nonisolated public enum Elevation: Sendable, CaseIterable {
     /// Cards in a pane: the 1-point ring, no shadow.
     case card
     /// Quiet capsule controls: the ring and a small shadow, as push
-    /// buttons have.
+    /// buttons have; the ring alone where the theme stands controls on a
+    /// lip, which raises them instead.
     case quiet
     /// Things that float (toasts, the operation capsule): the ring and a
     /// soft, wide shadow.
@@ -19,9 +22,9 @@ nonisolated public enum Elevation: Sendable, CaseIterable {
     /// Sheets.
     case sheet
 
-    /// The 1-point ring around the shape: black 8% (white 9% in dark). A
-    /// sheet's is drawn in dark alone, white 10%, where its shadow doesn't
-    /// show.
+    /// The 1-point ring just inside the shape's edge, so it adds nothing
+    /// to the shape's size: black 8% (white 9% in dark). A sheet's is drawn
+    /// in dark alone, white 10%, where its shadow doesn't show.
     public var ring: NSColor? {
         switch self {
         case .card, .quiet, .floating:
@@ -43,7 +46,7 @@ nonisolated public enum Elevation: Sendable, CaseIterable {
         case .card:
             nil
         case .quiet:
-            .espalierDynamic(light: NSColor.black.withAlphaComponent(0.08), dark: NSColor.black.withAlphaComponent(0.4))
+            Theme.current.controls.lip > 0 ? nil : .espalierDynamic(light: NSColor.black.withAlphaComponent(0.08), dark: NSColor.black.withAlphaComponent(0.4))
         case .floating:
             .espalierDynamic(light: NSColor.black.withAlphaComponent(0.12), dark: NSColor.black.withAlphaComponent(0.45))
         case .sheet:
@@ -98,8 +101,7 @@ struct SurfaceModifier<S: InsettableShape>: ViewModifier {
             .overlay {
                 if let ring = elevation?.ring {
                     shape
-                        .inset(by: -0.5)
-                        .stroke(Color(nsColor: ring), lineWidth: 1)
+                        .strokeBorder(Color(nsColor: ring), lineWidth: 1)
                         .allowsHitTesting(false)
                 }
             }
@@ -174,4 +176,52 @@ public struct Hairline: View {
             .frame(width: axis == .vertical ? 1 : nil, height: axis == .horizontal ? 1 : nil)
             .accessibilityHidden(true)
     }
+}
+
+// MARK: - Pillows
+
+extension View {
+    /// Floats the view on a chunky pillow: the cream capsule with the
+    /// floating ring and shadow, standing on a lip a shade deeper than the
+    /// cream where the theme gives controls one. Toasts and the operation
+    /// capsule.
+    public func pillowSurface(in shape: some InsettableShape = Capsule(style: .circular)) -> some View {
+        modifier(PillowSurface(shape: shape))
+    }
+}
+
+private struct PillowSurface<S: InsettableShape>: ViewModifier {
+    let shape: S
+
+    func body(content: Content) -> some View {
+        let depth = Theme.current.controls.lip
+        content
+            .surface(.quiet, elevation: .floating, in: shape)
+            .background {
+                if depth > 0 {
+                    shape
+                        .fill(Color(nsColor: Palette.line2))
+                        .offset(y: depth)
+                }
+            }
+    }
+}
+
+extension Metrics {
+    /// Toasts and the operation capsule as pillows.
+    public enum Pillow {
+        /// The least a pillow is high: its badge, concentric with its end.
+        public static let height: CGFloat = 50
+        /// Between a pillow's parts.
+        public static let spacing: CGFloat = 12
+        /// A toast's round close button.
+        public static let closeSize: CGFloat = 26
+    }
+}
+
+extension Typography {
+    /// A toast's or the operation capsule's sentence (13, medium).
+    public static var pillowMessage: Font { sans(.body, weight: .medium) }
+    /// The detail under the operation capsule's sentence (12).
+    public static var pillowDetail: Font { secondary }
 }

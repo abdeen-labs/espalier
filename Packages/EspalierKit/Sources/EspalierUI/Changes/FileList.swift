@@ -249,7 +249,7 @@ struct FileTable: NSViewRepresentable {
         tableView.focusRingType = .none
         tableView.intercellSpacing = .zero
         tableView.gridStyleMask = []
-        tableView.rowHeight = Metrics.FileList.rowHeight
+        tableView.rowHeight = FileRowMetrics.rowHeight
         tableView.usesAutomaticRowHeights = false
         tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         tableView.allowsMultipleSelection = table.allowsMultipleSelection
@@ -899,22 +899,22 @@ struct HiddenChangesNote: View {
     let onShow: () -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(Color(espalier: Palette.warning))
-                .accessibilityLabel("Warning")
-            // The note takes the room the button leaves before it wraps.
+        // A honey banner; the note takes the room the button leaves before
+        // it wraps.
+        SoftBanner(color: Palette.warningMark) {
+            SoftBannerSymbol("eye.slash", color: Palette.warningMark)
+        } message: {
             Text(text)
-                .font(Typography.secondary)
+                .font(Typography.secondary.weight(.medium))
+                .foregroundStyle(.text)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("Warning: \(text)")
+        } accessory: {
             Button("Show", action: onShow)
                 .buttonStyle(.quiet)
                 .controlSize(.small)
                 .tooltip("Show the files the commit includes")
         }
-        .padding(.horizontal, FileRowMetrics.contentInset)
-        .padding(.vertical, Metrics.insetSmall)
         .accessibilityElement(children: .contain)
     }
 
@@ -1150,7 +1150,7 @@ struct ChangesController {
 extension ChangesTableView: LookChangeObserving {
     /// The rows' height and the background follow the look.
     func lookDidChange() {
-        rowHeight = Metrics.FileList.rowHeight
+        rowHeight = FileRowMetrics.rowHeight
         backgroundColor = Palette.background
         enclosingScrollView?.backgroundColor = Palette.background
     }

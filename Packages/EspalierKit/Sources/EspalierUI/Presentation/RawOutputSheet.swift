@@ -1,6 +1,6 @@
-// Git's raw output, shown monospaced and scrolled to the end, in a box as
-// tall as the output up to `Metrics.Sheet.terminalHeight`, then scrolling,
-// never past its ends.
+// Git's raw output, shown monospaced and scrolled to the end, in a soft
+// code card as tall as the output up to `Metrics.Sheet.terminalHeight`,
+// then scrolling, never past its ends.
 
 import AppKit
 import SwiftUI
@@ -33,21 +33,28 @@ public struct TerminalOutputView: View {
             .accessibilityValue(text)
         }
         .foregroundStyle(.text)
-        .background(Color(espalier: Palette.hunk))
-        .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-                .strokeBorder(.line, lineWidth: 1)
-        )
+        .background(Color(espalier: Palette.field))
+        .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
     }
 
     private var output: some View {
         Text(text.isEmpty ? " " : text)
             .font(Typography.terminal)
+            .lineSpacing(Metrics.CodeCard.lineSpacing)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding(Metrics.insetSmall)
+            .padding(Metrics.CodeCard.padding)
+    }
+}
+
+extension Metrics {
+    /// Raw output in a soft code card.
+    public enum CodeCard {
+        /// Around the output, inside the card.
+        public static let padding: CGFloat = 14
+        /// Between the output's lines.
+        public static let lineSpacing: CGFloat = 3
     }
 }
 

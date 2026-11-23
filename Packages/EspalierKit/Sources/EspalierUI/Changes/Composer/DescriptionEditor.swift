@@ -31,7 +31,7 @@ struct ComposerMenuItem {
 /// The commit description.
 struct DescriptionEditor: NSViewRepresentable {
     @Binding var text: String
-    var placeholder = "Description"
+    var placeholder = "Add more detail (optional)"
     var isEditable = true
     var isSpellCheckingEnabled = true
     var completions: ComposerCompletions = .none

@@ -1,11 +1,11 @@
-// Outcomes and notices as toasts: a success's symbol is green, a notice's
-// (a refusal, something the app did on its own) is gray. Their copy is the
-// state layer's; they last 5 s,
-// or 15 s with Undo, counted once the pointer leaves the toast, and the
-// close button dismisses one at once. Edit ▸ Undo (⌘Z) runs a toast's Undo
-// too, and its button shows the key (the window's undo manager;
-// WindowPresenter): while the toast shows, or while the Undo is valid when
-// it says how long that is, after the toast closes too.
+// Outcomes and notices as toasts: chunky pillows whose colored badge says
+// what happened: done (leaf), done and undoable (blueberry), or a notice
+// (slate: a refusal, something the app did on its own). Their copy is the
+// state layer's; they last 5 s, or 15 s with Undo, counted once the pointer
+// leaves the toast, and the close button dismisses one at once. Edit ▸ Undo
+// (⌘Z) runs a toast's Undo too, and its button shows the key (the window's
+// undo manager; WindowPresenter): while the toast shows, or while the Undo
+// is valid when it says how long that is, after the toast closes too.
 
 import AppKit
 import EspalierCore
@@ -114,9 +114,10 @@ enum ToastAnnouncer {
     }
 }
 
-/// One toast's capsule: the symbol, the message, Undo when there is one,
-/// and the close button, spaced as the operation capsule. The symbol and
-/// the round close button sit concentric with the capsule's ends.
+/// One toast's pillow: the badge, the message, Undo when there is one (a
+/// quiet pillow button), and the close button, spaced as the operation
+/// capsule. The badge and the round close button sit concentric with the
+/// pillow's ends.
 public struct ToastView: View {
     private let content: ToastContent
     private let onUndo: () -> Void
@@ -129,14 +130,10 @@ public struct ToastView: View {
     }
 
     public var body: some View {
-        HStack(spacing: Metrics.insetSmall) {
-            Image(systemName: content.systemImage)
-                .font(.system(size: 17))
-                .foregroundStyle(symbolStyle)
-                .frame(width: Metrics.Floating.symbolSize, height: Metrics.Floating.symbolSize)
-                .accessibilityHidden(true)
+        HStack(spacing: Metrics.Pillow.spacing) {
+            MoodBadge(mood: content.mood, systemImage: content.systemImage)
             Text(content.message)
-                .font(Typography.row)
+                .font(Typography.pillowMessage)
                 .foregroundStyle(.text)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -149,7 +146,7 @@ public struct ToastView: View {
                         }
                     }
                 }
-                .buttonStyle(.secondary)
+                .buttonStyle(.quiet)
                 .controlSize(.regular)
             }
             Button(action: onClose) {
@@ -158,21 +155,24 @@ public struct ToastView: View {
             .buttonStyle(ToastCloseButtonStyle())
             .tooltip("Close")
         }
-        .padding(.leading, (Metrics.Floating.height - Metrics.Floating.symbolSize) / 2)
-        .padding(.trailing, (Metrics.Floating.height - Metrics.Floating.closeSize) / 2)
+        .padding(.leading, (Metrics.Pillow.height - Metrics.Tiles.floating) / 2)
+        .padding(.trailing, (Metrics.Pillow.height - Metrics.Pillow.closeSize) / 2)
         .padding(.vertical, Metrics.insetSmall)
-        .frame(minHeight: Metrics.Floating.height)
+        .frame(minHeight: Metrics.Pillow.height)
         .floatingWidth()
-        .floatingSurface()
+        .pillowSurface()
         // One element: the message, with Undo and Close as its actions.
         .accessibilityElement(children: .combine)
     }
+}
 
-    /// The symbol's color: green for a success, gray for a notice.
-    private var symbolStyle: AnyShapeStyle {
-        switch content.tone {
-        case .success: AnyShapeStyle(Color(espalier: Palette.success))
-        case .notice: AnyShapeStyle(.text2)
+extension ToastContent {
+    /// What the toast's badge says: done (leaf), whether or not it can be
+    /// undone, or a notice (slate).
+    var mood: TileMood {
+        switch tone {
+        case .success: .done
+        case .notice: .notice
         }
     }
 }
@@ -202,9 +202,9 @@ private struct ToastCloseBody<Label: View>: View {
         let appearance = CapsuleButtonAppearance(kind: .secondary, controlSize: .small, isPressed: isPressed, isHovered: isHovered)
         label
             .labelStyle(.iconOnly)
-            .font(.system(size: 9, weight: .bold))
+            .font(.system(size: 10, weight: .bold))
             .foregroundStyle(.text2)
-            .frame(width: Metrics.Floating.closeSize, height: Metrics.Floating.closeSize)
+            .frame(width: Metrics.Pillow.closeSize, height: Metrics.Pillow.closeSize)
             .background(Circle().fill(appearance.fill))
             .overlay(
                 Circle().fill(appearance.stateOverlay)

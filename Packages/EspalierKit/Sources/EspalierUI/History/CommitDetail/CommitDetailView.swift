@@ -1,5 +1,5 @@
-// The commit detail, as desktop's commit view lays it out: the header of one
-// commit (or a range) across the top, then its changed files beside the
+// The commit detail: the header card of one commit (or a range) across the
+// top, then its changed files beside the
 // selected file's diff (`DiffContainer`, with its own header row), in a split
 // whose divider is remembered.
 
@@ -31,15 +31,16 @@ struct CommitDetailView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Metrics.CommitDetail.cardPadding)
+            // A message expanding shows its lines as the header grows.
+            .clipped()
+            .cardSurface()
             .padding(.horizontal, Metrics.CommitDetail.horizontalPadding)
             .padding(.top, Metrics.CommitDetail.topPadding)
             .padding(.bottom, Metrics.CommitDetail.bottomPadding)
-            // A message expanding shows its lines as the header grows.
-            .clipped()
             // Another commit, or the same one after a checkout, shows at
             // once.
             .motionScope(AnyHashable([selection.shas.first ?? "", repository.gitState.tip.branch?.ref ?? ""]))
-            Hairline()
             SplitView(autosaveName: "Espalier.Split.commitFiles", leadingColumn: Metrics.Column.commitFileList) {
                 CommitFiles(repository: repository)
             } trailing: {

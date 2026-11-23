@@ -1,7 +1,7 @@
 // Text prepared for drawing, kept between draws. Rows redraw often (the
 // pointer over a block, the selection, the cursor), so each line's Core Text
 // lines are built once per width, color, and token generation, as are line
-// numbers and hunk headers. The cache empties when the document, tokens,
+// numbers and hunk headers' words. The cache empties when the document, tokens,
 // font, wrap width, or appearance change.
 
 import AppKit
@@ -49,7 +49,7 @@ final class DiffTextCache {
     private var numbers: [NumberKey: CTLine] = [:]
     private var markers: [MarkerKey: CTLine] = [:]
     /// Hunk headers' lines, by the document line they show.
-    private var headers: [Int: CTLine] = [:]
+    private var headers: [Int: HunkHeaderText] = [:]
     private var appearance: AppearanceVariant?
     /// The look the colors and fonts are in.
     private var look: Look?
@@ -153,20 +153,79 @@ final class DiffTextCache {
         return line
     }
 
-    /// A hunk header's line as git wrote it ("@@ -24,9 +24,13 @@ final
-    /// class ForecastService {"), in `color`.
-    func header(line index: Int, text: String, color: NSColor, font: NSFont) -> CTLine {
-        if let line = headers[index] {
-            return line
+    /// A hunk header's pill and what follows it: "Lines 24–36" in the
+    /// pill's font and color, and the function context git found ("final
+    /// class ForecastService {") in the code font and `contextColor`.
+    func hunkHeader(line index: Int, words makeWords: () -> HunkHeaderWords, labelFont: NSFont, labelColor: NSColor, contextFont: NSFont, contextColor: NSColor) -> HunkHeaderText {
+        if let text = headers[index] {
+            return text
         }
-        let line = CTLineCreateWithAttributedString(NSAttributedString(
-            string: text,
-            attributes: [.font: font, DiffRowRenderer.foregroundKey: color.cgColor]
+        let words = makeWords()
+        let label = CTLineCreateWithAttributedString(NSAttributedString(
+            string: words.label,
+            attributes: [.font: labelFont, DiffRowRenderer.foregroundKey: labelColor.cgColor]
         ))
+        let context = words.context.map { context in
+            CTLineCreateWithAttributedString(NSAttributedString(
+                string: context,
+                attributes: [.font: contextFont, DiffRowRenderer.foregroundKey: contextColor.cgColor]
+            ))
+        }
+        let text = HunkHeaderText(label: label, labelWidth: ceil(CGFloat(CTLineGetTypographicBounds(label, nil, nil, nil))), context: context)
         if headers.count >= Self.limit {
             headers.removeAll(keepingCapacity: true)
         }
-        headers[index] = line
-        return line
+        headers[index] = text
+        return text
+    }
+}
+
+/// A hunk header's text, ready to draw.
+struct HunkHeaderText {
+    let label: CTLine
+    let labelWidth: CGFloat
+    let context: CTLine?
+}
+
+/// A hunk header in words: the lines it shows ("Lines 19–26") in place of
+/// git's "@@ -18,6 +19,8 @@", and the function context git wrote after it.
+nonisolated struct HunkHeaderWords: Sendable, Equatable {
+    var label: String
+    var context: String?
+
+    /// - Parameters:
+    ///   - text: git's header line.
+    ///   - isBottomDummy: The hunk at the bottom, which only expands the
+    ///     diff down.
+    init(header: DiffHunkHeader, text: String, isBottomDummy: Bool, numberFormat: NumberFormat) {
+        if isBottomDummy {
+            label = "Unchanged lines below"
+            context = nil
+            return
+        }
+        // The new file's lines, or the old file's when the hunk leaves
+        // none (a deleted file).
+        let (start, count) = header.newLineCount > 0
+            ? (header.newStartLine, header.newLineCount)
+            : (header.oldStartLine, header.oldLineCount)
+        let first = formatCount(start, numberFormat)
+        if count <= 1 {
+            label = "Line \(first)"
+        } else {
+            label = "Lines \(first)\u{2013}\(formatCount(start + count - 1, numberFormat))"
+        }
+        context = Self.context(of: text)
+    }
+
+    /// What follows the header's closing "@@", trimmed; nil when nothing
+    /// does.
+    static func context(of text: String) -> String? {
+        guard text.hasPrefix("@@"),
+              let close = text.range(of: "@@", range: text.index(text.startIndex, offsetBy: 2)..<text.endIndex)
+        else {
+            return nil
+        }
+        let context = text[close.upperBound...].trimmingCharacters(in: .whitespaces)
+        return context.isEmpty ? nil : context
     }
 }
