@@ -157,7 +157,7 @@ public struct DiffContainer: View {
                 }
             }
         }
-        .background(Color(nsColor: Palette.pane))
+        .background(Color(nsColor: Palette.background))
         .onChange(of: DiffViewIdentity(fileID: file?.id, diff: DiffIdentity(diff.value), isLoading: diff.isLoading), initial: true) {
             session.highlighter = environmentHighlighter ?? SyntaxHighlighting.defaultHighlighter
             session.tabSize = settings.tabSize

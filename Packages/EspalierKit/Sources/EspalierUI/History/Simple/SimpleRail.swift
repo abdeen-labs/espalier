@@ -219,10 +219,8 @@ enum SimpleRailRenderer {
                 colors[color] = color.cgColor
             }
             let variant = AppearanceVariant.of(appearance)
-            // Clear on a clear pane (Default's), where the row's fill behind
-            // the rail shows.
-            let base = Palette.pane.resolved(in: variant)
-            background = (isSelected && !Theme.current.cardIsGlass ? ColorContrast.composite(Palette.accentSoft.resolved(in: variant), over: base) : base).cgColor
+            let base = Palette.background.resolved(in: variant)
+            background = (isSelected ? ColorContrast.composite(Palette.accentSoft.resolved(in: variant), over: base) : base).cgColor
         }
         func cg(_ color: NSColor) -> CGColor {
             colors[color] ?? color.cgColor

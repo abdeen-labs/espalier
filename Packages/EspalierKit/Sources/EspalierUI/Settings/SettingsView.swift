@@ -81,10 +81,9 @@ struct SettingsPanes: View {
 }
 
 /// The window's layout: the sidebar of panes on the left; on the right,
-/// the header band with the selected pane's name and a hairline, then the
-/// pane. It fills the window, under its transparent titlebar too. In the
-/// floating layout the band sits on the backdrop with no hairline, and the
-/// pane is a card.
+/// the header band with the selected pane's name, then the pane. It fills
+/// the window, under its transparent titlebar too. The band sits on the
+/// backdrop with no hairline, and the pane is a card.
 struct SettingsLayout<Pane: View>: View {
     @Binding var selection: SettingsTab
     private let pane: Pane
@@ -109,14 +108,14 @@ struct SettingsLayout<Pane: View>: View {
                     // The pane's scroll view reaches up under the header
                     // band, as high as the titlebar, its content inset by
                     // as much; clipped to the pane, content scrolls out of
-                    // sight at the hairline instead of over the name.
+                    // sight at the band's edge instead of over the name.
                     .clipped()
-                    // In the floating layout, the pane is a card on the
-                    // backdrop, under the band, as the main window's are.
+                    // The pane is a card on the backdrop, under the band, as
+                    // the main window's are.
                     .paneCard()
                     .paneMargins()
             }
-            .background(Color(espalier: PaneCards.floats ? Theme.current.backdrop : Palette.background))
+            .background(Color(espalier: Theme.current.backdrop))
         }
         .ignoresSafeArea()
         .navigationTitle(selection.title)
@@ -128,24 +127,20 @@ struct SettingsLayout<Pane: View>: View {
     }
 }
 
-/// The pane's header band: its name (13 bold, the headline) and a
-/// hairline, as high as the main window's toolbar.
+/// The pane's header band: its name (13 bold, the headline), as high as
+/// the main window's toolbar.
 struct SettingsHeader: View {
     let title: String
 
     var body: some View {
-        VStack(spacing: 0) {
-            Text(title)
-                .font(Typography.paneTitle)
-                .foregroundStyle(.text)
-                .lineLimit(1)
-                .padding(.horizontal, Metrics.SettingsWindow.contentInset)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .accessibilityAddTraits(.isHeader)
-            Hairline()
-                .opacity(PaneCards.floats ? 0 : 1)
-        }
-        .frame(height: Metrics.SettingsWindow.headerHeight)
+        Text(title)
+            .font(Typography.paneTitle)
+            .foregroundStyle(.text)
+            .lineLimit(1)
+            .padding(.horizontal, Metrics.SettingsWindow.contentInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
+            .frame(height: Metrics.SettingsWindow.headerHeight)
     }
 }
 
@@ -172,10 +167,6 @@ struct SettingsSidebar: View {
         .frame(width: Metrics.SettingsWindow.sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Color(espalier: Palette.sidebar))
-        .overlay(alignment: .trailing) {
-            Hairline(.vertical)
-                .opacity(PaneCards.floats ? 0 : 1)
-        }
         .focusable()
         .focusEffectDisabled()
         .onKeyPress(.upArrow) {

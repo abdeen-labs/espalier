@@ -1,5 +1,5 @@
 // Default: playful and creamy. The panes are cream cards floating on an
-// oat backdrop (`PaneLayout.floatingCards`), warm espresso ink for text,
+// oat backdrop, warm espresso ink for text,
 // and a butter-yellow highlight, like a highlighter on paper, for every
 // selection. The palette's accent is the one prominent action, focus,
 // links, checkboxes, and the current branch. Controls are soft, raised
@@ -86,7 +86,6 @@ nonisolated extension ThemeDefinition {
             refTag: RefTagStyle(alpha: (0.16, 0.24), textMix: (0.38, 0.20), ink: 0x2B2119),
             statusBadgeShape: .circle,
             avatarShape: .circle,
-            paneLayout: .floatingCards,
             controls: ControlStyle(prominentShadow: nil, flatInCards: true, lip: 3),
             scrollEdgeFade: 24
         )

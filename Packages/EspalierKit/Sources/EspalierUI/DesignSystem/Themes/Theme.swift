@@ -56,24 +56,8 @@ nonisolated public final class Theme: Sendable {
     public let segmentSelection: NSColor
     /// The dim over a window behind a sheet or an alert.
     public let scrim: NSColor
-    /// What the panes float on in the floating cards layout, and
-    /// what the card is inset in in the inset card layout.
+    /// What the panes float on as cards.
     public let backdrop: NSColor
-    /// The backdrop as glass, in the main window's inset card layout: the
-    /// backdrop color over a blur of what's behind the window; nil is the
-    /// backdrop color, opaque.
-    public let backdropGlass: GlassStyle?
-    /// Whether the content's card is glass too: the inset card on the
-    /// backdrop's glass, its fill `cardFill` over the glass and
-    /// its panes clear, so the glass shows through the whole window.
-    public let cardIsGlass: Bool
-    /// What the panes in the main window's content fill with: clear where
-    /// the card is glass, so the card's fill shows; else `background`.
-    public let pane: NSColor
-    /// The inset card's fill, and a card's on a pane (the commit
-    /// message's): where the card is glass, `background` at 40% over what's
-    /// behind it; else `background`.
-    public let cardFill: NSColor
     /// A raised card's soft shadow and ring: a selected segment on its
     /// track, the floating panes.
     public let raisedShadow: NSColor
@@ -181,8 +165,6 @@ nonisolated public final class Theme: Sendable {
     public let refTag: RefTagStyle
     public let statusBadgeShape: StatusBadgeShape
     public let avatarShape: AvatarShape
-    /// How the panes sit in the window.
-    public let paneLayout: PaneLayout
     /// Capsule controls' surfaces.
     public let controls: ControlStyle
     /// How far a scrolling list's content fades out at an edge with more
@@ -207,7 +189,6 @@ nonisolated public final class Theme: Sendable {
         segmentSelection = definition.segmentSelection
         scrim = definition.scrim
         backdrop = definition.backdrop
-        backdropGlass = definition.backdropGlass
         raisedShadow = definition.raisedShadow
         raisedRing = definition.raisedRing
         text = definition.text
@@ -247,12 +228,6 @@ nonisolated public final class Theme: Sendable {
         case let .color(color):
             color
         }
-        let cardIsGlass = definition.paneLayout == .insetCard && definition.backdropGlass != nil
-        self.cardIsGlass = cardIsGlass
-        pane = cardIsGlass ? .clear : background
-        cardFill = cardIsGlass ? NSColor.espalierDynamic { variant in
-            background.resolved(in: variant).withAlphaComponent(Theme.glassCardOpacity)
-        } : background
         link = definition.linkBase ?? accent
 
         let delete = definition.delete
@@ -306,7 +281,6 @@ nonisolated public final class Theme: Sendable {
         refTag = definition.refTag
         statusBadgeShape = definition.statusBadgeShape
         avatarShape = definition.avatarShape
-        paneLayout = definition.paneLayout
         controls = definition.controls
         scrollEdgeFade = definition.scrollEdgeFade
     }
@@ -382,9 +356,6 @@ nonisolated public final class Theme: Sendable {
     /// background (`onAccent`, in a theme that sets none): only a
     /// near-white accent, none of the Mac's.
     static let onAccentWhiteMinimum = 1.3
-
-    /// The background's opacity in a glass card's fill (`cardFill`).
-    static let glassCardOpacity: CGFloat = 0.4
 }
 
 // MARK: - The current theme
@@ -431,24 +402,6 @@ nonisolated private enum ThemeCache {
 }
 
 // MARK: - Token types
-
-/// How the panes sit in the window.
-nonisolated public enum PaneLayout: Sendable, Equatable {
-    /// Cards floating on the backdrop (Default and Islands).
-    case floatingCards
-    /// One card inset in the backdrop, the panes in it edge to edge and
-    /// divided by hairlines.
-    case insetCard
-}
-
-/// Glass: a color over a blur of what's behind the window, and a wash over
-/// the color.
-nonisolated public struct GlassStyle: Sendable, Equatable {
-    /// The color's opacity over the blur.
-    public var opacity: CGFloat
-    /// A translucent wash over the color; nil for none.
-    public var wash: NSColor? = nil
-}
 
 /// Section labels' look.
 nonisolated public struct SectionLabelStyle: Sendable, Equatable {
@@ -585,7 +538,6 @@ nonisolated struct ThemeDefinition: Sendable {
     var segmentSelection: NSColor
     var scrim: NSColor
     var backdrop: NSColor
-    var backdropGlass: GlassStyle?
     var raisedShadow: NSColor
     var raisedRing: NSColor
 
@@ -645,7 +597,6 @@ nonisolated struct ThemeDefinition: Sendable {
     var refTag: RefTagStyle
     var statusBadgeShape: StatusBadgeShape
     var avatarShape: AvatarShape = .circle
-    var paneLayout: PaneLayout
     var controls: ControlStyle = .standard
     var scrollEdgeFade: CGFloat = 0
 }

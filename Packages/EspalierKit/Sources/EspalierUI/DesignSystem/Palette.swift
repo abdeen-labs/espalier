@@ -132,12 +132,6 @@ nonisolated public enum Palette {
 
     /// Content panes and the toolbar.
     public static var background: NSColor { Theme.current.background }
-    /// What the panes in the main window's content fill with: clear in
-    /// Default, whose card is glass, else `background`.
-    public static var pane: NSColor { Theme.current.pane }
-    /// The content's card, and a card on a pane (the commit message):
-    /// `background`, at 40% over the glass in Default.
-    public static var cardFill: NSColor { Theme.current.cardFill }
     /// The sidebar.
     public static var sidebar: NSColor { Theme.current.sidebar }
     /// Search fields, segmented tracks, neutral chips.

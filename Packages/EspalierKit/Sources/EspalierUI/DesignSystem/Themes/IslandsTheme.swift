@@ -1,5 +1,5 @@
 // Islands: calm and friendly. The panes float as white cards on a sage
-// backdrop (`PaneLayout.floatingCards`), controls are soft pills with bold
+// backdrop, controls are soft pills with bold
 // titles (white and raised on the backdrop, flat on the field fill in a
 // card), and the palette's accent marks selection, the current branch, and
 // (as its prominent fill) the one prominent action. Bold uppercase labels,
@@ -78,7 +78,6 @@ nonisolated extension ThemeDefinition {
             refTag: RefTagStyle(alpha: (0.14, 0.22), textMix: (0.30, 0.25), ink: 0x0C1410),
             statusBadgeShape: .circle,
             avatarShape: .roundedSquare,
-            paneLayout: .floatingCards,
             controls: ControlStyle(prominentShadow: NSColor.black.withAlphaComponent(0.14), flatInCards: true)
         )
     }

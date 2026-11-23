@@ -255,7 +255,7 @@ struct FileTable: NSViewRepresentable {
         tableView.allowsMultipleSelection = table.allowsMultipleSelection
         tableView.allowsEmptySelection = true
         tableView.allowsTypeSelect = true
-        tableView.backgroundColor = Palette.pane
+        tableView.backgroundColor = Palette.background
         tableView.setAccessibilityLabel(table.tableLabel)
         tableView.dataSource = coordinator
         tableView.delegate = coordinator
@@ -268,8 +268,8 @@ struct FileTable: NSViewRepresentable {
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = !Theme.current.cardIsGlass
-        scrollView.backgroundColor = Palette.pane
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = Palette.background
         // A little room above the first row.
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.contentInsets = NSEdgeInsets(top: Metrics.grid, left: 0, bottom: Metrics.grid, right: 0)
@@ -1151,9 +1151,8 @@ extension ChangesTableView: LookChangeObserving {
     /// The rows' height and the background follow the look.
     func lookDidChange() {
         rowHeight = Metrics.FileList.rowHeight
-        backgroundColor = Palette.pane
-        enclosingScrollView?.backgroundColor = Palette.pane
-        enclosingScrollView?.drawsBackground = !Theme.current.cardIsGlass
+        backgroundColor = Palette.background
+        enclosingScrollView?.backgroundColor = Palette.background
     }
 }
 

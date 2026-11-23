@@ -15,10 +15,10 @@
 // a list that fits doesn't scroll, and a longer one never scrolls past its
 // ends. The filter clears as it closes.
 //
-// The rail is the `sidebar` color (clear in the inset card layout, where
-// it's on the detail column's backdrop), its icons 36 square with the row radius, the hover wash under the pointer
-// and on the icon whose popover is open, and the selected one in the
-// sidebar's selection with its symbol in the selection's color.
+// The rail is the `sidebar` color, its icons 36 square with the row
+// radius, the hover wash under the pointer and on the icon whose popover is
+// open, and the selected one in the sidebar's selection with its symbol in
+// the selection's color.
 //
 // The hover wash fades. Changes' count rolls to a new value over 0.2 s, and
 // its capsule and the warning fade in and out. A section's icon fades in
@@ -172,8 +172,7 @@ struct SidebarRail: View {
         .padding(.top, Metrics.Rail.topInset)
         .frame(width: Metrics.Rail.width)
         .frame(maxHeight: .infinity, alignment: .top)
-        // The inset card layout's rail is on the detail column's backdrop.
-        .background(Color(espalier: InsetCard.isOn ? .clear : Palette.sidebar))
+        .background(Color(espalier: Palette.sidebar))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Sidebar")
     }

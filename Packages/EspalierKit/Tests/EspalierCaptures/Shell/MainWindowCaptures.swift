@@ -1,15 +1,12 @@
 // The whole main window, its toolbar, sidebar, and detail area, as a
 // titled window draws it offscreen: History with HEAD's commit and its
-// diff, History with Commit Info (and under Reduce Transparency, where the
-// inset card layout's chrome is opaque), History with the sidebar hidden
+// diff, History with Commit Info, History with the sidebar hidden
 // (Changes | History in the toolbar), History beside the icons style's
 // rail, with and without Commit Info, and a merge's conflicts in Changes
 // (the conflicted file's conflicts as blocks); and the rail's Branches and
 // Tags popovers.
 // The window stays up while its split view, toolbar, and diff finish, so
-// it's drawn in the run's look: `--look islands-lagoon` shows the panes as
-// cards on the backdrop, and `--look default` in one card inset in the
-// glass chrome (which an offscreen window can't blur).
+// it's drawn in the run's look.
 
 import AppKit
 @testable import EspalierCore
@@ -34,9 +31,8 @@ extension MainToolbarWindows {
         private let area = "MainWindow"
 
         /// Draws `context`'s window in each appearance, once its diff (when
-        /// `showsDiff`) has rows and it has stopped changing; under Reduce
-        /// Transparency when `reducesTransparency`.
-        private func captureWindow(_ context: WindowContext, named name: String, showsDiff: Bool, reducesTransparency: Bool = false) async {
+        /// `showsDiff`) has rows and it has stopped changing.
+        private func captureWindow(_ context: WindowContext, named name: String, showsDiff: Bool) async {
             FlatWindowChrome.install()
             // A fixed name in the location control, not the folder's.
             if let repository = context.repository {
@@ -44,7 +40,7 @@ extension MainToolbarWindows {
             }
             for appearance in CaptureAppearance.allCases {
                 var stage: MainWindowStage? = autoreleasepool {
-                    MainWindowStage(context, appearance: appearance, reducesTransparency: reducesTransparency)
+                    MainWindowStage(context, appearance: appearance)
                 }
                 await stage?.settle { !showsDiff || stage?.views(DiffTableView.self).contains { $0.numberOfRows > 0 } == true }
                 let image = stage?.image
@@ -79,18 +75,6 @@ extension MainToolbarWindows {
                 fixture.context.state.columnVisibility = .all
                 fixture.context.state.isInspectorPresented = true
                 await captureWindow(fixture.context, named: "history-inspector", showsDiff: true)
-                await fixture.settle()
-            }
-        }
-
-        @Test("History with Commit Info under Reduce Transparency")
-        func historyInspectorReducedTransparency() async throws {
-            try await withIsolatedGitConfig { _ in
-                let fixture = try await MainWindowFixture.history()
-                await fixture.show(.history)
-                fixture.context.state.columnVisibility = .all
-                fixture.context.state.isInspectorPresented = true
-                await captureWindow(fixture.context, named: "history-inspector-reduced-transparency", showsDiff: true, reducesTransparency: true)
                 await fixture.settle()
             }
         }
@@ -171,29 +155,22 @@ final class MainWindowStage {
 
     let window: CaptureWindow
     let context: WindowContext
-    /// Whether the window draws as under Reduce Transparency.
-    let reducesTransparency: Bool
 
     /// - Parameters:
     ///   - size: The window's content size.
     ///   - highlighter: What colors the diff's code, as the app's own
     ///     highlighter does; none by default.
-    ///   - reducesTransparency: Whether it draws as under Reduce
-    ///     Transparency, whatever the Mac's setting.
     init(
         _ context: WindowContext,
         appearance: CaptureAppearance,
         size: CGSize = MainWindowStage.size,
-        highlighter: (any SyntaxHighlighter)? = nil,
-        reducesTransparency: Bool = false
+        highlighter: (any SyntaxHighlighter)? = nil
     ) {
         _ = Capture.look
         self.context = context
-        self.reducesTransparency = reducesTransparency
         let root = MainWindow()
             .windowEnvironment(context)
             .environment(\.syntaxHighlighter, highlighter)
-            .environment(\._accessibilityReduceTransparency, reducesTransparency)
         let controller = NSHostingController(rootView: Capture.prepared(root))
         controller.sceneBridgingOptions = [.toolbars]
         window = CaptureWindow(
@@ -271,8 +248,7 @@ final class MainWindowStage {
                     .safeAreaInset(edge: .top, spacing: 0) {
                         Color.clear.frame(height: toolbarHeight)
                     }
-                    .windowEnvironment(context)
-                    .environment(\._accessibilityReduceTransparency, reducesTransparency),
+                    .windowEnvironment(context),
                 size: column.size,
                 appearance: appearance
             )

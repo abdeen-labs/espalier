@@ -235,8 +235,7 @@ final class GraphColors {
     private let named: [Int: CGColor]
     private let others: [CGColor]
     /// What fills a node's gap and hole: the row's background, or a
-    /// selected row's; clear on a clear pane (Default's), where the row's
-    /// fill behind the graph shows.
+    /// selected row's.
     let background: CGColor
     let selectedBackground: CGColor
 
@@ -253,9 +252,9 @@ final class GraphColors {
             named = palette.namedTracks.mapValues(\.cgColor)
             others = palette.otherTracks.map(\.cgColor)
             let variant = AppearanceVariant.of(appearance)
-            let base = Palette.pane.resolved(in: variant)
+            let base = Palette.background.resolved(in: variant)
             background = base.cgColor
-            selectedBackground = Theme.current.cardIsGlass ? base.cgColor : ColorContrast.composite(Palette.accentSoft.resolved(in: variant), over: base).cgColor
+            selectedBackground = ColorContrast.composite(Palette.accentSoft.resolved(in: variant), over: base).cgColor
         }
         self.palette = palette
         self.trunk = trunk

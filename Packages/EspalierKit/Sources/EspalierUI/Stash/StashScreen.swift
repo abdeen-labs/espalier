@@ -172,7 +172,7 @@ struct StashColumn: View {
             Hairline()
             StashFooter(content: content)
         }
-        .background(Color(espalier: Palette.pane))
+        .background(Color(espalier: Palette.background))
         .frame(maxHeight: .infinity, alignment: .top)
     }
 

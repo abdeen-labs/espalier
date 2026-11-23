@@ -209,19 +209,9 @@ struct GraphDot: Equatable {
 
 extension CGContext {
     /// Fills the ellipse in `rect` with `background`: a gap or hole a node
-    /// makes in what's drawn. A clear background (a clear pane's, Default's)
-    /// clears what's drawn there instead, as far as the context's alpha, so
-    /// what's behind the drawing shows (a selected row's fill).
+    /// makes in what's drawn.
     nonisolated func knockOutEllipse(in rect: CGRect, background: CGColor) {
-        guard background.alpha == 0 else {
-            setFillColor(background)
-            fillEllipse(in: rect)
-            return
-        }
-        saveGState()
-        setBlendMode(.destinationOut)
-        setFillColor(gray: 0, alpha: 1)
+        setFillColor(background)
         fillEllipse(in: rect)
-        restoreGState()
     }
 }

@@ -41,8 +41,8 @@ public struct KeyCap: View {
 
 extension EnvironmentValues {
     /// Whether a capsule search field is drawn as a quiet capsule, raised,
-    /// rather than on the `field` fill: on the floating layout's backdrop,
-    /// beside quiet capsules.
+    /// rather than on the `field` fill: on the backdrop, beside quiet
+    /// capsules.
     @Entry public var searchFieldIsRaised = false
     /// Whether a capsule search field sits on the sidebar's surface, which
     /// is as light as the `field` fill: it's drawn as a wash instead.
