@@ -1,8 +1,8 @@
 // The sidebar's icons style (Settings ▸ Appearance ▸ Sidebar ▸ Icons): a
 // rail at the window's leading edge, below the toolbar, in place of the
-// sidebar's column. Changes and History come first, each its place's tile,
-// Changes with its count in an apricot pill (a warning while conflicts
-// exist); after a little space, a plain symbol for each section the
+// sidebar's column. Changes and History come first, Changes with its count
+// in a pill (a warning while conflicts exist); after a little space, a
+// symbol for each section the
 // repository's sidebar shows (Branches, Pull Requests, Tags, Stashes),
 // which opens the section in a popover beside it. A section's icon is
 // selected while one of its places is.
@@ -37,9 +37,7 @@ extension Metrics {
         public static let width: CGFloat = 56
         /// An icon's side.
         public static let item: CGFloat = 40
-        /// Changes' and History's tiles, and a section's symbol's point
-        /// size.
-        public static let tile: CGFloat = 26
+        /// An icon's symbol's point size.
         public static let symbolSize: CGFloat = 17
         /// The space between icons.
         public static let spacing: CGFloat = 4
@@ -153,7 +151,7 @@ struct SidebarRail: View {
                 }
                 RailButton(
                     "History",
-                    icon: .tile(.history),
+                    systemImage: PlaceIdentity.history.systemImage,
                     shortcut: ActionKind.showHistory.shortcut?.symbols,
                     isSelected: place == .history
                 ) {
@@ -203,7 +201,7 @@ private struct ChangesRailButton: View {
         let fade = motion.animates ? AnyTransition.opacity : .identity
         RailButton(
             "Changes",
-            icon: .tile(.changes),
+            systemImage: PlaceIdentity.changes.systemImage,
             shortcut: ActionKind.showChanges.shortcut?.symbols,
             accessibilityValue: accessibilityValue,
             isSelected: isSelected,
@@ -241,7 +239,7 @@ private struct RailSectionButton: View {
     var body: some View {
         RailButton(
             section.title,
-            icon: .symbol(section.place.systemImage),
+            systemImage: section.place.systemImage,
             isOpen: context.state.railPopover == section,
             isSelected: section.contains(context.state.place)
         ) {
@@ -271,20 +269,13 @@ private struct RailSectionButton: View {
     }
 }
 
-/// What a rail icon shows: a place's tile (Changes, History) or a plain
-/// symbol (a section).
-enum RailIcon {
-    case tile(PlaceIdentity)
-    case symbol(String)
-}
-
-/// A rail icon: its tile or symbol in a 40-point square, the hover wash
+/// A rail icon: its symbol in a 40-point square, the hover wash
 /// under the pointer and while its popover is open, the sidebar's selection
 /// while selected, and what it badges at its top trailing corner. Its
 /// tooltip is its title and shortcut.
 struct RailButton<Badge: View>: View {
     private let title: String
-    private let icon: RailIcon
+    private let systemImage: String
     private let shortcut: String?
     private let accessibilityValue: String?
     private let isOpen: Bool
@@ -298,7 +289,7 @@ struct RailButton<Badge: View>: View {
     ///   - isOpen: Whether the popover it opens is open.
     init(
         _ title: String,
-        icon: RailIcon,
+        systemImage: String,
         shortcut: String? = nil,
         accessibilityValue: String? = nil,
         isOpen: Bool = false,
@@ -307,7 +298,7 @@ struct RailButton<Badge: View>: View {
         @ViewBuilder badge: () -> Badge = { EmptyView() }
     ) {
         self.title = title
-        self.icon = icon
+        self.systemImage = systemImage
         self.shortcut = shortcut
         self.accessibilityValue = accessibilityValue
         self.isOpen = isOpen
@@ -351,17 +342,11 @@ struct RailButton<Badge: View>: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    @ViewBuilder
     private var iconView: some View {
-        switch icon {
-        case .tile(let place):
-            PlaceTile(place, size: Metrics.Rail.tile)
-        case .symbol(let systemImage):
-            Image(systemName: systemImage)
-                .font(.system(size: Metrics.Rail.symbolSize))
-                .foregroundStyle(Color.sidebarRowIcon(isSelected: isSelected))
-                .accessibilityHidden(true)
-        }
+        Image(systemName: systemImage)
+            .font(.system(size: Metrics.Rail.symbolSize))
+            .foregroundStyle(Color.sidebarRowIcon(isSelected: isSelected))
+            .accessibilityHidden(true)
     }
 }
 

@@ -6,8 +6,8 @@
 // sections keep showing the previous repository until the selected one has
 // loaded (`SidebarSectionsHold`).
 //
-// The sidebar is the `sidebar` color. Changes and History lead on their
-// tiles, in bold; each section after them leads with its chevron and its
+// The sidebar is the `sidebar` color. Changes and History lead; each
+// section after them leads with its chevron and its
 // name in bold (a collapsed section's count in a pill). Rows are roomy with the row radius, groups of a section's rows
 // are set apart by space, and the selected item is on the theme's sidebar
 // selection (`Palette.sidebarSelection`, the butter highlight), its title
@@ -210,7 +210,7 @@ struct PlacesSectionRows: View {
             ChangesPlaceRow(content: changes, isSelected: selection == .changes)
                 .sidebarRow(.changes)
                 .tag(SidebarPlace.changes)
-            SidebarRowLabel("History", systemImage: "clock.arrow.circlepath", place: .history, isSelected: selection == .history)
+            SidebarRowLabel("History", systemImage: "clock.arrow.circlepath", isSelected: selection == .history)
                 .sidebarRow(.history)
                 .tag(SidebarPlace.history)
         }
@@ -277,8 +277,7 @@ nonisolated struct ChangesPlaceRowContent: Sendable, Hashable {
     }
 }
 
-/// The Changes row: its count in an apricot pill, or a warning while
-/// conflicts exist. The count rolls to a new value, and the count and the warning
+/// The Changes row: its count, or a warning while conflicts exist. The count rolls to a new value, and the count and the warning
 /// fade in and out, over 0.2 s.
 struct ChangesPlaceRow: View {
     let content: ChangesPlaceRowContent
@@ -287,7 +286,7 @@ struct ChangesPlaceRow: View {
 
     var body: some View {
         let fade = motion.animates ? AnyTransition.opacity : .identity
-        SidebarRowLabel("Changes", systemImage: "plus.forwardslash.minus", place: .changes, isSelected: isSelected) {
+        SidebarRowLabel("Changes", systemImage: "plus.forwardslash.minus", isSelected: isSelected) {
             if content.hasConflicts || content.badge != nil {
                 // The count and the warning crossfade in place.
                 ZStack(alignment: .trailing) {
@@ -296,7 +295,9 @@ struct ChangesPlaceRow: View {
                             .tooltip("Conflicts")
                             .transition(fade)
                     } else if let badge = content.badge {
-                        CountPill(badge, color: PlaceIdentity.changes.color)
+                        Text(badge)
+                            .font(Typography.count)
+                            .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
                             .contentTransition(motion.animates ? .numericText(value: Double(content.changedFileCount)) : .identity)
                             .transition(fade)
                     }
@@ -311,13 +312,11 @@ struct ChangesPlaceRow: View {
 // MARK: - Rows
 
 /// A sidebar row's look: a symbol (the accent when the row is selected,
-/// the row's tint or secondary text otherwise), or its place's tile and the
-/// title in bold (Changes and History), the title (bold when
+/// the row's tint or secondary text otherwise), the title (bold when
 /// selected), and what trails it.
 struct SidebarRowLabel<Trailing: View>: View {
     private let title: String
     private let systemImage: String
-    private let place: PlaceIdentity?
     private let tint: NSColor?
     private let isSelected: Bool
     private let isEmphasized: Bool
@@ -332,14 +331,11 @@ struct SidebarRowLabel<Trailing: View>: View {
     ///   - truncationMode: Where a long title is cut: the middle for names
     ///     (a branch's start and end both tell), the tail for text read
     ///     from its start.
-    ///   - place: The place whose tile the row draws in place of the
-    ///     symbol; nil draws the symbol alone.
     ///   - tint: The symbol's color while the row isn't selected (a tag's
     ///     honey); nil for secondary text.
     init(
         _ title: String,
         systemImage: String,
-        place: PlaceIdentity? = nil,
         tint: NSColor? = nil,
         isSelected: Bool = false,
         isEmphasized: Bool = false,
@@ -348,7 +344,6 @@ struct SidebarRowLabel<Trailing: View>: View {
     ) {
         self.title = title
         self.systemImage = systemImage
-        self.place = place
         self.tint = tint
         self.isSelected = isSelected
         self.isEmphasized = isEmphasized
@@ -358,18 +353,14 @@ struct SidebarRowLabel<Trailing: View>: View {
 
     var body: some View {
         let isSelected = isSelected || isRowSelected
-        HStack(spacing: place == nil ? Metrics.insetSmall : Metrics.SidebarRows.placeSpacing) {
-            if let place {
-                PlaceTile(place, size: Metrics.SidebarRows.placeTile)
-            } else {
-                Image(systemName: systemImage)
-                    .font(Typography.row)
-                    .foregroundStyle(symbolStyle(isSelected: isSelected))
-                    .frame(width: Metrics.Sidebar.symbolWidth)
-                    .accessibilityHidden(true)
-            }
+        HStack(spacing: Metrics.insetSmall) {
+            Image(systemName: systemImage)
+                .font(Typography.row)
+                .foregroundStyle(symbolStyle(isSelected: isSelected))
+                .frame(width: Metrics.Sidebar.symbolWidth)
+                .accessibilityHidden(true)
             Text(title)
-                .font(place == nil ? SidebarRowFont.title(isSelected: isSelected, isEmphasized: isEmphasized) : Typography.row.weight(.bold))
+                .font(SidebarRowFont.title(isSelected: isSelected, isEmphasized: isEmphasized))
                 .foregroundStyle(.sidebarRowText(isSelected: isSelected))
                 .lineLimit(1)
                 .truncationMode(truncationMode)
@@ -441,9 +432,6 @@ extension Metrics {
         public static let contentHeight: CGFloat = 26
         /// A row's height, the list's insets included.
         public static let height: CGFloat = 34
-        /// Changes' and History's tiles, and the space after them.
-        public static let placeTile: CGFloat = 22
-        public static let placeSpacing: CGFloat = 10
         /// The room above a section's header.
         public static let headerTop: CGFloat = 8
         /// The room below a section's header.

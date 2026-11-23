@@ -2,9 +2,8 @@
 // History teal, Branches blueberry, Tags honey, Stashes grape, Pull
 // Requests plum, Worktrees leaf, and Remotes slate. The colors tint the
 // places' pills and dots. `PlaceTile` draws a symbol in white on a rounded
-// tile of a color: Changes' and History's in the sidebar and the toolbar's
-// switcher, and Settings' panes. The colors are fixed across palettes, a
-// shade deeper in dark.
+// tile of a color: Settings' panes. The colors are fixed across palettes,
+// a shade deeper in dark.
 
 import AppKit
 import SwiftUI
@@ -62,13 +61,8 @@ public struct PlaceTile: View {
     private let color: NSColor
     private let size: CGFloat
 
-    /// - Parameter size: The tile's side; the corner radius and the
-    ///   symbol scale with it.
-    public init(_ kind: PlaceIdentity, size: CGFloat = Metrics.PlaceTiles.small) {
-        self.init(systemImage: kind.systemImage, color: kind.color, size: size)
-    }
-
-    /// A tile of any symbol and color (a Settings pane's).
+    /// A tile of a symbol and a color (a Settings pane's); the corner
+    /// radius and the symbol scale with `size`, its side.
     public init(systemImage: String, color: NSColor, size: CGFloat = Metrics.PlaceTiles.small) {
         self.systemImage = systemImage
         self.color = color

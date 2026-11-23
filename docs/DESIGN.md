@@ -44,9 +44,8 @@ its tokens say (Themes, below).
   `field` fill or a card.
 - **Every place has a color** (`PlaceIdentity`): Changes apricot, History
   teal, Branches blueberry, Tags honey, Stashes grape, Pull Requests plum,
-  Worktrees leaf, Remotes slate. Only Changes and History show as tiles,
-  in the sidebar and the toolbar's tabs; Settings' panes have tiles in its
-  sidebar. Elsewhere a symbol is plain, in secondary text or a status
+  Worktrees leaf, Remotes slate. Only Settings' panes show as tiles, in
+  its sidebar; elsewhere a symbol is plain, in secondary text or a status
   color.
 - **Names are candy pills:** branches, tags, remotes, and counts are
   fully rounded pills in a tint of their color, the current branch's

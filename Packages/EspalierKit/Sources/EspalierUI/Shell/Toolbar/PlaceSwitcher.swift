@@ -1,8 +1,7 @@
 // Changes | History in the middle of the toolbar while the sidebar is
 // hidden (its column, or the icons style's rail), so the two places are
-// always one click away: two chunky tabs, each with its place's tile and
-// its name in bold, Changes with its count in an apricot pill (a warning
-// while conflicts exist). The place you're in sits on the butter
+// always one click away: two tabs, each with its place's symbol and name,
+// Changes with its count (a warning while conflicts exist). The place you're in sits on the butter
 // highlight; in another place (a branch, a stash) neither tab does. A
 // tab's press sinks and eases back; the highlight moves at once, as
 // navigation does.
@@ -48,7 +47,9 @@ struct PlaceTabs: View {
                     WarningGlyph()
                         .font(.system(size: 11))
                 } else if let badge = changes.badge {
-                    CountPill(badge, color: PlaceIdentity.changes.color)
+                    Text(badge)
+                        .font(Typography.count)
+                        .foregroundStyle(.text3)
                 }
             }
             PlaceTab(
@@ -75,7 +76,7 @@ struct PlaceTabs: View {
     }
 }
 
-/// One tab: its place's tile, its name in bold, and what follows it, on the
+/// One tab: its place's symbol, its name, and what follows it, on the
 /// butter highlight while it's the place you're in.
 private struct PlaceTab<Accessory: View>: View {
     private let title: String
@@ -108,9 +109,11 @@ private struct PlaceTab<Accessory: View>: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: Metrics.PlaceTabs.symbolSpacing) {
-                PlaceTile(place, size: Metrics.PlaceTabs.tile)
+                Image(systemName: place.systemImage)
+                    .foregroundStyle(Color.sidebarRowIcon(isSelected: isSelected))
+                    .accessibilityHidden(true)
                 Text(title)
-                    .font(Typography.sans(size: 13, weight: .bold, relativeTo: .body))
+                    .font(Typography.row.weight(isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? Color.sidebarRowText(isSelected: true) : .text2)
                     .lineLimit(1)
                 accessory
@@ -147,11 +150,10 @@ extension Metrics {
     /// The toolbar's Changes | History tabs.
     public enum PlaceTabs {
         public static let height: CGFloat = 30
-        public static let tile: CGFloat = 22
         public static let spacing: CGFloat = 2
         public static let trackInset: CGFloat = 2
         public static let symbolSpacing: CGFloat = 7
-        public static let leadingPadding: CGFloat = 4
+        public static let leadingPadding: CGFloat = 12
         public static let trailingPadding: CGFloat = 12
     }
 }
