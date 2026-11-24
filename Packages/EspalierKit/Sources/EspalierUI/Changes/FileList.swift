@@ -899,23 +899,45 @@ struct HiddenChangesNote: View {
     let onShow: () -> Void
 
     var body: some View {
-        // A honey banner; the note takes the room the button leaves before
-        // it wraps.
-        SoftBanner(color: Palette.warningMark) {
-            SoftBannerSymbol("eye.slash", color: Palette.warningMark)
-        } message: {
-            Text(text)
-                .font(Typography.secondary.weight(.medium))
-                .foregroundStyle(.text)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityLabel("Warning: \(text)")
-        } accessory: {
-            Button("Show", action: onShow)
-                .buttonStyle(.quiet)
-                .controlSize(.small)
-                .tooltip("Show the files the commit includes")
+        // A honey banner, or the warning symbol and the note in a row, as
+        // the theme has it; the note takes the room the button leaves
+        // before it wraps.
+        Group {
+            if ChangesThemeStyle.current.panes == .hairlines {
+                HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color(espalier: Palette.warning))
+                        .accessibilityLabel("Warning")
+                    Text(text)
+                        .font(Typography.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    showButton
+                }
+                .padding(.horizontal, FileRowMetrics.contentInset)
+                .padding(.vertical, Metrics.insetSmall)
+            } else {
+                SoftBanner(color: Palette.warningMark) {
+                    SoftBannerSymbol("eye.slash", color: Palette.warningMark)
+                } message: {
+                    Text(text)
+                        .font(Typography.secondary.weight(.medium))
+                        .foregroundStyle(.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel("Warning: \(text)")
+                } accessory: {
+                    showButton
+                }
+            }
         }
         .accessibilityElement(children: .contain)
+    }
+
+    private var showButton: some View {
+        Button("Show", action: onShow)
+            .buttonStyle(.quiet)
+            .controlSize(.small)
+            .tooltip("Show the files the commit includes")
     }
 
     var text: String {

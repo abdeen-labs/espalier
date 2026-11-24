@@ -45,8 +45,9 @@ extension LastCommitContent {
     }
 }
 
-/// "Committed 2 minutes ago", the summary, and Undo, on a soft card.
-/// Another commit's card crossfades in (Changes' column sets the motion).
+/// "Committed 2 minutes ago", the summary, and Undo, on a soft card or as
+/// a plain row. Another commit's row crossfades in (Changes' column sets
+/// the motion).
 public struct LastCommitRow: View {
     private let content: LastCommitContent
     private let onUndo: () -> Void
@@ -72,41 +73,60 @@ public struct LastCommitRow: View {
         }
     }
 
-    /// A soft card: the commit symbol, when and what was committed, and Undo.
+    /// When and what was committed, and Undo: on a soft card after the
+    /// commit symbol, or as a plain row, as the theme has it.
+    @ViewBuilder
     private var row: some View {
-        HStack(spacing: Metrics.SoftBanner.spacing) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: Metrics.SoftBanner.symbolSize, weight: .semibold))
-                .foregroundStyle(.text2)
-                .frame(width: Metrics.SoftBanner.mark)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: Metrics.grid / 2) {
-                CommittedDateText(date: content.date)
-                    .font(Typography.meta)
-                    .foregroundStyle(.text3)
-                Text(content.summary)
-                    .font(Typography.row.weight(.semibold))
-                    .foregroundStyle(.text)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+        if ComposerView.isSplit {
+            HStack(spacing: Metrics.insetSmall) {
+                details(summaryWeight: .medium)
+                Spacer(minLength: Metrics.insetSmall)
+                undoButton
             }
-            .accessibilityElement(children: .combine)
-            Spacer(minLength: Metrics.insetSmall)
-            Button(action: onUndo) {
-                Label("Undo", systemImage: "arrow.uturn.backward")
+        } else {
+            HStack(spacing: Metrics.SoftBanner.spacing) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: Metrics.SoftBanner.symbolSize, weight: .semibold))
+                    .foregroundStyle(.text2)
+                    .frame(width: Metrics.SoftBanner.mark)
+                    .accessibilityHidden(true)
+                details(summaryWeight: .semibold)
+                Spacer(minLength: Metrics.insetSmall)
+                undoButton
             }
-            .buttonStyle(.secondary)
-            .controlSize(.small)
-            .disabled(!content.isUndoEnabled)
-            .tooltip(content.undoHelp)
+            .padding(.leading, Metrics.SoftBanner.leadingPadding)
+            .padding(.trailing, Metrics.SoftBanner.trailingPadding)
+            .padding(.vertical, Metrics.insetSmall)
+            .background(
+                RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
+                    .fill(Color(espalier: Palette.field))
+            )
         }
-        .padding(.leading, Metrics.SoftBanner.leadingPadding)
-        .padding(.trailing, Metrics.SoftBanner.trailingPadding)
-        .padding(.vertical, Metrics.insetSmall)
-        .background(
-            RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous)
-                .fill(Color(espalier: Palette.field))
-        )
+    }
+
+    /// "Committed 2 minutes ago" over the summary.
+    private func details(summaryWeight: Font.Weight) -> some View {
+        VStack(alignment: .leading, spacing: Metrics.grid / 2) {
+            CommittedDateText(date: content.date)
+                .font(Typography.meta)
+                .foregroundStyle(.text3)
+            Text(content.summary)
+                .font(Typography.row.weight(summaryWeight))
+                .foregroundStyle(.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var undoButton: some View {
+        Button(action: onUndo) {
+            Label("Undo", systemImage: "arrow.uturn.backward")
+        }
+        .buttonStyle(.secondary)
+        .controlSize(.small)
+        .disabled(!content.isUndoEnabled)
+        .tooltip(content.undoHelp)
     }
 }
 

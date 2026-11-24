@@ -1,6 +1,7 @@
 // The Changes list's header: the include-all checkbox over the rows'
-// checkboxes, the title in plain words ("3 files changed"), a candy pill that says how many go into the
-// commit, and the filter options; "No changes" over an empty list.
+// checkboxes, the title in plain words ("3 files changed"), a pill in the
+// accent that says how many go into the commit, and the filter options;
+// "No changes" over an empty list.
 // `ChangesModel.visibleIncludeAll` decides the checkbox. As files change or
 // are included, the title's and the pill's counts roll over 0.2 s; the
 // filter's changes show at once.
@@ -177,19 +178,22 @@ public struct ChangesHeader: View {
         .frame(minHeight: Metrics.PaneHeader.height)
     }
 
-    /// How many go into the commit, on Changes' apricot; a neutral pill
-    /// while none do. Its count rolls as checkboxes and files change it
-    /// (0.2 s).
+    /// How many go into the commit, in the accent; a neutral pill while
+    /// none do. Its count rolls as checkboxes and files change it (0.2 s).
     private var includedPill: some View {
-        TintedPill(content.included, color: content.includedCount > 0 ? PlaceIdentity.changes.color : Palette.text3)
+        TintedPill(content.included, color: content.includedCount > 0 ? Palette.accent : Palette.text3)
             .contentTransition(motion.animates ? .numericText() : .identity)
             .motion(Motion.kindChange, value: content.included)
             .accessibilityLabel(content.includedAccessibilityLabel)
     }
 
-    /// The title's font: the pane title's, 15 and bold.
+    /// The title's font: the pane title's, 15 and bold, over stacked
+    /// cards; the row font, semibold, between hairlines.
     static var titleFont: NSFont {
-        AppKitTypography.sans(.title3, weight: .bold)
+        if ChangesThemeStyle.current.panes == .hairlines {
+            return AppKitTypography.row(weight: .semibold)
+        }
+        return AppKitTypography.sans(.title3, weight: .bold)
     }
 }
 

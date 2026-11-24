@@ -314,6 +314,21 @@ extension SuggestionAction {
         }
     }
 
+    /// The action's symbol on its row (the toolbar's, where it has one).
+    var rowSystemImage: String {
+        switch self {
+        case .viewStash: "tray.full"
+        case .publishRepository: "icloud.and.arrow.up"
+        case .publishBranch: "arrow.up.circle"
+        case .pull: "arrow.down.circle"
+        case .push: "arrow.up.circle"
+        case .previewPullRequest, .createPullRequest: "arrow.trianglehead.pull"
+        case .openInEditor: "arrow.up.forward.app"
+        case .showInFinder: "folder"
+        case .viewOnGitHub: "safari"
+        }
+    }
+
     /// The action's shortcut, as a key cap shows it.
     var shortcut: String? {
         actionID.kind.shortcut?.symbols
@@ -322,17 +337,25 @@ extension SuggestionAction {
 
 extension SuggestionsContent {
     /// The line under the title: what's left to do, which the primary
-    /// suggestion says, or the general note without one.
+    /// suggestion says, or the general note without one, in the words of
+    /// the theme's screen (`ChangesThemeStyle.noChanges`).
     public var subtitle: String {
         primary?.card(numberFormat: numberFormat).description
-            ?? "Everything here is committed. Here's what you could do next."
+            ?? (ChangesThemeStyle.current.noChanges == .rows
+                ? "There are no uncommitted changes in this repository. Here are some suggestions for what to do next."
+                : "Everything here is committed. Here's what you could do next.")
     }
 }
 
-/// No changes: a check on its tiles, "Nothing to Commit", a plain line about
-/// what's left to do, then the suggestions as soft action cards: the
-/// primary one wide, with its prominent action, then the editor, Finder,
-/// and GitHub side by side, each with its shortcut as a key cap.
+/// No changes, as the theme has it (`ChangesThemeStyle.noChanges`): a check
+/// on its tiles, "Nothing to Commit", a plain line about what's left to
+/// do, then the suggestions as soft action cards: the primary one wide,
+/// with its prominent action, then the editor, Finder, and GitHub side by
+/// side, each with its shortcut as a key cap. Or a green check in a soft
+/// circle, "No Local Changes", the line, then the suggestions as rows in
+/// one card: the primary one with its prominent action, then the editor,
+/// Finder, and GitHub, each with its description and its shortcut as a key
+/// cap.
 public struct NoChangesSuggestions: View {
     private let content: SuggestionsContent
     private let perform: (SuggestionAction) -> Void
@@ -357,6 +380,108 @@ public struct NoChangesSuggestions: View {
     }
 
     public var body: some View {
+        if ChangesThemeStyle.current.noChanges == .rows {
+            rowsScreen
+        } else {
+            cardsScreen
+        }
+    }
+
+    /// The check in its soft circle, "No Local Changes", the line, and the
+    /// suggestions as rows in one card.
+    private var rowsScreen: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: SuggestionMetrics.circle * SuggestionMetrics.circleSymbolScale, weight: .semibold))
+                    .foregroundStyle(Color(espalier: Palette.success))
+                    .frame(width: SuggestionMetrics.circle, height: SuggestionMetrics.circle)
+                    .background(Circle().fill(.field))
+                    .accessibilityHidden(true)
+                Text("No Local Changes")
+                    .font(Typography.sans(.title2, weight: .semibold))
+                    .foregroundStyle(.text)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Metrics.insetLarge)
+                    .accessibilityAddTraits(.isHeader)
+                Text(content.subtitle)
+                    .font(Typography.row)
+                    .foregroundStyle(.text2)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Metrics.grid)
+                rows
+                    .padding(.top, Metrics.insetLarge + Metrics.insetSmall)
+            }
+            .frame(maxWidth: SuggestionMetrics.rowsWidth)
+            .padding(Metrics.insetLarge)
+            .accessibilityElement(children: .contain)
+            .frame(maxWidth: .infinity)
+            .padding(.top, SuggestionMetrics.rowsTopInset)
+            .unbouncedScrollContent()
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(Color(espalier: Palette.pane))
+    }
+
+    /// The suggestions as rows in one card, hairlines between them.
+    private var rows: some View {
+        VStack(spacing: 0) {
+            let secondary = secondaryCards
+            if let primary = content.primary {
+                primaryRow(primary)
+                if !secondary.isEmpty {
+                    Hairline()
+                }
+            }
+            ForEach(Array(secondary.enumerated()), id: \.offset) { index, item in
+                SuggestionRow(item.card, isEnabled: item.isEnabled, perform: perform)
+                    .environment(\.openURL, OpenURLAction { _ in
+                        onOpenIntegrationSettings()
+                        return .handled
+                    })
+                if index < secondary.count - 1 {
+                    Hairline()
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+        .surface(.quiet, elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func primaryRow(_ primary: SuggestionsContent.Primary) -> some View {
+        let card = primary.card(numberFormat: content.numberFormat)
+        if case .pullRequest(_, let choice) = primary {
+            SuggestionRow(card, isEnabled: content.isPrimaryEnabled, isProminent: true, perform: perform) {
+                pullRequestButton(card, choice: choice)
+                    .controlSize(.small)
+            }
+        } else {
+            SuggestionRow(card, isEnabled: content.isPrimaryEnabled, isProminent: true, perform: perform)
+        }
+    }
+
+    /// The pull request suggestion's button, with the choice of previewing
+    /// or creating in its menu.
+    private func pullRequestButton(_ card: SuggestionCard, choice: PullRequestSuggestedNextAction) -> some View {
+        SplitCapsuleButton(.prominent, menuLabel: "Pull Request Options", action: { perform(card.action) }) {
+            Text(card.buttonTitle)
+        } menu: { [onChoosePullRequestAction] in
+            MenuPicker(selection: Binding(get: { choice }, set: { onChoosePullRequestAction($0) })) {
+                for action in PullRequestSuggestedNextAction.allCases {
+                    MenuChoice(action.title, value: action)
+                }
+            }
+        }
+        .fixedSize()
+        .disabled(!content.isPrimaryEnabled)
+    }
+
+    /// The check on its tiles, "Nothing to Commit", the line, and the
+    /// suggestions as cards.
+    private var cardsScreen: some View {
         ScrollView {
             VStack(spacing: 0) {
                 MessageTiles(systemImage: "checkmark", tint: Color(espalier: Palette.success), arrangement: .rise)
@@ -429,17 +554,7 @@ public struct NoChangesSuggestions: View {
         let card = primary.card(numberFormat: content.numberFormat)
         if case .pullRequest(_, let choice) = primary {
             PrimarySuggestionCard(card, isEnabled: content.isPrimaryEnabled, perform: perform) {
-                SplitCapsuleButton(.prominent, menuLabel: "Pull Request Options", action: { perform(card.action) }) {
-                    Text(card.buttonTitle)
-                } menu: { [onChoosePullRequestAction] in
-                    MenuPicker(selection: Binding(get: { choice }, set: { onChoosePullRequestAction($0) })) {
-                        for action in PullRequestSuggestedNextAction.allCases {
-                            MenuChoice(action.title, value: action)
-                        }
-                    }
-                }
-                .fixedSize()
-                .disabled(!content.isPrimaryEnabled)
+                pullRequestButton(card, choice: choice)
             }
         } else {
             PrimarySuggestionCard(card, isEnabled: content.isPrimaryEnabled, perform: perform)
@@ -476,6 +591,22 @@ enum SuggestionMetrics {
     /// A card's symbol: its point size, and the column it's centered in.
     static let symbolSize: CGFloat = 17
     static let symbolWidth: CGFloat = 22
+
+    // The rows' screen.
+
+    /// The widest the rows and the message above them get.
+    static let rowsWidth: CGFloat = 440
+    /// Space above the check's circle.
+    static let rowsTopInset: CGFloat = 80
+    /// The check's soft circle, and its symbol's size as a fraction of it.
+    static let circle: CGFloat = 56
+    static let circleSymbolScale: CGFloat = 0.4
+    /// A row's height on one line.
+    static let rowHeight: CGFloat = 48
+    /// Space inside a row before its symbol and after its shortcut.
+    static let rowPadding: CGFloat = 14
+    /// A row's symbol column.
+    static let rowSymbolWidth: CGFloat = 18
 }
 
 /// A suggestion's symbol, in secondary text.
@@ -604,16 +735,126 @@ struct SecondarySuggestionCard: View {
     }
 }
 
+/// One suggestion's row: its symbol, its title (and a description, when it
+/// has one), its action, and its shortcut as a key cap. The primary row
+/// has a prominent button (or a custom control); the others are buttons
+/// themselves. The menu the action is in shows as the tooltip.
+struct SuggestionRow<Control: View>: View {
+    let card: SuggestionCard
+    let isEnabled: Bool
+    let isProminent: Bool
+    let perform: (SuggestionAction) -> Void
+    let control: Control?
+    @State private var isHovered = false
+
+    init(_ card: SuggestionCard, isEnabled: Bool, isProminent: Bool = false, perform: @escaping (SuggestionAction) -> Void, @ViewBuilder control: () -> Control) {
+        self.card = card
+        self.isEnabled = isEnabled
+        self.isProminent = isProminent
+        self.perform = perform
+        self.control = control()
+    }
+
+    var body: some View {
+        if isProminent {
+            content
+                .tooltip(card.discoverability)
+                .accessibilityElement(children: .contain)
+        } else {
+            // The whole row runs the action; a description's link stays
+            // clickable on top.
+            ZStack {
+                Button {
+                    perform(card.action)
+                } label: {
+                    Color(nsColor: isHovered && isEnabled ? Palette.hover : .clear)
+                        .hoverMotion(isHovered)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
+                .disabled(!isEnabled)
+                .onHover { isHovered = $0 }
+                .accessibilityLabel(card.buttonTitle)
+                .tooltip(card.discoverability)
+                content
+                    .allowsHitTesting(card.descriptionLinksToSettings)
+                    .accessibilityHidden(card.description == nil)
+            }
+        }
+    }
+
+    private var content: some View {
+        HStack(alignment: .center, spacing: Metrics.insetMedium) {
+            Image(systemName: card.action.rowSystemImage)
+                .font(.system(size: 15))
+                .foregroundStyle(isProminent ? Color.accent : .text2)
+                .frame(width: SuggestionMetrics.rowSymbolWidth)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Metrics.grid / 2) {
+                Text(isProminent ? card.title : card.buttonTitle)
+                    .font(isProminent ? Typography.row.weight(.semibold) : Typography.row)
+                    .foregroundStyle(.text)
+                    .allowsHitTesting(false)
+                if !isProminent, let description = card.description {
+                    SettingsLinkedText(description: description, linksToSettings: card.descriptionLinksToSettings)
+                        .font(Typography.secondary)
+                        .foregroundStyle(.text3)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: Metrics.insetSmall)
+            if isProminent {
+                if let control {
+                    control
+                } else {
+                    Button(card.buttonTitle) { perform(card.action) }
+                        .buttonStyle(.prominent)
+                        .controlSize(.small)
+                        .disabled(!isEnabled)
+                }
+            }
+            if let shortcut = card.action.shortcut {
+                KeyCap(shortcut)
+                    .allowsHitTesting(false)
+            }
+        }
+        .padding(.horizontal, SuggestionMetrics.rowPadding)
+        .padding(.vertical, Metrics.insetSmall)
+        .frame(minHeight: SuggestionMetrics.rowHeight)
+        .opacity(isProminent || isEnabled ? 1 : Palette.disabledOpacity)
+    }
+}
+
+extension SuggestionRow where Control == EmptyView {
+    init(_ card: SuggestionCard, isEnabled: Bool, isProminent: Bool = false, perform: @escaping (SuggestionAction) -> Void) {
+        self.card = card
+        self.isEnabled = isEnabled
+        self.isProminent = isProminent
+        self.perform = perform
+        control = nil
+    }
+}
+
+/// A description with "Settings" as a link, when it links there.
+private struct SettingsLinkedText: View {
+    let description: String
+    let linksToSettings: Bool
+
+    var body: some View {
+        var attributed = AttributedString(description)
+        if linksToSettings, let range = description.range(of: "Settings"), let linkRange = Range(range, in: attributed) {
+            attributed[linkRange].link = URL(string: "espalier-settings:integrations")
+        }
+        return LinkedText(attributed)
+    }
+}
+
 /// "Choose your editor in Settings.", with "Settings" as a link.
 private struct EditorSettingsNote: View {
     let description: String
 
     var body: some View {
-        var attributed = AttributedString(description)
-        if let range = description.range(of: "Settings"), let linkRange = Range(range, in: attributed) {
-            attributed[linkRange].link = URL(string: "espalier-settings:integrations")
-        }
-        return LinkedText(attributed)
+        SettingsLinkedText(description: description, linksToSettings: true)
             .font(Typography.secondary)
             .foregroundStyle(.text3)
             .multilineTextAlignment(.center)

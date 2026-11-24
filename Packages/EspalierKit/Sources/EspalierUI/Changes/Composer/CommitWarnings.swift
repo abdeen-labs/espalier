@@ -137,7 +137,8 @@ extension Tip {
 }
 
 /// The warning above the commit button: a friendly banner with its symbol
-/// and the text with its links.
+/// and the text with its links, or the symbol and the text in a row, as the
+/// theme has it.
 public struct CommitWarningView: View {
     private let warning: CommitWarning
     private let onLink: (URL) -> Void
@@ -150,25 +151,44 @@ public struct CommitWarningView: View {
         self.onLink = onLink
     }
 
-    /// A banner: tomato for rules the user can't bypass, honey otherwise.
+    /// Tomato for rules the user can't bypass, honey otherwise.
     public var body: some View {
-        let color = warning.isError ? Palette.error : Palette.warningMark
-        SoftBanner(color: color) {
-            SoftBannerSymbol(warning.isError ? "xmark.octagon.fill" : "exclamationmark.triangle.fill", color: color)
-                .accessibilityElement()
-                .accessibilityLabel(warning.isError ? "Error" : "Warning")
-        } message: {
-            Text(warning.message)
-                .font(Typography.secondary)
-                .foregroundStyle(.text)
-                .fixedSize(horizontal: false, vertical: true)
-                .composerLinkTint()
-                .environment(\.openURL, OpenURLAction { url in
-                    onLink(url)
-                    return .handled
-                })
+        Group {
+            if ComposerView.isSplit {
+                HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
+                    Image(systemName: symbol)
+                        .foregroundStyle(Color(espalier: warning.isError ? Palette.error : Palette.warning))
+                        .accessibilityLabel(warning.isError ? "Error" : "Warning")
+                    message
+                }
+            } else {
+                let color = warning.isError ? Palette.error : Palette.warningMark
+                SoftBanner(color: color) {
+                    SoftBannerSymbol(symbol, color: color)
+                        .accessibilityElement()
+                        .accessibilityLabel(warning.isError ? "Error" : "Warning")
+                } message: {
+                    message
+                        .foregroundStyle(.text)
+                }
+            }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var symbol: String {
+        warning.isError ? "xmark.octagon.fill" : "exclamationmark.triangle.fill"
+    }
+
+    private var message: some View {
+        Text(warning.message)
+            .font(Typography.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .composerLinkTint()
+            .environment(\.openURL, OpenURLAction { url in
+                onLink(url)
+                return .handled
+            })
     }
 }
 

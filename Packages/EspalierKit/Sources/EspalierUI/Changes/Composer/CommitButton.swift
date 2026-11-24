@@ -114,12 +114,14 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
     }
 }
 
-/// The commit button: a big full-width pillow, 44 high, that names the
-/// branch as a candy pill, with its shortcut on the right. A long branch
-/// name gives way in the middle, so the button never grows past its column;
-/// the count rolls over 0.2 s as files are included or leave. The button
-/// and its working pillow (the arc and "Committing…") crossfade over 0.2 s
-/// as work starts and ends.
+/// The commit button, as the theme has it (`ChangesThemeStyle.panes`): a
+/// big full-width pillow, 44 high, that names the branch as a candy pill;
+/// or the full-width prominent capsule, 34 high, with the branch in bold.
+/// Its shortcut is on the right. A long branch name gives way in the
+/// middle, so the button never grows past its column; the count rolls over
+/// 0.2 s as files are included or leave. The button and its working
+/// pillow or capsule (the arc and "Committing…") crossfade over 0.2 s as
+/// work starts and ends.
 public struct CommitButton: View {
     private let content: CommitButtonContent
     private let action: () -> Void
@@ -130,21 +132,23 @@ public struct CommitButton: View {
         self.action = action
     }
 
+    /// The prominent capsule with the branch in bold, rather than the
+    /// pillow with its pill.
+    private var isCapsule: Bool {
+        ComposerView.isSplit
+    }
+
     public var body: some View {
         // The crossfade carries its own motion, so the button moves as the
         // composer around it does.
         let fade: AnyTransition = motion.animates ? .opacity.animation(Motion.animation(Motion.kindChange)) : .identity
         // One over the other while they crossfade.
-        ZStack {
+        let button = ZStack {
             if content.isCommitting || content.isGenerating {
-                // While it works, the capsule stays legible rather than
+                // While it works, the button stays legible rather than
                 // fading as a disabled button does (as the sync button).
-                HStack(spacing: Metrics.insetSmall) {
-                    ArcProgress(.small, tint: Palette.buttonText)
-                    label
-                }
-                .pillowChrome()
-                .accessibilityElement(children: .ignore)
+                working
+                    .accessibilityElement(children: .ignore)
                 .accessibilityAddTraits(.isButton)
                 .tooltip(content.help)
                 .accessibilityLabel(content.title)
@@ -178,12 +182,35 @@ public struct CommitButton: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.pillow)
+                .commitButtonStyle(isCapsule: isCapsule)
                 .disabled(!content.isEnabled)
                 .tooltip(content.help)
                 .accessibilityLabel(content.title)
                 .transition(fade)
             }
+        }
+        if isCapsule {
+            button
+                .controlSize(.extraLarge)
+        } else {
+            button
+        }
+    }
+
+    /// The arc and the title on the button's own chrome.
+    @ViewBuilder
+    private var working: some View {
+        let content = HStack(spacing: Metrics.insetSmall) {
+            ArcProgress(.small, tint: Palette.buttonText)
+            label
+        }
+        if isCapsule {
+            content
+                .frame(maxWidth: .infinity)
+                .capsuleChrome(.prominent)
+        } else {
+            content
+                .pillowChrome()
         }
     }
 
@@ -201,12 +228,29 @@ public struct CommitButton: View {
             .accessibilityHidden(true)
     }
 
-    /// The title: the words keep their room and the branch, in its candy
-    /// pill, gives way in the middle. Its count rolls to a new one.
+    /// The title: the words keep their room and the branch, in bold or in
+    /// its candy pill, gives way in the middle. Its count rolls to a new
+    /// one.
     private var label: some View {
         let parts = content.titleParts
         return Group {
-            if let branch = parts.branch {
+            if let branch = parts.branch, isCapsule {
+                HStack(spacing: 0) {
+                    Text(parts.lead)
+                        .layoutPriority(2)
+                    // The space leads the branch's text: a trailing one
+                    // would be trimmed.
+                    Text(verbatim: " " + branch)
+                        .fontWeight(.bold)
+                        .truncationMode(.middle)
+                        .layoutPriority(1)
+                    if !parts.trail.isEmpty {
+                        Text(parts.trail)
+                            .layoutPriority(2)
+                    }
+                }
+                .lineLimit(1)
+            } else if let branch = parts.branch {
                 HStack(spacing: Metrics.CommitButton.pillSpacing) {
                     Text(parts.lead)
                         .layoutPriority(2)
@@ -229,6 +273,18 @@ public struct CommitButton: View {
         }
         .contentTransition(motion.animates ? .numericText() : .identity)
         .motion(Motion.kindChange, value: content.fileCount)
+    }
+}
+
+extension Button {
+    /// The commit button's style: the prominent capsule, or the pillow.
+    @ViewBuilder
+    fileprivate func commitButtonStyle(isCapsule: Bool) -> some View {
+        if isCapsule {
+            buttonStyle(.prominent)
+        } else {
+            buttonStyle(.pillow)
+        }
     }
 }
 

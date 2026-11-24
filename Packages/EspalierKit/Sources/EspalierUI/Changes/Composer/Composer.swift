@@ -520,13 +520,19 @@ public struct ComposerView: View {
             }
             if let lastCommit = content.lastCommit {
                 // Grows in after a commit over 0.22 s and leaves over 0.15
-                // s (Changes' column sets the motion).
-                LastCommitRow(lastCommit, onUndo: actions.undo)
-                    .barTransition()
+                // s (Changes' column sets the motion). A card, or a row
+                // under a hairline.
+                VStack(alignment: .leading, spacing: Metrics.insetSmall) {
+                    if Self.isSplit {
+                        Hairline()
+                    }
+                    LastCommitRow(lastCommit, onUndo: actions.undo)
+                }
+                .barTransition()
             }
         }
         .padding(.horizontal, Metrics.Composer.horizontalPadding)
-        .padding(.top, Metrics.insetSmall)
+        .padding(.top, Self.isSplit ? Metrics.insetMedium : Metrics.insetSmall)
         .padding(.bottom, Metrics.Composer.horizontalPadding)
         .onChange(of: focusRequest) {
             focusBridge.focusSummary()
@@ -559,6 +565,9 @@ public struct ComposerView: View {
             if content.showsCoAuthors(draft) {
                 coAuthorsSection
             }
+            if Self.isSplit {
+                Hairline()
+            }
             footer(showsSparkle: false)
         }
         .noteCard()
@@ -587,11 +596,14 @@ public struct ComposerView: View {
         )
     }
 
-    /// The commit message as a note card: the summary large and bold, the
-    /// description under it, the co-authors under them while they show,
-    /// and tucked into the card's footer the AI button, co-authors, and the
-    /// commit options on the left and the author on the right. No rules:
-    /// the field with focus has a soft wash of its own.
+    /// The commit message's card, as the theme has it
+    /// (`ChangesThemeStyle.panes`): a note card, the summary large and
+    /// bold, the description under it, the co-authors under them while
+    /// they show, and tucked into the card's footer the AI button,
+    /// co-authors, and the commit options on the left and the author on the
+    /// right, with no rules (the field with focus has a soft wash of its
+    /// own); or the same pieces on a plain card, the summary semibold,
+    /// split by hairlines, the field with focus tinted to the hairlines.
     private var card: some View {
         VStack(spacing: 0) {
             messageFields
@@ -615,6 +627,9 @@ public struct ComposerView: View {
                 coAuthorsSection
             }
             if !footerIsOnlyAuthor {
+                if Self.isSplit {
+                    Hairline()
+                }
                 footer(showsSparkle: true)
             }
         }
@@ -665,6 +680,10 @@ public struct ComposerView: View {
                 focusTint(behind: .summary)
             }
             .fieldRegion()
+            if Self.isSplit {
+                Hairline()
+                    .padding(.horizontal, Metrics.Composer.cardPadding)
+            }
             DescriptionEditor(
                 text: descriptionBinding,
                 isEditable: !content.isReadOnly,
@@ -686,10 +705,14 @@ public struct ComposerView: View {
         }
     }
 
-    /// The co-authors under a divider. Opens and closes as a bar does
-    /// (`coAuthorsBinding`).
+    /// The co-authors, under a hairline where the card has them. Opens and
+    /// closes as a bar does (`coAuthorsBinding`).
     private var coAuthorsSection: some View {
         VStack(spacing: 0) {
+            if Self.isSplit {
+                Hairline()
+                    .padding(.horizontal, Metrics.Composer.cardPadding)
+            }
             CoAuthorsField(
                 authors: $draft.coAuthors,
                 isEditable: !content.isReadOnly,
@@ -716,16 +739,26 @@ public struct ComposerView: View {
     }
 
     /// The faint accent wash behind `field` while it has focus: a soft
-    /// rounded patch inset in the card, like a highlighter's. It fades in
-    /// over 0.15 s and out over 0.1 s, and crossfades to the other field.
+    /// rounded patch inset in the card, like a highlighter's; or, where
+    /// hairlines split the card, over the field's whole part of it, from
+    /// the card's edges to the hairlines, the summary's top corners the
+    /// card's. It fades in over 0.15 s and out over 0.1 s, and crossfades to
+    /// the other field.
     private func focusTint(behind field: ComposerField) -> some View {
         ZStack {
             if markedField == field {
-                RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-                    .fill(Color(espalier: Palette.accentFaint))
-                    .padding(.horizontal, Metrics.NoteCard.focusInset)
-                    .padding(.top, field == .summary ? Metrics.NoteCard.focusInset : 0)
-                    .transition(motion.animates ? .opacity : .identity)
+                if Self.isSplit {
+                    let corner = field == .summary ? Metrics.Radius.card : 0
+                    UnevenRoundedRectangle(topLeadingRadius: corner, topTrailingRadius: corner, style: .continuous)
+                        .fill(Color(espalier: Palette.accentFaint))
+                        .transition(motion.animates ? .opacity : .identity)
+                } else {
+                    RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
+                        .fill(Color(espalier: Palette.accentFaint))
+                        .padding(.horizontal, Metrics.NoteCard.focusInset)
+                        .padding(.top, field == .summary ? Metrics.NoteCard.focusInset : 0)
+                        .transition(motion.animates ? .opacity : .identity)
+                }
             }
         }
         .animation(motion.animation(markedField == nil ? Motion.focusOut : Motion.leave), value: markedField)
@@ -873,33 +906,53 @@ public struct ComposerView: View {
     }
 
     /// The message fields' height with nothing typed: the summary's line
-    /// and the description's fewest lines, with their padding.
+    /// and the description's fewest lines, with their padding (and the
+    /// hairline between them, where the card has one).
     private static var emptyMessageFieldsHeight: CGFloat {
         Metrics.NoteCard.summaryTopPadding + ceil(NSLayoutManager().defaultLineHeight(for: summaryFont)) + Metrics.NoteCard.summaryBottomPadding
+            + (isSplit ? 1 : 0)
             + DescriptionEditor.height(for: "", width: Metrics.Column.changesFileList.ideal) + Metrics.grid * 2
     }
 
-    /// The summary's font: large and bold, as a pane's title.
+    /// The summary's font: large and bold, as a pane's title, on a note
+    /// card; the row font, semibold, where hairlines split the card.
     private static var summaryFont: NSFont {
-        AppKitTypography.sans(.title3, weight: .bold)
+        isSplit ? AppKitTypography.row(weight: .semibold) : AppKitTypography.sans(.title3, weight: .bold)
+    }
+
+    /// Hairlines split the composer's card and set the last commit row
+    /// apart (`ChangesThemeStyle.panes`).
+    static var isSplit: Bool {
+        ChangesThemeStyle.current.panes == .hairlines
     }
 }
 
 extension View {
-    /// The composer's note card: a cream card on the column with the
-    /// card's ring and shadow and a generous radius.
+    /// The composer's card: a cream note card on the column with the
+    /// card's ring and shadow and a generous radius; or, where hairlines
+    /// split it, the card fill at the card radius.
     func noteCard() -> some View {
         surface(Color(espalier: Palette.cardFill), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.NoteCard.radius, style: .continuous))
     }
 }
 
 extension Metrics {
-    /// The composer's note card.
+    /// The composer's card, as the theme has it.
     public enum NoteCard {
-        public static let radius: CGFloat = 18
-        /// Above the summary, and between it and the description.
-        public static let summaryTopPadding: CGFloat = 12
-        public static let summaryBottomPadding: CGFloat = 2
+        public static var radius: CGFloat {
+            ComposerView.isSplit ? Metrics.Radius.card : 18
+        }
+
+        /// Above the summary.
+        public static var summaryTopPadding: CGFloat {
+            ComposerView.isSplit ? Metrics.Composer.summaryTopPadding : 12
+        }
+
+        /// Between the summary and the description (or its hairline).
+        public static var summaryBottomPadding: CGFloat {
+            ComposerView.isSplit ? Metrics.insetSmall : 2
+        }
+
         /// How far the focused field's wash sits inside the card.
         public static let focusInset: CGFloat = 4
     }
@@ -919,17 +972,34 @@ struct AIFailureLine: View {
     }
 
     var body: some View {
-        // A tomato banner; the message takes the room the button leaves
-        // before it wraps.
-        SoftBanner(color: Palette.error) {
-            SoftBannerSymbol("sparkles", color: Palette.error)
-        } message: {
-            Text(failure.message)
-                .font(Typography.secondary.weight(.medium))
-                .foregroundStyle(.text)
-                .fixedSize(horizontal: false, vertical: true)
-        } accessory: {
-            recoveryButton
+        // A tomato banner, or the error symbol and the message in red in a
+        // row, as the theme has it; the message takes the room the button
+        // leaves before it wraps.
+        Group {
+            if ComposerView.isSplit {
+                HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(Color(espalier: Palette.error))
+                        .accessibilityHidden(true)
+                    Text(failure.message)
+                        .font(Typography.secondary)
+                        .foregroundStyle(Color(espalier: Palette.error))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    recoveryButton
+                }
+            } else {
+                SoftBanner(color: Palette.error) {
+                    SoftBannerSymbol("sparkles", color: Palette.error)
+                } message: {
+                    Text(failure.message)
+                        .font(Typography.secondary.weight(.medium))
+                        .foregroundStyle(.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                } accessory: {
+                    recoveryButton
+                }
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Couldn't generate a commit message: \(failure.message)")

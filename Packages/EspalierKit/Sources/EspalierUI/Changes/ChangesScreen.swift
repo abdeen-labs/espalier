@@ -98,7 +98,8 @@ struct ChangesColumn: View {
         )
         FileList(repository: repository)
         .safeAreaBar(edge: .top, spacing: 0) {
-            // No rule under it: the list fades out under the header.
+            // The list fades out under the header, or ends at a hairline
+            // under it, as the theme has it.
             ChangesHeader(
                 ChangesHeaderContent.make(repository, numberFormat: context.app.preferences.numberFormat),
                 onIncludeAll: { include in
@@ -111,6 +112,11 @@ struct ChangesColumn: View {
             )
             .contextMenuCard { [context] in
                 ChangesHeaderMenu.content(repository: repository, context: context)
+            }
+            .overlay(alignment: .bottom) {
+                if ChangesThemeStyle.current.panes == .hairlines {
+                    Hairline()
+                }
             }
         }
         .safeAreaBar(edge: .bottom, spacing: 0) {
@@ -276,7 +282,8 @@ struct ChangesFooter: View {
     var body: some View {
         let changes = repository.changes
         let controller = ChangesController(context: context, repository: repository)
-        // Soft cards stacked under the files, no rules between them.
+        // Soft cards stacked under the files with no rules between them,
+        // or each piece under a hairline, as the theme has them.
         VStack(spacing: 0) {
             if layout.showsHiddenNote {
                 HiddenChangesNote(
@@ -284,25 +291,47 @@ struct ChangesFooter: View {
                     numberFormat: context.app.preferences.numberFormat,
                     onShow: controller.showIncludedFiles
                 )
-                .padding(.horizontal, Metrics.Composer.horizontalPadding)
-                .padding(.top, Metrics.insetSmall)
+                .footerPiece()
                 .barTransition()
             }
             if layout.stashCount > 0 {
                 StashedChangesRow(count: layout.stashCount) {
                     context.actions.perform(.toggleStashedChanges)
                 }
-                .padding(.horizontal, Metrics.Composer.horizontalPadding)
-                .padding(.top, Metrics.insetSmall)
+                .footerPiece()
                 .barTransition()
             }
             switch layout.bottom {
             case .composer, .merge:
                 Composer(repository: repository)
+                    .footerPiece(padsCard: false)
                     .barTransition()
             case .none:
                 EmptyView()
             }
+        }
+    }
+}
+
+extension View {
+    /// A piece of Changes' footer as the theme stacks it
+    /// (`ChangesThemeStyle.panes`): a card inset under the one above, or
+    /// full width under a hairline.
+    ///
+    /// - Parameter padsCard: The piece is a card the footer insets; the
+    ///   composer insets its own.
+    @ViewBuilder
+    fileprivate func footerPiece(padsCard: Bool = true) -> some View {
+        if ChangesThemeStyle.current.panes == .hairlines {
+            VStack(spacing: 0) {
+                Hairline()
+                self
+            }
+        } else if padsCard {
+            padding(.horizontal, Metrics.Composer.horizontalPadding)
+                .padding(.top, Metrics.insetSmall)
+        } else {
+            self
         }
     }
 }

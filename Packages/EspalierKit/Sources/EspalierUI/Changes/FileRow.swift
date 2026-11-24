@@ -180,21 +180,32 @@ extension FileRowContent {
     }
 }
 
-/// The Changes list's row metrics: roomy file rows, inset 8 from the
-/// column's edges, the row radius.
+/// The Changes list's row metrics, as the theme's rows have them
+/// (`ChangesThemeStyle.fileRows`): roomy rows inset 8 from the column's
+/// edges, or compact ones inset 6.
 enum FileRowMetrics {
-    /// The row height: `ceil(lineHeight(.body) × 2.375)`, 38 at the default
-    /// text size, so it follows the text size.
+    private static var isCompact: Bool {
+        ChangesThemeStyle.current.fileRows == .compact
+    }
+
+    /// The row height, so it follows the text size: roomy
+    /// `ceil(lineHeight(.body) × 2.375)`, 38 at the default text size;
+    /// compact `× 1.875`, 30.
     static var rowHeight: CGFloat {
-        ceil(AppKitTypography.bodyLayoutLineHeight * 2.375)
+        ceil(AppKitTypography.bodyLayoutLineHeight * (isCompact ? 1.875 : 2.375))
     }
 
     /// The row's inset from the column's edges (its selection's too).
-    static let inset: CGFloat = 8
+    static var inset: CGFloat {
+        isCompact ? 6 : 8
+    }
+
     /// Space inside the row before its checkbox and after its last label.
     static let padding: CGFloat = 8
-    /// Space between the checkbox, the tile, and the name.
-    static let spacing: CGFloat = 10
+    /// Space between the checkbox, the badge, and the name.
+    static var spacing: CGFloat {
+        isCompact ? 9 : 10
+    }
     /// Space between the name, a rename's source, and the folder.
     static let labelSpacing: CGFloat = 6
     /// Space before the line counts, and before a conflict's buttons.
@@ -219,13 +230,15 @@ enum FileRowMetrics {
     }
 }
 
-/// A changed file's row in the Changes table: the chunky checkbox, the
-/// status tile, the name in semibold, then a rename's source and the
-/// folder in soft tertiary text (which give way first), and the lines added
-/// and removed at the trailing edge as two small pills, leaf and tomato;
-/// for a conflicted file, its state and buttons at the trailing edge
-/// instead, and the resolved tile (a check) once it's resolved. AppKit, so
-/// a table of 50,000 files configures only the rows on screen.
+/// A changed file's row in the Changes table: the checkbox, the status
+/// badge, the name (semibold in roomy rows, medium in compact ones), then
+/// a rename's source and the folder in tertiary text (which give way
+/// first), and the lines added and removed at the trailing edge, as two
+/// small pills, leaf and tomato, or as one run of colored text, as the
+/// theme has them; for a conflicted file, its state and buttons at the
+/// trailing edge instead, and the resolved badge (a check) once it's
+/// resolved. AppKit, so a table of 50,000 files configures only the rows
+/// on screen.
 final class FileRowView: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("Espalier.FileRow")
 
@@ -236,6 +249,8 @@ final class FileRowView: NSTableCellView {
     /// The lines added, and removed, as pills.
     private let addedPill = CountPillView(color: Palette.add)
     private let deletedPill = CountPillView(color: Palette.delete)
+    /// The lines added and removed as one run of colored text.
+    private let countsLabel = FileRowView.label(font: AppKitTypography.count(), color: Palette.text3)
     private let glyph = StatusGlyphView()
     /// A conflicted file's state: "3 conflicts", "Manual conflict".
     private let conflictLabel = FileRowView.label(font: AppKitTypography.secondary, color: Palette.text3)
@@ -276,10 +291,12 @@ final class FileRowView: NSTableCellView {
         checkbox.action = #selector(toggle(_:))
         addedPill.isHidden = true
         deletedPill.isHidden = true
+        countsLabel.lineBreakMode = .byClipping
+        countsLabel.isHidden = true
         directoryLabel.lineBreakMode = .byTruncatingHead
         conflictLabel.lineBreakMode = .byTruncatingTail
         conflictLabel.isHidden = true
-        for view in [checkbox, glyph, nameLabel, sourceLabel, directoryLabel, addedPill, deletedPill, conflictLabel] as [NSView] {
+        for view in [checkbox, glyph, nameLabel, sourceLabel, directoryLabel, addedPill, deletedPill, countsLabel, conflictLabel] as [NSView] {
             addSubview(view)
         }
         textField = nameLabel
@@ -292,9 +309,10 @@ final class FileRowView: NSTableCellView {
         fatalError("init(coder:) is not supported")
     }
 
-    /// The name's font: the row font, semibold.
+    /// The name's font: the row font, semibold in roomy rows and medium in
+    /// compact ones.
     static var nameFont: NSFont {
-        AppKitTypography.row(weight: .semibold)
+        AppKitTypography.row(weight: ChangesThemeStyle.current.fileRows == .compact ? .medium : .semibold)
     }
 
     /// Shows `content`, changing only what differs (a status pass refills
@@ -475,6 +493,7 @@ final class FileRowView: NSTableCellView {
         }
         addedPill.color = Palette.add
         deletedPill.color = Palette.delete
+        countsLabel.font = AppKitTypography.count()
         glyph.lookDidChange()
         // Shown again in full, in the new fonts and colors.
         content = nil
@@ -540,6 +559,13 @@ final class FileRowView: NSTableCellView {
             pillEnd = pill.frame.minX - FileRowMetrics.pillSpacing
             end = pill.frame.minX - FileRowMetrics.countsSpacing + padding
         }
+        // Or the counts as text, on the name's baseline (set below).
+        if !countsLabel.isHidden {
+            let width = Self.fittingWidth(countsLabel)
+            let height = ceil(countsLabel.intrinsicContentSize.height)
+            countsLabel.frame = CGRect(x: end - width, y: ((bounds.height - height) / 2).rounded(), width: width, height: height)
+            end = countsLabel.frame.minX - FileRowMetrics.countsSpacing + 2 * padding
+        }
         let widths = FileLabelWidths.widths(
             natural: natural,
             floors: labels.map { FileLabelWidths.floor(of: $0.stringValue, font: $0.font ?? AppKitTypography.secondary) + 2 * padding },
@@ -558,15 +584,45 @@ final class FileRowView: NSTableCellView {
                 x += width + gap
             }
         }
+        if !countsLabel.isHidden {
+            countsLabel.frame.origin.y = (baseline - countsLabel.firstBaselineOffsetFromTop).rounded()
+        }
         if !conflictLabel.isHidden {
             conflictLabel.frame.origin.y = (baseline - conflictLabel.firstBaselineOffsetFromTop).rounded()
         }
     }
 
-    /// Shows "+10" on a leaf pill and "−2" on a tomato one, or hides them.
+    /// Shows the counts as the theme has them (`ChangesThemeStyle.lineCounts`):
+    /// "+10" on a leaf pill and "−2" on a tomato one, or "+10 −2" as text in
+    /// the added and removed colors; or hides them.
     private func setCounts(_ parts: (added: String?, deleted: String?)?) {
-        addedPill.text = parts?.added
-        deletedPill.text = parts?.deleted
+        let asText = ChangesThemeStyle.current.lineCounts == .text
+        addedPill.text = asText ? nil : parts?.added
+        deletedPill.text = asText ? nil : parts?.deleted
+        guard asText, let parts else {
+            if !countsLabel.isHidden {
+                countsLabel.isHidden = true
+                countsLabel.stringValue = ""
+            }
+            return
+        }
+        let font = AppKitTypography.count()
+        let text = NSMutableAttributedString()
+        if let added = parts.added {
+            text.append(NSAttributedString(string: added, attributes: [.font: font, .foregroundColor: DiffColors.addedMarker]))
+        }
+        if let deleted = parts.deleted {
+            if text.length > 0 {
+                text.append(NSAttributedString(string: " ", attributes: [.font: font]))
+            }
+            text.append(NSAttributedString(string: deleted, attributes: [.font: font, .foregroundColor: DiffColors.deletedMarker]))
+        }
+        if countsLabel.attributedStringValue != text {
+            countsLabel.attributedStringValue = text
+        }
+        if countsLabel.isHidden {
+            countsLabel.isHidden = false
+        }
     }
 
     override var isFlipped: Bool {
@@ -615,9 +671,10 @@ final class FileRowView: NSTableCellView {
     }
 }
 
-/// A file's status tile: its letter in the status color on the status's
-/// tint, a rounded square, the AppKit twin of `StatusGlyph`, for table
-/// rows. The letter is a label, so drawing stays a fill.
+/// A file's status badge: its letter in the status color on the status's
+/// tint, a rounded square, or a resolved conflict's check where the theme
+/// has it; the AppKit twin of `StatusGlyph`, for table rows. The letter
+/// is a label, so drawing stays a fill.
 final class StatusGlyphView: NSView {
     var kind: FileStatusKind = .modified {
         didSet {
@@ -628,12 +685,19 @@ final class StatusGlyphView: NSView {
     }
 
     fileprivate let letter = NSTextField(labelWithString: "")
+    /// A resolved conflict's check, in the letter's place.
+    private let check = NSImageView()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         letter.alignment = .center
         letter.setAccessibilityElement(false)
         addSubview(letter)
+        check.imageScaling = .scaleNone
+        check.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
+        check.setAccessibilityElement(false)
+        check.isHidden = true
+        addSubview(check)
         apply()
     }
 
@@ -650,16 +714,18 @@ final class StatusGlyphView: NSView {
         letter.stringValue = kind.letter
         letter.font = Self.font
         letter.textColor = kind.tileInk
+        letter.isHidden = kind.showsCheck
+        check.isHidden = !kind.showsCheck
+        check.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: Metrics.StatusTile.checkSize, weight: .regular)
+        check.contentTintColor = Palette.success
         setTooltip(kind.title)
         needsLayout = true
         needsDisplay = true
     }
 
-    /// The letter's font: the code font, bold (black with Increase
-    /// Contrast), as `StatusGlyph`.
+    /// The letter's font, as `StatusGlyph`'s (`Metrics.StatusTile.letterFont`).
     private static var font: NSFont {
-        let increased = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
-        return AppKitTypography.mono(size: Metrics.StatusTile.letterSize, weight: increased ? .black : .bold)
+        Metrics.StatusTile.letterFont(increasedContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -674,9 +740,13 @@ final class StatusGlyphView: NSView {
         // The label centered on its line's height, not its frame's.
         let height = letter.intrinsicContentSize.height
         letter.frame = CGRect(x: 0, y: ((bounds.height - height) / 2).rounded(), width: bounds.width, height: height)
+        check.frame = bounds
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        guard !kind.showsCheck else {
+            return
+        }
         kind.tileFill.setFill()
         let radius = min(Metrics.StatusTile.radius, bounds.height / 2)
         NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()

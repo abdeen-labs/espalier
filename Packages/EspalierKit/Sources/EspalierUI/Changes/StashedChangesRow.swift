@@ -1,11 +1,12 @@
-// The "Stashed Changes" card under the Changes list, shown while the current
+// The "Stashed Changes" row under the Changes list, shown while the current
 // branch has a stash: the stash symbol, the title, how many when it has
-// more than one, and a chevron. Like View ▸ Show Stashed Changes (⌃H), it
-// shows the branch's newest stash.
+// more than one, and a chevron. A soft card, or a plain row between
+// hairlines, as the theme has it. Like View ▸ Show Stashed Changes (⌃H),
+// it shows the branch's newest stash.
 
 import SwiftUI
 
-/// The card that shows the current branch's newest stash.
+/// The row that shows the current branch's newest stash.
 public struct StashedChangesRow: View {
     /// How many stashes the current branch has.
     private let count: Int
@@ -19,6 +20,20 @@ public struct StashedChangesRow: View {
     }
 
     public var body: some View {
+        Group {
+            if ChangesThemeStyle.current.panes == .hairlines {
+                row
+            } else {
+                card
+            }
+        }
+        .tooltip(count > 1 ? "Show the newest changes stashed on this branch" : "Show the changes stashed on this branch")
+        .accessibilityLabel(count > 1 ? "Stashed Changes, \(formatCount(count, numberFormat)) stashes" : "Stashed Changes")
+        .accessibilityHint(count > 1 ? "Shows the newest changes stashed on this branch" : "Shows the changes stashed on this branch")
+    }
+
+    /// A soft card in a tint of the stashes' color, the count on a pill.
+    private var card: some View {
         Button(action: action) {
             HStack(spacing: Metrics.SoftBanner.spacing) {
                 Image(systemName: "tray.full")
@@ -49,8 +64,34 @@ public struct StashedChangesRow: View {
         }
         .buttonStyle(.bare(.rounded(Metrics.Radius.card)))
         .onHover { isHovered = $0 }
-        .tooltip(count > 1 ? "Show the newest changes stashed on this branch" : "Show the changes stashed on this branch")
-        .accessibilityLabel(count > 1 ? "Stashed Changes, \(formatCount(count, numberFormat)) stashes" : "Stashed Changes")
-        .accessibilityHint(count > 1 ? "Shows the newest changes stashed on this branch" : "Shows the changes stashed on this branch")
+    }
+
+    /// A plain row, a little taller than a file's: the symbol over the
+    /// checkboxes' column, the count in tertiary text.
+    private var row: some View {
+        Button(action: action) {
+            HStack(spacing: FileRowMetrics.spacing) {
+                Image(systemName: "tray.full")
+                    .foregroundStyle(.text2)
+                    .frame(width: CheckboxDrawing.size)
+                    .accessibilityHidden(true)
+                Text("Stashed Changes")
+                    .font(Typography.row.weight(.medium))
+                    .foregroundStyle(.text)
+                Spacer(minLength: Metrics.insetSmall)
+                if count > 1 {
+                    Text(formatCount(count, numberFormat))
+                        .font(Typography.count)
+                        .foregroundStyle(.text3)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.text3)
+            }
+            .padding(.horizontal, FileRowMetrics.contentInset)
+            .frame(height: FileRowMetrics.rowHeight + Metrics.insetSmall)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
     }
 }

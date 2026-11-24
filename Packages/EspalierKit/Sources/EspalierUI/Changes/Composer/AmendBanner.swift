@@ -12,21 +12,41 @@ public struct AmendBanner: View {
     }
 
     public var body: some View {
-        // A banner in the accent.
-        SoftBanner(color: Palette.accent) {
-            SoftBannerSymbol("pencil", color: Palette.accent)
-        } message: {
-            LinkedText(Self.message)
-                .font(Typography.secondary)
-                .foregroundStyle(.text)
-                .fixedSize(horizontal: false, vertical: true)
-                .environment(\.openURL, OpenURLAction { _ in
-                    onStopAmending()
-                    return .handled
-                })
+        // A banner in the accent, or the symbol and the note on a quiet
+        // card, as the theme has it.
+        Group {
+            if ComposerView.isSplit {
+                HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
+                    Image(systemName: "pencil.circle.fill")
+                        .foregroundStyle(Color.accent)
+                        .accessibilityHidden(true)
+                    note(color: .text2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, Metrics.Composer.cardPadding)
+                .padding(.vertical, Metrics.insetSmall)
+                .surface(.quiet, elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+            } else {
+                SoftBanner(color: Palette.accent) {
+                    SoftBannerSymbol("pencil", color: Palette.accent)
+                } message: {
+                    note(color: .text)
+                }
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityAction(named: "Stop Amending", onStopAmending)
+    }
+
+    private func note(color: Color) -> some View {
+        LinkedText(Self.message)
+            .font(Typography.secondary)
+            .foregroundStyle(color)
+            .fixedSize(horizontal: false, vertical: true)
+            .environment(\.openURL, OpenURLAction { _ in
+                onStopAmending()
+                return .handled
+            })
     }
 
     /// The note, with "most recent commit" in bold and "Stop amending" as

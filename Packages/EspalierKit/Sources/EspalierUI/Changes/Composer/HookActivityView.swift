@@ -60,29 +60,51 @@ public struct HookActivityView: View {
     }
 
     public var body: some View {
-        // A banner in the status's color; one line when it fits, else the
-        // buttons go under the text.
-        SoftBanner(color: color) {
-            statusGlyph
-        } message: {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Metrics.insetSmall) {
-                    status
-                        .fixedSize()
-                    Spacer(minLength: Metrics.insetSmall)
-                    buttons
-                }
-                VStack(alignment: .leading, spacing: Metrics.grid) {
-                    status
+        // A banner in the status's color, or the glyph and the text in a
+        // row, as the theme has it; one line when it fits, else the buttons
+        // go under the text.
+        Group {
+            if ComposerView.isSplit {
+                line {
                     HStack(spacing: Metrics.insetSmall) {
-                        Spacer(minLength: 0)
-                        buttons
+                        statusGlyph
+                        Text(content.text)
+                            .font(Typography.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
+                }
+            } else {
+                SoftBanner(color: color) {
+                    statusGlyph
+                } message: {
+                    line { status }
+                }
+                .motion(Motion.leave, value: content.status)
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    /// `status` and the buttons: on one line when it fits, else the buttons
+    /// under it.
+    private func line(@ViewBuilder _ status: () -> some View) -> some View {
+        let status = status()
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: Metrics.insetSmall) {
+                status
+                    .fixedSize()
+                Spacer(minLength: Metrics.insetSmall)
+                buttons
+            }
+            VStack(alignment: .leading, spacing: Metrics.grid) {
+                status
+                HStack(spacing: Metrics.insetSmall) {
+                    Spacer(minLength: 0)
+                    buttons
                 }
             }
         }
-        .motion(Motion.leave, value: content.status)
-        .accessibilityElement(children: .contain)
     }
 
     /// The banner's color: the accent while the hook runs, then leaf or
@@ -127,21 +149,41 @@ public struct HookActivityView: View {
     private var statusGlyph: some View {
         let fade: AnyTransition = motion.animates ? .opacity : .identity
         // One over the other while they crossfade.
+        let isInline = ComposerView.isSplit
         return ZStack {
             switch content.status {
             case .running:
-                ArcProgress(.small, tint: Palette.accent)
-                    .accessibilityHidden(true)
-                    .transition(fade)
+                Group {
+                    if isInline {
+                        ArcProgress(.mini)
+                    } else {
+                        ArcProgress(.small, tint: Palette.accent)
+                    }
+                }
+                .accessibilityHidden(true)
+                .transition(fade)
             case .finished:
-                SoftBannerSymbol("checkmark.circle.fill", color: Palette.success)
+                symbol("checkmark.circle.fill", color: Palette.success, isInline: isInline)
                     .transition(fade)
             case .failed:
-                SoftBannerSymbol("xmark.circle.fill", color: Palette.error)
+                symbol(isInline ? "xmark.octagon.fill" : "xmark.circle.fill", color: Palette.error, isInline: isInline)
                     .transition(fade)
             }
         }
         .motion(Motion.leave, value: content.status)
+    }
+
+    /// The hook's end: a banner's symbol, or a plain one in the text's
+    /// size.
+    @ViewBuilder
+    private func symbol(_ systemImage: String, color: NSColor, isInline: Bool) -> some View {
+        if isInline {
+            Image(systemName: systemImage)
+                .foregroundStyle(Color(espalier: color))
+                .accessibilityHidden(true)
+        } else {
+            SoftBannerSymbol(systemImage, color: color)
+        }
     }
 }
 
