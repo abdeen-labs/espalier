@@ -116,19 +116,17 @@ struct ToolbarCaptures {
         capture(LocationControlView(state).padding(Metrics.insetMedium), named: name, area: "LocationControl")
     }
 
-    /// A branch two commits ahead and one behind its upstream, in a
-    /// feature's color.
-    private static let aheadBehindLocation = LocationControlState(
+    /// A feature branch.
+    private static let featureLocation = LocationControlState(
         repository: .repository(name: "harbor", path: "/Users/joe/Developer/harbor"),
-        branch: .branch(name: "feature/charts"),
-        aheadBehind: AheadBehind(ahead: 2, behind: 1)
+        branch: .branch(name: "feature/charts")
     )
 
-    @Test("the location control on a branch ahead of and behind its upstream, in the branch's color")
-    func locationControlCounts() {
+    @Test("the location control on a feature branch, in the branch's color")
+    func locationControlColor() {
         capture(
-            LocationControlView(Self.aheadBehindLocation, branchColor: PlaceIdentity.grape).padding(Metrics.insetMedium),
-            named: "branch-ahead-behind",
+            LocationControlView(Self.featureLocation, branchColor: PlaceIdentity.grape).padding(Metrics.insetMedium),
+            named: "branch-color",
             area: "LocationControl"
         )
     }
@@ -146,7 +144,7 @@ struct ToolbarCaptures {
         capture(tabs, named: "tabs", area: "PlaceSwitcher")
     }
 
-    @Test("the sync group: where the branch stands and the last fetch beside the button", arguments: ["9-fetch", "8-push", "7-pull-diverged"])
+    @Test("the sync group: the last fetch beside the button", arguments: ["9-fetch", "8-push", "7-pull-diverged"])
     func syncGroup(name: String) throws {
         let state = try Self.syncState(name)
         capture(SyncButtonGroup(state).padding(Metrics.insetMedium), named: "\(name)-group", area: "SyncButton")

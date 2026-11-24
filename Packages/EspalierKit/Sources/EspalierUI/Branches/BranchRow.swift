@@ -1,10 +1,11 @@
-// A branch's row in the sidebar's Branches section: a candy dot in the
-// branch's color and its name (the branch you're on as a candy pill, its
-// dot haloed: "you are here"; the default branch's dot is the trunk's
-// color, and its tooltip says it's the default), the branch's pull request,
-// and how it compares with its upstream ("↑2" and "↓3" in pills, a dashed
-// circle for not published, or its upstream gone), in the same form on
-// every row. Value-driven: `BranchRowContent`
+// A branch's row in the sidebar's Branches section: a dot in the branch's
+// color and its name (the branch you're on as a candy pill, its dot
+// haloed: "you are here", or its name semibold, in the theme's way:
+// `SidebarThemeStyle.currentBranch`; the default branch's dot is the
+// trunk's color, and its tooltip says it's the default), the branch's pull
+// request, and how it compares with its upstream ("↑2" and "↓3" in pills
+// or as colored text, a dashed circle for not published, or its upstream
+// gone), in the same form on every row. Value-driven: `BranchRowContent`
 // is built from the models by `BranchesSectionContent`.
 
 import EspalierCore
@@ -211,9 +212,8 @@ nonisolated struct BranchRowMarks: Equatable {
     }
 }
 
-/// A branch's row: a candy dot in its branch color, its name (the current
-/// one in a candy pill of its color with its dot haloed, a selected one
-/// bold), the pull request glyph, and its comparison with its upstream; its tooltip is its name, and says when
+/// A branch's row: a dot in its branch color, its name (the current one
+/// marked in the theme's way, `BranchName`), the pull request glyph, and its comparison with its upstream; its tooltip is its name, and says when
 /// it's the default branch. A change to what the row already showed
 /// moves over 0.2 s (`BranchRowMarks.animates(from:)`): the counts roll,
 /// the glyphs fade in and out, the checks' symbol is replaced, and what's
@@ -239,20 +239,12 @@ public struct BranchRow: View {
         let marks = BranchRowMarks(content)
         let color = dotColor ?? content.fallbackColor
         HStack(spacing: Metrics.insetSmall) {
-            CandyDot(color, isHere: content.isCurrent)
+            BranchDot(color, isCurrent: content.isCurrent)
                 .frame(width: Metrics.Sidebar.symbolWidth)
-            Group {
-                if content.isCurrent {
-                    // You are here: the name in a pill of its color.
-                    CandyPill(content.title, color: color, size: .regular)
-                } else {
-                    Text(content.title)
-                        .font(SidebarRowFont.title(isSelected: isSelected))
-                        .foregroundStyle(.sidebarRowText(isSelected: isSelected))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+            BranchName(content.title, color: color, isCurrent: content.isCurrent) { isCurrent in
+                SidebarRowFont.title(isSelected: isSelected, isEmphasized: isCurrent)
             }
+            .foregroundStyle(.sidebarRowText(isSelected: isSelected))
             // The name first; what follows takes the room left.
             .layoutPriority(1)
             HStack(spacing: Metrics.insetSmall) {
@@ -274,8 +266,10 @@ public struct BranchRow: View {
     }
 }
 
-/// The trailing comparison: "↑2" in a pill of the accent's tint and "↓3"
-/// in a neutral pill; a dashed circle, "Not published" in its tooltip, for a branch that isn't published; a
+/// The trailing comparison, in the theme's way (`SidebarThemeStyle.counts`):
+/// "↑2" in a pill of the accent's tint and "↓3" in a neutral pill, or "↑2"
+/// in the accent and "↓3" as the sidebar's counts are, in SF Mono; a dashed
+/// circle, "Not published" in its tooltip, for a branch that isn't published; a
 /// crossed-out cloud, with a tooltip, for a branch whose upstream is gone
 /// from its remote. Each takes one form whatever the row's width. Where
 /// the row animates a change, the counts roll.
@@ -297,11 +291,11 @@ struct BranchTrackingView: View {
             if tracking.countsText(numberFormat) != nil {
                 HStack(spacing: Metrics.grid) {
                     if ahead > 0 {
-                        CountPill("↑\(BranchTracking.formatCompactCount(ahead, numberFormat))", color: Palette.accent)
+                        AheadCount("↑\(BranchTracking.formatCompactCount(ahead, numberFormat))")
                             .contentTransition(motion.animates ? .numericText() : .identity)
                     }
                     if behind > 0 {
-                        CountPill("↓\(BranchTracking.formatCompactCount(behind, numberFormat))")
+                        BehindCount("↓\(BranchTracking.formatCompactCount(behind, numberFormat))", color: .sidebarRowCount(isSelected: isSelected))
                             .contentTransition(motion.animates ? .numericText() : .identity)
                     }
                 }
@@ -345,5 +339,102 @@ struct PullRequestBadgeGlyph: View {
         }
         .font(Typography.secondary)
         .tooltip(badge.tooltip)
+    }
+}
+
+/// A branch's dot in the theme's way (`SidebarThemeStyle.currentBranch`):
+/// a candy dot, haloed for the current branch, or a plain dot.
+struct BranchDot: View {
+    private let color: NSColor
+    private let isCurrent: Bool
+
+    init(_ color: NSColor, isCurrent: Bool) {
+        self.color = color
+        self.isCurrent = isCurrent
+    }
+
+    var body: some View {
+        switch Theme.current.style.sidebar.currentBranch {
+        case .pill:
+            CandyDot(color, isHere: isCurrent)
+        case .semibold:
+            Circle()
+                .fill(Color(nsColor: color))
+                .frame(width: Metrics.Sidebar.dotSize, height: Metrics.Sidebar.dotSize)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// A branch's name, the current one marked in the theme's way
+/// (`SidebarThemeStyle.currentBranch`): in a candy pill of its color, or in
+/// `font(true)`, semibold. Other names are in `font(false)`.
+struct BranchName: View {
+    private let name: String
+    private let color: NSColor
+    private let isCurrent: Bool
+    private let font: (Bool) -> Font
+
+    init(_ name: String, color: NSColor, isCurrent: Bool, font: @escaping (Bool) -> Font) {
+        self.name = name
+        self.color = color
+        self.isCurrent = isCurrent
+        self.font = font
+    }
+
+    var body: some View {
+        if isCurrent, Theme.current.style.sidebar.currentBranch == .pill {
+            // You are here: the name in a pill of its color.
+            CandyPill(name, color: color, size: .regular)
+        } else {
+            Text(name)
+                .font(font(isCurrent))
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+}
+
+/// An ahead count ("↑2") in the theme's way (`SidebarThemeStyle.counts`):
+/// in a pill of the accent's tint, or in the accent in SF Mono.
+struct AheadCount: View {
+    private let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        switch Theme.current.style.sidebar.counts {
+        case .pills:
+            CountPill(text, color: Palette.accent)
+        case .text:
+            Text(verbatim: text)
+                .font(Typography.aheadCount)
+                .foregroundStyle(.accent)
+        }
+    }
+}
+
+/// A behind count ("↓3") in the theme's way (`SidebarThemeStyle.counts`):
+/// in a neutral pill, or in `color` in SF Mono.
+struct BehindCount: View {
+    private let text: String
+    private let color: Color
+
+    init(_ text: String, color: Color) {
+        self.text = text
+        self.color = color
+    }
+
+    var body: some View {
+        switch Theme.current.style.sidebar.counts {
+        case .pills:
+            CountPill(text)
+        case .text:
+            Text(verbatim: text)
+                .font(Typography.secondaryCount)
+                .foregroundStyle(color)
+        }
     }
 }

@@ -111,21 +111,23 @@ nonisolated struct WorktreeRowContent: Sendable, Equatable, Identifiable {
     }
 }
 
-/// One worktree: a leaf candy dot (haloed for the window's: you are here),
-/// or a missing repository's symbol when its folder is gone, its name, a
-/// lock, and its branch or SHA (in the code font).
+/// One worktree: a leaf candy dot (haloed for the window's: you are here)
+/// where the theme colors row symbols (`SidebarThemeStyle.rowSymbols`), or
+/// a missing repository's symbol when its folder is gone, its name, a lock,
+/// and its branch or SHA (in the code font).
 struct WorktreeRow: View {
     let content: WorktreeRowContent
 
     var body: some View {
         HStack(spacing: Metrics.insetSmall) {
             // The glyph column, under the worktrees' symbol, as the
-            // repositories' is: a missing worktree's glyph, else its dot.
+            // repositories' is: a missing worktree's glyph, else its dot,
+            // or empty.
             ZStack {
                 if content.isMissing {
                     Image(systemName: "questionmark.folder")
                         .foregroundStyle(.text3)
-                } else {
+                } else if Theme.current.style.sidebar.rowSymbols == .colored {
                     CandyDot(PlaceIdentity.worktrees.color, isHere: content.isCurrent)
                 }
             }

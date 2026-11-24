@@ -110,31 +110,19 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
 
     /// The button's title: while an operation that isn't one of the
     /// button's runs, the operation's.
-    /// It says what it does, and where: "Push to origin", "Pull from
-    /// origin". A push names the remotes it also goes to: "Push to origin
-    /// and mirror", or "Push to origin and 2 More".
+    /// A push names the remotes it also goes to: "Push origin and mirror",
+    /// or "Push origin and 2 More".
     public var title: String {
         switch kind {
         case .progress(let title, _, _, let shown): shown.map { SyncButtonState(kind: $0, destinations: destinations).title } ?? title
         case .loading: ""
         case .publishRepository: "Publish Repository"
-        case .fetchUnborn(let remote), .fetch(let remote): "Fetch from \(remote)"
+        case .fetchUnborn, .fetch: "Fetch"
         case .detachedHead, .publishBranch: "Publish Branch"
-        case .forcePush(let remote, _, _): "Force Push to \(remote)\(alsoPushedTo)"
-        case .pull(let remote, let withRebase, _, _, _): withRebase ? "Pull from \(remote) with Rebase" : "Pull from \(remote)"
-        case .push(let remote, _, _): "Push to \(remote)\(alsoPushedTo)"
+        case .forcePush(let remote, _, _): "Force Push \(remote)\(alsoPushedTo)"
+        case .pull(let remote, let withRebase, _, _, _): withRebase ? "Pull \(remote) with Rebase" : "Pull \(remote)"
+        case .push(let remote, _, _): "Push \(remote)\(alsoPushedTo)"
         }
-    }
-
-    /// Where the branch stands, beside the button, over the last fetch: "Up
-    /// to date with origin" while it's in step with its upstream (a fetch
-    /// is all there is to do); nil otherwise, where the button says it.
-    public var standing: String? {
-        let shown: Kind? = if case .progress(_, _, _, let shown) = kind { shown } else { kind }
-        if case .fetch(let remote)? = shown {
-            return "Up to date with \(remote)"
-        }
-        return nil
     }
 
     /// What follows a push's remote in its title: the one other remote it
@@ -260,7 +248,7 @@ nonisolated public struct SyncButtonState: Sendable, Equatable {
     }
 
     /// The button's label: the title, then the counts in `numberFormat`
-    /// ("Push to origin ↑2"; "Pull from origin ↓3 ↑2", behind first when pulling).
+    /// ("Push origin ↑2"; "Pull origin ↓3 ↑2", behind first when pulling).
     public func label(_ numberFormat: NumberFormat) -> String {
         ([title] + [countsText(numberFormat)].compactMap { $0 }).joined(separator: " ")
     }
@@ -647,29 +635,42 @@ public struct SyncButtonView: View {
 
     /// The symbol (with the failure badge drawn into it, so it survives
     /// menu and toolbar labels, which keep only an image and a title), the
-    /// title, and its counts in a pill ("Push to origin ↑2").
+    /// title, and its counts, in a pill or as text in the theme's way
+    /// (`ToolbarThemeStyle.syncCounts`) ("Push origin ↑2").
     private func label(kind: CapsuleButtonKind, detail: String, drawsArc: Bool) -> some View {
         let symbolColor: NSColor = kind == .prominent ? Palette.buttonText : Palette.text2
         return HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
             symbol(color: symbolColor, drawsArc: drawsArc)
             // A new title in the same look rolls in, letter by letter,
-            // where it differs ("Push to origin" to "Pull from origin").
+            // where it differs ("Push origin" to "Pull origin").
             Text(state.title)
                 .lineLimit(1)
                 .contentTransition(motion.animates ? .numericText() : .identity)
             if let counts = state.countsText(numberFormat) {
-                // The counts, in a pill of the capsule's own ink, roll to a
-                // new value over 0.2 s (a commit adds one to push).
-                Text(counts)
-                    .font(Typography.sans(size: 11, weight: .heavy, relativeTo: .callout))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .fixedSize()
-                    .contentTransition(motion.animates ? .numericText() : .identity)
-                    .motion(Motion.kindChange, value: counts)
-                    .padding(.horizontal, 6)
-                    .frame(height: Metrics.CandyPills.countHeight)
-                    .background(Capsule(style: .circular).fill(countPillFill(kind)))
+                // The counts roll to a new value over 0.2 s (a commit adds
+                // one to push).
+                switch Theme.current.style.toolbar.syncCounts {
+                case .pill:
+                    // In a pill of the capsule's own ink.
+                    Text(counts)
+                        .font(Typography.sans(size: 11, weight: .heavy, relativeTo: .callout))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .fixedSize()
+                        .contentTransition(motion.animates ? .numericText() : .identity)
+                        .motion(Motion.kindChange, value: counts)
+                        .padding(.horizontal, 6)
+                        .frame(height: Metrics.CandyPills.countHeight)
+                        .background(Capsule(style: .circular).fill(countPillFill(kind)))
+                case .text:
+                    Text(counts)
+                        .font(Typography.aheadCount)
+                        .opacity(0.9)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .contentTransition(motion.animates ? .numericText() : .identity)
+                        .motion(Motion.kindChange, value: counts)
+                }
             }
         }
         .accessibilityElement(children: .ignore)
@@ -762,40 +763,29 @@ enum BadgedSymbol {
 }
 
 /// "Fetched 2 minutes ago", beside the sync button, while the button's
-/// detail is the last fetch, under where the branch stands when that's
-/// worth saying ("Up to date with origin"), in bold.
+/// detail is the last fetch.
 public struct LastFetchedLabel: View {
     private let lastFetched: Date?
-    private let standing: String?
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
 
     public init(_ state: SyncButtonState) {
-        self.init(lastFetched: state.showsLastFetched ? state.lastFetched : nil, standing: state.standing)
+        self.init(lastFetched: state.showsLastFetched ? state.lastFetched : nil)
     }
 
-    /// "Fetched" and `lastFetched`, under `standing`; nothing when
-    /// `lastFetched` is nil.
-    init(lastFetched: Date?, standing: String? = nil) {
+    /// "Fetched" and `lastFetched`; nothing when it's nil.
+    init(lastFetched: Date?) {
         self.lastFetched = lastFetched
-        self.standing = standing
     }
 
     public var body: some View {
         if let lastFetched {
             TimelineView(.everyMinute) { context in
-                VStack(alignment: .trailing, spacing: 0) {
-                    if let standing {
-                        Text(standing)
-                            .font(Typography.meta.weight(.bold))
-                            .foregroundStyle(.text2)
-                    }
-                    Text("Fetched \(RelativeTime.describe(lastFetched, now: context.date, formatting: formatting, timeZone: timeZone))")
-                        .font(Typography.meta)
-                        .foregroundStyle(.text3)
-                }
-                .lineLimit(1)
-                .fixedSize()
+                Text("Fetched \(RelativeTime.describe(lastFetched, now: context.date, formatting: formatting, timeZone: timeZone))")
+                    .font(Typography.meta)
+                    .foregroundStyle(.text3)
+                    .lineLimit(1)
+                    .fixedSize()
             }
             .accessibilityHidden(true)
         }
@@ -863,7 +853,7 @@ public struct SyncButtonGroup: View {
                         .controlSize(.large)
                         .transition(motion.animates ? AnyTransition.opacity : .identity)
                 } else {
-                    LastFetchedLabel(lastFetched: Self.lastFetched(shown, settled: settledHere), standing: shown.standing)
+                    LastFetchedLabel(lastFetched: Self.lastFetched(shown, settled: settledHere))
                 }
             }
             // Over a wider capsule crossfading out as the button narrows.

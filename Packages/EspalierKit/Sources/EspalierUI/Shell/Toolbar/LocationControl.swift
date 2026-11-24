@@ -1,8 +1,8 @@
 // Ported in part from desktop/app/src/ui/toolbar/branch-dropdown.tsx
 //
 // The location control, in Xcode's scheme/destination pattern: one capsule
-// with a repository segment and a branch segment (its titles, tooltips, and
-// states), each opening a popover.
+// with a repository segment, a chevron, and a branch segment (its titles,
+// tooltips, and states), each opening a popover.
 
 import EspalierCore
 import EspalierSupport
@@ -43,15 +43,11 @@ nonisolated public struct LocationControlState: Sendable, Equatable {
     /// operation in progress refuses switching branches ("Finish or abort
     /// the merge first."), its tooltip. Nil when it opens.
     public var branchBlockedReason: String?
-    /// How the branch compares with its upstream, once it's published;
-    /// nil otherwise.
-    public var aheadBehind: AheadBehind?
 
-    public init(repository: RepositorySegment, branch: BranchSegment, branchBlockedReason: String? = nil, aheadBehind: AheadBehind? = nil) {
+    public init(repository: RepositorySegment, branch: BranchSegment, branchBlockedReason: String? = nil) {
         self.repository = repository
         self.branch = branch
         self.branchBlockedReason = branchBlockedReason
-        self.aheadBehind = aheadBehind
     }
 
     /// The repository segment's title.
@@ -65,7 +61,7 @@ nonisolated public struct LocationControlState: Sendable, Equatable {
 
     /// What the control's width depends on: its two titles.
     var measuredTitles: String {
-        "\(repositoryTitle)\u{0}\(branchTitle ?? "")\u{0}\(aheadBehind.map { "\($0.ahead) \($0.behind)" } ?? "")"
+        "\(repositoryTitle)\u{0}\(branchTitle ?? "")"
     }
 
     /// The repository segment's tooltip.
@@ -120,36 +116,6 @@ nonisolated public struct LocationControlState: Sendable, Equatable {
         }
     }
 
-    /// How the branch compares with its upstream, as its row does: on a
-    /// branch, the counts of a published branch ("↑2 ↓1").
-    private var tracking: BranchTracking? {
-        guard case .branch = branch, let aheadBehind else {
-            return nil
-        }
-        return .aheadBehind(ahead: aheadBehind.ahead, behind: aheadBehind.behind)
-    }
-
-    /// The counts in the branch's pill ("↑2 ↓1"), in `numberFormat`; nil
-    /// when in step with its upstream, or not on a published branch.
-    func countsText(_ numberFormat: NumberFormat) -> String? {
-        tracking?.countsText(numberFormat)
-    }
-
-    /// How the branch compares with its upstream, in words ("2 commits
-    /// ahead"), in `numberFormat`.
-    func trackingDescription(_ numberFormat: NumberFormat) -> String? {
-        tracking?.description(numberFormat)
-    }
-
-    /// The branch's tooltip, with how it compares with its upstream on a
-    /// new line ("main\n2 commits ahead").
-    func branchTooltip(_ numberFormat: NumberFormat) -> String? {
-        guard branchBlockedReason == nil, let tooltip = branchTooltip, let tracking = trackingDescription(numberFormat) else {
-            return branchTooltip
-        }
-        return "\(tooltip)\n\(tracking)"
-    }
-
     /// The branch segment's symbol.
     public var branchSystemImage: String {
         switch branch {
@@ -191,7 +157,7 @@ nonisolated public struct LocationControlState: Sendable, Equatable {
             case .branch, .unborn, .detached: repository.operations.checkoutRefusal
             case .hidden, .checkingOut, .rebasing: nil
             }
-            return LocationControlState(repository: segment, branch: branch, branchBlockedReason: blockedReason, aheadBehind: repository.gitState.aheadBehind)
+            return LocationControlState(repository: segment, branch: branch, branchBlockedReason: blockedReason)
         }
     }
 
@@ -219,21 +185,23 @@ nonisolated public struct LocationControlState: Sendable, Equatable {
 }
 
 /// The location control's look, value-driven (`LocationControlState`):
-/// one raised pillow on its lip, with the repository (its folder symbol and
-/// its name in bold) and the branch as a candy pill in the branch's color (its
-/// symbol, its name, how it compares with its upstream, and a down
-/// chevron). Each part opens its popover.
+/// one capsule with the repository (a folder and its name), a chevron, and
+/// the branch (its symbol in the branch's color, its name, and a down
+/// chevron). Each part opens its popover. The capsule is the theme's
+/// (`ToolbarThemeStyle.locationControl`): a raised pillow on its lip, the
+/// names in bold, or a flat quiet capsule of the toolbar's height, the
+/// names in the button font.
 public struct LocationControlView: View {
     private let state: LocationControlState
     private let branchColor: NSColor?
     private let onRepository: () -> Void
     private let onBranch: () -> Void
-    /// The branch's name fades in as the control appears (after a switch).
-    private let fadesInBranch: Bool
+    @State private var branchOpacity: Double
+    @Environment(\.motion) private var motion
 
     /// - Parameters:
-    ///   - branchColor: The branch's color (`BranchColors`); nil for the
-    ///     accent, the current branch's.
+    ///   - branchColor: The branch's color (`BranchColors`), its symbol's;
+    ///     nil for the accent, the current branch's.
     ///   - fadesInBranch: The branch's name fades in over 0.15 s as the
     ///     control appears: it replaces the control of the branch the
     ///     user switched from (the toolbar measures a new control for each
@@ -247,127 +215,63 @@ public struct LocationControlView: View {
     ) {
         self.state = state
         self.branchColor = branchColor
-        self.fadesInBranch = fadesInBranch
         self.onRepository = onRepository
         self.onBranch = onBranch
+        _branchOpacity = State(initialValue: fadesInBranch ? 0 : 1)
     }
 
     public var body: some View {
-        HStack(spacing: Metrics.LocationControl.spacing) {
+        let look = Theme.current.style.toolbar.locationControl
+        HStack(spacing: 0) {
             LocationSegment(action: onRepository) {
                 LocationRepositoryLabel(state: state)
             }
             .tooltip(state.repositoryTooltip ?? state.repositoryTitle)
             .accessibilityLabel("Repository: \(state.repositoryTitle)")
 
-            if state.branchTitle != nil {
-                LocationBranchPill(state: state, color: branchColor, size: .regular, fadesIn: fadesInBranch, action: onBranch)
-            }
-        }
-        .padding(.horizontal, Metrics.LocationControl.inset)
-        .frame(height: CapsuleButtonAppearance(kind: .quiet, controlSize: .large).capsuleHeight)
-        .quietControlSurface()
-        .onLip(CapsuleButtonAppearance(kind: .quiet, controlSize: .large).lip, isPressed: false)
-    }
-}
-
-/// The repository's folder symbol and its name in bold, or the arc while
-/// one clones.
-struct LocationRepositoryLabel: View {
-    let state: LocationControlState
-    var font: Font = Typography.sans(size: 13, weight: .bold, relativeTo: .body)
-
-    var body: some View {
-        HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
-            Group {
-                if case .cloning = state.repository {
-                    ArcProgress(.small)
-                } else {
-                    Image(systemName: "folder")
-                        .foregroundStyle(.text2)
-                }
-            }
-            .frame(width: Metrics.symbolWidth)
-            Text(state.repositoryTitle)
-                .font(font)
-                .foregroundStyle(.text)
-                .lineLimit(1)
-        }
-    }
-}
-
-/// The branch as a candy pill in its color: its symbol (the arc while
-/// checking out), its name (a detached HEAD's SHA in the code font), how it
-/// compares with its upstream ("↑2 ↓1"), and a down chevron while it opens
-/// the branch popover. A click opens the popover; disabled (checking out,
-/// rebasing, an operation refusing a switch), it fades and says why in its
-/// tooltip.
-struct LocationBranchPill: View {
-    let state: LocationControlState
-    let color: NSColor?
-    let size: CandyPillSize
-    var fadesIn = false
-    let action: () -> Void
-    @State private var opacity: Double?
-    @State private var isHovered = false
-    @Environment(\.motion) private var motion
-    @Environment(\.numberFormat) private var numberFormat
-
-    var body: some View {
-        if let title = state.branchTitle {
-            Button(action: action) {
-                CandyPill(color: pillColor, size: size) {
-                    branchSymbol
-                    branchText(title)
-                        .truncationMode(.middle)
-                        .opacity(opacity ?? (fadesIn ? 0 : 1))
-                        .onAppear {
-                            if fadesIn {
-                                withMotion(motion, Motion.leave) {
-                                    opacity = 1
+            if let branchTitle = state.branchTitle {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: Metrics.CapsuleMenu.chevronSize, weight: .semibold))
+                    .foregroundStyle(.text3)
+                    .padding(.horizontal, -1)
+                    .accessibilityHidden(true)
+                LocationSegment(action: onBranch) {
+                    HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
+                        branchSymbol
+                        branchText(branchTitle)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .opacity(branchOpacity)
+                            .onAppear {
+                                if branchOpacity < 1 {
+                                    withMotion(motion, Motion.leave) {
+                                        branchOpacity = 1
+                                    }
                                 }
                             }
+                        if state.isBranchEnabled {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: Metrics.CapsuleMenu.chevronSize, weight: .semibold))
+                                .foregroundStyle(.text3)
                         }
-                    if let counts = state.countsText(numberFormat) {
-                        Text(counts)
-                            .font(Typography.sans(size: size.fontSize - 1, weight: .heavy, relativeTo: .callout))
-                            .monospacedDigit()
-                            .opacity(0.8)
-                            .fixedSize()
-                            .contentTransition(motion.animates ? .numericText() : .identity)
-                            .motion(Motion.kindChange, value: counts)
-                    }
-                    if state.isBranchEnabled {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: Metrics.CapsuleMenu.chevronSize, weight: .heavy))
-                            .opacity(0.7)
                     }
                 }
-                .overlay {
-                    Capsule(style: .circular)
-                        .fill(Color(espalier: Palette.hover))
-                        .opacity(isHovered && state.isBranchEnabled ? 1 : 0)
-                        .hoverMotion(isHovered)
-                        .allowsHitTesting(false)
-                }
-                .contentShape(Capsule(style: .circular))
+                .disabled(!state.isBranchEnabled)
+                .tooltip(state.branchTooltip ?? branchTitle)
+                .accessibilityLabel("Branch: \(branchTitle)")
             }
-            // Fades the pill while disabled.
-            .buttonStyle(.bare(.capsule))
-            .disabled(!state.isBranchEnabled)
-            .onHover { isHovered = $0 }
-            .tooltip(state.branchTooltip(numberFormat) ?? title)
-            .accessibilityLabel("Branch: \(title)")
-            .accessibilityValue(state.trackingDescription(numberFormat) ?? "")
         }
+        .font(Metrics.LocationControl.font)
+        .foregroundStyle(.text)
+        .padding(.horizontal, Metrics.LocationControl.inset)
+        .frame(height: Metrics.LocationControl.height)
+        .quietControlSurface()
+        .onLip(look == .pillow ? Self.pillow.lip : nil, isPressed: false)
     }
 
-    /// The branch's color; a detached HEAD is the remotes' slate.
-    private var pillColor: NSColor {
-        if case .detached = state.branch {
-            return PlaceIdentity.remotes.color
-        }
-        return color ?? Palette.accent
+    /// The pillow's capsule: a large quiet button's.
+    fileprivate static var pillow: CapsuleButtonAppearance {
+        CapsuleButtonAppearance(kind: .quiet, controlSize: .large)
     }
 
     /// The branch's symbol, or the arc while checking out. The arc gives
@@ -378,29 +282,60 @@ struct LocationBranchPill: View {
         return ZStack {
             if let progress {
                 // It turns until git reports how far it has got.
-                ArcProgress(.mini, value: progress > 0 ? progress : nil, tint: CandyColors.ink(pillColor))
+                ArcProgress(.mini, value: progress > 0 ? progress : nil)
                     .transition(fade)
             } else {
                 Image(systemName: state.branchSystemImage)
-                    .font(.system(size: size.symbolSize, weight: .bold))
+                    .font(Typography.row)
+                    .foregroundStyle(branchSymbolColor)
                     .transition(fade)
             }
         }
         .motion(Motion.leave, value: progress == nil)
     }
 
-    /// The branch's title as one text: a detached HEAD's SHA in the code
-    /// font ("On a1b2c3d").
+    /// The branch segment's title as one text: a detached HEAD's SHA in the
+    /// code font, in the control's weight ("On a1b2c3d").
     private func branchText(_ title: String) -> Text {
         guard let sha = state.detachedShortSHA else {
             return Text(title)
         }
-        return Text("On \(Text(sha).font(Typography.sha(weight: .bold)))")
+        return Text("On \(Text(sha).font(Typography.sha(weight: Metrics.LocationControl.weight)))")
+    }
+
+    /// The branch's color; a detached HEAD is neutral.
+    private var branchSymbolColor: Color {
+        if case .detached = state.branch {
+            return .text2
+        }
+        return Color(nsColor: branchColor ?? Palette.accent)
     }
 }
 
-/// The repository's part of the location control: a plain button with a
-/// hover wash.
+/// The repository's folder symbol and its name, or the arc while one
+/// clones.
+struct LocationRepositoryLabel: View {
+    let state: LocationControlState
+
+    var body: some View {
+        HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
+            Group {
+                if case .cloning = state.repository {
+                    ArcProgress(.small)
+                } else {
+                    Image(systemName: "folder")
+                        .font(Typography.row)
+                        .foregroundStyle(.text2)
+                }
+            }
+            .frame(width: Metrics.symbolWidth)
+            Text(state.repositoryTitle)
+                .lineLimit(1)
+        }
+    }
+}
+
+/// One part of the location control: a plain button with a hover wash.
 private struct LocationSegment<Label: View>: View {
     let action: () -> Void
     @ViewBuilder let label: Label
@@ -410,14 +345,13 @@ private struct LocationSegment<Label: View>: View {
     var body: some View {
         Button(action: action) {
             label
-                .padding(.leading, Metrics.LocationControl.segmentLeading)
-                .padding(.trailing, Metrics.LocationControl.segmentTrailing)
+                .padding(.horizontal, Metrics.LocationControl.segmentPadding)
                 .frame(maxHeight: .infinity)
                 .background {
                     Capsule(style: .circular)
                         .fill(isHovered && isEnabled ? Color(nsColor: Palette.hover) : .clear)
                         .hoverMotion(isHovered)
-                        .padding(.vertical, Metrics.LocationControl.inset)
+                        .padding(.vertical, Metrics.LocationControl.hoverInset)
                 }
                 .contentShape(Capsule(style: .circular))
         }
@@ -428,20 +362,37 @@ private struct LocationSegment<Label: View>: View {
 }
 
 extension Metrics {
-    /// The toolbar's location control.
+    /// The toolbar's location control, in the theme's capsule
+    /// (`ToolbarThemeStyle.locationControl`).
     public enum LocationControl {
-        /// How far the branch's pill and the repository's hover wash sit
-        /// inside the capsule on every side, so each is concentric with
-        /// the capsule's ends: half the capsule's height less the pill's.
-        public static var inset: CGFloat {
-            (CapsuleButtonAppearance(kind: .quiet, controlSize: .large).capsuleHeight - CandyPillSize.regular.height) / 2
+        private static var isPillow: Bool {
+            Theme.current.style.toolbar.locationControl == .pillow
         }
-        /// Between the repository and the branch's pill.
-        public static let spacing: CGFloat = 2
-        /// Before the repository's symbol and after its name, inside its
-        /// hover wash.
-        public static let segmentLeading: CGFloat = 8
-        public static let segmentTrailing: CGFloat = 10
+        /// The capsule's height: a large quiet button's, or the toolbar's.
+        public static var height: CGFloat {
+            isPillow ? LocationControlView.pillow.capsuleHeight : ControlHeight.toolbar
+        }
+        /// The names' weight: bold, or the quiet button's.
+        public static var weight: Font.Weight {
+            isPillow ? .bold : Theme.current.buttonWeights.quiet
+        }
+        /// The names' font.
+        public static var font: Font {
+            isPillow ? Typography.sans(size: 13, weight: .bold, relativeTo: .body) : Typography.button
+        }
+        /// Inside the capsule's ends, before the repository and after the
+        /// branch: in the pillow, as far as the hover wash is inside its top
+        /// and bottom, so the wash is concentric with its ends.
+        public static var inset: CGFloat {
+            isPillow ? hoverInset : grid
+        }
+        /// How far a segment's hover wash sits inside the capsule's top and
+        /// bottom.
+        public static var hoverInset: CGFloat {
+            isPillow ? (LocationControlView.pillow.capsuleHeight - 22) / 2 : 3
+        }
+        /// Before and after a segment's content, inside its hover wash.
+        public static let segmentPadding: CGFloat = 10
     }
 }
 

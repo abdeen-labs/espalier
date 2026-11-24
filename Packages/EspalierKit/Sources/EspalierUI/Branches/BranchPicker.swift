@@ -539,7 +539,7 @@ struct BranchPickerList: View {
             onActivate?(branch)
         } label: {
             row(branch, in: group)
-                .frame(minHeight: Metrics.Pickers.rowHeight)
+                .frame(minHeight: Metrics.Pickers.rowMinHeight)
                 .selectableRow(isSelected: isHighlighted)
         }
         .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
@@ -603,22 +603,14 @@ struct BranchPickerList: View {
         }
     }
 
-    /// "No branches match “x”" for a filter, offering Create New Branch…
-    /// when the picker does; "No Branches Yet" without one. The branch
-    /// symbol leads.
+    /// "No Matching Branches" for a filter, with Create New Branch… when the
+    /// picker offers it; "No Branches" without one.
     private var noBranches: some View {
         let isFiltered = !content.filter.isEmpty
         let offersCreate = onCreateBranch != nil && isFiltered
-        let message: String? = if offersCreate {
-            "You can make a new branch with that name."
-        } else if isFiltered {
-            "Try another part of its name."
-        } else {
-            "This repository has no branches to show."
-        }
         return PickerEmptyState(
-            isFiltered ? "No branches match “\(content.filter)”" : "No Branches Yet",
-            message: message,
+            isFiltered ? "No Matching Branches" : "No Branches",
+            message: offersCreate ? "Do you want to create a new branch instead?" : nil,
             systemImage: isFiltered ? "magnifyingglass" : PlaceIdentity.branches.systemImage
         ) {
             if offersCreate {
@@ -667,9 +659,9 @@ private struct EmbeddedListChrome: ViewModifier {
     }
 }
 
-/// A branch in the picker: its candy dot in the glyph column, under its
-/// group's mark, its name (the current one, haloed, in a candy pill of its
-/// color: you are here), how the current branch
+/// A branch in the picker: its dot in the glyph column, under its group's
+/// mark, its name (the current one marked as the sidebar's row marks it,
+/// `BranchName`), how the current branch
 /// compares with it (Compare's list), and the date of its last commit; its
 /// tooltip is its name, and says when it's the default branch, as the
 /// sidebar's row does.
@@ -686,19 +678,12 @@ struct BranchPickerRow: View {
     var body: some View {
         let color = dotColor ?? TrackPalette.color(forBranch: branch.name, isCurrent: isCurrent, isDefault: false)
         HStack(spacing: Metrics.insetSmall) {
-            CandyDot(color, isHere: isCurrent)
+            BranchDot(color, isCurrent: isCurrent)
                 .frame(width: Metrics.Sidebar.glyphSize)
-            Group {
-                if isCurrent {
-                    CandyPill(branch.name, color: color, size: .regular)
-                } else {
-                    Text(branch.name)
-                        .font(Typography.row)
-                        .foregroundStyle(.text)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+            BranchName(branch.name, color: color, isCurrent: isCurrent) { isCurrent in
+                isCurrent ? Typography.row.weight(.semibold) : Typography.row
             }
+            .foregroundStyle(.text)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityName)
             Spacer(minLength: Metrics.insetSmall)
@@ -832,5 +817,13 @@ struct ComparedBranchPickerRow: View {
             }
             loaded = (key, value)
         }
+    }
+}
+
+extension Metrics.Pickers {
+    /// A popover row's least height: roomy (`rowHeight`) where the sidebar's
+    /// rows are (`SidebarThemeStyle.density`), else the row's own.
+    static var rowMinHeight: CGFloat {
+        Theme.current.style.sidebar.density == .roomy ? rowHeight : 0
     }
 }

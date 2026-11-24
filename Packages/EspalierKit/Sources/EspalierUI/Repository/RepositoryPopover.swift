@@ -252,10 +252,7 @@ struct RepositoryPopoverView: View {
 
             if content.rowIDs.isEmpty {
                 PickerEmptyState(
-                    content.hasRepositories ? "No repositories match “\(filter)”" : "No Repositories Yet",
-                    message: content.hasRepositories
-                        ? "Try another part of its name, or its owner."
-                        : "Clone one, create one, or add one from your Mac with Add.",
+                    content.hasRepositories ? "No Matching Repositories" : "No Repositories",
                     systemImage: content.hasRepositories ? "magnifyingglass" : "folder"
                 )
             } else {
@@ -347,7 +344,7 @@ struct RepositoryPopoverView: View {
     }
 
     /// A row: a click activates it, the pointer highlights it, and it has
-    /// its context menu. Rows are roomy.
+    /// its context menu. Rows are roomy where the sidebar's are.
     private func row<RowLabel: View>(
         _ id: RepositoryPopoverRowID,
         @ViewBuilder label: () -> RowLabel,
@@ -358,7 +355,7 @@ struct RepositoryPopoverView: View {
             activate(id)
         } label: {
             label()
-                .frame(minHeight: Metrics.Pickers.rowHeight)
+                .frame(minHeight: Metrics.Pickers.rowMinHeight)
                 .selectableRow(isSelected: isHighlighted)
         }
         .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
@@ -391,11 +388,24 @@ struct RepositoryPopoverView: View {
 }
 
 /// The worktrees' label: their symbol, "Worktrees" in bold, and New
-/// Worktree….
+/// Worktree…; or, where the sidebar's headers are the theme's section
+/// labels (`SidebarThemeStyle.sectionHeader`), a group label as the
+/// repositories' groups have, with the worktrees' mark.
 struct WorktreesGroupLabel<Accessory: View>: View {
     @ViewBuilder let accessory: Accessory
 
     var body: some View {
+        switch Theme.current.style.sidebar.sectionHeader {
+        case .title:
+            title
+        case .label:
+            ListGroupLabel("Worktrees", mark: .symbol("rectangle.stack")) {
+                accessory
+            }
+        }
+    }
+
+    private var title: some View {
         HStack(spacing: Metrics.insetSmall) {
             Image(systemName: PlaceIdentity.worktrees.systemImage)
                 .font(Typography.secondary)

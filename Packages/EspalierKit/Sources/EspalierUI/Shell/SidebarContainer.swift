@@ -8,10 +8,13 @@
 //
 // The sidebar is the `sidebar` color (the chrome's backdrop in the inset
 // card layout: ChromeBackdrop.swift). Changes and History lead; each
-// section after them leads with its chevron and its
-// name in bold (a collapsed section's count in a pill). Rows are roomy with the row radius, groups of a section's rows
-// are set apart by space, and the selected item is on the theme's sidebar
-// selection (`Palette.sidebarSelection`), its title
+// section after them leads with its chevron and its header, in the
+// theme's way (`SidebarThemeStyle`): its name in bold with a collapsed
+// section's count in a pill, roomy rows, and space between groups of a
+// section's rows; or the theme's section label with the count inline, rows
+// 28 high, and hairlines between groups. Rows have the row radius, and the
+// selected item is on the theme's sidebar selection
+// (`Palette.sidebarSelection`), its title
 // in the selected weight (`SidebarRowFont`) and its symbol in the theme's
 // selection symbol color (the list's own selection drawing is off before
 // it first draws: `SidebarListStyler`). Selected branch, tag, stash, and
@@ -333,7 +336,8 @@ struct SidebarRowLabel<Trailing: View>: View {
     ///     (a branch's start and end both tell), the tail for text read
     ///     from its start.
     ///   - tint: The symbol's color while the row isn't selected (a tag's
-    ///     honey); nil for secondary text.
+    ///     honey), where the theme colors row symbols
+    ///     (`SidebarThemeStyle.rowSymbols`); nil for secondary text.
     init(
         _ title: String,
         systemImage: String,
@@ -374,23 +378,33 @@ struct SidebarRowLabel<Trailing: View>: View {
     /// The symbol's color: the selection's, else the row's tint or
     /// secondary text.
     private func symbolStyle(isSelected: Bool) -> Color {
-        if !isSelected, let tint {
+        if !isSelected, let tint, Theme.current.style.sidebar.rowSymbols == .colored {
             return Color(nsColor: tint)
         }
         return .sidebarRowIcon(isSelected: isSelected)
     }
 }
 
-/// A quiet gap between groups of a section's rows (the branches that lead
-/// the Branches section, and its Other and Remote Branches): a short row of
-/// space of its own that takes no hover or selection.
+/// A quiet divider between groups of a section's rows (the branches that
+/// lead the Branches section, and its Other and Remote Branches): a short
+/// row of space, or a hairline across the rows' content, in the theme's
+/// way, that takes no hover or selection.
 struct SidebarDivider: View {
     var body: some View {
-        Color.clear
-            .frame(maxWidth: .infinity)
-            .frame(height: Metrics.SidebarRows.groupGap)
-            .selectionDisabled()
-            .accessibilityHidden(true)
+        Group {
+            switch Theme.current.style.sidebar.groupDivider {
+            case .space:
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: Metrics.SidebarRows.groupGap)
+            case .hairline:
+                Hairline()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Metrics.grid)
+            }
+        }
+        .selectionDisabled()
+        .accessibilityHidden(true)
     }
 }
 
@@ -427,16 +441,28 @@ final class SidebarHover {
 }
 
 extension Metrics {
-    /// The sidebar's roomy rows.
+    /// The sidebar's rows, roomy or compact in the theme's way
+    /// (`SidebarThemeStyle.density`).
     public enum SidebarRows {
+        private static var isRoomy: Bool {
+            Theme.current.style.sidebar.density == .roomy
+        }
         /// A row's content, at least: the list adds its own insets.
-        public static let contentHeight: CGFloat = 26
+        public static var contentHeight: CGFloat {
+            isRoomy ? 26 : 20
+        }
         /// A row's height, the list's insets included.
-        public static let height: CGFloat = 34
+        public static var height: CGFloat {
+            isRoomy ? 34 : 28
+        }
         /// The room above a section's header.
-        public static let headerTop: CGFloat = 8
+        public static var headerTop: CGFloat {
+            isRoomy ? 8 : 0
+        }
         /// The room below a section's header.
-        public static let headerBottom: CGFloat = 3
+        public static var headerBottom: CGFloat {
+            isRoomy ? 3 : 0
+        }
         /// The gap between groups of a section's rows.
         public static let groupGap: CGFloat = 6
     }
@@ -454,7 +480,7 @@ extension Metrics.Sidebar {
 }
 
 extension View {
-    /// A sidebar row: roomy, its background the sidebar's selection or
+    /// A sidebar row: its theme's height, its background the sidebar's selection or
     /// the hover wash, inset 10 from the sidebar's edges with the row radius.
     ///
     /// - Parameters:
@@ -851,12 +877,14 @@ extension EnvironmentValues {
     @Entry var sidebarSectionExpansion: Binding<Bool>?
 }
 
-/// A section's header: its name in bold, and what trails it (New Branch's
-/// plus). In a `SidebarSection` that collapses, a chevron is always before
-/// the name, as the list's own chevron is before a disclosure row's symbol,
-/// and a pill after the name has the section's count while it's collapsed,
-/// so a collapsed section doesn't read as empty. Without a chevron, the
-/// name lines up with the rows' symbols. The
+/// A section's header: its name, and what trails it (New Branch's plus).
+/// The name is a bold title or the theme's section label
+/// (`SidebarThemeStyle.sectionHeader`). In a `SidebarSection` that
+/// collapses, a chevron is always before the name, as the list's own
+/// chevron is before a disclosure row's symbol, and the section's count
+/// follows the name while it's collapsed, in a pill after a title or in the
+/// label ("Tags 3"), so a collapsed section doesn't read as empty. Without
+/// a chevron, the name lines up with the rows' symbols. The
 /// count fades in and out as the chevron turns, and rolls to a new value
 /// over 0.2 s as the section's rows change; the filter's changes draw at
 /// once.
@@ -885,21 +913,29 @@ struct SidebarSectionHeader<Accessory: View>: View {
                 if let expansion {
                     SidebarSectionChevron(title: title, isExpanded: expansion)
                 }
-                HStack(spacing: Metrics.insetSmall) {
-                    Text(title)
-                        .font(Typography.sans(size: 14, weight: .bold, relativeTo: .headline))
-                        .foregroundStyle(.text)
-                        .lineLimit(1)
-                        .accessibilityAddTraits(.isHeader)
-                    if let shownCount {
-                        CountPill(formatCount(shownCount, numberFormat))
-                            .contentTransition(motion.animates ? .numericText() : .identity)
-                            .transition(motion.animates ? .opacity : .identity)
-                            .accessibilityLabel("\(formatCount(shownCount, numberFormat)) items")
+                switch Theme.current.style.sidebar.sectionHeader {
+                case .title:
+                    HStack(spacing: Metrics.insetSmall) {
+                        Text(title)
+                            .font(Typography.sans(size: 14, weight: .bold, relativeTo: .headline))
+                            .foregroundStyle(.text)
+                            .lineLimit(1)
+                            .accessibilityAddTraits(.isHeader)
+                        if let shownCount {
+                            CountPill(formatCount(shownCount, numberFormat))
+                                .contentTransition(motion.animates ? .numericText() : .identity)
+                                .transition(motion.animates ? .opacity : .identity)
+                                .accessibilityLabel("\(formatCount(shownCount, numberFormat)) items")
+                        }
                     }
+                    .transaction(value: context?.state.sidebarFilter) { $0.animation = nil }
+                    .motion(Motion.kindChange, value: shownCount)
+                case .label:
+                    SectionLabel(title, count: shownCount)
+                        .contentTransition(motion.animates ? .numericText() : .identity)
+                        .transaction(value: context?.state.sidebarFilter) { $0.animation = nil }
+                        .motion(Motion.kindChange, value: count)
                 }
-                .transaction(value: context?.state.sidebarFilter) { $0.animation = nil }
-                .motion(Motion.kindChange, value: shownCount)
             }
             Spacer(minLength: Metrics.grid)
             accessory

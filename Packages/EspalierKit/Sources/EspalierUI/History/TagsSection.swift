@@ -27,13 +27,15 @@ nonisolated struct TagRowContent: Sendable, Equatable, Identifiable {
     }
 }
 
-/// One tag, its symbol in the tags' honey. Its arrow fades out over 0.15 s
+/// One tag, its symbol filled in the tags' honey or plain gray
+/// (`SidebarThemeStyle.rowSymbols`). Its arrow fades out over 0.15 s
 /// once it's pushed, and in over 0.22 s for a tag made here.
 struct TagRow: View {
     let content: TagRowContent
 
     var body: some View {
-        SidebarRowLabel(content.name, systemImage: "tag.fill", tint: PlaceIdentity.tags.color) {
+        let isColored = Theme.current.style.sidebar.rowSymbols == .colored
+        SidebarRowLabel(content.name, systemImage: isColored ? "tag.fill" : "tag", tint: PlaceIdentity.tags.color) {
             if content.isWaitingToBePushed {
                 Image(systemName: "arrow.up.circle")
                     .foregroundStyle(.text3)

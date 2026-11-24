@@ -304,9 +304,11 @@ struct RepositoryKindMark: View {
     }
 }
 
-/// The changed files count in an apricot pill, and the ahead and behind
-/// counts in pills (the ahead in the accent's tint), with their tooltips. A count that changes while the list shows rolls to its new
-/// value over 0.2 s.
+/// The changed files count, and the ahead and behind counts, with their
+/// tooltips, in the theme's way (`SidebarThemeStyle.counts`): in pills (the
+/// changed files and the ahead in the accent's tint), or as text (the
+/// changed files on the field fill, the ahead in the accent). A count that
+/// changes while the list shows rolls to its new value over 0.2 s.
 struct RepositoryStatusIndicators: View {
     let content: RepositoryRowContent
     @Environment(\.numberFormat) private var numberFormat
@@ -318,7 +320,7 @@ struct RepositoryStatusIndicators: View {
         if content.showsStatus, content.changedFileCount > 0 || content.ahead > 0 || content.behind > 0 {
             HStack(spacing: Metrics.grid) {
                 if content.changedFileCount > 0 {
-                    CountPill(content.changedFileCount > 999 ? "999+" : formatCount(content.changedFileCount, numberFormat), color: PlaceIdentity.changes.color)
+                    changedFilesCount(content.changedFileCount > 999 ? "999+" : formatCount(content.changedFileCount, numberFormat))
                         .contentTransition(motion.animates ? .numericText() : .identity)
                         .motion(Motion.kindChange, value: content.changedFileCount)
                         .tooltip(RepositoryRowContent.changesTooltip)
@@ -326,12 +328,12 @@ struct RepositoryStatusIndicators: View {
                 if let tooltip = content.aheadBehindTooltip(numberFormat) {
                     HStack(spacing: Metrics.grid) {
                         if content.ahead > 0 {
-                            CountPill("↑\(formatCount(content.ahead, numberFormat))", color: Palette.accent)
+                            AheadCount("↑\(formatCount(content.ahead, numberFormat))")
                                 .contentTransition(motion.animates ? .numericText() : .identity)
                                 .motion(Motion.kindChange, value: content.ahead)
                         }
                         if content.behind > 0 {
-                            CountPill("↓\(formatCount(content.behind, numberFormat))")
+                            BehindCount("↓\(formatCount(content.behind, numberFormat))", color: .text3)
                                 .contentTransition(motion.animates ? .numericText() : .identity)
                                 .motion(Motion.kindChange, value: content.behind)
                         }
@@ -341,6 +343,21 @@ struct RepositoryStatusIndicators: View {
             }
             // The counts keep one line; the owner beside them truncates.
             .fixedSize()
+        }
+    }
+
+    @ViewBuilder
+    private func changedFilesCount(_ text: String) -> some View {
+        switch Theme.current.style.sidebar.counts {
+        case .pills:
+            CountPill(text, color: Palette.accent)
+        case .text:
+            Text(verbatim: text)
+                .font(Typography.tinyCount)
+                .foregroundStyle(.text2)
+                .padding(.horizontal, Metrics.grid + 1)
+                .padding(.vertical, 1)
+                .background(Capsule(style: .circular).fill(.field))
         }
     }
 }

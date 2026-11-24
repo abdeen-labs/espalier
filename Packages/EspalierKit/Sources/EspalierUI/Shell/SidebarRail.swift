@@ -1,11 +1,10 @@
 // The sidebar's icons style (Settings ▸ Appearance ▸ Sidebar ▸ Icons): a
 // rail at the window's leading edge, below the toolbar, in place of the
 // sidebar's column. Changes and History come first, Changes with its count
-// in a pill (a warning while conflicts exist); after a little space, a
-// symbol for each section the
-// repository's sidebar shows (Branches, Pull Requests, Tags, Stashes),
-// which opens the section in a popover beside it. A section's icon is
-// selected while one of its places is.
+// (a warning while conflicts exist); after a little space or a hairline, a
+// symbol for each section the repository's sidebar shows (Branches, Pull
+// Requests, Tags, Stashes), which opens the section in a popover beside
+// it. A section's icon is selected while one of its places is.
 //
 // A popover holds the sidebar's filter over the section's list, on the
 // popover's `background`, its rows as the sidebar has them (selecting a
@@ -16,9 +15,12 @@
 // ends. The filter clears as it closes.
 //
 // The rail is the `sidebar` color (clear in the inset card layout, where
-// it's on the detail column's backdrop), its icons 40 square with the row
-// radius, the hover wash under the pointer and on the icon whose popover is
-// open, and the selected one on the sidebar's selection.
+// it's on the detail column's backdrop), roomy or compact in the theme's
+// way (`SidebarThemeStyle.density`): icons 40 square, Changes' count in a
+// pill, and space after History; or icons 36 square, the count on a quiet
+// capsule, and a hairline after History. Icons have the row radius, the
+// hover wash under the pointer and on the icon whose popover is open, and
+// the selected one is on the sidebar's selection.
 //
 // The hover wash fades. Changes' count rolls to a new value over 0.2 s, and
 // its capsule and the warning fade in and out. A section's icon fades in
@@ -32,19 +34,32 @@ import EspalierCore
 import SwiftUI
 
 extension Metrics {
-    /// The icons style's rail.
+    /// The icons style's rail, roomy or compact in the theme's way
+    /// (`SidebarThemeStyle.density`).
     public enum Rail {
-        public static let width: CGFloat = 56
+        static var isRoomy: Bool {
+            Theme.current.style.sidebar.density == .roomy
+        }
+        public static var width: CGFloat {
+            isRoomy ? 56 : 52
+        }
         /// An icon's side.
-        public static let item: CGFloat = 40
+        public static var item: CGFloat {
+            isRoomy ? 40 : 36
+        }
         /// An icon's symbol's point size.
-        public static let symbolSize: CGFloat = 17
+        public static var symbolSize: CGFloat {
+            isRoomy ? 17 : 15
+        }
         /// The space between icons.
         public static let spacing: CGFloat = 4
         /// The space above the first icon.
         public static let topInset: CGFloat = 8
-        /// The space between History and the sections.
+        /// The space between History and the sections, in the roomy rail.
         public static let groupGap: CGFloat = 10
+        /// The hairline between History and the sections, in the compact
+        /// rail.
+        public static let dividerWidth: CGFloat = 20
         /// A popover's width: the sidebar's ideal.
         public static let popoverWidth: CGFloat = Column.sidebar.ideal + 40
         /// The tallest a popover's list gets before it scrolls.
@@ -157,9 +172,15 @@ struct SidebarRail: View {
                 ) {
                     context.select(.history)
                 }
-                Color.clear
-                    .frame(height: Metrics.Rail.groupGap)
-                    .accessibilityHidden(true)
+                if Metrics.Rail.isRoomy {
+                    Color.clear
+                        .frame(height: Metrics.Rail.groupGap)
+                        .accessibilityHidden(true)
+                } else {
+                    Hairline()
+                        .frame(width: Metrics.Rail.dividerWidth)
+                        .padding(.vertical, Metrics.Rail.spacing)
+                }
                 ForEach(sections) { section in
                     RailSectionButton(section: section, repository: repository)
                         .barTransition()
@@ -213,10 +234,21 @@ private struct ChangesRailButton: View {
                     .font(.system(size: 10))
                     .transition(fade)
             } else if let badge = content.badge {
-                CountPill(badge, color: PlaceIdentity.changes.color)
-                    .background(Capsule(style: .circular).fill(Color(espalier: Palette.sidebar)))
-                    .contentTransition(motion.animates ? .numericText(value: Double(content.changedFileCount)) : .identity)
-                    .transition(fade)
+                Group {
+                    if Metrics.Rail.isRoomy {
+                        CountPill(badge, color: Palette.accent)
+                            .background(Capsule(style: .circular).fill(Color(espalier: Palette.sidebar)))
+                    } else {
+                        Text(badge)
+                            .font(Typography.tinyCount)
+                            .foregroundStyle(.text2)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .surface(.quiet, elevation: .quiet)
+                    }
+                }
+                .contentTransition(motion.animates ? .numericText(value: Double(content.changedFileCount)) : .identity)
+                .transition(fade)
             }
         }
         .motion(Motion.kindChange, value: content)
@@ -270,7 +302,7 @@ private struct RailSectionButton: View {
     }
 }
 
-/// A rail icon: its symbol in a 40-point square, the hover wash
+/// A rail icon: its symbol in a square (`Metrics.Rail.item`), the hover wash
 /// under the pointer and while its popover is open, the sidebar's selection
 /// while selected, and what it badges at its top trailing corner. Its
 /// tooltip is its title and shortcut.
@@ -332,7 +364,7 @@ struct RailButton<Badge: View>: View {
         .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
         .overlay(alignment: .topTrailing) {
             badge
-                .offset(x: 6, y: -3)
+                .offset(x: Metrics.Rail.isRoomy ? 6 : 4, y: Metrics.Rail.isRoomy ? -3 : -4)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }

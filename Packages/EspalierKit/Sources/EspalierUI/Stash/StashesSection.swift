@@ -69,16 +69,31 @@ nonisolated struct StashRowContent: Sendable, Equatable, Identifiable {
     }
 }
 
-/// One stash: its symbol in the stashes' grape, its name, and its file
-/// count in a pill.
+/// One stash: its symbol (filled in the stashes' grape, or plain gray:
+/// `SidebarThemeStyle.rowSymbols`), its name, and its file count (in a
+/// pill, or as text: `SidebarThemeStyle.counts`).
 struct StashRow: View {
     let content: StashRowContent
+    @Environment(\.isSidebarRowSelected) private var isSelected
     @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
-        SidebarRowLabel(content.title, systemImage: "tray.full.fill", tint: PlaceIdentity.stashes.color, truncationMode: content.truncationMode) {
+        let style = Theme.current.style.sidebar
+        SidebarRowLabel(
+            content.title,
+            systemImage: style.rowSymbols == .colored ? "tray.full.fill" : "tray.full",
+            tint: PlaceIdentity.stashes.color,
+            truncationMode: content.truncationMode
+        ) {
             if let badge = content.badge(numberFormat) {
-                CountPill(badge)
+                switch style.counts {
+                case .pills:
+                    CountPill(badge)
+                case .text:
+                    Text(badge)
+                        .font(Typography.count)
+                        .foregroundStyle(.sidebarRowCount(isSelected: isSelected))
+                }
             }
         }
         .tooltip(content.tooltip)
