@@ -1,7 +1,9 @@
-// The diff's header: the file's status tile, its name in bold and its
-// folder, a rename's "old → new" line, the added and removed line counts
-// as pills, Open in <Editor>, and the options menu. Unified and Split are in the options menu (and the View
-// menu); an image diff's modes are above its images. The counts roll over
+// The diff's header: the file's name and folder (after its status tile,
+// the name in bold, where the theme shows the tile; else the status is the
+// path's tooltip), a rename's or copy's "old → new" line, the added and
+// removed line counts, Open in <Editor>, and the options menu. Unified and
+// Split are in the options menu (and the View menu); an image diff's modes
+// are above its images. The counts roll over
 // 0.2 s as the same file's diff reloads; another file's show at once.
 
 import EspalierCore
@@ -31,9 +33,9 @@ nonisolated struct DiffHeaderContent: Sendable, Equatable {
     }
 }
 
-/// The diff's header row: the status tile, the name in bold, the folder in
-/// tertiary text, the counts as pills (zero counts left out), Open in
-/// <Editor>, and the options.
+/// The diff's header row: the status tile and the name in bold, or the name
+/// alone, by theme; the folder in tertiary text, the counts (zero counts
+/// left out), Open in <Editor>, and the options.
 struct DiffHeader<Options: View>: View {
     let content: DiffHeaderContent
     var openInEditor: @MainActor () -> Void = {}
@@ -66,13 +68,13 @@ struct DiffHeader<Options: View>: View {
             }
             .frame(minHeight: Self.height)
             if let oldPath = content.oldPath {
-                Text("\(content.status == .copied ? "Copied" : "Renamed") from \(oldPath)")
+                Text("\(oldPath) \u{2192} \(content.path)")
                     .font(Typography.meta)
                     .foregroundStyle(.text3)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .tooltip("\(oldPath) \u{2192} \(content.path)")
-                    .padding(.leading, Metrics.StatusTile.header + Metrics.insetSmall)
+                    .padding(.leading, showsTile ? Metrics.StatusTile.header + Metrics.insetSmall : 0)
                     .padding(.bottom, Metrics.insetSmall)
             }
         }
@@ -80,12 +82,18 @@ struct DiffHeader<Options: View>: View {
         .padding(.trailing, Metrics.insetSmall)
     }
 
+    private var showsTile: Bool {
+        Theme.current.style.diff.fileHeader == .tile
+    }
+
     private var path: some View {
         HStack(spacing: Metrics.insetSmall) {
-            StatusGlyph(content.status, size: Metrics.StatusTile.header)
+            if showsTile {
+                StatusGlyph(content.status, size: Metrics.StatusTile.header)
+            }
             HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
                 Text(content.fileName)
-                    .font(Typography.paneHeading)
+                    .font(showsTile ? Typography.paneHeading : Typography.row.weight(.medium))
                     .foregroundStyle(.text)
                     .lineLimit(1)
                     .layoutPriority(1)
@@ -98,6 +106,7 @@ struct DiffHeader<Options: View>: View {
                 }
             }
         }
+        .tooltip(showsTile ? nil : content.status.title)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(content.path), \(content.status.title)")
     }

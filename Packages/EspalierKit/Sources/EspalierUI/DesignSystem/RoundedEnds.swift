@@ -1,7 +1,6 @@
 // A rectangle whose two ends round separately: what AppKit rows draw when
-// a shape runs across several rows (a run of selected commits, a block of
-// added lines, an included run's gutter pill) and only its first and last
-// row round their outer corners.
+// a shape runs across several rows (a run of selected commits) and only
+// its first and last row round their outer corners.
 
 import AppKit
 

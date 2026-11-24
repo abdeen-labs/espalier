@@ -1,6 +1,6 @@
-// The diff container's layouts: the header, the previous file's diff while
-// the next loads, a text diff with its warnings and with find open, the find
-// bar's states, a large diff, a binary file, a submodule's change, a failed
+// The diff container's layouts: the header, a renamed file's header, the
+// previous file's diff while the next loads, a text diff with its warnings
+// and with find open, the find bar's states, a large diff, a binary file, a submodule's change, a failed
 // diff, empty states, the image modes with their picker, overlaid images of
 // different sizes, an image that can't be decoded, a conflicted image, a
 // conflicted file with nothing to diff, and a working directory file of a
@@ -43,6 +43,22 @@ struct DiffContainerCaptures {
             area: area,
             size: Self.size,
             appearances: CaptureAppearance.allCases
+        )
+    }
+
+    @Test("a renamed file's header: its old path → new path under its name")
+    func renamedHeader() async {
+        await captureDiffView(
+            {
+                DiffContainer(
+                    .loaded(.text(DiffCaptureFixtures.swiftChange)),
+                    file: DiffFileInfo(path: "Sources/App/RepositoryLoader.swift", oldPath: "Sources/Loader.swift", status: .renamed),
+                    context: .history
+                )
+            },
+            named: "container-renamed",
+            area: area,
+            size: Self.size
         )
     }
 

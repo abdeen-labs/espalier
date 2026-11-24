@@ -89,14 +89,12 @@ public enum DiffColors {
     /// The "−" marker: delete.
     public static var deletedMarker: NSColor { Theme.current.diff.deletedMarker }
 
-    /// A hunk header's pill ("Lines 19–26"), its label, and the function
-    /// context after it.
-    public static var hunkPill: NSColor { Palette.hunk }
-    public static var hunkPillText: NSColor { Palette.text2 }
-    public static var hunkContext: NSColor { Palette.text3 }
-    /// A hunk header's expansion buttons: a chevron on a pillow of the
-    /// hunk's color, and one under the pointer, the wash over its pillow.
-    public static var expansionPillow: NSColor { Palette.hunk }
+    /// Hunk header rows, and git's header line in them.
+    public static var hunkHeaderBackground: NSColor { Palette.hunk }
+    public static var hunkHeaderText: NSColor { Palette.text2 }
+    /// A hunk header's expansion buttons, and one under the pointer, on a
+    /// wash (bare chevrons), or on a pillow of the wash with a second wash
+    /// over it (pillows).
     public static var expansionButton: NSColor { Palette.text2 }
     public static var expansionButtonHovered: NSColor { Palette.text }
     public static let expansionButtonHover = NSColor.espalierDynamic(
@@ -104,16 +102,20 @@ public enum DiffColors {
         highContrastLight: NSColor.black.withAlphaComponent(0.13), highContrastDark: NSColor.white.withAlphaComponent(0.16)
     )
 
-    /// Line numbers: context lines' in tertiary text, changed lines' in a
-    /// soft add or delete.
+    /// Line numbers: context lines' in tertiary text; changed lines' in a
+    /// soft add or delete where the theme colors them, else the same.
     public static var lineNumber: NSColor { Palette.text3 }
-    public static var addedLineNumber: NSColor { Theme.current.diff.addedNumber }
-    public static var deletedLineNumber: NSColor { Theme.current.diff.deletedNumber }
+    public static var addedLineNumber: NSColor {
+        Theme.current.style.diff.changedLineNumbers == .colored ? Theme.current.diff.addedNumber : lineNumber
+    }
+    public static var deletedLineNumber: NSColor {
+        Theme.current.style.diff.changedLineNumbers == .colored ? Theme.current.diff.deletedNumber : lineNumber
+    }
     /// The missing-newline note and its symbol.
     public static var quietMark: NSColor { Palette.text3 }
 
-    /// The pill behind an included run of changed lines' numbers: the
-    /// accent at 16% (24% in dark).
+    /// An included changed line's number cells: the accent at 16% (24% in
+    /// dark).
     public static var includedNumberCell: NSColor { Palette.accentMid }
     /// The handle beside a changed line the commit includes: the accent.
     public static var includedHandle: NSColor { Palette.accent }
