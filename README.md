@@ -54,17 +54,17 @@
   keys stay in your Keychain, and nothing is sent unless you configure a
   provider.
 - **Customizable interface.** Choose between two themes (Default and
-  Islands), tweak background tints, pick your UI and code fonts, and match
-  your Mac's light or dark appearance.
+  Frost), pick an accent color and a background tint, and match your Mac's
+  light or dark appearance.
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/islands-dark.webp">
-    <img src=".github/readme/islands-light.webp" alt="Espalier using the Islands theme" width="64%">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/readme/frost-dark.webp">
+    <img src=".github/readme/frost-light.webp" alt="Espalier using the Frost theme" width="64%">
   </picture>
 </p>
 
-<p align="center"><sub>The Islands theme</sub></p>
+<p align="center"><sub>The Frost theme</sub></p>
 
 ## Building
 
