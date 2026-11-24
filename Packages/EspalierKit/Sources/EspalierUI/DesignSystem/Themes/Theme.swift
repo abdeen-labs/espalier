@@ -543,6 +543,9 @@ nonisolated struct ThemeDefinition: Sendable {
     /// Selected rows and chips, and a menu's highlighted row; nil is the
     /// accent at `accentSoftAlpha`.
     var selection: NSColor?
+    /// The selection on a background tint, where the theme's own doesn't
+    /// suit it: every selection, the sidebar's too (`tinted(_:)`).
+    var selectionByTint: [BackgroundTint: NSColor] = [:]
     var prominent: NSColor
     /// Nil is white.
     var prominentText: NSColor?

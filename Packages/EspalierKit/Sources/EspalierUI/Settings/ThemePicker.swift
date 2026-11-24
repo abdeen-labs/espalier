@@ -55,6 +55,12 @@ extension BackgroundTint {
 }
 
 extension Theme {
+    /// The palette's swatch: its accent, or White's prominent fill, as its
+    /// accent is ink on light surfaces.
+    var paletteSwatch: NSColor {
+        palette == .white ? prominent : accent
+    }
+
     /// The background swatch: the soft fill, an opaque surface every tint
     /// re-hues, as light draws it, its tint three times as strong, so tints
     /// this faint tell apart.

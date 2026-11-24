@@ -96,8 +96,9 @@ palette and background. Views use the tokens, which read the current look.
 - **A palette** is an accent color and the colors made from it: links,
   the prominent fill, and selected items' tints. Each is a hue of its own:
   System (the Mac's accent color), Blueberry (the default) and Slate (made
-  for Default), Lagoon and Plum (made for Islands), and Tangerine, Magenta, and
-  Volt. A theme's default branch and renamed colors give way to others
+  for Default), Lagoon and Plum (made for Islands), Tangerine, Magenta, and
+  Volt, and White (white prominent fills under ink text; what's drawn in
+  the accent is ink in light and white in dark). A theme's default branch and renamed colors give way to others
   beside an accent near their hue.
 
 - **Default** is playful and creamy: cream cards floating on oat (cocoa
@@ -110,7 +111,9 @@ palette and background. Views use the tokens, which read the current look.
   backdrop (the floating layout), with soft pills and bold titles.
 - **A background tint** (Neutral, Warm, Cool, Sage, Rose, Lavender) gives
   a theme's surfaces its hue in place of the theme's own, faint on white
-  and stronger toward gray, each surface as light as before.
+  and stronger toward gray, each surface as light as before. Default's
+  highlight is a highlighter in the tint's color on Cool (blue), Sage
+  (green), Rose (pink), and Lavender (purple).
 
 ## Motion
 

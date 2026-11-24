@@ -10,8 +10,9 @@ import Testing
 
 @Suite("Theme branch colors")
 struct ThemeBranchColorTests {
-    // System is this Mac's accent color.
-    private static let palettes = DesignPalette.allCases.filter { $0 != .system }
+    // System is this Mac's accent color, and White's accent has no hue for
+    // a branch's color to stay apart from.
+    private static let palettes = DesignPalette.allCases.filter { $0 != .system && $0 != .white }
 
     private static func hue(_ color: NSColor) -> Double {
         OKLCH.hue(of: color.resolved(in: .light))
@@ -38,6 +39,14 @@ struct ThemeBranchColorTests {
                 #expect(color.resolved(in: .light) != drawn.trunk.resolved(in: .light), "\(tone) in \(theme) in \(palette)")
             }
         }
+    }
+
+    @Test("White's accent has no hue, so it keeps every tone", arguments: DesignTheme.allCases)
+    func whiteKeepsEveryTone(_ theme: DesignTheme) {
+        let white = Theme.named(theme, palette: .white)
+        let gray = NSColor(srgbRed: 0.55, green: 0.55, blue: 0.55, alpha: 1)
+        #expect(Theme.accentHue(white.accent) == nil)
+        #expect(white.branchTones(accent: white.accent) == white.branchTones(accent: gray))
     }
 
     @Test("an accent with no hue keeps the theme's first trunk and every tone")

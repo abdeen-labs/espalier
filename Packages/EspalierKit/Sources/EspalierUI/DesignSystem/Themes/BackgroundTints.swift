@@ -5,8 +5,11 @@
 // light, away from black in dark), as the themes' own tints do; a surface
 // too near white to carry the hue is as light as the hue allows. Neutral
 // takes the hue away. Translucent washes (hover, selection, the scrim) stay
-// as they are and take the tint from what's under them; text, status
-// colors, and the palette's colors stay as they are. Hue and chroma are
+// as they are and take the tint from what's under them, but for a
+// selection the theme gives the tint a color of its own (Default's
+// highlighter, yellow on its own cream, is the tint's color on Cool, Sage,
+// Rose, and Lavender); text, status colors, and the palette's colors stay
+// as they are. Hue and chroma are
 // OKLCH's.
 
 import AppKit
@@ -60,6 +63,10 @@ nonisolated extension ThemeDefinition {
         definition.segmentSelection = tinted(segmentSelection)
         definition.backdrop = tinted(backdrop)
         definition.sidebarSelection = tinted(sidebarSelection)
+        if let selection = selectionByTint[tint] {
+            definition.selection = selection
+            definition.sidebarSelection = selection
+        }
         return definition
     }
 }

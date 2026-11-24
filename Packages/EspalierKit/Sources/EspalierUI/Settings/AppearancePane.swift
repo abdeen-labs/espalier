@@ -114,7 +114,7 @@ struct AppearanceForm: View {
             SettingsSection("Colors") {
                 SettingsRow("Palette", description: preferences.designPalette.summary) {
                     SwatchPicker("Palette", values: DesignPalette.allCases, selection: $preferences.designPalette, title: \.title) { palette in
-                        Theme.named(preferences.designTheme, palette: palette).accent
+                        Theme.named(preferences.designTheme, palette: palette).paletteSwatch
                     }
                 }
                 // The chosen palette's name, and the background's below,

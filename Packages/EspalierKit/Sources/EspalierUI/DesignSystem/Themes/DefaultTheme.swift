@@ -1,7 +1,8 @@
 // Default: playful and creamy. The panes are cream cards floating on an
 // oat backdrop, warm espresso ink for text,
 // and a butter-yellow highlight, like a highlighter on paper, for every
-// selection. The palette's accent is the one prominent action, focus,
+// selection (a highlighter in the background tint's own color on Cool,
+// Sage, Rose, and Lavender). The palette's accent is the one prominent action, focus,
 // links, checkboxes, and the current branch. Controls are soft, raised
 // pillows with bold titles; section labels are bold and as written; radii
 // are generous, file badges round, ref tags soft pills, and the graph is
@@ -44,8 +45,10 @@ nonisolated extension ThemeDefinition {
             accentFaintAlpha: (0.06, 0.10),
             accentMidAlpha: (0.18, 0.26),
             textSelectionAlpha: (0.18, 0.28),
-            // Every selection is the butter highlight.
+            // Every selection is the butter highlight, or the background
+            // tint's highlighter.
             selection: DefaultColor.butter,
+            selectionByTint: DefaultColor.highlighters,
             prominent: palette.prominent,
             prominentText: palette.prominentText,
             marks: palette.marks,
@@ -107,4 +110,13 @@ nonisolated private enum DefaultColor {
 
     /// Every selection: a butter-yellow highlight (a honey glow in dark).
     static let butter = ThemeColor.wash(.hex(0xFFC21A), 0.30, .hex(0xFFB830), 0.17)
+
+    /// The highlight on the background tints yellow sits badly on: a
+    /// highlighter in the tint's own color.
+    static let highlighters: [BackgroundTint: NSColor] = [
+        .cool: ThemeColor.wash(.hex(0x4C8DFF), 0.20, .hex(0x6FA8FF), 0.20),
+        .sage: ThemeColor.wash(.hex(0x2DB56C), 0.22, .hex(0x57D18C), 0.17),
+        .rose: ThemeColor.wash(.hex(0xFF5F8F), 0.20, .hex(0xFF7FA6), 0.18),
+        .lavender: ThemeColor.wash(.hex(0xA070FF), 0.20, .hex(0xB794FF), 0.20),
+    ]
 }

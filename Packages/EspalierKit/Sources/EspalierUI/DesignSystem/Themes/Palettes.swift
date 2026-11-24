@@ -1,7 +1,7 @@
 // Palettes: the accent color and the colors made from it, on every design
 // theme, each a hue of its own: System, the Mac's accent color; Blueberry
-// and Slate, made for Default; Lagoon and Plum, made for Islands; and
-// Tangerine, Magenta, and Volt. A palette is the accent; its ink, for
+// and Slate, made for Default; Lagoon and Plum, made for Islands;
+// Tangerine, Magenta, and Volt; and White, which has no hue. A palette is the accent; its ink, for
 // links and counts in the accent's color (a little deeper in light,
 // lighter in dark); its deep ink, for a selected item's title on the
 // accent's wash; the prominent fill and its text; and the marks drawn on
@@ -128,6 +128,19 @@ nonisolated struct PaletteColors: Sendable {
                 prominent: ThemeColor.fixed(0xAFEC32, 0xACE92C),
                 prominentText: ThemeColor.fixed(0x152502, 0x152502),
                 marks: .color(ThemeColor.fixed(0x152502, 0x152502))
+            )
+        case .white:
+            // White prominent fills under ink text. White wouldn't show as
+            // a line, a check's box, or a link on light surfaces, so what's
+            // drawn in the accent is ink there, and white in dark.
+            PaletteColors(
+                palette,
+                accent: ThemeColor.fixed(0x2B2119, 0xFFF9EE),
+                ink: ThemeColor.fixed(0x2B2119, 0xFFF9EE),
+                deepInk: ThemeColor.fixed(0x2B2119, 0xFFF9EE),
+                prominent: ThemeColor.fixed(0xFFFFFF, 0xFFF9EE),
+                prominentText: ThemeColor.fixed(0x2B2119, 0x16130F),
+                marks: .color(ThemeColor.fixed(0xFFF9EE, 0x16130F))
             )
         }
     }

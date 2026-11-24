@@ -126,13 +126,16 @@ public enum DesignPalette: String, Sendable, Hashable, CaseIterable {
     case blueberry, slate
     case lagoon, plum
     case tangerine, magenta, volt
+    /// White prominent fills; what's drawn in the accent is ink on light
+    /// surfaces and white on dark ones.
+    case white
 
     /// The theme the palette is made for, if any.
     public var theme: DesignTheme? {
         switch self {
         case .blueberry, .slate: .default
         case .lagoon, .plum: .islands
-        case .system, .tangerine, .magenta, .volt: nil
+        case .system, .tangerine, .magenta, .volt, .white: nil
         }
     }
 }
