@@ -208,7 +208,7 @@ struct StashColumn: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             StashFooter(content: content, restore: restore, apply: apply, discard: discard)
         }
-        .background(Color(espalier: Palette.background))
+        .background(Color(espalier: Palette.pane))
         .frame(maxHeight: .infinity, alignment: .top)
     }
 

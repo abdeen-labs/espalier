@@ -1,8 +1,11 @@
 // The main window's layout: a detail area with its own inner split, the
 // inspector, the toolbar with its search field, the floating capsule and
 // toasts, and where the command palette opens. The window is flat
-// (`FlatWindowChrome`): the sidebar is opaque, and the columns draw the
-// toolbar's band. The panes are cards on the backdrop (FloatingPanes.swift).
+// (`FlatWindowChrome`): the sidebar is opaque, or glass where the theme's
+// backdrop is (ChromeBackdrop.swift), and the columns draw the toolbar's
+// band. In the floating layout the panes are cards on the backdrop
+// (FloatingPanes.swift); in the inset card layout they're in one card on
+// it (InsetCard.swift).
 //
 // The sidebar takes the style Settings ▸ Appearance ▸ Sidebar picks: in the
 // hidden style a two-column `NavigationSplitView`, the sidebar's column
@@ -88,6 +91,8 @@ struct MainWindow: View {
                     .transition(motion.animates ? AnyTransition.move(edge: .leading) : .identity)
             }
             DetailRouter()
+                // The inset card, or its part before Commit Info's.
+                .insetCard(inspector.wrappedValue ? .leading : .whole)
                 .overlay(alignment: .bottom) {
                     FloatingStatus()
                 }
@@ -127,8 +132,9 @@ struct MainWindow: View {
     }
 }
 
-/// The inspector's column: Commit Info under the toolbar's band, a card on
-/// the backdrop.
+/// The inspector's column: Commit Info under the toolbar's band, with a
+/// hairline on its leading edge; a card on the backdrop in the floating
+/// layout, and the inset card's trailing part in the inset card layout.
 struct InspectorColumn: View {
     var body: some View {
         InspectorRouter()
@@ -138,6 +144,8 @@ struct InspectorColumn: View {
                 bottom: PaneCards.frameMargins.bottom,
                 trailing: PaneCards.frameMargins.trailing
             ))
+            .insetCard(.trailing)
+            .padding(InsetCard.isOn ? InsetCard.inspectorMargins : EdgeInsets())
             .toolbarBand()
     }
 }

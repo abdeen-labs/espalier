@@ -68,8 +68,7 @@ public enum Typography {
         }
         return Font.custom(mono.name(for: 500), size: size * Look.current.codeFont.scale, relativeTo: .caption)
     }
-    /// The tracking of section labels: the theme's, in ems of their size
-    /// (Islands' 0.08 em of 10 points).
+    /// The tracking of section labels: the theme's, in ems of their size.
     public static var sectionLabelTracking: CGFloat {
         let label = Theme.current.sectionLabel
         return label.size * label.tracking

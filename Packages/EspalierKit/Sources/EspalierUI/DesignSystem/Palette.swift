@@ -132,6 +132,12 @@ nonisolated public enum Palette {
 
     /// Content panes and the toolbar.
     public static var background: NSColor { Theme.current.background }
+    /// What the panes in the main window's content fill with: clear in
+    /// Frost, whose card is glass, else `background`.
+    public static var pane: NSColor { Theme.current.pane }
+    /// The content's card, and a card on a pane (the commit message):
+    /// `background`, at 40% over the glass in Frost.
+    public static var cardFill: NSColor { Theme.current.cardFill }
     /// The sidebar.
     public static var sidebar: NSColor { Theme.current.sidebar }
     /// Search fields, segmented tracks, neutral chips.
@@ -141,7 +147,7 @@ nonisolated public enum Palette {
     /// A hovered row.
     public static var hover: NSColor { Theme.current.hover }
     /// The sidebar's selected item: Default's is the butter highlight,
-    /// Islands' a wash of the accent.
+    /// Frost's a neutral wash.
     public static var sidebarSelection: NSColor { Theme.current.sidebarSelection }
     /// Dividers and hairlines.
     public static var line: NSColor { Theme.current.line }
@@ -187,8 +193,8 @@ nonisolated public enum Palette {
     /// Links: the theme's link color, else the accent.
     public static var link: NSColor { Theme.current.link }
 
-    /// Selected rows and chips: Default's butter highlight; Islands' is the
-    /// accent at 10% (14% in dark).
+    /// Selected rows and chips: Default's butter highlight; Frost's a
+    /// neutral wash.
     public static var accentSoft: NSColor { Theme.current.accentSoft }
 
     /// The commit message field that has focus: the accent at 6% (10% in

@@ -52,7 +52,7 @@ public struct PullRequestScreen: View {
             if let pullRequest {
                 PullRequestChangesView(repository: repository, pullRequest: pullRequest)
             } else {
-                Color(nsColor: Palette.background)
+                Color(nsColor: Palette.pane)
             }
         }
         .task(id: number) {
@@ -332,7 +332,7 @@ struct PullRequestOverviewView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .unbouncedScrollContent()
         }
-        .background(Color(nsColor: Palette.background))
+        .background(Color(nsColor: Palette.pane))
     }
 
     private var header: some View {
@@ -531,7 +531,7 @@ struct PullRequestChangesView: View {
         }
         // The background fills the pane, whatever the state's size.
         .fillingSpace()
-        .background(Color(nsColor: Palette.background))
+        .background(Color(nsColor: Palette.pane))
         .task(id: pullRequest) {
             if changes.pullRequest != pullRequest || changes.status == .idle {
                 await changes.showChanges(of: pullRequest)

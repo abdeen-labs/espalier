@@ -88,7 +88,7 @@ private struct DatedCommits {
 private func selectInApp(
     _ local: Repository,
     shas: [String: String],
-    historyStyle: HistoryStyle? = .graph
+    historyStyle: EspalierCore.HistoryStyle? = .graph
 ) async throws -> HistoryCaptureFixture {
     let harness = try AppHarness(historyStyle: historyStyle)
     let app = await harness.loadedApp()

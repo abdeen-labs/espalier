@@ -9,7 +9,7 @@
 //
 // The fade is an alpha mask on the clip view's layer, a gradient from clear
 // to opaque, not a gradient painted in the background's color: whatever is
-// behind the list shows through. Its edges are the content
+// behind the list shows through, glass included. Its edges are the content
 // insets' edges, so content that scrolls under the insets (a toolbar, a
 // header band, the filter field, a list's margin) is out of sight there
 // while its edge fades. The clip view scrolls by moving its layer's bounds,

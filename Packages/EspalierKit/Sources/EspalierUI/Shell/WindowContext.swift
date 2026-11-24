@@ -162,7 +162,7 @@ public final class WindowContext {
     // MARK: Sidebar
 
     /// The sidebar's form (Settings ▸ Appearance ▸ Sidebar).
-    var sidebarStyle: SidebarStyle {
+    var sidebarStyle: EspalierCore.SidebarStyle {
         app.preferences.sidebarStyle
     }
 

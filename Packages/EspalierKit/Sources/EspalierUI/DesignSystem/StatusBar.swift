@@ -67,50 +67,55 @@ public struct StatusBar<Glyph: View, Trailing: View>: View {
     }
 
     public var body: some View {
-        HStack(spacing: Metrics.StatusBar.spacing) {
-            glyph
-                .frame(width: Metrics.StatusBar.glyphWidth)
-            // As the tone changes, the lines' new words crossfade in
-            // with the fill; other changes (a step of the work, a file
-            // resolved) show at once.
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(Typography.statusBarTitle)
-                    .foregroundStyle(.text)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .motion(Motion.arrive, value: tone)
-                if let subtitle {
-                    subtitle
-                        .font(Typography.meta)
-                        .foregroundStyle(.text2)
+        VStack(spacing: 0) {
+            HStack(spacing: Metrics.StatusBar.spacing) {
+                glyph
+                    .frame(width: Metrics.StatusBar.glyphWidth)
+                // As the tone changes, the lines' new words crossfade in
+                // with the fill; other changes (a step of the work, a file
+                // resolved) show at once.
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(Typography.statusBarTitle)
+                        .foregroundStyle(.text)
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .motion(Motion.arrive, value: tone)
-                        .tooltip(help)
+                    if let subtitle {
+                        subtitle
+                            .font(Typography.meta)
+                            .foregroundStyle(.text2)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .motion(Motion.arrive, value: tone)
+                            .tooltip(help)
+                    }
+                    if let detail {
+                        Text(detail)
+                            .font(Typography.meta)
+                            .foregroundStyle(.text2)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .motion(Motion.arrive, value: tone)
+                            .tooltip(detail)
+                    }
                 }
-                if let detail {
-                    Text(detail)
-                        .font(Typography.meta)
-                        .foregroundStyle(.text2)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .motion(Motion.arrive, value: tone)
-                        .tooltip(detail)
+                .contentTransition(motion.animates ? .opacity : .identity)
+                .padding(.vertical, Metrics.insetSmall)
+                .layoutPriority(1)
+                Spacer(minLength: Metrics.insetSmall)
+                HStack(spacing: Metrics.insetSmall) {
+                    trailing
                 }
+                .fixedSize()
             }
-            .contentTransition(motion.animates ? .opacity : .identity)
-            .padding(.vertical, Metrics.insetSmall)
-            .layoutPriority(1)
-            Spacer(minLength: Metrics.insetSmall)
-            HStack(spacing: Metrics.insetSmall) {
-                trailing
-            }
-            .fixedSize()
+            .padding(.horizontal, Metrics.insetLarge)
+            .frame(minHeight: Metrics.StatusBar.height)
+            .background(Color(espalier: tone.fill).motion(Motion.arrive, value: tone))
+            // A card of its own in the floating layout, which needs none.
+            Hairline()
+                .opacity(PaneCards.floats ? 0 : 1)
         }
-        .padding(.horizontal, Metrics.insetLarge)
-        .frame(minHeight: Metrics.StatusBar.height)
-        .background(Color(espalier: tone.fill).motion(Motion.arrive, value: tone))
         .accessibilityElement(children: .contain)
     }
 }

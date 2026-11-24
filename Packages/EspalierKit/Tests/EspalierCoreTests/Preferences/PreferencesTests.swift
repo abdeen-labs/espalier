@@ -194,7 +194,7 @@ struct PreferencesTests {
 
         preferences.designPalette = .plum
         preferences.designBackground = .warm
-        preferences.designTheme = .islands
+        preferences.designTheme = .frost
         // A palette and background chosen on one theme are every theme's.
         #expect(preferences.designPalette == .plum)
         #expect(preferences.designBackground == .warm)
@@ -203,7 +203,7 @@ struct PreferencesTests {
         #expect(storedKeys(temporary) == ["design-theme", "design-palette", "design-background", "app-font", "code-font"])
 
         let reloaded = Preferences(store: PreferenceStore(temporary.defaults))
-        #expect(reloaded.designTheme == .islands)
+        #expect(reloaded.designTheme == .frost)
         #expect(reloaded.designPalette == .plum)
         #expect(reloaded.designBackground == .warm)
         #expect(reloaded.appFont == .atkinson)

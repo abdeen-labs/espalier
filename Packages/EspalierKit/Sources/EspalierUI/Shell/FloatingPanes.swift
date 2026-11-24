@@ -1,4 +1,5 @@
-// The floating cards layout. The window is the theme's backdrop: the toolbar and the sidebar sit on it with
+// The floating cards layout (`PaneLayout.floatingCards`, Default). The
+// window is the theme's backdrop: the toolbar and the sidebar sit on it with
 // no hairlines, and each pane is a card floating on it, the `background`
 // fill in a rounded rectangle (the card radius) with the raised ring and
 // soft shadow, everything inside clipped to it. Cards are 10 apart, with no
@@ -13,14 +14,20 @@
 // still dragged as a divider (the whole gap), and each pane is hosted in a
 // `PaneCardView` that clips it. A place with one pane, the inspector, and
 // the operation panel are SwiftUI cards (`paneCard(margins:)`). Splits
-// inside a pane (a commit's files beside its diff) stay flat. The cards
-// follow a change of look at once (`LookChangeObserving`).
+// inside a pane (a commit's files beside its diff) stay flat. Everything
+// follows a change of look at once, keeping its views: SwiftUI bodies read
+// the layout, and the splits and cards are told (`LookChangeObserving`).
 
 import AppKit
 import SwiftUI
 
 /// The floating cards layout's measures.
 enum PaneCards {
+    /// Whether the current look floats the panes as cards.
+    static var floats: Bool {
+        Theme.current.paneLayout == .floatingCards
+    }
+
     /// The space between two cards.
     static let gap: CGFloat = 10
 
@@ -54,55 +61,65 @@ enum PaneCards {
 // MARK: - SwiftUI
 
 extension EnvironmentValues {
-    /// Whether the view is in a pane's card.
+    /// Whether the view is in a pane's card in the floating layout (or in a
+    /// pane that is one when the layout floats).
     @Entry var isInPaneCard = false
 }
 
 extension PaneCards {
     /// Whether a quiet capsule in a card draws flat on the `field` fill:
-    /// the theme's choice.
+    /// the theme's choice, while the layout floats.
     static func drawsQuietFlat(isInPaneCard: Bool) -> Bool {
-        isInPaneCard && Theme.current.controls.flatInCards
+        isInPaneCard && floats && Theme.current.controls.flatInCards
     }
 }
 
-/// A pane as a card on the backdrop.
+/// A pane as a card on the backdrop, in the floating layout; flat, the pane
+/// as it is. The pane keeps its identity across a change of layout: every
+/// modifier stays, with values that draw nothing while flat.
 struct PaneCardModifier: ViewModifier {
     /// The space around the card's frame.
     let margins: EdgeInsets
 
     func body(content: Content) -> some View {
+        let floats = PaneCards.floats
         let theme = Theme.current
         let shape = RoundedRectangle(cornerRadius: PaneCards.radius, style: .circular)
         content
             .environment(\.isInPaneCard, true)
-            .background(Color(nsColor: theme.background))
-            .clipShape(shape)
+            .background(floats ? Color(nsColor: theme.background) : .clear)
+            // Flat, the clip is far outside the pane.
+            .clipShape(shape.inset(by: floats ? 0 : -100_000))
             .background {
-                shape
-                    .fill(Color(nsColor: theme.background))
-                    .shadow(color: Color(nsColor: theme.raisedShadow), radius: PaneCards.shadowBlur / 2, y: PaneCards.shadowOffset)
+                if floats {
+                    shape
+                        .fill(Color(nsColor: theme.background))
+                        .shadow(color: Color(nsColor: theme.raisedShadow), radius: PaneCards.shadowBlur / 2, y: PaneCards.shadowOffset)
+                }
             }
             .overlay {
-                shape
-                    .inset(by: -0.5)
-                    .stroke(Color(nsColor: theme.raisedRing), lineWidth: 1)
-                    .allowsHitTesting(false)
+                if floats {
+                    shape
+                        .inset(by: -0.5)
+                        .stroke(Color(nsColor: theme.raisedRing), lineWidth: 1)
+                        .allowsHitTesting(false)
+                }
             }
-            .padding(PaneCards.inset)
-            .padding(margins)
+            .padding(floats ? PaneCards.inset : 0)
+            .padding(floats ? margins : EdgeInsets())
     }
 }
 
 extension View {
-    /// Floats the view as a card on the backdrop, its frame `margins` from
-    /// what's around it.
+    /// Floats the view as a card on the backdrop in the floating layout,
+    /// its frame `margins` from what's around it.
     func paneCard(margins: EdgeInsets = EdgeInsets()) -> some View {
         modifier(PaneCardModifier(margins: margins))
     }
 
-    /// The detail area's margins around its cards' frames; `leading` and
-    /// `trailing` replace the leading and trailing ones.
+    /// The detail area's margins around its cards' frames in the floating
+    /// layout; `leading` and `trailing` replace the leading and trailing
+    /// ones.
     func paneMargins(
         leading: CGFloat = PaneCards.frameMargins.leading,
         trailing: CGFloat = PaneCards.frameMargins.trailing
@@ -110,15 +127,17 @@ extension View {
         modifier(PaneMarginsModifier(leading: leading, trailing: trailing))
     }
 
-    /// The detail area's margins beside the sidebar: the leading one
-    /// follows the sidebar's edge as it shows and hides, so the cards move with the sidebar and
+    /// The detail area's margins beside the sidebar in the floating layout
+    /// and the inset card layout: the leading one follows the sidebar's
+    /// edge as it shows and hides, so the cards move with the sidebar and
     /// stop at the window's edge margin. Before Commit Info, the trailing
     /// one is the inspector's to keep.
     func paneMarginsBesideSidebar(beforeInspector: Bool) -> some View {
         modifier(SidebarPaneMarginsModifier(beforeInspector: beforeInspector))
     }
 
-    /// Nudges the detail's column as the sidebar shows or hides: it leans against the sidebar's travel and springs
+    /// Nudges the detail's column as the sidebar shows or hides in the
+    /// floating layout: it leans against the sidebar's travel and springs
     /// back.
     func sidebarNudge(isSidebarHidden: Bool) -> some View {
         background {
@@ -128,7 +147,7 @@ extension View {
     }
 }
 
-/// The detail area's margins.
+/// The detail area's margins in the floating layout.
 private struct PaneMarginsModifier: ViewModifier {
     let leading: CGFloat
     let trailing: CGFloat
@@ -137,7 +156,7 @@ private struct PaneMarginsModifier: ViewModifier {
         var margins = PaneCards.frameMargins
         margins.leading = leading
         margins.trailing = trailing
-        return content.padding(margins)
+        return content.padding(PaneCards.floats ? margins : EdgeInsets())
     }
 }
 
@@ -154,7 +173,7 @@ private struct SidebarNudge: NSViewRepresentable {
     }
 
     func updateNSView(_ view: NudgeView, context: Context) {
-        if let wasHidden = view.isSidebarHidden, wasHidden != isSidebarHidden, Motion.animates(view) {
+        if let wasHidden = view.isSidebarHidden, wasHidden != isSidebarHidden, PaneCards.floats, Motion.animates(view) {
             view.nudge(by: isSidebarHidden ? Motion.sidebarNudge : -Motion.sidebarNudge)
         }
         view.isSidebarHidden = isSidebarHidden
@@ -212,7 +231,8 @@ private struct SidebarNudge: NSViewRepresentable {
 /// The detail area's margins beside the sidebar, the leading one read from
 /// where the detail is in the window on every layout: the frame margin
 /// after the sidebar, growing to the window's edge margin as the sidebar's
-/// edge comes within it. It changes with the sidebar's own animation and has none of its own.
+/// edge comes within it (the inset card's margins in that layout). It
+/// changes with the sidebar's own animation and has none of its own.
 private struct SidebarPaneMarginsModifier: ViewModifier {
     let beforeInspector: Bool
 
@@ -224,17 +244,22 @@ private struct SidebarPaneMarginsModifier: ViewModifier {
 
     /// The margins with the detail's leading edge `minX` from the window's.
     private func margins(minX: CGFloat) -> EdgeInsets {
-        var margins = PaneCards.frameMargins
-        margins.leading = max(PaneCards.frameMargins.leading, PaneCards.windowEdgeMargin - minX)
-        margins.trailing = beforeInspector ? 0 : PaneCards.frameMargins.trailing
-        return margins
+        switch Theme.current.paneLayout {
+        case .floatingCards:
+            var margins = PaneCards.frameMargins
+            margins.leading = max(PaneCards.frameMargins.leading, PaneCards.windowEdgeMargin - minX)
+            margins.trailing = beforeInspector ? 0 : PaneCards.frameMargins.trailing
+            return margins
+        case .insetCard:
+            return InsetCard.detailMargins(minX: minX, beforeInspector: beforeInspector)
+        }
     }
 }
 
 // MARK: - AppKit
 
-/// A split pane's host in `SplitView`: flat (in a split inside a pane), a
-/// plain container; floating, a card that clips the pane to its rounded shape on the `background`
+/// A split pane's host in `SplitView`: flat, a plain container; floating,
+/// a card that clips the pane to its rounded shape on the `background`
 /// fill, with the raised ring and soft shadow around it.
 final class PaneCardView: NSView, LookChangeObserving {
     /// The pane.
@@ -304,7 +329,13 @@ final class PaneCardView: NSView, LookChangeObserving {
         shade.isHidden = !floats
         shade.needsDisplay = true
         placeSubviews()
-        guard floats, let clipLayer = clip.layer else {
+        guard let clipLayer = clip.layer else {
+            return
+        }
+        guard floats else {
+            clipLayer.cornerRadius = 0
+            clipLayer.masksToBounds = false
+            clipLayer.backgroundColor = nil
             return
         }
         var background: CGColor?
@@ -341,15 +372,14 @@ private final class PaneCardShade: NSView {
     }
 }
 
-/// `SplitView`'s split. Holding a place's panes, its divider is the gap
-/// between the cards and draws nothing.
-final class PaneSplitView: NSSplitView {
-    /// Whether the split holds a place's panes, which float as cards (a
-    /// split inside a pane stays flat).
+/// `SplitView`'s split. Holding a place's panes in the floating layout, its
+/// divider is the gap between the cards and draws nothing.
+final class PaneSplitView: NSSplitView, LookChangeObserving {
+    /// Whether the split holds a place's panes, which float as cards in the
+    /// floating layout (a split inside a pane stays flat).
     var holdsPanes = false
 
-    /// Whether the panes float as cards: once `updateLayout()` has run on a
-    /// split that holds them.
+    /// Whether the panes float as cards now.
     private(set) var floats = false
 
     override var dividerThickness: CGFloat {
@@ -367,21 +397,33 @@ final class PaneSplitView: NSSplitView {
         hideDividers()
     }
 
+    /// The divider views it hid, shown again once flat.
+    private var hiddenDividers: [NSView] = []
+
     /// Floating, the divider's views (AppKit's own) are hidden: the gap
-    /// between the cards is the divider.
+    /// between the cards is the divider. Flat, the ones it hid show again.
     private func hideDividers() {
         guard floats else {
+            for divider in hiddenDividers {
+                divider.isHidden = false
+            }
+            hiddenDividers = []
             return
         }
         for divider in subviews where !divider.isHidden && !arrangedSubviews.contains(divider) && NSStringFromClass(type(of: divider)) == "NSSplitDividerView" {
             divider.isHidden = true
+            hiddenDividers.append(divider)
         }
     }
 
-    /// Floats the panes as cards in a split that holds them; a split inside
-    /// a pane stays flat. The leading pane keeps its width.
+    func lookDidChange() {
+        updateLayout()
+    }
+
+    /// Floats the panes as cards, or lays them flat, as the current look
+    /// does. The leading pane keeps its width.
     func updateLayout() {
-        let floats = holdsPanes
+        let floats = holdsPanes && PaneCards.floats
         for case let card as PaneCardView in arrangedSubviews {
             card.floats = floats
         }
@@ -389,8 +431,8 @@ final class PaneSplitView: NSSplitView {
             return
         }
         // The leading pane's content keeps its width: its card's frame
-        // takes the room for the ring and shadow.
-        let position = arrangedSubviews.first.map { $0.frame.maxX + 2 * PaneCards.inset }
+        // takes the room for the ring and shadow, or gives it back.
+        let position = arrangedSubviews.first.map { $0.frame.maxX + (floats ? 2 : -2) * PaneCards.inset }
         self.floats = floats
         if let position, arrangedSubviews.count == 2, bounds.width > 0 {
             setPosition(position, ofDividerAt: 0)
@@ -403,7 +445,8 @@ final class PaneSplitView: NSSplitView {
 }
 
 /// Hides the window's split view dividers (the sidebar's and the
-/// inspector's): the backdrop's gaps divide the columns. It sits in
+/// inspector's): in the floating layout the backdrop's gaps divide the
+/// columns, and in the inset card layout the card's ring does. It sits in
 /// the background of the window's content and looks after the splits in it.
 struct WindowDividerStyler: NSViewRepresentable {
     func makeNSView(context: Context) -> StylerView {

@@ -60,7 +60,7 @@ struct ScrollEdgeFadeTests {
         #expect(bands == position.bands)
     }
 
-    @Test("in Default the mask is there while an edge fades and follows the scroll; a look without the fade has none")
+    @Test("the mask is there while an edge fades and follows the scroll")
     func mask() throws {
         let scrollView = NSScrollView(frame: CGRect(x: 0, y: 0, width: 300, height: 300))
         scrollView.documentView = FlippedDocument(frame: CGRect(x: 0, y: 0, width: 300, height: 1_000))
@@ -85,12 +85,6 @@ struct ScrollEdgeFadeTests {
         }
         #expect(fade.bands == ScrollEdgeFadeBands(top: 0, bottom: 24))
         #expect(mask.frame == layer.bounds)
-
-        Look.with(Look(theme: .islands)) {
-            fade.update()
-        }
-        #expect(fade.bands == .none)
-        #expect(layer.mask == nil)
     }
 
     @Test("a table's rows are its content: rows that fit don't fade, however tall the table, and rows past an edge do")
@@ -121,22 +115,19 @@ struct ScrollEdgeFadeTests {
         #expect(fade.bands == ScrollEdgeFadeBands(top: 0, bottom: 24))
     }
 
-    @Test("a file selected below the list scrolls into view clear of the fade in Default, to the list's edge in Islands", arguments: [
-        NamedCase("Default", (look: Look.default, clearance: CGFloat(24))),
-        NamedCase("Islands", (look: Look(theme: .islands), clearance: CGFloat(0))),
-    ])
-    func selectionClearsTheFade(_ testCase: NamedCase<(look: Look, clearance: CGFloat)>) {
+    @Test("a file selected below the list scrolls into view clear of the fade")
+    func selectionClearsTheFade() {
         let controller = HistoryFileListController()
         controller.scrollView.frame = CGRect(x: 0, y: 0, width: 200, height: 300)
         let files = (0..<40).map { index in
             HistoryFileContent(file: CommittedFileRowContent(id: "\(index)", path: "File\(index).swift", status: .modified), numberFormat: defaultNumberFormat)
         }
-        Look.with(testCase.value.look) {
+        Look.with(.default) {
             controller.update(files: files, selection: "30", actions: HistoryFilesActions(), focusRequest: 0)
         }
         let clipView = controller.scrollView.contentView
         let row = controller.tableView.rect(ofRow: 30)
-        #expect(clipView.bounds.maxY - clipView.contentInsets.bottom - row.maxY == testCase.value.clearance)
+        #expect(clipView.bounds.maxY - clipView.contentInsets.bottom - row.maxY == 24)
     }
 }
 

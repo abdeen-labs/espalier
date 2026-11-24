@@ -1,8 +1,7 @@
 // The Settings window as a titled window draws it offscreen, with its
 // chrome: Appearance scrolled so its first section has passed under the
 // header band, where the pane's scroll view reaches up under the titlebar.
-// It's drawn in the run's look: `--look islands-lagoon` shows the pane as a
-// card.
+// It's drawn in the run's look: `--look frost` shows Frost's.
 
 import AppKit
 @testable import EspalierCore

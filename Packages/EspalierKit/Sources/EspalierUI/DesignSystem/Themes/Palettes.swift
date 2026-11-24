@@ -1,6 +1,6 @@
 // Palettes: the accent color and the colors made from it, on every design
 // theme, each a hue of its own: System, the Mac's accent color; Blueberry
-// and Slate, made for Default; Lagoon and Plum, made for Islands;
+// and Slate, made for Default; Iris, made for Frost; Lagoon, Plum,
 // Tangerine, Magenta, and Volt; and White, which has no hue. A palette is the accent; its ink, for
 // links and counts in the accent's color (a little deeper in light,
 // lighter in dark); its deep ink, for a selected item's title on the
@@ -8,7 +8,8 @@
 // the accent (a checkbox's check). What a palette doesn't set is made from
 // its accent in OKLCH, so the Mac's accent color (System) has all of it
 // whichever color it is. Each theme takes what it uses (Theme.swift):
-// Default and Islands take the accent, the inks, and the prominent fill.
+// Default takes the accent, the inks, and the prominent fill; Frost the
+// accent and its marks, its prominent fill being ink.
 
 import AppKit
 import EspalierCore
@@ -82,8 +83,11 @@ nonisolated struct PaletteColors: Sendable {
             // Default's: a steel blue-gray, nearly as quiet as Default's
             // surfaces.
             PaletteColors(palette, accent: ThemeColor.fixed(0x4B5C74, 0x95A6BE))
+        case .iris:
+            // Frost's: a cool blue-violet.
+            PaletteColors(palette, accent: ThemeColor.fixed(0x5B43E8, 0x8B7CF6))
         case .lagoon:
-            // Islands': a deep sea blue-green.
+            // A deep sea blue-green.
             PaletteColors(
                 palette,
                 accent: ThemeColor.fixed(0x0B7A8C, 0x5CC6D6),
@@ -92,7 +96,7 @@ nonisolated struct PaletteColors: Sendable {
                 prominent: ThemeColor.fixed(0x0A6F80, 0x0E8094)
             )
         case .plum:
-            // Islands': a deep purple, between Blueberry and Magenta.
+            // A deep purple, between Blueberry and Magenta.
             PaletteColors(palette, accent: ThemeColor.fixed(0x781E98, 0xCA8DEF))
         case .tangerine:
             // Dark text and marks on the bright orange.

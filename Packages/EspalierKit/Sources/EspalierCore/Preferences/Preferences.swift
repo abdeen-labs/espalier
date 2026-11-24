@@ -113,7 +113,7 @@ public enum ApplicationTheme: String, Sendable, Hashable, CaseIterable {
 public enum DesignTheme: String, Sendable, Hashable, CaseIterable {
     /// The theme a new install opens in.
     case `default`
-    case islands
+    case frost
 }
 
 /// Espalier's palette: the accent color and the colors made from it (links,
@@ -124,6 +124,7 @@ public enum DesignPalette: String, Sendable, Hashable, CaseIterable {
     /// The Mac's accent color.
     case system
     case blueberry, slate
+    case iris
     case lagoon, plum
     case tangerine, magenta, volt
     /// White prominent fills; what's drawn in the accent is ink on light
@@ -134,8 +135,8 @@ public enum DesignPalette: String, Sendable, Hashable, CaseIterable {
     public var theme: DesignTheme? {
         switch self {
         case .blueberry, .slate: .default
-        case .lagoon, .plum: .islands
-        case .system, .tangerine, .magenta, .volt, .white: nil
+        case .iris: .frost
+        case .system, .lagoon, .plum, .tangerine, .magenta, .volt, .white: nil
         }
     }
 }

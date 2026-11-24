@@ -143,19 +143,26 @@ struct RefCapsuleStyle {
 
 // MARK: - SwiftUI
 
-/// A ref tag's shape: a capsule.
+/// A ref tag's shape: a rounded rectangle with the theme's tag radius, a
+/// capsule where that's half the tag's height or more.
 nonisolated struct RefTagShape: InsettableShape {
     var inset: CGFloat = 0
 
     init() {}
 
-    /// The corner radius of a tag `height` high: half of it.
+    /// The corner radius of a tag `height` high: the theme's tag radius, at
+    /// most half of it.
     static func radius(height: CGFloat) -> CGFloat {
-        height / 2
+        min(Theme.current.radii.tag, height / 2)
     }
 
     func path(in rect: CGRect) -> Path {
-        Capsule(style: .continuous).path(in: rect.insetBy(dx: inset, dy: inset))
+        let rect = rect.insetBy(dx: inset, dy: inset)
+        let radius = Self.radius(height: rect.height)
+        guard radius < rect.height / 2 else {
+            return Capsule(style: .continuous).path(in: rect)
+        }
+        return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect)
     }
 
     func inset(by amount: CGFloat) -> RefTagShape {

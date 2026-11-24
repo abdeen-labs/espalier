@@ -1,6 +1,7 @@
 // The detail area's inner split: an `NSSplitView` whose divider is saved per
 // kind of place, so the Changes column and the graph each keep their own
-// width. A place's split floats its panes as cards (FloatingPanes.swift).
+// width. A place's split floats its panes as cards in the floating layout
+// (FloatingPanes.swift).
 
 import AppKit
 import SwiftUI
@@ -16,7 +17,7 @@ public struct SplitView<Leading: View, Trailing: View>: NSViewRepresentable {
     private let autosaveName: String
     private let column: Metrics.ColumnWidth
     private let trailingMinimum: CGFloat
-    /// Whether it holds a place's panes (cards).
+    /// Whether it holds a place's panes (cards in the floating layout).
     private var holdsPanes = false
     private let leading: Leading
     private let trailing: Trailing
@@ -93,6 +94,7 @@ public struct SplitView<Leading: View, Trailing: View>: NSViewRepresentable {
     public func updateNSView(_ splitView: NSSplitView, context: Context) {
         context.coordinator.leadingHost?.rootView = bridged(AnyView(leading), context.environment)
         context.coordinator.trailingHost?.rootView = bridged(AnyView(trailing), context.environment)
+        (splitView as? PaneSplitView)?.updateLayout()
     }
 
     /// The pane's content with the window's environment, which doesn't
@@ -189,7 +191,7 @@ public struct SplitView<Leading: View, Trailing: View>: NSViewRepresentable {
 struct EnvironmentBridge: ViewModifier {
     let values: EnvironmentValues
     let windowContext: WindowContext?
-    /// Whether the pane is a card, or in one.
+    /// Whether the pane is a card (in the floating layout), or in one.
     var isInPaneCard = false
 
     func body(content: Content) -> some View {

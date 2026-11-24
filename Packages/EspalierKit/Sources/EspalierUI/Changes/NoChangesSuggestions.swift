@@ -383,7 +383,7 @@ public struct NoChangesSuggestions: View {
             .unbouncedScrollContent()
         }
         .scrollBounceBehavior(.basedOnSize)
-        .background(Color(espalier: Palette.background))
+        .background(Color(espalier: Palette.pane))
     }
 
     /// The primary card, then the others side by side, then the editor's

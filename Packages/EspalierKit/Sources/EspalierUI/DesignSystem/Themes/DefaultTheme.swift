@@ -1,5 +1,5 @@
 // Default: playful and creamy. The panes are cream cards floating on an
-// oat backdrop, warm espresso ink for text,
+// oat backdrop (`PaneLayout.floatingCards`), warm espresso ink for text,
 // and a butter-yellow highlight, like a highlighter on paper, for every
 // selection (a highlighter in the background tint's own color on Cool,
 // Sage, Rose, and Lavender). The palette's accent is the one prominent action, focus,
@@ -82,14 +82,16 @@ nonisolated extension ThemeDefinition {
             sidebarSelectionIcon: palette.accent,
             sidebarSelectionIsBold: true,
             sectionLabel: SectionLabelStyle(isUppercase: false, size: 12, weight: .bold, tracking: 0),
-            radii: ThemeRadii(row: 12, card: 18, small: 6),
+            radii: ThemeRadii(row: 12, card: 18, small: 6, tag: .infinity),
             commitTitle: TitleStyle(size: 20, weight: .bold),
             buttonWeights: ButtonWeights(quiet: .semibold, prominent: .bold),
             graph: GraphStyle(lineWidth: 3, lanePitch: 17),
             refTag: RefTagStyle(alpha: (0.16, 0.24), textMix: (0.38, 0.20), ink: 0x2B2119),
             avatarShape: .circle,
+            paneLayout: .floatingCards,
             controls: ControlStyle(prominentShadow: nil, flatInCards: true, lip: 3),
-            scrollEdgeFade: 24
+            scrollEdgeFade: 24,
+            style: .default
         )
     }
 }

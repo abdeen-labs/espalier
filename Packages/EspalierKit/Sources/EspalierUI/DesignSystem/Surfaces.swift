@@ -3,7 +3,7 @@
 // shadow, and quiet capsule buttons a small one, as push buttons do. Cards
 // in a pane have the ring alone. Toasts and the operation capsule are
 // pillows, standing on a lip as buttons do. No glass or materials of
-// Espalier's own.
+// Espalier's own but a glass theme's window chrome (ChromeBackdrop.swift).
 
 import AppKit
 import SwiftUI

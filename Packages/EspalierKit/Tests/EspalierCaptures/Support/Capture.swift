@@ -5,10 +5,11 @@
 // `<folder>/<look>/<Area>/<name>-<light|dark>.png`.
 //
 // ESPALIER_CAPTURE_LOOK=<theme>[-<color>][-<background>][-<app font>]
-// [-<code font>], as the settings store them ("default-slate",
-// "islands-lagoon-warm-fixel", "islands-plum-atkinson-sfmono"), draws
-// every capture in that look instead of the default one; a capture made in
-// a look of its own (`look:`) keeps it, and its name says which.
+// [-<code font>], as the settings store them ("default-slate", "frost",
+// "frost-lagoon-warm-fixel", "frost-plum-atkinson-sfmono"), draws every
+// capture in that look instead of the default one; without a color, a
+// theme is in the palette made for it (Frost in Iris). A capture made in a
+// look of its own (`look:`) keeps it, and its name says which.
 //
 // SwiftUI views go into an `NSHostingView` in an offscreen key window with
 // an explicit appearance; AppKit views go straight into the same kind of
@@ -270,15 +271,23 @@ func capture(
     }
 }
 
+extension DesignTheme {
+    /// The palette a capture look names the theme in when it names none:
+    /// the first made for it (Default's Blueberry, Frost's Iris).
+    var capturePalette: DesignPalette {
+        DesignPalette.allCases.first { $0.theme == self } ?? .blueberry
+    }
+}
+
 extension Look {
     /// The look's name in captures: "default" for Default in Blueberry, its
     /// own backgrounds, in Allo and Maple Mono; else the theme, then the
-    /// palette, the background tint, the app font, and the code font when
-    /// they aren't the defaults ("default-slate", "default-warm",
-    /// "islands-lagoon-fixel", "islands-plum-sfmono").
+    /// palette when it isn't the one made for the theme, and the background
+    /// tint, the app font, and the code font when they aren't the defaults
+    /// ("default-slate", "default-warm", "frost", "frost-lagoon-fixel").
     var captureName: String {
         var parts = [theme.rawValue]
-        if palette != .blueberry {
+        if palette != theme.capturePalette {
             parts.append(palette.rawValue)
         }
         if background != .own {
@@ -301,7 +310,7 @@ extension Look {
             fatalError("ESPALIER_CAPTURE_LOOK=\(name) doesn't start with a theme")
         }
         parts.removeFirst()
-        var palette = DesignPalette.blueberry
+        var palette = theme.capturePalette
         var background = BackgroundTint.own
         var appFont = AppFont.allo
         var codeFont = CodeFont.mapleMono

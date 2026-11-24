@@ -1,4 +1,4 @@
-// Settings ▸ Appearance: the theme (Default or Islands) and the
+// Settings ▸ Appearance: the theme (Default or Frost) and the
 // app font; colors (the palette, System's the Mac's accent color, on any
 // theme; the background tint; the appearance, System, Light, or Dark); code
 // (the code font, its text size, the diff's tab size), dates and numbers,
@@ -35,12 +35,12 @@ enum AppearanceSettings {
 
     /// The sidebar's styles, in order.
     static let sidebarStyles = [
-        CapsuleSegment("Hidden", value: SidebarStyle.hidden),
-        CapsuleSegment("Icons", value: SidebarStyle.icons),
+        CapsuleSegment("Hidden", value: EspalierCore.SidebarStyle.hidden),
+        CapsuleSegment("Icons", value: EspalierCore.SidebarStyle.icons),
     ]
 
     /// What a sidebar style does.
-    static func sidebarStyleDescription(_ style: SidebarStyle) -> String {
+    static func sidebarStyleDescription(_ style: EspalierCore.SidebarStyle) -> String {
         switch style {
         case .hidden:
             "Windows open without the sidebar, with Changes and History in the toolbar. View ▸ Show Sidebar shows it."

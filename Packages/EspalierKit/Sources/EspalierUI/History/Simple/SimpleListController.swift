@@ -171,7 +171,7 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         tableView.allowsEmptySelection = true
         tableView.allowsTypeSelect = true
         tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
-        tableView.backgroundColor = Palette.background
+        tableView.backgroundColor = Palette.pane
         tableView.selectionHighlightStyle = .regular
         tableView.draggingDestinationFeedbackStyle = .none
         tableView.setDraggingSourceOperationMask([.copy, .move, .generic], forLocal: true)
@@ -188,8 +188,8 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = true
-        scrollView.backgroundColor = Palette.background
+        scrollView.drawsBackground = !Theme.current.cardIsGlass
+        scrollView.backgroundColor = Palette.pane
         scrollView.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(boundsDidChange(_:)), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         NotificationCenter.default.addObserver(self, selector: #selector(willStartLiveScroll(_:)), name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
@@ -202,8 +202,9 @@ final class SimpleListController: NSObject, NSTableViewDataSource, NSTableViewDe
     @objc private func lookDidChange(_ notification: Notification) {
         rowHeight = Metrics.SimpleList.rowHeight
         tableView.rowHeight = rowHeight
-        tableView.backgroundColor = Palette.background
-        scrollView.backgroundColor = Palette.background
+        tableView.backgroundColor = Palette.pane
+        scrollView.backgroundColor = Palette.pane
+        scrollView.drawsBackground = !Theme.current.cardIsGlass
         tableView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<tableView.numberOfRows))
         reconfigureVisibleRows()
     }

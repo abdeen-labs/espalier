@@ -69,8 +69,8 @@ struct DetailRouter: View {
 
     var body: some View {
         let app = context.app
-        // A place's panes are its split's cards; the other destinations are
-        // one card.
+        // A place's panes are its split's cards in the floating layout; the
+        // other destinations are one card.
         switch DetailDestination.make(app: app, place: context.state.place) {
         case .launching:
             DelayedProgressView()

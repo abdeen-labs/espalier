@@ -889,7 +889,7 @@ extension View {
     /// The composer's note card: a cream card on the column with the
     /// card's ring and shadow and a generous radius.
     func noteCard() -> some View {
-        surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.NoteCard.radius, style: .continuous))
+        surface(Color(espalier: Palette.cardFill), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.NoteCard.radius, style: .continuous))
     }
 }
 

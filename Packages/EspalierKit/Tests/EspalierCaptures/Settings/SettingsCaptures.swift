@@ -68,10 +68,10 @@ struct SettingsCaptures {
         capture(window(.appearance) { AppearanceForm(preferences: app.preferences) }, named: "appearance", area: area)
     }
 
-    @Test("Appearance in a look of its own: a theme in a palette, its fonts; the pane a card on the backdrop in Islands", arguments: [
+    @Test("Appearance in a look of its own: a theme in a palette, its fonts", arguments: [
         Look(palette: .slate, appFont: .fixel, codeFont: .sfMono),
-        Look(theme: .islands, palette: .lagoon),
-        Look(theme: .islands, palette: .plum),
+        Look(theme: .frost, palette: .iris),
+        Look(theme: .frost, palette: .lagoon),
     ])
     func appearanceTheme(_ look: Look) throws {
         let harness = try AppHarness()

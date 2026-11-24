@@ -82,8 +82,10 @@ struct SettingsPanes: View {
 
 /// The window's layout: the sidebar of panes on the left; on the right,
 /// the header band with the selected pane's name, then the pane,
-/// whose groups are cream cards on the backdrop. It fills the window, under
-/// its transparent titlebar too.
+/// whose groups are cards. It fills the window, under its transparent
+/// titlebar too. In the floating layout the band and the pane sit on the
+/// backdrop; in the inset card layout, on the background, with a hairline
+/// under the band.
 struct SettingsLayout<Pane: View>: View {
     @Binding var selection: SettingsTab
     private let pane: Pane
@@ -109,7 +111,7 @@ struct SettingsLayout<Pane: View>: View {
                     // the band's edge instead of over the name.
                     .clipped()
             }
-            .background(Color(espalier: Theme.current.backdrop))
+            .background(Color(espalier: PaneCards.floats ? Theme.current.backdrop : Palette.background))
         }
         .ignoresSafeArea()
         .navigationTitle(selection.title)
@@ -122,7 +124,7 @@ struct SettingsLayout<Pane: View>: View {
 }
 
 /// The pane's header band: its name in display type, as high as the main
-/// window's toolbar.
+/// window's toolbar, and a hairline under it in the inset card layout.
 struct SettingsHeader: View {
     let tab: SettingsTab
 
@@ -135,6 +137,10 @@ struct SettingsHeader: View {
             .padding(.horizontal, Metrics.SettingsCards.pageInset)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .frame(height: Metrics.SettingsWindow.headerHeight)
+            .overlay(alignment: .bottom) {
+                Hairline()
+                    .opacity(PaneCards.floats ? 0 : 1)
+            }
     }
 }
 
@@ -160,6 +166,10 @@ struct SettingsSidebar: View {
         .frame(width: Metrics.SettingsCards.sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Color(espalier: Palette.sidebar))
+        .overlay(alignment: .trailing) {
+            Hairline(.vertical)
+                .opacity(PaneCards.floats ? 0 : 1)
+        }
         .focusable()
         .focusEffectDisabled()
         .onKeyPress(.upArrow) {

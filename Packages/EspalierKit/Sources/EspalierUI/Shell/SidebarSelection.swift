@@ -29,7 +29,7 @@ nonisolated public enum SidebarPlace: Hashable, Sendable {
     /// The kind of place, which names the inner split's autosave and sets
     /// its widths. History's places take History's `style`: the simple list
     /// and the graph each have their own width.
-    public func kind(style: HistoryStyle) -> PlaceKind {
+    public func kind(style: EspalierCore.HistoryStyle) -> PlaceKind {
         switch self {
         case .changes: .changes
         case .history, .branch, .tag: style == .simple ? .simpleHistory : .graphHistory

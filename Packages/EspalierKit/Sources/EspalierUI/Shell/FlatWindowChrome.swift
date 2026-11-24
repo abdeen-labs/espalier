@@ -7,11 +7,13 @@
 // traffic lights, toolbar customization) and makes each piece opaque:
 //
 // - The sidebar's content is opaque: the list hides its scroll background
-//   and fills its column, under the titlebar too, with `Palette.sidebar`.
-//   The Liquid Glass behind it never shows.
+//   and fills its column, under the titlebar too, with `Palette.sidebar`
+//   (with the chrome's backdrop in the inset card layout). The Liquid Glass
+//   behind it never shows.
 // - The titlebar is transparent (`titlebarAppearsTransparent`), so the
 //   detail column draws the toolbar's band itself (`toolbarBand()`): the
-//   backdrop.
+//   backdrop in the floating layout; the backdrop, as glass in Frost, in
+//   the inset card layout (ChromeBackdrop.swift).
 // - No toolbar item sits on a glass platter: SwiftUI's items hide theirs
 //   (`sharedBackgroundVisibility(.hidden)`), and the items SwiftUI adds on
 //   its own (the sidebar toggle) are made borderless as the toolbar adds
@@ -79,17 +81,19 @@ enum FlatWindowChrome {
 
 /// The toolbar's band over a column: the backdrop from the top of the
 /// window to a point above the bottom of the toolbar, where a floating
-/// card's ring starts. The content keeps to the safe area below it. The
-/// column and its band are the backdrop.
+/// card's ring starts. The content keeps to the safe area below it. In the
+/// floating layout the column and its band are the backdrop; in the inset
+/// card layout they're the chrome's backdrop (`ChromeBackdrop`), and the
+/// band draws nothing over the content, which keeps to its card.
 struct ToolbarBand: ViewModifier {
     func body(content: Content) -> some View {
         let theme = Theme.current
         content
-            .background(Color(espalier: theme.backdrop).ignoresSafeArea())
+            .background(ChromeSurface(theme.backdrop).ignoresSafeArea())
             .overlay(alignment: .top) {
                 GeometryReader { proxy in
                     let height = proxy.safeAreaInsets.top
-                    Color(espalier: theme.backdrop)
+                    Color(espalier: theme.paneLayout == .insetCard ? .clear : theme.backdrop)
                         .frame(height: max(height - 1, 0))
                         .frame(height: height, alignment: .top)
                         .offset(y: -height)

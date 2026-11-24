@@ -6,11 +6,12 @@
 // sections keep showing the previous repository until the selected one has
 // loaded (`SidebarSectionsHold`).
 //
-// The sidebar is the `sidebar` color. Changes and History lead; each
+// The sidebar is the `sidebar` color (the chrome's backdrop in the inset
+// card layout: ChromeBackdrop.swift). Changes and History lead; each
 // section after them leads with its chevron and its
 // name in bold (a collapsed section's count in a pill). Rows are roomy with the row radius, groups of a section's rows
 // are set apart by space, and the selected item is on the theme's sidebar
-// selection (`Palette.sidebarSelection`, the butter highlight), its title
+// selection (`Palette.sidebarSelection`), its title
 // in the selected weight (`SidebarRowFont`) and its symbol in the theme's
 // selection symbol color (the list's own selection drawing is off before
 // it first draws: `SidebarListStyler`). Selected branch, tag, stash, and
@@ -58,7 +59,7 @@ struct SidebarContainer: View {
                 }
             }
         }
-        .sidebarListStyle(surface: Palette.sidebar)
+        .sidebarListStyle(surface: InsetCard.isOn ? .clear : Palette.sidebar)
         .unbouncedList(fadesEdges: true)
         .sidebarMotionScope([selected?.id, shown?.id], loading: selected)
         .environment(\.sidebarSelection, selection.wrappedValue)
@@ -81,7 +82,7 @@ struct SidebarContainer: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             SidebarFilterField()
         }
-        .background(Color(espalier: Palette.sidebar).ignoresSafeArea())
+        .background(ChromeSurface(Palette.sidebar).ignoresSafeArea())
     }
 
     /// The places a click, a menu, or Return acts on: while the sections
@@ -986,7 +987,7 @@ private struct SidebarHeaderButtonBody<Label: View>: View {
 /// The filter at the bottom of the sidebar (⌥⌘J), and at the top of a rail
 /// popover: narrows every section but the first.
 struct SidebarFilterField: View {
-    /// What it's on: nil for the sidebar's surface (`Palette.sidebar`), or a
+    /// What it's on: nil for the sidebar's surface (`ChromeSurface`), or a
     /// rail popover's `background`.
     var surface: NSColor?
     @Environment(WindowContext.self) private var context
@@ -1000,12 +1001,16 @@ struct SidebarFilterField: View {
             focusRequest: $state.isSidebarFilterFocused
         )
         .controlSize(.regular)
-        .environment(\.searchFieldIsRaised, true)
+        .environment(\.searchFieldIsRaised, PaneCards.floats)
         .environment(\.searchFieldIsOnSidebar, surface == nil)
         .padding(.horizontal, Metrics.Sidebar.rowInset)
         .padding(.vertical, Metrics.insetSmall)
         .background {
-            Color(espalier: surface ?? Palette.sidebar)
+            if let surface {
+                Color(espalier: surface)
+            } else {
+                ChromeSurface(Palette.sidebar)
+            }
         }
         .announcesFilterResults(state.sidebarFilter) { [context] in
             Self.resultCount(in: context)
