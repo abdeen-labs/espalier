@@ -73,6 +73,7 @@ struct MissingRepositoryForm: View {
             systemImage: systemImage,
             attributedDescription: content.description,
             tint: Color(espalier: Palette.warningMark),
+            tiles: .fan,
             isLarge: true
         ) {
             HStack(spacing: Metrics.insetSmall) {

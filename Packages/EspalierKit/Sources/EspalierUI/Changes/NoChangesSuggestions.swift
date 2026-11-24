@@ -329,7 +329,7 @@ extension SuggestionsContent {
     }
 }
 
-/// No changes: a plain check, "Nothing to Commit", a plain line about
+/// No changes: a check on its tiles, "Nothing to Commit", a plain line about
 /// what's left to do, then the suggestions as soft action cards: the
 /// primary one wide, with its prominent action, then the editor, Finder,
 /// and GitHub side by side, each with its shortcut as a key cap.
@@ -359,11 +359,8 @@ public struct NoChangesSuggestions: View {
     public var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                Image(systemName: "checkmark.circle")
-                    .font(.system(size: CenteredMessageMetrics.largeSymbol))
-                    .foregroundStyle(.text3)
+                MessageTiles(systemImage: "checkmark", tint: Color(espalier: Palette.success), arrangement: .rise)
                     .padding(.bottom, SuggestionMetrics.symbolSpacing)
-                    .accessibilityHidden(true)
                 Text("Nothing to Commit")
                     .font(Typography.display(size: SuggestionMetrics.titleSize))
                     .foregroundStyle(.text)
@@ -467,7 +464,7 @@ enum SuggestionMetrics {
     /// Space above the symbol.
     static let topInset: CGFloat = 64
     /// Between the symbol and the title.
-    static let symbolSpacing: CGFloat = 14
+    static let symbolSpacing: CGFloat = 20
     /// The title's size.
     static let titleSize: CGFloat = 22
     /// Between the line and the cards.

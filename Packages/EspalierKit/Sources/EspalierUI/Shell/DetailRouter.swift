@@ -120,7 +120,7 @@ struct NoRepositorySelectedView: View {
     @Environment(WindowContext.self) private var context
 
     var body: some View {
-        CenteredMessage("No Repository Selected", systemImage: "folder", isLarge: true) {
+        CenteredMessage("No Repository Selected", systemImage: "folder", tint: .accent, tiles: .hand, isLarge: true) {
             HStack(spacing: Metrics.insetSmall) {
                 Button("Choose a Repository…") {
                     context.actions.perform(.switchRepository)

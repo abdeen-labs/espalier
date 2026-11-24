@@ -66,8 +66,12 @@ its tokens say (Themes, below).
   origin", "Up to date with origin"; a diff's hunk is "Lines 19–26" with
   its context, git's own header in its tooltip.
 - **Pane headers are a bold title;** a commit opens with a header card.
-  Empty states are a large plain symbol, a bold title, a sentence, and the
-  actions that help.
+  Empty states are a symbol on a soft box of their color, a bold title, a
+  sentence, and the actions that help. A place's own state (a missing
+  repository, no repository selected, a launch failure, a pull request
+  that didn't load, nothing to commit, a clone on its way) has two fainter
+  tiles tilted behind its box, each arranged its own way
+  (`MessageTiles`).
 - **The diff's changes are highlighter blocks,** rounded and inset, and
   its included lines a rounded pill in the gutter.
 - **Branch colors:** the current branch is the accent, the default branch

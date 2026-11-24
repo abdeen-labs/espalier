@@ -111,6 +111,25 @@ struct SheetComponentCaptures {
         capture(view, named: "centeredMessages", area: area)
     }
 
+    @Test("a place's messages on their tiles: missing, nothing selected, a failure, a pull request that didn't load, and nothing to commit")
+    func messageTiles() {
+        let view = HStack(alignment: .top, spacing: 0) {
+            CenteredMessage("Can't find \u{201C}espalier\u{201D}", systemImage: "questionmark.folder", description: "It was last seen at /Users/joe/Developer/espalier.", tint: Color(espalier: Palette.warningMark), tiles: .fan, isLarge: true)
+            CenteredMessage("No Repository Selected", systemImage: "folder", tint: .accent, tiles: .hand, isLarge: true)
+            CenteredMessage("Couldn't Start", systemImage: "exclamationmark.triangle", description: "The bundled git is missing.", tint: Color(espalier: Palette.error), tiles: .tumble, isLarge: true)
+            CenteredMessage("Pull Request #42", systemImage: "arrow.trianglehead.pull", description: "Couldn't load this pull request.", tint: Color(espalier: PlaceIdentity.pullRequests.color), tiles: .diagonal, isLarge: true)
+            VStack(spacing: 20) {
+                MessageTiles(systemImage: "checkmark", tint: Color(espalier: Palette.success), arrangement: .rise)
+                Text("Nothing to Commit")
+                    .font(Typography.largeMessageTitle)
+                    .foregroundStyle(.text)
+            }
+            .padding(Metrics.insetLarge)
+        }
+        .frame(width: 1500, height: 300)
+        capture(view, named: "messageTiles", area: area)
+    }
+
     @Test("menus drawn as capsules: quiet, small, and with a symbol")
     func capsuleMenus() {
         let view = HStack(spacing: Metrics.insetMedium) {

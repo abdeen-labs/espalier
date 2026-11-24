@@ -103,7 +103,8 @@ struct LaunchErrorView: View {
             "Couldn't Start",
             systemImage: "exclamationmark.triangle",
             description: message,
-            tint: Color(espalier: Palette.warningMark),
+            tint: Color(espalier: Palette.error),
+            tiles: .tumble,
             isLarge: true
         )
         .fillingSpace()

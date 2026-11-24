@@ -1,4 +1,4 @@
-// A repository being cloned: "Cloning <name>", the progress (indeterminate
+// A repository being cloned: an arrow on its tiles, "Cloning <name>", the progress (indeterminate
 // until git reports some), git's description, and Cancel Clone (`cancel`).
 
 import EspalierCore
@@ -45,11 +45,8 @@ struct CloningForm: View {
 
     var body: some View {
         VStack(spacing: Metrics.insetMedium) {
-            Image(systemName: "arrow.down.circle")
-                .font(.system(size: CenteredMessageMetrics.largeSymbol))
-                .foregroundStyle(.text3)
-                .padding(.bottom, Metrics.grid)
-                .accessibilityHidden(true)
+            MessageTiles(systemImage: "arrow.down", tint: .accent, arrangement: .drop)
+                .padding(.bottom, Metrics.insetSmall)
             Text("Cloning \(content.name)")
                 .font(Typography.largeMessageTitle)
                 .foregroundStyle(.text)

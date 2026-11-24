@@ -85,6 +85,8 @@ private struct PullRequestNotFound: View {
             "Pull Request #\(number)",
             systemImage: "arrow.trianglehead.pull",
             description: "Couldn't load this pull request. It may have been closed, or its branch deleted.",
+            tint: Color(espalier: PlaceIdentity.pullRequests.color),
+            tiles: .diagonal,
             isLarge: true
         ) {
             if let url = pageURL {

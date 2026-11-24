@@ -1,6 +1,7 @@
-// A centered message: a large plain symbol (in tertiary text, or the
-// message's tint), a bold title in display type, a plain sentence about
-// it, and its actions below. Every centered empty or failure state uses it: Changes' empty state, the diff's states (binary,
+// A centered message: a symbol on a soft box of the message's tint (the
+// field fill without one), a bold title in display type, a plain sentence about
+// it, and its actions below. A place's own message has two fainter tiles
+// tilted behind its box, arranged its own way (`MessageTiles`). Every centered empty or failure state uses it: Changes' empty state, the diff's states (binary,
 // too large, no content changes, a failed load), no repository selected, a
 // missing repository, a launch failure, and the history's and pull
 // requests' empty and failed loads.
@@ -21,6 +22,7 @@ public struct CenteredMessage<Actions: View>: View {
     private let systemImage: String
     private let description: AttributedString?
     private let tint: Color?
+    private let tiles: MessageTiles.Arrangement?
     private let isLarge: Bool
     private let maximumWidth: CGFloat
     private let actions: Actions
@@ -29,6 +31,8 @@ public struct CenteredMessage<Actions: View>: View {
     ///   - tint: The symbol's color (the check of "No local changes" is
     ///     green, a failure's warning the modified color); nil for
     ///     tertiary text.
+    ///   - tiles: The symbol sits on a soft tile of the tint, two fainter
+    ///     tiles behind it, arranged this way.
     ///   - isLarge: A place's own message (the larger symbol and title)
     ///     rather than a pane's.
     ///   - maximumWidth: The widest the title, the description, and the
@@ -38,6 +42,7 @@ public struct CenteredMessage<Actions: View>: View {
         systemImage: String,
         description: String? = nil,
         tint: Color? = nil,
+        tiles: MessageTiles.Arrangement? = nil,
         isLarge: Bool = false,
         maximumWidth: CGFloat = CenteredMessageMetrics.maximumWidth,
         @ViewBuilder actions: () -> Actions
@@ -47,6 +52,7 @@ public struct CenteredMessage<Actions: View>: View {
             systemImage: systemImage,
             attributedDescription: description.map { AttributedString($0) },
             tint: tint,
+            tiles: tiles,
             isLarge: isLarge,
             maximumWidth: maximumWidth,
             actions: actions
@@ -60,6 +66,7 @@ public struct CenteredMessage<Actions: View>: View {
         systemImage: String,
         attributedDescription: AttributedString?,
         tint: Color? = nil,
+        tiles: MessageTiles.Arrangement? = nil,
         isLarge: Bool = false,
         maximumWidth: CGFloat = CenteredMessageMetrics.maximumWidth,
         @ViewBuilder actions: () -> Actions
@@ -68,6 +75,7 @@ public struct CenteredMessage<Actions: View>: View {
         self.systemImage = systemImage
         self.description = attributedDescription
         self.tint = tint
+        self.tiles = tiles
         self.isLarge = isLarge
         self.maximumWidth = maximumWidth
         self.actions = actions()
@@ -75,16 +83,13 @@ public struct CenteredMessage<Actions: View>: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            Image(systemName: systemImage)
-                .font(.system(size: isLarge ? CenteredMessageMetrics.largeSymbol : CenteredMessageMetrics.symbol, weight: .regular))
-                .foregroundStyle(tint ?? .text3)
-                .accessibilityHidden(true)
+            MessageTiles(systemImage: systemImage, tint: tint, arrangement: tiles, size: tiles == nil ? CenteredMessageMetrics.box : CenteredMessageMetrics.tile)
             Text(title)
                 .font(isLarge ? Typography.largeMessageTitle : Typography.messageTitle)
                 .foregroundStyle(.text)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, CenteredMessageMetrics.titleTopPadding)
+                .padding(.top, tiles == nil ? CenteredMessageMetrics.titleTopPadding : CenteredMessageMetrics.tilesTitleTopPadding)
                 .accessibilityAddTraits(.isHeader)
             if let description {
                 LinkedText(description)
@@ -103,14 +108,116 @@ public struct CenteredMessage<Actions: View>: View {
     }
 }
 
+/// A message's symbol on a soft tile of its tint (the field fill without
+/// one): alone, a pane's box, or with two fainter tiles tilted behind it,
+/// which each of a place's messages arranges its own way.
+public struct MessageTiles: View {
+    /// How the tiles behind sit.
+    nonisolated public enum Arrangement: Sendable {
+        /// Fanned out to either side: something that was here is missing.
+        case fan
+        /// Held up behind, like a hand of cards: something to choose.
+        case hand
+        /// Fallen over to either side, the front tile knocked askew:
+        /// something broke.
+        case tumble
+        /// One up and to the left, one down and to the right, leaning
+        /// together: two things that didn't meet.
+        case diagonal
+        /// Rising above, smaller as they go: everything's done.
+        case rise
+        /// Dropping in from above, one after the other: something on its
+        /// way.
+        case drop
+
+        /// The front tile's tilt, in degrees.
+        var frontAngle: Double {
+            self == .tumble ? -6 : 0
+        }
+
+        /// The tiles behind: where each sits from the front tile's center
+        /// and its size, as fractions of the front tile's side, and its
+        /// tilt in degrees.
+        var ghosts: [(x: CGFloat, y: CGFloat, scale: CGFloat, angle: Double)] {
+            switch self {
+            case .fan: [(-0.5, 0.06, 0.82, -14), (0.5, 0.06, 0.82, 14)]
+            case .hand: [(-0.4, -0.22, 0.8, -18), (0.4, -0.22, 0.8, 18)]
+            case .tumble: [(-0.6, 0.2, 0.68, -34), (0.62, 0.13, 0.78, 22)]
+            case .diagonal: [(-0.52, -0.2, 0.74, 12), (0.52, 0.2, 0.74, 12)]
+            case .rise: [(-0.54, -0.14, 0.7, -16), (0.5, -0.36, 0.54, 18)]
+            case .drop: [(-0.26, -0.4, 0.72, -12), (0.3, -0.72, 0.5, 14)]
+            }
+        }
+
+        /// How far the tiles behind reach above the front tile, as a
+        /// fraction of its side.
+        var reachAbove: CGFloat {
+            max(0, ghosts.map { -$0.y + $0.scale * 0.6 - 0.5 }.max() ?? 0)
+        }
+    }
+
+    private let systemImage: String
+    private let tint: Color?
+    private let arrangement: Arrangement?
+    private let size: CGFloat
+
+    /// - Parameter arrangement: How the tiles behind sit; nil for the tile
+    ///   alone.
+    public init(systemImage: String, tint: Color?, arrangement: Arrangement?, size: CGFloat = CenteredMessageMetrics.tile) {
+        self.systemImage = systemImage
+        self.tint = tint
+        self.arrangement = arrangement
+        self.size = size
+    }
+
+    public var body: some View {
+        let shape = RoundedRectangle(cornerRadius: size * Metrics.PlaceTiles.radiusRatio, style: .continuous)
+        ZStack {
+            ForEach(Array((arrangement?.ghosts ?? []).enumerated()), id: \.offset) { _, ghost in
+                let side = size * ghost.scale
+                RoundedRectangle(cornerRadius: side * Metrics.PlaceTiles.radiusRatio, style: .continuous)
+                    .fill(tint.map { $0.opacity(CenteredMessageMetrics.ghostOpacity) } ?? .field)
+                    .frame(width: side, height: side)
+                    .rotationEffect(.degrees(ghost.angle))
+                    .offset(x: size * ghost.x, y: size * ghost.y)
+            }
+            shape
+                .fill(tint.map { $0.opacity(CenteredMessageMetrics.tileOpacity) } ?? .field)
+                .frame(width: size, height: size)
+                .overlay {
+                    Image(systemName: systemImage)
+                        .font(.system(size: size * CenteredMessageMetrics.tileSymbolScale, weight: .semibold))
+                        .foregroundStyle(tint ?? .text2)
+                }
+                // The tile covers the tiles behind it.
+                .background(shape.fill(Color(espalier: Palette.background)))
+                .rotationEffect(.degrees(arrangement?.frontAngle ?? 0))
+        }
+        .frame(height: size)
+        .padding(.top, size * (arrangement?.reachAbove ?? 0))
+        .accessibilityHidden(true)
+    }
+}
+
 /// A centered message's sizes. The cloning view, centered too, shares its
 /// widest width.
 public enum CenteredMessageMetrics {
+    /// The tile a symbol sits on: its side, the symbol's size as a
+    /// fraction of it, and its tint's opacity.
+    public static let tile: CGFloat = 64
+    /// A pane's message's box, alone.
+    static let box: CGFloat = 52
+    static let tileSymbolScale: CGFloat = 0.44
+    static let tileOpacity: CGFloat = 0.16
+    /// The tint's opacity on the tiles behind it.
+    static let ghostOpacity: CGFloat = 0.08
+    /// Above the title, under the tiles.
+    static let tilesTitleTopPadding: CGFloat = 20
     /// The symbol's point size: a place's message, and a pane's.
     static let largeSymbol: CGFloat = 44
     static let symbol: CGFloat = 36
     /// Above the title, the description, and the actions.
-    static let titleTopPadding: CGFloat = 14
+    static let titleTopPadding: CGFloat = 16
     static let descriptionTopPadding: CGFloat = 6
     static let actionsTopPadding: CGFloat = 20
     /// The widest a centered message gets.
@@ -118,8 +225,8 @@ public enum CenteredMessageMetrics {
 }
 
 extension CenteredMessage where Actions == EmptyView {
-    public init(_ title: String, systemImage: String, description: String? = nil, tint: Color? = nil, isLarge: Bool = false) {
-        self.init(title, systemImage: systemImage, description: description, tint: tint, isLarge: isLarge) {
+    public init(_ title: String, systemImage: String, description: String? = nil, tint: Color? = nil, tiles: MessageTiles.Arrangement? = nil, isLarge: Bool = false) {
+        self.init(title, systemImage: systemImage, description: description, tint: tint, tiles: tiles, isLarge: isLarge) {
             EmptyView()
         }
     }
