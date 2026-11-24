@@ -47,8 +47,6 @@ struct SettingsCaptures {
         preferences.designTheme = look.theme
         preferences.designPalette = look.palette
         preferences.designBackground = look.background
-        preferences.appFont = look.appFont
-        preferences.codeFont = look.codeFont
     }
 
     // MARK: Prompts, Appearance, Advanced
@@ -68,8 +66,8 @@ struct SettingsCaptures {
         capture(window(.appearance) { AppearanceForm(preferences: app.preferences) }, named: "appearance", area: area)
     }
 
-    @Test("Appearance in a look of its own: a theme in a palette, its fonts", arguments: [
-        Look(palette: .slate, appFont: .fixel, codeFont: .sfMono),
+    @Test("Appearance in a look of its own: a theme in a palette", arguments: [
+        Look(palette: .slate),
         Look(theme: .frost, palette: .iris),
         Look(theme: .frost, palette: .lagoon),
     ])

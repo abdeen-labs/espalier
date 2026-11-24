@@ -1,9 +1,8 @@
-// Settings ▸ Appearance: the theme (Default or Frost) and the
-// app font; colors (the palette, System's the Mac's accent color, on any
+// Settings ▸ Appearance: the theme (Default or Frost), which sets the
+// fonts; colors (the palette, System's the Mac's accent color, on any
 // theme; the background tint; the appearance, System, Light, or Dark); code
-// (the code font, its text size, the diff's tab size), dates and numbers,
-// accessibility, and the sidebar (its style, hidden or icons, and the
-// worktree list). Each font's name in its pop-up is drawn in that font. The
+// (its text size, the diff's tab size), dates and numbers, accessibility,
+// and the sidebar (its style, hidden or icons, and the worktree list). The
 // code text size steps through the same sizes as View ▸ Bigger (⌘=) and
 // Smaller (⌘−).
 
@@ -80,9 +79,9 @@ enum AppearanceSettings {
     }
 }
 
-/// The Appearance pane: the theme and the app font; the palette, the
-/// background tint, and the appearance; code (its font, text size, and tab
-/// size), dates and numbers, accessibility, and the sidebar.
+/// The Appearance pane: the theme; the palette, the background tint, and
+/// the appearance; code (its text size and tab size), dates and numbers,
+/// accessibility, and the sidebar.
 struct AppearanceForm: View {
     @Bindable var preferences: Preferences
     @Environment(\.motion) private var motion
@@ -99,15 +98,6 @@ struct AppearanceForm: View {
                         background: preferences.designBackground
                     )
                     .padding(.vertical, Metrics.FocusRing.outset)
-                }
-                SettingsRow("Font", labelsControl: true) {
-                    CapsulePopUp("Font", selection: $preferences.appFont, title: preferences.appFont.title) {
-                        for font in AppFont.allCases {
-                            MenuChoice(font.title, value: font)
-                                .titleFont(Typography.sans(.body, in: font))
-                        }
-                    }
-                    .fixedSize()
                 }
             }
 
@@ -133,15 +123,6 @@ struct AppearanceForm: View {
             }
 
             SettingsSection("Code") {
-                SettingsRow("Font", labelsControl: true) {
-                    CapsulePopUp("Code font", selection: $preferences.codeFont, title: preferences.codeFont.title) {
-                        for font in CodeFont.allCases {
-                            MenuChoice(font.title, value: font)
-                                .titleFont(Typography.mono(size: TextStyleSizes.size(of: .body), in: font))
-                        }
-                    }
-                    .fixedSize()
-                }
                 SettingsRow("Text size", description: "View ▸ Bigger (⌘=) and Smaller (⌘−) change it too.", labelsControl: true) {
                     CapsuleStepper(
                         "Text size",

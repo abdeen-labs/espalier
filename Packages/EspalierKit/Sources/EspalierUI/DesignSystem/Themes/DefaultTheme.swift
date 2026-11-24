@@ -91,6 +91,8 @@ nonisolated extension ThemeDefinition {
             paneLayout: .floatingCards,
             controls: ControlStyle(prominentShadow: nil, flatInCards: true, lip: 3),
             scrollEdgeFade: 24,
+            // Allo, at its roundest, and Maple Mono.
+            fonts: ThemeFonts(text: .allo, code: .mapleMono),
             style: .default
         )
     }

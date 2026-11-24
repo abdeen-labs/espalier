@@ -270,7 +270,7 @@ public enum Metrics {
     /// status costs only the rows on screen.
     public enum FileList {
         /// The row height: `ceil(lineHeight(.body) × 2.125)`, 34 at the
-        /// default text size, from SF Pro's line height at the app font's
+        /// default text size, from SF Pro's line height at the theme's sans's
         /// body size.
         public static var rowHeight: CGFloat {
             ceil(AppKitTypography.bodyLayoutLineHeight * 2.125)

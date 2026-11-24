@@ -1,8 +1,8 @@
-// A compact gallery of what the themes and fonts change, in light and
-// dark: the sidebar with its selection and a section label, a few graph
-// rows, two History rows with ref tags (one selected), the buttons, a
-// commit's title, and file badges. Each theme in each palette, and each
-// background tint, app font, and code font on Default.
+// A compact gallery of what the themes change, in light and dark: the
+// sidebar with its selection and a section label, a few graph rows, two
+// History rows with ref tags (one selected), the buttons, a commit's
+// title, and file badges. Each theme in each palette, and each background
+// tint on Default.
 
 import AppKit
 import EspalierCore
@@ -26,16 +26,6 @@ struct ThemeGalleryCaptures {
     @Test("each background tint on Default", arguments: BackgroundTint.allCases.filter { $0 != .own })
     func backgrounds(_ background: BackgroundTint) {
         capture(ThemeGallery(), named: "gallery", area: area, look: Look(background: background))
-    }
-
-    @Test("each app font on Default", arguments: [AppFont.sf, .fixel, .atkinson, .martian])
-    func appFonts(_ font: AppFont) {
-        capture(ThemeGallery(), named: "gallery", area: area, look: Look(appFont: font))
-    }
-
-    @Test("each code font on Default", arguments: [CodeFont.sfMono, .atkinsonMono])
-    func codeFonts(_ font: CodeFont) {
-        capture(ThemeGallery(), named: "gallery", area: area, look: Look(codeFont: font))
     }
 }
 

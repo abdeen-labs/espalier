@@ -1,5 +1,5 @@
-// Settings ▸ Appearance's design theme, palette, background tint, app font,
-// and code font, applied to the app as the current look (`LookCenter`).
+// Settings ▸ Appearance's design theme, palette, and background tint,
+// applied to the app as the current look (`LookCenter`).
 // SwiftUI views that read a theme's color or font draw again by themselves;
 // AppKit views and the controllers of AppKit tables are told
 // (`Look.didChange`), and every view of every window lays out and draws
@@ -17,9 +17,7 @@ extension Look {
         self.init(
             theme: preferences.designTheme,
             palette: preferences.designPalette,
-            background: preferences.designBackground,
-            appFont: preferences.appFont,
-            codeFont: preferences.codeFont
+            background: preferences.designBackground
         )
     }
 
@@ -29,9 +27,7 @@ extension Look {
         Look(
             theme: Preferences.storedDesignTheme(in: store),
             palette: Preferences.storedDesignPalette(in: store),
-            background: Preferences.storedDesignBackground(in: store),
-            appFont: Preferences.storedAppFont(in: store),
-            codeFont: Preferences.storedCodeFont(in: store)
+            background: Preferences.storedDesignBackground(in: store)
         )
     }
 

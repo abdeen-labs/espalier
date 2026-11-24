@@ -1,18 +1,16 @@
-// The app font's and the code font's faces: SF Pro and SF Mono, the
-// system's, or the bundled families (Resources/Fonts, registered for the
-// process before a face is first made). The app font is every piece of the
-// interface's text; the code font draws commit IDs, counts, ref tags, code,
-// and terminal output. Each has a size scale, so every font reads at about
-// the same size, whichever the other is. A bundled face's weight is
-// set on its weight axis (the Atkinson Hyperlegible Mono variable font's
-// default is ExtraLight), its monos never join characters (`calt` and
-// `liga` off: the diff shows exact characters), and it falls back on the
-// system font's cascade list, so a missing glyph (CJK, emoji, arrows) takes
-// the same font, and line height, as it would in SF.
+// The themes' faces: the bundled families (Resources/Fonts, registered for
+// the process before a face is first made). A theme sets its text face,
+// every piece of the interface's text, and its code face, which draws
+// commit IDs, counts, ref tags, code, and terminal output (`ThemeFonts`).
+// Each face has a size scale, so it reads at about the size of the
+// system's font. A bundled face's weight is set on its weight axis, its
+// monos never join characters (`calt` and `liga` off: the diff shows exact
+// characters), and it falls back on the system font's cascade list, so a
+// missing glyph (CJK, emoji, arrows) takes the same font, and line height,
+// as it would in SF. A face that fails to load is the system's font.
 
 import AppKit
 import CoreText
-import EspalierCore
 import EspalierSupport
 import Synchronization
 import SwiftUI
@@ -66,28 +64,16 @@ nonisolated struct BundledFace: Sendable, Hashable {
     let names: [Int: String]
     /// Whether the family is a variable font with a weight axis.
     let isVariable: Bool
-    /// Axes set to a fixed value (Martian Grotesk's width, 100).
-    let fixedAxes: [UInt32: CGFloat]
     /// The weight Regular (400) is drawn at: Geist's Medium (500), as its
     /// own Regular reads thin at text sizes; 400 for the others.
     let regularWeight: Int
     /// Whether it's monospaced: ligatures and contextual alternates off.
     let isMono: Bool
 
-    static let fixelText = BundledFace(
-        family: "Fixel Text",
-        names: [400: "FixelText-Regular", 500: "FixelText-Medium", 600: "FixelText-SemiBold", 700: "FixelText-Bold"],
-        isVariable: false,
-        fixedAxes: [:],
-        regularWeight: 400,
-        isMono: false
-    )
-
     static let geist = BundledFace(
         family: "Geist",
         names: [400: "Geist-Regular", 500: "Geist-Medium", 600: "Geist-SemiBold", 700: "Geist-Bold", 800: "Geist-ExtraBold", 900: "Geist-Black"],
         isVariable: true,
-        fixedAxes: [:],
         regularWeight: 500,
         isMono: false
     )
@@ -102,7 +88,6 @@ nonisolated struct BundledFace: Sendable, Hashable {
             700: "AlloVariable-Bold", 800: "AlloVariable-ExtraBold", 900: "AlloVariable-Black",
         ],
         isVariable: true,
-        fixedAxes: [:],
         regularWeight: 400,
         isMono: false
     )
@@ -114,7 +99,6 @@ nonisolated struct BundledFace: Sendable, Hashable {
         family: "Maple Mono NL",
         names: [400: "MapleMonoNL-Regular"],
         isVariable: true,
-        fixedAxes: [:],
         regularWeight: 400,
         isMono: true
     )
@@ -123,53 +107,12 @@ nonisolated struct BundledFace: Sendable, Hashable {
         family: "Geist Mono",
         names: [400: "GeistMono-Regular", 500: "GeistMono-Medium", 600: "GeistMono-SemiBold", 700: "GeistMono-Bold", 800: "GeistMono-ExtraBold", 900: "GeistMono-Black"],
         isVariable: true,
-        fixedAxes: [:],
         regularWeight: 400,
         isMono: true
     )
 
-    static let atkinsonNext = BundledFace(
-        family: "Atkinson Hyperlegible Next",
-        names: [
-            400: "AtkinsonHyperlegibleNext-Regular",
-            500: "AtkinsonHyperlegibleNext-Regular_Medium",
-            600: "AtkinsonHyperlegibleNext-Regular_SemiBold",
-            700: "AtkinsonHyperlegibleNext-Regular_Bold",
-            800: "AtkinsonHyperlegibleNext-Regular_ExtraBold",
-        ],
-        isVariable: true,
-        fixedAxes: [:],
-        regularWeight: 400,
-        isMono: false
-    )
-
-    static let atkinsonMono = BundledFace(
-        family: "Atkinson Hyperlegible Mono",
-        names: [
-            400: "AtkinsonHyperlegibleMono-ExtraLight_Regular",
-            500: "AtkinsonHyperlegibleMono-ExtraLight_Medium",
-            600: "AtkinsonHyperlegibleMono-ExtraLight_SemiBold",
-            700: "AtkinsonHyperlegibleMono-ExtraLight_Bold",
-            800: "AtkinsonHyperlegibleMono-ExtraLight_ExtraBold",
-        ],
-        isVariable: true,
-        fixedAxes: [:],
-        regularWeight: 400,
-        isMono: true
-    )
-
-    static let martianGrotesk = BundledFace(
-        family: "Martian Grotesk",
-        names: [400: "MartianGrotesk-NormalRegular", 500: "MartianGrotesk-Medium", 600: "MartianGrotesk-SemiBold", 700: "MartianGrotesk-Bold", 800: "MartianGrotesk-ExtraBold", 900: "MartianGrotesk-Black"],
-        isVariable: true,
-        fixedAxes: [Self.widthAxis: 100],
-        regularWeight: 400,
-        isMono: false
-    )
-
-    /// The `wght` and `wdth` axes' tags.
+    /// The `wght` axis's tag.
     static let weightAxis: UInt32 = 0x7767_6874
-    static let widthAxis: UInt32 = 0x7764_7468
 
     /// The weight `weight` (100 to 900) is drawn at: Regular at the face's
     /// regular weight, every other weight as is.
@@ -198,12 +141,8 @@ nonisolated struct BundledFace: Sendable, Hashable {
             return cached
         }
         var attributes: [NSFontDescriptor.AttributeName: Any] = [.name: name(for: weight)]
-        var axes = fixedAxes.reduce(into: [NSNumber: NSNumber]()) { $0[NSNumber(value: $1.key)] = NSNumber(value: Double($1.value)) }
         if isVariable {
-            axes[NSNumber(value: Self.weightAxis)] = NSNumber(value: drawnWeight(weight))
-        }
-        if !axes.isEmpty {
-            attributes[.variation] = axes
+            attributes[.variation] = [NSNumber(value: Self.weightAxis): NSNumber(value: drawnWeight(weight))]
         }
         if isMono {
             attributes[.featureSettings] = [
@@ -254,71 +193,24 @@ nonisolated private struct FontKey: Hashable, Sendable {
     let weight: Int
 }
 
-extension AppFont {
-    /// The bundled face, nil for SF Pro.
-    nonisolated var face: BundledFace? {
-        switch self {
-        case .sf: nil
-        case .allo: .allo
-        case .fixel: .fixelText
-        case .atkinson: .atkinsonNext
-        case .martian: .martianGrotesk
-        case .geist: .geist
-        }
-    }
+/// A theme's face and its sizes against the system font's.
+nonisolated struct ThemeFont: Sendable, Hashable {
+    let face: BundledFace
+    /// What the face's sizes are multiplied by, so it reads at about the
+    /// system font's size.
+    let scale: CGFloat
 
-    /// Its sizes against SF Pro's, so every app font reads alike.
-    nonisolated var scale: CGFloat {
-        switch self {
-        case .sf, .fixel, .geist: 1
-        case .allo: 1.02
-        case .atkinson: 1.04
-        case .martian: 0.88
-        }
-    }
-
-    /// The font's name in Settings.
-    public var title: String {
-        switch self {
-        case .allo: "Allo"
-        case .sf: "SF Pro"
-        case .fixel: "Fixel Text"
-        case .atkinson: "Atkinson Hyperlegible Next"
-        case .martian: "Martian Grotesk"
-        case .geist: "Geist"
-        }
-    }
+    static let allo = ThemeFont(face: .allo, scale: 1.02)
+    static let mapleMono = ThemeFont(face: .mapleMono, scale: 1.04)
+    static let geist = ThemeFont(face: .geist, scale: 1)
+    static let geistMono = ThemeFont(face: .geistMono, scale: 1)
 }
 
-extension CodeFont {
-    /// The bundled face, nil for SF Mono.
-    nonisolated var face: BundledFace? {
-        switch self {
-        case .sfMono: nil
-        case .mapleMono: .mapleMono
-        case .geistMono: .geistMono
-        case .atkinsonMono: .atkinsonMono
-        }
-    }
-
-    /// Its sizes against SF Mono's.
-    nonisolated var scale: CGFloat {
-        switch self {
-        case .sfMono, .geistMono: 1
-        case .mapleMono: 1.04
-        case .atkinsonMono: 1.02
-        }
-    }
-
-    /// The font's name in Settings.
-    public var title: String {
-        switch self {
-        case .mapleMono: "Maple Mono"
-        case .sfMono: "SF Mono"
-        case .geistMono: "Geist Mono"
-        case .atkinsonMono: "Atkinson Hyperlegible Mono"
-        }
-    }
+/// A theme's fonts: the text face for the interface, the code face for
+/// what's drawn monospaced.
+nonisolated struct ThemeFonts: Sendable, Hashable {
+    let text: ThemeFont
+    let code: ThemeFont
 }
 
 extension Font.Weight {

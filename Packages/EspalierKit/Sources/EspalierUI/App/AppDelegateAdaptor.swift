@@ -45,7 +45,7 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
     /// Keeps the app's appearance on the theme chosen in Settings, once
     /// launched.
     @ObservationIgnored private var themeApplier: ThemeApplier?
-    /// Keeps the look on the design theme, color, app font, and code font
+    /// Keeps the look on the design theme, color, and background tint
     /// chosen in Settings, once launched.
     @ObservationIgnored private var lookApplier: LookApplier?
 

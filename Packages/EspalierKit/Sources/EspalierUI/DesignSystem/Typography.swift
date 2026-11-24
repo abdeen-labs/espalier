@@ -1,16 +1,15 @@
-// Espalier's type roles, in the current app font (`AppFont`, the sans) for
-// text, counts within it included, and code font (`CodeFont`, the mono) for
-// commit IDs, counts set apart (a row's, a header's), ahead and behind, ref
-// tags, code, and terminal output. At the sizes of the
-// system's text styles: body 13, secondary 12, meta 11, section labels 10
-// (the theme's size); the mono 11 for commit IDs, counts, and ahead and
+// Espalier's type roles, in the current theme's faces (`ThemeFonts`): its
+// text face (the sans) for text, counts within it included, and its code
+// face (the mono) for commit IDs, counts set apart (a row's, a header's),
+// ahead and behind, ref tags, code, and terminal output. At the sizes of
+// the system's text styles: body 13, secondary 12, meta 11, section labels
+// 10 (the theme's size); the mono 11 for commit IDs, counts, and ahead and
 // behind arrows, 10 in ref tags, and code at the user's code text size.
-// Sans roles use the text style of their size (a bundled sans is relative
-// to it), so the macOS Text Size setting applies; mono roles keep a fixed
-// size, but for a section label's count, which follows its label. SF Pro
-// and SF Mono are exactly the system's fonts; the other fonts scale their
-// sizes so they read alike. Key caps stay SF Pro whatever the app font:
-// the bundled faces lack their symbols.
+// Sans roles use the text style of their size (the sans is relative to
+// it), so the macOS Text Size setting applies; mono roles keep a fixed
+// size, but for a section label's count, which follows its label. Each
+// face scales its sizes so it reads at about the system font's. Key caps
+// stay SF Pro whatever the theme: the bundled faces lack their symbols.
 
 import AppKit
 import EspalierCore
@@ -59,14 +58,11 @@ public enum Typography {
     /// A section label's count ("BRANCHES 5"), in the mono at the label's
     /// size.
     public static var sectionCount: Font {
-        let size = Theme.current.sectionLabel.size
-        guard let mono = Look.current.codeFont.face else {
-            if let style = TextStyleSizes.style(ofSize: size) {
-                return .system(style, design: .monospaced, weight: .medium)
-            }
-            return .system(size: size, weight: .medium, design: .monospaced)
-        }
-        return Font.custom(mono.name(for: 500), size: size * Look.current.codeFont.scale, relativeTo: .caption)
+        let theme = Theme.current
+        let size = theme.sectionLabel.size
+        let mono = theme.fonts.code
+        BundledFonts.register()
+        return Font.custom(mono.face.name(for: 500), size: size * mono.scale, relativeTo: .caption)
     }
     /// The tracking of section labels: the theme's, in ems of their size.
     public static var sectionLabelTracking: CGFloat {
@@ -90,8 +86,8 @@ public enum Typography {
     public static func sha(weight: Font.Weight) -> Font { mono(size: 11, weight: weight) }
     /// Terminal output (hooks, raw git errors).
     public static var terminal: Font { mono(size: 11) }
-    /// Key caps' text (10, medium): SF Pro whatever the app font, which has
-    /// the keys' symbols.
+    /// Key caps' text (10, medium): SF Pro whatever the theme's face, which
+    /// has the keys' symbols.
     public static let keyCap: Font = .caption.weight(.medium)
     /// Quiet and secondary buttons' titles (13, in the theme's weight:
     /// Default's semibold; 12 when small).
@@ -109,70 +105,36 @@ public enum Typography {
         mono(size: size)
     }
 
-    /// The font of text that sets none: the app font's body, or nil (the
-    /// system's) in SF Pro.
-    public static var defaultFont: Font? {
-        Look.current.appFont.face == nil ? nil : row
-    }
+    /// The font of text that sets none: the sans's body.
+    public static var defaultFont: Font { row }
 
     // MARK: Making fonts
 
-    /// The sans at a text style, and a weight: SF Pro's text style itself,
-    /// or the bundled sans at the style's size, scaled, relative to it.
-    public static func sans(_ style: Font.TextStyle, weight: Font.Weight? = nil, in font: AppFont = Look.current.appFont) -> Font {
-        guard let sans = font.face else {
-            let font = TextStyleSizes.systemFont(style)
-            return weight.map { font.weight($0) } ?? font
-        }
+    /// The sans at a text style, and a weight: the theme's text face at the
+    /// style's size, scaled, relative to it.
+    public static func sans(_ style: Font.TextStyle, weight: Font.Weight? = nil) -> Font {
+        let font = Theme.current.fonts.text
         let size = TextStyleSizes.size(of: style)
         let weight = weight ?? TextStyleSizes.weight(of: style)
-        return sans.swiftUIFont(size: size * font.scale, weight: weight.axisValue, relativeTo: style)
+        return font.face.swiftUIFont(size: size * font.scale, weight: weight.axisValue, relativeTo: style)
     }
 
-    /// The sans at a size, relative to `style`: a size that's a text
-    /// style's own is that style.
+    /// The sans at a size, scaled, relative to `style` so the Mac's text
+    /// size applies.
     public static func sans(size: CGFloat, weight: Font.Weight, relativeTo style: Font.TextStyle) -> Font {
-        let font = Look.current.appFont
-        guard let sans = font.face else {
-            if let match = TextStyleSizes.style(ofSize: size, preferring: style) {
-                return TextStyleSizes.systemFont(match).weight(weight)
-            }
-            return .system(size: size * TextStyleSizes.textSizeScale(style), weight: weight)
-        }
-        return sans.swiftUIFont(size: size * font.scale, weight: weight.axisValue, relativeTo: style)
+        let font = Theme.current.fonts.text
+        return font.face.swiftUIFont(size: size * font.scale, weight: weight.axisValue, relativeTo: style)
     }
 
     /// The mono at a fixed size, regular unless a weight is given.
-    public static func mono(size: CGFloat, weight: Font.Weight? = nil, in font: CodeFont = Look.current.codeFont) -> Font {
-        guard let mono = font.face else {
-            guard let weight else {
-                return .system(size: size, design: .monospaced)
-            }
-            return .system(size: size, weight: weight, design: .monospaced)
-        }
-        return mono.swiftUIFont(size: size * font.scale, weight: (weight ?? .regular).axisValue, relativeTo: nil)
+    public static func mono(size: CGFloat, weight: Font.Weight? = nil) -> Font {
+        let font = Theme.current.fonts.code
+        return font.face.swiftUIFont(size: size * font.scale, weight: (weight ?? .regular).axisValue, relativeTo: nil)
     }
 }
 
 /// The macOS text styles' sizes and weights at the default text size.
 nonisolated enum TextStyleSizes {
-    /// SF Pro at a text style.
-    static func systemFont(_ style: Font.TextStyle) -> Font {
-        switch style {
-        case .largeTitle: .largeTitle
-        case .title: .title
-        case .title2: .title2
-        case .title3: .title3
-        case .headline: .headline
-        case .subheadline: .subheadline
-        case .callout: .callout
-        case .footnote: .footnote
-        case .caption: .caption
-        case .caption2: .caption2
-        default: .body
-        }
-    }
-
     static func size(of style: Font.TextStyle) -> CGFloat {
         switch style {
         case .largeTitle: 26
@@ -188,35 +150,6 @@ nonisolated enum TextStyleSizes {
 
     static func weight(of style: Font.TextStyle) -> Font.Weight {
         style == .headline ? .bold : .regular
-    }
-
-    /// The text style whose size is `size`, `preferring` it when it's one.
-    static func style(ofSize size: CGFloat, preferring preferred: Font.TextStyle? = nil) -> Font.TextStyle? {
-        if let preferred, self.size(of: preferred) == size {
-            return preferred
-        }
-        let styles: [Font.TextStyle] = [.body, .callout, .subheadline, .caption, .title3, .title2, .title, .largeTitle]
-        return styles.first { self.size(of: $0) == size }
-    }
-
-    /// How much the Mac's text size scales `style` now.
-    @MainActor
-    static func textSizeScale(_ style: Font.TextStyle) -> CGFloat {
-        let appKitStyle: NSFont.TextStyle = switch style {
-        case .largeTitle: .largeTitle
-        case .title: .title1
-        case .title2: .title2
-        case .title3: .title3
-        case .headline: .headline
-        case .callout: .callout
-        case .subheadline: .subheadline
-        case .footnote: .footnote
-        case .caption: .caption1
-        case .caption2: .caption2
-        default: .body
-        }
-        let preferred = FontFallback.checked(.preferredFont(forTextStyle: appKitStyle), size: size(of: style), design: .sans)
-        return preferred.pointSize / size(of: style)
     }
 }
 
@@ -276,34 +209,24 @@ public enum AppKitTypography {
 
     // MARK: Making fonts
 
-    /// The sans at a text style's size now, and a weight: SF Pro's text
-    /// style (at a weight, the system font at its size), or the bundled
-    /// sans at that size, scaled.
+    /// The sans at a text style's size now, and a weight: the theme's text
+    /// face at that size, scaled.
     public static func sans(_ style: NSFont.TextStyle, weight: NSFont.Weight? = nil) -> NSFont {
         let preferred = FontFallback.checked(.preferredFont(forTextStyle: style), size: NSFont.systemFontSize, design: .sans)
-        let font = Look.current.appFont
-        guard let sans = font.face else {
-            guard let weight else {
-                return preferred
-            }
-            return FontFallback.checked(.systemFont(ofSize: preferred.pointSize, weight: weight), size: preferred.pointSize, design: .sans)
-        }
+        let font = Theme.current.fonts.text
         let weight = weight ?? (style == .headline ? .bold : .regular)
-        return sans.font(size: preferred.pointSize * font.scale, weight: weight.axisValue)
+        return font.face.font(size: preferred.pointSize * font.scale, weight: weight.axisValue)
     }
 
     /// The mono at a fixed size.
     public static func mono(size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
-        let font = Look.current.codeFont
-        guard let mono = font.face else {
-            return FontFallback.checked(.monospacedSystemFont(ofSize: size, weight: weight), size: size, design: .mono)
-        }
-        return mono.font(size: size * font.scale, weight: weight.axisValue)
+        let font = Theme.current.fonts.code
+        return font.face.font(size: size * font.scale, weight: weight.axisValue)
     }
 
-    /// The line height rows are laid out for with `font`: its own in SF;
-    /// for a bundled face, SF Pro's at the same size, so a face with tall
-    /// line metrics doesn't grow every row (its text is centered in it).
+    /// The line height rows are laid out for with `font`: SF Pro's at the
+    /// same size, so a face with tall line metrics doesn't grow every row
+    /// (its text is centered in it); a system font's own.
     public static func layoutLineHeight(of font: NSFont) -> CGFloat {
         let layout = NSLayoutManager()
         guard !font.isSystemFace else {
@@ -313,7 +236,7 @@ public enum AppKitTypography {
     }
 
     /// The body text's line height for laying out rows: SF Pro's at the
-    /// app font's body size.
+    /// theme's sans's body size.
     public static var bodyLayoutLineHeight: CGFloat {
         layoutLineHeight(of: row)
     }
@@ -360,22 +283,20 @@ public struct SectionLabel: View {
 }
 
 extension View {
-    /// Text that sets no font takes the app font's body. In SF Pro nothing
-    /// changes. Every window's and panel's root has it.
+    /// Text that sets no font takes the theme's sans at the body. Every
+    /// window's and panel's root has it.
     public func lookFont() -> some View {
         modifier(LookFontModifier())
     }
 }
 
 /// Sets the default font from the current look, read in the body so a
-/// change of fonts updates it, without changing the view's structure.
+/// change of theme updates it, without changing the view's structure.
 private struct LookFontModifier: ViewModifier {
     func body(content: Content) -> some View {
         let font = Typography.defaultFont
         content.transformEnvironment(\.font) { current in
-            if let font {
-                current = font
-            }
+            current = font
         }
     }
 }

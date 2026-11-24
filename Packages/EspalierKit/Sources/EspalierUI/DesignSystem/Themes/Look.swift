@@ -1,7 +1,7 @@
-// The look Espalier draws in: the design theme, the palette, the background
-// tint, the app font, and the code font, each picked in Settings ▸
-// Appearance apart from the others (and from the appearance, System, Light,
-// or Dark). One look is current for the process (`LookCenter`); reading it
+// The look Espalier draws in: the design theme (which sets the fonts), the
+// palette, and the background tint, each picked in Settings ▸ Appearance
+// apart from the others (and from the appearance, System, Light, or
+// Dark). One look is current for the process (`LookCenter`); reading it
 // in a SwiftUI body makes the view draw again when it changes, and
 // `LookApplier` tells the AppKit views.
 // A task can draw in a look of its own (`Look.with(_:operation:)`) without
@@ -12,28 +12,21 @@ import Foundation
 import Observation
 import Synchronization
 
-/// The design theme, the palette, the background tint, the app font, and
-/// the code font.
+/// The design theme, the palette, and the background tint.
 nonisolated public struct Look: Sendable, Hashable {
     public var theme: DesignTheme
     public var palette: DesignPalette
     /// The tint of the theme's backgrounds.
     public var background: BackgroundTint
-    /// The interface's text.
-    public var appFont: AppFont
-    /// What's drawn monospaced.
-    public var codeFont: CodeFont
 
-    public init(theme: DesignTheme = .default, palette: DesignPalette = .blueberry, background: BackgroundTint = .own, appFont: AppFont = .allo, codeFont: CodeFont = .mapleMono) {
+    public init(theme: DesignTheme = .default, palette: DesignPalette = .blueberry, background: BackgroundTint = .own) {
         self.theme = theme
         self.palette = palette
         self.background = background
-        self.appFont = appFont
-        self.codeFont = codeFont
     }
 
-    /// Default in Blueberry, its own backgrounds, in Allo and Maple Mono: the
-    /// look a new install opens in.
+    /// Default in Blueberry, its own backgrounds: the look a new install
+    /// opens in.
     public static let `default` = Look()
 
     /// The look the current task draws in: its own (`with(_:operation:)`),

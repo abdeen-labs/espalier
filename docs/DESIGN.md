@@ -3,8 +3,8 @@
 Playful, creamy, and intuitive: cream cards on oat, warm espresso ink,
 round type, and soft controls you want to press. New UI follows it. The
 values are `DesignSystem`'s tokens. This describes Default, the theme a new
-install opens in, in Blueberry, Allo, and Maple Mono; Frost changes what
-its tokens say (Themes, below).
+install opens in, in Blueberry; Frost changes what its tokens say
+(Themes, below).
 
 ## Identity
 
@@ -13,7 +13,7 @@ its tokens say (Themes, below).
   the app.
 - **The mark shows on Welcome and About,** hanging from a trellis band (a
   wash of peach under a lattice), and nowhere else in the app.
-- **The name** is set in the app font at its heaviest, drawn tight
+- **The name** is set in the theme's text font at its heaviest, drawn tight
   (`Wordmark`); Welcome's heading is as heavy.
 
 ## Principles
@@ -61,7 +61,7 @@ its tokens say (Themes, below).
   fully rounded pills in a tint of their color, the current branch's
   filled with the accent.
 - **A file's status is a tile** in a tint of its color with its letter (A,
-  M, D, R, C, U), bold, in the code font.
+  M, D, R, C, U), bold, in the theme's code font.
 - **Plain sentences:** "3 files changed", "All in the commit", "Push to
   origin", "Up to date with origin"; a diff's hunk is "Lines 19–26" with
   its context, git's own header in its tooltip.
@@ -81,15 +81,14 @@ its tokens say (Themes, below).
 - **Buttons come in three styles:** quiet, prominent (one per area), and
   secondary (Cancel in sheets, Undo). A prominent button that deletes or
   discards is red.
-- **SF Symbols** for every icon; the app font for text (Allo, at its
-  roundest, by default); the code font (Maple Mono by default) for what's
-  monospaced. Pane titles are 15 and bold, commit titles 20 and bold.
+- **SF Symbols** for every icon; the theme's text font for text and its
+  code font for what's monospaced. Pane titles are 15 and bold, commit titles 20 and bold.
 
 ## Themes, colors, and fonts
 
 Settings ▸ Appearance picks a theme (Default or Frost), a palette, a
-background tint, the appearance, the app font, and the code font, each
-apart from the others. The theme is how the app looks; the
+background tint, and the appearance, each apart from the others. The
+theme is how the app looks, its fonts included; the
 palette and the background are its colors, and every theme takes every
 palette and background. Views use the tokens, which read the current look.
 
@@ -107,11 +106,12 @@ palette and background. Views use the tokens, which read the current look.
   links, raised pillow controls with bold titles, a thick graph with round
   dots, status colors from an orchard (leaf, tomato,
   honey, grape), and lists that fade out at an edge with more beyond it.
+  Its text is Allo, at its roundest, and its code Maple Mono.
 - **Frost** is quiet and precise: a glass window around one inset card,
   its panes clear and divided by hairlines; near-white and near-black
   surfaces; washes for lines, hover, selection, and fields; one neutral
   selection; ink for the prominent action; flat controls, small radii,
-  and a fine graph.
+  and a fine graph. Its text is Geist, and its code Geist Mono.
 - **A background tint** (Neutral, Warm, Cool, Sage, Rose, Lavender) gives
   a theme's surfaces its hue in place of the theme's own, faint on white
   and stronger toward gray, each surface as light as before. Default's

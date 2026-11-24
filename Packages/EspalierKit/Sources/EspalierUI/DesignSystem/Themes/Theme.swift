@@ -186,6 +186,8 @@ nonisolated public final class Theme: Sendable {
     /// How far a scrolling list's content fades out at an edge with more
     /// beyond it (`ScrollEdgeFade`), in points; 0 for no fade.
     public let scrollEdgeFade: CGFloat
+    /// The text face and the code face (`Typography`).
+    let fonts: ThemeFonts
     /// What each area of the app draws its own way in this theme.
     public let style: ThemeStyle
 
@@ -307,6 +309,7 @@ nonisolated public final class Theme: Sendable {
         paneLayout = definition.paneLayout
         controls = definition.controls
         scrollEdgeFade = definition.scrollEdgeFade
+        fonts = definition.fonts
         style = definition.style
     }
 
@@ -643,6 +646,7 @@ nonisolated struct ThemeDefinition: Sendable {
     var paneLayout: PaneLayout
     var controls: ControlStyle = .standard
     var scrollEdgeFade: CGFloat = 0
+    var fonts: ThemeFonts
     var style: ThemeStyle
 }
 

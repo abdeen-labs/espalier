@@ -6,12 +6,7 @@ import SwiftUI
 
 extension Typography {
     /// The device code to enter when signing in (the mono, 22, semibold).
-    public static var deviceCode: Font {
-        guard Look.current.codeFont.face != nil else {
-            return .system(.title, design: .monospaced).weight(.semibold)
-        }
-        return mono(size: 22, weight: .semibold)
-    }
+    public static var deviceCode: Font { mono(size: 22, weight: .semibold) }
     /// The welcome flow's paragraphs (15).
     public static var welcomeBody: Font { sans(.title3) }
 }

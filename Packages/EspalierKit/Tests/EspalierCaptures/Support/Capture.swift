@@ -4,9 +4,8 @@
 // (scripts/capture.sh sets it), and writes
 // `<folder>/<look>/<Area>/<name>-<light|dark>.png`.
 //
-// ESPALIER_CAPTURE_LOOK=<theme>[-<color>][-<background>][-<app font>]
-// [-<code font>], as the settings store them ("default-slate", "frost",
-// "frost-lagoon-warm-fixel", "frost-plum-atkinson-sfmono"), draws every
+// ESPALIER_CAPTURE_LOOK=<theme>[-<color>][-<background>], as the settings
+// store them ("default-slate", "frost", "frost-lagoon-warm"), draws every
 // capture in that look instead of the default one; without a color, a
 // theme is in the palette made for it (Frost in Iris). A capture made in a
 // look of its own (`look:`) keeps it, and its name says which.
@@ -281,10 +280,10 @@ extension DesignTheme {
 
 extension Look {
     /// The look's name in captures: "default" for Default in Blueberry, its
-    /// own backgrounds, in Allo and Maple Mono; else the theme, then the
-    /// palette when it isn't the one made for the theme, and the background
-    /// tint, the app font, and the code font when they aren't the defaults
-    /// ("default-slate", "default-warm", "frost", "frost-lagoon-fixel").
+    /// own backgrounds; else the theme, then the palette when it isn't the
+    /// one made for the theme, and the background tint when it isn't the
+    /// theme's own ("default-slate", "default-warm", "frost",
+    /// "frost-lagoon-warm").
     var captureName: String {
         var parts = [theme.rawValue]
         if palette != theme.capturePalette {
@@ -292,12 +291,6 @@ extension Look {
         }
         if background != .own {
             parts.append(background.rawValue)
-        }
-        if appFont != .allo {
-            parts.append(appFont.rawValue)
-        }
-        if codeFont != .mapleMono {
-            parts.append(codeFont.rawValue)
         }
         return parts.joined(separator: "-")
     }
@@ -312,21 +305,15 @@ extension Look {
         parts.removeFirst()
         var palette = theme.capturePalette
         var background = BackgroundTint.own
-        var appFont = AppFont.allo
-        var codeFont = CodeFont.mapleMono
         for part in parts {
             if let named = DesignPalette(rawValue: part) {
                 palette = named
             } else if let named = BackgroundTint(rawValue: part) {
                 background = named
-            } else if let named = AppFont(rawValue: part) {
-                appFont = named
-            } else if let named = CodeFont(rawValue: part) {
-                codeFont = named
             } else {
-                fatalError("ESPALIER_CAPTURE_LOOK=\(name): \(part) is neither a palette, a background, an app font, nor a code font")
+                fatalError("ESPALIER_CAPTURE_LOOK=\(name): \(part) is neither a palette nor a background")
             }
         }
-        self.init(theme: theme, palette: palette, background: background, appFont: appFont, codeFont: codeFont)
+        self.init(theme: theme, palette: palette, background: background)
     }
 }

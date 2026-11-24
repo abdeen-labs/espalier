@@ -42,10 +42,6 @@ public enum PreferenceKey {
     public static let designPalette = "design-palette"
     /// The background tint (`BackgroundTint`), on every design theme.
     public static let designBackground = "design-background"
-    /// The app font (`AppFont`), Espalier's own.
-    public static let appFont = "app-font"
-    /// The code font (`CodeFont`), Espalier's own.
-    public static let codeFont = "code-font"
     public static let underlineLinks = "underline-links"
     public static let preferAbsoluteDates = "preferAbsoluteDates"
     public static let tabSize = "tab-size"
@@ -105,11 +101,10 @@ public enum ApplicationTheme: String, Sendable, Hashable, CaseIterable {
     case system, light, dark
 }
 
-/// Espalier's design theme: how the app looks (its layout, shapes, type,
-/// and marks, and where it puts the palette's colors), picked apart from the
-/// palette (`DesignPalette`), the background tint, the appearance
-/// (`ApplicationTheme`), the app font, and the code font. The raw values are
-/// the ones stored.
+/// Espalier's design theme: how the app looks (its layout, shapes, fonts,
+/// type, and marks, and where it puts the palette's colors), picked apart
+/// from the palette (`DesignPalette`), the background tint, and the
+/// appearance (`ApplicationTheme`). The raw values are the ones stored.
 public enum DesignTheme: String, Sendable, Hashable, CaseIterable {
     /// The theme a new install opens in.
     case `default`
@@ -148,37 +143,6 @@ public enum BackgroundTint: String, Sendable, Hashable, CaseIterable {
     /// The theme's own backgrounds.
     case own
     case neutral, warm, cool, sage, rose, lavender
-}
-
-/// The app font: every piece of the interface's text. The raw values are
-/// the ones stored.
-public enum AppFont: String, Sendable, Hashable, CaseIterable {
-    /// Allo, at its roundest: the font a new install opens in.
-    case allo
-    /// SF Pro, the system's.
-    case sf
-    /// Fixel Text.
-    case fixel
-    /// Atkinson Hyperlegible Next.
-    case atkinson
-    /// Martian Grotesk.
-    case martian
-    /// Geist.
-    case geist
-}
-
-/// The code font: what's drawn monospaced (commit IDs, counts, ref tags,
-/// code, terminal output). The raw values are the ones stored, apart from
-/// `AppFont`'s.
-public enum CodeFont: String, Sendable, Hashable, CaseIterable {
-    /// Maple Mono NL: the code font a new install opens in.
-    case mapleMono = "maplemono"
-    /// SF Mono, the system's.
-    case sfMono = "sfmono"
-    /// Geist Mono.
-    case geistMono = "geistmono"
-    /// Atkinson Hyperlegible Mono.
-    case atkinsonMono = "atkinsonmono"
 }
 
 /// The sidebar's form. The raw values are the ones stored.
@@ -247,8 +211,6 @@ public final class Preferences {
         designTheme = Self.storedDesignTheme(in: store)
         designPalette = Self.storedDesignPalette(in: store)
         designBackground = Self.storedDesignBackground(in: store)
-        appFont = Self.storedAppFont(in: store)
-        codeFont = Self.storedCodeFont(in: store)
         underlineLinks = store.getBoolean(PreferenceKey.underlineLinks, true)
         preferAbsoluteDates = store.getBoolean(PreferenceKey.preferAbsoluteDates, false)
         tabSize = store.getNumber(PreferenceKey.tabSize, 4)
@@ -480,22 +442,6 @@ public final class Preferences {
         }
     }
 
-    /// The app font (`app-font`; Geist by default).
-    public var appFont: AppFont {
-        didSet {
-            guard appFont != oldValue else { return }
-            store.setEnum(PreferenceKey.appFont, appFont)
-        }
-    }
-
-    /// The code font (`code-font`; Geist Mono by default).
-    public var codeFont: CodeFont {
-        didSet {
-            guard codeFont != oldValue else { return }
-            store.setEnum(PreferenceKey.codeFont, codeFont)
-        }
-    }
-
     /// The design theme stored in `store`; an unknown one is Default. The
     /// app applies it before the model loads, so its first windows open in
     /// it.
@@ -512,16 +458,6 @@ public final class Preferences {
     /// theme's own.
     public static func storedDesignBackground(in store: PreferenceStore) -> BackgroundTint {
         store.getEnum(PreferenceKey.designBackground, BackgroundTint.self) ?? .own
-    }
-
-    /// The app font stored in `store`; an unknown one is Allo.
-    public static func storedAppFont(in store: PreferenceStore) -> AppFont {
-        store.getEnum(PreferenceKey.appFont, AppFont.self) ?? .allo
-    }
-
-    /// The code font stored in `store`; an unknown one is Maple Mono.
-    public static func storedCodeFont(in store: PreferenceStore) -> CodeFont {
-        store.getEnum(PreferenceKey.codeFont, CodeFont.self) ?? .mapleMono
     }
 
     /// Underline links (`underline-links`).

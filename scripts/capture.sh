@@ -7,7 +7,7 @@
 #   scripts/capture.sh [--look LOOK] [--out FOLDER] [FILTER]
 #
 # LOOK is spelled as the settings store it: default-slate, frost,
-# frost-lagoon-warm, default-sfmono; a theme with no palette named is in its
+# frost-lagoon-warm; a theme with no palette named is in its
 # own (Frost in Iris). FOLDER defaults to .captures in the checkout; it's
 # emptied first.
 

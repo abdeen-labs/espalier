@@ -86,6 +86,7 @@ nonisolated extension ThemeDefinition {
             // Lists fade out at an edge with more beyond it, over a
             // 24-point band, instead of ending at a hard cut.
             scrollEdgeFade: 24,
+            fonts: ThemeFonts(text: .geist, code: .geistMono),
             style: .frost
         )
     }
