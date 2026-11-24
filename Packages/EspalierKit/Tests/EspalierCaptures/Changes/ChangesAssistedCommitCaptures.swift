@@ -51,7 +51,8 @@ struct ChangesAssistedCommitCaptures {
             sparkle: .ready(model: "GPT-5"),
             button: values.button(enabled: false),
             mode: .manual,
-            showsModeSwitch: true
+            showsModeSwitch: true,
+            assistedIntro: AssistedCommitContent(status: .ready(model: "GPT-5"))
         )
         capture(values.composer(content), named: "composer-manual-switch", area: area)
     }

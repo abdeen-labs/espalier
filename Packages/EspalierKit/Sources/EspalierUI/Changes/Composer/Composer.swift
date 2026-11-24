@@ -71,6 +71,10 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
     public var isModeSwitchEnabled: Bool
     /// The assisted card's status, in Assisted.
     public var assisted: AssistedCommitContent?
+    /// What the assisted card would show, in Manual while the switch
+    /// shows: the message fields keep room for it, so the card is as tall
+    /// in either mode.
+    public var assistedIntro: AssistedCommitContent?
 
     public init(
         lastCommit: LastCommitContent? = nil,
@@ -97,7 +101,8 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
         mode: CommitMode = .manual,
         showsModeSwitch: Bool = false,
         isModeSwitchEnabled: Bool = true,
-        assisted: AssistedCommitContent? = nil
+        assisted: AssistedCommitContent? = nil,
+        assistedIntro: AssistedCommitContent? = nil
     ) {
         self.lastCommit = lastCommit
         self.isAmending = isAmending
@@ -124,6 +129,7 @@ nonisolated public struct ComposerContent: Sendable, Equatable {
         self.showsModeSwitch = showsModeSwitch
         self.isModeSwitchEnabled = isModeSwitchEnabled
         self.assisted = assisted
+        self.assistedIntro = assistedIntro
     }
 
     /// The summary's placeholder when the commit doesn't name one file: a
@@ -310,7 +316,8 @@ extension ComposerContent {
             mode: mode,
             showsModeSwitch: showsModeSwitch,
             isModeSwitchEnabled: !isAssistedPending && !isCommitting && !isGenerating,
-            assisted: assisted
+            assisted: assisted,
+            assistedIntro: showsModeSwitch && assisted == nil ? AssistedCommitContent.make(repository, app: app) : nil
         )
     }
 
@@ -433,6 +440,11 @@ public struct ComposerView: View {
     private let actions: ComposerActions
 
     @State private var focusBridge = ComposerFocusBridge()
+    /// The message fields' height in Manual, as last laid out, and the
+    /// height of what Assisted would show in their place. Each card keeps
+    /// room for the other's, so switching modes doesn't resize the card.
+    @State private var messageFieldsHeight: CGFloat = 0
+    @State private var assistedIntroHeight: CGFloat = 0
     @Environment(\.motion) private var motion
     @Environment(\.appearsActive) private var appearsActive
 
@@ -537,25 +549,33 @@ public struct ComposerView: View {
     /// sparkle (the model writes every message).
     private func assistedCard(_ assisted: AssistedCommitContent) -> some View {
         VStack(spacing: 0) {
-            AssistedCommitStatusView(assisted, actions: AssistedCommitActions(
-                cancel: actions.cancelAssisted,
-                retryUndo: actions.retryAssistedUndo,
-                retryPush: actions.retryAssistedPush,
-                dismiss: actions.dismissAssistedFailure,
-                openSettings: actions.openAISettings,
-                chooseModel: actions.chooseAssistedModel
-            ))
-            .padding(.horizontal, Metrics.Composer.cardPadding)
-            .padding(.vertical, Metrics.insetMedium)
-            .popoverCard(item: assistedModelPopover, title: SparklePopover.chooseModel.title) { _ in
-                AIModelPopover(content.modelChoices, onChoose: actions.selectAssistedModel)
-            }
+            assistedStatus(assisted)
+                .popoverCard(item: assistedModelPopover, title: SparklePopover.chooseModel.title) { _ in
+                    AIModelPopover(content.modelChoices, onChoose: actions.selectAssistedModel)
+                }
+                // As tall as the message fields it stands in for: as last
+                // laid out, or empty where they haven't shown yet.
+                .frame(minHeight: messageFieldsHeight > 0 ? messageFieldsHeight : Self.emptyMessageFieldsHeight, alignment: .top)
             if content.showsCoAuthors(draft) {
                 coAuthorsSection
             }
             footer(showsSparkle: false)
         }
         .noteCard()
+    }
+
+    /// The run's status, padded as the assisted card pads it.
+    private func assistedStatus(_ assisted: AssistedCommitContent) -> some View {
+        AssistedCommitStatusView(assisted, actions: AssistedCommitActions(
+            cancel: actions.cancelAssisted,
+            retryUndo: actions.retryAssistedUndo,
+            retryPush: actions.retryAssistedPush,
+            dismiss: actions.dismissAssistedFailure,
+            openSettings: actions.openAISettings,
+            chooseModel: actions.chooseAssistedModel
+        ))
+        .padding(.horizontal, Metrics.Composer.cardPadding)
+        .padding(.vertical, Metrics.insetMedium)
     }
 
     /// The model choice the assisted card asked for, on the sparkle's
@@ -573,6 +593,45 @@ public struct ComposerView: View {
     /// commit options on the left and the author on the right. No rules:
     /// the field with focus has a soft wash of its own.
     private var card: some View {
+        VStack(spacing: 0) {
+            messageFields
+                // Room for what Assisted would show in the fields' place,
+                // measured from a hidden copy of it at the fields' width.
+                .frame(minHeight: content.assistedIntro == nil ? 0 : assistedIntroHeight, alignment: .top)
+                .background(alignment: .top) {
+                    if let intro = content.assistedIntro {
+                        assistedStatus(intro)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                                assistedIntroHeight = height
+                            }
+                            .hidden()
+                            .accessibilityHidden(true)
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    messageFieldsHeight = height
+                }
+            if content.showsCoAuthors(draft) {
+                coAuthorsSection
+            }
+            if !footerIsOnlyAuthor {
+                footer(showsSparkle: true)
+            }
+        }
+        .noteCard()
+        // A field's ring, on the card's edge, while one of its fields has
+        // focus.
+        .focusRing(markedField != nil, in: RoundedRectangle(cornerRadius: Metrics.NoteCard.radius, style: .continuous), outset: 0)
+        .contextMenuCard {
+            for item in menuItems {
+                MenuAction(item.title, action: item.action)
+                    .disabled(!item.isEnabled)
+            }
+        }
+    }
+
+    /// The summary over the description.
+    private var messageFields: some View {
         VStack(spacing: 0) {
             HStack(spacing: Metrics.insetSmall) {
                 SummaryField(
@@ -624,22 +683,6 @@ public struct ComposerView: View {
                 focusTint(behind: .description)
             }
             .fieldRegion()
-            if content.showsCoAuthors(draft) {
-                coAuthorsSection
-            }
-            if !footerIsOnlyAuthor {
-                footer(showsSparkle: true)
-            }
-        }
-        .noteCard()
-        // A field's ring, on the card's edge, while one of its fields has
-        // focus.
-        .focusRing(markedField != nil, in: RoundedRectangle(cornerRadius: Metrics.NoteCard.radius, style: .continuous), outset: 0)
-        .contextMenuCard {
-            for item in menuItems {
-                MenuAction(item.title, action: item.action)
-                    .disabled(!item.isEnabled)
-            }
         }
     }
 
@@ -827,6 +870,13 @@ public struct ComposerView: View {
         }
         actions.cancelGeneration()
         return true
+    }
+
+    /// The message fields' height with nothing typed: the summary's line
+    /// and the description's fewest lines, with their padding.
+    private static var emptyMessageFieldsHeight: CGFloat {
+        Metrics.NoteCard.summaryTopPadding + ceil(NSLayoutManager().defaultLineHeight(for: summaryFont)) + Metrics.NoteCard.summaryBottomPadding
+            + DescriptionEditor.height(for: "", width: Metrics.Column.changesFileList.ideal) + Metrics.grid * 2
     }
 
     /// The summary's font: large and bold, as a pane's title.
