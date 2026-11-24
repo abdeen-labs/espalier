@@ -467,14 +467,22 @@ struct HistoryLineCounts: View {
     }
 }
 
-/// "+10 −2" as two candy pills joined in one capsule: each count in its
-/// diff color on a tint of it; zero counts left out. Headers show it.
+/// "+10 −2" in headers (`HistoryThemeStyle.lineCounts`): two candy pills
+/// joined in one capsule, each count in its diff color on a tint of it, or
+/// plain colored text (`HistoryLineCounts`); zero counts left out.
 struct LineCountPills: View {
     let added: Int
     let deleted: Int
     @Environment(\.numberFormat) private var numberFormat
 
     var body: some View {
+        switch Theme.current.style.history.lineCounts {
+        case .pill: pills
+        case .text: HistoryLineCounts(added: added, deleted: deleted)
+        }
+    }
+
+    private var pills: some View {
         HStack(spacing: Metrics.LineCountPills.spacing) {
             if added > 0 {
                 part("+\(formatCount(added, numberFormat))", color: DiffColors.addedMarker)

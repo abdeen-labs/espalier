@@ -202,9 +202,15 @@ enum CommitRowParts {
 
     private static var lineHeights: [NSFont: CGFloat] = [:]
 
-    /// A title's font: the row's in medium, bold for HEAD's commit.
+    /// A title's font: the row's in the theme's weights, heavier for
+    /// HEAD's commit.
     static func titleFont(isCurrentTip: Bool) -> NSFont {
-        isCurrentTip ? AppKitTypography.row(weight: .bold) : AppKitTypography.row(weight: .medium)
+        switch Theme.current.style.history.rowTitleWeights {
+        case .mediumAndBold:
+            isCurrentTip ? AppKitTypography.row(weight: .bold) : AppKitTypography.row(weight: .medium)
+        case .regularAndSemibold:
+            isCurrentTip ? AppKitTypography.row(weight: .semibold) : AppKitTypography.row
+        }
     }
 
     /// The time label: secondary text, right-aligned in its column.
@@ -263,9 +269,10 @@ final class CommitRowCellView: NSTableCellView {
     let graphView = GraphCellView(frame: .zero)
     private let refsView = RefCapsulesView(frame: .zero)
     private let summaryLabel = CommitRowParts.label(font: AppKitTypography.row, color: Palette.text)
-    /// The working copy's changed files, on a pill of the Changes place's
-    /// color.
+    /// The working copy's changed files: on a pill of the accent, or as
+    /// secondary text (`HistoryThemeStyle.workingCopyDetail`).
     private let detailPill = PillLabelView(frame: .zero)
+    private let detailLabel = CommitRowParts.label(font: AppKitTypography.secondary, color: Palette.text3)
     private let warningView = NSImageView()
     private let unpushedView = CommitRowParts.unpushedArrow()
     private let avatarView = RowAvatarView(frame: .zero)
@@ -293,6 +300,7 @@ final class CommitRowCellView: NSTableCellView {
         addSubview(summaryLabel)
         detailPill.setAccessibilityElement(false)
         addSubview(detailPill)
+        addSubview(detailLabel)
         warningView.imageScaling = .scaleProportionallyDown
         warningView.setAccessibilityElement(false)
         warningView.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)?
@@ -355,13 +363,16 @@ final class CommitRowCellView: NSTableCellView {
         switch content.kind {
         case .workingCopy(let summary):
             summaryLabel.stringValue = summary.title
-            summaryLabel.font = AppKitTypography.row(weight: .medium)
+            summaryLabel.font = CommitRowParts.titleFont(isCurrentTip: false)
             summaryLabel.textColor = summary.isDirty ? Palette.text : Palette.text3
             summaryLabel.setTooltip(nil)
             let detail = summary.detail(content.numberFormat)
+            let showsPill = Theme.current.style.history.workingCopyDetail == .pill
             detailPill.text = detail ?? ""
-            detailPill.color = summary.conflictedFiles > 0 ? Palette.warningMark : PlaceIdentity.changes.color
-            detailPill.isHidden = detail == nil
+            detailPill.color = summary.conflictedFiles > 0 ? Palette.warningMark : Palette.accent
+            detailPill.isHidden = detail == nil || !showsPill
+            detailLabel.stringValue = detail ?? ""
+            detailLabel.isHidden = detail == nil || showsPill
             warningView.isHidden = summary.conflictedFiles == 0
             refsView.refs = []
             unpushedView.isHidden = true
@@ -376,6 +387,7 @@ final class CommitRowCellView: NSTableCellView {
             summaryLabel.textColor = content.summary.isEmpty || content.isMerge ? Palette.text3 : Palette.text
             summaryLabel.setTooltip(content.displaySummary)
             detailPill.isHidden = true
+            detailLabel.isHidden = true
             warningView.isHidden = true
             refsView.numberFormat = content.numberFormat
             refsView.refs = content.refs
@@ -394,7 +406,7 @@ final class CommitRowCellView: NSTableCellView {
         summaryWidth = CommitRowParts.fittingWidth(summaryLabel)
         if content.isDimmed != isDimmed {
             isDimmed = content.isDimmed
-            for view in [summaryLabel, detailPill, refsView, unpushedView, avatarView, dateLabel, shortIDLabel, warningView] as [NSView] {
+            for view in [summaryLabel, detailPill, detailLabel, refsView, unpushedView, avatarView, dateLabel, shortIDLabel, warningView] as [NSView] {
                 view.alphaValue = alpha
             }
         }
@@ -431,6 +443,8 @@ final class CommitRowCellView: NSTableCellView {
     private func restyle() {
         styledLook = Look.current
         detailPill.needsDisplay = true
+        detailLabel.font = AppKitTypography.secondary
+        detailLabel.textColor = Palette.text3
         dateLabel.font = AppKitTypography.secondary
         dateLabel.textColor = Palette.text3
         shortIDLabel.font = AppKitTypography.code(size: 11)
@@ -469,6 +483,7 @@ final class CommitRowCellView: NSTableCellView {
             summaryLabel.frame = centered(CGSize(width: min(summaryWidth, max(trailing - leading, 0)), height: Self.rowLabelHeight), x: leading)
             leading = summaryLabel.frame.maxX + Metrics.insetSmall
             detailPill.frame = centered(CGSize(width: min(detailPill.fittingWidth, max(trailing - leading, 0)), height: Metrics.Pill.height), x: leading)
+            detailLabel.frame = centered(CGSize(width: max(trailing - leading, 0), height: Self.secondaryLabelHeight), x: leading)
             refsView.frame = .zero
             return
         }
@@ -560,18 +575,24 @@ struct GraphRowStyle {
 }
 
 extension Metrics {
-    /// History's commit rows, roomy: the graph's height (the simple list's
+    /// History's commit rows, roomy or compact
+    /// (`HistoryThemeStyle.rows`): the graph's height (the simple list's
     /// rows have their own), the avatar, and the time's column.
     enum HistoryRows {
+        static var isRoomy: Bool {
+            Theme.current.style.history.rows == .roomy
+        }
+
         /// The graph's row height: `ceil(lineHeight(.body) × 2.625)`, 42 at
-        /// the default text size.
+        /// the default text size, roomy; `ceil(lineHeight(.body) × 2)`, 32,
+        /// compact.
         static var height: CGFloat {
-            ceil(AppKitTypography.bodyLayoutLineHeight * 2.625)
+            ceil(AppKitTypography.bodyLayoutLineHeight * (isRoomy ? 2.625 : 2))
         }
 
         /// The author's avatar.
-        static let avatarSize: CGFloat = 22
+        static var avatarSize: CGFloat { isRoomy ? 22 : 20 }
         /// The time's column, its text right-aligned ("Nov 21").
-        static let timeWidth: CGFloat = 52
+        static var timeWidth: CGFloat { isRoomy ? 52 : 44 }
     }
 }

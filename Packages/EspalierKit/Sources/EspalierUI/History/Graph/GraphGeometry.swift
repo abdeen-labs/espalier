@@ -11,7 +11,7 @@ extension Metrics.Graph {
     static let dash: [CGFloat] = [2, 2]
     /// The working copy is a ring: the radius of its stroke's center line,
     /// and its stroke, thinner than a line, so its dashes read as dashes.
-    static let workingCopyRadius: CGFloat = 6
+    static var workingCopyRadius: CGFloat { Metrics.HistoryRows.isRoomy ? 6 : 5.25 }
     static let workingCopyStroke: CGFloat = 2
     /// A dimmed track's opacity while another track is hovered.
     static let hoverDimming: CGFloat = 0.4
@@ -26,11 +26,12 @@ extension Metrics.Graph {
 
     /// A node is a dot: a commit's, a merge's (with a hole), the current
     /// tip's, and the hole's radius in each, with a gap of the row's
-    /// background around them.
-    static let dotRadius: CGFloat = 6
-    static let headDotNodeRadius: CGFloat = 7.5
-    static let mergeHoleRadius: CGFloat = 2.5
-    static let headHoleRadius: CGFloat = 3
+    /// background around them, larger in roomy rows than in compact ones
+    /// (`HistoryThemeStyle.rows`).
+    static var dotRadius: CGFloat { Metrics.HistoryRows.isRoomy ? 6 : 5 }
+    static var headDotNodeRadius: CGFloat { Metrics.HistoryRows.isRoomy ? 7.5 : 6.5 }
+    static var mergeHoleRadius: CGFloat { Metrics.HistoryRows.isRoomy ? 2.5 : 2.25 }
+    static var headHoleRadius: CGFloat { Metrics.HistoryRows.isRoomy ? 3 : 2.5 }
     static let dotGap: CGFloat = 2
 }
 

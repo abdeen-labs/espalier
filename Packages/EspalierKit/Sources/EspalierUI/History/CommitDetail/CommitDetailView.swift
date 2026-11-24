@@ -1,6 +1,6 @@
-// The commit detail: the header card of one commit (or a range) across the
-// top, then its changed files beside the
-// selected file's diff (`DiffContainer`, with its own header row), in a split
+// The commit detail: the header of one commit (or a range) across the top,
+// on a card or over a hairline, then its changed files beside the selected
+// file's diff (`DiffContainer`, with its own header row), in a split
 // whose divider is remembered.
 
 import EspalierCore
@@ -31,13 +31,8 @@ struct CommitDetailView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(Metrics.CommitDetail.cardPadding)
             // A message expanding shows its lines as the header grows.
-            .clipped()
-            .cardSurface()
-            .padding(.horizontal, Metrics.CommitDetail.horizontalPadding)
-            .padding(.top, Metrics.CommitDetail.topPadding)
-            .padding(.bottom, Metrics.CommitDetail.bottomPadding)
+            .commitDetailHeader(clipped: true)
             // Another commit, or the same one after a checkout, shows at
             // once.
             .motionScope(AnyHashable([selection.shas.first ?? "", repository.gitState.tip.branch?.ref ?? ""]))
@@ -60,6 +55,43 @@ private struct CommitDiff: View {
             PlaceholderNote("No files changed")
         } else {
             DiffContainer(selection.diff, file: selection.file.map(DiffFileInfo.init), context: .history)
+        }
+    }
+}
+
+extension View {
+    /// The commit detail's header (a commit's, a range's, or the working
+    /// copy's) on its card, or plain over a hairline
+    /// (`HistoryThemeStyle.commitHeader`), inset from the pane's edges.
+    /// When `clipped`, what grows past its room is cut at the header's
+    /// edge.
+    @ViewBuilder
+    func commitDetailHeader(clipped: Bool = false) -> some View {
+        if Metrics.CommitDetail.isCard {
+            padding(Metrics.CommitDetail.cardPadding)
+                .clipped(clipped)
+                .cardSurface()
+                .padding(.horizontal, Metrics.CommitDetail.horizontalPadding)
+                .padding(.top, Metrics.CommitDetail.topPadding)
+                .padding(.bottom, Metrics.CommitDetail.bottomPadding)
+        } else {
+            VStack(spacing: 0) {
+                padding(.horizontal, Metrics.CommitDetail.horizontalPadding)
+                    .padding(.top, Metrics.CommitDetail.topPadding)
+                    .padding(.bottom, Metrics.CommitDetail.bottomPadding)
+                    .clipped(clipped)
+                Hairline()
+            }
+        }
+    }
+
+    /// Clipped to its frame when `isClipped`.
+    @ViewBuilder
+    fileprivate func clipped(_ isClipped: Bool) -> some View {
+        if isClipped {
+            self.clipped()
+        } else {
+            self
         }
     }
 }

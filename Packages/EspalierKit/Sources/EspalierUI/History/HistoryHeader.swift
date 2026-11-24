@@ -161,20 +161,28 @@ struct RollingCountText: View {
 }
 
 /// A branch's name in History's headers, on one line: the branch symbol,
-/// then the name (13 semibold), its middle cut when it's long; and after
-/// it, when given, a caption in secondary text ("compared with main"),
-/// which is cut first.
+/// then the name, as the pane's heading or a semibold row title
+/// (`HistoryThemeStyle.branchName`), its middle cut when it's long; and
+/// after it, when given, a caption in secondary text ("compared with
+/// main"), which is cut first.
 struct BranchNameLabel: View {
     let name: String
     var caption: String? = nil
 
     var body: some View {
+        let isHeading = Theme.current.style.history.branchName == .heading
         HStack(alignment: .firstTextBaseline, spacing: Metrics.grid) {
-            Image(systemName: PlaceIdentity.branches.systemImage)
-                .font(Typography.secondary)
-                .foregroundStyle(.text3)
+            if isHeading {
+                Image(systemName: PlaceIdentity.branches.systemImage)
+                    .font(Typography.secondary)
+                    .foregroundStyle(.text3)
+            } else {
+                Image(systemName: "arrow.trianglehead.branch")
+                    .imageScale(.small)
+                    .foregroundStyle(.text3)
+            }
             Text(name)
-                .font(Typography.paneHeading)
+                .font(isHeading ? Typography.paneHeading : Typography.row.weight(.semibold))
                 .foregroundStyle(.text)
                 .lineLimit(1)
                 .truncationMode(.middle)

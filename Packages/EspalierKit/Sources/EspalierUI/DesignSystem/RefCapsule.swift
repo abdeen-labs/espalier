@@ -1,9 +1,12 @@
-// Ref tags, candy pills: a name in bold sans on a tint of its color, the
-// text in the color's deep shade, fully rounded. Branches take their
-// commit's track color, so names and lines visibly belong together; the
-// current branch is filled with the accent; tags are honey, as the Tags
-// place is. One content type, two renderers: SwiftUI for headers and the
-// inspector, AppKit drawing for the graph's table cells.
+// Ref tags, as the theme draws them (`HistoryThemeStyle.refTags`): candy
+// pills, a name in bold sans on a tint of its color, the text in the
+// color's deep shade, fully rounded, tags honey as the Tags place is; or
+// mono labels, the name in the mono on a rounded rectangle, remote branches
+// outlined and tags neutral gray. Branches take their commit's track color,
+// so names and lines visibly belong together; the current branch is filled
+// with the theme's prominent fill. One content type, two renderers: SwiftUI
+// for headers and the inspector, AppKit drawing for the graph's table
+// cells.
 
 import AppKit
 import GitKit
@@ -85,8 +88,10 @@ nonisolated public struct RefCapsuleContent: Sendable, Hashable, Identifiable {
 
 /// How a capsule is painted, from its kind, track color, and the theme's
 /// tags: the current branch filled with the theme's prominent fill; other
-/// local branches a tint of their track color; remote branches a fainter
-/// tint, with a cloud; tags a tint of honey, with a tag.
+/// local branches a tint of their track color. As candy pills, remote
+/// branches a fainter tint, with a cloud, and tags a tint of honey, with a
+/// tag; as mono labels, remote branches outlined, with a cloud, and tags
+/// neutral, with a tag.
 struct RefCapsuleStyle {
     var fill: NSColor?
     var stroke: NSColor?
@@ -97,6 +102,9 @@ struct RefCapsuleStyle {
 
     /// A remote branch's tint, as a fraction of a local branch's.
     static let remoteTintScale: CGFloat = 0.6
+    /// A mono label tag's tint and a remote branch's outline.
+    static let neutralTintAlpha: CGFloat = 0.14
+    static let outlineAlpha: CGFloat = 0.45
 
     /// A candy pill of `color` (resolved in `variant`): a tint of it, and
     /// the text in its deep shade, in the theme's strengths.
@@ -109,34 +117,42 @@ struct RefCapsuleStyle {
 
     init(_ content: RefCapsuleContent, palette: TrackPalette.Resolved, variant: AppearanceVariant) {
         let theme = Theme.current
+        let isMono = theme.style.history.refTags == .monoLabels
         func candy(_ color: NSColor, tintScale: CGFloat = 1) -> (fill: NSColor, text: NSColor) {
             Self.candy(color, variant: variant, tintScale: tintScale)
         }
         let track = palette.color(forRef: content).resolved(in: variant)
         stroke = nil
+        symbol = RefCapsuleRenderer.symbol(for: content.kind)
         switch content.kind {
         case .currentBranch, .currentBranchWithUpstream, .detachedHead:
             let solidText = theme.prominentText.resolved(in: variant)
             fill = theme.prominent.resolved(in: variant)
             text = solidText
             secondaryText = solidText.withAlphaComponent(0.75)
-            symbol = nil
         case .localBranch, .localBranchWithUpstream:
             (fill, text) = candy(track)
             secondaryText = text.withAlphaComponent(0.7)
-            symbol = nil
+        case .remoteBranch where isMono:
+            fill = nil
+            stroke = track.withAlphaComponent(Self.outlineAlpha)
+            text = track
+            secondaryText = track.withAlphaComponent(0.7)
         case .remoteBranch:
             (fill, text) = candy(track, tintScale: Self.remoteTintScale)
             secondaryText = text.withAlphaComponent(0.7)
-            symbol = RefCapsuleRenderer.symbol(for: content.kind)
+        case .tag where isMono:
+            let neutral = Palette.text2.resolved(in: variant)
+            fill = neutral.withAlphaComponent(Self.neutralTintAlpha)
+            text = neutral
+            secondaryText = neutral
         case .tag:
             (fill, text) = candy(PlaceIdentity.tags.color.resolved(in: variant))
             secondaryText = text
-            symbol = RefCapsuleRenderer.symbol(for: content.kind)
         }
         if variant.isHighContrast {
             // Increase Contrast outlines every capsule, fully opaque.
-            stroke = text
+            stroke = isMono && content.kind != .tag ? track : text
         }
     }
 }
@@ -191,7 +207,7 @@ public struct RefCapsule: View {
         HStack(spacing: Metrics.Pill.glyphSpacing) {
             if let symbol = style.symbol {
                 Image(systemName: symbol)
-                    .font(.system(size: Metrics.Pill.symbolSize, weight: .bold))
+                    .font(.system(size: Metrics.Pill.symbolSize, weight: Metrics.Pill.isMono ? .semibold : .bold))
                     .foregroundStyle(Color(nsColor: style.text))
             }
             Text(content.title)
@@ -203,7 +219,7 @@ public struct RefCapsule: View {
                     .foregroundStyle(Color(nsColor: style.secondaryText))
             }
         }
-        .font(Typography.namePill)
+        .font(Typography.refTag)
         .lineLimit(1)
         .padding(.horizontal, Metrics.Pill.horizontalPadding)
         .frame(height: Metrics.Pill.height)
@@ -434,20 +450,20 @@ public enum RefCapsuleRenderer {
     }
 
     private static func attributes(_ color: NSColor) -> [NSAttributedString.Key: Any] {
-        [.font: AppKitTypography.namePill, .foregroundColor: color]
+        [.font: AppKitTypography.refTag, .foregroundColor: color]
     }
 
     /// The symbol before a kind's name.
     static func symbol(for kind: RefCapsuleContent.Kind) -> String? {
         switch kind {
-        case .remoteBranch: "cloud.fill"
-        case .tag: "tag.fill"
+        case .remoteBranch: Metrics.Pill.isMono ? "cloud" : "cloud.fill"
+        case .tag: Metrics.Pill.isMono ? "tag" : "tag.fill"
         default: nil
         }
     }
 
     private static func symbolImage(_ name: String, color: NSColor) -> NSImage? {
-        let configuration = NSImage.SymbolConfiguration(pointSize: Metrics.Pill.symbolSize, weight: .bold)
+        let configuration = NSImage.SymbolConfiguration(pointSize: Metrics.Pill.symbolSize, weight: Metrics.Pill.symbolWeight)
             .applying(.init(paletteColors: [color]))
         return NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(configuration)
@@ -492,7 +508,7 @@ final class PillLabelView: NSView {
         }
     }
 
-    var color: NSColor = PlaceIdentity.changes.color {
+    var color: NSColor = Palette.accent {
         didSet {
             needsDisplay = true
         }
@@ -579,15 +595,36 @@ struct RefPillFlow: Layout {
 }
 
 extension Metrics {
-    /// Candy pills: ref tags, and the counts and SHAs beside them.
+    /// Ref tags, and the counts and SHAs beside them: candy pills, or mono
+    /// labels (`HistoryThemeStyle.refTags`).
     public enum Pill {
-        public static let height: CGFloat = 20
-        public static let horizontalPadding: CGFloat = 8
+        static var isMono: Bool {
+            Theme.current.style.history.refTags == .monoLabels
+        }
+
+        public static var height: CGFloat { isMono ? 18 : 20 }
+        public static var horizontalPadding: CGFloat { isMono ? 7 : 8 }
         public static let spacing: CGFloat = 4
         /// At most this many ref pills, then "+N".
         public static let maximumVisible = 3
         public static let glyphSpacing: CGFloat = 3
         /// The symbol before a remote branch's or a tag's name.
-        public static let symbolSize: CGFloat = 9
+        public static var symbolSize: CGFloat { isMono ? 9.5 : 9 }
+        static var symbolWeight: NSFont.Weight { isMono ? .semibold : .bold }
+    }
+}
+
+extension Typography {
+    /// A ref tag's name: the mono at 10 semibold for mono labels, else the
+    /// candy pill's bold sans.
+    static var refTag: Font {
+        Metrics.Pill.isMono ? refCapsule : namePill
+    }
+}
+
+extension AppKitTypography {
+    /// A ref tag's name, as `Typography.refTag`.
+    static var refTag: NSFont {
+        Metrics.Pill.isMono ? refCapsule : namePill
     }
 }

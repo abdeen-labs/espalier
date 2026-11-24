@@ -1,7 +1,7 @@
-// The selected commit's header card: the author's avatar beside the summary
-// in display type and who authored it when, in a sentence; the short SHA on
-// a pill that copies it; its tags; then the description, two lines until
-// expanded. Its branches show in its row, not here. The summary and description show emoji for shortcodes and link
+// The selected commit's header, a card or plain: the summary, who authored
+// it when, its tags, and the short SHA that copies the full one; then the
+// description, two lines until expanded. Its branches show in its row, not
+// here. The summary and description show emoji for shortcodes and link
 // URLs, and in GitHub repositories issue references and mentions
 // (`RichText`).
 
@@ -76,22 +76,28 @@ extension CommitHeaderContent {
 
 extension Metrics {
     /// The top of a commit's details: its header card, inset from the
-    /// pane's edges as the list's header is.
+    /// pane's edges, or its plain header, inset as the list's header is
+    /// (`HistoryThemeStyle.commitHeader`).
     enum CommitDetail {
-        static let horizontalPadding: CGFloat = Metrics.insetMedium
-        static let topPadding: CGFloat = Metrics.insetMedium
-        static let bottomPadding: CGFloat = Metrics.insetMedium
+        static var isCard: Bool {
+            Theme.current.style.history.commitHeader == .card
+        }
+
+        static var horizontalPadding: CGFloat { isCard ? Metrics.insetMedium : Metrics.HistoryHeader.horizontalPadding }
+        static var topPadding: CGFloat { isCard ? Metrics.insetMedium : Metrics.insetLarge }
+        static var bottomPadding: CGFloat { isCard ? Metrics.insetMedium : 14 }
         /// Inside the card.
         static let cardPadding: CGFloat = Metrics.insetLarge
-        /// Between the avatar and the title.
+        /// Between the avatar and the title, on the card.
         static let avatarSpacing: CGFloat = 14
         /// Between the title, the author line, and the body.
-        static let titleSpacing: CGFloat = 6
-        static let bodySpacing: CGFloat = 12
+        static var titleSpacing: CGFloat { isCard ? 6 : Metrics.insetSmall }
+        static var bodySpacing: CGFloat { isCard ? 12 : 10 }
         /// The body's extra space between lines (18-point lines at 12).
         static let bodyLineSpacing: CGFloat = 3
-        /// The author's avatar, beside the title.
-        static let avatarSize: CGFloat = 44
+        /// The author's avatar: beside the title on the card, beside the
+        /// author's name in the plain header.
+        static var avatarSize: CGFloat { isCard ? 44 : 18 }
         /// The SHA's pill.
         static let shaPillHeight: CGFloat = 26
         /// The symbol's circle when the details can't show changes.
@@ -99,10 +105,12 @@ extension Metrics {
     }
 }
 
-/// The selected commit's header, a card: the author's big avatar beside the
-/// title in display type and a sentence saying who wrote it and when, the
-/// SHA as a pill that copies it, its tags as candy pills, then the body,
-/// two lines until expanded. Expanding grows the body over 0.22 s, and
+/// The selected commit's header (`HistoryThemeStyle.commitHeader`). As a
+/// card: the author's big avatar beside the title in display type and a
+/// sentence saying who wrote it and when, the SHA as a pill that copies it,
+/// its tags, then the body. Plain: the title (15 semibold), the author and
+/// time with the tags and the short ID as a chip with a copy button, then
+/// the body. The body shows two lines until expanded. Expanding grows the body over 0.22 s, and
 /// collapsing shrinks it over 0.15 s, what's below moving with it; a tag
 /// made or deleted on the commit fades in or out as the line makes room
 /// (`CommitDetailView` keeps another commit's header from animating).
@@ -114,18 +122,90 @@ struct CommitHeader: View {
     @Environment(\.motion) private var motion
 
     var body: some View {
+        Group {
+            if Metrics.CommitDetail.isCard {
+                card
+            } else {
+                plain
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: content.sha) {
+            // Another commit shows collapsed at once, its chevron too.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                isExpanded = false
+            }
+        }
+    }
+
+    private var title: some View {
+        Text(content.summary.isEmpty ? AttributedString(CommitRowContent.emptySummary) : content.richSummary)
+            .foregroundStyle(content.summary.isEmpty ? .text3 : .text)
+            .tint(Color(espalier: Palette.link))
+            .textSelection(.enabled)
+            .lineLimit(isExpanded ? nil : 3)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var authorTooltip: String {
+        content.authorEmail.isEmpty ? content.authorName : "\(content.authorName) <\(content.authorEmail)>"
+    }
+
+    // MARK: Plain
+
+    private var plain: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            title
+                .font(Typography.commitSummary)
+            metadata
+                .padding(.top, Metrics.CommitDetail.titleSpacing)
+            if !content.description.isEmpty {
+                description
+                    .padding(.top, Metrics.CommitDetail.bodySpacing)
+            }
+        }
+    }
+
+    /// The author, when, the tags, and the short ID's chip.
+    private var metadata: some View {
+        HStack(spacing: Metrics.insetSmall) {
+            Avatar(content.avatarUser, size: Metrics.CommitDetail.avatarSize)
+            Text(content.authorName)
+                .fontWeight(.medium)
+                .foregroundStyle(.text)
+                .tooltip(authorTooltip)
+            HStack(spacing: 3) {
+                Text("authored")
+                RelativeTimeText(content.date)
+            }
+            .foregroundStyle(.text3)
+            if !content.tags.isEmpty {
+                RefCapsuleList(content.tags, palette: palette)
+                    .transition(motion.animates ? .opacity : .identity)
+            }
+            Spacer(minLength: Metrics.insetSmall)
+            MonoChip(content.shortSHA, isSelectable: true) {
+                CommitSHACopyButton(sha: content.sha)
+            }
+            .fixedSize()
+        }
+        .font(Typography.secondary)
+        .lineLimit(1)
+        .motion(Motion.arrive, value: content.tags)
+    }
+
+    // MARK: Card
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: Metrics.CommitDetail.avatarSpacing) {
                 Avatar(content.avatarUser, size: Metrics.CommitDetail.avatarSize)
-                    .tooltip(content.authorEmail.isEmpty ? content.authorName : "\(content.authorName) <\(content.authorEmail)>")
+                    .tooltip(authorTooltip)
                 VStack(alignment: .leading, spacing: Metrics.CommitDetail.titleSpacing) {
-                    Text(content.summary.isEmpty ? AttributedString(CommitRowContent.emptySummary) : content.richSummary)
+                    title
                         .font(Typography.commitTitle)
-                        .foregroundStyle(content.summary.isEmpty ? .text3 : .text)
-                        .tint(Color(espalier: Palette.link))
-                        .textSelection(.enabled)
-                        .lineLimit(isExpanded ? nil : 3)
-                        .fixedSize(horizontal: false, vertical: true)
                     byline
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -144,15 +224,6 @@ struct CommitHeader: View {
             }
         }
         .motion(Motion.arrive, value: content.tags)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .onChange(of: content.sha) {
-            // Another commit shows collapsed at once, its chevron too.
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                isExpanded = false
-            }
-        }
     }
 
     /// "Priya Raman authored this 2 hours ago."
@@ -171,6 +242,8 @@ struct CommitHeader: View {
         .lineLimit(1)
     }
 
+    /// The body, and its chevron: bare in the plain header, on a circle
+    /// on the card.
     private var description: some View {
         HStack(alignment: .top, spacing: Metrics.insetSmall) {
             Text(content.richDescription)
@@ -187,13 +260,15 @@ struct CommitHeader: View {
                 }
             } label: {
                 // The chevron turns over 0.15 s, as a disclosure's does.
+                let isCard = Metrics.CommitDetail.isCard
+                let side = isCard ? Metrics.insetLarge + Metrics.grid : Metrics.insetLarge
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(.text2)
+                    .font(.system(size: 10, weight: isCard ? .bold : .semibold))
+                    .foregroundStyle(isCard ? .text2 : .text3)
                     .rotationEffect(.degrees(isExpanded ? 180 : 0))
                     .motion(Motion.leave, value: isExpanded)
-                    .frame(width: Metrics.insetLarge + Metrics.grid, height: Metrics.insetLarge + Metrics.grid)
-                    .background(Circle().fill(.field))
+                    .frame(width: side, height: side)
+                    .background(Circle().fill(.field).opacity(isCard ? 1 : 0))
                     .contentShape(Circle())
             }
             .buttonStyle(.bare(.circle))
@@ -233,5 +308,28 @@ struct CommitSHAPill: View {
         .fixedSize()
         .tooltip("Copy the full SHA")
         .accessibilityLabel("Copy the full SHA, \(shortenSHA(sha))")
+    }
+}
+
+/// The plain header's ID chip's copy button: copies the full SHA, its
+/// symbol a check for a moment after.
+struct CommitSHACopyButton: View {
+    let sha: String
+
+    var body: some View {
+        CopyButton(sha) { systemImage in
+            // The copy symbol's room, whichever shows, so the chip keeps
+            // its width.
+            ZStack {
+                Image(systemName: "doc.on.doc")
+                    .hidden()
+                Image(systemName: systemImage)
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(.text3)
+        }
+        .buttonStyle(.bare)
+        .tooltip("Copy the full SHA")
+        .accessibilityLabel("Copy the full SHA")
     }
 }

@@ -1,7 +1,7 @@
-// The working copy's detail in History: a header card, then a read-only
-// summary of the uncommitted changes (the files beside the selected file's
-// diff, with nothing to stage), and Review Changes (⌘1), which goes to Changes with the
-// composer focused.
+// The working copy's detail in History: a header, on a card or over a
+// hairline, then a read-only summary of the uncommitted changes (the files
+// beside the selected file's diff, with nothing to stage), and Review
+// Changes (⌘1), which goes to Changes with the composer focused.
 
 import EspalierCore
 import EspalierSupport
@@ -13,8 +13,8 @@ nonisolated struct WorkingCopyHeaderContent: Sendable, Equatable {
     var summary: WorkingCopySummary
 }
 
-/// The working copy's header: what changed, and Review
-/// Changes. As files change, the title crossfades and the count rolls over
+/// The working copy's header: what changed, and Review Changes, a regular
+/// button on the card, a small one in the plain header. As files change, the title crossfades and the count rolls over
 /// 0.2 s.
 struct WorkingCopyHeader: View {
     let content: WorkingCopyHeaderContent
@@ -23,10 +23,11 @@ struct WorkingCopyHeader: View {
     @Environment(\.motion) private var motion
 
     var body: some View {
-        HStack(alignment: .center, spacing: Metrics.CommitDetail.avatarSpacing) {
+        let isCard = Metrics.CommitDetail.isCard
+        HStack(alignment: isCard ? .center : .top, spacing: isCard ? Metrics.CommitDetail.avatarSpacing : Metrics.insetSmall) {
             VStack(alignment: .leading, spacing: Metrics.CommitDetail.titleSpacing) {
                 Text(content.summary.title)
-                    .font(Typography.commitTitle)
+                    .font(isCard ? Typography.commitTitle : Typography.commitSummary)
                     .foregroundStyle(content.summary.isDirty ? .text : .text3)
                     .contentTransition(motion.animates ? .opacity : .identity)
                 if let detail = content.summary.detail(numberFormat) {
@@ -40,7 +41,7 @@ struct WorkingCopyHeader: View {
                         }
                     }
                     .font(Typography.secondary)
-                    .foregroundStyle(.text2)
+                    .foregroundStyle(isCard ? .text2 : .text3)
                     .transition(motion.animates ? .opacity : .identity)
                 }
             }
@@ -50,6 +51,7 @@ struct WorkingCopyHeader: View {
                 Text("Review Changes")
             }
             .buttonStyle(.quiet)
+            .controlSize(isCard ? .regular : .small)
             .tooltip("Review Changes (⌘1)")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -69,11 +71,7 @@ struct WorkingCopyDetail: View {
             WorkingCopyHeader(content: WorkingCopyHeaderContent(summary: summary)) {
                 context.actions.perform(.reviewChanges)
             }
-            .padding(Metrics.CommitDetail.cardPadding)
-            .cardSurface()
-            .padding(.horizontal, Metrics.CommitDetail.horizontalPadding)
-            .padding(.top, Metrics.CommitDetail.topPadding)
-            .padding(.bottom, Metrics.CommitDetail.bottomPadding)
+            .commitDetailHeader()
             if files.isEmpty {
                 CenteredMessage(
                     "No Local Changes",

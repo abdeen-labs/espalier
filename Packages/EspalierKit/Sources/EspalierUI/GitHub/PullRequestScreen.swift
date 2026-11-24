@@ -1,8 +1,8 @@
-// The pull request place. Left: the overview, as cards (the title,
-// Draft, "#142 opened 2 days ago by octo", the branches as pills, Check
-// Out through the uncommitted changes decision or "Checked Out" for the
-// current branch's, New Worktree…, View on GitHub, the checks with their
-// steps, and the description in Markdown, each in its own card). Right:
+// The pull request place. Left: the overview, as cards or as one column
+// split by hairlines (the title, Draft, "#142 opened 2 days ago by octo",
+// the branches, Check Out through the uncommitted changes decision or
+// "Checked Out" for the current branch's, New Worktree…, View on GitHub,
+// the checks with their steps, and the description in Markdown). Right:
 // the changes since the merge base when the pull request's head is in the
 // repository (`pullRequestChanges`), else "Changes Not Available" with a
 // quiet Check Out (the overview's is the prominent one).
@@ -306,8 +306,10 @@ struct PullRequestOverview: View {
     }
 }
 
-/// The overview, as cards: the header (the title, who opened it when, the
-/// branches as pills, and the actions), the checks, and the description.
+/// The overview (`HistoryThemeStyle.pullRequestOverview`): the header (the
+/// title, who opened it when, the branches, and the actions), the checks,
+/// and the description, each on its card or in one column with hairlines
+/// between.
 struct PullRequestOverviewView: View {
     let content: PullRequestOverviewContent
     let checks: ChecksContent
@@ -315,31 +317,72 @@ struct PullRequestOverviewView: View {
     let description: MarkdownDocument?
     let actions: PullRequestOverviewActions
 
+    private var isCards: Bool {
+        Theme.current.style.history.pullRequestOverview == .card
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Metrics.PullRequestOverview.cardSpacing) {
-                VStack(alignment: .leading, spacing: Metrics.insetMedium) {
-                    header
-                    buttons
+            Group {
+                if isCards {
+                    VStack(alignment: .leading, spacing: Metrics.PullRequestOverview.cardSpacing) {
+                        VStack(alignment: .leading, spacing: Metrics.insetMedium) {
+                            header
+                            buttons
+                        }
+                        .overviewCard()
+                        checksSection
+                            .overviewCard()
+                        descriptionSection
+                            .overviewCard()
+                    }
+                    .padding(Metrics.insetMedium)
+                } else {
+                    VStack(alignment: .leading, spacing: Metrics.insetMedium) {
+                        header
+                        buttons
+                        Hairline()
+                        checksSection
+                        Hairline()
+                        descriptionSection
+                    }
+                    .padding(Metrics.insetLarge)
                 }
-                .overviewCard()
-                checksSection
-                    .overviewCard()
-                descriptionSection
-                    .overviewCard()
             }
-            .padding(Metrics.insetMedium)
             .frame(maxWidth: .infinity, alignment: .leading)
             .unbouncedScrollContent()
         }
         .background(Color(nsColor: Palette.pane))
     }
 
+    /// A branch's name: a candy pill of `color`, or a mono label.
+    @ViewBuilder
+    private func branchName(_ name: String, color: NSColor) -> some View {
+        if Theme.current.style.history.refTags == .pills {
+            NamePill(name, color: color)
+        } else {
+            QuietCapsule(name, isName: true)
+        }
+    }
+
+    /// A section's heading: the card's, or the column's section label.
+    @ViewBuilder
+    private func sectionHeading(_ title: String) -> some View {
+        if isCards {
+            Text(LocalizedStringKey(title))
+                .font(Typography.cardHeading)
+                .foregroundStyle(.text3)
+                .accessibilityAddTraits(.isHeader)
+        } else {
+            SectionLabel(title)
+        }
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
             HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
                 Text(content.title)
-                    .font(Typography.commitTitle)
+                    .font(isCards ? Typography.commitTitle : Typography.commitSummary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                 if content.isDraft {
@@ -347,27 +390,31 @@ struct PullRequestOverviewView: View {
                 }
             }
             HStack(spacing: Metrics.grid) {
-                Text(verbatim: "#\(content.number)")
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.text)
-                Text("opened")
+                if isCards {
+                    Text(verbatim: "#\(content.number)")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.text)
+                    Text("opened")
+                } else {
+                    Text(verbatim: "#\(content.number) opened")
+                }
                 RelativeTimeText(content.created)
                 Text("by")
                 Avatar(content.authorAvatar)
                 Text(content.author)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.text)
+                    .fontWeight(isCards ? .semibold : nil)
+                    .foregroundStyle(isCards ? .text : .text2)
             }
             .font(Typography.secondary)
             .foregroundStyle(.text2)
             .accessibilityElement(children: .combine)
             HStack(spacing: Metrics.grid) {
-                NamePill(content.base, color: PlaceIdentity.branches.color)
+                branchName(content.base, color: PlaceIdentity.branches.color)
                 Image(systemName: "arrow.left")
-                    .font(Typography.subheadline.weight(.bold))
-                    .foregroundStyle(.text3)
+                    .font(isCards ? Typography.subheadline.weight(.bold) : Typography.subheadline)
+                    .foregroundStyle(isCards ? .text3 : .text2)
                     .accessibilityLabel("from")
-                NamePill(content.head, color: PlaceIdentity.pullRequests.color)
+                branchName(content.head, color: PlaceIdentity.pullRequests.color)
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(content.head) into \(content.base)")
@@ -438,10 +485,7 @@ struct PullRequestOverviewView: View {
 
     private var checksSection: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-            Text("Checks")
-                .font(Typography.cardHeading)
-                .foregroundStyle(.text3)
-                .accessibilityAddTraits(.isHeader)
+            sectionHeading("Checks")
             if !checks.isEmpty, !(checks.isLoading && checks.overall == nil) {
                 ChecksHeader(content: checks, actions: actions.checks)
             }
@@ -451,10 +495,7 @@ struct PullRequestOverviewView: View {
 
     private var descriptionSection: some View {
         VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-            Text("Description")
-                .font(Typography.cardHeading)
-                .foregroundStyle(.text3)
-                .accessibilityAddTraits(.isHeader)
+            sectionHeading("Description")
             if let description {
                 if description.isEmpty {
                     Text("No description provided.")

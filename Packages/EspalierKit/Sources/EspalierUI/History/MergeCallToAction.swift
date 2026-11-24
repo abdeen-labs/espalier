@@ -1,6 +1,6 @@
 // The call to action on a branch's Ahead, the one place a merge, a squash
 // and merge, or a rebase between the current branch and another starts, on
-// a card: the status line saying what the method would do (`CompareModel.statusMessage`)
+// a card or bare: the status line saying what the method would do (`CompareModel.statusMessage`)
 // with its symbol, and the method's split button, whose menu switches the
 // method. The Branch menu's commands, their shortcuts, the branch rows'
 // menus, and the branch popover's merge all lead here (BranchActions).
@@ -53,13 +53,14 @@ struct MergeCallToActionActions {
 }
 
 /// The status line and the method's split button, prominent as the place's
-/// one action, together on a card.
+/// one action, together on a card or bare on the pane
+/// (`HistoryThemeStyle.mergeCallToAction`).
 struct MergeCallToAction: View {
     let content: MergeCallToActionContent
     var actions = MergeCallToActionActions()
 
     var body: some View {
-        HStack(alignment: .center, spacing: Metrics.insetMedium) {
+        let line = HStack(alignment: .center, spacing: Metrics.insetMedium) {
             MergeStatusLine(status: content.status, message: content.message)
             MergeMethodButton(
                 method: Binding(get: { content.method }, set: { actions.setMethod($0) }),
@@ -67,10 +68,16 @@ struct MergeCallToAction: View {
                 start: actions.start
             )
         }
-        .padding(.leading, Metrics.insetMedium)
-        .padding(.trailing, Metrics.insetSmall)
-        .padding(.vertical, Metrics.insetSmall)
-        .cardSurface()
+        switch Theme.current.style.history.mergeCallToAction {
+        case .card:
+            line
+                .padding(.leading, Metrics.insetMedium)
+                .padding(.trailing, Metrics.insetSmall)
+                .padding(.vertical, Metrics.insetSmall)
+                .cardSurface()
+        case .plain:
+            line
+        }
     }
 }
 
