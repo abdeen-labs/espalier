@@ -1,5 +1,5 @@
 // Espalier's alert, drawn as a card like the compact confirmation sheets:
-// the title in display type (after the warning glyph when critical), the
+// the title in a sheet's title type (after the warning glyph when critical), the
 // message in secondary text (paragraphs, and "• " lines as a list), the
 // "Do not show this message again" checkbox, and the buttons in a row at
 // the bottom right. The first button is the default, a prominent capsule (Return); a

@@ -81,8 +81,7 @@ struct SettingsPanes: View {
 }
 
 /// The window's layout: the sidebar of panes on the left; on the right,
-/// the header band with the selected pane's name, then the pane,
-/// whose groups are cards. It fills the window, under its transparent
+/// the header band with the selected pane's name, then the pane. It fills the window, under its transparent
 /// titlebar too. In the floating layout the band and the pane sit on the
 /// backdrop; in the inset card layout, on the background, with a hairline
 /// under the band.
@@ -123,8 +122,9 @@ struct SettingsLayout<Pane: View>: View {
     }
 }
 
-/// The pane's header band: its name in display type, as high as the main
-/// window's toolbar, and a hairline under it in the inset card layout.
+/// The pane's header band: its name in the theme's pane title, as high as
+/// the main window's toolbar, inset as the page is, and a hairline under it
+/// in the inset card layout.
 struct SettingsHeader: View {
     let tab: SettingsTab
 
@@ -134,7 +134,10 @@ struct SettingsHeader: View {
             .foregroundStyle(.text)
             .lineLimit(1)
             .accessibilityAddTraits(.isHeader)
-            .padding(.horizontal, Metrics.SettingsCards.pageInset)
+            .padding(
+                .horizontal,
+                Theme.current.style.settings.groups == .cards ? Metrics.SettingsCards.pageInset : Metrics.SettingsWindow.contentInset
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .frame(height: Metrics.SettingsWindow.headerHeight)
             .overlay(alignment: .bottom) {
@@ -144,9 +147,11 @@ struct SettingsHeader: View {
     }
 }
 
-/// The sidebar: the eight panes as tiled rows, as System Settings lists
-/// its panes, each a symbol on its colored tile beside the name, the
-/// selected one in the sidebar's selection. It's one stop in the key view
+/// The sidebar: the eight panes in the theme's look
+/// (`SettingsThemeStyle.Sidebar`): tiled rows, as System Settings lists its
+/// panes, each a symbol on its colored tile beside the name; or as the main
+/// window's sidebar draws its rows, each with its plain symbol, at their
+/// height. The selected one is in the sidebar's selection. It's one stop in the key view
 /// loop: the up and down arrows choose a pane. Like the main window's
 /// sidebar, it draws no ring while it has focus. VoiceOver reads each row
 /// as a button, the chosen one selected.
@@ -184,16 +189,23 @@ struct SettingsSidebar: View {
 
     private func row(_ tab: SettingsTab) -> some View {
         let isSelected = tab == selection
+        let isTiled = Theme.current.style.settings.sidebar == .tiles
         let shape = RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-        return HStack(spacing: Metrics.insetMedium - 2) {
-            PlaceTile(systemImage: tab.tileSymbol, color: tab.tileColor, size: Metrics.SettingsCards.sidebarTile)
-            Text(tab.title)
-                .font(isSelected ? Typography.row.weight(.semibold) : Typography.row)
-                .foregroundStyle(.sidebarRowText(isSelected: isSelected))
-                .lineLimit(1)
+        return Group {
+            if isTiled {
+                HStack(spacing: Metrics.insetMedium - 2) {
+                    PlaceTile(systemImage: tab.tileSymbol, color: tab.tileColor, size: Metrics.SettingsCards.sidebarTile)
+                    Text(tab.title)
+                        .font(isSelected ? Typography.row.weight(.semibold) : Typography.row)
+                        .foregroundStyle(.sidebarRowText(isSelected: isSelected))
+                        .lineLimit(1)
+                }
+            } else {
+                SidebarRowLabel(tab.title, systemImage: tab.systemImage, isSelected: isSelected)
+            }
         }
-        .padding(.horizontal, Metrics.SettingsSidebar.rowPadding)
-        .frame(height: Metrics.SettingsCards.sidebarRowHeight)
+        .padding(.horizontal, isTiled ? Metrics.SettingsSidebar.rowPadding : Metrics.Sidebar.rowPadding)
+        .frame(height: isTiled ? Metrics.SettingsCards.sidebarRowHeight : Metrics.SettingsSidebar.symbolRowHeight)
         .frame(maxWidth: .infinity, alignment: .leading)
         // Hover fades (in 0.08 s, out 0.15 s); choosing a pane is
         // instant, as selection is.
@@ -276,11 +288,15 @@ extension SettingsTab {
 extension Metrics {
     /// The Settings window's sidebar.
     public enum SettingsSidebar {
-        /// Between rows.
-        public static let rowSpacing: CGFloat = 2
+        /// Between rows: tiled ones, and ones with plain symbols.
+        public static var rowSpacing: CGFloat {
+            Theme.current.style.settings.sidebar == .tiles ? 2 : 1
+        }
         /// Between the top band and the first row.
         public static let topSpacing: CGFloat = 2
-        /// Inside a row, before its tile.
+        /// Inside a tiled row, before its tile.
         public static let rowPadding: CGFloat = 6
+        /// A row with a plain symbol.
+        public static let symbolRowHeight: CGFloat = 28
     }
 }

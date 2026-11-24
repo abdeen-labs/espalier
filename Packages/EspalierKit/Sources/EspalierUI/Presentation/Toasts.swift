@@ -1,6 +1,8 @@
-// Outcomes and notices as toasts: chunky pillows whose colored badge says
-// what happened: done (leaf), done and undoable (blueberry), or a notice
-// (slate: a refusal, something the app did on its own). Their copy is the
+// Outcomes and notices as toasts, in the theme's look: chunky pillows whose
+// colored badge says what happened: done (leaf), done and undoable
+// (blueberry), or a notice (slate: a refusal, something the app did on its
+// own); or capsules whose symbol is green for a success and gray for a
+// notice. Their copy is the
 // state layer's; they last 5 s, or 15 s with Undo, counted once the pointer
 // leaves the toast, and the close button dismisses one at once. Edit ▸ Undo
 // (⌘Z) runs a toast's Undo too, and its button shows the key (the window's
@@ -114,10 +116,12 @@ enum ToastAnnouncer {
     }
 }
 
-/// One toast's pillow: the badge, the message, Undo when there is one (a
-/// quiet pillow button), and the close button, spaced as the operation
-/// capsule. The badge and the round close button sit concentric with the
-/// pillow's ends.
+/// One toast, in the theme's look (`ControlsThemeStyle.Toast`): the badge
+/// or the symbol, the message, Undo when there is one, and the close
+/// button, spaced as the operation capsule. As a pillow, the badge says
+/// what happened and Undo is a quiet pillow button; as a capsule, a symbol
+/// in the tone's color and Undo a secondary capsule. What leads and the
+/// round close button sit concentric with the ends.
 public struct ToastView: View {
     private let content: ToastContent
     private let onUndo: () -> Void
@@ -130,10 +134,21 @@ public struct ToastView: View {
     }
 
     public var body: some View {
-        HStack(spacing: Metrics.Pillow.spacing) {
-            MoodBadge(mood: content.mood, systemImage: content.systemImage)
+        let isPillow = ToastMetrics.isPillow
+        let height = ToastMetrics.height
+        let lead = isPillow ? Metrics.Tiles.floating : Metrics.Floating.symbolSize
+        HStack(spacing: isPillow ? Metrics.Pillow.spacing : Metrics.insetSmall) {
+            if isPillow {
+                MoodBadge(mood: content.mood, systemImage: content.systemImage)
+            } else {
+                Image(systemName: content.systemImage)
+                    .font(.system(size: 17))
+                    .foregroundStyle(symbolStyle)
+                    .frame(width: Metrics.Floating.symbolSize, height: Metrics.Floating.symbolSize)
+                    .accessibilityHidden(true)
+            }
             Text(content.message)
-                .font(Typography.pillowMessage)
+                .font(isPillow ? Typography.pillowMessage : Typography.row)
                 .foregroundStyle(.text)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -146,7 +161,7 @@ public struct ToastView: View {
                         }
                     }
                 }
-                .buttonStyle(.quiet)
+                .buttonStyle(isPillow ? .quiet : .secondary)
                 .controlSize(.regular)
             }
             Button(action: onClose) {
@@ -155,14 +170,52 @@ public struct ToastView: View {
             .buttonStyle(ToastCloseButtonStyle())
             .tooltip("Close")
         }
-        .padding(.leading, (Metrics.Pillow.height - Metrics.Tiles.floating) / 2)
-        .padding(.trailing, (Metrics.Pillow.height - Metrics.Pillow.closeSize) / 2)
+        .padding(.leading, (height - lead) / 2)
+        .padding(.trailing, (height - ToastMetrics.closeSize) / 2)
         .padding(.vertical, Metrics.insetSmall)
-        .frame(minHeight: Metrics.Pillow.height)
+        .frame(minHeight: height)
         .floatingWidth()
-        .pillowSurface()
+        .modifier(ToastSurface(isPillow: isPillow))
         // One element: the message, with Undo and Close as its actions.
         .accessibilityElement(children: .combine)
+    }
+
+    /// The capsule's symbol color: green for a success, gray for a notice.
+    private var symbolStyle: AnyShapeStyle {
+        switch content.tone {
+        case .success: AnyShapeStyle(Color(espalier: Palette.success))
+        case .notice: AnyShapeStyle(.text2)
+        }
+    }
+}
+
+/// A toast's surface: the pillow, or the floating capsule.
+private struct ToastSurface: ViewModifier {
+    let isPillow: Bool
+
+    func body(content: Content) -> some View {
+        if isPillow {
+            content.pillowSurface()
+        } else {
+            content.floatingSurface()
+        }
+    }
+}
+
+/// A toast's sizes: the pillow's, or the capsule's.
+enum ToastMetrics {
+    static var isPillow: Bool {
+        Theme.current.style.controls.toast == .pillow
+    }
+
+    /// The least a toast is high.
+    static var height: CGFloat {
+        isPillow ? Metrics.Pillow.height : Metrics.Floating.height
+    }
+
+    /// The round close button.
+    static var closeSize: CGFloat {
+        isPillow ? Metrics.Pillow.closeSize : Metrics.Floating.closeSize
     }
 }
 
@@ -202,9 +255,9 @@ private struct ToastCloseBody<Label: View>: View {
         let appearance = CapsuleButtonAppearance(kind: .secondary, controlSize: .small, isPressed: isPressed, isHovered: isHovered)
         label
             .labelStyle(.iconOnly)
-            .font(.system(size: 10, weight: .bold))
+            .font(.system(size: ToastMetrics.isPillow ? 10 : 9, weight: .bold))
             .foregroundStyle(.text2)
-            .frame(width: Metrics.Pillow.closeSize, height: Metrics.Pillow.closeSize)
+            .frame(width: ToastMetrics.closeSize, height: ToastMetrics.closeSize)
             .background(Circle().fill(appearance.fill))
             .overlay(
                 Circle().fill(appearance.stateOverlay)

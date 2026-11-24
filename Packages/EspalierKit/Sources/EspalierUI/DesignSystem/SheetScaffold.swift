@@ -1,5 +1,5 @@
-// The frame Espalier's sheets share: a header (the title in display type
-// and an optional line under it), the content, and the buttons, on the
+// The frame Espalier's sheets share: a header (the title in the theme's
+// title type and an optional line under it), the content, and the buttons, on the
 // cream `background`. Cancel is a secondary capsule, the default button the
 // prominent one. `ModalPresenter` shows it in a card on the window's modal
 // layer, named by the title for VoiceOver.
@@ -19,9 +19,18 @@ extension Metrics.Sheet {
 }
 
 extension Typography {
+    /// A title in the theme's title type (`ControlsThemeStyle.Titles`):
+    /// display type at `displaySize`, bold, or `system`.
+    static func themedTitle(displaySize: CGFloat, system: @autoclosure () -> Font) -> Font {
+        switch Theme.current.style.controls.titles {
+        case .display: display(size: displaySize)
+        case .system: system()
+        }
+    }
+
     /// A sheet's, an alert's, or a welcome step's title: display type, 17
-    /// bold.
-    public static var sheetTitle: Font { display(size: 17) }
+    /// bold, or the system's 15 semibold.
+    public static var sheetTitle: Font { themedTitle(displaySize: 17, system: sans(.title3, weight: .semibold)) }
     /// The line under a sheet's title (13, secondary text).
     public static var sheetMessage: Font { row }
     /// A label above a field or a group in a sheet (12, semibold, secondary
@@ -32,7 +41,7 @@ extension Typography {
     public static var welcomeTitle: Font { display(size: 34) }
 }
 
-/// A sheet's header: the title in display type and the line under it.
+/// A sheet's header: the title and the line under it.
 public struct SheetHeader: View {
     private let title: String
     private let message: String?

@@ -1,9 +1,13 @@
-// Espalier's checkbox: chunky, 18 with radius 6, a little key you press.
-// Off, it's the content background in a `line2` rim that's thicker along
-// the bottom; on or mixed, it's the accent standing on a lip a shade deeper,
-// with a bold check or dash in the theme's marks color (`onAccent`, white
-// but on a near-white accent). Toggled, it pops: it swells and settles back
-// (none with Reduce Motion). One drawing, three renderers: Core
+// Espalier's checkbox, in the theme's look (`ControlsThemeStyle.Checkbox`).
+// As a key: chunky, 18 with radius 6, a little key you press. Off, it's the
+// content background in a `line2` rim that's thicker along the bottom; on
+// or mixed, it's the accent standing on a lip a shade deeper, with a bold
+// check or dash. Toggled, it pops: it swells and settles back (none with
+// Reduce Motion). Flat: 15 with the theme's small radius; off, an empty box
+// with a 1-point `line2` border on the content background; on or mixed,
+// the flat accent with a check or dash. The mark is in the theme's marks
+// color (`onAccent`, white but on a near-white accent). One drawing, three
+// renderers: Core
 // Graphics for tables that draw their rows (the diff's hunk headers), an
 // `NSButton` for AppKit rows and headers (a checkbox to VoiceOver, mixed
 // state included), and a SwiftUI view, which a `Toggle` takes with the
@@ -54,6 +58,21 @@ public enum CheckboxDrawing {
         Metrics.Checkbox.box
     }
 
+    /// Whether the theme draws the flat box rather than the key.
+    static var isFlat: Bool {
+        Theme.current.style.controls.checkbox == .flat
+    }
+
+    /// The box's corner radius.
+    static var radius: CGFloat {
+        isFlat ? Metrics.Radius.small : Metrics.Checkbox.radius
+    }
+
+    /// The check's and the dash's stroke.
+    static var markWidth: CGFloat {
+        isFlat ? Metrics.Checkbox.flatMarkWidth : Metrics.Checkbox.markWidth
+    }
+
     /// Draws a checkbox filling `rect` (a square, `size` on a side) in the
     /// current context, in the current drawing appearance's colors.
     ///
@@ -76,7 +95,11 @@ public enum CheckboxDrawing {
             context.setAlpha(Palette.disabledOpacity)
         }
         let scale = rect.width / size
-        let radius = Metrics.Checkbox.radius * scale
+        let radius = Self.radius * scale
+        if isFlat {
+            drawFlat(state, in: rect, radius: radius, scale: scale, isPressed: isPressed, flipped: flipped)
+            return
+        }
         let box = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
         // The rim (and the lip under the face), then the face on it.
         let face = faceRect(in: rect, state: state, scale: scale, flipped: flipped)
@@ -92,23 +115,7 @@ public enum CheckboxDrawing {
             box.fill()
             Palette.accent.setFill()
             NSBezierPath(roundedRect: face, xRadius: radius, yRadius: radius).fill()
-            Theme.current.onAccent.setStroke()
-            let mark = NSBezierPath()
-            mark.lineWidth = Metrics.Checkbox.markWidth * scale
-            mark.lineCapStyle = .round
-            mark.lineJoinStyle = .round
-            for (index, point) in markPoints(state).enumerated() {
-                let location = CGPoint(
-                    x: face.minX + point.x * face.width,
-                    y: flipped ? face.minY + point.y * face.height : face.maxY - point.y * face.height
-                )
-                if index == 0 {
-                    mark.move(to: location)
-                } else {
-                    mark.line(to: location)
-                }
-            }
-            mark.stroke()
+            strokeMark(state, in: face, lineWidth: markWidth * scale, flipped: flipped)
         }
         if isPressed {
             NSColor.black.withAlphaComponent(Metrics.Checkbox.pressedOpacity).setFill()
@@ -116,9 +123,56 @@ public enum CheckboxDrawing {
         }
     }
 
-    /// The box's face: inside the rim when off; on or mixed, the whole box
-    /// but the lip along its bottom, which it stands on.
+    /// The flat box: off, the content background with a 1-point `line2`
+    /// border; on or mixed, the accent with the mark.
+    private static func drawFlat(_ state: CheckboxState, in rect: CGRect, radius: CGFloat, scale: CGFloat, isPressed: Bool, flipped: Bool) {
+        switch state {
+        case .off:
+            let box = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: radius - 0.5, yRadius: radius - 0.5)
+            Palette.background.setFill()
+            box.fill()
+            Palette.line2.setStroke()
+            box.lineWidth = 1
+            box.stroke()
+        case .on, .mixed:
+            Palette.accent.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            strokeMark(state, in: rect, lineWidth: markWidth * scale, flipped: flipped)
+        }
+        if isPressed {
+            NSColor.black.withAlphaComponent(Metrics.Checkbox.pressedOpacity).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+        }
+    }
+
+    /// Strokes the check or the dash across `face` in the marks color.
+    private static func strokeMark(_ state: CheckboxState, in face: CGRect, lineWidth: CGFloat, flipped: Bool) {
+        Theme.current.onAccent.setStroke()
+        let mark = NSBezierPath()
+        mark.lineWidth = lineWidth
+        mark.lineCapStyle = .round
+        mark.lineJoinStyle = .round
+        for (index, point) in markPoints(state).enumerated() {
+            let location = CGPoint(
+                x: face.minX + point.x * face.width,
+                y: flipped ? face.minY + point.y * face.height : face.maxY - point.y * face.height
+            )
+            if index == 0 {
+                mark.move(to: location)
+            } else {
+                mark.line(to: location)
+            }
+        }
+        mark.stroke()
+    }
+
+    /// The key's face: inside the rim when off; on or mixed, the whole box
+    /// but the lip along its bottom, which it stands on. The flat box's
+    /// face is the whole box.
     static func faceRect(in rect: CGRect, state: CheckboxState, scale: CGFloat = 1, flipped: Bool) -> CGRect {
+        if isFlat {
+            return rect
+        }
         let lip = Metrics.Checkbox.lip * scale
         switch state {
         case .off:
@@ -268,7 +322,7 @@ public final class CheckboxButton: NSButton {
     }
 
     /// Sets the state; when `animated` and motion runs here, the old box
-    /// crossfades into the new one over 0.15 s, and a box without a drawn
+    /// crossfades into the new one over 0.15 s, and a key without a drawn
     /// title pops. Owners animate only a change of the same item's state,
     /// never a row reused for another.
     public func setState(_ newState: NSControl.StateValue, animated: Bool) {
@@ -280,7 +334,7 @@ public final class CheckboxButton: NSButton {
         Motion.crossfade(layer, duration: Motion.leave)
         // Drawn now, so the crossfade takes this change of contents.
         displayIfNeeded()
-        if !drawsTitle || title.isEmpty {
+        if !drawsTitle || title.isEmpty, !CheckboxDrawing.isFlat {
             pop()
         }
     }
@@ -344,12 +398,22 @@ public struct CheckboxMark: View {
     }
 
     public var body: some View {
+        if CheckboxDrawing.isFlat {
+            flat
+        } else {
+            key
+        }
+    }
+
+    /// The key: the rim or the lip, the face on it, and the mark; it pops
+    /// when toggled.
+    private var key: some View {
         let size = CheckboxDrawing.size
         let box = CGRect(x: 0, y: 0, width: size, height: size)
         let face = CheckboxDrawing.faceRect(in: box, state: state, flipped: true)
         let radius = Metrics.Checkbox.radius
         let faceRadius = state == .off ? max(radius - Metrics.Checkbox.rim, 1) : radius
-        ZStack(alignment: .topLeading) {
+        return ZStack(alignment: .topLeading) {
             // The rim and face crossfade, and the mark fades and scales in,
             // over 0.15 s.
             RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -381,6 +445,36 @@ public struct CheckboxMark: View {
         } animation: { _ in
             motion.animates ? .easeOut(duration: Motion.CheckboxPop.duration / Double(Motion.CheckboxPop.scales.count - 1)) : nil
         }
+        .opacity(isEnabled ? 1 : Palette.disabledOpacity)
+        .accessibilityHidden(true)
+    }
+
+    /// The flat box: the content background in a 1-point border, or the
+    /// accent with the mark.
+    private var flat: some View {
+        let size = CheckboxDrawing.size
+        let shape = RoundedRectangle(cornerRadius: CheckboxDrawing.radius, style: .circular)
+        return ZStack {
+            // The fill crossfades, and the mark fades and scales in, over
+            // 0.15 s.
+            shape.fill(state == .off ? Color(espalier: Palette.background) : Color.accent)
+            if state == .off {
+                shape.strokeBorder(.line2, lineWidth: 1)
+                    .transition(motion.animates ? .opacity : .identity)
+            } else {
+                Path { path in
+                    path.addLines(CheckboxDrawing.markPoints(state).map { CGPoint(x: $0.x * size, y: $0.y * size) })
+                }
+                .stroke(
+                    Color(nsColor: Theme.current.onAccent),
+                    style: StrokeStyle(lineWidth: CheckboxDrawing.markWidth, lineCap: .round, lineJoin: .round)
+                )
+                .id(state)
+                .transition(motion.animates ? .scale(scale: 0.6).combined(with: .opacity) : .identity)
+            }
+        }
+        .motion(Motion.leave, value: state)
+        .frame(width: size, height: size)
         .opacity(isEnabled ? 1 : Palette.disabledOpacity)
         .accessibilityHidden(true)
     }
@@ -461,11 +555,11 @@ private struct CheckboxToggleButtonBody<Label: View>: View {
             CheckboxMark(state)
                 .overlay {
                     // A press darkens the box at once and eases back.
-                    RoundedRectangle(cornerRadius: Metrics.Checkbox.radius, style: .continuous)
+                    RoundedRectangle(cornerRadius: CheckboxDrawing.radius, style: .continuous)
                         .fill(.black.opacity(isPressed ? Metrics.Checkbox.pressedOpacity : 0))
                         .pressMotion(isPressed)
                 }
-                .focusRing(isFocused, in: RoundedRectangle(cornerRadius: Metrics.Checkbox.radius, style: .continuous))
+                .focusRing(isFocused, in: RoundedRectangle(cornerRadius: CheckboxDrawing.radius, style: .continuous))
                 .alignmentGuide(.firstTextBaseline) { dimensions in
                     // The box's center on the label's first line's middle.
                     dimensions[VerticalAlignment.center] + markOffset
@@ -483,17 +577,20 @@ private struct CheckboxToggleButtonBody<Label: View>: View {
 }
 
 extension Metrics.Checkbox {
-    /// The box's side.
-    public static let box: CGFloat = 18
-    /// The box's corner radius.
+    /// The box's side: the key's 18, the flat box's 15.
+    public static var box: CGFloat {
+        CheckboxDrawing.isFlat ? 15 : 18
+    }
+    /// The key's corner radius.
     public static let radius: CGFloat = 6
     /// An empty box's rim.
     public static let rim: CGFloat = 1.5
     /// The lip along the bottom: under a checked box's face, and thickening
     /// an empty box's rim.
     public static let lip: CGFloat = 1.5
-    /// The check's and the dash's stroke.
+    /// The check's and the dash's stroke: the key's, and the flat box's.
     public static let markWidth: CGFloat = 2.25
+    public static let flatMarkWidth: CGFloat = 1.75
     /// Between the box and its title.
     public static let titleSpacing: CGFloat = 8
     /// Darkens the box while the mouse is down on it.

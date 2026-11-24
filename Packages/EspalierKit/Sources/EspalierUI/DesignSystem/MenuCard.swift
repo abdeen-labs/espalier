@@ -1,16 +1,18 @@
-// Espalier's menu card: a cream card on the `quiet` fill with the floating
-// ring and shadow, the card radius, its rows inside a 6-point inset with
-// the row radius. Rows are 30 high: a check column (only in a menu with
+// Espalier's menu card: a card on the `quiet` fill with the floating ring
+// and shadow, the card radius, its rows inside an inset with the row
+// radius. Rows are 30 high in a roomy menu, 24 in a compact one (the
+// theme's, `ControlsThemeStyle.Menu`): a check column (only in a menu with
 // checkable items), a leading symbol in secondary text, the title (the
 // error color for a destructive item) with an optional subtitle under it,
 // and a chevron for a submenu.
-// The highlighted row, under the pointer or the keyboard, is the butter
-// highlight (the soft accent) in its rounded shape, its text staying
-// primary; it fades from row to row under the pointer, as hover does, and
-// moves at once with the keyboard. Disabled rows fade, are never
-// highlighted, and show why as their tooltip when they say. Section
-// headers are soft titles, as written; dividers are faint rules inset from
-// the card's edges. A menu taller than the screen scrolls, never past its
+// The highlighted row, under the pointer or the keyboard, is the soft
+// accent in its rounded shape, its text staying primary; it fades from row
+// to row under the pointer, as hover does, and moves at once with the
+// keyboard. Disabled rows fade, are never highlighted, and show why as
+// their tooltip when they say. Section headers are soft titles, as
+// written, in a roomy menu and the theme's section labels in a compact
+// one; dividers are faint rules inset from the card's edges, rounded in a
+// roomy menu and plain in a compact one. A menu taller than the screen scrolls, never past its
 // ends, its rows fading out toward an end with more past it as that end
 // comes in. The card fades and grows very slightly from its anchor as it
 // opens, except under Reduce Motion and offscreen.
@@ -209,8 +211,7 @@ private struct MenuRowView: View {
                     }
                 }
         case .header(let text):
-            Text(text)
-                .font(Typography.menuHeader)
+            header(text)
                 .foregroundStyle(.text3)
                 .lineLimit(1)
                 .padding(.leading, Metrics.Menu.rowPadding + leadingColumnsWidth)
@@ -219,13 +220,32 @@ private struct MenuRowView: View {
                 .padding(.bottom, Metrics.Menu.headerBottomPadding)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .divider:
-            // A soft rounded rule in the card's ring color: the panes' line
-            // color is the card's own fill in dark.
-            Capsule(style: .circular)
+            // A rule in the card's ring color (the panes' line color is the
+            // card's own fill in dark): soft and rounded in a roomy menu,
+            // plain in a compact one.
+            let shape = Metrics.Menu.isCompact
+                ? AnyShape(Rectangle())
+                : AnyShape(Capsule(style: .circular))
+            shape
                 .fill(Color(nsColor: Elevation.floating.ring ?? Palette.line))
                 .frame(height: Metrics.Menu.dividerThickness)
                 .padding(.horizontal, Metrics.Menu.dividerInset - Metrics.Menu.inset)
                 .padding(.vertical, Metrics.Menu.dividerSpacing)
+        }
+    }
+
+    /// A section header: a soft title as written in a roomy menu, the
+    /// theme's section label in a compact one.
+    @ViewBuilder
+    private func header(_ text: String) -> some View {
+        if Metrics.Menu.isCompact {
+            Text(text)
+                .font(Typography.sectionLabel)
+                .tracking(Typography.sectionLabelTracking)
+                .textCase(Theme.current.sectionLabel.isUppercase ? .uppercase : nil)
+        } else {
+            Text(text)
+                .font(Typography.menuHeader)
         }
     }
 
@@ -358,21 +378,28 @@ extension EdgeInsets {
 }
 
 extension Metrics {
-    /// Menus: the card, its rows, and where it opens.
+    /// Menus: the card, its rows, and where it opens. Where a roomy menu
+    /// and a compact one differ (`ControlsThemeStyle.Menu`), the roomy
+    /// value comes first.
     public enum Menu {
+        /// Whether the theme's menus are compact.
+        static var isCompact: Bool {
+            Theme.current.style.controls.menu == .compact
+        }
+
         /// The card's padding around its rows.
-        public static let inset: CGFloat = 6
+        public static var inset: CGFloat { isCompact ? 5 : 6 }
         /// An item row's height (one line).
-        public static let rowHeight: CGFloat = 30
+        public static var rowHeight: CGFloat { isCompact ? 24 : 30 }
         /// Space inside a row before its first column and after its last.
-        public static let rowPadding: CGFloat = 10
+        public static var rowPadding: CGFloat { isCompact ? 8 : 10 }
         /// Space between a row's columns.
-        public static let columnSpacing: CGFloat = 8
+        public static var columnSpacing: CGFloat { isCompact ? 6 : 8 }
         /// The check column.
         public static let checkColumnWidth: CGFloat = 12
         public static let checkSize: CGFloat = 11
         /// The leading symbol column.
-        public static let symbolColumnWidth: CGFloat = 20
+        public static var symbolColumnWidth: CGFloat { isCompact ? 16 : 20 }
         /// The least space between a title and the chevron or the card's
         /// edge.
         public static let trailingSpacing: CGFloat = 16
@@ -388,16 +415,16 @@ extension Metrics {
         /// A title is cut in its middle past this width.
         public static let titleMaximumWidth: CGFloat = 380
         /// A section header's space above and below its text.
-        public static let headerTopPadding: CGFloat = 8
-        public static let headerBottomPadding: CGFloat = 4
+        public static var headerTopPadding: CGFloat { isCompact ? 6 : 8 }
+        public static var headerBottomPadding: CGFloat { isCompact ? 3 : 4 }
         /// A divider's inset from the card's edges, and its space above
         /// and below.
-        public static let dividerInset: CGFloat = 14
-        public static let dividerSpacing: CGFloat = 5
+        public static var dividerInset: CGFloat { isCompact ? 10 : 14 }
+        public static var dividerSpacing: CGFloat { isCompact ? 4 : 5 }
         /// A divider's thickness.
         public static let dividerThickness: CGFloat = 1
         /// The narrowest a card gets.
-        public static let minimumWidth: CGFloat = 160
+        public static var minimumWidth: CGFloat { isCompact ? 120 : 160 }
         /// Between a pull-down or pop-up and its menu.
         public static let gap: CGFloat = 4
         /// A menu stays this far in from the screen's visible edges.

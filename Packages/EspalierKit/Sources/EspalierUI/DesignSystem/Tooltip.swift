@@ -4,10 +4,11 @@
 // AppKit views have `setTooltip(_:)` and tooltip areas
 // (`TooltipAreas.swift`); `TooltipCenter` decides when a card shows.
 //
-// The card: a small cream pill, the text in secondary type and primary
-// color on the `quiet` fill, with the floating ring and a smaller shadow
-// than a menu's, padded 6 by 11, wrapping at 280 points into a rounded
-// card.
+// The card, in the theme's look (`ControlsThemeStyle.Tooltip`), on the
+// `quiet` fill with the floating ring and a smaller shadow than a menu's,
+// wrapping at 280 points. A pill: the text in secondary type and primary
+// color, padded 6 by 11, a rounded card once it wraps. A card: the text in
+// secondary type and color, the row radius, padded 6 by 8.
 
 import AppKit
 import SwiftUI
@@ -67,11 +68,12 @@ struct TooltipCard: View {
 
     var body: some View {
         let dark = colorScheme == .dark
-        let shape = PillShape(maximumRadius: Metrics.Tooltip.cornerRadius)
+        let isCard = Theme.current.style.controls.tooltip == .card
+        let shape = PillShape(maximumRadius: Metrics.Tooltip.cornerRadius, isPill: !isCard)
         TooltipTextLayout(maximumWidth: Metrics.Tooltip.maximumWidth - 2 * Metrics.Tooltip.horizontalPadding) {
             Text(verbatim: text)
                 .font(Typography.secondary)
-                .foregroundStyle(.text)
+                .foregroundStyle(isCard ? .text2 : .text)
         }
         .padding(.horizontal, Metrics.Tooltip.horizontalPadding)
         .padding(.vertical, Metrics.Tooltip.verticalPadding)
@@ -98,18 +100,20 @@ struct TooltipCard: View {
 
 /// A rounded rectangle whose corners are half its height, up to
 /// `maximumRadius`: a pill while it's one line high, a rounded card when
-/// it's taller.
+/// it's taller. Not a pill, its corners are `maximumRadius` at any height.
 nonisolated public struct PillShape: InsettableShape {
     let maximumRadius: CGFloat
+    let isPill: Bool
     var inset: CGFloat = 0
 
-    public init(maximumRadius: CGFloat) {
+    public init(maximumRadius: CGFloat, isPill: Bool = true) {
         self.maximumRadius = maximumRadius
+        self.isPill = isPill
     }
 
     public func path(in rect: CGRect) -> Path {
         let rect = rect.insetBy(dx: inset, dy: inset)
-        let radius = max(0, min(rect.height / 2, maximumRadius - inset))
+        let radius = max(0, isPill ? min(rect.height / 2, maximumRadius - inset) : maximumRadius - inset)
         return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect)
     }
 
@@ -143,13 +147,21 @@ private struct TooltipTextLayout: Layout {
 extension Metrics {
     /// Tooltips: the card and where it shows.
     public enum Tooltip {
-        /// Space around the text inside the card.
-        public static let horizontalPadding: CGFloat = 11
+        /// Space around the text inside the card: a pill's, and a card's.
+        public static var horizontalPadding: CGFloat {
+            isCard ? 8 : 11
+        }
         public static let verticalPadding: CGFloat = 6
         /// The widest a card gets; its text wraps to stay inside.
         public static let maximumWidth: CGFloat = 280
-        /// The most a card's corner radius gets: one line is a pill.
-        public static let cornerRadius: CGFloat = 14
+        /// A pill's most corner radius (one line is a pill), and a card's,
+        /// a row's.
+        public static var cornerRadius: CGFloat {
+            isCard ? Radius.row : 14
+        }
+        private static var isCard: Bool {
+            Theme.current.style.controls.tooltip == .card
+        }
         /// Between the cursor, or the area the card is for, and the card.
         public static let gap: CGFloat = 4
         /// The cursor reaches at most this far below the pointer's hotspot.

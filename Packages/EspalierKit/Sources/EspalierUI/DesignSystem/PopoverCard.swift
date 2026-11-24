@@ -14,8 +14,9 @@
 import SwiftUI
 
 extension Typography {
-    /// A popover's title: display type, 15 bold.
-    public static var popoverTitle: Font { display(size: 15) }
+    /// A popover's title: display type, 15 bold, or the headline (13
+    /// bold).
+    public static var popoverTitle: Font { themedTitle(displaySize: 15, system: heading) }
 }
 
 extension Metrics.Popover {

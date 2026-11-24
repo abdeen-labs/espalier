@@ -1,8 +1,9 @@
 // The pieces every Settings pane is made of: the page, which scrolls under
-// the pane's header; sections as cream cards on the backdrop, each under
-// its bold title; roomy rows inside the card, split by hairlines, each with
-// its title and an optional description on the left and its control on
-// the right; rows for a message or for buttons alone;
+// the pane's header; sections in the theme's look, as cards on the
+// backdrop, each under its bold title, or split by hairlines, each under a
+// section label; rows split by hairlines, each with its title and an
+// optional description on the left and its control on the right; rows for
+// a message or for buttons alone;
 // the "Local" badge; a row's "⋯" menu; and the fade of what a change shows
 // or hides. Messages under a control are `FieldMessage`s, as in sheets.
 
@@ -11,9 +12,10 @@ import SwiftUI
 
 // MARK: - Page and sections
 
-/// A pane's content: its sections' cards, spaced apart, inset from the
-/// pane's edges, scrolling when the pane is taller than the window, never
-/// past its ends.
+/// A pane's content: its sections, inset from the pane's edges, scrolling
+/// when the pane is taller than the window, never past its ends. In the
+/// theme's look (`SettingsThemeStyle.Groups`): cards spaced apart, or
+/// sections split by hairlines.
 struct SettingsPage<Content: View>: View {
     private let content: Content
 
@@ -22,13 +24,29 @@ struct SettingsPage<Content: View>: View {
     }
 
     var body: some View {
+        let isCards = Theme.current.style.settings.groups == .cards
         ScrollView {
-            VStack(alignment: .leading, spacing: Metrics.SettingsCards.sectionSpacing) {
-                content
+            Group {
+                if isCards {
+                    VStack(alignment: .leading, spacing: Metrics.SettingsCards.sectionSpacing) {
+                        content
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Group(subviews: content) { sections in
+                            ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
+                                if index > 0 {
+                                    Hairline()
+                                }
+                                section
+                            }
+                        }
+                    }
+                }
             }
-            .padding(.horizontal, Metrics.SettingsCards.pageInset)
+            .padding(.horizontal, isCards ? Metrics.SettingsCards.pageInset : Metrics.SettingsWindow.contentInset)
             .padding(.top, Metrics.SettingsWindow.contentTopInset)
-            .padding(.bottom, Metrics.SettingsCards.pageInset)
+            .padding(.bottom, isCards ? Metrics.SettingsCards.pageInset : Metrics.SettingsWindow.contentBottomInset)
             .frame(maxWidth: .infinity, alignment: .leading)
             .unbouncedScrollContent(fadesEdges: true)
         }
@@ -36,7 +54,8 @@ struct SettingsPage<Content: View>: View {
     }
 }
 
-/// A section: its title, then its rows in a cream card, split by
+/// A section, in the theme's look: its bold title, then its rows in a card,
+/// split by hairlines; or its section label, then its rows, split by
 /// hairlines.
 struct SettingsSection<Content: View>: View {
     private let title: String?
@@ -50,6 +69,14 @@ struct SettingsSection<Content: View>: View {
     }
 
     var body: some View {
+        if Theme.current.style.settings.groups == .cards {
+            card
+        } else {
+            plain
+        }
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: Metrics.SettingsCards.labelSpacing) {
             if let title {
                 Text(title)
@@ -58,26 +85,47 @@ struct SettingsSection<Content: View>: View {
                     .padding(.leading, Metrics.SettingsCards.labelInset)
                     .accessibilityAddTraits(.isHeader)
             }
-            VStack(alignment: .leading, spacing: 0) {
-                Group(subviews: content) { rows in
-                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        if index > 0 {
-                            Hairline()
-                        }
-                        row
+            rows
+                .padding(.horizontal, Metrics.SettingsCards.rowInset)
+                .padding(.vertical, Metrics.SettingsCards.cardVerticalInset)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+        }
+    }
+
+    private var plain: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let title {
+                SectionLabel(title)
+                    .padding(.top, Metrics.SettingsWindow.sectionLabelTop)
+                    .padding(.bottom, Metrics.SettingsWindow.sectionLabelBottom)
+                    .accessibilityAddTraits(.isHeader)
+            } else {
+                Color.clear
+                    .frame(height: Metrics.SettingsWindow.untitledSectionTop)
+                    .accessibilityHidden(true)
+            }
+            rows
+        }
+    }
+
+    /// The rows, split by hairlines.
+    private var rows: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Group(subviews: content) { rows in
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                    if index > 0 {
+                        Hairline()
                     }
+                    row
                 }
             }
-            .padding(.horizontal, Metrics.SettingsCards.rowInset)
-            .padding(.vertical, Metrics.SettingsCards.cardVerticalInset)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .surface(Color(espalier: Palette.background), elevation: .card, in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
         }
     }
 }
 
 extension Metrics {
-    /// Settings' groups as cream cards on the backdrop.
+    /// Settings' groups as cards on the backdrop.
     public enum SettingsCards {
         /// Around the page's cards.
         public static let pageInset: CGFloat = 24
@@ -91,20 +139,37 @@ extension Metrics {
         /// the last.
         public static let rowInset: CGFloat = 16
         public static let cardVerticalInset: CGFloat = 4
-        /// The window's width.
-        public static let windowWidth: CGFloat = 760
-        /// The sidebar: its width, its rows' height, and their tiles.
-        public static let sidebarWidth: CGFloat = 200
+        /// The window's width, and its sidebar's: the theme's.
+        public static var windowWidth: CGFloat { Theme.current.style.settings.windowWidth }
+        public static var sidebarWidth: CGFloat { Theme.current.style.settings.sidebarWidth }
+        /// The sidebar's tiled rows: their height, and their tiles.
         public static let sidebarRowHeight: CGFloat = 34
         public static let sidebarTile: CGFloat = 22
     }
 }
 
+extension Metrics.SettingsWindow {
+    /// Settings' groups split by hairlines: the pane's content and header
+    /// inset from its sides, and the space below its last section.
+    public static let contentInset: CGFloat = 20
+    public static let contentBottomInset: CGFloat = 20
+    /// Space above a section label.
+    public static let sectionLabelTop: CGFloat = 18
+    /// Space above a section without a label.
+    public static let untitledSectionTop: CGFloat = 8
+}
+
 extension Typography {
     /// A Settings group's title over its card (13, bold, as written).
     static var settingsSectionTitle: Font { sans(.body, weight: .bold) }
-    /// A Settings pane's name in its header: display type, 22 bold.
-    static var settingsPaneTitle: Font { display(size: 22) }
+    /// A Settings pane's name in its header, in the theme's look: display
+    /// type, 22 bold, or the headline (13, bold).
+    static var settingsPaneTitle: Font {
+        switch Theme.current.style.settings.paneTitle {
+        case .display: display(size: 22)
+        case .headline: paneTitle
+        }
+    }
 }
 
 // MARK: - Rows

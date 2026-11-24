@@ -1,6 +1,7 @@
 // The pieces the location control's popovers and the command palette share:
 // a header (a bold title and what trails it) and an empty state (a plain
-// symbol, a bold title, a sentence, and the action that helps).
+// symbol, a title in the theme's title type, a sentence, and the action
+// that helps).
 
 import SwiftUI
 
@@ -52,7 +53,7 @@ struct PickerEmptyState<Actions: View>: View {
                 .padding(.bottom, Metrics.grid)
                 .accessibilityHidden(true)
             Text(title)
-                .font(Typography.display(size: 16))
+                .font(Typography.pickerEmptyTitle)
                 .foregroundStyle(.text)
                 .multilineTextAlignment(.center)
             if let message {
@@ -70,6 +71,12 @@ struct PickerEmptyState<Actions: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)
     }
+}
+
+extension Typography {
+    /// An empty list's title in a popover: display type, 16 bold, or the
+    /// system's 15 semibold.
+    static var pickerEmptyTitle: Font { themedTitle(displaySize: 16, system: sans(.title3, weight: .semibold)) }
 }
 
 extension Metrics {

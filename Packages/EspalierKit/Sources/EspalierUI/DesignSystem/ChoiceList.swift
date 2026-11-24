@@ -139,10 +139,10 @@ public struct ChoiceList<Value: Hashable>: View {
     }
 }
 
-/// A radio mark, as chunky as a checkbox: 18 points; the accent with a dot
-/// in the theme's marks color (`onAccent`) when chosen, else a thick
-/// `line2` ring on the content background. Chosen, it pops as a checkbox
-/// does.
+/// A radio mark, the checkbox's size and look: the accent with a dot in
+/// the theme's marks color (`onAccent`) when chosen. Unchosen, the key's is
+/// a thick `line2` ring on the content background, and the flat one's a
+/// 1-point ring on the quiet fill. A chosen key pops as a checkbox does.
 public struct RadioMark: View {
     private let isSelected: Bool
     @Environment(\.motion) private var motion
@@ -152,28 +152,30 @@ public struct RadioMark: View {
     }
 
     public var body: some View {
+        let isFlat = CheckboxDrawing.isFlat
+        let dot = isFlat ? Metrics.ChoiceList.flatDotSize : Metrics.ChoiceList.dotSize
         ZStack {
             // The fill crossfades and the dot fades and scales in over
             // 0.15 s.
             Circle()
-                .fill(isSelected ? Color.accent : Color(espalier: Palette.background))
+                .fill(isSelected ? Color.accent : isFlat ? Color.quiet : Color(espalier: Palette.background))
             if isSelected {
                 Circle()
                     .fill(Color(nsColor: Theme.current.onAccent))
-                    .frame(width: Metrics.ChoiceList.dotSize, height: Metrics.ChoiceList.dotSize)
+                    .frame(width: dot, height: dot)
                     .transition(motion.animates ? .scale(scale: 0.6).combined(with: .opacity) : .identity)
             } else {
                 Circle()
-                    .strokeBorder(.line2, lineWidth: Metrics.Checkbox.rim)
+                    .strokeBorder(.line2, lineWidth: isFlat ? 1 : Metrics.Checkbox.rim)
                     .transition(motion.animates ? .opacity : .identity)
             }
         }
         .motion(Motion.leave, value: isSelected)
         .frame(width: CheckboxDrawing.size, height: CheckboxDrawing.size)
         .phaseAnimator(Motion.CheckboxPop.scales, trigger: isSelected) { content, scale in
-            content.scaleEffect(isSelected ? scale : 1)
+            content.scaleEffect(isSelected && !isFlat ? scale : 1)
         } animation: { _ in
-            motion.animates ? .easeOut(duration: Motion.CheckboxPop.duration / Double(Motion.CheckboxPop.scales.count - 1)) : nil
+            motion.animates && !isFlat ? .easeOut(duration: Motion.CheckboxPop.duration / Double(Motion.CheckboxPop.scales.count - 1)) : nil
         }
         .accessibilityHidden(true)
     }
@@ -187,7 +189,9 @@ extension Metrics {
         public static let verticalPadding: CGFloat = 9
         /// Between the radio mark and the title.
         public static let markSpacing: CGFloat = 10
-        /// The dot inside a chosen radio mark.
+        /// The dot inside a chosen radio mark: the key's, and the flat
+        /// one's.
         public static let dotSize: CGFloat = 7
+        public static let flatDotSize: CGFloat = 6
     }
 }

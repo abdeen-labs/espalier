@@ -1,18 +1,21 @@
 // A centered message: a symbol on a soft box of the message's tint (the
-// field fill without one), a bold title in display type, a plain sentence about
-// it, and its actions below. A place's own message has two fainter tiles
-// tilted behind its box, arranged its own way (`MessageTiles`). Every centered empty or failure state uses it: Changes' empty state, the diff's states (binary,
-// too large, no content changes, a failed load), no repository selected, a
-// missing repository, a launch failure, and the history's and pull
-// requests' empty and failed loads.
+// field fill without one), a title in the theme's title type, a plain
+// sentence about it, and its actions below. A place's own message has two
+// fainter tiles tilted behind its box, arranged its own way
+// (`MessageTiles`). Every centered empty or failure state uses it: Changes'
+// empty state, the diff's states (binary, too large, no content changes, a
+// failed load), no repository selected, a missing repository, a launch
+// failure, and the history's and pull requests' empty and failed loads.
 
 import SwiftUI
 
 extension Typography {
-    /// A centered message's title: display type, 17 bold.
-    static var messageTitle: Font { display(size: 17) }
-    /// A large centered message's title: display type, 22 bold.
-    static var largeMessageTitle: Font { display(size: 22) }
+    /// A centered message's title: display type, 17 bold, or the system's
+    /// 15 semibold.
+    static var messageTitle: Font { themedTitle(displaySize: 17, system: sans(.title3, weight: .semibold)) }
+    /// A large centered message's title: display type, 22 bold, or the
+    /// system's 17 semibold.
+    static var largeMessageTitle: Font { themedTitle(displaySize: 22, system: sans(.title2, weight: .semibold)) }
 }
 
 /// A centered message: a large symbol, a title, a description, and actions
@@ -173,13 +176,21 @@ public struct MessageTiles: View {
     public var body: some View {
         let shape = RoundedRectangle(cornerRadius: size * Metrics.PlaceTiles.radiusRatio, style: .continuous)
         ZStack {
-            ForEach(Array((arrangement?.ghosts ?? []).enumerated()), id: \.offset) { _, ghost in
-                let side = size * ghost.scale
-                RoundedRectangle(cornerRadius: side * Metrics.PlaceTiles.radiusRatio, style: .continuous)
-                    .fill(tint.map { $0.opacity(CenteredMessageMetrics.ghostOpacity) } ?? .field)
-                    .frame(width: side, height: side)
-                    .rotationEffect(.degrees(ghost.angle))
-                    .offset(x: size * ghost.x, y: size * ghost.y)
+            // The tiles behind; on a glass card, cut away under the front
+            // tile, which has no opaque backing there to cover them.
+            ZStack {
+                ForEach(Array((arrangement?.ghosts ?? []).enumerated()), id: \.offset) { _, ghost in
+                    let side = size * ghost.scale
+                    RoundedRectangle(cornerRadius: side * Metrics.PlaceTiles.radiusRatio, style: .continuous)
+                        .fill(tint.map { $0.opacity(CenteredMessageMetrics.ghostOpacity) } ?? .field)
+                        .frame(width: side, height: side)
+                        .rotationEffect(.degrees(ghost.angle))
+                        .offset(x: size * ghost.x, y: size * ghost.y)
+                }
+            }
+            .mask {
+                MessageTileCutout(side: Theme.current.cardIsGlass ? size : 0, angle: arrangement?.frontAngle ?? 0, radius: size * Metrics.PlaceTiles.radiusRatio)
+                    .fill(style: FillStyle(eoFill: true))
             }
             shape
                 .fill(tint.map { $0.opacity(CenteredMessageMetrics.tileOpacity) } ?? .field)
@@ -189,13 +200,40 @@ public struct MessageTiles: View {
                         .font(.system(size: size * CenteredMessageMetrics.tileSymbolScale, weight: .semibold))
                         .foregroundStyle(tint ?? .text2)
                 }
-                // The tile covers the tiles behind it.
-                .background(shape.fill(Color(espalier: Palette.background)))
+                // On the pane's fill: the background where panes are
+                // opaque, clear on a glass card.
+                .background(shape.fill(Color(espalier: Palette.pane)))
                 .rotationEffect(.degrees(arrangement?.frontAngle ?? 0))
         }
         .frame(height: size)
         .padding(.top, size * (arrangement?.reachAbove ?? 0))
         .accessibilityHidden(true)
+    }
+}
+
+/// Everything around the tiles but the front tile: a region well past
+/// them, with a hole the front tile's shape, `side` on a side, turned
+/// `angle` degrees about the center (no hole when `side` is 0). Filled
+/// even-odd.
+nonisolated private struct MessageTileCutout: Shape {
+    let side: CGFloat
+    let angle: Double
+    let radius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let reach = max(rect.width, rect.height, side) * 4
+        var path = Path(rect.insetBy(dx: -reach, dy: -reach))
+        guard side > 0 else {
+            return path
+        }
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let tile = RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .path(in: CGRect(x: center.x - side / 2, y: center.y - side / 2, width: side, height: side))
+        let turn = CGAffineTransform(translationX: center.x, y: center.y)
+            .rotated(by: angle * .pi / 180)
+            .translatedBy(x: -center.x, y: -center.y)
+        path.addPath(tile, transform: turn)
+        return path
     }
 }
 

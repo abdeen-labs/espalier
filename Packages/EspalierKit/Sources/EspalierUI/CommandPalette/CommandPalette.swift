@@ -2,12 +2,13 @@
 // card, centered across the main window a little way below the toolbar.
 // Along its top the search field, with the magnifying glass and ⌘K; then
 // the results under their sections' labels (Actions, Repositories,
-// Branches), each roomy row with its symbol in secondary text, its title
-// with the characters the query matched in the accent, what trails it (an
-// action's menu, a repository's owner or folder), a check mark for a
-// checked item, and its shortcut; along the bottom the keys: ↑↓ Navigate, ↩ Open, esc Close.
-// The card keeps one size, so typing never moves it; nothing matching
-// says so, with what to try.
+// Branches), each row (roomy or compact, the theme's) with its symbol in
+// secondary text, its title with the characters the query matched in the
+// accent, what trails it (an action's menu, a repository's owner or
+// folder), a check mark for a checked item, and its shortcut; along the
+// bottom the keys: ↑↓ Navigate, ↩ Open, esc Close. The card keeps one
+// size, so typing never moves it; nothing matching shows "No Results",
+// with what to try.
 //
 // Typing filters, and the first row is highlighted. The arrow keys move
 // the highlight at once, scrolling it into view; the pointer moves it as
@@ -21,19 +22,29 @@ import AppKit
 import SwiftUI
 
 extension Metrics {
-    /// The command palette.
+    /// The command palette. Where a roomy palette and a compact one differ
+    /// (`ControlsThemeStyle.CommandPalette`), the roomy value comes first.
     public enum CommandPalette {
-        public static let width: CGFloat = 580
+        /// Whether the theme's palette is compact.
+        static var isCompact: Bool {
+            Theme.current.style.controls.commandPalette == .compact
+        }
+
+        public static var width: CGFloat { isCompact ? 560 : 580 }
         /// The search field's band.
-        public static let headerHeight: CGFloat = 54
+        public static var headerHeight: CGFloat { isCompact ? 48 : 54 }
         /// The results, which scroll inside this height.
-        public static let resultsHeight: CGFloat = 380
+        public static var resultsHeight: CGFloat { isCompact ? 360 : 380 }
         /// The keys' band.
-        public static let footerHeight: CGFloat = 36
+        public static var footerHeight: CGFloat { isCompact ? 34 : 36 }
         /// A row.
-        public static let rowHeight: CGFloat = 36
+        public static var rowHeight: CGFloat { isCompact ? ListRow.height : 36 }
         /// A row's symbol column.
-        public static let rowSymbolWidth: CGFloat = 20
+        public static var rowSymbolWidth: CGFloat { isCompact ? Sidebar.glyphSize : 20 }
+        /// Between a row's symbol, title, and what trails them.
+        public static var rowSpacing: CGFloat { isCompact ? Metrics.insetSmall : Metrics.insetSmall + 2 }
+        /// Inside a row, before its symbol and after its last column.
+        public static var rowPadding: CGFloat { isCompact ? ListRow.horizontalPadding : ListRow.horizontalPadding - 2 }
         /// What trails a row's title is cut in its middle past this width.
         public static let detailMaximumWidth: CGFloat = 220
         /// Between a key hint's caps and its label, and between hints.
@@ -54,8 +65,15 @@ extension Metrics {
 }
 
 extension Typography {
-    /// The palette's search text (17, medium).
-    static var paletteField: Font { sans(.title2, weight: .medium) }
+    /// The palette's search text: roomy, 17 medium; compact, 15.
+    static var paletteField: Font {
+        Metrics.CommandPalette.isCompact ? sans(.title3) : sans(.title2, weight: .medium)
+    }
+
+    /// A row's title: roomy, 13 medium; compact, 13.
+    static var paletteRowTitle: Font {
+        Metrics.CommandPalette.isCompact ? row : row.weight(.medium)
+    }
 }
 
 /// Where the main window's palette opens: a strip across the window under
@@ -134,9 +152,10 @@ struct CommandPaletteView: View {
 
     private var header: some View {
         @Bindable var model = model
-        return HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall + 2) {
+        let isCompact = Metrics.CommandPalette.isCompact
+        return HStack(alignment: isCompact ? .center : .firstTextBaseline, spacing: Metrics.insetSmall + 2) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 17, weight: .bold))
+                .font(isCompact ? .system(size: 15, weight: .medium) : .system(size: 17, weight: .bold))
                 .foregroundStyle(.text3)
                 .accessibilityHidden(true)
             TextField("Search", text: $model.query, prompt: Text("Search actions, repositories, and branches").fieldPrompt())
@@ -179,7 +198,7 @@ struct CommandPaletteView: View {
     private var results: some View {
         if model.sections.isEmpty {
             PickerEmptyState(
-                "Nothing matches “\(model.query)”",
+                "No Results",
                 message: "Try the name of an action, a repository, or a branch.",
                 systemImage: "magnifyingglass"
             )
@@ -287,14 +306,14 @@ struct CommandPaletteRowView: View {
 
     var body: some View {
         let item = row.item
-        HStack(spacing: Metrics.insetSmall + 2) {
+        HStack(spacing: Metrics.CommandPalette.rowSpacing) {
             Image(systemName: item.systemImage)
                 .font(Typography.row)
                 .foregroundStyle(.text2)
                 .frame(width: Metrics.CommandPalette.rowSymbolWidth)
                 .accessibilityHidden(true)
             Text(title)
-                .font(Typography.row.weight(.medium))
+                .font(Typography.paletteRowTitle)
                 .foregroundStyle(.text)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -318,7 +337,7 @@ struct CommandPaletteRowView: View {
                 KeyCap(shortcut)
             }
         }
-        .padding(.horizontal, Metrics.ListRow.horizontalPadding - 2)
+        .padding(.horizontal, Metrics.CommandPalette.rowPadding)
         .frame(minHeight: Metrics.CommandPalette.rowHeight)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
