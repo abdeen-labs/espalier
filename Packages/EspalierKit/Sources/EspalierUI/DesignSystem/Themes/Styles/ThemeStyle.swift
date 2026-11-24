@@ -5,13 +5,13 @@
 
 /// What each area of the app draws its own way in a theme.
 nonisolated public struct ThemeStyle: Sendable, Equatable {
-    public var toolbar: ToolbarStyle
-    public var sidebar: SidebarStyle
-    public var changes: ChangesStyle
-    public var diff: DiffStyle
-    public var history: HistoryStyle
-    public var controls: ControlsStyle
-    public var settings: SettingsStyle
+    public var toolbar: ToolbarThemeStyle
+    public var sidebar: SidebarThemeStyle
+    public var changes: ChangesThemeStyle
+    public var diff: DiffThemeStyle
+    public var history: HistoryThemeStyle
+    public var controls: ControlsThemeStyle
+    public var settings: SettingsThemeStyle
 
     /// Default's.
     public static let `default` = ThemeStyle(

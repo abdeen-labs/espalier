@@ -188,7 +188,7 @@ public struct HistoryScreen: View {
     private struct PlaceKey: Hashable {
         let repository: RepositoryID
         let place: SidebarPlace
-        let style: EspalierCore.HistoryStyle
+        let style: HistoryStyle
         let scope: HistoryScope
         let currentBranch: String?
         let branchView: BranchView

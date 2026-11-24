@@ -35,12 +35,12 @@ enum AppearanceSettings {
 
     /// The sidebar's styles, in order.
     static let sidebarStyles = [
-        CapsuleSegment("Hidden", value: EspalierCore.SidebarStyle.hidden),
-        CapsuleSegment("Icons", value: EspalierCore.SidebarStyle.icons),
+        CapsuleSegment("Hidden", value: SidebarStyle.hidden),
+        CapsuleSegment("Icons", value: SidebarStyle.icons),
     ]
 
     /// What a sidebar style does.
-    static func sidebarStyleDescription(_ style: EspalierCore.SidebarStyle) -> String {
+    static func sidebarStyleDescription(_ style: SidebarStyle) -> String {
         switch style {
         case .hidden:
             "Windows open without the sidebar, with Changes and History in the toolbar. View ▸ Show Sidebar shows it."

@@ -20,7 +20,7 @@ extension Metrics {
 /// What the history's header shows.
 nonisolated struct HistoryHeaderContent: Sendable, Equatable {
     /// Simple or Graph.
-    var style: EspalierCore.HistoryStyle = .graph
+    var style: HistoryStyle = .graph
     var scope: HistoryScope
     /// "1,204 commits", or "1,200+ commits" while older ones aren't loaded.
     var count: String
@@ -52,7 +52,7 @@ nonisolated struct HistoryHeaderContent: Sendable, Equatable {
 /// The header over the list.
 struct HistoryHeader: View {
     let content: HistoryHeaderContent
-    var setStyle: (EspalierCore.HistoryStyle) -> Void = { _ in }
+    var setStyle: (HistoryStyle) -> Void = { _ in }
     var setScope: (HistoryScope) -> Void = { _ in }
     var search = HistorySearchActions()
 
@@ -63,8 +63,8 @@ struct HistoryHeader: View {
                     "History Style",
                     selection: Binding(get: { content.style }, set: { setStyle($0) }),
                     segments: [
-                        CapsuleSegment(EspalierCore.HistoryStyle.simple.title, systemImage: "list.bullet", value: .simple),
-                        CapsuleSegment(EspalierCore.HistoryStyle.graph.title, systemImage: "point.3.connected.trianglepath.dotted", value: .graph),
+                        CapsuleSegment(HistoryStyle.simple.title, systemImage: "list.bullet", value: .simple),
+                        CapsuleSegment(HistoryStyle.graph.title, systemImage: "point.3.connected.trianglepath.dotted", value: .graph),
                     ]
                 )
                 .fixedSize()

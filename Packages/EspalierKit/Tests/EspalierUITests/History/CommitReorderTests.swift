@@ -14,7 +14,7 @@ import TestSupport
 @Suite("Commit reorder", .offline, .hangGuard(minutes: 5)) @MainActor
 struct CommitReorderTests {
     /// A history style, and the row of its first commit.
-    typealias Style = (style: EspalierCore.HistoryStyle, firstRow: Int)
+    typealias Style = (style: HistoryStyle, firstRow: Int)
 
     nonisolated static let styles: [NamedCase<Style>] = [
         NamedCase("in the graph, below the uncommitted-work row", (style: .graph, firstRow: 1)),
@@ -23,7 +23,7 @@ struct CommitReorderTests {
 
     /// `main` with README (the root), A, B, and C, its history shown in
     /// `style`, and the commits' SHAs by summary.
-    private func linearFixture(_ style: EspalierCore.HistoryStyle) async throws -> (OperationsFixture, [String: String]) {
+    private func linearFixture(_ style: HistoryStyle) async throws -> (OperationsFixture, [String: String]) {
         var shas: [String: String] = [:]
         let fixture = try await makeOperationsFixture { local in
             for name in ["A", "B", "C"] {
@@ -39,7 +39,7 @@ struct CommitReorderTests {
     /// `main` with README (the root), A, M (merging `side`'s S, from
     /// README), and B, its history shown in `style`, and the commits' SHAs
     /// by summary.
-    private func mergeFixture(_ style: EspalierCore.HistoryStyle) async throws -> (OperationsFixture, [String: String]) {
+    private func mergeFixture(_ style: HistoryStyle) async throws -> (OperationsFixture, [String: String]) {
         var shas: [String: String] = [:]
         let fixture = try await makeOperationsFixture { local in
             try await runGit(["checkout", "-q", "-b", "side"], local)
