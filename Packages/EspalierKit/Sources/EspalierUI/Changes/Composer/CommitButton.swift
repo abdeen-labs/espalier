@@ -212,9 +212,11 @@ public struct CommitButton: View {
                         .layoutPriority(2)
                     BranchPill(branch)
                         .layoutPriority(1)
-                    if !parts.trail.isEmpty {
-                        // "…" and " with AI" follow the pill; their space
-                        // is the stack's.
+                    if !parts.trail.isEmpty, !content.isCommitting {
+                        // " with AI" follows the pill; its space is the
+                        // stack's. A commit under way ends at the pill:
+                        // the arc says it's working, and its "…" would
+                        // stand alone after the pill.
                         Text(parts.trail.trimmingCharacters(in: .whitespaces))
                             .layoutPriority(2)
                     }
