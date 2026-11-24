@@ -1,17 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 180 180">
   <title>Espalier</title>
   <defs>
-    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF8EA"/><stop offset="1" stop-color="#F2E2C4"/></linearGradient>
-    <linearGradient id="ink" gradientUnits="userSpaceOnUse" x1="0" y1="40" x2="0" y2="150"><stop offset="0" stop-color="#4A3528"/><stop offset="1" stop-color="#2B2119"/></linearGradient>
-    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="108" cy="87" r="34"><stop offset="0" stop-color="#FFC21A" stop-opacity="0.5"/><stop offset="1" stop-color="#FFC21A" stop-opacity="0"/></radialGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFCF5"/><stop offset="1" stop-color="#F5E8D0"/></linearGradient>
+    <linearGradient id="peach" x1="0.15" y1="0.05" x2="0.85" y2="0.95"><stop offset="0" stop-color="#FFC98F"/><stop offset="0.55" stop-color="#FF9F6B"/><stop offset="1" stop-color="#FF7F5C"/></linearGradient>
+    <radialGradient id="blush" cx="0.72" cy="0.68" r="0.5"><stop offset="0" stop-color="#FF5E7A" stop-opacity="0.75"/><stop offset="1" stop-color="#FF5E7A" stop-opacity="0"/></radialGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#63C77C"/><stop offset="1" stop-color="#2F8A4C"/></linearGradient>
   </defs>
-  <circle cx="108" cy="87" r="34" fill="url(#glow)"/>
-  <g fill="none" stroke="url(#ink)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M58 146V66A22 22 0 0 1 80 44H124"/>
-    <path d="M58 108C58 95 66 87 80 87H108"/>
-    <path d="M58 146C58 136 66 130 80 130H124"/>
-  </g>
-  <circle cx="124" cy="44" r="11" fill="url(#ink)"/>
-  <circle cx="124" cy="130" r="11" fill="url(#ink)"/>
-  <circle cx="108" cy="87" r="11.5" fill="#3D5BD9"/>
+  <path d="M92.24 54.44C92.24 45.48 95.6 39.88 102.32 36.52" fill="none" stroke="#3A2A1F" stroke-width="8.96" stroke-linecap="round"/>
+  <path d="M91.12 51.08C81.38 67.96 62.22 71.9 43.94 61.34C53.68 44.47 72.84 40.52 91.12 51.08Z" fill="url(#leaf)"/>
+  <path d="M92.24 56.68C107.92 45.48 142.64 58.92 142.64 99.24C142.64 130.6 119.12 150.76 90 150.76C60.88 150.76 37.36 130.6 37.36 99.24C37.36 58.92 76.56 45.48 92.24 56.68Z" fill="url(#peach)"/>
+  <path d="M92.24 56.68C107.92 45.48 142.64 58.92 142.64 99.24C142.64 130.6 119.12 150.76 90 150.76C60.88 150.76 37.36 130.6 37.36 99.24C37.36 58.92 76.56 45.48 92.24 56.68Z" fill="url(#blush)"/>
+  <path d="M56.4 90.28C56.4 79.08 63.12 70.12 72.08 66.76" fill="none" stroke="#FFE6C4" stroke-opacity="0.85" stroke-width="5.6" stroke-linecap="round"/>
+  <path d="M92.24 56.68C86.64 63.4 83.28 72.36 82.16 82.44" fill="none" stroke="#E8603F" stroke-width="5.04" stroke-linecap="round"/>
 </svg>

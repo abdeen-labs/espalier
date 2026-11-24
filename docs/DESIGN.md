@@ -6,6 +6,16 @@ values are `DesignSystem`'s tokens. This describes Default, the theme a new
 install opens in, in Blueberry, Allo, and Maple Mono; Islands changes what
 its tokens say (Themes, below).
 
+## Identity
+
+- **The mark is a peach** with its stem and leaf, on cream: the app's icon
+  (`Espalier/AppIcon.icon`), and `BrandMark`, which draws the same peach in
+  the app.
+- **The mark shows on Welcome and About,** hanging from a trellis band (a
+  wash of peach under a lattice), and nowhere else in the app.
+- **The name** is set in the app font at its heaviest, drawn tight
+  (`Wordmark`); Welcome's heading is as heavy.
+
 ## Principles
 
 - **Espalier draws its own UI.** Simple, clean, and modern, with
@@ -114,6 +124,8 @@ token, `Motion`.
   title roll, bars and banners grow in while what's below moves, view
   switches crossfade, and rows animate in and out as a section opens and
   closes. Hover in lists fades, row by row.
+- **The mark grows in** on Welcome and About: its stem draws out, then its
+  leaf and the peach pop.
 - **Work that runs moves:** the arc turns, the bar's segment sweeps, and
   the shimmer passes over a message being generated. The generated message
   fades in over half a second, settling long, its summary rising into

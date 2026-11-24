@@ -6,8 +6,8 @@
 //   swift scripts/dmg/draw-background.swift
 //
 // writes background.png and background@2x.png next to this script, in the
-// app's fonts (Geist and Geist Mono, from EspalierUI's resources) and the
-// website's colors. settings.py puts the icons where this draws around
+// app's fonts (Allo and Maple Mono, from EspalierUI's resources) and the
+// app's colors: cream, espresso, and the mark's peach. settings.py puts the icons where this draws around
 // them: `appIcon` and `applicationsIcon` here are its `icon_locations`.
 //
 // Finder draws the picture from the top left of the window's content, a
@@ -46,30 +46,39 @@ func color(_ hex: UInt32) -> NSColor {
     )
 }
 
-let paper = color(0xF9F8FE)
-let ink = color(0x110C19)
-let quietInk = color(0x6B637C)
-/// The icon's fruit.
-let fruit = color(0x8B5CF6)
+let paper = color(0xFFFBF3)
+let ink = color(0x2B2119)
+let quietInk = color(0x7A6858)
+/// The mark's peach: its body, lit and in shadow, its blush, its shine,
+/// its crease, and its leaf.
+let peach = color(0xFF9F6B)
+let peachLight = color(0xFFC98F)
+let peachShadow = color(0xFF7F5C)
+let blush = color(0xFF5E7A)
+let shine = color(0xFFE6C4)
+let crease = color(0xE8603F)
+let leaf = color(0x3FA35B)
 
 // MARK: - Fonts
 
 let here = URL(fileURLWithPath: #filePath).standardizedFileURL.deletingLastPathComponent()
 let fontsFolder = here.appending(path: "../../Packages/EspalierKit/Sources/EspalierUI/Resources/Fonts").standardizedFileURL
 
-for file in ["geist/Geist[wght].ttf", "geist-mono/GeistMono[wght].ttf"] {
+for file in ["allo/AlloVariable-Round.ttf", "maple-mono/MapleMonoNL[wght].ttf"] {
     var error: Unmanaged<CFError>?
     guard CTFontManagerRegisterFontsForURL(fontsFolder.appending(path: file) as CFURL, .process, &error) else {
         fatalError("Couldn't register \(file): \(String(describing: error?.takeRetainedValue()))")
     }
 }
 
-/// A face of a variable family at `weight` on its weight axis.
+/// A face of a variable family at `weight` on its weight axis, and at
+/// `size` on its optical size axis, as far as that goes, where it has one.
 func font(_ family: String, size: CGFloat, weight: CGFloat) -> NSFont {
     let weightAxis = 0x7767_6874 // 'wght'
+    let opticalSizeAxis = 0x6F70_737A // 'opsz'
     let descriptor = CTFontDescriptorCreateWithAttributes([
         kCTFontFamilyNameAttribute: family,
-        kCTFontVariationAttribute: [weightAxis: weight],
+        kCTFontVariationAttribute: [weightAxis: weight, opticalSizeAxis: min(size, 32)],
     ] as CFDictionary)
     return CTFontCreateWithFontDescriptor(descriptor, size, nil) as NSFont
 }
@@ -108,12 +117,12 @@ struct Line {
 
 // MARK: - The pieces
 
-/// The icon's tree, drawn flat: Marketing/AppIcon/draw-icon.py's geometry,
-/// in its 180-unit square. `height` is the mark's, from its top tip to the
-/// foot of its trunk; `origin` is its top left.
+/// The mark, a peach with its stem and leaf, as the app draws it
+/// (EspalierUI's BrandMark): `height` is the mark's, from the stem's tip to
+/// the peach's foot; `origin` is its top left.
 func drawMark(origin: CGPoint, height: CGFloat) {
-    // The mark's ink in the 180-unit square.
-    let bounds = CGRect(x: 51.5, y: 33, width: 84, height: 119.5)
+    // The mark's ink around the peach's center.
+    let bounds = CGRect(x: -47, y: -58, width: 94, height: 106)
     let scale = height / bounds.height
     let context = NSGraphicsContext.current!.cgContext
     context.saveGState()
@@ -121,38 +130,58 @@ func drawMark(origin: CGPoint, height: CGFloat) {
     context.scaleBy(x: scale, y: scale)
     context.translateBy(x: -bounds.minX, y: -bounds.minY)
 
-    // A quarter circle as a curve: its control points sit this far along.
-    let k: CGFloat = 0.5523
-    let tree = CGMutablePath()
-    tree.move(to: CGPoint(x: 58, y: 146))
-    tree.addLine(to: CGPoint(x: 58, y: 66))
-    tree.addCurve(to: CGPoint(x: 80, y: 44), control1: CGPoint(x: 58, y: 66 - 22 * k), control2: CGPoint(x: 80 - 22 * k, y: 44))
-    tree.addLine(to: CGPoint(x: 124, y: 44))
-    tree.move(to: CGPoint(x: 58, y: 108))
-    tree.addCurve(to: CGPoint(x: 80, y: 87), control1: CGPoint(x: 58, y: 95), control2: CGPoint(x: 66, y: 87))
-    tree.addLine(to: CGPoint(x: 108, y: 87))
-    tree.move(to: CGPoint(x: 58, y: 146))
-    tree.addCurve(to: CGPoint(x: 80, y: 130), control1: CGPoint(x: 58, y: 136), control2: CGPoint(x: 66, y: 130))
-    tree.addLine(to: CGPoint(x: 124, y: 130))
-
-    context.setStrokeColor(ink.cgColor)
-    context.setLineWidth(13)
+    // The stem, and the leaf from its foot.
     context.setLineCap(.round)
-    context.setLineJoin(.round)
-    context.addPath(tree)
+    context.setStrokeColor(ink.cgColor)
+    context.setLineWidth(8)
+    context.move(to: CGPoint(x: 2, y: -38))
+    context.addCurve(to: CGPoint(x: 11, y: -54), control1: CGPoint(x: 2, y: -46), control2: CGPoint(x: 5, y: -51))
     context.strokePath()
+    context.saveGState()
+    context.translateBy(x: 1, y: -41)
+    context.rotate(by: -150 * .pi / 180)
+    context.scaleBy(x: 1.45, y: 1.45)
+    context.move(to: .zero)
+    context.addCurve(to: CGPoint(x: 22, y: -20), control1: CGPoint(x: 0, y: -12), control2: CGPoint(x: 9, y: -20))
+    context.addCurve(to: .zero, control1: CGPoint(x: 22, y: -8), control2: CGPoint(x: 13, y: 0))
+    context.setFillColor(leaf.cgColor)
+    context.fillPath()
+    context.restoreGState()
 
-    context.setFillColor(ink.cgColor)
-    for tip in [CGPoint(x: 124, y: 44), CGPoint(x: 124, y: 130)] {
-        context.fillEllipse(in: CGRect(x: tip.x - 11, y: tip.y - 11, width: 22, height: 22))
-    }
-    context.setFillColor(fruit.cgColor)
-    context.fillEllipse(in: CGRect(x: 108 - 11.5, y: 87 - 11.5, width: 23, height: 23))
+    // The body: round, with a dip at the stem, lit from the upper left,
+    // with a blush on its cheek.
+    let body = CGMutablePath()
+    body.move(to: CGPoint(x: 2, y: -36))
+    body.addCurve(to: CGPoint(x: 47, y: 2), control1: CGPoint(x: 16, y: -46), control2: CGPoint(x: 47, y: -34))
+    body.addCurve(to: CGPoint(x: 0, y: 48), control1: CGPoint(x: 47, y: 30), control2: CGPoint(x: 26, y: 48))
+    body.addCurve(to: CGPoint(x: -47, y: 2), control1: CGPoint(x: -26, y: 48), control2: CGPoint(x: -47, y: 30))
+    body.addCurve(to: CGPoint(x: 2, y: -36), control1: CGPoint(x: -47, y: -34), control2: CGPoint(x: -12, y: -46))
+    body.closeSubpath()
+    let space = CGColorSpace(name: CGColorSpace.sRGB)!
+    context.saveGState()
+    context.addPath(body)
+    context.clip()
+    let shades = CGGradient(colorsSpace: space, colors: [peachLight.cgColor, peach.cgColor, peachShadow.cgColor] as CFArray, locations: [0, 0.55, 1])!
+    context.drawLinearGradient(shades, start: CGPoint(x: -32, y: -38), end: CGPoint(x: 32, y: 45), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    let cheek = CGGradient(colorsSpace: space, colors: [blush.withAlphaComponent(0.75).cgColor, blush.withAlphaComponent(0).cgColor] as CFArray, locations: [0, 1])!
+    context.drawRadialGradient(cheek, startCenter: CGPoint(x: 20, y: 20), startRadius: 0, endCenter: CGPoint(x: 20, y: 20), endRadius: 46, options: [])
+    context.restoreGState()
+
+    context.setStrokeColor(shine.withAlphaComponent(0.85).cgColor)
+    context.setLineWidth(5)
+    context.move(to: CGPoint(x: -30, y: -6))
+    context.addCurve(to: CGPoint(x: -16, y: -27), control1: CGPoint(x: -30, y: -16), control2: CGPoint(x: -24, y: -24))
+    context.strokePath()
+    context.setStrokeColor(crease.cgColor)
+    context.setLineWidth(4.5)
+    context.move(to: CGPoint(x: 2, y: -36))
+    context.addCurve(to: CGPoint(x: -7, y: -13), control1: CGPoint(x: -3, y: -30), control2: CGPoint(x: -6, y: -22))
+    context.strokePath()
     context.restoreGState()
 }
 
-/// The arrow from the app to Applications: a branch with a fruit where it
-/// starts.
+/// The arrow from the app to Applications: a branch with a peach-colored
+/// dot where it starts.
 func drawArrow(from start: CGFloat, to end: CGFloat, y: CGFloat) {
     let context = NSGraphicsContext.current!.cgContext
     let head: CGFloat = 13
@@ -167,7 +196,7 @@ func drawArrow(from start: CGFloat, to end: CGFloat, y: CGFloat) {
     context.addLine(to: CGPoint(x: end, y: y))
     context.addLine(to: CGPoint(x: end - head, y: y + head))
     context.strokePath()
-    context.setFillColor(fruit.cgColor)
+    context.setFillColor(peach.cgColor)
     context.fillEllipse(in: CGRect(x: start - 7, y: y - 7, width: 14, height: 14))
     context.restoreGState()
 }
@@ -176,7 +205,7 @@ func drawArrow(from start: CGFloat, to end: CGFloat, y: CGFloat) {
 func drawPill(under icon: CGPoint) {
     let size = CGSize(width: 118, height: 26)
     let rect = CGRect(x: icon.x - size.width / 2, y: icon.y + nameOffset - size.height / 2, width: size.width, height: size.height)
-    fruit.setFill()
+    peach.setFill()
     NSBezierPath(roundedRect: rect, xRadius: size.height / 2, yRadius: size.height / 2).fill()
 }
 
@@ -185,20 +214,20 @@ func drawBackground() {
     CGRect(origin: .zero, size: canvas).fill()
 
     // The mark, the name, and what Espalier is, on one line.
-    let name = Line("Espalier", font: font("Geist", size: 17, weight: 650), color: ink, tracking: -0.01)
-    let what = Line("A GIT CLIENT FOR THE MAC", font: font("Geist Mono", size: 10.5, weight: 500), color: quietInk, tracking: 0.12)
+    let name = Line("Espalier", font: font("Allo Variable", size: 19, weight: 900), color: ink, tracking: -0.02)
+    let what = Line("A GIT CLIENT FOR THE MAC", font: font("Maple Mono NL", size: 10.5, weight: 600), color: quietInk, tracking: 0.1)
     let nameBaseline: CGFloat = 54
-    let markHeight: CGFloat = 22
-    drawMark(origin: CGPoint(x: margin, y: nameBaseline - markHeight + 3), height: markHeight)
-    let nameX = margin + 84 / 119.5 * markHeight + 9
+    let markHeight: CGFloat = 28
+    drawMark(origin: CGPoint(x: margin, y: nameBaseline - markHeight + 5), height: markHeight)
+    let nameX = margin + 94 / 106 * markHeight + 8
     name.draw(x: nameX, baseline: nameBaseline)
     what.draw(x: nameX + name.inkWidth + 16, baseline: nameBaseline - 0.5)
 
     // The headline, sized to run from margin to margin.
     let headlineText = "Put down roots."
-    let measured = Line(headlineText, font: font("Geist", size: 100, weight: 800), color: ink, tracking: -0.045)
+    let measured = Line(headlineText, font: font("Allo Variable", size: 100, weight: 900), color: ink, tracking: -0.035)
     let headlineSize = 100 * (canvas.width - margin * 2) / measured.inkWidth
-    let headline = Line(headlineText, font: font("Geist", size: headlineSize, weight: 800), color: ink, tracking: -0.045)
+    let headline = Line(headlineText, font: font("Allo Variable", size: headlineSize, weight: 900), color: ink, tracking: -0.035)
     headline.draw(x: margin, baseline: 138)
 
     drawArrow(from: appIcon.x + 86, to: applicationsIcon.x - 86, y: appIcon.y)

@@ -1,7 +1,6 @@
 // The tiles' colors by name (the places' orchard colors, and tomato), which
-// Settings' panes take; the round badges that say what a toast or the
-// operation capsule is about; and the app's icon, drawn from its art, which
-// heads the welcome flow and About.
+// Settings' panes take; and the round badges that say what a toast or the
+// operation capsule is about.
 
 import AppKit
 import SwiftUI
@@ -84,52 +83,11 @@ nonisolated enum TileSymbol {
     }
 }
 
-/// Espalier's icon, drawn from its art (light and dark) in the icon's
-/// rounded square, standing on a soft shadow.
-public struct AppIconArt: View {
-    private let size: CGFloat
-    @Environment(\.colorScheme) private var colorScheme
-
-    public init(size: CGFloat) {
-        self.size = size
-    }
-
-    public var body: some View {
-        let shape = RoundedRectangle(cornerRadius: size * Metrics.Tiles.iconRadiusRatio, style: .continuous)
-        Group {
-            if let image = AppIconArt.image(dark: colorScheme == .dark) {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-            } else {
-                Image(nsImage: NSApplication.shared.applicationIconImage)
-                    .resizable()
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(shape)
-        .overlay(shape.strokeBorder(Color(nsColor: Elevation.card.ring ?? .clear), lineWidth: 1))
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.12), radius: size * 0.08, y: size * 0.04)
-        .accessibilityHidden(true)
-    }
-
-    /// The bundled art, light or dark.
-    static func image(dark: Bool) -> NSImage? {
-        let name = dark ? "AppIcon-Dark" : "AppIcon"
-        guard let url = Bundle.module.url(forResource: name, withExtension: "png", subdirectory: "AppIcon") else {
-            return nil
-        }
-        return NSImage(contentsOf: url)
-    }
-}
-
 extension Metrics {
-    /// The badges, and the app's icon.
+    /// The badges.
     public enum Tiles {
         /// A badge's tint of its color.
         public static let softAlpha: (light: CGFloat, dark: CGFloat) = (0.16, 0.24)
-        /// The app icon's corner radius, as a fraction of its side.
-        public static let iconRadiusRatio: CGFloat = 0.225
         /// A toast's and the operation capsule's badge.
         public static let floating: CGFloat = 30
     }

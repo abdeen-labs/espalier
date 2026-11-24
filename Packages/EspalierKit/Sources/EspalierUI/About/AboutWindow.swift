@@ -1,6 +1,6 @@
-// About Espalier, a window of its own: the icon drawn from its art, the
-// name in display type, the version and build, the line about GitHub Desktop, and Acknowledgements…, which opens
-// the Acknowledgements window.
+// About Espalier, a window of its own: the mark over its trellis band, the
+// name as the brand sets it, the version and build, the line about GitHub
+// Desktop, and Acknowledgements…, which opens the Acknowledgements window.
 
 import AppKit
 import SwiftUI
@@ -25,35 +25,31 @@ nonisolated struct AboutContent: Sendable, Equatable {
     }
 }
 
-extension Typography {
-    /// About's name: display type, 30 bold.
-    static var aboutTitle: Font { display(size: 30) }
-}
-
 /// The About window's layout.
 struct AboutView: View {
     let content: AboutContent
     var showAcknowledgements: @MainActor () -> Void = {}
 
     var body: some View {
-        VStack(spacing: Metrics.insetSmall) {
-            AppIconArt(size: Metrics.About.iconSize)
-                .padding(.bottom, Metrics.insetSmall)
-            Text("Espalier")
-                .font(Typography.aboutTitle)
-                .foregroundStyle(.text)
-            MonoChip(content.versionLine, isSelectable: true)
-            Text("A native Mac Git client, originally rooted in GitHub Desktop.")
-                .font(Typography.secondary)
-                .foregroundStyle(.text2)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, Metrics.grid)
-            Button("Acknowledgements…", action: showAcknowledgements)
-                .buttonStyle(.quiet)
-                .padding(.top, Metrics.insetSmall)
+        VStack(spacing: 0) {
+            BrandHero(markSize: Metrics.About.iconSize, bandHeight: Metrics.About.bandHeight)
+            VStack(spacing: Metrics.insetSmall) {
+                Wordmark(size: Metrics.About.nameSize)
+                MonoChip(content.versionLine, isSelectable: true)
+                Text("A native Mac Git client, originally rooted in GitHub Desktop.")
+                    .font(Typography.secondary)
+                    .foregroundStyle(.text2)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Metrics.grid)
+                Button("Acknowledgements…", action: showAcknowledgements)
+                    .buttonStyle(.quiet)
+                    .padding(.top, Metrics.insetSmall)
+            }
+            .padding(.horizontal, Metrics.insetLarge * 2)
+            .padding(.top, Metrics.insetMedium)
+            .padding(.bottom, Metrics.insetLarge * 2)
         }
-        .padding(Metrics.insetLarge * 2)
         .frame(width: Metrics.About.width)
         .background(Color(espalier: Palette.background))
     }

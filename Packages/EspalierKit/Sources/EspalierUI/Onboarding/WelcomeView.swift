@@ -3,7 +3,8 @@
 // and to GitHub Enterprise, "New to GitHub? Create your free account.", and
 // Skip This Step, which goes on to Configure Git, whose Finish ends the flow
 // (`endWelcomeFlow()`). Each step is a cream card on the backdrop, the
-// steps' dots at its top. Signing in goes through the sign-in sheet; once
+// steps' dots at its foot; the first opens under the mark, growing in over
+// its trellis band. Signing in goes through the sign-in sheet; once
 // it signs in, Configure Git follows. One step crossfades into the next over
 // 0.22 s.
 
@@ -26,8 +27,6 @@ struct WelcomeStart: View {
 
     var body: some View {
         VStack(spacing: Metrics.Welcome.sectionSpacing) {
-            AppIconArt(size: Metrics.Welcome.iconSize)
-                .padding(.top, Metrics.WelcomeCard.iconLift)
             WelcomeHeading(
                 title: "Welcome to Espalier",
                 message: "Sign in to GitHub.com or GitHub Enterprise to work with your remotes and pull requests, or skip this step to jump straight into your local repositories."
@@ -69,7 +68,7 @@ struct WelcomeHeading: View {
     var body: some View {
         VStack(spacing: Metrics.insetMedium) {
             Text(title)
-                .font(Typography.welcomeTitle)
+                .font(Typography.brandTitle(size: Metrics.WelcomeCard.titleSize))
                 .foregroundStyle(.text)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
@@ -85,8 +84,9 @@ struct WelcomeHeading: View {
 
 extension View {
     /// A welcome step's frame: the step on a cream card, the steps' dots at
-    /// its top, centered on the oat backdrop, scrolling when the window is
-    /// shorter than the card.
+    /// its foot, centered on the oat backdrop, scrolling when the window is
+    /// shorter than the card. The first step's card opens with the mark
+    /// over its trellis band.
     func welcomeCard(step: WelcomeStep) -> some View {
         modifier(WelcomeCardModifier(step: step))
     }
@@ -98,13 +98,22 @@ private struct WelcomeCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         GeometryReader { proxy in
             ScrollView(.vertical) {
-                VStack(spacing: Metrics.WelcomeCard.dotsSpacing) {
-                    WelcomeStepDots(step: step)
-                    content
+                let shape = RoundedRectangle(cornerRadius: Metrics.WelcomeCard.radius, style: .continuous)
+                VStack(spacing: 0) {
+                    if step == .start {
+                        BrandHero(markSize: Metrics.Welcome.iconSize, bandHeight: Metrics.WelcomeCard.bandHeight)
+                    }
+                    VStack(spacing: Metrics.WelcomeCard.dotsSpacing) {
+                        content
+                        WelcomeStepDots(step: step)
+                    }
+                    .padding(.horizontal, Metrics.WelcomeCard.horizontalPadding)
+                    .padding(.top, step == .start ? Metrics.WelcomeCard.heroSpacing : Metrics.WelcomeCard.verticalPadding)
+                    .padding(.bottom, Metrics.WelcomeCard.verticalPadding)
                 }
-                .padding(.horizontal, Metrics.WelcomeCard.horizontalPadding)
-                .padding(.vertical, Metrics.WelcomeCard.verticalPadding)
-                .surface(Color(espalier: Palette.background), elevation: .floating, in: RoundedRectangle(cornerRadius: Metrics.WelcomeCard.radius, style: .continuous))
+                .frame(width: min(Metrics.WelcomeCard.width, max(0, proxy.size.width - Metrics.WelcomeCard.margin * 2)))
+                .clipShape(shape)
+                .surface(Color(espalier: Palette.background), elevation: .floating, in: shape)
                 .padding(Metrics.WelcomeCard.margin)
                 .frame(minWidth: proxy.size.width, minHeight: proxy.size.height)
                 .unbouncedScrollContent()
@@ -149,9 +158,14 @@ extension Metrics {
         public static let dotSize: CGFloat = 8
         public static let currentDotWidth: CGFloat = 24
         public static let dotSpacing: CGFloat = 6
-        public static let dotsSpacing: CGFloat = 20
-        /// Space above the icon, under the dots.
-        public static let iconLift: CGFloat = 4
+        public static let dotsSpacing: CGFloat = 24
+        /// The card's width, and its trellis band's height.
+        public static let width: CGFloat = 580
+        public static let bandHeight: CGFloat = 132
+        /// Under the mark, above the heading.
+        public static let heroSpacing: CGFloat = 18
+        /// The heading's size.
+        public static let titleSize: CGFloat = 36
     }
 }
 

@@ -348,8 +348,8 @@ public enum Metrics {
 
     /// The welcome flow.
     public enum Welcome {
-        /// The app icon's size.
-        public static let iconSize: CGFloat = 128
+        /// The mark's size.
+        public static let iconSize: CGFloat = 148
         /// The widest a paragraph gets.
         public static let textWidth: CGFloat = 440
         /// The Configure Git form's width.
@@ -362,8 +362,11 @@ public enum Metrics {
 
     /// About Espalier and its acknowledgements.
     public enum About {
-        /// The app icon's size.
-        public static let iconSize: CGFloat = 96
+        /// The mark's size, and its trellis band's height.
+        public static let iconSize: CGFloat = 112
+        public static let bandHeight: CGFloat = 96
+        /// The name's size.
+        public static let nameSize: CGFloat = 38
         /// The About window's width.
         public static let width: CGFloat = 360
         /// The Acknowledgements sheet.

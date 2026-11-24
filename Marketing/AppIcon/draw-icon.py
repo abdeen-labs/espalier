@@ -6,9 +6,9 @@
 writes, next to this script, Espalier-Icon.svg and Espalier-Icon-Dark.svg on a
 square background that fills the canvas, and Espalier-Icon-Transparent.svg and
 Espalier-Icon-Dark-Transparent.svg with no background. The geometry and colors
-are Espalier/AppIcon.icon's: its SVG layers (the tree, the fruit, and the glow
-behind the fruit) and the fills in icon.json, drawn flat with no glass, shadow,
-or icon mask. Change the icon there first and then update this to match.
+are Espalier/AppIcon.icon's: its SVG layers (the peach, its crease, the leaf, and
+the stem) and the fills in icon.json, drawn flat with no glass, shadow, or icon
+mask. Change the icon there first and then update this to match.
 
 The PNGs beside the SVGs are 1024-pixel renders of them:
 
@@ -17,42 +17,45 @@ The PNGs beside the SVGs are 1024-pixel renders of them:
 from pathlib import Path
 
 
-# The tree: a trunk trained into three tiers, the lower two peeling off it.
-TREE = [
-    "M58 146V66A22 22 0 0 1 80 44H124",
-    "M58 108C58 95 66 87 80 87H108",
-    "M58 146C58 136 66 130 80 130H124",
-]
-TIPS = [(124, 44), (124, 130)]
-FRUIT = (108, 87)
+# The peach: round, with a dip at the stem, the short crease down its left
+# shoulder, and the shine beside it.
+BODY = ("M92.24 56.68C107.92 45.48 142.64 58.92 142.64 99.24C142.64 130.6 119.12 150.76 90 150.76"
+        "C60.88 150.76 37.36 130.6 37.36 99.24C37.36 58.92 76.56 45.48 92.24 56.68Z")
+CREASE = "M92.24 56.68C86.64 63.4 83.28 72.36 82.16 82.44"
+SHINE = "M56.4 90.28C56.4 79.08 63.12 70.12 72.08 66.76"
+# The stem, and the leaf from its foot.
+STEM = "M92.24 54.44C92.24 45.48 95.6 39.88 102.32 36.52"
+LEAF = "M91.12 51.08C81.38 67.96 62.22 71.9 43.94 61.34C53.68 44.47 72.84 40.52 91.12 51.08Z"
 
-LIGHT = dict(name="Espalier", top="#FFF8EA", bottom="#F2E2C4",
-             ink_top="#4A3528", ink_bottom="#2B2119", fruit="#3D5BD9", glow="#FFC21A")
-DARK = dict(name="Espalier", top="#2A221B", bottom="#120E0B",
-            ink_top="#FFF6E6", ink_bottom="#EFDDC2", fruit="#8FA2FF", glow="#FFB830")
+LIGHT = dict(name="Espalier", top="#FFFCF5", bottom="#F5E8D0", stem="#3A2A1F",
+             leaf_top="#63C77C", leaf_bottom="#2F8A4C")
+DARK = dict(name="Espalier", top="#3A2E24", bottom="#1A1410", stem="#FFF1DC",
+            leaf_top="#7FD49A", leaf_bottom="#7FD49A")
 
 
 def svg(p, background):
-    x, y = FRUIT
     return "\n".join([
         '<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 180 180">',
         f'  <title>{p["name"]}</title>',
         '  <defs>',
         f'    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">'
         f'<stop offset="0" stop-color="{p["top"]}"/><stop offset="1" stop-color="{p["bottom"]}"/></linearGradient>',
-        f'    <linearGradient id="ink" gradientUnits="userSpaceOnUse" x1="0" y1="40" x2="0" y2="150">'
-        f'<stop offset="0" stop-color="{p["ink_top"]}"/><stop offset="1" stop-color="{p["ink_bottom"]}"/></linearGradient>',
-        f'    <radialGradient id="glow" gradientUnits="userSpaceOnUse" cx="{x}" cy="{y}" r="34">'
-        f'<stop offset="0" stop-color="{p["glow"]}" stop-opacity="0.5"/>'
-        f'<stop offset="1" stop-color="{p["glow"]}" stop-opacity="0"/></radialGradient>',
+        '    <linearGradient id="peach" x1="0.15" y1="0.05" x2="0.85" y2="0.95">'
+        '<stop offset="0" stop-color="#FFC98F"/><stop offset="0.55" stop-color="#FF9F6B"/>'
+        '<stop offset="1" stop-color="#FF7F5C"/></linearGradient>',
+        '    <radialGradient id="blush" cx="0.72" cy="0.68" r="0.5">'
+        '<stop offset="0" stop-color="#FF5E7A" stop-opacity="0.75"/>'
+        '<stop offset="1" stop-color="#FF5E7A" stop-opacity="0"/></radialGradient>',
+        f'    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1">'
+        f'<stop offset="0" stop-color="{p["leaf_top"]}"/><stop offset="1" stop-color="{p["leaf_bottom"]}"/></linearGradient>',
         '  </defs>',
         *(['  <rect width="180" height="180" fill="url(#body)"/>'] if background else []),
-        f'  <circle cx="{x}" cy="{y}" r="34" fill="url(#glow)"/>',
-        '  <g fill="none" stroke="url(#ink)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">',
-        *(f'    <path d="{d}"/>' for d in TREE),
-        '  </g>',
-        *(f'  <circle cx="{cx}" cy="{cy}" r="11" fill="url(#ink)"/>' for cx, cy in TIPS),
-        f'  <circle cx="{x}" cy="{y}" r="11.5" fill="{p["fruit"]}"/>',
+        f'  <path d="{STEM}" fill="none" stroke="{p["stem"]}" stroke-width="8.96" stroke-linecap="round"/>',
+        f'  <path d="{LEAF}" fill="url(#leaf)"/>',
+        f'  <path d="{BODY}" fill="url(#peach)"/>',
+        f'  <path d="{BODY}" fill="url(#blush)"/>',
+        f'  <path d="{SHINE}" fill="none" stroke="#FFE6C4" stroke-opacity="0.85" stroke-width="5.6" stroke-linecap="round"/>',
+        f'  <path d="{CREASE}" fill="none" stroke="#E8603F" stroke-width="5.04" stroke-linecap="round"/>',
         '</svg>',
     ]) + "\n"
 

@@ -154,16 +154,14 @@ let package = Package(
         vendoredGrammar("TreeSitterYAML", exclude: ["src/schema.core.c", "src/schema.json.c", "src/schema.legacy.c"]),
 
         // SwiftUI and AppKit views. The text fonts' files are copied as they
-        // are, each family with its license (Resources/Fonts/SOURCES.md), and
-        // the app icon's art (Marketing/AppIcon's renders) for the views that
-        // show it.
+        // are, each family with its license (Resources/Fonts/SOURCES.md).
         .target(
             name: "EspalierUI",
             dependencies: [
                 "EspalierSupport", "GitKit", "GitHubKit", "AIKit", "EspalierCore", "EspalierSyntax",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
-            resources: [.copy("Resources/Fonts"), .copy("Resources/AppIcon")],
+            resources: [.copy("Resources/Fonts")],
             swiftSettings: approachable + [.defaultIsolation(MainActor.self)]
         ),
 

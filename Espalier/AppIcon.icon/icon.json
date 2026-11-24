@@ -3,81 +3,61 @@
     {
       "layers": [
         {
-          "image-name": "fruit.svg",
-          "name": "fruit",
-          "glass": true,
-          "fill-specializations": [
-            {
-              "appearance": "dark",
-              "value": {
-                "solid": "srgb:0.56078,0.63529,1.00000,1.00000"
-              }
-            }
-          ]
-        }
-      ],
-      "shadow": {
-        "kind": "neutral",
-        "opacity": 0.5
-      },
-      "translucency": {
-        "enabled": false,
-        "value": 0.5
-      }
-    },
-    {
-      "layers": [
-        {
-          "image-name": "tree.svg",
-          "name": "tree",
-          "glass": true,
-          "fill-specializations": [
-            {
-              "appearance": "dark",
-              "value": {
-                "linear-gradient": [
-                  "srgb:1.00000,0.96471,0.90196,1.00000",
-                  "srgb:0.93725,0.86667,0.76078,1.00000"
-                ],
-                "orientation": {
-                  "start": {
-                    "x": 0.5,
-                    "y": 0.0
-                  },
-                  "stop": {
-                    "x": 0.5,
-                    "y": 1.0
-                  }
-                }
-              }
-            }
-          ]
-        }
-      ],
-      "shadow": {
-        "kind": "neutral",
-        "opacity": 0.5
-      },
-      "translucency": {
-        "enabled": false,
-        "value": 0.5
-      }
-    },
-    {
-      "layers": [
-        {
-          "image-name": "glow.svg",
-          "name": "glow",
+          "image-name": "crease.svg",
+          "name": "crease",
           "glass": false
+        },
+        {
+          "image-name": "peach.svg",
+          "name": "peach",
+          "glass": true
         }
       ],
       "shadow": {
-        "kind": "none",
-        "opacity": 0
+        "kind": "neutral",
+        "opacity": 0.5
       },
       "translucency": {
         "enabled": false,
-        "value": 0
+        "value": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "leaf.svg",
+          "name": "leaf",
+          "glass": true,
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:0.49804,0.83137,0.60392,1.00000"
+              }
+            }
+          ]
+        },
+        {
+          "image-name": "stem.svg",
+          "name": "stem",
+          "glass": true,
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "srgb:1.00000,0.94510,0.86275,1.00000"
+              }
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
       }
     }
   ],
@@ -90,8 +70,8 @@
     {
       "value": {
         "linear-gradient": [
-          "srgb:1.00000,0.97255,0.91765,1.00000",
-          "srgb:0.94902,0.88627,0.76863,1.00000"
+          "srgb:1.00000,0.98824,0.96078,1.00000",
+          "srgb:0.96078,0.90980,0.81569,1.00000"
         ],
         "orientation": {
           "start": {
@@ -109,8 +89,8 @@
       "appearance": "dark",
       "value": {
         "linear-gradient": [
-          "srgb:0.16471,0.13333,0.10588,1.00000",
-          "srgb:0.07059,0.05490,0.04314,1.00000"
+          "srgb:0.22745,0.18039,0.14118,1.00000",
+          "srgb:0.10196,0.07843,0.06275,1.00000"
         ],
         "orientation": {
           "start": {
