@@ -114,11 +114,17 @@ public enum DiffColors {
     /// The missing-newline note and its symbol.
     public static var quietMark: NSColor { Palette.text3 }
 
-    /// An included changed line's number cells: the accent at 16% (24% in
+    /// The blue that marks the lines the commit includes, the same in every
+    /// palette.
+    nonisolated private static let included = ThemeColor.fixed(0x3D5BD9, 0x8FA2FF)
+    /// An included changed line's number cells: the blue at 18% (26% in
     /// dark).
-    public static var includedNumberCell: NSColor { Palette.accentMid }
-    /// The handle beside a changed line the commit includes: the accent.
-    public static var includedHandle: NSColor { Palette.accent }
+    public static let includedNumberCell = NSColor.espalierDynamic { variant in
+        let alpha: CGFloat = variant.isDark ? 0.26 : 0.18
+        return included.resolved(in: variant).withAlphaComponent(variant.isHighContrast ? min(alpha * 1.6, 1) : alpha)
+    }
+    /// The handle beside a changed line the commit includes: the blue.
+    public static var includedHandle: NSColor { included }
     /// The handle beside a changed line left out: `line2`.
     public static var excludedHandle: NSColor { Palette.line2 }
     /// A wash over the number cells and handle of the line or block a
