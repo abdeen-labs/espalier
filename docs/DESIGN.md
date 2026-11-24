@@ -3,7 +3,7 @@
 Playful, creamy, and intuitive: cream cards on oat, warm espresso ink,
 round type, and soft controls you want to press. New UI follows it. The
 values are `DesignSystem`'s tokens. This describes Default, the theme a new
-install opens in, in Blueberry, Allo, and Maple Mono; Islands changes what
+install opens in, in Blueberry, Allo, and Maple Mono; Frost changes what
 its tokens say (Themes, below).
 
 ## Identity
@@ -87,7 +87,7 @@ its tokens say (Themes, below).
 
 ## Themes, colors, and fonts
 
-Settings ▸ Appearance picks a theme (Default or Islands), a palette, a
+Settings ▸ Appearance picks a theme (Default or Frost), a palette, a
 background tint, the appearance, the app font, and the code font, each
 apart from the others. The theme is how the app looks; the
 palette and the background are its colors, and every theme takes every
@@ -96,8 +96,8 @@ palette and background. Views use the tokens, which read the current look.
 - **A palette** is an accent color and the colors made from it: links,
   the prominent fill, and selected items' tints. Each is a hue of its own:
   System (the Mac's accent color), Blueberry (the default) and Slate (made
-  for Default), Lagoon and Plum (made for Islands), Tangerine, Magenta, and
-  Volt, and White (white prominent fills under ink text; what's drawn in
+  for Default), Iris (made for Frost), Lagoon, Plum, Tangerine, Magenta,
+  and Volt, and White (white prominent fills under ink text; what's drawn in
   the accent is ink in light and white in dark). A theme's default branch and renamed colors give way to others
   beside an accent near their hue.
 
@@ -107,8 +107,11 @@ palette and background. Views use the tokens, which read the current look.
   links, raised pillow controls with bold titles, a thick graph with round
   dots, status colors from an orchard (leaf, tomato,
   honey, grape), and lists that fade out at an edge with more beyond it.
-- **Islands** is calm and friendly: the panes float as cards on a sage
-  backdrop (the floating layout), with soft pills and bold titles.
+- **Frost** is quiet and precise: a glass window around one inset card,
+  its panes clear and divided by hairlines; near-white and near-black
+  surfaces; washes for lines, hover, selection, and fields; one neutral
+  selection; ink for the prominent action; flat controls, small radii,
+  and a fine graph.
 - **A background tint** (Neutral, Warm, Cool, Sage, Rose, Lavender) gives
   a theme's surfaces its hue in place of the theme's own, faint on white
   and stronger toward gray, each surface as light as before. Default's

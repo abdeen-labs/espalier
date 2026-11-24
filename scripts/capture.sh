@@ -6,9 +6,10 @@
 #
 #   scripts/capture.sh [--look LOOK] [--out FOLDER] [FILTER]
 #
-# LOOK is spelled as the settings store it: default-slate, islands-plum-fixel,
-# islands-lagoon-warm, default-sfmono. FOLDER defaults to .captures in
-# the checkout; it's emptied first.
+# LOOK is spelled as the settings store it: default-slate, frost,
+# frost-lagoon-warm, default-sfmono; a theme with no palette named is in its
+# own (Frost in Iris). FOLDER defaults to .captures in the checkout; it's
+# emptied first.
 
 set -euo pipefail
 
@@ -21,13 +22,13 @@ while (( $# )); do
     case $1 in
         --look) look=$2; shift 2 ;;
         --out) out=${2:A}; shift 2 ;;
-        -h|--help) sed -n '2,11p' $0 | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,12p' $0 | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) filter=$1; shift ;;
     esac
 done
 
 if [[ $look == all ]]; then
-    looks=(default default-slate islands-lagoon islands-plum)
+    looks=(default default-slate frost)
 else
     looks=($look)
 fi
