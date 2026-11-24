@@ -84,7 +84,7 @@ final class SuggestionList {
 
     /// The space before a suggestion's text in the card: an anchor moved
     /// left by it lines the suggestions' text up with the text typed.
-    static let textInset = Metrics.Menu.inset + Metrics.Menu.rowPadding
+    static var textInset: CGFloat { Metrics.Menu.inset + Metrics.Menu.rowPadding }
 
     /// Shows `suggestions` for typing in `textView`, the card below
     /// `anchor` (in `view`'s coordinates) at least `minimumWidth` wide; no

@@ -3,6 +3,8 @@
 // (`.default`) and one for Frost (`.frost`). Views read their area's from
 // `Theme.current.style` and never ask which theme is current.
 
+import CoreGraphics
+
 /// What each area of the app draws its own way in a theme.
 nonisolated public struct ThemeStyle: Sendable, Equatable {
     public var toolbar: ToolbarThemeStyle
@@ -12,6 +14,8 @@ nonisolated public struct ThemeStyle: Sendable, Equatable {
     public var history: HistoryThemeStyle
     public var controls: ControlsThemeStyle
     public var settings: SettingsThemeStyle
+    /// The height of the header row atop a column and atop the diff.
+    public var paneHeaderHeight: CGFloat
 
     /// Default's.
     public static let `default` = ThemeStyle(
@@ -21,7 +25,8 @@ nonisolated public struct ThemeStyle: Sendable, Equatable {
         diff: .default,
         history: .default,
         controls: .default,
-        settings: .default
+        settings: .default,
+        paneHeaderHeight: 46
     )
 
     /// Frost's.
@@ -32,6 +37,7 @@ nonisolated public struct ThemeStyle: Sendable, Equatable {
         diff: .frost,
         history: .frost,
         controls: .frost,
-        settings: .frost
+        settings: .frost,
+        paneHeaderHeight: 40
     )
 }

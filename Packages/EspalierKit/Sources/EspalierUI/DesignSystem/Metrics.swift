@@ -271,16 +271,17 @@ public enum Metrics {
     public enum FileList {
         /// The row height: `ceil(lineHeight(.body) × 2.125)`, 34 at the
         /// default text size, from SF Pro's line height at the theme's sans's
-        /// body size.
+        /// body size; × 1.875, 30, where the theme's file rows are compact.
         public static var rowHeight: CGFloat {
-            ceil(AppKitTypography.bodyLayoutLineHeight * 2.125)
+            let lines = Theme.current.style.changes.fileRows == .compact ? 1.875 : 2.125
+            return ceil(AppKitTypography.bodyLayoutLineHeight * lines)
         }
     }
 
     /// The header row atop a column (Changes, the stash, History) and atop
-    /// the diff: one height, so their hairlines line up.
+    /// the diff: one height, so their hairlines line up. The theme sets it.
     public enum PaneHeader {
-        public static let height: CGFloat = 46
+        public static var height: CGFloat { Theme.current.style.paneHeaderHeight }
     }
 
     /// The Changes column's composer: the commit message card and the

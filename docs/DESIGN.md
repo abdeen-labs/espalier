@@ -56,15 +56,16 @@ install opens in, in Blueberry; Frost changes what its tokens say
   teal, Branches blueberry, Tags honey, Stashes grape, Pull Requests plum,
   Worktrees leaf, Remotes slate. Only Settings' panes show as tiles, in
   its sidebar; elsewhere a symbol is plain, in secondary text or a status
-  color.
+  color. Changes' counts and its "in the commit" pill are the palette's
+  accent.
 - **Names are candy pills:** branches, tags, remotes, and counts are
   fully rounded pills in a tint of their color, the current branch's
   filled with the accent.
 - **A file's status is a tile** in a tint of its color with its letter (A,
   M, D, R, C, U), bold, in the theme's code font.
-- **Plain sentences:** "3 files changed", "All in the commit", "Push to
-  origin", "Up to date with origin"; a diff's hunk is "Lines 19–26" with
-  its context, git's own header in its tooltip.
+- **Plain sentences:** "3 files changed", "All in the commit", "Push
+  origin", "Fetched 2 minutes ago". A diff's hunk opens with git's own
+  "@@" line, and a renamed file reads "old/path → new/path".
 - **Pane headers are a bold title;** a commit opens with a header card.
   Empty states are a symbol on a soft box of their color, a bold title, a
   sentence, and the actions that help. A place's own state (a missing
@@ -72,8 +73,8 @@ install opens in, in Blueberry; Frost changes what its tokens say
   that didn't load, nothing to commit, a clone on its way) has two fainter
   tiles tilted behind its box, each arranged its own way
   (`MessageTiles`).
-- **The diff's changes are highlighter blocks,** rounded and inset, and
-  its included lines a rounded pill in the gutter.
+- **The diff's changes are full-width bands,** and its included lines a
+  band behind their numbers in the gutter, beside a bar.
 - **Branch colors:** the current branch is the accent, the default branch
   teal; the others cycle through apricot, plum, grape, blue, and leaf,
   skipping those near the accent. A track keeps its color for its line of
@@ -111,7 +112,12 @@ palette and background. Views use the tokens, which read the current look.
   its panes clear and divided by hairlines; near-white and near-black
   surfaces; washes for lines, hover, selection, and fields; one neutral
   selection; ink for the prominent action; flat controls, small radii,
-  and a fine graph. Its text is Geist, and its code Geist Mono.
+  and a fine graph. Its text is Geist, and its code Geist Mono. Where
+  Default draws cards, pills, and tiles, Frost draws plainly
+  (`Theme.current.style`): rows and headers split by hairlines, counts as
+  text, small square status badges, monospaced branch and tag labels,
+  compact rows, system-size semibold titles, and plain symbols in
+  Settings' sidebar.
 - **A background tint** (Neutral, Warm, Cool, Sage, Rose, Lavender) gives
   a theme's surfaces its hue in place of the theme's own, faint on white
   and stronger toward gray, each surface as light as before. Default's

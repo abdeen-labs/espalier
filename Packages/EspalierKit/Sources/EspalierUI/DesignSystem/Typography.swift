@@ -339,9 +339,4 @@ extension AppKitTypography {
     public static var namePill: NSFont {
         sans(.subheadline, weight: .bold)
     }
-
-    /// A hunk header's pill ("Lines 19–26"): the sans at 11, semibold.
-    public static var hunkLabel: NSFont {
-        sans(.subheadline, weight: .semibold)
-    }
 }

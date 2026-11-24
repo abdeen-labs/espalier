@@ -113,8 +113,9 @@ public struct StatusBar<Glyph: View, Trailing: View>: View {
             .frame(minHeight: Metrics.StatusBar.height)
             .background(Color(espalier: tone.fill).motion(Motion.arrive, value: tone))
             // A card of its own in the floating layout, which needs none.
-            Hairline()
-                .opacity(PaneCards.floats ? 0 : 1)
+            if !PaneCards.floats {
+                Hairline()
+            }
         }
         .accessibilityElement(children: .contain)
     }

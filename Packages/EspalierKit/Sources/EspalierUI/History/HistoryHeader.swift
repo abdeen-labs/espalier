@@ -10,7 +10,7 @@ extension Metrics {
     /// The compact header row a History column starts with, and the inset
     /// of a commit's details, which line up with it.
     enum HistoryHeader {
-        static let height: CGFloat = PaneHeader.height
+        static var height: CGFloat { PaneHeader.height }
         static let horizontalPadding: CGFloat = Metrics.insetLarge
         /// Between the header's controls.
         static let spacing: CGFloat = 10
