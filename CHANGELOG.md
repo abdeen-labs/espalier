@@ -16,6 +16,23 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.6] - 2026-11-24
+
+### Added
+
+- A new Default theme, playful and creamy: cream cards floating on an oat background, round type, soft buttons that press down, branch and tag names on rounded pills, and a butter-yellow highlight for what's selected.
+- Two palettes: Blueberry, made for the new Default, and White, which draws the main button in white.
+- In Default, the highlight follows your background tint: blue on Cool, green on Sage, pink on Rose, and purple on Lavender.
+
+### Changed
+
+- Espalier has a new icon: a peach with its stem and leaf, on cream. Welcome, About, and the disk image show it too.
+- The theme that was Default is named Frost again, and Islands is gone. Pick your theme in Settings ▸ Appearance.
+- Fonts come with the theme: Default is set in Allo with Maple Mono for code, and Frost in Geist with Geist Mono. Settings ▸ Appearance no longer has font pop-ups.
+- The Changes list's header reads "3 files changed", with a pill under it that says how many are in the commit, such as "All in the commit".
+- The commit message's fields ask "What did you change?" and "Add more detail (optional)".
+- Screens with nothing to show, such as a missing repository or a clone on its way, show their symbol on a soft tile with two fainter tiles tilted behind it.
+
 ## [1.5.6] - 2026-11-21
 
 ### Changed
@@ -242,7 +259,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.5.6...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.6...HEAD
+[1.6]: https://github.com/abdeen-labs/espalier/compare/v1.5.6...v1.6
 [1.5.6]: https://github.com/abdeen-labs/espalier/compare/v1.5.5...v1.5.6
 [1.5.5]: https://github.com/abdeen-labs/espalier/compare/v1.5.4...v1.5.5
 [1.5.4]: https://github.com/abdeen-labs/espalier/compare/v1.5.3...v1.5.4
