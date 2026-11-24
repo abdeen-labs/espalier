@@ -805,6 +805,22 @@ final class ChangesTableView: NSTableView, ContextMenuContentProviding {
 
     override func keyDown(with event: NSEvent) {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.numericPad, .function, .capsLock])
+        // Up from the first file goes around to the last, and down from the
+        // last to the first.
+        if modifiers.isEmpty, numberOfRows > 1 {
+            let last = numberOfRows - 1
+            var around: Int?
+            if event.keyCode == KeyCode.upArrow, selectedRowIndexes == IndexSet(integer: 0) {
+                around = last
+            } else if event.keyCode == KeyCode.downArrow, selectedRowIndexes == IndexSet(integer: last) {
+                around = 0
+            }
+            if let around {
+                selectRowIndexes(IndexSet(integer: around), byExtendingSelection: false)
+                scrollRowToVisible(around)
+                return
+            }
+        }
         if modifiers.isEmpty, let coordinator {
             switch event.keyCode {
             case 49: // Space
