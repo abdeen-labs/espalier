@@ -21,6 +21,7 @@ import Foundation
 import GitKit
 import SwiftUI
 import Testing
+import TestSupport
 @testable import EspalierUI
 
 /// The appearances views are captured in.
@@ -57,10 +58,7 @@ final class CaptureWindow: NSWindow {
 /// window context: nothing the developer's settings saved changes what
 /// they draw.
 enum CaptureDefaults {
-    nonisolated(unsafe) static let empty: UserDefaults = {
-        let suiteName = POSIXPath.join(NSTemporaryDirectory(), "EspalierCaptureDefaults-\(UUID().uuidString)")
-        return UserDefaults(suiteName: suiteName) ?? .standard
-    }()
+    nonisolated(unsafe) static let empty: UserDefaults = (try? TemporaryDefaults())?.defaults ?? .standard
 }
 
 /// Draws views offscreen and writes them.

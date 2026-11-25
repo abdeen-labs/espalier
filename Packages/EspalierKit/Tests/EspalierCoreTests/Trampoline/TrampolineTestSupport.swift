@@ -280,11 +280,9 @@ func withTrampoline<T>(
     configure: (UserDefaults) -> Void = { _ in },
     _ body: (TrampolineContext) async throws -> T
 ) async throws -> T {
-    // A defaults domain named by a path keeps its file out of
-    // ~/Library/Preferences.
-    let suiteName = POSIXPath.join(try createTempDirectory(), "defaults")
-    let defaults = try #require(UserDefaults(suiteName: suiteName))
-    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let temporary = try TemporaryDefaults()
+    defer { temporary.remove() }
+    let defaults = temporary.defaults
     configure(defaults)
 
     let server = TrampolineServer()

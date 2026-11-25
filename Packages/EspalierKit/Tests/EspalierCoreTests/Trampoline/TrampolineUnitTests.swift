@@ -36,9 +36,9 @@ struct TrampolineUnitTests {
 
         @Test("finds a generic credential by the URL's username or the stored one")
         func genericAccount() throws {
-            let suiteName = POSIXPath.join(try createTempDirectory(), "defaults")
-            let defaults = try #require(UserDefaults(suiteName: suiteName))
-            defer { defaults.removePersistentDomain(forName: suiteName) }
+            let temporary = try TemporaryDefaults()
+            defer { temporary.remove() }
+            let defaults = temporary.defaults
             let auth = GenericGitAuth(secrets: InMemorySecretStore(), defaults: defaults)
             let invocation = TrampolineInvocation(path: "/", isBackgroundTask: false, runtime: TestEnvironment.runtime)
 
@@ -75,9 +75,9 @@ struct TrampolineUnitTests {
     struct GenericAuth {
         @Test("keeps the username in the settings and the password in the keychain")
         func storage() throws {
-            let suiteName = POSIXPath.join(try createTempDirectory(), "defaults")
-            let defaults = try #require(UserDefaults(suiteName: suiteName))
-            defer { defaults.removePersistentDomain(forName: suiteName) }
+            let temporary = try TemporaryDefaults()
+            defer { temporary.remove() }
+            let defaults = temporary.defaults
             let secrets = InMemorySecretStore()
             let auth = GenericGitAuth(secrets: secrets, defaults: defaults)
 

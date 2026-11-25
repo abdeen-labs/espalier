@@ -357,9 +357,9 @@ func withLoginSession<T>(
     shellEnvironment: ShellEnvironment? = nil,
     _ body: (GitRuntime) async throws -> T
 ) async throws -> T {
-    let suiteName = POSIXPath.join(try createTempDirectory(), "defaults")
-    let defaults = try #require(UserDefaults(suiteName: suiteName))
-    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let temporary = try TemporaryDefaults()
+    defer { temporary.remove() }
+    let defaults = temporary.defaults
 
     let server = TrampolineServer()
     let trampoline = TrampolineEnvironment(

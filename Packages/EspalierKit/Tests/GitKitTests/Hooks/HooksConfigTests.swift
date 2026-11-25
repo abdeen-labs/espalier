@@ -6,15 +6,11 @@ import TestSupport
 
 @Suite("hooks/config")
 struct HooksConfigTests {
-    /// Runs `body` with an empty defaults domain of its own. The suite name
-    /// is a path, so the domain's file goes in a temporary directory rather
-    /// than ~/Library/Preferences, where removing the domain leaves an empty
-    /// file behind.
+    /// Runs `body` with an empty defaults domain of its own.
     func withDefaults(_ body: (UserDefaults) throws -> Void) throws {
-        let suiteName = POSIXPath.join(try createTempDirectory(), "defaults")
-        let defaults = try #require(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        try body(defaults)
+        let temporary = try TemporaryDefaults()
+        defer { temporary.remove() }
+        try body(temporary.defaults)
     }
 
     // The defaults, the keys, and the setters are checked through
