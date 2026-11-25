@@ -343,6 +343,33 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
         }
         applySelection(to: tableView)
         tableView.refreshHover()
+        takeKeysOnOpening()
+    }
+
+    // MARK: The keys on opening
+
+    /// The repository whose files last took the keys as they first showed.
+    private var openedRepository: ObjectIdentifier?
+
+    /// Gives the table the keys as a repository's changes first show, when
+    /// nothing in the window has them, so the arrow keys browse the files
+    /// without a click first. It takes them after this update: taking them
+    /// publishes the focused selection, which a view update can't.
+    func takeKeysOnOpening() {
+        guard let tableView, tableView.window != nil, tableView.numberOfRows > 0,
+              let repository = parent.scope.repository, repository != openedRepository else {
+            return
+        }
+        openedRepository = repository
+        Task { @MainActor [weak tableView] in
+            guard let tableView, let window = tableView.window else {
+                return
+            }
+            let responder = window.firstResponder
+            if responder == nil || responder === window || responder === window.contentView {
+                window.makeFirstResponder(tableView)
+            }
+        }
     }
 
     // MARK: Rows arriving and departing
@@ -718,6 +745,11 @@ final class ChangesTableView: NSTableView, ContextMenuContentProviding {
     /// A row scrolled into view shows clear of the list's edge fades.
     override func scrollToVisible(_ rect: NSRect) -> Bool {
         super.scrollToVisible(clearingEdgeFades(rect))
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        coordinator?.takeKeysOnOpening()
     }
 
     // MARK: The context menu
