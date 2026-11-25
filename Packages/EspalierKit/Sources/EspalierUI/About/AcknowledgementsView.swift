@@ -265,40 +265,19 @@ struct AcknowledgementDetail: View {
 public struct AcknowledgementsView: View {
     @State private var selection: Acknowledgement.ID?
 
+    /// The sidebar's rows: each group's label, then its components.
+    private static let listRows: [AcknowledgementsList.Row] = Acknowledgement.Group.allCases.flatMap { group -> [AcknowledgementsList.Row] in
+        let components = Acknowledgement.all.filter { $0.group == group }
+        return [.group(group.rawValue)] + components.map { .component(id: $0.id, name: $0.name) }
+    }
+
     public init() {}
 
     public var body: some View {
         HStack(spacing: 0) {
-            List(selection: $selection) {
-                ForEach(Acknowledgement.Group.allCases, id: \.self) { group in
-                    // The group's label is a row of its own: a list's
-                    // floating header draws a line.
-                    SectionLabel(group.rawValue)
-                        .padding(.horizontal, Metrics.ListRow.horizontalPadding)
-                        .padding(.top, Metrics.PaletteList.sectionTopPadding)
-                        .padding(.bottom, Metrics.PaletteList.sectionBottomPadding)
-                        .listRowInsets(EdgeInsets(top: 0, leading: Metrics.ListRow.inset, bottom: 0, trailing: Metrics.ListRow.inset))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                    ForEach(Acknowledgement.all.filter { $0.group == group }) { acknowledgement in
-                        Text(acknowledgement.name)
-                            .foregroundStyle(.text)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .selectableRow(isSelected: acknowledgement.id == selection)
-                            .tag(acknowledgement.id)
-                            .listRowInsets(EdgeInsets(top: 1, leading: Metrics.ListRow.inset, bottom: 1, trailing: Metrics.ListRow.inset))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                    }
-                }
-            }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .rowsDrawSelection()
-            .unbouncedList()
-            .background(Color(espalier: Palette.sidebar))
-            .frame(width: Metrics.About.acknowledgementsListWidth)
+            AcknowledgementsList(rows: Self.listRows, selection: $selection)
+                .background(Color(espalier: Palette.sidebar))
+                .frame(width: Metrics.About.acknowledgementsListWidth)
             Hairline(.vertical)
             if let acknowledgement = Acknowledgement.all.first(where: { $0.id == selection }) {
                 AcknowledgementDetail(acknowledgement: acknowledgement)

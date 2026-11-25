@@ -194,6 +194,21 @@ My rule: rigor where a mistake hurts users, not everywhere.
   the action; commands that open a sheet end in an ellipsis; Settings is
   named by pane ("Settings ▸ Integrations").
 - Long lists use `NSTableView` or `List`.
+- **The overscroll bug** is a list or scroll view showing its content past
+  its first or last row: a rubber band, or on a flick the content jumping
+  past the end and back, frame by frame. AppKit's momentum carries content
+  past an end even with elasticity off, and its responsive scrolling shows
+  that before the main thread can undo it.
+  - An AppKit list (Changes' files, History's lists, a commit's files, the
+    diff) is in an `UnbouncedScrollView`: its clip view never takes an
+    origin outside the content, and it opts out of responsive scrolling.
+    It never shows the bug.
+  - SwiftUI's `ScrollView` and `List` make their own scroll view, so they
+    take a pin, `unbouncedScrollContent()` or `unbouncedList()`, which puts
+    the content back after it moves. It can't opt them out of responsive
+    scrolling, so a flick on a long list still shows the jump (the
+    Acknowledgements sidebar does). A list that must never show it is an
+    `NSTableView` in an `UnbouncedScrollView`.
 
 ## Tests
 
