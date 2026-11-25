@@ -178,7 +178,7 @@ extension Acknowledgement {
     /// The bundled text fonts (Resources/Fonts): each family's folder, and
     /// its license as the font ships it.
     static let fonts: [Acknowledgement] = [
-        font("allo", name: "Allo", version: "1.003", url: "https://github.com/joshpuckett/allo"),
+        font("allo", name: "Allo", version: "1.100", url: "https://github.com/joshpuckett/allo"),
         font("maple-mono", name: "Maple Mono", version: "7.900", url: "https://github.com/subframe7536/maple-font"),
         font("geist", name: "Geist", version: "1.800", url: "https://github.com/vercel/geist-font"),
         font("geist-mono", name: "Geist Mono", version: "1.701", url: "https://github.com/vercel/geist-font"),
