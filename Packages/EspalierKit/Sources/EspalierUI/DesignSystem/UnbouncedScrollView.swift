@@ -14,7 +14,9 @@
 // scroll ends puts the clip view's origin back inside the content whenever
 // it moves out, and back where it was sideways as the scroll began. SwiftUI's
 // clip view rests where it puts itself, so that sideways origin is measured,
-// not worked out.
+// not worked out. A list can make its scroll view after the pin last looked
+// for it, in a window with nothing to make it look again, so a pin with no
+// scroll view looks again as any scroll in its window starts.
 //
 // Either kind can fade its content out at the edges with more beyond them
 // (`fadesEdges`, ScrollEdgeFade.swift).
@@ -204,6 +206,12 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            // Scrolls starting anywhere, so that one in a scroll view it
+            // hasn't found yet finds it.
+            NotificationCenter.default.removeObserver(self, name: NSScrollView.willStartLiveScrollNotification, object: nil)
+            if window != nil {
+                NotificationCenter.default.addObserver(self, selector: #selector(willStartLiveScroll(_:)), name: NSScrollView.willStartLiveScrollNotification, object: nil)
+            }
             attach()
             if window != nil, scrollView == nil {
                 // A list's table isn't there yet: the layout pass that
@@ -235,7 +243,8 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
             guard found !== scrollView, found != nil || window == nil else {
                 return
             }
-            NotificationCenter.default.removeObserver(self)
+            NotificationCenter.default.removeObserver(self, name: NSScrollView.didEndLiveScrollNotification, object: nil)
+            NotificationCenter.default.removeObserver(self, name: NSView.boundsDidChangeNotification, object: nil)
             scrollView = found
             heldX = nil
             if let found {
@@ -299,13 +308,18 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
         private func observe(_ scrollView: NSScrollView) {
             Self.turnElasticityOff(scrollView)
             scrollView.contentView.postsBoundsChangedNotifications = true
-            NotificationCenter.default.addObserver(self, selector: #selector(willStartLiveScroll(_:)), name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
             NotificationCenter.default.addObserver(self, selector: #selector(didEndLiveScroll(_:)), name: NSScrollView.didEndLiveScrollNotification, object: scrollView)
             NotificationCenter.default.addObserver(self, selector: #selector(boundsDidChange(_:)), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         }
 
+        /// A scroll starting in any scroll view. With none of its own in
+        /// the window, it looks for one first; then its own scroll's start
+        /// turns the elasticity off and holds the sideways origin.
         @objc private func willStartLiveScroll(_ notification: Notification) {
-            guard let scrollView else {
+            if scrollView?.window == nil {
+                attach()
+            }
+            guard let scrollView, notification.object as? NSScrollView === scrollView else {
                 return
             }
             Self.turnElasticityOff(scrollView)
