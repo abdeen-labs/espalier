@@ -206,9 +206,9 @@ My rule: rigor where a mistake hurts users, not everywhere.
   - SwiftUI's `ScrollView` and `List` make their own scroll view, so they
     take a pin, `unbouncedScrollContent()` or `unbouncedList()`, which puts
     the content back after it moves. It can't opt them out of responsive
-    scrolling, so a flick on a long list still shows the jump (the
-    Acknowledgements sidebar does). A list that must never show it is an
-    `NSTableView` in an `UnbouncedScrollView`.
+    scrolling, so a flick on a long list still shows the jump. A list that
+    must never show it is an `NSTableView` in an `UnbouncedScrollView`, as
+    the Acknowledgements sidebar is.
 
 ## Tests
 
