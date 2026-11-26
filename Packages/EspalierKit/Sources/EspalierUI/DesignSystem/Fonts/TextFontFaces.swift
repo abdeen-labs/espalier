@@ -78,8 +78,9 @@ nonisolated struct BundledFace: Sendable, Hashable {
         isMono: false
     )
 
-    /// Allo, its roundness pinned at 100 in the bundled file; its optical
-    /// size follows the point size.
+    /// Allo, its roundness pinned at 100 and its optical size at 14 (the
+    /// text cut) in the bundled file, so the family has one instance for
+    /// each weight and a weight asked of it is that one.
     static let allo = BundledFace(
         family: "Allo Variable",
         names: [

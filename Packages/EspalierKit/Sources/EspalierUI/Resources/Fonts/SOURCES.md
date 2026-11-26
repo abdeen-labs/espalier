@@ -12,4 +12,8 @@ Mono on 2026-11-22, Allo on 2026-11-25), but Allo's (below). All SIL OFL 1.1.
 
 Allo's file is AlloVariable.ttf with its roundness axis (`ROND`) pinned at
 100 by fontTools' instancer, its named instances moved to roundness 100
-first so they're kept; its optical size and weight axes are as they were.
+first so they're kept, and its optical size axis (`opsz`) pinned at 14,
+the text cut, which drops the Display named instances (optical size 32).
+Its weight axis is as it was. With both cuts in the family, a weight asked
+of it (SwiftUI's `weight(_:)`) came back as the Display cut for some
+weights, tighter than the text beside it.
