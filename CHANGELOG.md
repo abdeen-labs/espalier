@@ -16,6 +16,12 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.7.2] - 2026-11-26
+
+### Changed
+
+- Home and the shelf show every repository as soon as Espalier opens, as it was when you last used it, and bring each one up to date as it's checked. They no longer fill in over a few seconds. The first launch after updating still fills in, once.
+
 ## [1.7.1] - 2026-11-25
 
 ### Changed
@@ -286,7 +292,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.7.2...HEAD
+[1.7.2]: https://github.com/abdeen-labs/espalier/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/abdeen-labs/espalier/compare/v1.7...v1.7.1
 [1.7]: https://github.com/abdeen-labs/espalier/compare/v1.6...v1.7
 [1.6]: https://github.com/abdeen-labs/espalier/compare/v1.5.6...v1.6
