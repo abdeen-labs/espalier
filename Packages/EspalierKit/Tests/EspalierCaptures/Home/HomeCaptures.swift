@@ -1,8 +1,10 @@
 // Home: the full board (six pieces of work that need the user, each with
 // its own headline and peek (the push card its commits), the first focused
 // and unseen; In Progress with work
-// changing now and work waiting on checks; Quiet closed), Quiet open, the
-// board at two columns and at one, nothing needing the user, status off, a
+// changing now and work waiting on checks; Quiet closed), Quiet open (its
+// repositories grouped by owner, under the board and alone in a wide
+// window), the board at two columns and at one, nothing needing the user,
+// status off, a
 // long repository and branch name, Fetch All running, and a card whose Push
 // runs. The board is made from plain values through `makePiecesOfWork` and
 // `makeBoard`, as the app makes it, drawn on the backdrop the window shows
@@ -27,9 +29,12 @@ struct HomeCaptures {
         draw(HomeCaptureBoard.full().content(), named: "board", size: wide)
     }
 
-    @Test("Quiet open, its names wrapped")
+    @Test("Quiet open, its repositories grouped by owner: under the board, and alone in a wide window and a narrow one")
     func quietOpen() {
-        draw(HomeCaptureBoard.full().content(), named: "quiet-open", size: CGSize(width: wide.width, height: 1000), isQuietOpen: true)
+        draw(HomeCaptureBoard.full().content(), named: "quiet-open", size: CGSize(width: wide.width, height: 1320), isQuietOpen: true)
+        let quiet = HomeCaptureBoard.full(needsYou: false, inProgress: false).content()
+        draw(quiet, named: "quiet-open-wide", size: CGSize(width: 1790, height: 520), isQuietOpen: true)
+        draw(quiet, named: "quiet-open-narrow", size: CGSize(width: 520, height: 1180), isQuietOpen: true)
     }
 
     @Test("the board at two columns and at one")
@@ -160,12 +165,27 @@ struct HomeCaptureBoard {
                 number: 145, title: "Cache responses", url: url, isDraft: false, checks: .pending, review: .none, updatedAt: board.now
             )))
         }
-        for name in [
-            "dotfiles", "espalier-site", "mooring", "harbor-android", "signal-flags", "chart-data", "anchor", "bilge",
-            "compass", "deckhand", "ensign", "fathom", "galley", "hawser", "jetty", "keel", "lanyard", "mainsail",
-            "nautical-almanac", "offing", "pennant", "quay", "rigging",
-        ] {
-            board.add(name, branch: "main", aheadBehind: AheadBehind(ahead: 0, behind: 0), minutesAgo: 600)
+        // The quiet repositories: three owners' and four in a folder, one
+        // off its default branch, last changed from minutes to months ago.
+        let quiet: [(owner: String?, names: [String])] = [
+            ("harbor-co", ["harbor-android", "chart-data", "signal-flags", "mooring", "anchor", "bilge", "compass", "deckhand"]),
+            ("joe", ["dotfiles", "espalier-site", "ensign", "fathom", "galley"]),
+            ("tide-labs", ["hawser", "jetty", "keel", "lanyard", "mainsail", "nautical-almanac"]),
+            (nil, ["offing", "pennant", "quay", "rigging"]),
+        ]
+        let ages: [Double] = [8, 45, 180, 600, 1500, 4300, 9000, 30000, 70000]
+        var index = 0
+        for (owner, names) in quiet {
+            for name in names {
+                board.add(
+                    name,
+                    branch: name == "keel" ? "agent/ballast" : "main",
+                    aheadBehind: AheadBehind(ahead: 0, behind: 0),
+                    minutesAgo: ages[index % ages.count],
+                    owner: owner
+                )
+                index += 1
+            }
         }
         return board
     }
@@ -204,10 +224,15 @@ struct HomeCaptureBoard {
         commits: [String] = [],
         pullRequest: BranchPullRequestStatus? = nil,
         folder: String = "/Users/joe/Developer",
+        owner: String? = nil,
         isChecking: Bool = false
     ) -> WorktreeKey {
         let path = linked ? "\(folder)/\(name)-worktree" : "\(folder)/\(name)"
-        let record = ModelFixtures.record(path: path, alias: name)
+        let record = ModelFixtures.record(
+            path: path,
+            alias: name,
+            gitHubRepository: owner.map { ModelFixtures.gitHubRepository(owner: $0, name: name) }
+        )
         records.append(record)
         let key = WorktreeKey(repositoryID: record.id, path: record.path)
         let entry = WorktreeEntry(path: path, head: tip ?? "", branch: "refs/heads/\(branch)", isDetached: false, type: linked ? .linked : .main, isLocked: false, isPrunable: false)
@@ -252,7 +277,7 @@ struct HomeCaptureBoard {
             now: now
         ))
         let board = makeBoard(pieces, pinned: [], isStatusOff: false)
-        let colors = BranchColors(branches: ["feature/charts", "fix/tide-zone", "agent/rate-limits", "agent/onboarding", "cache-keys", "agent/nav", "feature/widget", "agent/units", "agent/cache"], current: nil, defaultBranch: "main")
+        let colors = BranchColors(branches: ["feature/charts", "fix/tide-zone", "agent/rate-limits", "agent/onboarding", "cache-keys", "agent/nav", "feature/widget", "agent/units", "agent/cache", "agent/ballast"], current: nil, defaultBranch: "main")
         return HomeContent.make(board: board, running: running, focus: focus) { _, branch in
             colors.color(of: (name: branch, isRemote: false))
         }

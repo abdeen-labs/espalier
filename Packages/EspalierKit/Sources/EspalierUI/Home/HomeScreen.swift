@@ -52,12 +52,21 @@ struct HomeScreen: View {
     private func content(_ model: HomeModel) -> HomeContent {
         let app = context.app
         let board = app.board
-        return HomeContent.make(board: board, running: model.running, focus: model.focus, isScanningFolders: app.isScanningFolders) { piece, branch in
-            guard let repository = app.repository(piece.record.id) else {
-                return Palette.accent
+        return HomeContent.make(
+            board: board,
+            running: model.running,
+            focus: model.focus,
+            isScanningFolders: app.isScanningFolders,
+            isDefaultBranch: { record, branch in
+                HomeContent.isDefaultBranch(branch, known: app.repository(record.id)?.gitState.branches.defaultBranch?.nameWithoutRemote)
+            },
+            branchColor: { record, branch in
+                guard let repository = app.repository(record.id) else {
+                    return Palette.accent
+                }
+                return BranchColors.of(repository).color(of: (name: branch, isRemote: false))
             }
-            return BranchColors.of(repository).color(of: (name: branch, isRemote: false))
-        }
+        )
     }
 
     private func actions(_ model: HomeModel) -> HomeViewActions {

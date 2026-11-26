@@ -1,8 +1,10 @@
 // Home's content from boards made of plain values: the cards follow the
 // board's order, one card has the focus (the first unless another was
 // chosen), Push All shows only with something to push, repositories whose
-// status hasn't loaded stay out until it has, each next step goes where it
-// should, and the arrow keys move the focus through the grid.
+// status hasn't loaded stay out until it has, the quiet repositories are
+// grouped by owner and show a branch only off the default one, each next
+// step goes where it should, and the arrow keys move the focus through the
+// grid.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -28,15 +30,22 @@ private struct Board {
         stopped: RepositoryIndicator.StoppedOperation? = nil,
         tip: String? = nil,
         pullRequest: BranchPullRequestStatus? = nil,
-        hasStatus: Bool = true
+        hasStatus: Bool = true,
+        owner: String? = nil,
+        head: RepositoryIndicator.Head = .branch(name: "feature"),
+        folder: String = "/repositories"
     ) -> WorktreeKey {
-        let record = ModelFixtures.record(path: "/repositories/\(name)", alias: name)
+        let record = ModelFixtures.record(
+            path: "\(folder)/\(name)",
+            alias: name,
+            gitHubRepository: owner.map { ModelFixtures.gitHubRepository(owner: $0, name: name) }
+        )
         records.append(record)
         let key = WorktreeKey(repositoryID: record.id, path: record.path)
         worktrees[record.id] = [WorktreeFacts(
             path: record.path,
             isCurrent: true,
-            indicator: hasStatus ? RepositoryIndicator(head: .branch(name: "feature"), aheadBehind: aheadBehind, changedFilesCount: changed, stoppedOperation: stopped) : nil,
+            indicator: hasStatus ? RepositoryIndicator(head: head, aheadBehind: aheadBehind, changedFilesCount: changed, stoppedOperation: stopped) : nil,
             tip: tip,
             pullRequest: pullRequest
         )]
@@ -44,11 +53,17 @@ private struct Board {
         return key
     }
 
-    /// Every reason counts, those off by default too.
-    func content(focus: WorktreeKey? = nil) -> HomeContent {
+    /// Every reason counts, those off by default too. Every repository's
+    /// default branch is `defaultBranch`; nil when none is known.
+    func content(focus: WorktreeKey? = nil, defaultBranch: String? = nil) -> HomeContent {
         let settings = WorkSettings(needsYouReasons: Set(NeedsYouReason.allCases))
         let pieces = makePiecesOfWork(WorkInputs(repositories: records, worktrees: worktrees, lastChanged: lastChanged, settings: settings, now: now))
-        return HomeContent.make(board: makeBoard(pieces, pinned: [], isStatusOff: false), focus: focus) { _, _ in Palette.accent }
+        return HomeContent.make(
+            board: makeBoard(pieces, pinned: [], isStatusOff: false),
+            focus: focus,
+            isDefaultBranch: { _, branch in HomeContent.isDefaultBranch(branch, known: defaultBranch) },
+            branchColor: { _, _ in Palette.accent }
+        )
     }
 }
 
@@ -90,6 +105,57 @@ struct HomeContentTests {
         board.add("ahead", aheadBehind: AheadBehind(ahead: 2, behind: 0))
         board.add("diverged", aheadBehind: AheadBehind(ahead: 1, behind: 1))
         #expect(board.content().pushAllCount == 1)
+    }
+
+    @Test("quiet repositories are grouped by owner, one without an owner by its folder; the groups are by name, ignoring case")
+    func quietGroups() {
+        var board = Board()
+        board.add("tide-kit", owner: "harbor-co")
+        board.add("anchor", owner: "Joe")
+        board.add("buoy", owner: "harbor-co")
+        board.add("local", folder: "/work/experiments")
+        board.add("changed", changed: 1, owner: "harbor-co")
+        let groups = board.content().quietGroups
+
+        // The folder's group comes first: "/" sorts before the letters.
+        #expect(groups.map { $0.repositories.map(\.title) } == [["local"], ["buoy", "tide-kit"], ["anchor"]])
+        #expect(Array(groups.map(\.name).dropFirst()) == ["harbor-co", "Joe"])
+    }
+
+    @Test("a quiet repository shows its branch only off its default branch, and the commit a detached HEAD is at")
+    func quietBranch() {
+        var board = Board()
+        board.add("on-default", head: .branch(name: "trunk"))
+        board.add("off-default", head: .branch(name: "main"))
+        board.add("detached", head: .detached(sha: "0123456789abcdef"))
+        let quiet = board.content(defaultBranch: "trunk").quiet
+
+        #expect(quiet.map(\.title) == ["detached", "off-default", "on-default"])
+        #expect(quiet.map(\.branch?.text) == ["0123456", "main", nil])
+        #expect(quiet.map(\.branch?.isDetached) == [true, false, nil])
+    }
+
+    @Test("until a repository's default branch is known, main and master count as it")
+    func conventionalDefaultBranch() {
+        var board = Board()
+        board.add("a", head: .branch(name: "main"))
+        board.add("b", head: .branch(name: "master"))
+        board.add("c", head: .branch(name: "trunk"))
+
+        #expect(board.content().quiet.map(\.branch?.text) == [nil, nil, "trunk"])
+    }
+
+    @Test("two quiet repositories of one title in one group show the folders they're in, and no other does")
+    func quietFolders() {
+        var board = Board()
+        board.add("harbor", owner: "harbor-co", folder: "/work/one")
+        board.add("harbor", owner: "harbor-co", folder: "/work/two")
+        board.add("harbor", owner: "joe", folder: "/work/three")
+        board.add("buoy", owner: "harbor-co")
+        let quiet = board.content().quiet
+
+        #expect(quiet.map(\.title) == ["buoy", "harbor", "harbor", "harbor"])
+        #expect(quiet.map { $0.folder != nil } == [false, true, true, false])
     }
 
     @Test("a repository whose status hasn't loaded isn't quiet yet and counts as being checked; the title waits until a card is known")

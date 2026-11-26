@@ -1,6 +1,7 @@
 // Home's look, value-driven (`HomeContent`): the heading with Fetch All and
 // Push All, Needs You's cards (or, where the theme draws plainly, its rows),
-// In Progress's rows, and the Quiet line; or, with status off, why Home
+// In Progress's rows, and the Quiet line with the quiet repositories'
+// groups under it; or, with status off, why Home
 // can't say anything. It scrolls when it doesn't fit, pinned against the
 // overscroll bug. One card has the focus: its button is the prominent one,
 // Return takes it, and the arrow keys move the focus. Counts roll, and
@@ -465,6 +466,42 @@ struct HomeCardGrid: Layout {
     }
 }
 
+/// Cards in as many columns as fit (`HomeCardGrid.columns`), each card as
+/// high as it is and under the shortest column so far, the leftmost of
+/// equals.
+struct HomeColumns: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? Metrics.Home.cardMinWidth
+        return CGSize(width: width, height: frames(width: width, subviews: subviews).map(\.maxY).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (subview, frame) in zip(subviews, frames(width: bounds.width, subviews: subviews)) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                proposal: ProposedViewSize(width: frame.width, height: frame.height)
+            )
+        }
+    }
+
+    /// Where each card goes, from the layout's top left.
+    private func frames(width: CGFloat, subviews: Subviews) -> [CGRect] {
+        let columns = HomeCardGrid.columns(forWidth: width, spacing: spacing)
+        let columnWidth = ((width - spacing * CGFloat(columns - 1)) / CGFloat(columns)).rounded(.down)
+        // Each column's bottom so far.
+        var bottoms = Array(repeating: CGFloat(0), count: columns)
+        return subviews.map { subview in
+            let column = bottoms.indices.min { bottoms[$0] < bottoms[$1] } ?? 0
+            let height = subview.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil)).height
+            let y = bottoms[column] > 0 ? bottoms[column] + spacing : 0
+            bottoms[column] = y + height
+            return CGRect(x: CGFloat(column) * (columnWidth + spacing), y: y, width: columnWidth, height: height)
+        }
+    }
+}
+
 /// Rows split by hairlines, in a theme that draws plainly.
 struct HomeHairlineList<Item: Identifiable, Row: View>: View {
     private let items: [Item]
@@ -562,8 +599,6 @@ extension Metrics {
         public static let progressInset: CGFloat = 6
         /// A row's sides.
         public static let rowPadding: CGFloat = 12
-        /// Between the quiet repositories' names.
-        public static let quietNameSpacing: CGFloat = 4
         /// How far a card or row starts from as it arrives.
         public static let arrivalScale: CGFloat = 0.97
         /// A plain row's top and bottom, where the theme draws plainly.

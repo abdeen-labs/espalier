@@ -1,12 +1,14 @@
 // What Home shows, as values: the heading's counts, a card for each piece of
 // work that needs the user (its head, headline, peek, next step, and pending
-// counts), a row for each one in progress, and the quiet repositories. Built
+// counts), a row for each one in progress, and the quiet repositories, which
+// it groups by owner. Built
 // from the board (`AppModel.board`) and what Home is running, so captures
 // and tests draw and check Home from values. Also where each next step
 // goes, and how the arrow keys move the focus between cards.
 
 import AppKit
 import EspalierCore
+import EspalierSupport
 import GitKit
 
 /// What Home shows.
@@ -128,7 +130,30 @@ struct HomeProgressRow: Equatable, Identifiable {
 struct HomeQuietRepository: Equatable, Identifiable {
     let id: RepositoryID
     var title: String
+    /// The owner (or folder) when another repository has the same title.
     var owner: String?
+    /// What its group is named: its owner on GitHub, else the folder it's
+    /// in.
+    var group: String
+    /// The folder it's in, when its group has another repository of its
+    /// title.
+    var folder: String?
+    /// Its branch when it isn't on its default branch, or the commit a
+    /// detached HEAD is at.
+    var branch: HomeBranchLabel?
+    /// When it last changed on disk.
+    var lastChanged: Date?
+}
+
+/// The quiet repositories of one owner, or in one folder.
+struct HomeQuietGroup: Equatable, Identifiable {
+    /// The owner, or the folder.
+    var name: String
+    var repositories: [HomeQuietRepository]
+
+    var id: ExactString {
+        ExactString(name)
+    }
 }
 
 /// Where a card's next step goes.
@@ -170,13 +195,16 @@ extension HomeContent {
     ///   - focus: The card the user last moved the focus to; the first card
     ///     has it when that one isn't on the board.
     ///   - isScanningFolders: Whether a scan of the watched folders runs.
-    ///   - branchColor: A piece of work's branch's color.
+    ///   - isDefaultBranch: Whether a branch is its repository's default
+    ///     branch. A quiet repository on it shows no branch.
+    ///   - branchColor: The color of a repository's branch.
     static func make(
         board: WorkBoard,
         running: HomeRunning = HomeRunning(),
         focus: WorktreeKey? = nil,
         isScanningFolders: Bool = false,
-        branchColor: (PieceOfWork, String) -> NSColor
+        isDefaultBranch: (RepositoryRecord, String) -> Bool = { _, branch in HomeContent.isDefaultBranch(branch, known: nil) },
+        branchColor: (RepositoryRecord, String) -> NSColor
     ) -> HomeContent {
         guard !board.isStatusOff else {
             return HomeContent(isStatusOff: true)
@@ -220,8 +248,25 @@ extension HomeContent {
                 phase: phase
             )
         }
-        let quiet = board.quietRepositories.filter { !pending.contains($0.id) }.map {
-            HomeQuietRepository(id: $0.id, title: $0.title, owner: owner($0.record, $0.needsDisambiguation))
+        let quietRepositories = board.quietRepositories.filter { !pending.contains($0.id) }
+        var quiet = quietRepositories.map { repository in
+            HomeQuietRepository(
+                id: repository.id,
+                title: repository.title,
+                owner: owner(repository.record, repository.needsDisambiguation),
+                group: RepositoryRowContent.disambiguation(for: repository.record),
+                branch: quietBranch(repository, isDefault: isDefaultBranch, color: branchColor),
+                lastChanged: repository.lastChanged
+            )
+        }
+        // Two of one title in one group (one GitHub repository in two
+        // folders) are told apart by their folders.
+        var titles: [QuietTitle: Int] = [:]
+        for repository in quiet {
+            titles[QuietTitle(repository), default: 0] += 1
+        }
+        for (index, repository) in quietRepositories.enumerated() where titles[QuietTitle(quiet[index]), default: 0] > 1 {
+            quiet[index].folder = RepositoryRowContent.abbreviatedPath(POSIXPath.dirname(repository.record.path))
         }
         return HomeContent(
             checkingCount: pending.count,
@@ -240,11 +285,50 @@ extension HomeContent {
         needsDisambiguation ? RepositoryRowContent.disambiguation(for: record) : nil
     }
 
+    /// A quiet repository's group and title, as its group tells its
+    /// repositories apart.
+    private struct QuietTitle: Hashable {
+        let group: ExactString
+        let title: ExactString
+
+        init(_ repository: HomeQuietRepository) {
+            group = ExactString(repository.group)
+            title = ExactString(repository.title)
+        }
+    }
+
+    /// Whether `branch` is the default branch of a repository whose default
+    /// branch is `known`. Until its branches have loaded it isn't known,
+    /// and a branch named `main` or `master` counts.
+    static func isDefaultBranch(_ branch: String, known: String?) -> Bool {
+        if let known {
+            return JSCompat.strictEquals(branch, known)
+        }
+        return branch == "main" || branch == "master"
+    }
+
+    /// A quiet repository's branch when it isn't its default branch, or the
+    /// short SHA of a detached HEAD.
+    private static func quietBranch(
+        _ repository: QuietRepository,
+        isDefault: (RepositoryRecord, String) -> Bool,
+        color: (RepositoryRecord, String) -> NSColor
+    ) -> HomeBranchLabel? {
+        switch repository.head {
+        case .branch(let name)?, .unborn(let name)?:
+            isDefault(repository.record, name) ? nil : HomeBranchLabel(text: name, isDetached: false, color: color(repository.record, name))
+        case .detached(let sha)?:
+            HomeBranchLabel(text: String(sha.prefix(shortSHALength)), isDetached: true, color: Palette.text3)
+        case nil:
+            nil
+        }
+    }
+
     /// The branch, or the short SHA of a detached HEAD.
-    private static func branchLabel(_ piece: PieceOfWork, color: (PieceOfWork, String) -> NSColor) -> HomeBranchLabel? {
+    private static func branchLabel(_ piece: PieceOfWork, color: (RepositoryRecord, String) -> NSColor) -> HomeBranchLabel? {
         switch piece.head {
         case .branch(let name)?, .unborn(let name)?:
-            HomeBranchLabel(text: name, isDetached: false, color: color(piece, name))
+            HomeBranchLabel(text: name, isDetached: false, color: color(piece.record, name))
         case .detached(let sha)?:
             HomeBranchLabel(text: String(sha.prefix(shortSHALength)), isDetached: true, color: Palette.text3)
         case nil:
@@ -376,6 +460,30 @@ extension HomeContent {
         quiet.count == 1
             ? "1 repository is clean and in sync"
             : "\(formatCount(quiet.count, format)) repositories are clean and in sync"
+    }
+
+    /// The quiet repositories by group: the groups by name, ignoring case,
+    /// each one's repositories in `quiet`'s order.
+    var quietGroups: [HomeQuietGroup] {
+        var indexes: [ExactString: Int] = [:]
+        var groups: [HomeQuietGroup] = []
+        for repository in quiet {
+            let key = ExactString(repository.group)
+            if let index = indexes[key] {
+                groups[index].repositories.append(repository)
+            } else {
+                indexes[key] = groups.count
+                groups.append(HomeQuietGroup(name: repository.group, repositories: [repository]))
+            }
+        }
+        // By the lowercased names' code units, then the names' own, so two
+        // names that differ only in case keep one order.
+        let keyed = groups.map { (group: $0, lowercased: Array(JSCompat.toLowerCase($0.name).utf16), exact: Array($0.name.utf16)) }
+        return keyed.sorted { x, y in
+            x.lowercased == y.lowercased
+                ? x.exact.lexicographicallyPrecedes(y.exact)
+                : x.lowercased.lexicographicallyPrecedes(y.lowercased)
+        }.map(\.group)
     }
 }
 

@@ -162,6 +162,26 @@ struct WorkBoardTests {
         #expect(builder.shelf(.recentActivity).quietRepositoryCount == 2)
     }
 
+    @Test("a quiet repository tells where the worktree its record points at is, and when the latest of its worktrees changed")
+    func quietRepositoryFacts() {
+        var builder = Builder()
+        let harbor = builder.add("harbor", .quiet)
+        // A linked worktree of harbor's, quiet too, changed later.
+        let linked = WorktreeKey(repositoryID: harbor.repositoryID, path: "/worktrees/charts")
+        builder.worktrees[harbor.repositoryID]?.insert(WorktreeFacts(
+            path: linked.path,
+            isCurrent: false,
+            indicator: RepositoryIndicator(head: .branch(name: "charts"), aheadBehind: nil, changedFilesCount: 0)
+        ), at: 0)
+        let later = now.addingTimeInterval(-10 * 60)
+        builder.lastChanged[linked] = later
+
+        let quiet = builder.board().quietRepositories
+
+        #expect(quiet.map(\.head) == [.branch(name: "main")])
+        #expect(quiet.map(\.lastChanged) == [later])
+    }
+
     @Test("counts the unseen Needs You work, and Push All takes the work ahead of an upstream it isn't behind")
     func unseenAndPushAll() {
         var builder = Builder()

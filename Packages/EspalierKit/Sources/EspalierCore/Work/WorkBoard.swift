@@ -13,6 +13,11 @@ public struct QuietRepository: Sendable, Equatable, Identifiable {
     /// As its pieces of work have it (`PieceOfWork.title`).
     public let title: String
     public let needsDisambiguation: Bool
+    /// Where the HEAD of the worktree its record points at is; nil until a
+    /// status has told.
+    public let head: RepositoryIndicator.Head?
+    /// When the latest of its worktrees last changed on disk.
+    public let lastChanged: Date?
 
     public var id: RepositoryID {
         record.id
@@ -96,12 +101,31 @@ private func quietRepositories(_ work: [PieceOfWork]) -> [QuietRepository] {
     for piece in work where piece.phase != .quiet {
         busy.insert(piece.record.id)
     }
-    var seen: Set<RepositoryID> = []
+    // Each quiet repository's pieces of work, the repositories in the order
+    // of their first.
+    var order: [RepositoryID] = []
+    var pieces: [RepositoryID: [PieceOfWork]] = [:]
+    for piece in work where !busy.contains(piece.record.id) {
+        if pieces[piece.record.id] == nil {
+            order.append(piece.record.id)
+        }
+        pieces[piece.record.id, default: []].append(piece)
+    }
     var quiet: [(repository: QuietRepository, key: [UInt16], offset: Int)] = []
-    for piece in work where !busy.contains(piece.record.id) && seen.insert(piece.record.id).inserted {
+    for id in order {
+        guard let all = pieces[id], let first = all.first else {
+            continue
+        }
+        let current = all.first(where: \.isCurrent) ?? first
         quiet.append((
-            QuietRepository(record: piece.record, title: piece.title, needsDisambiguation: piece.needsDisambiguation),
-            titleKey(piece.title),
+            QuietRepository(
+                record: first.record,
+                title: first.title,
+                needsDisambiguation: first.needsDisambiguation,
+                head: current.head,
+                lastChanged: all.compactMap(\.lastChanged).max()
+            ),
+            titleKey(first.title),
             quiet.count
         ))
     }

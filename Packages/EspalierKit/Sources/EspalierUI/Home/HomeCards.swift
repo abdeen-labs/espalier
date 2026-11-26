@@ -1,7 +1,7 @@
 // Home's pieces: a card of Needs You (its head, headline with its time,
 // peek, and the next step beside the pending counts), the same as a plain
 // row where the theme draws plainly, In Progress's rows, and the Quiet line
-// that opens into the quiet repositories' names.
+// that opens into the quiet repositories, a group for each owner.
 
 import EspalierCore
 import EspalierSupport
@@ -185,6 +185,8 @@ struct HomeCappedWidth: Layout {
 /// in the code font; a detached HEAD's short SHA in the code font.
 struct HomeBranchView: View {
     let branch: HomeBranchLabel
+    /// The pill's size: a card's, or a row's.
+    var size: CandyPillSize = .regular
 
     var body: some View {
         Group {
@@ -195,7 +197,7 @@ struct HomeBranchView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             } else {
-                CandyPill(branch.text, color: branch.color, size: .regular)
+                CandyPill(branch.text, color: branch.color, size: size)
             }
         }
         .tooltip(branch.text)
@@ -541,8 +543,8 @@ struct HomeProgressRowView: View {
 // MARK: - Quiet
 
 /// The Quiet line: the chevron, "Quiet", how many repositories are clean
-/// and in sync, and their names trailing off; open, the names as a wrapped
-/// run, each opening its repository.
+/// and in sync, and their names trailing off; open, the repositories in
+/// groups, one for each owner (`HomeQuietGroups`).
 struct HomeQuietSection: View {
     let content: HomeContent
     @Binding var isOpen: Bool
@@ -588,19 +590,12 @@ struct HomeQuietSection: View {
             }
             .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
             .accessibilityValue(isOpen ? "Open" : "Closed")
+            .padding(.horizontal, Metrics.Home.labelInset)
             if isOpen {
-                RefPillFlow(spacing: Metrics.Home.quietNameSpacing) {
-                    ForEach(content.quiet) { repository in
-                        HomeQuietName(name: repository.name) {
-                            openRepository(repository.id)
-                        }
-                    }
-                }
-                .padding(.leading, Metrics.symbolWidth + Metrics.insetSmall - Metrics.Home.quietNamePadding)
-                .transition(motion.animates ? .opacity : .identity)
+                HomeQuietGroups(groups: content.quietGroups, openRepository: openRepository)
+                    .transition(motion.animates ? .opacity : .identity)
             }
         }
-        .padding(.horizontal, Metrics.Home.labelInset)
     }
 }
 
@@ -611,33 +606,144 @@ extension HomeQuietRepository {
     }
 }
 
-/// A quiet repository's name: a click opens it; the pointer highlights it.
-struct HomeQuietName: View {
-    let name: String
+/// The quiet repositories' groups in as many columns as cards fit, each
+/// group under the shortest column so far (`HomeColumns`), so they line up
+/// with Needs You's cards. The rows' times tick once a minute.
+struct HomeQuietGroups: View {
+    let groups: [HomeQuietGroup]
+    let openRepository: (RepositoryID) -> Void
+    @Environment(\.scheduler) private var scheduler
+    @Environment(\.motion) private var motion
+
+    var body: some View {
+        // Ticks once a minute, telling time by the app's clock.
+        TimelineView(.everyMinute) { _ in
+            let now = scheduler.now
+            HomeColumns(spacing: Metrics.Home.cardSpacing) {
+                ForEach(groups) { group in
+                    HomeQuietGroupView(group: group, now: now, openRepository: openRepository)
+                        .transition(motion.animates ? .opacity : .identity)
+                }
+            }
+        }
+    }
+}
+
+/// One owner's quiet repositories: the owner and how many there are, then a
+/// row for each. The group is a card on the backdrop, or sits under a
+/// hairline where the theme draws plainly.
+struct HomeQuietGroupView: View {
+    let group: HomeQuietGroup
+    let now: Date
+    let openRepository: (RepositoryID) -> Void
+    @Environment(\.numberFormat) private var numberFormat
+
+    var body: some View {
+        switch HomeThemeStyle.current.quiet {
+        case .cards:
+            rows(dividesHeader: false)
+                .padding(Metrics.Home.quietGroupInset)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .environment(\.isInPaneCard, true)
+                .homeCardSurface(in: RoundedRectangle(cornerRadius: Metrics.Radius.card, style: .continuous))
+        case .hairlines:
+            rows(dividesHeader: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func rows(dividesHeader: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: Metrics.insetSmall) {
+                // A folder is cut at its head, so the folder nearest the
+                // repositories stays.
+                Text(group.name)
+                    .font(Typography.row.weight(.bold))
+                    .foregroundStyle(.text)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .tooltip(group.name)
+                Text(verbatim: formatCount(group.repositories.count, numberFormat))
+                    .font(Typography.count)
+                    .foregroundStyle(.text3)
+            }
+            .padding(.horizontal, Metrics.Home.quietRowPadding)
+            .frame(minHeight: Metrics.Home.quietHeaderHeight)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            if dividesHeader {
+                Hairline()
+            }
+            ForEach(group.repositories) { repository in
+                HomeQuietRow(repository: repository, now: now) {
+                    openRepository(repository.id)
+                }
+            }
+        }
+    }
+}
+
+/// A quiet repository: its title, its folder where its group has another
+/// of that title, its branch when it's off its default branch, and when it
+/// last changed at the trailing edge. A click opens it.
+struct HomeQuietRow: View {
+    let repository: HomeQuietRepository
+    let now: Date
     let open: () -> Void
     @State private var isHovered = false
+    @Environment(\.dateTimeFormatting) private var formatting
+    @Environment(\.timeZone) private var timeZone
 
     var body: some View {
         Button(action: open) {
-            Text(name)
-                .font(Typography.row)
-                .foregroundStyle(Color(espalier: isHovered ? Palette.text : Palette.text2))
-                .lineLimit(1)
-                .padding(.horizontal, Metrics.Home.quietNamePadding)
-                .padding(.vertical, 2)
-                .background(
-                    Capsule(style: .circular)
-                        .fill(Color(espalier: Palette.hover))
-                        .opacity(isHovered ? 1 : 0)
-                        .hoverMotion(isHovered)
-                )
+            HStack(spacing: Metrics.insetSmall) {
+                Text(repository.title)
+                    .font(Typography.rowTitle)
+                    .foregroundStyle(.text)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .layoutPriority(1)
+                if let folder = repository.folder {
+                    Text(folder)
+                        .font(Typography.secondary)
+                        .foregroundStyle(.text3)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .tooltip(folder)
+                }
+                if let branch = repository.branch {
+                    HomeBranchView(branch: branch, size: .small)
+                }
+                Spacer(minLength: Metrics.insetSmall)
+                if let lastChanged = repository.lastChanged {
+                    Text(RelativeTime.describe(lastChanged, now: now, formatting: formatting, timeZone: timeZone))
+                        .font(Typography.secondary)
+                        .foregroundStyle(.text3)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
+            .padding(.horizontal, Metrics.Home.quietRowPadding)
+            .frame(maxWidth: .infinity, minHeight: Metrics.Home.quietRowHeight, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
+                    .fill(Color(espalier: Palette.hover))
+                    .opacity(isHovered ? 1 : 0)
+                    .hoverMotion(isHovered)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous))
         }
-        .buttonStyle(.bare(.capsule))
+        .buttonStyle(.bare(.rounded(Metrics.Radius.row)))
         .onHover { isHovered = $0 }
     }
 }
 
 nonisolated extension Metrics.Home {
-    /// The sides of a quiet repository's name, for its hover highlight.
-    public static let quietNamePadding: CGFloat = 6
+    /// Inside a quiet group's card.
+    public static let quietGroupInset: CGFloat = 8
+    /// A quiet group's name and count.
+    public static let quietHeaderHeight: CGFloat = 34
+    /// A quiet repository's row, and its sides.
+    public static let quietRowHeight: CGFloat = 30
+    public static let quietRowPadding: CGFloat = 10
 }
