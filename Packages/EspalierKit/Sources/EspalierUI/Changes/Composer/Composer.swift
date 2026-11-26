@@ -274,6 +274,8 @@ extension ComposerContent {
             )
         } else {
             let pushes = Self.pushesAfterCommit(repository)
+            // A commit is made with files included, or as an empty commit.
+            let makesCommit = !included.isEmpty || commit.options.allowEmpty
             button = CommitButtonContent(
                 isAmending: isAmending,
                 fileCount: included.count,
@@ -284,7 +286,9 @@ extension ComposerContent {
                 disabledReason: disabledReason,
                 numberFormat: app.preferences.numberFormat,
                 pushes: pushes,
-                pushCaption: pushes ? Self.pushCaption(repository, fileCount: included.count, numberFormat: app.preferences.numberFormat) : nil
+                pushCaption: pushes && makesCommit
+                    ? Self.pushCaption(repository, fileCount: included.count, numberFormat: app.preferences.numberFormat)
+                    : nil
             )
         }
 
@@ -340,7 +344,8 @@ extension ComposerContent {
     }
 
     /// What committing `fileCount` files and pushing will do, as the sync
-    /// button names the remote; nil without a remote.
+    /// button names the remote; nil without a remote. The composer shows it
+    /// only while there's something to commit.
     @MainActor
     static func pushCaption(_ repository: RepositoryModel, fileCount: Int, numberFormat: NumberFormat) -> String? {
         let state = repository.gitState
@@ -360,6 +365,7 @@ extension ComposerContent {
         guard let remote, let branchName else {
             return nil
         }
+        // The commits ahead of the upstream and the one about to be made.
         // Status reports ahead and behind only for a published branch.
         let commitsToPush = state.aheadBehind.map { $0.ahead + 1 }
         return CommitButtonContent.pushCaption(

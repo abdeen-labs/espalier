@@ -87,7 +87,7 @@ struct ChangesComposerCaptures {
         capture(values.composer(committing, draft: CommitDraft(summary: "Fix crash on open")), named: "composer-committing", area: area)
     }
 
-    @Test("Push After Committing on: the Options button filled, Commit and Push, and what it will do under it")
+    @Test("Push After Committing on: the Options button filled, Commit and Push, and what it will do under it; with nothing to commit, no line")
     func pushAfterCommitting() {
         var button = values.button()
         button.pushes = true
@@ -99,6 +99,15 @@ struct ChangesComposerCaptures {
             button: button
         )
         capture(values.composer(content, draft: CommitDraft(summary: "Fix crash on open")), named: "composer-push-after-committing", area: area)
+
+        // Nothing to commit: the button is disabled, and nothing is under it.
+        let nothing = ComposerContent(
+            author: values.author,
+            sparkle: .ready(model: "GPT-5"),
+            options: CommitOptionsContent(pushesAfterCommitting: true),
+            button: CommitButtonContent(fileCount: 0, branch: "main", isEnabled: false, disabledReason: "There are no changes to commit.", pushes: true)
+        )
+        capture(values.composer(nothing, draft: CommitDraft(summary: "")), named: "composer-push-after-committing-nothing", area: area)
     }
 
     @Test("a hook running, and its output")
