@@ -45,6 +45,23 @@ public struct WorktreeStatus: Sendable, Equatable, Identifiable {
     public var id: ExactString {
         ExactString(entry.path)
     }
+
+    /// The local branch the worktree has checked out: its status's, else
+    /// its list entry's; nil when it's detached.
+    public var branchName: String? {
+        switch indicator?.head {
+        case .branch(let name)?, .unborn(let name)?:
+            return name
+        case .detached?:
+            return nil
+        case nil:
+            let prefix = "refs/heads/"
+            guard let ref = entry.branch, JSCompat.startsWith(ref, prefix) else {
+                return nil
+            }
+            return JSCompat.dropFirst(ref, prefix.unicodeScalars.count)
+        }
+    }
 }
 
 /// A status that loaded for a worktree other than the one its repository's
@@ -54,6 +71,8 @@ struct WorktreeStatusUpdate: Sendable {
     let repositoryID: RepositoryID
     /// The worktree's folder, as `git worktree list` has it.
     let worktreePath: String
+    /// The worktree's git directory, when it's known.
+    var gitDirectory: String?
     let status: StatusResult
     /// The tip the status tells (`tipFromStatus`).
     let tip: Tip
@@ -98,7 +117,11 @@ extension AppModel {
     /// repository's refresh passes: `RepositoryRefresher`'s step 3.)
     func worktreeStatusDidLoad(_ update: WorktreeStatusUpdate) async {
         onWorktreeStatus?(update)
-        let snapshot = await WorktreeStatusSnapshot.load(update.status, workingDirectory: update.worktreePath)
+        let snapshot = await WorktreeStatusSnapshot.load(
+            update.status,
+            workingDirectory: update.worktreePath,
+            gitDirectory: update.gitDirectory
+        )
         worktreeActivity.recordStatus(snapshot, forWorktreeAt: update.worktreePath, of: update.repositoryID)
     }
 }

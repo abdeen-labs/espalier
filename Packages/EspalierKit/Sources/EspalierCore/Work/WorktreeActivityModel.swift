@@ -6,10 +6,10 @@ import os
 
 private let logger = Log.logger(category: "worktree-activity")
 
-/// What's kept about the repositories to order and mark them:
-/// when each kind of activity last happened in each worktree, which
-/// worktrees have activity the user hasn't seen, and the pinned
-/// repositories. `AppModel.arrangedRepositories` is the list made of it.
+/// What's kept about the worktrees to order and mark them: when each kind
+/// of activity last happened in each worktree, which worktrees have activity
+/// the user hasn't seen, when each last changed on disk, and the pinned
+/// repositories. `AppModel.board` and `AppModel.shelf` are made of it.
 ///
 /// - **Activity.** Each status of a worktree arrives as a snapshot
 ///   (`recordStatus`), is compared with the worktree's previous one, and
@@ -47,6 +47,14 @@ public final class WorktreeActivityModel {
     /// The open worktree: the selected repository's, where its record
     /// points. Nothing in it is unseen.
     public private(set) var openWorktree: WorktreeKey?
+
+    /// When each worktree last changed on disk, as its last status found
+    /// (`WorktreeStatusSnapshot.lastChanged`), kept between launches.
+    public private(set) var lastChanged: [WorktreeKey: Date] = [:]
+
+    /// A few of each worktree's changed files, as its last status since
+    /// launch found (`WorktreeStatusSnapshot.changedFilesSample`).
+    public private(set) var changedFilesSamples: [WorktreeKey: [ChangedFileSample]] = [:]
 
     @ObservationIgnored weak var app: AppModel?
     @ObservationIgnored let store: WorktreeActivityStore
@@ -86,6 +94,12 @@ public final class WorktreeActivityModel {
             return
         }
         let key = WorktreeKey(repositoryID: id, path: path)
+        if lastChanged[key] != snapshot.lastChanged {
+            lastChanged[key] = snapshot.lastChanged
+        }
+        if changedFilesSamples[key] ?? [] != snapshot.changedFilesSample {
+            changedFilesSamples[key] = snapshot.changedFilesSample.isEmpty ? nil : snapshot.changedFilesSample
+        }
         guard let previous = snapshots[key] else {
             snapshots[key] = snapshot
             didChange()
@@ -221,6 +235,22 @@ public final class WorktreeActivityModel {
     private func forget(_ shouldForget: (WorktreeKey) -> Bool) {
         let forgottenActivity = activity.keys.filter(shouldForget)
         let forgottenSnapshots = snapshots.keys.filter(shouldForget)
+        let forgottenTimes = lastChanged.keys.filter(shouldForget)
+        if !forgottenTimes.isEmpty {
+            var remaining = lastChanged
+            for key in forgottenTimes {
+                remaining[key] = nil
+            }
+            lastChanged = remaining
+        }
+        let forgottenSamples = changedFilesSamples.keys.filter(shouldForget)
+        if !forgottenSamples.isEmpty {
+            var remaining = changedFilesSamples
+            for key in forgottenSamples {
+                remaining[key] = nil
+            }
+            changedFilesSamples = remaining
+        }
         guard !forgottenActivity.isEmpty || !forgottenSnapshots.isEmpty else {
             return
         }
@@ -257,6 +287,7 @@ public final class WorktreeActivityModel {
         pinnedRepositoryIDs = pinned
         self.activity = activity
         self.snapshots = snapshots
+        lastChanged = snapshots.compactMapValues(\.lastChanged)
         isLoaded = true
     }
 

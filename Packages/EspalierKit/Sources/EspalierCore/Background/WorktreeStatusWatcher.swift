@@ -494,6 +494,7 @@ final class WorktreeStatusWatcher {
             await app.worktreeStatusDidLoad(WorktreeStatusUpdate(
                 repositoryID: id,
                 worktreePath: path,
+                gitDirectory: gitDirectory,
                 status: loaded.status,
                 tip: loaded.tip
             ))

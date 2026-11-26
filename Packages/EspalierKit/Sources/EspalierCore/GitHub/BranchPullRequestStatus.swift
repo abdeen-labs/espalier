@@ -71,15 +71,42 @@ public struct BranchPullRequest: Sendable, Equatable {
     }
 }
 
+/// A branch's merged pull request, with the commit its head merged at.
+public struct MergedPullRequest: Sendable, Equatable {
+    public var number: Int
+    public var title: String
+    /// The pull request's page on GitHub.
+    public var url: URL
+    /// The commit the branch was at when the pull request merged.
+    public var headSHA: String
+    /// The branch it merged into.
+    public var baseBranch: String
+    /// When it merged; nil when GitHub didn't say.
+    public var mergedAt: Date?
+
+    public init(number: Int, title: String, url: URL, headSHA: String, baseBranch: String, mergedAt: Date?) {
+        self.number = number
+        self.title = title
+        self.url = url
+        self.headSHA = headSHA
+        self.baseBranch = baseBranch
+        self.mergedAt = mergedAt
+    }
+}
+
 /// How the pull request of a repository's branch is doing.
 public enum BranchPullRequestStatus: Sendable, Equatable {
     /// Not known yet: GitHub hasn't answered about the branch.
     case unknown
-    /// The branch is pushed, isn't the default branch, and has no open
-    /// pull request.
+    /// The branch is pushed, isn't the default branch, and has no open or
+    /// merged pull request.
     case noPullRequest
     /// The branch's open pull request.
     case open(BranchPullRequest)
+    /// The branch has no open pull request, isn't the default branch, and
+    /// this pull request of it merged (its most recently updated one). Its
+    /// upstream may be gone.
+    case merged(MergedPullRequest)
 }
 
 /// Something that happened to the pull request of a repository's branch,
@@ -134,19 +161,37 @@ struct TrackedBranch: Sendable, Hashable {
 extension AppModel {
     /// The branches whose pull requests are kept current
     /// (`BranchPullRequestUpdater`), for every listed repository on GitHub
-    /// with a signed-in account: this one function says which, so more
-    /// branches are added here. Today, each repository's checked-out branch.
+    /// with a signed-in account: this one function says which. The branch
+    /// each listed worktree has checked out: the one its record points at,
+    /// and its linked worktrees that aren't other repositories in the list
+    /// (those are tracked as their own repository's).
     ///
     /// The updater calls it while tracking observation, so a change to any
     /// observable state it reads (the list, the indicators, a repository's
     /// git state) has it called again.
     func pullRequestBranches() -> [TrackedBranch] {
-        repositories.compactMap { record in
-            guard !record.isMissing, case .branch(let name)? = indicators[record.id]?.head else {
-                return nil
+        var branches: [TrackedBranch] = []
+        for record in repositories where !record.isMissing {
+            if case .branch(let name)? = indicators[record.id]?.head {
+                branches.append(TrackedBranch(repositoryID: record.id, name: name, upstreamMarker: checkedOutUpstreamMarker(record.id)))
             }
-            return TrackedBranch(repositoryID: record.id, name: name, upstreamMarker: checkedOutUpstreamMarker(record.id))
+            for worktree in worktreeStatuses[record.id] ?? [] where !worktree.isCurrent && worktree.repositoryID == nil {
+                guard let name = worktree.branchName else {
+                    continue
+                }
+                branches.append(TrackedBranch(repositoryID: record.id, name: name, upstreamMarker: linkedUpstreamMarker(worktree)))
+            }
         }
+        return branches
+    }
+
+    /// The upstream marker of a linked worktree's branch: the commit it's
+    /// at and how far it's behind, while it has nothing to push.
+    private func linkedUpstreamMarker(_ worktree: WorktreeStatus) -> String? {
+        guard let aheadBehind = worktree.indicator?.aheadBehind, aheadBehind.ahead == 0, !worktree.entry.head.isEmpty else {
+            return nil
+        }
+        return "\(worktree.entry.head)+\(aheadBehind.behind)"
     }
 
     /// The upstream marker of a repository's checked-out branch: its

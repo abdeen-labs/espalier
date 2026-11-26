@@ -57,17 +57,19 @@ public enum PreferenceKey {
     /// The sidebar's form (`SidebarStyle`), Espalier's own.
     public static let sidebarStyle = "sidebar-style"
 
-    // The arrangement of the repositories, Espalier's own.
-    /// How the repositories are arranged (`RepositoryArrangement`).
+    // Home, the shelf, and their pieces of work, Espalier's own.
+    /// Whether the window opens to Home and offers it.
+    public static let showsHome = "shows-home"
+    /// How the shelf is arranged (`RepositoryArrangement`).
     public static let repositoryArrangement = "repository-arrangement"
 
-    /// Whether a kind of activity moves a repository up under Recent
-    /// Activity.
+    /// Whether a kind of activity counts: it orders the pieces of work and
+    /// makes one unseen.
     public static func recentActivity(_ kind: WorktreeActivityKind) -> String {
         "recent-activity-\(kind.rawValue)"
     }
 
-    /// Whether a reason puts a repository under Needs You.
+    /// Whether a reason counts toward a piece of work needing the user.
     public static func needsYou(_ reason: NeedsYouReason) -> String {
         "needs-you-\(reason.rawValue)"
     }
@@ -176,17 +178,18 @@ public enum SidebarStyle: String, Sendable, Hashable, CaseIterable {
     case icons
 }
 
-/// How the repositories that aren't pinned are arranged. The raw
-/// values are the ones stored.
+/// How the shelf's pieces of work that aren't pinned are arranged
+/// (`makeShelf`). The raw values are the ones stored.
 public enum RepositoryArrangement: String, Sendable, Hashable, CaseIterable {
-    /// One section, the repository with the latest activity first.
+    /// The one with the latest activity first, whatever its phase.
     case recentActivity = "recent-activity"
-    /// The repositories with something for the user to do, then the rest.
+    /// By phase: Needs You, then In Progress, each the latest activity
+    /// first.
     case needsYou = "needs-you"
 }
 
-/// A reason a repository is under Needs You. The raw values are the ones
-/// stored, each in its own key (`PreferenceKey.needsYou(_:)`).
+/// A reason a piece of work needs the user (`PieceOfWork`). The raw values
+/// are the ones stored, each in its own key (`PreferenceKey.needsYou(_:)`).
 public enum NeedsYouReason: String, Sendable, Hashable, CaseIterable {
     /// It has uncommitted changes.
     case uncommittedChanges = "uncommitted-changes"
@@ -200,24 +203,29 @@ public enum NeedsYouReason: String, Sendable, Hashable, CaseIterable {
     case commitsToPull = "commits-to-pull"
     /// Its branch is pushed and has no pull request.
     case branchWithoutPullRequest = "branch-without-pull-request"
+    /// Its branch was merged and is ready to clean up: it isn't the default
+    /// branch, its merged pull request's head is the branch's tip, and the
+    /// worktree has no changed files.
+    case mergedReadyToCleanUp = "merged-ready-to-clean-up"
 
     /// Whether the reason counts until the user says otherwise.
     public var isOnByDefault: Bool {
         switch self {
-        case .uncommittedChanges, .commitsToPush, .stoppedOperation, .pullRequestAttention: true
+        case .uncommittedChanges, .commitsToPush, .stoppedOperation, .pullRequestAttention, .mergedReadyToCleanUp: true
         case .commitsToPull, .branchWithoutPullRequest: false
         }
     }
 }
 
-/// The settings the arrangement of the repositories reads (`arrangeRepositories`).
-public struct RepositoryArrangementSettings: Sendable, Equatable {
+/// The settings the pieces of work, the board, and the shelf read
+/// (`makePiecesOfWork`, `makeShelf`).
+public struct WorkSettings: Sendable, Equatable {
+    /// How the shelf is arranged.
     public var arrangement: RepositoryArrangement
-    /// The kinds of activity that count: they move a repository up under
-    /// Recent Activity, order the repositories under Needs You, and make a
-    /// worktree unseen.
+    /// The kinds of activity that count: they order the pieces of work and
+    /// make one unseen.
     public var activityKinds: Set<WorktreeActivityKind>
-    /// The reasons that put a repository under Needs You.
+    /// The reasons that count toward a piece of work needing the user.
     public var needsYouReasons: Set<NeedsYouReason>
 
     /// The settings; a new install's by default.
@@ -301,6 +309,7 @@ public final class Preferences {
         timeFormat = store.getString(PreferenceKey.timeFormat)
         sidebarStyle = store.getEnum(PreferenceKey.sidebarStyle, SidebarStyle.self) ?? .hidden
 
+        showsHome = store.getBoolean(PreferenceKey.showsHome, true)
         repositoryArrangement = store.getEnum(PreferenceKey.repositoryArrangement, RepositoryArrangement.self) ?? .recentActivity
         recentActivityKinds = Set(WorktreeActivityKind.allCases.filter { kind in
             store.getBoolean(PreferenceKey.recentActivity(kind), kind.isOnByDefault)
@@ -646,9 +655,15 @@ public final class Preferences {
         }
     }
 
-    // MARK: The arrangement of the repositories
+    // MARK: Home, the shelf, and their pieces of work
 
-    /// How the repositories that aren't pinned are arranged
+    /// Whether the window opens to Home and offers it (`shows-home`; on by
+    /// default).
+    public var showsHome: Bool {
+        didSet { write(PreferenceKey.showsHome, showsHome, oldValue) }
+    }
+
+    /// How the shelf's pieces of work that aren't pinned are arranged
     /// (`repository-arrangement`; Recent Activity by default).
     public var repositoryArrangement: RepositoryArrangement {
         didSet {
@@ -657,11 +672,10 @@ public final class Preferences {
         }
     }
 
-    /// The kinds of activity that move a repository up under Recent
-    /// Activity (`recent-activity-<kind>`, one key a kind; changed files,
-    /// HEAD, and the server by default, not pull requests). They also
-    /// order the repositories under Needs You and decide what makes a
-    /// worktree unseen.
+    /// The kinds of activity that count (`recent-activity-<kind>`, one key
+    /// a kind; changed files, HEAD, and the server by default, not pull
+    /// requests): they order the pieces of work and decide what makes one
+    /// unseen.
     public var recentActivityKinds: Set<WorktreeActivityKind> {
         didSet {
             for kind in recentActivityKinds.symmetricDifference(oldValue) {
@@ -670,11 +684,11 @@ public final class Preferences {
         }
     }
 
-    /// The reasons that put a repository under Needs You
+    /// The reasons that count toward a piece of work needing the user
     /// (`needs-you-<reason>`, one key a reason; uncommitted changes,
-    /// commits to push, a stopped operation, and pull request attention by
-    /// default, not commits to pull or a pushed branch with no pull
-    /// request).
+    /// commits to push, a stopped operation, pull request attention, and a
+    /// merged branch ready to clean up by default, not commits to pull or a
+    /// pushed branch with no pull request).
     public var needsYouReasons: Set<NeedsYouReason> {
         didSet {
             for reason in needsYouReasons.symmetricDifference(oldValue) {
@@ -683,9 +697,9 @@ public final class Preferences {
         }
     }
 
-    /// The three settings above, as the arrangement takes them.
-    public var repositoryArrangementSettings: RepositoryArrangementSettings {
-        RepositoryArrangementSettings(
+    /// The three settings above, as the pieces of work take them.
+    public var workSettings: WorkSettings {
+        WorkSettings(
             arrangement: repositoryArrangement,
             activityKinds: recentActivityKinds,
             needsYouReasons: needsYouReasons

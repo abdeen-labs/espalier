@@ -105,9 +105,11 @@ public final class AppModel {
     @ObservationIgnored public let integrations: IntegrationsModel
     @ObservationIgnored public let clones: CloneCoordinator
     @ObservationIgnored public let ai: AIModel
-    /// The worktrees' activity, what's unseen, and the pinned repositories
-    /// (`arrangedRepositories` is the list made of them).
+    /// The worktrees' activity, what's unseen, when each last changed, and
+    /// the pinned repositories (`board` and `shelf` are made of them).
     @ObservationIgnored public let worktreeActivity: WorktreeActivityModel
+    /// Moves pieces of work out of In Progress when their time runs out.
+    @ObservationIgnored public let workClock: WorkClock
 
     // MARK: Unsolicited facts
 
@@ -156,11 +158,13 @@ public final class AppModel {
         clones = CloneCoordinator()
         ai = AIModel(environment: environment)
         worktreeActivity = WorktreeActivityModel(environment: environment)
+        workClock = WorkClock(scheduler: environment.scheduler)
         let scheduler = environment.scheduler
         listStore = RepositoryListStore(fileURL: environment.directories.repositoryList, now: { scheduler.now })
         background = BackgroundCoordinator(app: self, environment: environment)
         clones.app = self
         worktreeActivity.app = self
+        workClock.app = self
         accounts.attach(to: self)
         ai.attach(to: self)
     }

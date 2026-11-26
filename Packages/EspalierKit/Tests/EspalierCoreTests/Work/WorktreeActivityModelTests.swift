@@ -41,8 +41,8 @@ struct WorktreeActivityModelTests {
     }
 
     /// The repository's row in the arranged list.
-    private func row(_ model: RepositoryModel, in app: AppModel) throws -> ArrangedRepository {
-        try #require(app.arrangedRepositories.flatMap(\.repositories).first { $0.id == model.id })
+    private func row(_ model: RepositoryModel, in app: AppModel) throws -> PieceOfWork {
+        try #require(app.piecesOfWork.first { $0.record.id == model.id })
     }
 
     /// The saved state, decoded.
@@ -332,11 +332,11 @@ struct WorktreeActivityModelTests {
         await harness.scheduler.advance(by: .seconds(3600))
         let app = await harness.loadedApp()
         await app.idle()
-        let rows = app.arrangedRepositories.flatMap(\.repositories)
-        #expect(rows.first { $0.id == unseen.id }?.isUnseen == true)
-        #expect(rows.first { $0.id == seen.id }?.isUnseen == false)
-        #expect(rows.first { $0.id == unseen.id }?.latestActivity == changed)
-        #expect(rows.first { $0.id == seen.id }?.latestActivity == changed)
+        let rows = app.piecesOfWork
+        #expect(rows.first { $0.record.id == unseen.id }?.isUnseen == true)
+        #expect(rows.first { $0.record.id == seen.id }?.isUnseen == false)
+        #expect(rows.first { $0.record.id == unseen.id }?.latestActivity == changed)
+        #expect(rows.first { $0.record.id == seen.id }?.latestActivity == changed)
         await app.idle()
     }
 
@@ -384,20 +384,17 @@ struct WorktreeActivityModelTests {
         // Something happens in the worktree it left.
         await harness.scheduler.advance(by: .seconds(60))
         app.worktreeActivity.recordActivity(.head, forWorktreeAt: main.path, of: model.id)
-        let sections = arrangeRepositories(
-            app.repositories,
-            indicators: app.indicators,
-            worktrees: [model.id: [WorktreeSummary(path: main.path, name: "main"), WorktreeSummary(path: linked.path, name: "linked")]],
-            pullRequests: [:],
+        let work = makePiecesOfWork(WorkInputs(
+            repositories: app.repositories,
+            worktrees: [model.id: [WorktreeFacts(path: main.path, isCurrent: false), WorktreeFacts(path: linked.path, isCurrent: true)]],
             activity: app.worktreeActivity.activity,
             openWorktree: app.worktreeActivity.openWorktree,
-            pinned: [],
-            settings: app.preferences.repositoryArrangementSettings
-        )
-        let row = try #require(sections.flatMap(\.repositories).first)
-        #expect(row.worktrees.map(\.isCurrent) == [false, true])
-        #expect(row.worktrees.map(\.isUnseen) == [true, false])
-        #expect(row.isUnseen)
+            settings: app.preferences.workSettings,
+            now: harness.scheduler.now
+        ))
+        #expect(work.map(\.id) == [main, linked])
+        #expect(work.map(\.isUnseen) == [true, false])
+        #expect(work.map(\.isOpen) == [false, true])
         await app.idle()
     }
 
@@ -419,8 +416,7 @@ struct WorktreeActivityModelTests {
         #expect(first.worktreeActivity.pinnedRepositoryIDs == [charlie.id, alpha.id])
         #expect(first.worktreeActivity.isPinned(alpha.id))
         #expect(!first.worktreeActivity.isPinned(bravo.id))
-        #expect(first.arrangedRepositories.first?.kind == .pinned)
-        #expect(first.arrangedRepositories.first?.repositories.map(\.id) == [charlie.id, alpha.id])
+        #expect(first.piecesOfWork.filter(\.isPinned).map(\.record.id) == [alpha.id, charlie.id])
         await first.prepareForTermination()
 
         let app = await harness.loadedApp()

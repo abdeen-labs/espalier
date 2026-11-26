@@ -95,7 +95,11 @@ final class RepositoryRefresher {
             }
             // What's compared with the worktree's previous status to tell
             // activity.
-            let activitySnapshot = await WorktreeStatusSnapshot.load(loaded, workingDirectory: repository.path)
+            let activitySnapshot = await WorktreeStatusSnapshot.load(
+                loaded,
+                workingDirectory: repository.path,
+                gitDirectory: model.watchedPaths?.gitDirectory ?? model.record.resolvedGitDir
+            )
             guard token.isCurrent else { return }
             // The operations the status doesn't show, from git's own files.
             let (interruptedRebase, unsupported) = await operationsBeyondStatus(loaded, in: repository)

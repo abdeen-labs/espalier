@@ -24,8 +24,16 @@ private func later(_ change: (inout WorktreeStatusSnapshot) -> Void) -> Worktree
 @Suite("Worktree status snapshot")
 struct WorktreeStatusSnapshotTests {
     /// The snapshot of the repository's status now.
-    private func snapshot(_ repository: Repository) async throws -> WorktreeStatusSnapshot {
-        await WorktreeStatusSnapshot.load(try await getStatusOrThrow(repository), workingDirectory: repository.path)
+    private func snapshot(_ repository: Repository, gitDirectory: String? = nil) async throws -> WorktreeStatusSnapshot {
+        await WorktreeStatusSnapshot.load(
+            try await getStatusOrThrow(repository),
+            workingDirectory: repository.path,
+            gitDirectory: gitDirectory
+        )
+    }
+
+    private func setModified(_ path: String, _ date: Date) throws {
+        try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: path)
     }
 
     private func write(_ path: String, _ contents: String, in repository: Repository) throws {
@@ -44,6 +52,45 @@ struct WorktreeStatusSnapshotTests {
             TreeEntry(path: ".gitignore", contents: "build/\n"),
         ]))
         return repository
+    }
+
+    @Test("a worktree last changed at the latest of its changed files' modification times and its HEAD's last move, in the main worktree and a linked one")
+    func lastChanged() async throws {
+        let repository = try await committedRepository()
+        let linkedPath = realPath(POSIXPath.join(try createTempDirectory(), "linked"))
+        _ = try await runGit(["worktree", "add", "-q", "-b", "linked", linkedPath], repository)
+        let linked = Repository(path: linkedPath)
+        let mainGitDirectory = POSIXPath.join(repository.path, ".git")
+        let linkedGitDirectory = try await runGit(["rev-parse", "--absolute-git-dir"], linked)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(linkedGitDirectory != mainGitDirectory)
+        let mainMoved = Date(timeIntervalSince1970: 1_700_000_000)
+        let linkedMoved = mainMoved.addingTimeInterval(100)
+        try setModified(POSIXPath.join(mainGitDirectory, "logs/HEAD"), mainMoved)
+        try setModified(POSIXPath.join(linkedGitDirectory, "logs/HEAD"), linkedMoved)
+
+        // No changed files: when HEAD last moved, each worktree's own.
+        #expect(try await snapshot(repository, gitDirectory: mainGitDirectory).lastChanged == mainMoved)
+        #expect(try await snapshot(linked, gitDirectory: linkedGitDirectory).lastChanged == linkedMoved)
+
+        // A changed file written later.
+        try write("notes.txt", "more notes\n", in: repository)
+        let written = mainMoved.addingTimeInterval(200)
+        try setModified(POSIXPath.join(repository.path, "notes.txt"), written)
+        #expect(try await snapshot(repository, gitDirectory: mainGitDirectory).lastChanged == written)
+        #expect(try await snapshot(linked, gitDirectory: linkedGitDirectory).lastChanged == linkedMoved)
+
+        // A changed file written before HEAD moved.
+        let earlier = mainMoved.addingTimeInterval(-500)
+        try setModified(POSIXPath.join(repository.path, "notes.txt"), earlier)
+        #expect(try await snapshot(repository, gitDirectory: mainGitDirectory).lastChanged == mainMoved)
+        // Without the git directory, the files alone.
+        #expect(try await snapshot(repository).lastChanged == earlier)
+
+        // A deleted file has no time.
+        try FileManager.default.removeItem(atPath: POSIXPath.join(repository.path, "notes.txt"))
+        #expect(try await snapshot(repository).lastChanged == nil)
+        #expect(try await snapshot(repository).changedFilesSample == [ChangedFileSample(path: "notes.txt", kind: .deleted)])
     }
 
     @Test("the fingerprint differs once a file becomes changed, is written again, changes status, or stops being changed")

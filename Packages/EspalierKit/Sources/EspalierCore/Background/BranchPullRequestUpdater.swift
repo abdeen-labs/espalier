@@ -20,7 +20,10 @@ private let logger = Log.logger(category: "branch-pull-requests")
 ///   review decision, and for what became of the pull request the branch
 ///   had. The branch's pull request is the one whose head is in the
 ///   repository the branch's remote points at, as
-///   `isPullRequestAssociatedWithBranch` has it.
+///   `isPullRequestAssociatedWithBranch` has it. A branch with no open
+///   pull request has its merged one, if it has one, from the same
+///   request; so does a branch whose upstream is gone (deleted once its
+///   pull request merged), which is asked about for that alone.
 /// - **When.** While running, a pass every 2 minutes asks about the branches
 ///   that are due. Every pass: those whose checks are pending, and those
 ///   whose upstream moved in the last 10 minutes, since CI and the pull
@@ -72,6 +75,7 @@ final class BranchPullRequestUpdater {
         case nothing
         case noPullRequest
         case open(BranchPullRequest)
+        case merged(MergedPullRequest)
     }
 
     /// The account and the GitHub repository a branch's pull requests are
@@ -104,6 +108,9 @@ final class BranchPullRequestUpdater {
         let refName: String
         let owner: String
         let name: String
+        /// Whether the upstream branch is gone from the remote: only its
+        /// merged pull request is looked for.
+        let isGone: Bool
     }
 
     /// One branch to ask GitHub about.
@@ -556,6 +563,7 @@ final class BranchPullRequestUpdater {
             if let head = ask.head, let headIndex = place.head, headIndex < answer.openPullRequests.count {
                 loaded = Self.loaded(
                     answer.openPullRequests[headIndex],
+                    merged: headIndex < answer.mergedPullRequests.count ? answer.mergedPullRequests[headIndex] : [],
                     head: head,
                     defaultBranch: answer.defaultBranch,
                     knownNumber: ask.knownNumber
@@ -566,31 +574,40 @@ final class BranchPullRequestUpdater {
         return true
     }
 
-    /// What GitHub's open pull requests with the head's branch name say
-    /// about the branch: its pull request is the one whose head is in the
-    /// repository the branch's remote points at, the one it had when
-    /// several are, else the newest.
+    /// What GitHub's open and merged pull requests with the head's branch
+    /// name say about the branch: its pull request is the one whose head is
+    /// in the repository the branch's remote points at, the open one it had
+    /// when several are, else the newest open one, else the most recently
+    /// updated merged one. The default branch has no merged one, and a
+    /// branch whose upstream is gone has nothing to say without one.
     private static func loaded(
         _ pullRequests: [APIBranchPullRequest],
+        merged: [APIMergedPullRequest],
         head: Head,
         defaultBranch: String?,
         knownNumber: Int?
     ) -> Loaded {
-        let candidates = pullRequests.filter { pullRequest in
-            guard let owner = pullRequest.headRepositoryOwner, let name = pullRequest.headRepositoryName else {
+        func isHead(_ refName: String, _ owner: String?, _ name: String?) -> Bool {
+            guard let owner, let name else {
                 return false
             }
-            return JSCompat.strictEquals(pullRequest.headRefName, head.refName)
+            return JSCompat.strictEquals(refName, head.refName)
                 && JSCompat.caseInsensitiveEquals(owner, head.owner)
                 && JSCompat.caseInsensitiveEquals(name, head.name)
-        }.compactMap(BranchPullRequest.init)
-        if let pullRequest = candidates.first(where: { $0.number == knownNumber }) ?? candidates.first {
+        }
+        let candidates = pullRequests.filter { isHead($0.headRefName, $0.headRepositoryOwner, $0.headRepositoryName) }
+            .compactMap(BranchPullRequest.init)
+        if !head.isGone, let pullRequest = candidates.first(where: { $0.number == knownNumber }) ?? candidates.first {
             return .open(pullRequest)
         }
         if let defaultBranch, JSCompat.strictEquals(defaultBranch, head.refName) {
             return .nothing
         }
-        return .noPullRequest
+        if let pullRequest = merged.first(where: { isHead($0.headRefName, $0.headRepositoryOwner, $0.headRepositoryName) })
+            .flatMap(MergedPullRequest.init) {
+            return .merged(pullRequest)
+        }
+        return head.isGone ? .nothing : .noPullRequest
     }
 
     /// The branch's upstream on GitHub: nil unless it's a branch of a
@@ -603,7 +620,7 @@ final class BranchPullRequestUpdater {
             return nil
         }
         let refName = JSCompat.dropFirst(upstream.remoteRef, prefix.unicodeScalars.count)
-        return refName.isEmpty ? nil : Head(refName: refName, owner: remote.owner, name: remote.name)
+        return refName.isEmpty ? nil : Head(refName: refName, owner: remote.owner, name: remote.name, isGone: upstream.isGone)
     }
 
     // MARK: Applying
@@ -683,6 +700,7 @@ final class BranchPullRequestUpdater {
             case .nothing?: status = nil
             case .noPullRequest?: status = .noPullRequest
             case .open(let pullRequest)?: status = .open(pullRequest)
+            case .merged(let pullRequest)?: status = .merged(pullRequest)
             }
         }
         if app.branchPullRequests[key] != status {
@@ -722,6 +740,24 @@ final class BranchPullRequestUpdater {
     }
 }
 
+extension MergedPullRequest {
+    /// The pull request as GitHub's GraphQL API returned it; nil when its
+    /// URL isn't one.
+    init?(_ pullRequest: APIMergedPullRequest) {
+        guard let url = URL(string: pullRequest.url) else {
+            return nil
+        }
+        self.init(
+            number: pullRequest.number,
+            title: pullRequest.title,
+            url: url,
+            headSHA: pullRequest.headRefOid,
+            baseBranch: pullRequest.baseRefName,
+            mergedAt: parseGitHubTimestamp(pullRequest.mergedAt)
+        )
+    }
+}
+
 extension BranchPullRequest {
     /// The pull request as GitHub's GraphQL API returned it; nil when its
     /// URL isn't one.
@@ -756,22 +792,29 @@ extension BranchPullRequest {
 private struct ResolvedUpstream: Sendable {
     let remoteURL: String
     let remoteRef: String
+    /// Whether the ref is gone from the remote.
+    let isGone: Bool
 }
 
 /// The upstreams of the local branches named `branches` that are on a
-/// remote and still there, by branch name. Nil when git couldn't say.
+/// remote, whether or not they're still there, by branch name. Nil when
+/// git couldn't say.
 @concurrent
 private func resolveUpstreams(_ repository: Repository, _ branches: [String]) async -> [ExactString: ResolvedUpstream]? {
     do {
         var urls: [ExactString: String?] = [:]
         var resolved: [ExactString: ResolvedUpstream] = [:]
-        for upstream in try await getBranchUpstreams(repository, branches) where !upstream.isGone && upstream.remoteName != "." {
+        for upstream in try await getBranchUpstreams(repository, branches) where upstream.remoteName != "." {
             let remote = ExactString(upstream.remoteName)
             if urls[remote] == nil {
                 urls[remote] = .some(try await getRemoteURL(repository, upstream.remoteName))
             }
             if case .some(.some(let url)) = urls[remote] {
-                resolved[ExactString(upstream.branch)] = ResolvedUpstream(remoteURL: url, remoteRef: upstream.remoteRef)
+                resolved[ExactString(upstream.branch)] = ResolvedUpstream(
+                    remoteURL: url,
+                    remoteRef: upstream.remoteRef,
+                    isGone: upstream.isGone
+                )
             }
         }
         return resolved

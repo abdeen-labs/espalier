@@ -30,7 +30,12 @@ public struct BackgroundServices: OptionSet, Sendable {
     /// Saving the worktrees' activity and the pins a while after they change
     /// (`WorktreeActivityModel`). Left out, they're saved only when flushed.
     public static let worktreeActivityAutosave = BackgroundServices(rawValue: 1 << 8)
+    /// The clock that wakes when a piece of work stops changing now
+    /// (`WorkClock`). Left out, phases change only with their inputs.
+    public static let workClock = BackgroundServices(rawValue: 1 << 9)
 
     /// Every one, as the app runs them.
-    public static let all: BackgroundServices = [.fetcher, .pruner, .pullRequests, .notifications, .branchPullRequests, .worktreeActivityAutosave]
+    public static let all: BackgroundServices = [
+        .fetcher, .pruner, .pullRequests, .notifications, .branchPullRequests, .worktreeActivityAutosave, .workClock,
+    ]
 }

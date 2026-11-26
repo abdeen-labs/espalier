@@ -10,8 +10,9 @@ import Synchronization
 ///
 /// It reads the query as `branchPullRequestsQuery` writes it: repository
 /// `i` is `r<i>`, with its owner and name in the variables `o<i>` and
-/// `n<i>`; head branch name `j` is `b<j>`, in the variable `h<i>_<j>`; and
-/// pull request `k` is `p<k>`, its number in the query's text. A repository
+/// `n<i>`; head branch name `j`'s open pull requests are `b<j>` and its
+/// merged ones `m<j>`, the name in the variable `h<i>_<j>`; and pull request
+/// `k` is `p<k>`, its number in the query's text. A repository
 /// it doesn't have is null in the answer, with a `NOT_FOUND` error.
 public final class BranchPullRequestsEndpoint: Sendable {
     /// A pull request on the fake server.
@@ -30,6 +31,13 @@ public final class BranchPullRequestsEndpoint: Sendable {
         public var checks: APIStatusState?
         public var review: APIReviewDecision?
         public var updatedAt: String
+        /// The commit the head branch is at (for a merged one, was at when
+        /// it merged).
+        public var headSHA: String
+        /// The branch it merges into.
+        public var baseRefName: String
+        /// When it merged, for a merged one.
+        public var mergedAt: String
 
         public init(
             _ number: Int,
@@ -41,7 +49,10 @@ public final class BranchPullRequestsEndpoint: Sendable {
             isDraft: Bool = false,
             checks: APIStatusState? = nil,
             review: APIReviewDecision? = nil,
-            updatedAt: String = "2026-10-01T10:00:00Z"
+            updatedAt: String = "2026-10-01T10:00:00Z",
+            headSHA: String? = nil,
+            baseRefName: String = "main",
+            mergedAt: String = "2026-10-01T10:00:00Z"
         ) {
             self.number = number
             self.title = title ?? "Pull request \(number)"
@@ -53,6 +64,9 @@ public final class BranchPullRequestsEndpoint: Sendable {
             self.checks = checks
             self.review = review
             self.updatedAt = updatedAt
+            self.headSHA = headSHA ?? String(repeating: String(number % 10), count: 40)
+            self.baseRefName = baseRefName
+            self.mergedAt = mergedAt
         }
     }
 
@@ -177,6 +191,11 @@ public final class BranchPullRequestsEndpoint: Sendable {
                     .filter { $0.state == .open && $0.headRefName == head }
                     .sorted { $0.number > $1.number }
                 fields["b\(headIndex)"] = ["nodes": .array(open.map { node($0, in: repository) })]
+                let merged = repository.pullRequests
+                    .filter { $0.state == .merged && $0.headRefName == head }
+                    .sorted { $0.updatedAt > $1.updatedAt }
+                    .prefix(5)
+                fields["m\(headIndex)"] = ["nodes": .array(merged.map { mergedNode($0, in: repository) })]
             }
             for (alias, number) in numbers {
                 fields["p\(alias)"] = repository.pullRequests.first { $0.number == number }
@@ -199,15 +218,32 @@ public final class BranchPullRequestsEndpoint: Sendable {
         return .json(.object(response))
     }
 
-    private func node(_ pullRequest: PullRequest, in repository: Repository) -> JSONValue {
-        // A fork has its parent's name.
-        var headRepository = JSONValue.null
-        if !pullRequest.headRepositoryIsGone {
-            headRepository = [
-                "name": .string(repository.name),
-                "owner": ["login": .string(pullRequest.headOwner ?? repository.owner)],
-            ]
+    /// The repository the head branch is in: a fork has its parent's name.
+    private func headRepository(_ pullRequest: PullRequest, in repository: Repository) -> JSONValue {
+        guard !pullRequest.headRepositoryIsGone else {
+            return .null
         }
+        return [
+            "name": .string(repository.name),
+            "owner": ["login": .string(pullRequest.headOwner ?? repository.owner)],
+        ]
+    }
+
+    private func mergedNode(_ pullRequest: PullRequest, in repository: Repository) -> JSONValue {
+        [
+            "number": .number(Double(pullRequest.number)),
+            "title": .string(pullRequest.title),
+            "url": .string("https://github.com/\(repository.owner)/\(repository.name)/pull/\(pullRequest.number)"),
+            "headRefName": .string(pullRequest.headRefName),
+            "headRefOid": .string(pullRequest.headSHA),
+            "baseRefName": .string(pullRequest.baseRefName),
+            "mergedAt": .string(pullRequest.mergedAt),
+            "headRepository": headRepository(pullRequest, in: repository),
+        ]
+    }
+
+    private func node(_ pullRequest: PullRequest, in repository: Repository) -> JSONValue {
+        let headRepository = headRepository(pullRequest, in: repository)
         return [
             "number": .number(Double(pullRequest.number)),
             "title": .string(pullRequest.title),

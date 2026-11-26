@@ -212,33 +212,36 @@ struct PreferencesTests {
         #expect(unknown.designBackground == .own)
     }
 
-    @Test("keeps the arrangement of the repositories, and each kind of activity and each Needs You reason under a key of its own")
+    @Test("keeps whether Home shows, the shelf's arrangement, and each kind of activity and each Needs You reason under a key of its own")
     func repositoryArrangement() throws {
         let temporary = try TemporaryDefaults()
         defer { temporary.remove() }
         let preferences = Preferences(store: PreferenceStore(temporary.defaults))
-        #expect(preferences.repositoryArrangementSettings == RepositoryArrangementSettings(
+        #expect(preferences.workSettings == WorkSettings(
             arrangement: .recentActivity,
             activityKinds: [.files, .head, .server],
-            needsYouReasons: [.uncommittedChanges, .commitsToPush, .stoppedOperation, .pullRequestAttention]
+            needsYouReasons: [.uncommittedChanges, .commitsToPush, .stoppedOperation, .pullRequestAttention, .mergedReadyToCleanUp]
         ))
+        #expect(preferences.showsHome)
 
         preferences.repositoryArrangement = .needsYou
         preferences.recentActivityKinds = [.files, .head, .pullRequest]
         preferences.needsYouReasons.insert(.commitsToPull)
         preferences.needsYouReasons.remove(.commitsToPush)
+        preferences.showsHome = false
         // Only what changed is stored: the rest keeps following its default.
         #expect(storedKeys(temporary) == [
-            "repository-arrangement",
+            "shows-home", "repository-arrangement",
             "recent-activity-server", "recent-activity-pull-request",
             "needs-you-commits-to-pull", "needs-you-commits-to-push",
         ])
 
         let reloaded = Preferences(store: PreferenceStore(temporary.defaults))
-        #expect(reloaded.repositoryArrangementSettings == RepositoryArrangementSettings(
+        #expect(!reloaded.showsHome)
+        #expect(reloaded.workSettings == WorkSettings(
             arrangement: .needsYou,
             activityKinds: [.files, .head, .pullRequest],
-            needsYouReasons: [.uncommittedChanges, .stoppedOperation, .pullRequestAttention, .commitsToPull]
+            needsYouReasons: [.uncommittedChanges, .stoppedOperation, .pullRequestAttention, .mergedReadyToCleanUp, .commitsToPull]
         ))
 
         temporary.defaults.set("alphabetical", forKey: "repository-arrangement")

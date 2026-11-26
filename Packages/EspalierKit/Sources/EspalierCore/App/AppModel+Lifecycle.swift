@@ -54,6 +54,9 @@ extension AppModel {
         ai.applicationDidLaunch()
         background.update()
         background.observePreferences()
+        if environment.backgroundServices.contains(.workClock) {
+            workClock.start()
+        }
         scanWatchedFoldersAtLaunch()
     }
 
@@ -138,6 +141,7 @@ extension AppModel {
     /// left to finish.
     public func prepareForTermination() async {
         background.stopAll()
+        workClock.stop()
         for model in models.values {
             model.becomeInactive()
         }

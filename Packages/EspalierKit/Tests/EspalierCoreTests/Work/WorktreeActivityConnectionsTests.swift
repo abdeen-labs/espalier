@@ -1,7 +1,8 @@
-// What feeds the arranged list from the rest of the app, on real
+// What feeds the pieces of work from the rest of the app, on real
 // repositories: another worktree's statuses and a pull request's news as
-// activity, a repository's listed worktrees and its pull request's facts in
-// its row, and what a loaded worktree list forgets.
+// activity, a repository's listed worktrees and their pull requests, when
+// each worktree last changed on disk, and what a loaded worktree list
+// forgets.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -57,9 +58,15 @@ struct WorktreeActivityConnectionsTests {
         await fixture.app.worktreeStatusDidLoad(WorktreeStatusUpdate(
             repositoryID: fixture.id,
             worktreePath: fixture.linked.path,
+            gitDirectory: try await linkedGitDirectory(fixture),
             status: status,
             tip: tipFromStatus(status, remoteNames: [])
         ))
+    }
+
+    /// The linked worktree's own git directory, in the main repository's.
+    private func linkedGitDirectory(_ fixture: Fixture) async throws -> String {
+        try await runGit(["rev-parse", "--absolute-git-dir"], fixture.linked).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// The repository's worktrees as `git worktree list` has them, the one
@@ -71,8 +78,14 @@ struct WorktreeActivityConnectionsTests {
         }
     }
 
-    private func row(_ fixture: Fixture) throws -> ArrangedRepository {
-        try #require(fixture.app.arrangedRepositories.flatMap(\.repositories).first { $0.id == fixture.id })
+    /// The repository's pieces of work.
+    private func work(_ fixture: Fixture) -> [PieceOfWork] {
+        fixture.app.piecesOfWork.filter { $0.record.id == fixture.id }
+    }
+
+    /// The piece of work at the worktree the record points at.
+    private func current(_ fixture: Fixture) throws -> PieceOfWork {
+        try #require(work(fixture).first { $0.id == fixture.currentKey })
     }
 
     private func pullRequest(checks: BranchPullRequest.Checks = .none, review: BranchPullRequest.Review = .none) throws -> BranchPullRequest {
@@ -87,7 +100,7 @@ struct WorktreeActivityConnectionsTests {
         )
     }
 
-    @Test("another worktree's statuses record activity under its folder, and its repository's row has it")
+    @Test("another worktree's statuses record activity under its folder, and its piece of work has it")
     func otherWorktreeActivity() async throws {
         let fixture = try await makeFixture()
         let app = fixture.app
@@ -96,20 +109,43 @@ struct WorktreeActivityConnectionsTests {
         // The first status is only kept.
         try await deliverLinkedStatus(fixture)
         #expect(app.worktreeActivity.activity[fixture.linkedKey] == nil)
-        #expect(try !row(fixture).isUnseen)
+        #expect(work(fixture).allSatisfy { !$0.isUnseen })
 
         try fixture.harness.write("notes.txt", "notes\n", in: fixture.linked)
         try await deliverLinkedStatus(fixture)
 
         #expect(app.worktreeActivity.activity[fixture.linkedKey]?.files != nil)
         #expect(app.worktreeActivity.activity[fixture.currentKey] == nil)
-        let repository = try row(fixture)
-        #expect(repository.isUnseen)
-        #expect(repository.latestActivity != nil)
-        #expect(repository.worktrees.map(\.isCurrent) == [true, false])
-        #expect(repository.worktrees.map(\.isUnseen) == [false, true])
-        #expect(repository.worktrees.map(\.id) == [fixture.currentKey, fixture.linkedKey])
-        #expect(repository.worktrees[1].entry?.branch == "refs/heads/feature")
+        let work = work(fixture)
+        #expect(work.map(\.id) == [fixture.currentKey, fixture.linkedKey])
+        #expect(work.map(\.isCurrent) == [true, false])
+        #expect(work.map(\.isUnseen) == [false, true])
+        #expect(work.map { $0.latestActivity != nil } == [false, true])
+        #expect(work[1].entry?.branch == "refs/heads/feature")
+        await app.idle()
+    }
+
+    @Test("each worktree's statuses record when it last changed on disk: its own HEAD's last move, and the pieces of work have it")
+    func lastChanged() async throws {
+        let fixture = try await makeFixture()
+        let app = fixture.app
+        app.setWorktreeStatuses(try await listWorktreeStatuses(fixture), for: fixture.id)
+        let mainMoved = Date(timeIntervalSince1970: 1_700_000_000)
+        let linkedMoved = mainMoved.addingTimeInterval(300)
+        let mainGitDirectory = POSIXPath.join(fixture.model.record.path, ".git")
+        try FileManager.default.setAttributes([.modificationDate: mainMoved], ofItemAtPath: POSIXPath.join(mainGitDirectory, "logs/HEAD"))
+        try FileManager.default.setAttributes(
+            [.modificationDate: linkedMoved],
+            ofItemAtPath: POSIXPath.join(try await linkedGitDirectory(fixture), "logs/HEAD")
+        )
+
+        await fixture.model.refresh(.status, reason: .fileSystem)
+        await fixture.model.idle()
+        try await deliverLinkedStatus(fixture)
+
+        #expect(app.worktreeActivity.lastChanged[fixture.currentKey] == mainMoved)
+        #expect(app.worktreeActivity.lastChanged[fixture.linkedKey] == linkedMoved)
+        #expect(work(fixture).map(\.lastChanged) == [mainMoved, linkedMoved])
         await app.idle()
     }
 
@@ -165,7 +201,7 @@ struct WorktreeActivityConnectionsTests {
         await app.idle()
     }
 
-    @Test("a repository's row has the reasons its checked-out branch's pull request gives", arguments: [
+    @Test("a piece of work has the reasons its branch's pull request gives", arguments: [
         NamedCase("checks failing", (checks: BranchPullRequest.Checks.failing, review: BranchPullRequest.Review.none, attention: true)),
         NamedCase("changes requested", (checks: .passing, review: .changesRequested, attention: true)),
         NamedCase("passing and approved", (checks: .passing, review: .approved, attention: false)),
@@ -178,16 +214,22 @@ struct WorktreeActivityConnectionsTests {
             Issue.record("The repository isn't on a branch")
             return
         }
-        #expect(try !row(fixture).needsYouReasons.contains(.pullRequestAttention))
+        #expect(try !current(fixture).reasons.contains(.pullRequestAttention))
 
         app.branchPullRequests[RepositoryBranch(repositoryID: fixture.id, name: checkedOut)] =
             .open(try pullRequest(checks: testCase.value.checks, review: testCase.value.review))
 
-        #expect(try row(fixture).needsYouReasons.contains(.pullRequestAttention) == testCase.value.attention)
-        // Another branch's pull request says nothing of this row.
+        #expect(try current(fixture).reasons.contains(.pullRequestAttention) == testCase.value.attention)
+        // Another branch's pull request says nothing of this piece of work.
         app.branchPullRequests[RepositoryBranch(repositoryID: fixture.id, name: checkedOut)] = nil
         app.branchPullRequests[RepositoryBranch(repositoryID: fixture.id, name: "feature")] = .open(try pullRequest(checks: .failing))
-        #expect(try !row(fixture).needsYouReasons.contains(.pullRequestAttention))
+        #expect(try !current(fixture).reasons.contains(.pullRequestAttention))
+
+        // The linked worktree's piece of work has its branch's.
+        app.setWorktreeStatuses(try await listWorktreeStatuses(fixture), for: fixture.id)
+        try await deliverLinkedStatus(fixture)
+        let linked = try #require(work(fixture).first { $0.id == fixture.linkedKey })
+        #expect(linked.pullRequest == .open(try pullRequest(checks: .failing)))
         await app.idle()
     }
 
@@ -205,7 +247,7 @@ struct WorktreeActivityConnectionsTests {
             app.insertRecord(record)
         }
 
-        let titles = Dictionary(uniqueKeysWithValues: app.arrangedRepositories.flatMap(\.repositories).map { ($0.id, $0.title) })
+        let titles = Dictionary(uniqueKeysWithValues: app.piecesOfWork.map { ($0.record.id, $0.title) })
 
         #expect(titles[linked.id] == "harbor")
         #expect(titles[aliased.id] == "Tides")

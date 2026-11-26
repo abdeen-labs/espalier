@@ -272,6 +272,90 @@ struct BranchPullRequestUpdaterTests {
         await fixture.finish()
     }
 
+    // MARK: Merged pull requests and linked worktrees
+
+    @Test("a branch with no open pull request has its merged one, with the commit its head merged at; the default branch has none")
+    func merged() async throws {
+        let fixture = try await makeFixture([
+            .init(name: "merged", pullRequests: [
+                .init(8, title: "Add charts", state: .merged, headSHA: "abc", baseRefName: "develop", mergedAt: "2026-10-02T09:00:00Z"),
+                // Another fork's, from a branch of the same name.
+                .init(9, headOwner: "hubot", state: .merged, updatedAt: "2026-10-03T10:00:00Z"),
+            ]),
+            .init(name: "default", pullRequests: [.init(3, head: "main", state: .merged)]),
+        ])
+        let merged = try await fixture.add("merged")
+        let onDefault = try await fixture.add("default", branch: "main")
+
+        await fixture.start()
+
+        #expect(fixture.status(merged) == .merged(MergedPullRequest(
+            number: 8,
+            title: "Add charts",
+            url: try #require(URL(string: "https://github.com/octocat/merged/pull/8")),
+            headSHA: "abc",
+            baseBranch: "develop",
+            mergedAt: try Date("2026-10-02T09:00:00Z", strategy: .iso8601)
+        )))
+        #expect(fixture.status(onDefault) == nil)
+        await fixture.finish()
+    }
+
+    @Test("a branch whose upstream is gone is asked about for its merged pull request alone", arguments: [
+        NamedCase("merged", true),
+        NamedCase("never merged", false),
+    ])
+    func goneUpstream(_ testCase: NamedCase<Bool>) async throws {
+        let fixture = try await makeFixture([
+            .init(pullRequests: testCase.value ? [.init(8, state: .merged, headSHA: "abc")] : []),
+        ])
+        let model = try await fixture.add("hello")
+        // The remote branch was deleted, and a prune saw it go.
+        try await runGit(["update-ref", "-d", "refs/remotes/origin/feature"], model.record.gitRepository)
+        await fixture.refreshStatus(model)
+
+        await fixture.start()
+
+        #expect(fixture.requests == [[Asked("octocat/hello", heads: ["feature"])]])
+        if testCase.value {
+            guard case .merged(let pullRequest)? = fixture.status(model) else {
+                Issue.record("The branch isn't merged: \(String(describing: fixture.status(model)))")
+                await fixture.finish()
+                return
+            }
+            #expect(pullRequest.number == 8)
+            #expect(pullRequest.headSHA == "abc")
+        } else {
+            // Not a pushed branch without a pull request.
+            #expect(fixture.status(model) == nil)
+        }
+        await fixture.finish()
+    }
+
+    @Test("the branch of each listed linked worktree is kept current, as the worktree the record points at is")
+    func linkedWorktrees() async throws {
+        let fixture = try await makeFixture([
+            .init(pullRequests: [.init(4, checks: .failure), .init(5, head: "linked", checks: .pending)]),
+        ])
+        let model = try await fixture.add("hello")
+        let linkedPath = realPath(POSIXPath.join(try createTempDirectory(), "linked"))
+        try await runGit(["worktree", "add", "-q", "-b", "linked", linkedPath], model.record.gitRepository)
+        let linked = Repository(path: linkedPath)
+        try await runGit(["push", "-q", "-u", "origin", "linked"], linked)
+        let current = realPath(model.record.path)
+        let statuses = try await listWorktrees(model.record.path).map { entry in
+            WorktreeStatus(entry: entry, isCurrent: JSCompat.strictEquals(realPath(entry.path), current))
+        }
+        fixture.app.setWorktreeStatuses(statuses, for: model.id)
+
+        await fixture.start()
+
+        #expect(fixture.app.pullRequestStatus(for: model.id, branch: "feature") == .open(try pullRequest(4, checks: .failing)))
+        #expect(fixture.app.pullRequestStatus(for: model.id, branch: "linked") == .open(try pullRequest(5, checks: .pending)))
+        #expect(fixture.requests.flatMap { $0 }.flatMap(\.headRefNames).sorted() == ["feature", "linked"])
+        await fixture.finish()
+    }
+
     // MARK: When it asks
 
     @Test("asks every 2 minutes about a branch whose checks are pending, and every 10 about the others")
@@ -451,7 +535,13 @@ struct BranchPullRequestUpdaterTests {
         await fixture.runPasses(5)
         #expect(fixture.news.events.last == .merged(failed))
         #expect(fixture.news.news.count == 3)
-        #expect(fixture.status(model) == .noPullRequest)
+        // The branch has its merged pull request now.
+        guard case .merged(let merged)? = fixture.status(model) else {
+            Issue.record("The branch isn't merged: \(String(describing: fixture.status(model)))")
+            await fixture.finish()
+            return
+        }
+        #expect(merged.number == 5)
         await fixture.finish()
     }
 
@@ -468,11 +558,16 @@ struct BranchPullRequestUpdaterTests {
         await fixture.refreshStatus(model)
         await fixture.runPasses(5)
 
-        // The branch isn't pushed any more: only what became of its pull
-        // request is asked.
-        #expect(fixture.requests.last == [Asked("octocat/hello", numbers: [5])])
+        // The branch's upstream is gone: what became of its pull request is
+        // asked, and its merged one.
+        #expect(fixture.requests.last == [Asked("octocat/hello", heads: ["feature"], numbers: [5])])
         #expect(fixture.news.news == [PullRequestNews(repositoryID: model.id, branch: "feature", event: .merged(seen))])
-        #expect(fixture.status(model) == nil)
+        guard case .merged(let merged)? = fixture.status(model) else {
+            Issue.record("The branch isn't merged: \(String(describing: fixture.status(model)))")
+            await fixture.finish()
+            return
+        }
+        #expect(merged.number == 5)
         await fixture.finish()
     }
 

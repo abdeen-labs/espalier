@@ -16,13 +16,13 @@ protocol SelectionScopedService: AnyObject {
 /// | BackgroundFetcher | the selected repository | once the selection's pass has loaded its status and remotes | selection change, quit | never |
 /// | BranchPruner | the selected GitHub repository | on selection, or once the selection is associated | selection change, quit | — |
 /// | PullRequestUpdater | the selected GitHub repository with an account | selection while active; activation | inactive, selection change | — |
-/// | RepositoryIndicatorUpdater | every other repository | 2 min after launch if enabled; when the setting turns on | setting off, quit | while inactive |
+/// | RepositoryIndicatorUpdater | every other repository | 2 min after launch if enabled, or as soon as the main window is visible with Home on, or the repository list opens; when the setting turns on | setting off, quit | while inactive |
 /// | RepositoryIndicatorWatcher | every other repository that isn't missing | at launch if enabled; when the setting turns on | setting off, quit | while the main window isn't visible (it keeps watching, and refreshes what changed when the window is visible again) |
 /// | WorktreeStatusWatcher (the indicator watcher's `worktrees`) | every repository that isn't missing: its worktree list, and each worktree no repository's indicator covers | with the indicator watcher | with the indicator watcher | with the indicator watcher |
 /// | BranchPullRequestUpdater | every repository on GitHub with an account | at launch if enabled; activation; when the setting turns on | inactive, setting off (its statuses go), quit | — |
 ///
 /// `update()` is idempotent; selection, activation, window visibility, and
-/// the indicator setting call it. The first three and the last start only
+/// the indicator and Home settings call it. The first three and the last start only
 /// when the environment's `backgroundServices` include them (always in the
 /// app).
 /// The indicator watcher and the worktree watcher also follow the list
@@ -127,11 +127,16 @@ final class BackgroundCoordinator {
             pullRequests.stop()
         }
 
-        // Indicators, if enabled; paused while inactive.
+        // Indicators, if enabled; paused while inactive. With Home on, what
+        // the window shows is every repository's status, so the first pass
+        // doesn't wait while the window is visible.
         if app.preferences.repositoryIndicatorsEnabled {
             if !indicators.isRunning {
                 let elapsed = Duration.seconds(scheduler.now.timeIntervalSince(launchDate))
                 indicators.start(after: max(.zero, Self.initialIndicatorDelay - elapsed))
+            }
+            if app.preferences.showsHome, app.isMainWindowVisible {
+                startFirstIndicatorPassNow()
             }
             if app.isActive {
                 indicators.resume()
@@ -179,13 +184,22 @@ final class BackgroundCoordinator {
         guard let app, !isStopped, app.loadState == .ready, app.preferences.repositoryIndicatorsEnabled else {
             return
         }
+        if startFirstIndicatorPassNow() {
+            // Paused again while inactive.
+            update()
+        }
+    }
+
+    /// Starts the indicators' first pass now (after the skew) when it
+    /// hasn't started and waits for its delay. Returns whether it did.
+    @discardableResult
+    private func startFirstIndicatorPassNow() -> Bool {
         guard indicators.passCount == 0, !indicators.isRefreshing, indicators.startDelay != .zero else {
-            return
+            return false
         }
         indicators.stop()
         indicators.start(after: .zero)
-        // Paused again while inactive.
-        update()
+        return true
     }
 
     /// Stops everything, for quitting. Nothing starts again.
@@ -199,13 +213,14 @@ final class BackgroundCoordinator {
         branchPullRequests.stop()
     }
 
-    /// Calls `update()` whenever the indicator setting changes.
+    /// Calls `update()` whenever the indicator or Home setting changes.
     func observePreferences() {
         guard let app, !isStopped else {
             return
         }
         withObservationTracking {
             _ = app.preferences.repositoryIndicatorsEnabled
+            _ = app.preferences.showsHome
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 self?.update()

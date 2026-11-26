@@ -67,6 +67,10 @@ public final class AppHarness {
     ///     watches every repository but the selected one, runs each one's
     ///     first status, and lists and watches every repository's
     ///     worktrees.
+    ///   - showsHome: Whether the window opens to Home. Off by default, so a
+    ///     window opens on its repository as it did before Home, and the
+    ///     indicator updater's first pass waits its 2 minutes (with Home on
+    ///     it starts at once while the main window is visible).
     ///   - writesCommitGraphs: Whether History and the sidebar's upstream
     ///     comparisons write git's commit-graph file for repositories
     ///     without one (off, so tests don't change their repositories'
@@ -83,6 +87,7 @@ public final class AppHarness {
         scheduler: ManualScheduler = ManualScheduler(),
         skew: Duration = .zero,
         repositoryIndicators: Bool = false,
+        showsHome: Bool = false,
         writesCommitGraphs: Bool = false,
         backgroundServices: BackgroundServices = [],
         historyStyle: HistoryStyle? = .graph
@@ -92,6 +97,7 @@ public final class AppHarness {
         root = try createTempDirectory(prefix: "espalier-app-")
         defaults = try TemporaryDefaults()
         defaults.defaults.set(repositoryIndicators, forKey: PreferenceKey.repositoryIndicatorsEnabled)
+        defaults.defaults.set(showsHome, forKey: PreferenceKey.showsHome)
         if let historyStyle {
             defaults.defaults.set(historyStyle.rawValue, forKey: PreferenceKey.historyStyle)
         }

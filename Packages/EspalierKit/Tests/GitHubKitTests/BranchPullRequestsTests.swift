@@ -126,6 +126,49 @@ struct BranchPullRequestsTests {
         #expect(empty.openPullRequests == [[]])
     }
 
+    @Test("returns each head branch's merged pull requests, the most recently updated first, with the commit they merged at")
+    func mergedPullRequests() async throws {
+        BranchPullRequestsEndpoint([
+            .init(pullRequests: [
+                .init(3, title: "First try", state: .merged, updatedAt: "2026-09-01T10:00:00Z", headSHA: "aaa"),
+                .init(
+                    8,
+                    title: "Add charts",
+                    state: .merged,
+                    updatedAt: "2026-10-02T10:00:00Z",
+                    headSHA: "bbb",
+                    baseRefName: "develop",
+                    mergedAt: "2026-10-02T09:59:00Z"
+                ),
+                // From a fork, and gone.
+                .init(5, headOwner: "hubot", headRepositoryIsGone: true, state: .merged, updatedAt: "2026-08-01T10:00:00Z"),
+                .init(9),
+                .init(4, state: .closed),
+                .init(6, head: "other", state: .merged),
+            ]),
+        ]).install(on: mock)
+
+        let answers = try await api().fetchBranchPullRequests([
+            BranchPullRequestsQuery(owner: "octocat", name: "hello", headRefNames: ["feature", "none"]),
+        ])
+
+        let hello = try #require(answers[0])
+        #expect(hello.openPullRequests.map { $0.map(\.number) } == [[9], []])
+        #expect(hello.mergedPullRequests.map { $0.map(\.number) } == [[8, 3, 5], []])
+        #expect(hello.mergedPullRequests[0][0] == APIMergedPullRequest(
+            number: 8,
+            title: "Add charts",
+            url: "https://github.com/octocat/hello/pull/8",
+            headRefName: "feature",
+            headRefOid: "bbb",
+            headRepositoryOwner: "octocat",
+            headRepositoryName: "hello",
+            baseRefName: "develop",
+            mergedAt: "2026-10-02T09:59:00Z"
+        ))
+        #expect(hello.mergedPullRequests[0][2].headRepositoryOwner == nil)
+    }
+
     @Test("a repository GitHub can't answer about is nil, and the others are answered")
     func partialAnswer() async throws {
         BranchPullRequestsEndpoint([.init(pullRequests: [.init(1)])]).install(on: mock)
