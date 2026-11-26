@@ -7,54 +7,51 @@ import Foundation
 
 /// Finds the repositories in a folder.
 public enum RepositoryDiscovery {
-    /// How many levels below the folder a scan looks unless told otherwise:
-    /// `folder/owner/group/repository` is found.
-    public static let defaultMaxDepth = 3
-
-    /// The paths of the repositories in `folder`, at most `maxDepth` levels
-    /// below it, each a path under `folder` as given; a folder and its
-    /// directories are listed in the order of their names' bytes.
+    /// The paths of the repositories in `folder`, however far below it,
+    /// each a path under `folder` as given; a folder and its directories
+    /// are listed in the order of their names' bytes, a repository before
+    /// the ones inside it.
     ///
     /// - A repository is a directory that contains a `.git` directory;
-    ///   `folder` itself counts. A directory whose `.git` is anything else
-    ///   (a file: a linked worktree or a submodule's checkout) isn't one.
-    /// - Nothing inside a repository, or inside a directory with any other
-    ///   `.git`, is looked at.
+    ///   `folder` itself counts. A repository is looked into as any other
+    ///   directory is, so one inside another is found.
+    /// - A directory whose `.git` is anything else (a file: a linked
+    ///   worktree or a submodule's checkout) isn't a repository, and
+    ///   nothing inside it is looked at.
     /// - Symbolic links aren't followed (`folder` itself may be one), and
-    ///   hidden directories (a name that starts with a period),
-    ///   `node_modules`, `Library`, and bundles such as `.app` are left
-    ///   out, with everything in them. A directory that can't be read is
-    ///   left out too.
+    ///   hidden directories (a name that starts with a period), the
+    ///   directories left out by name (`namesLeftOut`), and bundles such
+    ///   as `.app` are left out, with everything in them. A directory
+    ///   that can't be read is left out too.
     ///
     /// Runs off the main actor. Once its task is cancelled it stops and
     /// returns what it found until then. A `folder` that isn't an absolute
     /// path, or isn't a directory that can be read, has no repositories.
     @concurrent
-    public static func repositories(in folder: String, maxDepth: Int = defaultMaxDepth) async -> [String] {
+    public static func repositories(in folder: String) async -> [String] {
         guard let root = standardizedAbsolutePath(folder) else {
             return []
         }
         var found: [String] = []
         // The directories to look at, the next one last.
-        var pending: [(path: String, depth: Int)] = [(root, 0)]
-        while let (path, depth) = pending.popLast() {
+        var pending = [root]
+        while let path = pending.popLast() {
             if Task.isCancelled {
                 break
             }
             switch gitEntry(in: path) {
             case .directory:
                 found.append(path)
-                continue
             case .other:
                 continue
             case .none:
                 break
             }
-            guard depth < maxDepth, let names = subdirectories(of: path) else {
+            guard let names = subdirectories(of: path) else {
                 continue
             }
             for name in names.reversed() {
-                pending.append((child(name, of: path), depth + 1))
+                pending.append(child(name, of: path))
             }
         }
         return found
@@ -128,11 +125,20 @@ public enum RepositoryDiscovery {
         name.utf8.first == UInt8(ascii: ".")
     }
 
-    /// The directories left out by name.
-    private static let namesLeftOut: Set<ExactString> = ["node_modules", "Library"].exactSet
+    /// The directories left out by name: `Library`, and the ones package
+    /// managers keep their checkouts of other people's repositories in.
+    private static let namesLeftOut: Set<ExactString> = [
+        "Library",
+        "node_modules",
+        "DerivedData",
+        "SourcePackages",
+        "Carthage",
+        "Pods",
+        "vendor",
+    ].exactSet
 
-    /// Whether scans leave out the directory `name` at `path`:
-    /// `node_modules`, `Library`, and bundles. Only a name with an
+    /// Whether scans leave out the directory `name` at `path`: the ones
+    /// left out by name (`namesLeftOut`), and bundles. Only a name with an
     /// extension is looked up as a bundle.
     private static func isLeftOut(_ name: String, at path: String) -> Bool {
         if namesLeftOut.contains(ExactString(name)) {

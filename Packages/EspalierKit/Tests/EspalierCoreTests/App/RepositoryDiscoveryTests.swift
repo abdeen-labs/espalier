@@ -1,5 +1,6 @@
-// The scan of a folder for repositories, against real directories: how deep
-// it looks, where it stops, what it leaves out, and what isn't a repository.
+// The scan of a folder for repositories, against real directories: that it
+// looks all the way down and inside repositories, what it leaves out, and
+// what isn't a repository.
 
 import Darwin
 @testable import EspalierCore
@@ -30,47 +31,38 @@ private func paths(_ paths: [String], in root: String) -> [String] {
 
 @Suite("Repository discovery")
 struct RepositoryDiscoveryTests {
-    static let depthCases: [NamedCase<(maxDepth: Int?, expected: [String])>] = [
-        NamedCase("three levels below the folder by default", (maxDepth: nil, expected: ["a", "b/c", "d/e/f"])),
-        NamedCase("the folder's own directories at depth 1", (maxDepth: 1, expected: ["a"])),
-        NamedCase("nothing below the folder at depth 0", (maxDepth: 0, expected: [])),
-        NamedCase("deeper when asked", (maxDepth: 4, expected: ["a", "b/c", "d/e/f", "g/h/i/j"])),
-    ]
-
-    @Test("finds the repositories down to the maximum depth, in the order of their paths", arguments: depthCases)
-    func depth(_ testCase: NamedCase<(maxDepth: Int?, expected: [String])>) async throws {
-        let (maxDepth, expected) = testCase.value
+    @Test("finds the repositories however far below the folder, in the order of their paths")
+    func anyDepth() async throws {
         let root = try createTempDirectory()
-        try makeRepositories(["g/h/i/j", "d/e/f", "b/c", "a"], in: root)
+        try makeRepositories(["g/h/i/j/k/l", "d/e/f", "b/c", "a"], in: root)
         try makeDirectory(POSIXPath.join(root, "empty/folder"))
 
-        let found = if let maxDepth {
-            await RepositoryDiscovery.repositories(in: root, maxDepth: maxDepth)
-        } else {
-            await RepositoryDiscovery.repositories(in: root)
-        }
-        #expect(found == paths(expected, in: root))
+        #expect(await RepositoryDiscovery.repositories(in: root) == paths(["a", "b/c", "d/e/f", "g/h/i/j/k/l"], in: root))
     }
 
-    @Test("doesn't look inside a repository")
-    func stopsAtRepository() async throws {
+    @Test("finds the repositories inside a repository, each after the one it's in")
+    func insideRepository() async throws {
         let root = try createTempDirectory()
-        try makeRepositories(["app", "app/vendor/library", "app/Packages/tool", "other"], in: root)
+        try makeRepositories(["other", "app/Packages/tool/deeper/still", "app/Packages/tool", "app", "app/site"], in: root)
 
-        #expect(await RepositoryDiscovery.repositories(in: root) == paths(["app", "other"], in: root))
+        #expect(await RepositoryDiscovery.repositories(in: root) == paths(
+            ["app", "app/Packages/tool", "app/Packages/tool/deeper/still", "app/site", "other"],
+            in: root
+        ))
     }
 
-    @Test("the folder itself counts when it's a repository, and then nothing in it is looked at")
+    @Test("the folder itself counts when it's a repository, with the ones in it")
     func folderIsRepository() async throws {
         let root = try createTempDirectory()
         try makeRepositories([".", "nested"], in: root)
+        let expected = [root, POSIXPath.join(root, "nested")]
 
-        #expect(await RepositoryDiscovery.repositories(in: root) == [root])
+        #expect(await RepositoryDiscovery.repositories(in: root) == expected)
         // With a trailing separator too, as the same path.
-        #expect(await RepositoryDiscovery.repositories(in: root + "/") == [root])
+        #expect(await RepositoryDiscovery.repositories(in: root + "/") == expected)
     }
 
-    @Test("leaves out hidden directories, node_modules, Library, and bundles, with everything in them")
+    @Test("leaves out hidden directories, Library, package managers' folders, and bundles, with everything in them")
     func leftOut() async throws {
         let root = try createTempDirectory()
         try makeRepositories([
@@ -80,12 +72,17 @@ struct RepositoryDiscoveryTests {
             "web/node_modules/package",
             "Library/Caches/checkout",
             "Tool.app/Contents/checkout",
+            // A repository's dependencies, which are repositories inside it.
+            "app",
+            "app/.build/checkouts/package",
+            "app/DerivedData/SourcePackages/checkouts/package",
+            "app/build/SourcePackages/checkouts/package",
             // A name with an extension that isn't a bundle's.
             "api.v2/client",
             "web/site",
         ], in: root)
 
-        #expect(await RepositoryDiscovery.repositories(in: root) == paths(["api.v2/client", "web/site"], in: root))
+        #expect(await RepositoryDiscovery.repositories(in: root) == paths(["api.v2/client", "app", "web/site"], in: root))
     }
 
     @Test("doesn't follow symbolic links, except the folder's own")
