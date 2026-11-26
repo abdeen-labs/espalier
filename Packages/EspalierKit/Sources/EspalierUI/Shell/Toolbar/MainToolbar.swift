@@ -1,4 +1,5 @@
-// The main window's toolbar: flat, 52 high, with a hairline below. The Home
+// The main window's toolbar: flat, 52 high, with a hairline below.
+// Espalier's sidebar toggle (in place of the split view's), the Home
 // button (while Home is on), the location control (one quiet capsule), and
 // the pull request chip lead; Changes | History is in the middle while the
 // sidebar is hidden; on the right, the search field, "Fetched 2 minutes
@@ -19,6 +20,16 @@ struct MainToolbar: CustomizableToolbarContent {
     let context: WindowContext
 
     var body: some CustomizableToolbarContent {
+        // Where the split view put its own toggle, which the window removes:
+        // with the sidebar style that has the split view.
+        ToolbarItem(id: "espalier.sidebarToggle", placement: .navigation) {
+            if context.sidebarStyle == .hidden {
+                SidebarToggleButton()
+            }
+        }
+        .customizationBehavior(.disabled)
+        .sharedBackgroundVisibility(.hidden)
+
         ToolbarItem(id: "espalier.home", placement: .navigation) {
             if offer.showsHomeButton {
                 HomeButton()

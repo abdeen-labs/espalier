@@ -73,8 +73,7 @@ struct HomeButton: View {
         Button {
             context.actions.perform(.showHome)
         } label: {
-            Image(systemName: "house")
-                .font(.system(size: 14, weight: .medium))
+            ToolbarSymbol("house")
                 .accessibilityLabel(ActionKind.showHome.title)
         }
         .buttonStyle(QuietRoundButtonStyle())
@@ -87,6 +86,41 @@ struct HomeButton: View {
             return ActionKind.showHome.title
         }
         return "\(ActionKind.showHome.title) (\(shortcut))"
+    }
+}
+
+/// Show Sidebar and Hide Sidebar: Espalier's own toggle in the place of the
+/// split view's, a quiet round control drawn as the Home button is.
+struct SidebarToggleButton: View {
+    @Environment(WindowContext.self) private var context
+
+    var body: some View {
+        let title = context.actions.title(for: .toggleSidebar)
+        Button {
+            context.actions.perform(.toggleSidebar)
+        } label: {
+            ToolbarSymbol("sidebar.left")
+                .accessibilityLabel(title)
+        }
+        .buttonStyle(QuietRoundButtonStyle())
+        .tooltip(ActionKind.toggleSidebar.shortcut.map { "\(title) (\($0.symbols))" } ?? title)
+    }
+}
+
+/// A symbol in the toolbar's quiet controls: the Home button's and the
+/// sidebar toggle's, and the Home capsule's house, in the row's font and
+/// secondary text.
+struct ToolbarSymbol: View {
+    private let systemImage: String
+
+    init(_ systemImage: String) {
+        self.systemImage = systemImage
+    }
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(Typography.row)
+            .foregroundStyle(.text2)
     }
 }
 
@@ -162,9 +196,7 @@ struct HomeLocationView: View {
         let look = Theme.current.style.toolbar.locationControl
         Button(action: action) {
             HStack(spacing: Metrics.ControlHeight.symbolSpacing) {
-                Image(systemName: "house")
-                    .font(Typography.row)
-                    .foregroundStyle(.text2)
+                ToolbarSymbol("house")
                     .frame(width: Metrics.symbolWidth)
                 Text(ActionKind.showHome.title)
                     .lineLimit(1)

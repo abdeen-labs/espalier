@@ -16,7 +16,7 @@
 //   the inset card layout (ChromeBackdrop.swift).
 // - No toolbar item sits on a glass platter: SwiftUI's items hide theirs
 //   (`sharedBackgroundVisibility(.hidden)`), and the items SwiftUI adds on
-//   its own (the sidebar toggle) are made borderless as the toolbar adds
+//   its own are made borderless as the toolbar adds
 //   them (`NSToolbarItem.isBordered`, which is what hides the platter).
 // - The window's own background is what the columns paint (the backdrop),
 //   following the look, so what a moving column uncovers (the floating

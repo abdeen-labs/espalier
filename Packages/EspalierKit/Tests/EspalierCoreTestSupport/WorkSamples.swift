@@ -16,8 +16,9 @@ public enum WorkSampleState: Sendable {
     case checksFailing
     /// A review of its open pull request asked for changes.
     case changesRequested
-    /// A rebase stopped with this many files with conflicts.
-    case rebaseStopped(conflicts: Int)
+    /// A rebase stopped with this many files with conflicts, `ahead` of
+    /// its upstream.
+    case rebaseStopped(conflicts: Int, ahead: Int = 0)
     /// Its pull request merged at its tip.
     case merged
     /// Changed files, changed a minute ago.
@@ -127,7 +128,7 @@ public struct WorkSampleBuilder {
         case .ahead(let count): (indicator(ahead: count), nil)
         case .checksFailing: (indicator(), pullRequest(.failing, .none))
         case .changesRequested: (indicator(), pullRequest(.passing, .changesRequested))
-        case .rebaseStopped(let conflicts): (indicator(changed: conflicts, stopped: .rebase, conflicts: conflicts), nil)
+        case .rebaseStopped(let conflicts, let ahead): (indicator(changed: conflicts, ahead: ahead, stopped: .rebase, conflicts: conflicts), nil)
         case .merged:
             (indicator(), .merged(MergedPullRequest(
                 number: 88,

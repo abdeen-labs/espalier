@@ -66,6 +66,17 @@ struct ShelfCaptures {
         capture(strip(builder, .recentActivity, width: 900), named: "long-names", area: area)
     }
 
+    @Test("long first lines: each tab as wide as its title, mark, counts, and dot need, up to its widest")
+    func longFirstLines() {
+        var builder = WorkSampleBuilder()
+        builder.open = builder.add("lighthouse", branch: "cache-keys", .changes(12, ahead: 3), minutesAgo: 1)
+        builder.add("pier-server", branch: "agent/rate-limits", .checksFailing, minutesAgo: 2, unseen: true)
+        builder.add("tidewaters", branch: "agent/onboarding", .rebaseStopped(conflicts: 4, ahead: 2), minutesAgo: 3, unseen: true)
+        builder.addLinked(to: builder.add("buoy-ios", branch: "main", .quiet), branch: "fix/tide-zone", .ahead(2), minutesAgo: 4)
+        builder.add("a-repository-with-a-very-long-name", branch: "main", .changesRequested, minutesAgo: 5)
+        capture(strip(builder, .recentActivity, width: 1_240), named: "long-first-lines", area: area)
+    }
+
     // MARK: Toolbar
 
     /// A toolbar row, as the window's toolbar lays it out, on the backdrop.
@@ -90,12 +101,15 @@ struct ShelfCaptures {
         branch: .branch(name: "feature/charts")
     )
 
-    @Test("the toolbar: the Home button before the location control")
+    @Test("the toolbar: the sidebar toggle and the Home button before the location control")
     func toolbarHomeButton() {
         capture(toolbar {
             Button {} label: {
-                Image(systemName: "house")
-                    .font(.system(size: 14, weight: .medium))
+                ToolbarSymbol("sidebar.left")
+            }
+            .buttonStyle(QuietRoundButtonStyle())
+            Button {} label: {
+                ToolbarSymbol("house")
             }
             .buttonStyle(QuietRoundButtonStyle())
             LocationControlView(Self.location)

@@ -414,7 +414,9 @@ private struct ShelfTab: View {
 
     var body: some View {
         let isFlat = Theme.current.style.toolbar.shelfTabs == .flat
-        ShelfTabButton(content: content, width: Metrics.Shelf.tabWidth, open: open, menu: menu) {
+        let branchFont = isFlat || content.isDetached ? Metrics.Shelf.codeBranchFont : Metrics.Shelf.branchFont
+        ShelfTabButton(content: content, width: Metrics.Shelf.tabWidth...Metrics.Shelf.maximumTabWidth, open: open, menu: menu) {
+            // The first line sets the tab's width; the branch fits in it.
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: Metrics.Shelf.markSpacing) {
                     Text(content.title)
@@ -434,11 +436,17 @@ private struct ShelfTab: View {
                     }
                 }
                 if !content.branch.isEmpty {
-                    Text(content.branch)
-                        .font(isFlat || content.isDetached ? Metrics.Shelf.codeBranchFont : Metrics.Shelf.branchFont)
-                        .foregroundStyle(.text2)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    Text(verbatim: " ")
+                        .font(branchFont)
+                        .hidden()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .overlay(alignment: .leading) {
+                            Text(content.branch)
+                                .font(branchFont)
+                                .foregroundStyle(.text2)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
                 }
             }
             .padding(.horizontal, Metrics.Shelf.tabPadding)
@@ -454,7 +462,7 @@ private struct CompactShelfTab: View {
     let menu: (ShelfTabContent) -> MenuContent
 
     var body: some View {
-        ShelfTabButton(content: content, width: Metrics.Shelf.compactWidth, open: open, menu: menu) {
+        ShelfTabButton(content: content, width: Metrics.Shelf.compactWidth...Metrics.Shelf.compactWidth, open: open, menu: menu) {
             if let mark = content.mark {
                 ShelfMark(mark: mark, isAlone: true)
             }
@@ -485,7 +493,9 @@ private struct ShelfMark: View {
 /// the hover wash, the tooltip, and the context menu.
 private struct ShelfTabButton<Label: View>: View {
     let content: ShelfTabContent
-    let width: CGFloat
+    /// From its narrowest to its widest: as wide as its label needs
+    /// between them.
+    let width: ClosedRange<CGFloat>
     let open: (WorktreeKey) -> Void
     let menu: (ShelfTabContent) -> MenuContent
     @ViewBuilder let label: Label
@@ -497,7 +507,7 @@ private struct ShelfTabButton<Label: View>: View {
             open(content.id)
         } label: {
             label
-                .frame(width: width, height: Metrics.Shelf.tabHeight)
+                .frame(minWidth: width.lowerBound, maxWidth: width.upperBound, minHeight: Metrics.Shelf.tabHeight, maxHeight: Metrics.Shelf.tabHeight)
                 .background {
                     ShelfTabSurface(isSelected: content.isOpen, isHovered: isHovered, shape: shape)
                 }
@@ -580,8 +590,10 @@ extension Metrics {
             Theme.current.style.toolbar.shelfTabs == .flat
         }
 
-        /// A full tab's width, and a compact one's.
+        /// A full tab's narrowest width and its widest, past which its
+        /// title truncates; a compact one's width.
         static var tabWidth: CGFloat { isFlat ? 150 : 154 }
+        static var maximumTabWidth: CGFloat { isFlat ? 240 : 250 }
         static let compactWidth: CGFloat = 40
         static var tabHeight: CGFloat { isFlat ? 40 : 46 }
         static var radius: CGFloat { isFlat ? Theme.current.radii.row : 14 }

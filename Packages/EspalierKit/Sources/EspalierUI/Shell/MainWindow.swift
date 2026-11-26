@@ -34,6 +34,8 @@ struct MainWindow: View {
             case .hidden:
                 NavigationSplitView(columnVisibility: Bindable(state).columnVisibility) {
                     SidebarContainer()
+                        // The toolbar has Espalier's own toggle in its place.
+                        .toolbar(removing: .sidebarToggle)
                         .navigationSplitViewColumnWidth(
                             min: Metrics.Column.sidebar.min,
                             ideal: Metrics.Column.sidebar.ideal,
