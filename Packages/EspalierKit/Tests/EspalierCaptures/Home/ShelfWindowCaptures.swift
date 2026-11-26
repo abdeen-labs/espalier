@@ -119,5 +119,44 @@ extension MainToolbarWindows {
                 await captureWindow(fixture, named: "home")
             }
         }
+
+        @Test("on Home, the window becoming key with nothing holding the keyboard gives it to Home; a field keeps it")
+        func homeTakesKeyboard() async throws {
+            try await withIsolatedGitConfig { _ in
+                let fixture = try await fixture()
+                fixture.app.preferences.showsHome = true
+                fixture.context.state.isShowingHome = true
+                FlatWindowChrome.install()
+                var stage: MainWindowStage? = MainWindowStage(fixture.context, appearance: .light)
+                await stage?.settle { true }
+                let window = try #require(stage?.window)
+                let becomeKey = {
+                    NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+                }
+
+                // As at launch: the window becomes key with nothing holding
+                // the keyboard, and Home takes it.
+                window.makeFirstResponder(nil)
+                #expect(window.firstResponder === window)
+                becomeKey()
+                await stage?.settle { true }
+                #expect(window.firstResponder !== window && window.firstResponder !== window.contentView)
+
+                // A field the user put the keyboard in keeps it.
+                let field = NSTextField()
+                window.contentView?.addSubview(field)
+                window.makeFirstResponder(field)
+                let held = window.firstResponder
+                becomeKey()
+                await stage?.settle { true }
+                #expect(window.firstResponder === held)
+
+                field.removeFromSuperview()
+                stage?.close()
+                stage = nil
+                await Task.yield()
+                await fixture.settle()
+            }
+        }
     }
 }

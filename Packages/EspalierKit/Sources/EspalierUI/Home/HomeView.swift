@@ -96,10 +96,21 @@ struct HomeView: View {
                 }
                 .accessibilityHidden(true)
         }
-        // With a card to take its step, Home takes the keyboard; with none,
-        // nothing has it until the user moves it to a control.
+        // With a card to take its step, Home takes the keyboard as it shows
+        // and whenever its window becomes key with nothing else holding the
+        // keyboard; with none, nothing has it until the user moves it to a
+        // control.
         .onAppear {
             hasFocus = !content.cards.isEmpty
+        }
+        .background {
+            HomeKeyboardClaim {
+                if !content.cards.isEmpty {
+                    hasFocus = true
+                }
+            }
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
         }
         .fillingSpace()
     }
@@ -160,6 +171,62 @@ struct HomeView: View {
             actions.focus(target)
         }
         return .handled
+    }
+}
+
+// MARK: - Keyboard
+
+/// Tells Home when its window is key and nothing in it holds the keyboard:
+/// as Home shows in a key window, and each time its window becomes key. A
+/// focus request made before the window is key (at launch) is lost, so Home
+/// asks again then. It never asks while a field, a list, or another control
+/// has the keyboard, or while a sheet or a panel is key in its place.
+struct HomeKeyboardClaim: NSViewRepresentable {
+    let claim: () -> Void
+
+    func makeNSView(context: Context) -> HomeKeyboardClaimView {
+        HomeKeyboardClaimView()
+    }
+
+    func updateNSView(_ view: HomeKeyboardClaimView, context: Context) {
+        view.claim = claim
+    }
+}
+
+/// `HomeKeyboardClaim`'s view.
+final class HomeKeyboardClaimView: NSView {
+    var claim: () -> Void = {}
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Observers by selector go when the view does.
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didBecomeKeyNotification, object: nil)
+        guard let window else {
+            return
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(windowDidBecomeKey), name: NSWindow.didBecomeKeyNotification, object: window)
+        // The screen before Home lets go of the keyboard as it leaves, after
+        // this view arrives.
+        DispatchQueue.main.async { [weak self] in
+            self?.claimWhenIdle()
+        }
+    }
+
+    @objc private func windowDidBecomeKey(_ notification: Notification) {
+        claimWhenIdle()
+    }
+
+    /// Claims the keyboard if the window is key and nothing in it holds the
+    /// keyboard: its first responder is the window or its content view.
+    private func claimWhenIdle() {
+        guard let window, window.isKeyWindow else {
+            return
+        }
+        let responder = window.firstResponder
+        guard responder == nil || responder === window || responder === window.contentView else {
+            return
+        }
+        claim()
     }
 }
 
