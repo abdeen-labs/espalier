@@ -37,7 +37,13 @@ struct HomeView: View {
     var actions = HomeViewActions()
     /// How many columns of cards fit, for the arrow keys.
     @State private var columns = 1
+    /// Whether Home has keyboard focus, for captures; nil reads it.
+    var hasKeyboardFocus: Bool?
+    /// The arrow keys and Return reach Home through a view behind it that
+    /// takes keyboard focus. It holds the focus itself, so the controls on
+    /// Home don't read it as theirs and draw their rings.
     @FocusState private var hasFocus: Bool
+    @Environment(\.appearsActive) private var appearsActive
     @Environment(\.motion) private var motion
 
     var body: some View {
@@ -80,14 +86,20 @@ struct HomeView: View {
             .unbouncedScrollContent()
         }
         .scrollIndicators(.automatic)
-        .focusable()
-        .focusEffectDisabled()
-        .focused($hasFocus)
-        .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow, .return]) { press in
-            handle(press.key)
+        .background {
+            Color.clear
+                .focusable()
+                .focusEffectDisabled()
+                .focused($hasFocus)
+                .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow, .return]) { press in
+                    handle(press.key)
+                }
+                .accessibilityHidden(true)
         }
+        // With a card to take its step, Home takes the keyboard; with none,
+        // nothing has it until the user moves it to a control.
         .onAppear {
-            hasFocus = true
+            hasFocus = !content.cards.isEmpty
         }
         .fillingSpace()
     }
@@ -98,7 +110,7 @@ struct HomeView: View {
         case .cards:
             HomeCardGrid(spacing: Metrics.Home.cardSpacing) {
                 ForEach(content.cards) { card in
-                    HomeCardView(card: card, actions: actions)
+                    HomeCardView(card: card, showsFocusRing: showsFocusRing, actions: actions)
                         .transition(motion.animates ? .opacity.combined(with: .scale(scale: Metrics.Home.arrivalScale)) : .identity)
                 }
             }
@@ -115,6 +127,12 @@ struct HomeView: View {
                 columns = 1
             }
         }
+    }
+
+    /// Whether the focused card shows the focus ring: while Home has the
+    /// keyboard in the key window.
+    private var showsFocusRing: Bool {
+        (hasKeyboardFocus ?? hasFocus) && appearsActive
     }
 
     /// The arrow keys move the focus between cards; Return takes the

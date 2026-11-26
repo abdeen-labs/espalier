@@ -1,7 +1,8 @@
 // The main window with the shelf: harbor's Changes under the shelf of the
 // work in five repositories, with the Home button in the toolbar; the same
 // with Home off (no Home button); and the window on Home (the "Home"
-// capsule and the jump field, no repository's items, and no shelf).
+// capsule and the jump field, no repository's items, and no shelf), with
+// four cards and docs-site In Progress, the first card alone ringed.
 
 import AppKit
 @testable import EspalierCore
@@ -21,9 +22,11 @@ extension MainToolbarWindows {
 
         /// harbor, selected at Changes with two changed files, then
         /// pier-api, buoy-ios, lighthouse, and docs-site with changed files
-        /// of their own. Status is on, and 20 minutes pass, so the work
-        /// needs the user.
+        /// of their own. Status is on. Every repository but docs-site was
+        /// last written 20 minutes before the app's clock, so its work needs
+        /// the user; docs-site a minute before, so it's changing now.
         private func fixture() async throws -> MainWindowFixture {
+            let now = ManualScheduler().now
             let local = try setupEmptyRepository("main")
             try await makeCommit(local, Tree(entries: [
                 TreeEntry(path: "TideStore.swift", contents: "import Foundation\n\nfinal class TideStore {}\n"),
@@ -33,6 +36,7 @@ extension MainToolbarWindows {
                 .write(to: URL(filePath: POSIXPath.join(local.path, "TideStore.swift")))
             try Data("import SwiftUI\nimport Charts\n".utf8)
                 .write(to: URL(filePath: POSIXPath.join(local.path, "StationView.swift")))
+            try setModified(local, ["TideStore.swift", "StationView.swift"], to: now.addingTimeInterval(-20 * 60))
             let fixture = try await MainWindowFixture.make(local)
             let app = fixture.app
             app.preferences.repositoryIndicatorsEnabled = true
@@ -43,6 +47,7 @@ extension MainToolbarWindows {
                 for file in files {
                     try Data("// \(name), changed\n".utf8).write(to: URL(filePath: POSIXPath.join(repository.path, file)))
                 }
+                try setModified(repository, files, to: now.addingTimeInterval(name == "docs-site" ? -60 : -20 * 60))
                 let model = try await fixture.harness.addAndSelect(repository, to: app)
                 await app.idle()
                 app.setAlias(name, for: model.id)
@@ -51,11 +56,17 @@ extension MainToolbarWindows {
             app.setAlias("harbor", for: fixture.repository.id)
             fixture.context.state.select(.changes, in: fixture.repository.id)
             await fixture.settle()
-            // The changes settle: the work needs the user, rather than
-            // changing now.
-            await fixture.harness.scheduler.advance(by: .seconds(20 * 60))
-            await fixture.settle()
             return fixture
+        }
+
+        /// Sets `files` and the record of HEAD's moves (what a piece of
+        /// work's last change is read from) in `repository` to have last
+        /// changed at `date`.
+        private func setModified(_ repository: Repository, _ files: [String], to date: Date) throws {
+            let paths = files.map { POSIXPath.join(repository.path, $0) } + [POSIXPath.join(repository.path, ".git/logs/HEAD")]
+            for path in paths {
+                try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: path)
+            }
         }
 
         /// Draws `fixture`'s window in each appearance once it has stopped

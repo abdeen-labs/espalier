@@ -14,6 +14,9 @@ import SwiftUI
 /// away from its button opens the work.
 struct HomeCardView: View {
     let card: HomeCard
+    /// Whether Home has the keyboard in the key window, so the focused card
+    /// shows the ring.
+    var showsFocusRing = true
     let actions: HomeViewActions
 
     var body: some View {
@@ -36,7 +39,7 @@ struct HomeCardView: View {
             Spacer(minLength: Metrics.insetMedium)
             HStack(spacing: Metrics.insetSmall) {
                 HomeStepButton(card: card, takeStep: actions.takeStep)
-                if card.isFocused {
+                if card.isFocused, showsFocusRing {
                     Text("Return")
                         .font(Typography.secondary)
                         .foregroundStyle(.text3)
@@ -50,7 +53,7 @@ struct HomeCardView: View {
         .frame(maxWidth: .infinity, minHeight: Metrics.Home.cardMinHeight, maxHeight: .infinity, alignment: .topLeading)
         .environment(\.isInPaneCard, true)
         .homeCardSurface(in: shape)
-        .focusRing(card.isFocused, in: shape, outset: 0)
+        .focusRing(card.isFocused && showsFocusRing, in: shape, outset: 0)
         .contentShape(shape)
         .onTapGesture {
             actions.open(card.id)
@@ -195,6 +198,7 @@ struct HomeUnseenDot: View {
 struct HomeHeadlineLine: View {
     let card: HomeCard
     var font: Font = Typography.row
+    @Environment(\.scheduler) private var scheduler
     @Environment(\.numberFormat) private var numberFormat
     @Environment(\.dateTimeFormatting) private var formatting
     @Environment(\.timeZone) private var timeZone
@@ -214,8 +218,9 @@ struct HomeHeadlineLine: View {
                 .foregroundStyle(.text)
                 .lineLimit(1)
                 .layoutPriority(1)
-            TimelineView(.everyMinute) { context in
-                if let detail = detail(now: context.date) {
+            // Ticks once a minute, telling time by the app's clock.
+            TimelineView(.everyMinute) { _ in
+                if let detail = detail(now: scheduler.now) {
                     Text(detail)
                         .font(font)
                         .foregroundStyle(.text2)

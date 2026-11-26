@@ -6,7 +6,7 @@
 // long repository and branch name, Fetch All running, and a card whose Push
 // runs. The board is made from plain values through `makePiecesOfWork` and
 // `makeBoard`, as the app makes it, drawn on the backdrop the window shows
-// Home on.
+// Home on, with Home holding the keyboard (the focused card's ring).
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -69,7 +69,7 @@ struct HomeCaptures {
 
     private func draw(_ content: HomeContent, named name: String, size: CGSize, isQuietOpen: Bool = false) {
         capture(
-            HomeView(content: content, isQuietOpen: .constant(isQuietOpen))
+            HomeView(content: content, isQuietOpen: .constant(isQuietOpen), hasKeyboardFocus: true)
                 .background(Color(nsColor: InsetCard.isOn ? Theme.current.cardFill : Theme.current.backdrop)),
             named: name,
             area: area,
