@@ -16,6 +16,13 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.7.3] - 2026-11-26
+
+### Fixed
+
+- In the Default theme, bold and semibold text was drawn in a tighter cut of the font than the text beside it, most visibly on the selected row in Settings. Every weight is the same cut now.
+- Pull on a Home card opened the repository and said it had no remotes. It waits for the repository to load, then pulls.
+
 ## [1.7.2] - 2026-11-26
 
 ### Changed
@@ -292,7 +299,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.7.2...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.7.3...HEAD
+[1.7.3]: https://github.com/abdeen-labs/espalier/compare/v1.7.2...v1.7.3
 [1.7.2]: https://github.com/abdeen-labs/espalier/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/abdeen-labs/espalier/compare/v1.7...v1.7.1
 [1.7]: https://github.com/abdeen-labs/espalier/compare/v1.6...v1.7
