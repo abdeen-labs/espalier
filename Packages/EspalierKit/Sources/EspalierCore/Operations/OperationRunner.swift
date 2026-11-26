@@ -260,13 +260,20 @@ extension RepositoryModel {
 
         let prompts = environment.prompts
         var onHookFailure: (@Sendable (String, TerminalOutput) async -> HookFailureResolution)?
-        if !descriptor.isBackgroundTask {
+        if descriptor.promptsUser {
             onHookFailure = { @Sendable hookName, terminalOutput in
                 let resolution = await prompts.promptHookFailure(hookName: hookName, terminalOutput: terminalOutput)
                 if resolution == .abort {
                     hookState.recordAbort(hookName)
                 }
                 return resolution
+            }
+        } else if !descriptor.isBackgroundTask {
+            // A user operation that mustn't ask aborts as if the user chose
+            // to, so it fails as `cancelled(.hookAborted)`.
+            onHookFailure = { @Sendable hookName, _ in
+                hookState.recordAbort(hookName)
+                return .abort
             }
         }
 
@@ -296,7 +303,8 @@ extension RepositoryModel {
             progress: ProgressSink(relay: progressRelay),
             gitHubHTMLURL: record.gitHubRepository.map { getHTMLURL($0.endpoint) },
             mainWorktreePath: record.mainWorktreePath,
-            stop: stop
+            stop: stop,
+            promptsUser: descriptor.promptsUser
         )
     }
 

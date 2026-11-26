@@ -24,6 +24,9 @@ public enum OperationKind: String, Sendable, Hashable, CaseIterable {
 
     // Repository maintenance and worktrees.
     case saveGitIgnore, installLFSHooks, addWorktree, removeWorktree, moveWorktree, pruneBranches, restoreBranch
+    /// Removing what's left of a merged branch: its worktree, or its
+    /// checkout in the main worktree, and the local branch.
+    case cleanUpMergedBranch
 
     /// Cloning a repository, an app-level operation.
     case clone

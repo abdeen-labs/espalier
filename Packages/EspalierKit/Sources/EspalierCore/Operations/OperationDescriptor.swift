@@ -44,6 +44,11 @@ public struct OperationDescriptor: Sendable {
     /// kind. Off for work that succeeds when its git work failed (the
     /// indicator fetch).
     public var updatesBackgroundFailure: Bool
+    /// Whether git may ask the user anything while it runs: credentials, an
+    /// SSH question, what to do about a failed hook. Off for an item of a
+    /// batch, which is skipped and reported instead (a failed hook aborts as
+    /// if the user chose to). Background work never asks.
+    public var allowsPrompts: Bool
 
     public init(
         kind: OperationKind,
@@ -54,7 +59,8 @@ public struct OperationDescriptor: Sendable {
         refreshAfter: RefreshScope = .full,
         refreshOptions: RefreshOptions = [],
         showsProgressUntilRefreshed: Bool = false,
-        updatesBackgroundFailure: Bool = true
+        updatesBackgroundFailure: Bool = true,
+        allowsPrompts: Bool = true
     ) {
         self.kind = kind
         self.lanes = lanes
@@ -65,6 +71,7 @@ public struct OperationDescriptor: Sendable {
         self.refreshOptions = refreshOptions
         self.showsProgressUntilRefreshed = showsProgressUntilRefreshed
         self.updatesBackgroundFailure = updatesBackgroundFailure
+        self.allowsPrompts = allowsPrompts
     }
 
     /// Whether background work runs it: its errors are never presented as
@@ -72,5 +79,11 @@ public struct OperationDescriptor: Sendable {
     /// prompts.
     public var isBackgroundTask: Bool {
         policy == .background
+    }
+
+    /// Whether git may ask the user anything: a user operation that allows
+    /// prompts.
+    public var promptsUser: Bool {
+        !isBackgroundTask && allowsPrompts
     }
 }

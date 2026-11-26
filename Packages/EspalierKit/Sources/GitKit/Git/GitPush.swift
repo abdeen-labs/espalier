@@ -26,6 +26,10 @@ public struct PushOptions: Sendable {
 
     public var onTerminalOutputAvailable: TerminalOutputCallback?
 
+    /// Whether git must not ask the user anything: no credential or SSH
+    /// prompt, and a failing hook is only reported to `onHookFailure`.
+    public var isBackgroundTask: Bool
+
     public init(
         forceWithLease: Bool = false,
         forceWithLeaseExpectedSHA: String? = nil,
@@ -33,7 +37,8 @@ public struct PushOptions: Sendable {
         noVerify: Bool = false,
         onHookProgress: (@Sendable (HookProgress) -> Void)? = nil,
         onHookFailure: (@Sendable (String, TerminalOutput) async -> HookFailureResolution)? = nil,
-        onTerminalOutputAvailable: TerminalOutputCallback? = nil
+        onTerminalOutputAvailable: TerminalOutputCallback? = nil,
+        isBackgroundTask: Bool = false
     ) {
         self.forceWithLease = forceWithLease
         self.forceWithLeaseExpectedSHA = forceWithLeaseExpectedSHA
@@ -42,6 +47,7 @@ public struct PushOptions: Sendable {
         self.onHookProgress = onHookProgress
         self.onHookFailure = onHookFailure
         self.onTerminalOutputAvailable = onTerminalOutputAvailable
+        self.isBackgroundTask = isBackgroundTask
     }
 }
 
@@ -94,6 +100,7 @@ public func push(
         onHookFailure: options?.onHookFailure,
         onTerminalOutputAvailable: options?.onTerminalOutputAvailable
     )
+    opts.isBackgroundTask = options?.isBackgroundTask ?? false
 
     if let progressCallback {
         args.append("--progress")

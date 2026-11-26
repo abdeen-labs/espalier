@@ -14,6 +14,10 @@ public final class OperationContext: Sendable {
     /// Whether background work runs the operation: pass it to GitKit
     /// (`isBackgroundTask`) so git never prompts.
     public nonisolated let isBackgroundTask: Bool
+    /// Whether git may ask the user anything (`OperationDescriptor.promptsUser`):
+    /// pass its opposite to GitKit as `isBackgroundTask` for the calls that
+    /// talk to a remote.
+    public nonisolated let promptsUser: Bool
     /// The hook callbacks for operations that intercept hooks.
     public nonisolated let hooks: HookCallbacks
     /// Where to report progress.
@@ -35,11 +39,13 @@ public final class OperationContext: Sendable {
         progress: ProgressSink,
         gitHubHTMLURL: String?,
         mainWorktreePath: String?,
-        stop: OperationStop = OperationStop()
+        stop: OperationStop = OperationStop(),
+        promptsUser: Bool? = nil
     ) {
         self.repository = repository
         self.kind = kind
         self.isBackgroundTask = isBackgroundTask
+        self.promptsUser = promptsUser ?? !isBackgroundTask
         self.hooks = hooks
         self.progress = progress
         self.gitHubHTMLURL = gitHubHTMLURL

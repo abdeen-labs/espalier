@@ -320,7 +320,7 @@ extension WorktreesModel {
 
     /// Renaming and deleting are only for linked worktrees that aren't
     /// locked; git refuses the others.
-    private func refuseMainOrLocked(_ worktree: WorktreeEntry, _ kind: OperationKind) throws(OperationError) {
+    func refuseMainOrLocked(_ worktree: WorktreeEntry, _ kind: OperationKind) throws(OperationError) {
         let name = getWorktreeDisplayName(worktree)
         let verb = kind == .removeWorktree ? "deleted" : "renamed or moved"
         if worktree.type == .main {
@@ -333,7 +333,7 @@ extension WorktreesModel {
 
     /// The other repositories in the list at the worktree's folder, refused
     /// with `busy` while one runs an operation the user started there.
-    private func otherRecords(at path: String, of repository: RepositoryModel, _ kind: OperationKind) throws(OperationError) -> [RepositoryModel] {
+    func otherRecords(at path: String, of repository: RepositoryModel, _ kind: OperationKind) throws(OperationError) -> [RepositoryModel] {
         guard let app = repository.app else {
             return []
         }
@@ -360,7 +360,7 @@ extension WorktreesModel {
 
     /// Asks the other repositories in the list that share the git directory
     /// (the repository's other worktrees) to reload their worktree lists.
-    private func refreshOtherWorktrees(_ siblings: WorktreeSiblings, after kind: OperationKind) {
+    func refreshOtherWorktrees(_ siblings: WorktreeSiblings, after kind: OperationKind) {
         guard let key = siblings.key, let app = repository?.app else {
             return
         }
@@ -374,7 +374,7 @@ extension WorktreesModel {
 /// an operation can move the repository to another worktree (which forgets
 /// it until the new worktree loads): the key of the network lane they share,
 /// their common git directory, once a refresh resolved it.
-private struct WorktreeSiblings {
+struct WorktreeSiblings {
     let id: RepositoryID
     let key: String?
 

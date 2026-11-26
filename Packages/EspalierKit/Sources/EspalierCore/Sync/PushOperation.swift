@@ -303,7 +303,8 @@ extension SyncModel {
     /// taking the pushed tags off the queue, the push to each of
     /// `additional` (together 0-0.643 of `progress`, in equal shares),
     /// fetching the remote (-0.9), and fast-forwarding other branches
-    /// ("Refreshing Repository", -0.95). The network lane is held.
+    /// ("Refreshing Repository", -0.95). Git runs in `worktree`, the
+    /// repository's working directory when nil. The network lane is held.
     ///
     /// - Throws: The push's error; the fetch's is returned instead, since
     ///   the push succeeded, and so are those of the pushes to `additional`.
@@ -314,12 +315,14 @@ extension SyncModel {
         additional: [Remote] = [],
         forceWithLease: Bool,
         leaseTip: String? = nil,
+        workingIn worktree: Repository? = nil,
         in ctx: OperationContext,
         progress: ProgressSink
     ) async throws -> PushResult {
         guard let repository else {
             throw notInList(ctx.kind)
         }
+        let gitRepository = worktree ?? ctx.repository
 
         // The remote is the branch's own; the URL is the repository
         // remote's, for the proxy.
@@ -348,7 +351,7 @@ extension SyncModel {
         // `refs/heads/<name>`: the branch list names a branch that shares
         // its name with a tag `heads/<name>`.
         try await GitKit.push(
-            ctx.repository,
+            gitRepository,
             safeRemote,
             branchNameFromRef(branch),
             branch.upstreamWithoutRemote,
@@ -358,7 +361,8 @@ extension SyncModel {
                 forceWithLeaseExpectedSHA: leaseTip,
                 onHookProgress: ctx.hooks.onHookProgress,
                 onHookFailure: ctx.hooks.onHookFailure,
-                onTerminalOutputAvailable: ctx.hooks.onTerminalOutputAvailable
+                onTerminalOutputAvailable: ctx.hooks.onTerminalOutputAvailable,
+                isBackgroundTask: !ctx.promptsUser
             ),
             progressCallback: { pushProgress.send(.push($0)) }
         )
@@ -369,7 +373,7 @@ extension SyncModel {
         for (index, other) in additional.enumerated() {
             let share = progress.scaled(from: pushShare * Double(index + 1), to: pushShare * Double(index + 2))
             do {
-                try await pushAdditional(branch, to: other, tags: tags, forceWithLease: forceWithLease, in: ctx, progress: share)
+                try await pushAdditional(branch, to: other, tags: tags, forceWithLease: forceWithLease, workingIn: gitRepository, in: ctx, progress: share)
                 additionalPushes.append((other.name, nil))
             } catch {
                 // Stop ends the whole push, not just this remote's.
@@ -383,8 +387,8 @@ extension SyncModel {
 
         let fetchFailure = await fetchRemotes(
             [safeRemote],
-            repository: ctx.repository,
-            isBackgroundTask: ctx.isBackgroundTask,
+            repository: gitRepository,
+            isBackgroundTask: !ctx.promptsUser,
             progress: progress.scaled(from: pushWeight, to: pushWeight + fetchWeight)
         )
 
@@ -394,7 +398,7 @@ extension SyncModel {
             title: refreshingRepositoryTitle,
             description: "Fast-forwarding branches"
         )))
-        await fastForwardOtherBranches(ctx.repository)
+        await fastForwardOtherBranches(gitRepository)
         progress.send(.generic(GenericProgress(value: refreshStartProgress + refreshWeight * 0.5, title: refreshingRepositoryTitle)))
 
         return PushResult(remoteName: safeRemote.name, tags: tags, fetchFailure: fetchFailure, additional: additionalPushes)
@@ -404,12 +408,14 @@ extension SyncModel {
     /// to the branch of the name it has on its own remote (its own name
     /// while it has no upstream), with `tags`, forced with git's default
     /// lease (the remote-tracking branch) when `forceWithLease`. The
-    /// branch's upstream stays as it is. The network lane is held.
+    /// branch's upstream stays as it is. Git runs in `worktree`, the
+    /// repository's working directory when nil. The network lane is held.
     func pushAdditional(
         _ branch: Branch,
         to remote: Remote,
         tags: [String],
         forceWithLease: Bool,
+        workingIn worktree: Repository? = nil,
         in ctx: OperationContext,
         progress: ProgressSink
     ) async throws {
@@ -418,7 +424,7 @@ extension SyncModel {
         // set the branch's upstream to this remote.
         let remoteBranch = branch.upstreamWithoutRemote.flatMap { $0.isEmpty ? nil : $0 } ?? localName
         try await GitKit.push(
-            ctx.repository,
+            worktree ?? ctx.repository,
             remote,
             localName,
             remoteBranch,
@@ -427,7 +433,8 @@ extension SyncModel {
                 forceWithLease: forceWithLease,
                 onHookProgress: ctx.hooks.onHookProgress,
                 onHookFailure: ctx.hooks.onHookFailure,
-                onTerminalOutputAvailable: ctx.hooks.onTerminalOutputAvailable
+                onTerminalOutputAvailable: ctx.hooks.onTerminalOutputAvailable,
+                isBackgroundTask: !ctx.promptsUser
             ),
             progressCallback: { progress.send(.push($0)) }
         )
@@ -452,7 +459,7 @@ extension SyncModel {
 
     /// The fetch after a push failed: its error as its own operation's, with
     /// a Retry that fetches.
-    private func classifyFetchFailure(_ error: (any Error)?) async -> OperationError? {
+    func classifyFetchFailure(_ error: (any Error)?) async -> OperationError? {
         guard let error, let repository else {
             return nil
         }
@@ -470,21 +477,23 @@ extension SyncModel {
     /// error as a push's, with a Retry that pushes `branch` to that remote
     /// alone with `tags`, forced as `request` is. The Retry is offered as a
     /// recovery, after any the error has: the branch's own remote took the
-    /// push, so only this one is left to do again.
-    private func classifyAdditionalFailure(
+    /// push, so only this one is left to do again. `retry` replaces that
+    /// Retry, for a push of a branch other than the current one.
+    func classifyAdditionalFailure(
         _ error: (any Error)?,
         remote: String,
         branch: Branch,
         request: PushRequest,
         tags: [String],
-        confirmed: Set<ConfirmationKind>
+        confirmed: Set<ConfirmationKind>,
+        retry otherRetry: (any RetryableOperation)? = nil
     ) async -> OperationError? {
         guard let error, let repository else {
             return nil
         }
         var context = ClassificationContext()
         context.hasAccountForRepository = repository.app?.accounts.account(for: repository.record) != nil
-        let retry = PushRetry(
+        let retry: any RetryableOperation = otherRetry ?? PushRetry(
             repositoryID: repository.id,
             request: PushRequest(forceWithLease: request.forceWithLease, branch: branch.ref, onlyRemote: remote, onlyRemoteTags: tags),
             confirmed: confirmed.intersection([.forcePush])

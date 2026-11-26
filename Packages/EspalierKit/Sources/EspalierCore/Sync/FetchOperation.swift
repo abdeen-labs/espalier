@@ -77,7 +77,20 @@ extension SyncModel {
         await repository.awaitOperationRefresh(covering: .full)
     }
 
-    private func fetch(remotes explicitRemotes: [Remote]?, kind: OperationKind) async throws(OperationError) {
+    /// Fetches without letting git ask the user anything (a credential, an
+    /// SSH question): one repository of a batch, whose failure is collected
+    /// rather than asked about. Otherwise as `fetch()`. `onStart` gets the
+    /// operation's Stop once it runs.
+    func fetchWithoutPrompts(onStart: @escaping @MainActor (OperationStop) -> Void) async throws(OperationError) {
+        try await fetch(remotes: nil, kind: .fetch, allowsPrompts: false, onStart: onStart)
+    }
+
+    private func fetch(
+        remotes explicitRemotes: [Remote]?,
+        kind: OperationKind,
+        allowsPrompts: Bool = true,
+        onStart: (@MainActor (OperationStop) -> Void)? = nil
+    ) async throws(OperationError) {
         guard let repository else {
             throw notInList(kind)
         }
@@ -91,9 +104,11 @@ extension SyncModel {
             lanes: [.network],
             retry: FetchRetry(repositoryID: repository.id),
             refreshAfter: .full,
-            showsProgressUntilRefreshed: true
+            showsProgressUntilRefreshed: true,
+            allowsPrompts: allowsPrompts
         )
         try await repository.perform(descriptor) { ctx in
+            onStart?(ctx.stop)
             let remotes: [Remote]
             if let explicitRemotes {
                 remotes = explicitRemotes
@@ -266,7 +281,7 @@ func fetchAndFastForward(_ remotes: [Remote], in ctx: OperationContext) async th
     let failure = await fetchRemotes(
         remotes,
         repository: ctx.repository,
-        isBackgroundTask: ctx.isBackgroundTask,
+        isBackgroundTask: !ctx.promptsUser,
         progress: ctx.progress.scaled(from: 0, to: fetchWeight)
     )
 

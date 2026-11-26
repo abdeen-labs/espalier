@@ -13,6 +13,7 @@ public enum ConfirmationKind: String, Sendable, Hashable, CaseIterable {
     case replaceCommandLineTool
     case checkoutLinkedBranch, checkoutLinkedPullRequest
     case signOutAccount
+    case pushAll, cleanUpWorktree, cleanUpMissingWorktree, cleanUpBranch
 }
 
 /// What's at the command line tool's path that installing would replace
@@ -78,6 +79,12 @@ public struct Confirmation: Sendable, Equatable {
         /// The account to sign out of, and how many repositories are
         /// assigned to it.
         case account(login: String, server: String, repositoryCount: Int)
+        /// The branches Push All pushes, in order.
+        case pushes([BranchPush])
+        /// What cleaning up a merged branch removes: the local branch, and
+        /// the worktree's folder, unless it's the main worktree (which then
+        /// checks out the default branch).
+        case cleanUp(branch: String, folder: String?)
     }
 }
 

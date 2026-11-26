@@ -36,10 +36,11 @@ extension WorktreesModel {
         try await switchRecord(to: worktree)
     }
 
-    /// Points the record at `worktree` and selects the result; see
-    /// `switchToWorktree(_:)`. Operations that hold the repository's lane
-    /// call it after git moved or removed the worktree it was at.
-    func switchRecord(to worktree: WorktreeEntry) async throws(OperationError) {
+    /// Points the record at `worktree` and, with `selecting`, selects the
+    /// result; see `switchToWorktree(_:)`. Operations that hold the
+    /// repository's lane call it after git moved or removed the worktree it
+    /// was at.
+    func switchRecord(to worktree: WorktreeEntry, selecting: Bool = true) async throws(OperationError) {
         guard let repository, let app = repository.app else {
             throw notInList(.checkoutBranch)
         }
@@ -91,7 +92,9 @@ extension WorktreesModel {
             }
             logger.info("Switched a repository to another worktree")
         }
-        app.select(.repository(result.id))
+        if selecting {
+            app.select(.repository(result.id))
+        }
     }
 
     /// Before checking out the branch `ref`: removes the other worktree that
