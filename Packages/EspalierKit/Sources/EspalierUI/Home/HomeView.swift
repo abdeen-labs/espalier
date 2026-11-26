@@ -104,8 +104,18 @@ struct HomeView: View {
             hasFocus = !content.cards.isEmpty
         }
         .background {
-            HomeKeyboardClaim {
-                if !content.cards.isEmpty {
+            HomeKeyboardClaim(hasCards: !content.cards.isEmpty) {
+                guard !content.cards.isEmpty else {
+                    return
+                }
+                // The window let go of the keyboard while the focus state
+                // still says Home has it; asking again needs a change.
+                if hasFocus {
+                    hasFocus = false
+                    Task { @MainActor in
+                        hasFocus = true
+                    }
+                } else {
                     hasFocus = true
                 }
             }
@@ -177,11 +187,13 @@ struct HomeView: View {
 // MARK: - Keyboard
 
 /// Tells Home when its window is key and nothing in it holds the keyboard:
-/// as Home shows in a key window, and each time its window becomes key. A
-/// focus request made before the window is key (at launch) is lost, so Home
-/// asks again then. It never asks while a field, a list, or another control
-/// has the keyboard, or while a sheet or a panel is key in its place.
+/// as Home shows in a key window, each time its window becomes key, and as
+/// Home goes from no cards to some. At launch the window becomes key before
+/// the repositories' statuses bring the cards, so Home asks again when they
+/// arrive. It never asks while a field, a list, or another control has the
+/// keyboard, or while a sheet or a panel is key in its place.
 struct HomeKeyboardClaim: NSViewRepresentable {
+    let hasCards: Bool
     let claim: () -> Void
 
     func makeNSView(context: Context) -> HomeKeyboardClaimView {
@@ -190,12 +202,26 @@ struct HomeKeyboardClaim: NSViewRepresentable {
 
     func updateNSView(_ view: HomeKeyboardClaimView, context: Context) {
         view.claim = claim
+        view.setHasCards(hasCards)
     }
 }
 
 /// `HomeKeyboardClaim`'s view.
 final class HomeKeyboardClaimView: NSView {
     var claim: () -> Void = {}
+    private var hasCards = false
+
+    /// Asks for the keyboard once the cards arrive, after SwiftUI has drawn
+    /// them.
+    func setHasCards(_ hasCards: Bool) {
+        let arrived = hasCards && !self.hasCards
+        self.hasCards = hasCards
+        if arrived {
+            DispatchQueue.main.async { [weak self] in
+                self?.claimWhenIdle()
+            }
+        }
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()

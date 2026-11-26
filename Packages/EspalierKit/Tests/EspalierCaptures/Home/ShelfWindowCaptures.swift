@@ -120,6 +120,52 @@ extension MainToolbarWindows {
             }
         }
 
+        @Test(
+            "on Home in a key window with no cards, the cards arriving give Home the keyboard, unless a field holds it",
+            arguments: [false, true]
+        )
+        func homeTakesKeyboardWhenCardsArrive(fieldHoldsKeyboard: Bool) async throws {
+            try await withIsolatedGitConfig { _ in
+                let fixture = try await fixture()
+                let app = fixture.app
+                let reasons = app.preferences.needsYouReasons
+                // As at launch: nothing needs the user yet.
+                app.preferences.needsYouReasons = []
+                app.preferences.showsHome = true
+                fixture.context.state.isShowingHome = true
+                FlatWindowChrome.install()
+                var stage: MainWindowStage? = MainWindowStage(fixture.context, appearance: .light)
+                await stage?.settle { true }
+                let window = try #require(stage?.window)
+                #expect(app.board.needsYou.isEmpty)
+                // What holds the keyboard on Home with no cards, as the
+                // window shows: nothing.
+                #expect(window.firstResponder === window || window.firstResponder === window.contentView)
+
+                let field = NSTextField()
+                if fieldHoldsKeyboard {
+                    window.contentView?.addSubview(field)
+                    window.makeFirstResponder(field)
+                }
+                let held = window.firstResponder
+
+                app.preferences.needsYouReasons = reasons
+                await stage?.settle { true }
+                #expect(!app.board.needsYou.isEmpty)
+                if fieldHoldsKeyboard {
+                    #expect(window.firstResponder === held)
+                } else {
+                    #expect(window.firstResponder !== window && window.firstResponder !== window.contentView)
+                }
+
+                field.removeFromSuperview()
+                stage?.close()
+                stage = nil
+                await Task.yield()
+                await fixture.settle()
+            }
+        }
+
         @Test("on Home, the window becoming key with nothing holding the keyboard gives it to Home; a field keeps it")
         func homeTakesKeyboard() async throws {
             try await withIsolatedGitConfig { _ in
