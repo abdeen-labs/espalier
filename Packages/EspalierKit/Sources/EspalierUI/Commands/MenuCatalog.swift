@@ -95,6 +95,7 @@ nonisolated public enum MenuCatalog {
     ])
 
     public static let go = MenuDefinition(title: "Go", entries: [
+        .item(.showHome),
         .item(.goBack),
         .item(.goForward),
         .separator,

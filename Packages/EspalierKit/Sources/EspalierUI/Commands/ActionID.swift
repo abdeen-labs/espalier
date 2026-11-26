@@ -74,6 +74,11 @@ nonisolated public enum ActionID: Sendable {
     case resetCodeTextSize
 
     // MARK: Go
+    /// Home: the pieces of work across every repository.
+    case showHome
+    /// Opens a piece of work: selects its repository at its worktree,
+    /// shows `place` there (nil: its last place), and leaves Home.
+    case openWork(WorktreeKey, place: SidebarPlace?)
     case goBack
     case goForward
     case goToCommit(sha: String?)
@@ -215,6 +220,8 @@ nonisolated public enum ActionID: Sendable {
         case .increaseCodeTextSize: .increaseCodeTextSize
         case .decreaseCodeTextSize: .decreaseCodeTextSize
         case .resetCodeTextSize: .resetCodeTextSize
+        case .showHome: .showHome
+        case .openWork: .openWork
         case .goBack: .goBack
         case .goForward: .goForward
         case .goToCommit: .goToCommit
@@ -329,6 +336,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
     case showChanges, showHistory, showNextPlace, showPreviousPlace, selectPlace, toggleSidebar, filterSidebar, search, showCommandPalette
     case toggleInspector, toggleSplitDiff, toggleHideWhitespace, toggleWrapLines, setImageDiffType, setHistoryScope
     case toggleStashedChanges, increaseCodeTextSize, decreaseCodeTextSize, resetCodeTextSize
+    case showHome, openWork
     case goBack, goForward, goToCommit, goToFirstParent, goToSecondParent, goToChild
     case push, forcePush, pull, fetch, publishRepository, publishBranch
     case stashAllChanges, discardAllChanges, switchRepository, repositorySettings
@@ -381,6 +389,8 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .increaseCodeTextSize: "Bigger"
         case .decreaseCodeTextSize: "Smaller"
         case .resetCodeTextSize: "Actual Size"
+        case .showHome: "Home"
+        case .openWork: "Open"
         case .goBack: "Back"
         case .goForward: "Forward"
         case .goToCommit: "Go to Commit…"
@@ -511,6 +521,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .increaseCodeTextSize: MenuShortcut("=")
         case .decreaseCodeTextSize: MenuShortcut("-")
         case .resetCodeTextSize: MenuShortcut("0")
+        case .showHome: MenuShortcut("h", [.command, .control])
         case .goBack: MenuShortcut("[")
         case .goForward: MenuShortcut("]")
         case .goToCommit: MenuShortcut("j", [.command, .shift])
@@ -530,7 +541,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
              .newRepository, .addLocalRepository, .cloneRepository, .addRepositories,
              .switchRepository, .toggleSidebar, .filterSidebar, .search, .showCommandPalette, .toggleSplitDiff, .toggleHideWhitespace,
              .toggleWrapLines, .setImageDiffType, .increaseCodeTextSize, .decreaseCodeTextSize,
-             .resetCodeTextSize, .signIn, .runBenchmark, .checkMenuShortcuts:
+             .resetCodeTextSize, .signIn, .runBenchmark, .checkMenuShortcuts, .showHome, .openWork:
             false
         default:
             true

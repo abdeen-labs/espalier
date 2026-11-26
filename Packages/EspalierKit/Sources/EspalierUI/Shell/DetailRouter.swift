@@ -13,6 +13,8 @@ nonisolated public enum DetailDestination: Sendable, Equatable {
     case getStarted
     /// Repositories exist, none is selected.
     case noRepositorySelected
+    /// Home: the pieces of work across every repository.
+    case home
     /// A repository being cloned.
     case cloning(CloneID)
     /// The selected repository's folder is gone.
@@ -28,11 +30,16 @@ nonisolated public enum DetailDestination: Sendable, Equatable {
 }
 
 extension DetailDestination {
-    /// The destination for the app's state and the window's place.
+    /// The destination for the app's state, whether the window shows Home,
+    /// and the window's place. Home shows once the list has loaded with a
+    /// repository in it.
     @MainActor
-    public static func make(app: AppModel, place: SidebarPlace?) -> DetailDestination {
+    public static func make(app: AppModel, isShowingHome: Bool = false, place: SidebarPlace?) -> DetailDestination {
         guard app.loadState == .ready else {
             return .launching
+        }
+        if isShowingHome, !app.repositories.isEmpty {
+            return .home
         }
         switch app.selection {
         case nil:
@@ -71,7 +78,10 @@ struct DetailRouter: View {
         let app = context.app
         // A place's panes are its split's cards in the floating layout; the
         // other destinations are one card.
-        switch DetailDestination.make(app: app, place: context.state.place) {
+        switch DetailDestination.make(app: app, isShowingHome: context.state.isShowingHome, place: context.state.place) {
+        case .home:
+            HomeScreen()
+                .paneCard()
         case .launching:
             DelayedProgressView()
                 .paneCard()

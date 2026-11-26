@@ -169,6 +169,7 @@ public final class ExternalEventsBridge {
     static func present(_ result: ExternalActionResult, in context: WindowContext) async {
         switch result {
         case .opened(let opened):
+            context.leaveHome()
             if let fetchError = opened.fetchError {
                 context.presenter.present(fetchError)
             }

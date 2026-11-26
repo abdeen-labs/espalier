@@ -63,6 +63,16 @@ struct MainWindow: View {
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .onChange(of: context.app.selection, initial: true) {
             restorePlace()
+            // A clone in progress shows where it's cloning.
+            if case .clone? = context.app.selection {
+                context.leaveHome()
+            }
+        }
+        // Turning Home off leaves it.
+        .onChange(of: context.app.preferences.showsHome) {
+            if !context.app.preferences.showsHome {
+                context.leaveHome()
+            }
         }
         .onChange(of: state.isRailHidden) {
             isRailHidden = state.isRailHidden
@@ -85,22 +95,28 @@ struct MainWindow: View {
     private var detail: some View {
         let state = context.state
         let inspector = inspectorBinding
-        return HStack(spacing: 0) {
-            if context.sidebarStyle == .icons, !state.isRailHidden {
-                SidebarRail()
-                    .transition(motion.animates ? AnyTransition.move(edge: .leading) : .identity)
+        return VStack(spacing: 0) {
+            // The shelf, above the detail area while it shows a repository.
+            if !state.isShowingHome {
+                WorkShelf()
             }
-            DetailRouter()
-                // The inset card, or its part before Commit Info's.
-                .insetCard(inspector.wrappedValue ? .leading : .whole)
-                .overlay(alignment: .bottom) {
-                    FloatingStatus()
+            HStack(spacing: 0) {
+                if context.sidebarStyle == .icons, !state.isRailHidden {
+                    SidebarRail()
+                        .transition(motion.animates ? AnyTransition.move(edge: .leading) : .identity)
                 }
-                .sidebarNudge(isSidebarHidden: state.columnVisibility == .detailOnly)
-                // The cards follow the sidebar as it shows and hides and
-                // keep the window's edge margin once it's hidden; the
-                // inspector's card keeps the gap after them.
-                .paneMarginsBesideSidebar(beforeInspector: inspector.wrappedValue)
+                DetailRouter()
+                    // The inset card, or its part before Commit Info's.
+                    .insetCard(inspector.wrappedValue ? .leading : .whole)
+                    .overlay(alignment: .bottom) {
+                        FloatingStatus()
+                    }
+                    .sidebarNudge(isSidebarHidden: state.columnVisibility == .detailOnly)
+                    // The cards follow the sidebar as it shows and hides and
+                    // keep the window's edge margin once it's hidden; the
+                    // inspector's card keeps the gap after them.
+                    .paneMarginsBesideSidebar(beforeInspector: inspector.wrappedValue)
+            }
         }
         .toolbarBand()
         .inspector(isPresented: inspector) {

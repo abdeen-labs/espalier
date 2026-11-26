@@ -60,6 +60,11 @@ public struct LinkedPullRequest: Equatable, Sendable {
 /// One window's navigation and UI state.
 @MainActor @Observable
 public final class WindowState {
+    /// Whether the window shows Home in place of the selected repository.
+    /// A window opens on Home while Settings' Home setting is on
+    /// (`Preferences.showsHome`); switching repositories, opening a piece
+    /// of work, showing a place, and turning the setting off leave it.
+    public var isShowingHome = false
     /// The selected place in the selected repository (the sidebar's
     /// selection).
     public var place: SidebarPlace?

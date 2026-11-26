@@ -80,6 +80,7 @@ public final class NotificationRouter: NSObject {
             logger.info("A notification's repository is no longer in the list")
             return
         }
+        context.leaveHome()
         guard let target = await app.pullRequestNotificationTarget(for: route) else {
             // The review, comment, or checks couldn't be loaded: the pull
             // request's place, if it's still open, else the repository.

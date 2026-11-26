@@ -133,9 +133,11 @@ enum RepositoryActions {
     // MARK: Switching and copying
 
     /// Switches the window to a repository or a clone in progress (a
-    /// repository row's click), closing the repository popover.
+    /// repository row's click), closing the repository popover and leaving
+    /// Home, the repository that's already selected too.
     static func switchTo(_ entry: RepositoryListEntryID, in context: WindowContext) {
         context.state.isRepositoryPopoverPresented = false
+        context.leaveHome()
         switch entry {
         case .repository(let id):
             context.app.select(.repository(id))
@@ -220,6 +222,7 @@ enum RepositoryActions {
     static func present(_ result: AddRepositoriesResult, in context: WindowContext) async {
         if let first = result.added.first ?? result.existing.first ?? result.unsafe.first {
             context.app.select(.repository(first))
+            context.leaveHome()
         }
         if let alert = AddRepositoryAlert(result) {
             let response = await context.modals.alert(alert.content)

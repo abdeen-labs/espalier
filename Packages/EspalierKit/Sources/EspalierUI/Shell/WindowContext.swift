@@ -60,6 +60,7 @@ public final class WindowContext {
         presenter = WindowPresenter(app: app, actions: actions)
         modals = ModalPresenter()
         state.isRailHidden = uiDefaults.bool(forKey: WindowState.sidebarHiddenKey)
+        state.isShowingHome = app.preferences.showsHome
 
         actions.availability = { [weak self] kind in
             guard let self else {
@@ -154,9 +155,15 @@ public final class WindowContext {
 
     // MARK: Navigation
 
-    /// Shows `place` in the selected repository.
+    /// Shows `place` in the selected repository, leaving Home.
     public func select(_ place: SidebarPlace) {
+        state.isShowingHome = false
         state.select(place, in: repository?.id)
+    }
+
+    /// Shows the selected repository in place of Home.
+    public func leaveHome() {
+        state.isShowingHome = false
     }
 
     // MARK: Sidebar

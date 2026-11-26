@@ -189,6 +189,7 @@ public struct RepositoryPopover: View {
             RepositoryActions.switchTo(entry, in: context)
         case .worktree(let path):
             close()
+            context.leaveHome()
             if path != context.repository?.worktrees.current?.path {
                 context.actions.perform(.switchToWorktree(path: path))
             }

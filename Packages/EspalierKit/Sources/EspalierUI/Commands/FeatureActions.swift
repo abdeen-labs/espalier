@@ -20,5 +20,6 @@ enum FeatureActions {
         WorktreeActions.register(into: actions, context: context)
         CommandLineToolInstaller.register(into: actions, context: context)
         CommandPaletteActions.register(into: actions, context: context)
+        HomeActions.register(into: actions, context: context)
     }
 }
