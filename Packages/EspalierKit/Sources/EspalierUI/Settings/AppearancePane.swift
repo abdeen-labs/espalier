@@ -2,7 +2,9 @@
 // fonts; colors (the palette, System's the Mac's accent color, on any
 // theme; the background tint; the appearance, System, Light, or Dark); code
 // (its text size, the diff's tab size), dates and numbers, accessibility,
-// and the sidebar (its style, hidden or icons, and the worktree list). The
+// Home (opening to it, how the shelf is arranged, the kinds of activity
+// that move work up, and what counts as needing the user), and the sidebar
+// (its style, hidden or icons, and the worktree list). The
 // code text size steps through the same sizes as View ▸ Bigger (⌘=) and
 // Smaller (⌘−).
 
@@ -48,6 +50,31 @@ enum AppearanceSettings {
         }
     }
 
+    /// How the shelf is arranged, in order.
+    static let arrangements = [
+        CapsuleSegment("Recent Activity", value: RepositoryArrangement.recentActivity),
+        CapsuleSegment("Needs You", value: RepositoryArrangement.needsYou),
+    ]
+
+    /// The kinds of activity that move work up, in order.
+    static let activityKinds: [(title: String, value: WorktreeActivityKind)] = [
+        ("Files change", .files),
+        ("A commit or a branch switch", .head),
+        ("New commits arrive from the server", .server),
+        ("News about its pull request", .pullRequest),
+    ]
+
+    /// The reasons that put work in Needs You, in order.
+    static let needsYouReasons: [(title: String, value: NeedsYouReason)] = [
+        ("Uncommitted changes", .uncommittedChanges),
+        ("Commits to push", .commitsToPush),
+        ("A rebase or merge that stopped", .stoppedOperation),
+        ("Checks failing or a review waiting on its pull request", .pullRequestAttention),
+        ("A merged branch to clean up", .mergedReadyToCleanUp),
+        ("Commits to pull", .commitsToPull),
+        ("A pushed branch with no pull request", .branchWithoutPullRequest),
+    ]
+
     /// The diff tab sizes; 4 is the default.
     static let tabSizes = [1, 2, 3, 4, 5, 6, 8, 10, 12]
     static let defaultTabSize = 4
@@ -81,7 +108,7 @@ enum AppearanceSettings {
 
 /// The Appearance pane: the theme; the palette, the background tint, and
 /// the appearance; code (its text size and tab size), dates and numbers,
-/// accessibility, and the sidebar.
+/// accessibility, Home, and the sidebar.
 struct AppearanceForm: View {
     @Bindable var preferences: Preferences
     @Environment(\.motion) private var motion
@@ -189,6 +216,28 @@ struct AppearanceForm: View {
                 )
             }
 
+            SettingsSection("Home") {
+                SettingsToggleRow(
+                    "Open to Home",
+                    description: "Windows open to Home, an overview of the work in your repositories, and the toolbar has a button for it.",
+                    isOn: $preferences.showsHome
+                )
+                SettingsRow("Arrange the shelf by", labelsControl: true) {
+                    CapsuleSegmentedControl("Arrange the shelf by", selection: $preferences.repositoryArrangement, segments: AppearanceSettings.arrangements)
+                        .fixedSize()
+                }
+                SettingsRow("Recent Activity moves work up when") {
+                    EmptyView()
+                } footer: {
+                    SettingsChecklist(choices: AppearanceSettings.activityKinds, selection: $preferences.recentActivityKinds)
+                }
+                SettingsRow("Needs You includes") {
+                    EmptyView()
+                } footer: {
+                    SettingsChecklist(choices: AppearanceSettings.needsYouReasons, selection: $preferences.needsYouReasons)
+                }
+            }
+
             SettingsSection("Sidebar") {
                 SettingsRow("Style", description: AppearanceSettings.sidebarStyleDescription(preferences.sidebarStyle), labelsControl: true) {
                     CapsuleSegmentedControl("Style", selection: $preferences.sidebarStyle, segments: AppearanceSettings.sidebarStyles)
@@ -233,5 +282,32 @@ struct AppearanceForm: View {
         } set: { format in
             preferences.timeFormat = format.rawValue
         }
+    }
+}
+
+/// A row's checkboxes, one for each choice, on when the choice is in
+/// `selection`.
+struct SettingsChecklist<Value: Hashable>: View {
+    let choices: [(title: String, value: Value)]
+    @Binding var selection: Set<Value>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.insetSmall) {
+            ForEach(choices, id: \.value) { choice in
+                Toggle(choice.title, isOn: Binding {
+                    selection.contains(choice.value)
+                } set: { isOn in
+                    if isOn {
+                        selection.insert(choice.value)
+                    } else {
+                        selection.remove(choice.value)
+                    }
+                })
+                .toggleStyle(.checkboxMark)
+                .font(Typography.row)
+            }
+        }
+        .padding(.top, Metrics.grid)
+        .padding(.vertical, Metrics.FocusRing.outset)
     }
 }

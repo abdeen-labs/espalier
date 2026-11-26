@@ -12,9 +12,9 @@
 // a view that watches the scroll view and, as each scroll starts, turns its
 // elasticity off again (SwiftUI sets it as it updates), then until the
 // scroll ends puts the clip view's origin back inside the content whenever
-// it moves out, and back where it was sideways as the scroll began. SwiftUI's
-// clip view rests where it puts itself, so that sideways origin is measured,
-// not worked out.
+// it moves out, and back where it was across its axis as the scroll began.
+// SwiftUI's clip view rests where it puts itself, so that origin across the
+// axis is measured, not worked out.
 //
 // Either kind can fade its content out at the edges with more beyond them
 // (`fadesEdges`, ScrollEdgeFade.swift).
@@ -120,12 +120,12 @@ final class EdgeClampingClipView: NSClipView {
 
 extension View {
     /// Keeps the SwiftUI `ScrollView` whose content this is from moving
-    /// past the content's ends, or sideways; with `fadesEdges`, its content
-    /// fades out at the edges with more beyond them, in a look that fades
-    /// them (`ScrollEdgeFade`).
-    func unbouncedScrollContent(fadesEdges: Bool = false) -> some View {
+    /// past the content's ends, or across `axis`, the one it scrolls along;
+    /// with `fadesEdges`, a vertical one's content fades out at the edges
+    /// with more beyond them, in a look that fades them (`ScrollEdgeFade`).
+    func unbouncedScrollContent(fadesEdges: Bool = false, axis: Axis = .vertical) -> some View {
         background {
-            UnbouncedScrollPin(finds: .enclosing, fadesEdges: fadesEdges)
+            UnbouncedScrollPin(finds: .enclosing, fadesEdges: fadesEdges, axis: axis)
                 .accessibilityHidden(true)
         }
     }
@@ -135,7 +135,7 @@ extension View {
     /// them, in a look that fades them (`ScrollEdgeFade`).
     func unbouncedList(fadesEdges: Bool = false) -> some View {
         background {
-            UnbouncedScrollPin(finds: .besideList, fadesEdges: fadesEdges)
+            UnbouncedScrollPin(finds: .besideList, fadesEdges: fadesEdges, axis: .vertical)
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
         }
@@ -143,7 +143,7 @@ extension View {
 }
 
 /// Keeps a scroll view SwiftUI made from moving past its content's ends,
-/// or sideways, while it scrolls, and fades its edges when asked.
+/// or across its axis, while it scrolls, and fades its edges when asked.
 private struct UnbouncedScrollPin: NSViewRepresentable {
     /// Where the scroll view is.
     enum Search {
@@ -155,9 +155,11 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
 
     let finds: Search
     let fadesEdges: Bool
+    /// The axis it scrolls along.
+    let axis: Axis
 
     func makeNSView(context: Context) -> PinView {
-        PinView(finds: finds, fadesEdges: fadesEdges)
+        PinView(finds: finds, fadesEdges: fadesEdges, axis: axis)
     }
 
     func updateNSView(_ view: PinView, context: Context) {
@@ -167,6 +169,8 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
 
     final class PinView: NSView {
         private let search: Search
+        /// The axis the scroll view scrolls along.
+        private let axis: Axis
         /// Whether the scroll view's content fades at its edges.
         var fadesEdges: Bool {
             didSet {
@@ -180,14 +184,15 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
         private weak var scrollView: NSScrollView?
         /// The scroll view's edge fade, with `fadesEdges`.
         private var edgeFade: ScrollEdgeFade?
-        /// The clip view's horizontal origin as the scroll in progress
+        /// The clip view's origin across `axis` as the scroll in progress
         /// began; nil between scrolls.
-        private var heldX: CGFloat?
+        private var heldOrigin: CGFloat?
         /// Whether it's moving the clip view itself.
         private var isPinning = false
 
-        init(finds search: Search, fadesEdges: Bool) {
+        init(finds search: Search, fadesEdges: Bool, axis: Axis) {
             self.search = search
+            self.axis = axis
             self.fadesEdges = fadesEdges
             super.init(frame: .zero)
         }
@@ -237,7 +242,7 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
             }
             NotificationCenter.default.removeObserver(self)
             scrollView = found
-            heldX = nil
+            heldOrigin = nil
             if let found {
                 observe(found)
             }
@@ -309,7 +314,8 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
                 return
             }
             Self.turnElasticityOff(scrollView)
-            heldX = scrollView.contentView.bounds.origin.x
+            let origin = scrollView.contentView.bounds.origin
+            heldOrigin = axis == .vertical ? origin.x : origin.y
         }
 
         @objc private func boundsDidChange(_ notification: Notification) {
@@ -318,21 +324,22 @@ private struct UnbouncedScrollPin: NSViewRepresentable {
 
         @objc private func didEndLiveScroll(_ notification: Notification) {
             pin()
-            heldX = nil
+            heldOrigin = nil
         }
 
         /// While a scroll lasts, puts the clip view's origin back inside the
-        /// content, and back where it was sideways as the scroll began. Its
+        /// content, and back where it was across the axis as the scroll
+        /// began. Its
         /// own move comes back here while it's pinning, so it moves the
         /// origin once, even where the clip view keeps it elsewhere.
         private func pin() {
-            guard let heldX, !isPinning, let scrollView else {
+            guard let heldOrigin, !isPinning, let scrollView else {
                 return
             }
             let clipView = scrollView.contentView
             let origin = clipView.bounds.origin
             let inside = EdgeClampingClipView.clamped(origin, of: clipView, size: clipView.bounds.size)
-            let pinned = NSPoint(x: heldX, y: inside.y)
+            let pinned = axis == .vertical ? NSPoint(x: heldOrigin, y: inside.y) : NSPoint(x: inside.x, y: heldOrigin)
             guard pinned != origin else {
                 return
             }

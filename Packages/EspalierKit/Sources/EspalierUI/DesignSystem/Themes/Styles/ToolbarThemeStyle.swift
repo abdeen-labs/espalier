@@ -1,5 +1,5 @@
 /// The main window's toolbar: the location control, the sync button and its
-/// label, and the Changes / History switcher.
+/// label, the Changes / History switcher, and the shelf of work under it.
 nonisolated public struct ToolbarThemeStyle: Sendable, Equatable {
     /// The location control's capsule.
     public enum LocationControl: Sendable, Equatable {
@@ -28,12 +28,22 @@ nonisolated public struct ToolbarThemeStyle: Sendable, Equatable {
         case segmented
     }
 
+    /// The shelf's tabs (`WorkShelf`). The open work's tab is raised, as
+    /// the capsule segmented control's selected segment, in either.
+    public enum ShelfTabs: Sendable, Equatable {
+        /// Soft cards on the backdrop, the branch in the text font.
+        case cards
+        /// Flat, split by hairlines, the branch in the code font.
+        case flat
+    }
+
     public var locationControl: LocationControl
     public var syncCounts: SyncCounts
     public var placeSwitcher: PlaceSwitcher
+    public var shelfTabs: ShelfTabs
 
     /// Default's.
-    public static let `default` = ToolbarThemeStyle(locationControl: .pillow, syncCounts: .pill, placeSwitcher: .tabs)
+    public static let `default` = ToolbarThemeStyle(locationControl: .pillow, syncCounts: .pill, placeSwitcher: .tabs, shelfTabs: .cards)
     /// Frost's.
-    public static let frost = ToolbarThemeStyle(locationControl: .flat, syncCounts: .text, placeSwitcher: .segmented)
+    public static let frost = ToolbarThemeStyle(locationControl: .flat, syncCounts: .text, placeSwitcher: .segmented, shelfTabs: .flat)
 }

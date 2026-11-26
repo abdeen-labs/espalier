@@ -238,12 +238,16 @@ private struct SidebarPaneMarginsModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         GeometryReader { proxy in
-            content.padding(margins(minX: proxy.frame(in: .global).minX))
+            content.padding(PaneCards.detailMargins(minX: proxy.frame(in: .global).minX, beforeInspector: beforeInspector))
         }
     }
+}
 
-    /// The margins with the detail's leading edge `minX` from the window's.
-    private func margins(minX: CGFloat) -> EdgeInsets {
+extension PaneCards {
+    /// The detail area's margins beside the sidebar with the detail's
+    /// leading edge `minX` from the window's
+    /// (`paneMarginsBesideSidebar(beforeInspector:)`).
+    static func detailMargins(minX: CGFloat, beforeInspector: Bool) -> EdgeInsets {
         switch Theme.current.paneLayout {
         case .floatingCards:
             var margins = PaneCards.frameMargins

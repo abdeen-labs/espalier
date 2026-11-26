@@ -1,9 +1,11 @@
-// The main window's toolbar: flat, 52 high, with a hairline below. The
-// location control (one quiet capsule) and the pull request chip lead;
-// Changes | History is in the middle while the sidebar is hidden; on the
-// right, the search field, "Fetched 2 minutes ago", the sync button, and
-// the overflow menu. Customizable extras are off by default. No item sits on
-// a glass platter (`FlatWindowChrome`).
+// The main window's toolbar: flat, 52 high, with a hairline below. The Home
+// button (while Home is on), the location control (one quiet capsule), and
+// the pull request chip lead; Changes | History is in the middle while the
+// sidebar is hidden; on the right, the search field, "Fetched 2 minutes
+// ago", the sync button, and the overflow menu. Customizable extras are off
+// by default. On Home, a "Home" capsule leads, and a field that opens the
+// command palette takes the repository's items' place (HomeToolbar.swift).
+// No item sits on a glass platter (`FlatWindowChrome`).
 
 import EspalierCore
 import GitKit
@@ -17,8 +19,19 @@ struct MainToolbar: CustomizableToolbarContent {
     let context: WindowContext
 
     var body: some CustomizableToolbarContent {
+        ToolbarItem(id: "espalier.home", placement: .navigation) {
+            if offer.showsHomeButton {
+                HomeButton()
+            }
+        }
+        .customizationBehavior(.disabled)
+        .sharedBackgroundVisibility(.hidden)
+
         ToolbarItem(id: "espalier.location", placement: .navigation) {
-            LocationControl()
+            switch offer.location {
+            case .location: LocationControl()
+            case .home: HomeLocationControl()
+            }
         }
         .customizationBehavior(.disabled)
         .sharedBackgroundVisibility(.hidden)
@@ -37,7 +50,7 @@ struct MainToolbar: CustomizableToolbarContent {
         // which does the same. It's Changes | History while the sidebar is
         // hidden, and draws nothing otherwise.
         ToolbarItem(id: "espalier.flexibleSpace", placement: .principal) {
-            if let repository = usableRepository, context.isSidebarHidden {
+            if let repository = usableRepository, context.isSidebarHidden, offer.showsRepositoryItems {
                 PlaceSwitcher(repository: repository)
             } else {
                 Color.clear
@@ -49,8 +62,13 @@ struct MainToolbar: CustomizableToolbarContent {
         .sharedBackgroundVisibility(.hidden)
 
         ToolbarItem(id: "espalier.search", placement: .primaryAction) {
-            ToolbarSearchField()
-                .padding(.trailing, Metrics.Toolbar.searchSpacing)
+            if offer.showsJumpField {
+                JumpField()
+                    .padding(.trailing, Metrics.Toolbar.searchSpacing)
+            } else {
+                ToolbarSearchField()
+                    .padding(.trailing, Metrics.Toolbar.searchSpacing)
+            }
         }
         .customizationBehavior(.disabled)
         .sharedBackgroundVisibility(.hidden)
@@ -114,7 +132,7 @@ struct MainToolbar: CustomizableToolbarContent {
         .sharedBackgroundVisibility(.hidden)
 
         ToolbarItem(id: "espalier.inspector", placement: .primaryAction) {
-            if context.state.place?.showsCommits == true {
+            if context.state.place?.showsCommits == true, offer.showsRepositoryItems {
                 Button {
                     context.actions.perform(.toggleInspector)
                 } label: {
@@ -132,8 +150,15 @@ struct MainToolbar: CustomizableToolbarContent {
         .sharedBackgroundVisibility(.hidden)
     }
 
+    /// What the toolbar offers on Home and off it.
+    private var offer: ToolbarOffer {
+        ToolbarOffer.make(context)
+    }
+
+    /// The selected repository, while it's usable and the window shows it
+    /// rather than Home: the items bound to a repository show for it.
     private var usableRepository: RepositoryModel? {
-        guard context.app.loadState == .ready, let repository = context.repository, repository.isUsable else {
+        guard offer.showsRepositoryItems, context.app.loadState == .ready, let repository = context.repository, repository.isUsable else {
             return nil
         }
         return repository
@@ -191,20 +216,28 @@ struct ToolbarSearchField: View {
     }
 }
 
-/// The toolbar's overflow menu: the repository's places outside Espalier.
+/// The toolbar's overflow menu: the repository's places outside Espalier;
+/// on Home, adding a repository.
 struct OverflowMenu: View {
     @Environment(WindowContext.self) private var context
 
     var body: some View {
-        PullDownButton("More") { [actions = context.actions] in
-            actions.menuAction(.openInEditor(path: nil))
-            actions.menuAction(.openInTerminal(path: nil))
-            actions.menuAction(.showInFinder(path: nil))
-            MenuDivider()
-            actions.menuAction(.viewOnGitHub)
-            actions.menuAction(.createPullRequest)
-            MenuDivider()
-            actions.menuAction(.repositorySettings)
+        PullDownButton("More") { [actions = context.actions, overflow = ToolbarOffer.make(context).overflow] in
+            switch overflow {
+            case .repository:
+                actions.menuAction(.openInEditor(path: nil))
+                actions.menuAction(.openInTerminal(path: nil))
+                actions.menuAction(.showInFinder(path: nil))
+                MenuDivider()
+                actions.menuAction(.viewOnGitHub)
+                actions.menuAction(.createPullRequest)
+                MenuDivider()
+                actions.menuAction(.repositorySettings)
+            case .addRepository:
+                actions.menuAction(.newRepository(path: nil))
+                actions.menuAction(.addLocalRepository)
+                actions.menuAction(.cloneRepository(url: nil))
+            }
         } label: {
             Label("More", systemImage: "ellipsis.circle")
         }
@@ -227,9 +260,16 @@ struct ActionToolbarButton: View {
     }
 
     var body: some View {
+        // They act on the repository, so Home has none.
+        if ToolbarOffer.make(context).showsRepositoryItems {
+            button
+        }
+    }
+
+    private var button: some View {
         let title = context.actions.title(for: action).replacingOccurrences(of: "…", with: "")
         let isEnabled = context.actions.canPerform(action)
-        Button {
+        return Button {
             context.actions.perform(action)
         } label: {
             Label(title, systemImage: systemImage)
