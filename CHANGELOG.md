@@ -16,6 +16,25 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.7] - 2026-11-25
+
+### Added
+
+- Home, the screen Espalier now opens to. It shows what needs you across every repository and worktree as cards: changed files, commits to push, a rebase or merge that stopped, failing checks, a review that asked for changes, or a merged branch to clean up. Each card has a button for its next step, and Return takes the focused card's. The toolbar's Home button and Go ▸ Home (⌃⌘H) bring you back to it. To open on your last repository instead, turn off Open to Home in Settings ▸ Home.
+- On Home, work that's still changing or waiting on its pull request's checks is listed under In Progress, and moves to Needs You once it has been quiet for 10 minutes. Repositories with nothing to do are counted under Quiet.
+- The shelf: a strip of tabs under the toolbar with every worktree that has work in it, so you can see it and switch to it from inside any repository.
+- Fetch All and Push All on Home. Push All asks first, listing each branch, and both say afterward what was skipped or failed.
+- Clean Up, for a branch whose pull request was merged: after asking, it removes the branch's worktree and deletes the local branch.
+- All Work in Changes: when a branch has commits ahead of its base, review everything on it together, commits and uncommitted changes, and mark files as viewed as you go (⌥⌘V). A mark clears when the file changes again.
+- Watched folders: choose a folder with File ▸ Watch Folder…, and Espalier adds every repository in it and new ones as they appear. A new install offers it first.
+- Settings ▸ Home: whether windows open to Home, the folders you watch, how the shelf is arranged, and what counts as needing you.
+
+### Changed
+
+- The commit button reads "Commit and Push" while Push After Committing is on, with a line under it saying what it will do. Push After Committing is now on until you turn it off in a repository.
+- The counts in the repository list update a moment after files change in any repository, not only the open one.
+- The toolbar's sidebar button is drawn in Espalier's own style.
+
 ## [1.6] - 2026-11-24
 
 ### Added
@@ -259,7 +278,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.6...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.7...HEAD
+[1.7]: https://github.com/abdeen-labs/espalier/compare/v1.6...v1.7
 [1.6]: https://github.com/abdeen-labs/espalier/compare/v1.5.6...v1.6
 [1.5.6]: https://github.com/abdeen-labs/espalier/compare/v1.5.5...v1.5.6
 [1.5.5]: https://github.com/abdeen-labs/espalier/compare/v1.5.4...v1.5.5
