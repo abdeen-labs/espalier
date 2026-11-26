@@ -17,6 +17,11 @@ final class HomeModel {
     /// The card the user last moved the focus to.
     var focus: WorktreeKey?
     var running = HomeRunning()
+    /// The pieces of work whose Push or Clean Up was asked for and hasn't
+    /// ended, asking or running.
+    @ObservationIgnored var startedSteps: Set<WorktreeKey> = []
+    /// Whether Push All was asked for and hasn't ended, asking or running.
+    @ObservationIgnored var isPushAllStarted = false
     @ObservationIgnored var fetchAll: Task<Void, Never>?
 }
 
@@ -43,17 +48,11 @@ struct HomeScreen: View {
         HomeView(content: content(model), isQuietOpen: $isQuietOpen, actions: actions(model))
     }
 
-    /// The content of the board now. While an alert asks (a confirmation
-    /// before Push All or Clean Up), nothing shows as running yet.
+    /// The content of the board now.
     private func content(_ model: HomeModel) -> HomeContent {
         let app = context.app
         let board = app.board
-        var running = model.running
-        if context.presenter.isPresentingModal || context.modals.isPresenting {
-            running.pieces = []
-            running.batch.isPushingAll = false
-        }
-        return HomeContent.make(board: board, running: running, focus: model.focus, isScanningFolders: app.isScanningFolders) { piece, branch in
+        return HomeContent.make(board: board, running: model.running, focus: model.focus, isScanningFolders: app.isScanningFolders) { piece, branch in
             guard let repository = app.repository(piece.record.id) else {
                 return Palette.accent
             }
@@ -102,32 +101,69 @@ enum HomeSteps {
     /// Takes `card`'s next step: opens the work where the step is and goes
     /// on there, or pushes or cleans up in place.
     static func take(_ card: HomeCard, model: HomeModel, in context: WindowContext) async {
-        guard let route = card.route, !model.running.pieces.contains(card.id) else {
+        guard let route = card.route, !model.startedSteps.contains(card.id) else {
             return
         }
         let app = context.app
+        let key = card.id
+        let setRunning: @MainActor (Bool) -> Void = { isRunning in
+            if isRunning {
+                model.running.pieces.insert(key)
+            } else {
+                model.running.pieces.remove(key)
+            }
+        }
         switch route {
         case .open(let place, let then):
-            await HomeActions.open(card.id, place: place, in: context)
+            await HomeActions.open(key, place: place, in: context)
             // It stays on Home when the work couldn't be opened.
             guard !context.state.isShowingHome, let then else {
                 return
             }
             follow(then, in: context)
         case .push:
-            let key = card.id
-            model.running.pieces.insert(key)
-            let outcome = await context.presenter.perform { _ throws(OperationError) in
+            model.startedSteps.insert(key)
+            let outcome = await perform(asksFirst: false, in: context, setRunning: setRunning) { _ throws(OperationError) in
                 try await app.pushWork(key)
             }
-            model.running.pieces.remove(key)
+            model.startedSteps.remove(key)
             ShellActions.finish(outcome, in: context)
         case .cleanUp(let request):
-            model.running.pieces.insert(card.id)
-            await context.presenter.perform { answers throws(OperationError) in
+            model.startedSteps.insert(key)
+            await perform(asksFirst: true, in: context, setRunning: setRunning) { answers throws(OperationError) in
                 try await app.cleanUp(request, confirmed: answers.confirmed)
             }
-            model.running.pieces.remove(card.id)
+            model.startedSteps.remove(key)
+        }
+    }
+
+    /// Runs `intent` as `WindowPresenter.perform` does, showing it as
+    /// running only while a run the user agreed to goes: `setRunning(true)`
+    /// as such a run starts, `setRunning(false)` as it ends. While the
+    /// presenter asks, nothing runs; after a Cancel, nothing does again.
+    ///
+    /// - Parameter asksFirst: The intent always asks before it changes
+    ///   anything (Push All, Clean Up): only a run with a confirmation the
+    ///   user gave counts, not the first, which only reads what to ask.
+    ///   Otherwise the click was the agreement, and every run counts.
+    @discardableResult
+    static func perform<T: Sendable>(
+        asksFirst: Bool,
+        in context: WindowContext,
+        setRunning: @escaping @MainActor (Bool) -> Void,
+        _ intent: @escaping @MainActor (IntentAnswers) async throws(OperationError) -> T
+    ) async -> T? {
+        await context.presenter.perform { answers throws(OperationError) in
+            let isAgreed = !asksFirst || !answers.confirmed.isEmpty
+            if isAgreed {
+                setRunning(true)
+            }
+            defer {
+                if isAgreed {
+                    setRunning(false)
+                }
+            }
+            return try await intent(answers)
         }
     }
 
@@ -177,7 +213,7 @@ enum HomeSteps {
     /// Pushes every branch Push All would, after its confirmation; then says
     /// what happened.
     static func pushAll(model: HomeModel, in context: WindowContext) async {
-        guard !model.running.batch.isPushingAll else {
+        guard !model.isPushAllStarted else {
             return
         }
         let app = context.app
@@ -185,11 +221,11 @@ enum HomeSteps {
         guard !keys.isEmpty else {
             return
         }
-        model.running.batch.isPushingAll = true
-        let result = await context.presenter.perform { answers throws(OperationError) in
+        model.isPushAllStarted = true
+        let result = await perform(asksFirst: true, in: context, setRunning: { model.running.batch.isPushingAll = $0 }) { answers throws(OperationError) in
             try await app.pushAll(keys, confirmed: answers.confirmed)
         }
-        model.running.batch.isPushingAll = false
+        model.isPushAllStarted = false
         if let result {
             report(HomeBatchReport.pushAll(result, name: { app.record($0.repositoryID)?.displayName ?? "" }, format: app.preferences.numberFormat), in: context)
         }
