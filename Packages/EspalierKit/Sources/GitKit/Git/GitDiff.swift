@@ -380,6 +380,112 @@ public func getWorkingDirectoryDiff(
     return try await buildDiff(result.stdoutData, repository, file, "HEAD", "HEAD", lineEndingsChange)
 }
 
+/// The files the working tree changes since `mergeBase`, its commits and
+/// uncommitted changes together (staged or not, untracked files left out),
+/// with each file's lines added and deleted: one `git diff <mergeBase>`,
+/// renames and copies found as the pull request preview finds them. Each
+/// file's `commitish` and `parentCommitish` are `mergeBase`.
+///
+/// Read-only: git runs with `--no-optional-locks`, so it never refreshes the
+/// index.
+public func getWorkingTreeChangedFiles(_ repository: Repository, since mergeBase: String) async throws -> ChangesetData {
+    let result = try await git(
+        [
+            "--no-optional-locks",
+            "diff",
+            "--no-ext-diff",
+            "-C",
+            "-M",
+            "-z",
+            "--raw",
+            "--numstat",
+            "--end-of-options",
+            mergeBase,
+            "--",
+        ],
+        repository.path,
+        "getWorkingTreeChangedFiles"
+    )
+    return try parseRawLogWithNumstat(result.stdout, mergeBase, mergeBase)
+}
+
+/// Render the diff of a file from `mergeBase` to the working tree, as
+/// `getWorkingTreeChangedFiles` lists it: an untracked file against an
+/// empty one, any other against the merge base (a rename's or copy's old
+/// path included). An image's sides are the merge base's blob and the file
+/// on disk.
+public func getWorkingTreeDiff(
+    _ repository: Repository,
+    _ file: CommittedFileChange,
+    since mergeBase: String,
+    hideWhitespaceInDiff: Bool = false
+) async throws -> Diff {
+    var args = ["--no-optional-locks", "diff"] + (hideWhitespaceInDiff ? ["-w"] : []) + [
+        "--no-ext-diff",
+        "--patch-with-raw",
+        "-z",
+        "--no-color",
+    ]
+    var successExitCodes: Set<Int> = [0]
+    let submoduleStatus = file.status.submoduleStatus
+    if submoduleStatus == nil, file.status.kind == .untracked {
+        // `--no-index` exits as `diff` does: 1 when the files differ.
+        successExitCodes.insert(1)
+        args += ["--no-index", "--", "/dev/null", file.path]
+    } else {
+        args += ["-C", "-M", "--end-of-options", mergeBase, "--"] + pathspecs(for: file)
+    }
+
+    guard let result = try await runDiff(
+        args,
+        repository.path,
+        "getWorkingTreeDiff",
+        options: GitExecutionOptions(successExitCodes: successExitCodes),
+        capsOutput: submoduleStatus == nil
+    ) else {
+        return .unrenderable
+    }
+    let buffer = result.stdoutData
+    if let submoduleStatus {
+        return try await buildSubmoduleDiff(buffer, repository, file, submoduleStatus)
+    }
+    if !isValidBuffer(buffer) {
+        return .unrenderable
+    }
+
+    let diff = try diffFromRawDiffOutput(buffer)
+    let lineEndingsChange = parseLineEndingsWarning(result.stderrData)
+    if isBufferTooLarge(buffer) || isDiffTooLarge(diff) {
+        return .largeText(LargeTextDiff(
+            text: diff.contents,
+            hunks: diff.hunks,
+            lineEndingsChange: lineEndingsChange,
+            maxLineNumber: diff.maxLineNumber,
+            hasHiddenBidiChars: diff.hasHiddenBidiChars
+        ))
+    }
+
+    if diff.isBinary {
+        guard imageFileExtensions.contains(POSIXPath.extname(file.path).lowercased()) else {
+            return .binary
+        }
+        let kind = file.status.kind
+        let current = kind == .deleted ? nil : try await getWorkingDirectoryImage(repository, file)
+        let previous = kind == .new || kind == .untracked
+            ? nil
+            : try await getBlobImage(repository, getOldPathOrDefault(file), mergeBase)
+        return .image(ImageDiff(previous: previous, current: current))
+    }
+
+    return .text(TextDiff(
+        text: diff.contents,
+        hunks: diff.hunks,
+        lineEndingsChange: lineEndingsChange,
+        maxLineNumber: diff.maxLineNumber,
+        hasHiddenBidiChars: diff.hasHiddenBidiChars
+    ))
+}
+
 /// The result of `getResolutionDiff`: the computed diff together with the
 /// exact old (base) and new (target) content strings it was generated from.
 public struct ResolutionDiff: Hashable, Sendable {

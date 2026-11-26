@@ -40,6 +40,12 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
     /// Why the button is disabled, for its tooltip.
     public var disabledReason: String?
     public var numberFormat: NumberFormat
+    /// The commit is pushed once it's made (Push After Committing): the
+    /// button reads "Commit and Push".
+    public var pushes: Bool
+    /// What committing and pushing will do, under the button: "Commits 2
+    /// files, then pushes 4 commits to origin".
+    public var pushCaption: String?
 
     public init(
         kind: Kind = .commit,
@@ -51,8 +57,12 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
         isGenerating: Bool = false,
         isEnabled: Bool,
         disabledReason: String? = nil,
-        numberFormat: NumberFormat = defaultNumberFormat
+        numberFormat: NumberFormat = defaultNumberFormat,
+        pushes: Bool = false,
+        pushCaption: String? = nil
     ) {
+        self.pushes = pushes
+        self.pushCaption = pushCaption
         self.kind = kind
         self.isAssisted = isAssisted
         self.isAmending = isAmending
@@ -86,6 +96,9 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
         if isAssisted, isCommitting {
             return ("Committing with AI…", nil, "")
         }
+        if pushes, !isAssisted {
+            return (isCommitting ? "Committing…" : "Commit and Push", nil, "")
+        }
         var words = [isCommitting ? "Committing" : "Commit"]
         if fileCount > 0 {
             words.append("\(formatNumber(Double(fileCount), numberFormat)) \(fileCount == 1 ? "File" : "Files")")
@@ -103,6 +116,26 @@ nonisolated public struct CommitButtonContent: Sendable, Equatable {
     public var title: String {
         let parts = titleParts
         return parts.lead + (parts.branch.map { " \($0)" } ?? "") + parts.trail
+    }
+
+    /// What committing and pushing will do: "Commits 2 files, then pushes 4
+    /// commits to origin", or "…, then publishes feature to origin" for a
+    /// branch not yet on the remote (numbers in the user's format).
+    ///
+    /// - Parameters:
+    ///   - fileCount: The files the commit includes.
+    ///   - commitsToPush: The commits the push sends, the one about to be
+    ///     made included; nil when the branch isn't published.
+    ///   - branch: The branch, which a publish names.
+    ///   - remote: Where the push goes.
+    public static func pushCaption(fileCount: Int, commitsToPush: Int?, branch: String, remote: String, numberFormat: NumberFormat) -> String {
+        let commits = fileCount == 0
+            ? "Commits"
+            : "Commits \(formatCount(fileCount, numberFormat)) \(fileCount == 1 ? "file" : "files")"
+        guard let commitsToPush else {
+            return "\(commits), then publishes \(branch) to \(remote)"
+        }
+        return "\(commits), then pushes \(formatCount(commitsToPush, numberFormat)) \(commitsToPush == 1 ? "commit" : "commits") to \(remote)"
     }
 
     /// The tooltip: the title, or why the button is disabled.

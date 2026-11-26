@@ -39,6 +39,8 @@ nonisolated struct DiffHeaderContent: Sendable, Equatable {
 struct DiffHeader<Options: View>: View {
     let content: DiffHeaderContent
     var openInEditor: @MainActor () -> Void = {}
+    /// What follows the counts (All Work's Mark Viewed).
+    var accessory: AnyView?
     @ViewBuilder var options: () -> Options
     @Environment(\.motion) private var motion
 
@@ -54,6 +56,9 @@ struct DiffHeader<Options: View>: View {
                 path
                 Spacer(minLength: Metrics.insetSmall)
                 stats
+                if let accessory {
+                    accessory
+                }
                 HStack(spacing: 0) {
                     if let title = content.openInEditorTitle {
                         Button(action: openInEditor) {

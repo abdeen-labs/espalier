@@ -57,10 +57,52 @@ struct ChangesCaptureRepository {
         return local
     }
 
+    /// A clone of `origin` on `feature/charts`, which branches from `main`
+    /// and commits three times (new chart files, a changed store, a
+    /// deleted view), then has uncommitted changes: the store again and a
+    /// row view.
+    static func withBranchWork() async throws -> Repository {
+        let (local, _) = try await setupRepositoryWithRemote()
+        func write(_ path: String, _ contents: String) throws {
+            let fullPath = POSIXPath.join(local.path, path)
+            try FileManager.default.createDirectory(atPath: POSIXPath.dirname(fullPath), withIntermediateDirectories: true)
+            try Data(contents.utf8).write(to: URL(exactFilePath: fullPath))
+        }
+        let store = (1...14).map { "    let line\($0) = \($0)" }
+        try write("Harbor/Stores/TideStore.swift", (["final class TideStore {"] + store + ["}"]).joined(separator: "\n") + "\n")
+        try write("Harbor/Views/TideRow.swift", "struct TideRow {\n    let tide: Tide\n}\n")
+        try write("Harbor/Views/LegacyGraph.swift", (1...13).map { "// graph \($0)" }.joined(separator: "\n") + "\n")
+        try await runGit(["add", "."], local)
+        try await runGit(["commit", "-m", "Add the store and views"], local)
+        try await runGit(["push", "origin", "main"], local)
+        try await runGit(["checkout", "-b", "feature/charts"], local)
+
+        try write("Harbor/Charts/TideChart.swift", (1...48).map { "let chart\($0) = \($0)" }.joined(separator: "\n") + "\n")
+        try write("Harbor/Charts/ChartAxis.swift", (1...24).map { "let axis\($0) = \($0)" }.joined(separator: "\n") + "\n")
+        try write("Harbor/Charts/ChartScale.swift", (1...19).map { "let scale\($0) = \($0)" }.joined(separator: "\n") + "\n")
+        try await runGit(["add", "."], local)
+        try await runGit(["commit", "-m", "Draw the tides as a chart"], local)
+        var changed = store
+        changed[2] = "    let cache = TideCache.shared"
+        changed.insert("    let client = StationClient()", at: 4)
+        try write("Harbor/Stores/TideStore.swift", (["final class TideStore {"] + changed + ["}"]).joined(separator: "\n") + "\n")
+        try write("Harbor/Stores/TideCache.swift", "struct TideCache {\n    static let shared = TideCache()\n}\n")
+        try await runGit(["add", "."], local)
+        try await runGit(["commit", "-m", "Cache the tides"], local)
+        try await runGit(["rm", "-q", "Harbor/Views/LegacyGraph.swift"], local)
+        try await runGit(["commit", "-m", "Remove the old graph"], local)
+
+        changed.append("    func refresh() {}")
+        try write("Harbor/Stores/TideStore.swift", (["final class TideStore {"] + changed + ["}"]).joined(separator: "\n") + "\n")
+        try write("Harbor/Views/TideRow.swift", "struct TideRow {\n    let tide: Tide\n    let station: Station\n}\n")
+        return local
+    }
+
     /// Waits for refreshes, operations, and the loads that follow them.
     func settle() async {
         await app.idle()
         await repository.changes.diffIdle()
+        await repository.allWork.idle()
         await repository.commit.mostRecentLocalCommitIdle()
         await repository.stash.loadsIdle()
         await app.idle()

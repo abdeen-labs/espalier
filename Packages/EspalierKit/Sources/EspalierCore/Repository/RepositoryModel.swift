@@ -70,6 +70,7 @@ public final class RepositoryModel: Identifiable {
     public let worktrees: WorktreesModel
     public let gitHub: RepositoryGitHubModel
     public let ai: RepositoryAIModel
+    public let allWork: AllWorkModel
 
     // MARK: Internals
 
@@ -130,6 +131,7 @@ public final class RepositoryModel: Identifiable {
         worktrees = WorktreesModel()
         gitHub = RepositoryGitHubModel()
         ai = RepositoryAIModel()
+        allWork = AllWorkModel()
 
         refresher.model = self
         refreshScheduler.runPass = { [weak self] scope, options, token in
@@ -150,7 +152,7 @@ public final class RepositoryModel: Identifiable {
 
     /// The feature models, for broadcasts.
     var features: [any RepositoryFeature] {
-        [changes, commit, stash, history, branches, operations, sync, worktrees, gitHub, ai]
+        [changes, commit, stash, history, branches, operations, sync, worktrees, gitHub, ai, allWork]
     }
 
     // MARK: Refreshing
@@ -188,6 +190,7 @@ public final class RepositoryModel: Identifiable {
             await operations.enrichmentIdle()
             await changes.diffIdle()
             await changes.lineCountsIdle()
+            await allWork.idle()
             await commit.mostRecentLocalCommitIdle()
             await stash.loadsIdle()
             await stash.settlementIdle()

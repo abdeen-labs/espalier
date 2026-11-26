@@ -87,13 +87,16 @@ struct ChangesComposerCaptures {
         capture(values.composer(committing, draft: CommitDraft(summary: "Fix crash on open")), named: "composer-committing", area: area)
     }
 
-    @Test("Push After Committing on: the Options button filled")
+    @Test("Push After Committing on: the Options button filled, Commit and Push, and what it will do under it")
     func pushAfterCommitting() {
+        var button = values.button()
+        button.pushes = true
+        button.pushCaption = CommitButtonContent.pushCaption(fileCount: 2, commitsToPush: 4, branch: "main", remote: "origin", numberFormat: defaultNumberFormat)
         let content = ComposerContent(
             author: values.author,
             sparkle: .ready(model: "GPT-5"),
             options: CommitOptionsContent(pushesAfterCommitting: true),
-            button: values.button()
+            button: button
         )
         capture(values.composer(content, draft: CommitDraft(summary: "Fix crash on open")), named: "composer-push-after-committing", area: area)
     }

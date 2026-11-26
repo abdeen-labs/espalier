@@ -69,6 +69,9 @@ nonisolated public enum ActionID: Sendable {
     /// View ▸ History: the scope.
     case setHistoryScope(HistoryScope)
     case toggleStashedChanges
+    /// Marks All Work's selected file viewed, or not, and moves to the next
+    /// file not viewed.
+    case markViewed
     case increaseCodeTextSize
     case decreaseCodeTextSize
     case resetCodeTextSize
@@ -217,6 +220,7 @@ nonisolated public enum ActionID: Sendable {
         case .setImageDiffType: .setImageDiffType
         case .setHistoryScope: .setHistoryScope
         case .toggleStashedChanges: .toggleStashedChanges
+        case .markViewed: .markViewed
         case .increaseCodeTextSize: .increaseCodeTextSize
         case .decreaseCodeTextSize: .decreaseCodeTextSize
         case .resetCodeTextSize: .resetCodeTextSize
@@ -335,7 +339,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
     case deleteSelection, copyPath
     case showChanges, showHistory, showNextPlace, showPreviousPlace, selectPlace, toggleSidebar, filterSidebar, search, showCommandPalette
     case toggleInspector, toggleSplitDiff, toggleHideWhitespace, toggleWrapLines, setImageDiffType, setHistoryScope
-    case toggleStashedChanges, increaseCodeTextSize, decreaseCodeTextSize, resetCodeTextSize
+    case toggleStashedChanges, markViewed, increaseCodeTextSize, decreaseCodeTextSize, resetCodeTextSize
     case showHome, openWork
     case goBack, goForward, goToCommit, goToFirstParent, goToSecondParent, goToChild
     case push, forcePush, pull, fetch, publishRepository, publishBranch
@@ -386,6 +390,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .setImageDiffType: "Image Diff"
         case .setHistoryScope: "History"
         case .toggleStashedChanges: "Show Stashed Changes"
+        case .markViewed: "Mark Viewed"
         case .increaseCodeTextSize: "Bigger"
         case .decreaseCodeTextSize: "Smaller"
         case .resetCodeTextSize: "Actual Size"
@@ -500,6 +505,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .stashAllChanges: MenuShortcut("s", [.command, .shift])
         case .toggleSidebar: MenuShortcut("s")
         case .toggleStashedChanges: MenuShortcut("h", [.control])
+        case .markViewed: MenuShortcut("v", [.command, .option])
         case .discardAllChanges: MenuShortcut(.delete, [.command, .shift])
         case .openInEditor: MenuShortcut("a", [.command, .shift])
         case .openWith: MenuShortcut("a", [.command, .option, .shift])

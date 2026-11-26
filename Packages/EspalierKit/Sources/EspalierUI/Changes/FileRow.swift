@@ -4,7 +4,9 @@
 // file's row has its badge (the check once resolved), and at its end what's
 // left to resolve, in the modified color while it needs the user, and the
 // conflict's buttons. A stash's files use the same row without the
-// checkbox.
+// checkbox; All Work's put a round viewed mark in its place, dim a viewed
+// file's name, and put a small apricot dot after the name of a file that
+// also has uncommitted changes.
 
 import AppKit
 import EspalierCore
@@ -40,6 +42,12 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
     public var conflict: ConflictFileRowContent?
     /// The format the line counts show in.
     public var numberFormat: NumberFormat
+    /// All Work's viewed mark, in the checkbox's place: viewed (true) or
+    /// not (false); nil for a row without one. A viewed row's name dims.
+    public var viewed: Bool?
+    /// All Work's file that also has uncommitted changes: a dot after its
+    /// name.
+    public var isUncommitted = false
 
     public init(
         id: String,
@@ -128,10 +136,18 @@ nonisolated public struct FileRowContent: Sendable, Equatable, Identifiable {
         if countParts != nil, let added = lineCount?.added, let deleted = lineCount?.deleted {
             label += ", \(formatCount(added, numberFormat)) added lines, \(formatCount(deleted, numberFormat)) removed lines"
         }
+        if isUncommitted {
+            label += ", has uncommitted changes"
+        }
         if let conflict {
             label += ", \(conflict.status)"
         }
         return label
+    }
+
+    /// How the viewed mark reads to VoiceOver.
+    public var viewedDescription: String? {
+        viewed.map { $0 ? "Viewed" : "Not viewed" }
     }
 
     /// The tooltip: the whole path, and a rename's source.
@@ -178,6 +194,31 @@ extension FileRowContent {
             showsCheckbox: false
         )
     }
+
+    /// The row for a file All Work lists: its viewed mark in the checkbox's
+    /// place, a dot after its name when it also has uncommitted changes, and its
+    /// line counts once they're known (in `numberFormat`).
+    public init(
+        allWork file: AllWorkFile,
+        viewed: Bool,
+        isUncommitted: Bool,
+        lineCount: FileLineCount?,
+        numberFormat: NumberFormat
+    ) {
+        self.init(
+            id: file.id,
+            path: file.path,
+            oldPath: file.change.status.oldPath,
+            status: FileStatusKind(file.change.status),
+            inclusion: nil,
+            isInclusionEnabled: false,
+            lineCount: lineCount,
+            showsCheckbox: false,
+            numberFormat: numberFormat
+        )
+        self.viewed = viewed
+        self.isUncommitted = isUncommitted
+    }
 }
 
 /// The Changes list's row metrics, as the theme's rows have them
@@ -208,6 +249,10 @@ enum FileRowMetrics {
     }
     /// Space between the name, a rename's source, and the folder.
     static let labelSpacing: CGFloat = 6
+    /// The uncommitted dot after All Work's file name, and the space
+    /// before it.
+    static let dotSize: CGFloat = 7
+    static let dotSpacing: CGFloat = 6
     /// Space before the line counts, and before a conflict's buttons.
     static let countsSpacing: CGFloat = 8
     /// Space between the added and removed lines' pills.
@@ -243,6 +288,10 @@ final class FileRowView: NSTableCellView {
     static let identifier = NSUserInterfaceItemIdentifier("Espalier.FileRow")
 
     let checkbox = CheckboxButton(title: "", target: nil, action: nil)
+    /// All Work's viewed mark, in the checkbox's place.
+    let viewedMark = ViewedMarkButton()
+    /// The dot after the name of a file that also has uncommitted changes.
+    private let uncommittedDot = UncommittedDotView()
     private let nameLabel = FileRowView.label(font: FileRowView.nameFont, color: Palette.text)
     private let sourceLabel = FileRowView.label(font: AppKitTypography.secondary, color: Palette.text3)
     private let directoryLabel = FileRowView.label(font: AppKitTypography.secondary, color: Palette.text3)
@@ -261,6 +310,8 @@ final class FileRowView: NSTableCellView {
     private(set) var content: FileRowContent?
     /// Includes (true) or excludes (false) the row's file.
     var onIncludeChanged: ((Bool) -> Void)?
+    /// Marks the row's file viewed (true) or not (false).
+    var onViewedChanged: ((Bool) -> Void)?
     /// What a conflicted file's buttons do.
     private var conflictActions: ConflictFileRowActions?
     /// The row is fading out of the table: its file is gone, so it takes no
@@ -275,6 +326,7 @@ final class FileRowView: NSTableCellView {
     func depart() {
         isDeparting = true
         onIncludeChanged = nil
+        onViewedChanged = nil
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -289,6 +341,11 @@ final class FileRowView: NSTableCellView {
         checkbox.refusesFirstResponder = true
         checkbox.target = self
         checkbox.action = #selector(toggle(_:))
+        viewedMark.refusesFirstResponder = true
+        viewedMark.target = self
+        viewedMark.action = #selector(toggleViewed(_:))
+        viewedMark.isHidden = true
+        uncommittedDot.isHidden = true
         addedPill.isHidden = true
         deletedPill.isHidden = true
         countsLabel.lineBreakMode = .byClipping
@@ -296,7 +353,7 @@ final class FileRowView: NSTableCellView {
         directoryLabel.lineBreakMode = .byTruncatingHead
         conflictLabel.lineBreakMode = .byTruncatingTail
         conflictLabel.isHidden = true
-        for view in [checkbox, glyph, nameLabel, sourceLabel, directoryLabel, addedPill, deletedPill, countsLabel, conflictLabel] as [NSView] {
+        for view in [checkbox, viewedMark, glyph, nameLabel, sourceLabel, directoryLabel, uncommittedDot, addedPill, deletedPill, countsLabel, conflictLabel] as [NSView] {
             addSubview(view)
         }
         textField = nameLabel
@@ -313,6 +370,11 @@ final class FileRowView: NSTableCellView {
     /// compact ones.
     static var nameFont: NSFont {
         AppKitTypography.row(weight: ChangesThemeStyle.current.fileRows == .compact ? .medium : .semibold)
+    }
+
+    /// The name's color: dimmed once viewed.
+    private var nameColor: NSColor {
+        content?.viewed == true ? Palette.text3 : Palette.text
     }
 
     /// Shows `content`, changing only what differs (a status pass refills
@@ -360,6 +422,19 @@ final class FileRowView: NSTableCellView {
         }
         checkbox.setTooltip(content.inclusionHelp)
         checkbox.setAccessibilityLabel("Include \(content.fileName)")
+        if viewedMark.isHidden != (content.viewed == nil) {
+            viewedMark.isHidden = content.viewed == nil
+        }
+        let viewedState: NSControl.StateValue = content.viewed == true ? .on : .off
+        if viewedMark.state != viewedState {
+            viewedMark.setState(viewedState, animated: isSameFile)
+        }
+        viewedMark.setAccessibilityLabel("Viewed")
+        viewedMark.setTooltip(content.viewed == true ? "Mark Not Viewed" : "Mark Viewed")
+        if uncommittedDot.isHidden == content.isUncommitted {
+            uncommittedDot.isHidden = !content.isUncommitted
+        }
+        nameLabel.textColor = nameColor
         Self.set(nameLabel, content.fileName)
         nameLabel.setTooltip(content.help)
         Self.set(sourceLabel, content.renameSource ?? "")
@@ -368,7 +443,7 @@ final class FileRowView: NSTableCellView {
         glyph.kind = content.status
         showConflict(content.conflict)
         setAccessibilityLabel(content.accessibilityLabel)
-        setAccessibilityValue(content.showsCheckbox ? content.inclusionDescription : nil)
+        setAccessibilityValue(content.showsCheckbox ? content.inclusionDescription : content.viewedDescription)
         setAccessibilityCustomActions(accessibilityActions(for: content))
         needsLayout = true
         if crossfadesConflict {
@@ -431,6 +506,15 @@ final class FileRowView: NSTableCellView {
                 return true
             })
         }
+        if let viewed = content.viewed {
+            actions.append(NSAccessibilityCustomAction(name: viewed ? "Mark Not Viewed" : "Mark Viewed") { [weak self] in
+                guard let viewed = self?.content?.viewed else {
+                    return false
+                }
+                self?.onViewedChanged?(!viewed)
+                return true
+            })
+        }
         if let conflict = content.conflict, let conflictActions {
             for (index, item) in conflict.accessibilityActions(conflictActions).enumerated() {
                 actions.append(NSAccessibilityCustomAction(name: item.name) { [weak self] in
@@ -487,10 +571,12 @@ final class FileRowView: NSTableCellView {
         for label in [sourceLabel, directoryLabel, conflictLabel] {
             label.font = AppKitTypography.secondary
         }
-        nameLabel.textColor = Palette.text
+        nameLabel.textColor = nameColor
         for label in [sourceLabel, directoryLabel, conflictLabel] {
             label.textColor = Palette.text3
         }
+        uncommittedDot.needsDisplay = true
+        viewedMark.needsDisplay = true
         addedPill.color = Palette.add
         deletedPill.color = Palette.delete
         countsLabel.font = AppKitTypography.count()
@@ -502,7 +588,7 @@ final class FileRowView: NSTableCellView {
     override var backgroundStyle: NSView.BackgroundStyle {
         didSet {
             // The labels keep their colors on the selection's soft wash.
-            nameLabel.textColor = Palette.text
+            nameLabel.textColor = nameColor
             sourceLabel.textColor = Palette.text3
             directoryLabel.textColor = Palette.text3
         }
@@ -513,8 +599,9 @@ final class FileRowView: NSTableCellView {
         let bounds = self.bounds
         let box = CheckboxDrawing.size
         checkbox.frame = CGRect(x: FileRowMetrics.contentInset, y: ((bounds.height - box) / 2).rounded(), width: box, height: box)
+        viewedMark.frame = checkbox.frame
         let glyphSize = Metrics.StatusTile.size
-        let glyphX = checkbox.isHidden ? FileRowMetrics.contentInset : checkbox.frame.maxX + FileRowMetrics.spacing
+        let glyphX = checkbox.isHidden && viewedMark.isHidden ? FileRowMetrics.contentInset : checkbox.frame.maxX + FileRowMetrics.spacing
         glyph.frame = CGRect(x: glyphX, y: ((bounds.height - glyphSize) / 2).rounded(), width: glyphSize, height: glyphSize)
 
         // The name, then the rename's source, then the folder, as
@@ -566,10 +653,13 @@ final class FileRowView: NSTableCellView {
             countsLabel.frame = CGRect(x: end - width, y: ((bounds.height - height) / 2).rounded(), width: width, height: height)
             end = countsLabel.frame.minX - FileRowMetrics.countsSpacing + 2 * padding
         }
+        // The uncommitted dot keeps its room after the name; the labels
+        // share the rest.
+        let dotRoom = uncommittedDot.isHidden ? 0 : FileRowMetrics.dotSpacing + FileRowMetrics.dotSize
         let widths = FileLabelWidths.widths(
             natural: natural,
             floors: labels.map { FileLabelWidths.floor(of: $0.stringValue, font: $0.font ?? AppKitTypography.secondary) + 2 * padding },
-            room: end - x,
+            room: end - x - dotRoom,
             gap: gap
         )
         // The labels share the name's baseline.
@@ -582,6 +672,17 @@ final class FileRowView: NSTableCellView {
             label.frame = CGRect(x: x, y: y, width: width, height: height)
             if width > 0 {
                 x += width + gap
+            }
+            if label === nameLabel, !uncommittedDot.isHidden {
+                // After the name's text, on the middle of its line.
+                let size = FileRowMetrics.dotSize
+                uncommittedDot.frame = CGRect(
+                    x: label.frame.maxX - padding + FileRowMetrics.dotSpacing,
+                    y: (label.frame.midY - size / 2).rounded(),
+                    width: size,
+                    height: size
+                )
+                x += dotRoom
             }
         }
         if !countsLabel.isHidden {
@@ -647,6 +748,16 @@ final class FileRowView: NSTableCellView {
         // The model decides; show the current state until it does.
         sender.state = InclusionCheckbox.state(content.inclusion)
         onIncludeChanged?(content.inclusion != true)
+    }
+
+    @objc private func toggleViewed(_ sender: NSButton) {
+        guard let viewed = content?.viewed, !isDeparting else {
+            sender.state = content?.viewed == true ? .on : .off
+            return
+        }
+        // The model decides; show the current state until it does.
+        sender.state = viewed ? .on : .off
+        onViewedChanged?(!viewed)
     }
 
     /// Sets a label's text when it differs; an empty label hides.
@@ -750,6 +861,35 @@ final class StatusGlyphView: NSView {
         kind.tileFill.setFill()
         let radius = min(Metrics.StatusTile.radius, bounds.height / 2)
         NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
+    }
+
+    override func isAccessibilityElement() -> Bool {
+        false
+    }
+}
+
+/// The dot after the name of All Work's file that also has uncommitted
+/// changes: a small filled circle in Changes' apricot, as an editor marks a
+/// tab with unsaved edits.
+final class UncommittedDotView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setTooltip("Has uncommitted changes")
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        PlaceIdentity.changes.color.setFill()
+        NSBezierPath(ovalIn: bounds).fill()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 
     override func isAccessibilityElement() -> Bool {

@@ -51,6 +51,11 @@ public struct AppDirectories: Sendable, Hashable {
         applicationSupport.appending(path: "worktree-activity.json", directoryHint: .notDirectory)
     }
 
+    /// All Work's viewed marks (`viewed-marks.json`).
+    public var viewedMarks: URL {
+        applicationSupport.appending(path: "viewed-marks.json", directoryHint: .notDirectory)
+    }
+
     /// The directory for one kind of cache, such as `pull-requests`.
     public func cacheDirectory(_ kind: String) -> URL {
         caches.appending(path: kind, directoryHint: .isDirectory)

@@ -105,6 +105,19 @@ public final class DiffContentsLoader {
         load(fileID: file.id, source: "working directory", old: old, new: new)
     }
 
+    /// Loads a file All Work lists: its contents at the merge base (the
+    /// change's `parentCommitish`) and on disk.
+    public func loadWorkingTree(_ file: CommittedFileChange) {
+        guard let repository else {
+            return
+        }
+        let old: ContentsSource? = isAdded(file) ? nil : .blob(commitish: file.parentCommitish, path: getOldPathOrDefault(file))
+        let new: ContentsSource? = file.status.kind == .deleted
+            ? nil
+            : .file(POSIXPath.join(repository.gitRepository.path, file.path))
+        load(fileID: file.id, source: "\(file.parentCommitish)..working directory", old: old, new: new)
+    }
+
     /// Forgets the contents and stops the load in flight.
     public func clear() {
         slot.cancel()

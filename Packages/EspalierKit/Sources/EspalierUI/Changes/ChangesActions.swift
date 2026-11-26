@@ -2,8 +2,8 @@
 // Merge or Continue, the operation panel's button, while an operation waits
 // on the user, and is titled as they are), Generate Commit
 // Message (⌥⌘G, gone while AI is off), Go to Commit Message (⌘J), Amend Last
-// Commit, Undo Commit…, and Discard All Changes…, plus the Debug menu's
-// Changes Apply benchmark. Each runs what the composer's controls run,
+// Commit, Undo Commit…, Discard All Changes…, and All Work's Mark Viewed
+// (⌥⌘V), plus the Debug menu's Changes Apply benchmark. Each runs what the composer's controls run,
 // through the window's presenter.
 
 import EspalierCore
@@ -108,6 +108,24 @@ enum ChangesActions {
                 return
             }
             await controller.undo()
+        }
+
+        // All Work's selected file: viewed, then on to the next not viewed;
+        // or no longer viewed.
+        actions.register(.markViewed, isEnabled: { [weak context] _ in
+            guard let context, context.state.place == .changes, let allWork = context.repository?.allWork else {
+                return false
+            }
+            return allWork.scope == .allWork && allWork.selectedFile != nil
+        }, title: { [weak context] _ in
+            guard let allWork = context?.repository?.allWork, allWork.scope == .allWork,
+                  let file = allWork.selectedFile, allWork.isViewed(file)
+            else {
+                return nil
+            }
+            return "Mark Not Viewed"
+        }) { [weak context] _ in
+            context?.repository?.allWork.toggleSelectedViewed()
         }
 
         Benchmarks.runners[.changesApply] = { context in

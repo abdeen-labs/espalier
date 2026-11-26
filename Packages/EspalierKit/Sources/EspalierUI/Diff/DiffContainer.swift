@@ -42,12 +42,16 @@ nonisolated public enum DiffContext: String, Sendable, Equatable {
 nonisolated public enum DiffFileChange: Sendable, Hashable {
     case workingDirectory(WorkingDirectoryFileChange)
     case committed(CommittedFileChange)
+    /// A file All Work lists: from the merge base (its `parentCommitish`)
+    /// to the working tree.
+    case workingTree(CommittedFileChange)
 
     /// The change's ID (`FileChange.id`).
     public var id: String {
         switch self {
         case .workingDirectory(let file): file.id
         case .committed(let file): file.id
+        case .workingTree(let file): file.id
         }
     }
 }
@@ -78,11 +82,18 @@ nonisolated public struct DiffFileInfo: Sendable, Equatable {
         }
     }
 
+    /// A file All Work lists, from the merge base to the working tree.
+    public init(workingTree change: CommittedFileChange) {
+        self.init(path: change.path, oldPath: change.status.oldPath, status: FileStatusKind(change.status))
+        self.change = .workingTree(change)
+    }
+
     /// The file's ID: its change's (`FileChange.id`), or its path.
     public var id: String {
         switch change {
         case .workingDirectory(let file)?: file.id
         case .committed(let file)?: "\(file.commitish):\(file.id)"
+        case .workingTree(let file)?: "\(file.parentCommitish)..:\(file.id)"
         case nil: path
         }
     }
@@ -92,6 +103,7 @@ nonisolated public struct DiffFileInfo: Sendable, Equatable {
         switch change {
         case .workingDirectory(let file)?: file.status
         case .committed(let file)?: file.status
+        case .workingTree(let file)?: file.status
         case nil: nil
         }
     }
@@ -107,6 +119,8 @@ public struct DiffContainer: View {
     /// A conflicted file's text divided by its markers
     /// (`changes.conflictedFileText`), for its blocks.
     private let conflictedText: ConflictedFileText?
+    /// What the header shows after the counts.
+    private let headerAccessory: AnyView?
 
     @Environment(WindowContext.self) private var window: WindowContext?
     @Environment(\.syntaxHighlighter) private var environmentHighlighter
@@ -122,18 +136,21 @@ public struct DiffContainer: View {
     ///   - staging: Line staging, in Changes.
     ///   - conflictedText: A conflicted file's text divided by its markers,
     ///     in Changes: its conflicts show as blocks.
+    ///   - headerAccessory: What the header shows after the counts.
     public init(
         _ diff: Loadable<Diff, OperationError>,
         file: DiffFileInfo?,
         context: DiffContext,
         staging: DiffStaging? = nil,
-        conflictedText: ConflictedFileText? = nil
+        conflictedText: ConflictedFileText? = nil,
+        headerAccessory: AnyView? = nil
     ) {
         self.diff = diff
         self.file = file
         self.context = context
         self.staging = staging
         self.conflictedText = conflictedText
+        self.headerAccessory = headerAccessory
     }
 
     public var body: some View {
@@ -184,6 +201,7 @@ public struct DiffContainer: View {
                 }
                 window?.actions.perform(.openInEditor(path: path))
             },
+            accessory: headerAccessory,
             options: {
                 DiffOptionsMenu(content: optionsContent(settings: settings), actions: optionsActions)
             }

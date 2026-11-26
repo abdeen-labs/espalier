@@ -110,6 +110,8 @@ public final class AppModel {
     @ObservationIgnored public let worktreeActivity: WorktreeActivityModel
     /// Moves pieces of work out of In Progress when their time runs out.
     @ObservationIgnored public let workClock: WorkClock
+    /// All Work's viewed marks, every worktree's.
+    @ObservationIgnored public let viewedMarks: ViewedMarksStore
 
     // MARK: Unsolicited facts
 
@@ -159,6 +161,7 @@ public final class AppModel {
         ai = AIModel(environment: environment)
         worktreeActivity = WorktreeActivityModel(environment: environment)
         workClock = WorkClock(scheduler: environment.scheduler)
+        viewedMarks = ViewedMarksStore(fileURL: environment.directories.viewedMarks)
         let scheduler = environment.scheduler
         listStore = RepositoryListStore(fileURL: environment.directories.repositoryList, now: { scheduler.now })
         background = BackgroundCoordinator(app: self, environment: environment)

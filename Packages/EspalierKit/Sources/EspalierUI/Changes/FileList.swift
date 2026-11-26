@@ -4,7 +4,8 @@
 // ⌥⌘C to copy paths; ⌘⌫ to discard; Return or a double-click to open in the
 // editor; type-select; and the context menu. `ChangesModel` holds the
 // files, the selection, and the filter. The stash's files show in the same
-// table, without checkboxes.
+// table, without checkboxes, and so do All Work's, with viewed marks
+// (AllWork.swift).
 //
 // The files are an AppKit table with fixed row heights: a SwiftUI `List`
 // measures every row when a status replaces them (hundreds of milliseconds
@@ -121,6 +122,8 @@ struct FileTableActions {
     var select: ([String]) -> Void = { _ in }
     /// A row's checkbox.
     var setIncluded: ([String], Bool) -> Void = { _, _ in }
+    /// A row's viewed mark (All Work).
+    var setViewed: (String, Bool) -> Void = { _, _ in }
     /// Space.
     var toggle: ([String]) -> Void = { _ in }
     /// Return or a double-click.
@@ -152,11 +155,15 @@ enum FileTableFiles {
     case changes([WorkingDirectoryFileChange])
     /// Files that can only be looked at (a stash's): no checkboxes.
     case readOnly([CommittedFileChange])
+    /// All Work's files, as their rows show them: viewed marks in place of
+    /// checkboxes.
+    case allWork([FileRowContent])
 
     var count: Int {
         switch self {
         case .changes(let files): files.count
         case .readOnly(let files): files.count
+        case .allWork(let rows): rows.count
         }
     }
 
@@ -169,6 +176,7 @@ enum FileTableFiles {
         switch self {
         case .changes(let files): files[row].id
         case .readOnly(let files): files[row].id
+        case .allWork(let rows): rows[row].id
         }
     }
 
@@ -177,6 +185,7 @@ enum FileTableFiles {
         switch self {
         case .changes(let files): files[row].path
         case .readOnly(let files): files[row].path
+        case .allWork(let rows): rows[row].path
         }
     }
 
@@ -185,6 +194,7 @@ enum FileTableFiles {
         switch self {
         case .changes(let files): files.map { ExactString($0.id) }
         case .readOnly(let files): files.map { ExactString($0.id) }
+        case .allWork(let rows): rows.map { ExactString($0.id) }
         }
     }
 
@@ -198,6 +208,10 @@ enum FileTableFiles {
             }
         case .readOnly(let files):
             for (index, file) in files.enumerated() where ids.contains(ExactString(file.id)) {
+                rows.insert(index)
+            }
+        case .allWork(let contents):
+            for (index, content) in contents.enumerated() where ids.contains(ExactString(content.id)) {
                 rows.insert(index)
             }
         }
@@ -465,9 +479,18 @@ final class FileTableCoordinator: NSObject, NSTableViewDataSource, NSTableViewDe
             cell.onIncludeChanged = { [weak self] include in
                 self?.parent.actions.setIncluded([id], include)
             }
+            cell.onViewedChanged = nil
         case .readOnly(let committed):
             cell.configure(FileRowContent(readOnly: committed[row]), repository: parent.scope.repository)
             cell.onIncludeChanged = nil
+            cell.onViewedChanged = nil
+        case .allWork(let rows):
+            cell.configure(rows[row], repository: parent.scope.repository)
+            cell.onIncludeChanged = nil
+            let id = rows[row].id
+            cell.onViewedChanged = { [weak self] viewed in
+                self?.parent.actions.setViewed(id, viewed)
+            }
         }
     }
 

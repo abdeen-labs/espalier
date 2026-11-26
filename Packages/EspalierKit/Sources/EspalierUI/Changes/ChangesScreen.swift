@@ -6,7 +6,9 @@
 // finishes the operation), and on the right the selected file's diff (a
 // conflicted file's conflicts as blocks), several files' actions, or "No
 // Local Changes" and Suggestions when there are no changes. The toolbar's
-// search field is the list's filter text.
+// search field is the list's filter text. In All Work (AllWork.swift), the
+// column lists the branch's whole work over the same composer, and the
+// right side shows the selected file's diff from the merge base.
 
 import EspalierCore
 import EspalierSupport
@@ -96,22 +98,42 @@ struct ChangesColumn: View {
             aiFailure: ChangesWindowState.of(context).aiFailures[repository.id],
             showsHookLine: hookLine.line != nil
         )
-        FileList(repository: repository)
+        let showsAllWork = repository.allWork.scope == .allWork
+        let chooseScope = { (scope: ChangesScope) in
+            repository.allWork.choose(scope)
+        }
+        Group {
+            if showsAllWork {
+                AllWorkList(repository: repository)
+            } else {
+                FileList(repository: repository)
+            }
+        }
         .safeAreaBar(edge: .top, spacing: 0) {
             // The list fades out under the header, or ends at a hairline
             // under it, as the theme has it.
-            ChangesHeader(
-                ChangesHeaderContent.make(repository, numberFormat: context.app.preferences.numberFormat),
-                onIncludeAll: { include in
-                    repository.changes.setVisibleFilesIncluded(include)
-                },
-                onFilterChange: { filter in
-                    repository.changes.filter = filter
-                },
-                onClearFilters: controller.clearFilters
-            )
-            .contextMenuCard { [context] in
-                ChangesHeaderMenu.content(repository: repository, context: context)
+            Group {
+                if showsAllWork {
+                    AllWorkHeader(
+                        content: AllWorkHeaderContent.make(repository, numberFormat: context.app.preferences.numberFormat),
+                        onScopeChange: chooseScope
+                    )
+                } else {
+                    ChangesHeader(
+                        ChangesHeaderContent.make(repository, numberFormat: context.app.preferences.numberFormat),
+                        onIncludeAll: { include in
+                            repository.changes.setVisibleFilesIncluded(include)
+                        },
+                        onFilterChange: { filter in
+                            repository.changes.filter = filter
+                        },
+                        onClearFilters: controller.clearFilters,
+                        onScopeChange: chooseScope
+                    )
+                    .contextMenuCard { [context] in
+                        ChangesHeaderMenu.content(repository: repository, context: context)
+                    }
+                }
             }
             .overlay(alignment: .bottom) {
                 if ChangesThemeStyle.current.panes == .hairlines {
@@ -237,7 +259,8 @@ struct ChangesFooterLayout: Equatable {
         }
         let showsLastCommit = bottom == .composer && hasLastCommit
         return ChangesFooterLayout(
-            showsHiddenNote: !repository.changes.includedFilesHiddenByFilter.isEmpty,
+            // All Work has no checkboxes for the note to be about.
+            showsHiddenNote: repository.allWork.scope == .uncommitted && !repository.changes.includedFilesHiddenByFilter.isEmpty,
             stashCount: repository.stash.currentEntries.count,
             bottom: bottom,
             isAmending: bottom == .composer && commit.amending != nil,
@@ -346,6 +369,8 @@ struct ChangesDetail: View {
         let changes = repository.changes
         let controller = ChangesController(context: context, repository: repository)
         switch ChangesDetailKind.make(repository) {
+        case .allWork:
+            AllWorkDetail(repository: repository)
         case .suggestions:
             NoChangesSuggestions(
                 SuggestionsContent.make(repository, app: context.app, actions: context.actions),
@@ -394,6 +419,8 @@ struct ChangesDetail: View {
 
 /// What the right side shows.
 enum ChangesDetailKind: Equatable {
+    /// All Work's selected file, or its note.
+    case allWork
     /// No local changes: Suggestions.
     case suggestions
     /// Several files are selected.
@@ -406,6 +433,9 @@ enum ChangesDetailKind: Equatable {
     @MainActor
     static func make(_ repository: RepositoryModel) -> ChangesDetailKind {
         let changes = repository.changes
+        if repository.allWork.scope == .allWork {
+            return .allWork
+        }
         guard !changes.workingDirectory.files.isEmpty else {
             return .suggestions
         }

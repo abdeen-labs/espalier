@@ -7,7 +7,8 @@
 // file's conflicts as blocks, and the merge's message, then resolved by
 // one block's side (the panel's Commit Merge, the band's Undo), and a
 // rebase's conflicts with the panel and the conflicted file's band and
-// blocks (light and dark).
+// blocks (light and dark); and a branch's work in All Work, with viewed
+// marks, beside its uncommitted changes in Uncommitted.
 
 import AppKit
 @testable import EspalierCore
@@ -136,6 +137,32 @@ struct ChangesPlaceCaptures {
         }
     }
 
+    @Test("All Work: the branch's files with viewed marks and the diff from the merge base, then the same branch in Uncommitted")
+    func allWork() async throws {
+        try await withIsolatedGitConfig { _ in
+            let fixture = try await ChangesCaptureRepository.make(try await ChangesCaptureRepository.withBranchWork())
+            let allWork = fixture.repository.allWork
+            allWork.choose(.allWork)
+            await fixture.settle()
+            for path in ["Harbor/Charts/ChartAxis.swift", "Harbor/Charts/ChartScale.swift", "Harbor/Charts/TideChart.swift"] {
+                if let file = allWork.files.first(where: { $0.path == path }) {
+                    allWork.setViewed(file, true)
+                }
+            }
+            // Selected once the place shows, as a click selects it.
+            await capturePlace(fixture, named: "place-all-work") {
+                allWork.select(allWork.files.first { $0.path == "Harbor/Stores/TideStore.swift" }?.id)
+            }
+
+            // The same branch's uncommitted changes, with their checkboxes.
+            allWork.choose(.uncommitted)
+            fixture.repository.changes.select(fileIDs: [try fixture.file("Harbor/Stores/TideStore.swift").id])
+            await fixture.settle()
+            await capturePlace(fixture, named: "place-all-work-uncommitted")
+            await fixture.app.idle()
+        }
+    }
+
     /// Captures the place in the window's environment, once what it loads
     /// as it shows has arrived and the diff's rows are built; with `typing`,
     /// once that's typed in the toolbar's search after the place shows, and
@@ -144,7 +171,8 @@ struct ChangesPlaceCaptures {
         _ fixture: ChangesCaptureRepository,
         named name: String,
         typing: String? = nil,
-        sourceLocation: SourceLocation = #_sourceLocation
+        sourceLocation: SourceLocation = #_sourceLocation,
+        once shown: (@MainActor () -> Void)? = nil
     ) async {
         await LoadedCapture.capture(
             ChangesScreen(repository: fixture.repository).windowEnvironment(fixture.context),
@@ -154,6 +182,11 @@ struct ChangesPlaceCaptures {
             loaded: { host in
                 await fixture.settle()
                 host.layoutSubtreeIfNeeded()
+                if let shown {
+                    shown()
+                    await fixture.settle()
+                    host.layoutSubtreeIfNeeded()
+                }
                 await LoadedCapture.diffDocumentShown(in: host)
                 if let typing {
                     fixture.context.state.searchText = typing

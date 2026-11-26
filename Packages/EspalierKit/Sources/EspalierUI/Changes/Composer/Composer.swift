@@ -273,6 +273,7 @@ extension ComposerContent {
                 numberFormat: app.preferences.numberFormat
             )
         } else {
+            let pushes = Self.pushesAfterCommit(repository)
             button = CommitButtonContent(
                 isAmending: isAmending,
                 fileCount: included.count,
@@ -281,7 +282,9 @@ extension ComposerContent {
                 isGenerating: isGenerating,
                 isEnabled: isEnabled,
                 disabledReason: disabledReason,
-                numberFormat: app.preferences.numberFormat
+                numberFormat: app.preferences.numberFormat,
+                pushes: pushes,
+                pushCaption: pushes ? Self.pushCaption(repository, fileCount: included.count, numberFormat: app.preferences.numberFormat) : nil
             )
         }
 
@@ -318,6 +321,53 @@ extension ComposerContent {
             isModeSwitchEnabled: !isAssistedPending && !isCommitting && !isGenerating,
             assisted: assisted,
             assistedIntro: showsModeSwitch && assisted == nil ? AssistedCommitContent.make(repository, app: app) : nil
+        )
+    }
+
+    /// Whether the commit about to be made is pushed once it's made: Push
+    /// After Committing is on, and the commit goes on a branch, not amending
+    /// or during an operation (`CommitModel.commit`'s rule).
+    @MainActor
+    static func pushesAfterCommit(_ repository: RepositoryModel) -> Bool {
+        let commit = repository.commit
+        guard commit.pushesAfterCommitting, commit.amending == nil, repository.gitState.inProgress == nil else {
+            return false
+        }
+        switch repository.gitState.tip {
+        case .valid, .unborn: return true
+        case .detached, .unknown: return false
+        }
+    }
+
+    /// What committing `fileCount` files and pushing will do, as the sync
+    /// button names the remote; nil without a remote.
+    @MainActor
+    static func pushCaption(_ repository: RepositoryModel, fileCount: Int, numberFormat: NumberFormat) -> String? {
+        let state = repository.gitState
+        var remote = state.remotes.currentRemote?.name
+        var branchName: String?
+        switch state.tip {
+        case .valid(let branch):
+            branchName = branch.name
+            if let upstreamRemote = branch.upstreamRemoteName {
+                remote = upstreamRemote
+            }
+        case .unborn(let ref):
+            branchName = ref
+        case .detached, .unknown:
+            break
+        }
+        guard let remote, let branchName else {
+            return nil
+        }
+        // Status reports ahead and behind only for a published branch.
+        let commitsToPush = state.aheadBehind.map { $0.ahead + 1 }
+        return CommitButtonContent.pushCaption(
+            fileCount: fileCount,
+            commitsToPush: commitsToPush,
+            branch: branchName,
+            remote: remote,
+            numberFormat: numberFormat
         )
     }
 
@@ -517,6 +567,16 @@ public struct ComposerView: View {
             }
             if content.showsButton {
                 CommitButton(content.button, action: actions.commit)
+                if let caption = content.button.pushCaption {
+                    // What Commit and Push will do.
+                    Text(caption)
+                        .font(Typography.meta)
+                        .foregroundStyle(.text3)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: .infinity)
+                        .tooltip(caption)
+                }
             }
             if let lastCommit = content.lastCommit {
                 // Grows in after a commit over 0.22 s and leaves over 0.15

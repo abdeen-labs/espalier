@@ -88,6 +88,7 @@ nonisolated public enum MenuCatalog {
             .toggle(.setHistoryScope(.allBranches)),
         ]),
         .item(.toggleStashedChanges),
+        .item(.markViewed),
         .separator,
         .item(.increaseCodeTextSize),
         .item(.decreaseCodeTextSize),

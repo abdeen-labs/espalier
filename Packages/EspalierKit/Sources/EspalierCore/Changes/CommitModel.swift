@@ -93,8 +93,9 @@ public final class CommitModel: RepositoryFeature {
     /// as it is in either.
     public internal(set) var mode: CommitMode = .manual
     /// Whether a commit is pushed once it's made, from the draft or with AI:
-    /// Push After Committing. Remembered per repository.
-    public internal(set) var pushesAfterCommitting = false
+    /// Push After Committing: on until the user turns it off. Remembered
+    /// per repository.
+    public internal(set) var pushesAfterCommitting = true
     /// The assisted commit run.
     public internal(set) var assisted: AssistedCommitState = .idle
     /// The recovery to try again after an assisted commit couldn't undo all
@@ -137,7 +138,7 @@ public final class CommitModel: RepositoryFeature {
         }
         let store = PreferenceStore(repository.environment.defaults.defaults)
         mode = (store.defaults.string(forKey: Self.commitModeKey(repository.id))).flatMap(CommitMode.init(rawValue:)) ?? .manual
-        pushesAfterCommitting = store.getBoolean(Self.pushAfterCommitKey(repository.id), false)
+        pushesAfterCommitting = store.getBoolean(Self.pushAfterCommitKey(repository.id), true)
     }
 
     /// Chooses whether commits are pushed once they're made, for this

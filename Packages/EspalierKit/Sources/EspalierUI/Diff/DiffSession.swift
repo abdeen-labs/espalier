@@ -192,6 +192,8 @@ final class DiffSession {
             loader.load(committed)
         case .workingDirectory(let working):
             loader.load(working)
+        case .workingTree(let file):
+            loader.loadWorkingTree(file)
         }
         let fileID = file.id
         let changeID = change.id
