@@ -60,7 +60,7 @@ struct SettingsCaptures {
         capture(window(.prompts) { PromptsForm(preferences: app.preferences) }, named: "prompts", area: area)
     }
 
-    @Test("Home: no watched folders, three with two sharing a name, and a scan running")
+    @Test("Home: no watched folders, four with two sharing a name and one with a long path, and a scan running")
     func home() throws {
         let harness = try AppHarness()
         let app = app(harness)
@@ -70,6 +70,7 @@ struct SettingsCaptures {
             POSIXPath.join(home, "Developer"),
             POSIXPath.join(home, "Work/Developer"),
             "/Volumes/Archive/Projects",
+            "/Volumes/Archive/Clients/Northwind Traders/Engagements/2026 Platform Rebuild/Repositories",
         ]
         capture(window(.home) { HomeForm(preferences: app.preferences, isScanning: false, actions: nil) }, named: "home-folders", area: area)
         capture(window(.home) { HomeForm(preferences: app.preferences, isScanning: true, actions: nil) }, named: "home-scanning", area: area)

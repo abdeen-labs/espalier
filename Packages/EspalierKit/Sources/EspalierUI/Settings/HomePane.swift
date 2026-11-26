@@ -181,8 +181,9 @@ struct HomeForm: View {
     }
 }
 
-/// A watched folder: its name and where it is, and its actions, Show in
-/// Finder and Stop Watching, in its "⋯" menu and its context menu.
+/// A watched folder: its name and where it is, on one line that gives way
+/// in the middle, with the full path in its tooltip; and its actions, Show
+/// in Finder and Stop Watching, in its "⋯" menu and its context menu.
 struct WatchedFolderRow: View {
     let folder: String
     let showInFinder: () -> Void
@@ -191,8 +192,20 @@ struct WatchedFolderRow: View {
     var body: some View {
         let title = WatchedFolderNames.title(of: folder)
         HStack(spacing: Metrics.SettingsWindow.rowSpacing) {
-            SettingsRowText(title: title, description: RepositoryRowContent.abbreviatedPath(folder))
-                .accessibilityElement(children: .combine)
+            VStack(alignment: .leading, spacing: Metrics.SettingsWindow.descriptionSpacing) {
+                Text(title)
+                    .font(Typography.rowTitle)
+                    .foregroundStyle(.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(RepositoryRowContent.abbreviatedPath(folder))
+                    .font(Typography.secondary)
+                    .foregroundStyle(.text3)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .tooltip(folder)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
             RowActionsMenu("Actions for \(title)") { [showInFinder, stopWatching] in
                 MenuAction("Show in Finder", action: showInFinder)
                 MenuAction("Stop Watching", action: stopWatching)
