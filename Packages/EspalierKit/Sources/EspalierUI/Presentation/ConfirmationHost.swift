@@ -56,7 +56,7 @@ extension Confirmation {
             }
             return .compactSheet(CompactConfirmation(
                 title: title,
-                paragraphs: [message, "Its folder stays on your Mac:"],
+                paragraphs: message.components(separatedBy: "\n\n") + ["Its folder stays on your Mac:"],
                 path: path,
                 optionTitle: "Also move the folder to the Trash",
                 confirmButton: confirmButton,
@@ -112,8 +112,10 @@ extension Confirmation {
         return ConfirmationResponse(isConfirmed: isConfirmed, suppressesFutureConfirmations: isConfirmed && alert.isSuppressed)
     }
 
-    /// The message with its list (files, authors): listed when there are at
-    /// most ten, counted in the question otherwise.
+    /// The message with its list (files, authors, Push All's branches):
+    /// listed when there are at most ten, counted in the question
+    /// otherwise; Push All's branches, whose message ends on the list, are
+    /// always listed, the first ten and the rest counted.
     private func alertMessage(_ numberFormat: NumberFormat) -> String {
         switch details {
         case .files(let paths):
@@ -127,6 +129,8 @@ extension Confirmation {
             }
         case .authors(let usernames):
             return usernames.count > AlertList.maximumItems ? message : AlertList.insert(usernames, intoMessage: message, numberFormat: numberFormat)
+        case .pushes(let pushes):
+            return AlertList.insert(pushes.map(\.listLine), intoMessage: message, numberFormat: numberFormat)
         default:
             return message
         }

@@ -2,14 +2,18 @@
 // symbols, subtitles, checks, a choice, sections with headers and
 // dividers, destructive and disabled items, a submenu's chevron, the
 // highlighted row, and a long menu scrolled to its choice; the highlighted
-// row in Slate and in the Mac's accent color; a
+// row in Slate and in the Mac's accent color; the repository popover's Add
+// menu and Home's More menu, with Watch Folder; a
 // list row as a context menu's target; the buttons that open menus,
 // closed; and the suggestion list's card.
 
 import AppKit
-import EspalierCore
+@testable import EspalierCore
+import EspalierCoreTestSupport
+import GitKit
 import SwiftUI
 import Testing
+import TestSupport
 @testable import EspalierUI
 
 @Suite("Menus", .captures) @MainActor
@@ -192,5 +196,18 @@ struct MenuCaptures {
         branches.suggestions = ["main", "feature/login", "feature/forecast", "fix/crash", "release/2.0", "origin/main", "origin/feature/login", "origin/fix/crash", "origin/release/2.0", "origin/gh-pages"].map { Suggestion(title: $0) }
         branches.minimumWidth = 280
         capture(SuggestionListCard(model: branches), named: "suggestionsScrolling", area: area)
+    }
+
+    @Test("the repository popover's Add menu, and Home's More menu, with Watch Folder")
+    func addMenus() async throws {
+        let harness = try AppHarness(showsHome: true, historyStyle: nil)
+        let app = await harness.loadedApp()
+        app.preferences.hasShownWelcomeFlow = true
+        _ = try await harness.addAndSelect(try setupEmptyRepository(), to: app)
+        let context = WindowContext(app: app)
+        context.state.isShowingHome = true
+        capture(card(RepositoryAddMenu.content(context.actions)), named: "repositoryAdd", area: area)
+        capture(card(OverflowMenu.content(.addRepository, actions: context.actions), highlighted: "Watch Folder…"), named: "homeMore", area: area)
+        await app.idle()
     }
 }

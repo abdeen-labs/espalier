@@ -1,3 +1,4 @@
+import EspalierSupport
 import GitKit
 
 /// Something an intent asks the user to confirm before it runs.
@@ -110,12 +111,19 @@ extension Confirmation {
     }
 
     /// Removing a repository from the list.
-    public static func removeRepository(name: String, path: String) -> Confirmation {
-        Confirmation(
+    ///
+    /// - Parameter watchedFolder: The watched folder it's in, when a scan
+    ///   would find it again: the message says it stays removed.
+    public static func removeRepository(name: String, path: String, watchedFolder: String? = nil) -> Confirmation {
+        var message = "Remove \u{201C}\(name)\u{201D} from Espalier?"
+        if let watchedFolder {
+            message += "\n\nIt's in \u{201C}\(POSIXPath.basename(watchedFolder))\u{201D}, a folder Espalier watches, and stays removed until you add it again."
+        }
+        return Confirmation(
             kind: .removeRepository,
             details: .repository(name: name, path: path),
             title: "Remove Repository?",
-            message: "Remove \u{201C}\(name)\u{201D} from Espalier?",
+            message: message,
             confirmButton: "Remove"
         )
     }

@@ -1,5 +1,5 @@
 // The File menu and the Repository menu's repository actions: Add (the open
-// panel and every result of adding), Clone, Create, Publish, Repository
+// panel and every result of adding), Watch Folder, Clone, Create, Publish, Repository
 // Settings, Alias, Open With, Remove, and the open actions. Every intent runs
 // through the window's presenter.
 
@@ -20,6 +20,13 @@ enum RepositoryActions {
                 return
             }
             AddRepositoryPanel.present(in: context)
+        }
+
+        actions.register(.watchFolder) { [weak context] _ in
+            guard let context else {
+                return
+            }
+            await WatchFolders.present(in: context)
         }
 
         actions.register(.addRepositories) { [weak context] action in

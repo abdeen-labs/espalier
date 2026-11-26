@@ -18,6 +18,22 @@ private let logger = Log.logger(category: "watched-folders")
 /// doesn't start another.
 let watchedFoldersRescanInterval: TimeInterval = 5 * 60
 
+/// What watching one folder did (`AppModel.watchFolders(_:)`).
+public struct WatchedFolderResult: Sendable, Equatable {
+    /// The folder, as `Preferences.watchedFolders` has it.
+    public let folder: String
+    /// It was watched before.
+    public let wasWatched: Bool
+    /// The repositories added to the list from it.
+    public let added: [RepositoryID]
+
+    public init(folder: String, wasWatched: Bool, added: [RepositoryID]) {
+        self.folder = folder
+        self.wasWatched = wasWatched
+        self.added = added
+    }
+}
+
 extension AppModel {
     // MARK: The folders
 
@@ -36,6 +52,25 @@ extension AppModel {
         let folder = await resolvingSymbolicLinks(standardized)
         preferences.watchedFolders.append(folder)
         return await result(of: startFolderScan(of: [folder]))
+    }
+
+    /// Watches each of `paths` in turn, as `addWatchedFolder(_:)` does, and
+    /// says for each what happened: the folder as it's watched, whether it
+    /// was watched already, and the repositories added from it. A path
+    /// that isn't absolute is left out.
+    @discardableResult
+    public func watchFolders(_ paths: [String]) async -> [WatchedFolderResult] {
+        var results: [WatchedFolderResult] = []
+        for path in paths {
+            guard let standardized = standardizedAbsolutePath(path) else {
+                continue
+            }
+            let folder = await resolvingSymbolicLinks(standardized)
+            let wasWatched = isWatchedFolder(folder)
+            let added = await addWatchedFolder(folder)
+            results.append(WatchedFolderResult(folder: folder, wasWatched: wasWatched, added: added))
+        }
+        return results
     }
 
     /// Stops watching `path`, a folder of `Preferences.watchedFolders`. The
@@ -205,11 +240,22 @@ extension AppModel {
     /// remembered is its main worktree, which is what a scan would find;
     /// nothing is while another repository in the list is still there.
     func excludeFromScans(_ removed: RepositoryRecord) {
-        let path = removed.mainWorktreePath ?? removed.path
-        guard watchedFolder(containing: path) != nil, !isRepositoryListed(at: path) else {
+        guard watchedFolderScansWouldFind(removed) != nil else {
             return
         }
-        preferences.watchedFolderExclusions.append(path)
+        preferences.watchedFolderExclusions.append(removed.mainWorktreePath ?? removed.path)
+    }
+
+    /// The watched folder a scan would find `record` in again once it's
+    /// removed from the list: the one its main worktree is in, unless
+    /// another repository in the list is there too. Nil otherwise.
+    func watchedFolderScansWouldFind(_ record: RepositoryRecord) -> String? {
+        let path = record.mainWorktreePath ?? record.path
+        guard let folder = watchedFolder(containing: path) else {
+            return nil
+        }
+        let others = repositories.filter { $0.id != record.id }
+        return isRepositoryListed(at: path, among: others) ? nil : folder
     }
 
     /// The user added `ids` to the list themselves (Add, Clone, Create, a
@@ -225,11 +271,11 @@ extension AppModel {
         preferences.watchedFolderExclusions.removeAll { added.contains(ExactString($0)) }
     }
 
-    /// Whether a repository in the list is at `path`, or has its main
-    /// worktree there.
-    private func isRepositoryListed(at path: String) -> Bool {
+    /// Whether one of `records` is at `path`, or has its main worktree
+    /// there.
+    private func isRepositoryListed(at path: String, among records: [RepositoryRecord]) -> Bool {
         let needle = POSIXPath.normalize(path)
-        return repositories.contains { record in
+        return records.contains { record in
             [record.path, record.mainWorktreePath].contains { listed in
                 listed.map { JSCompat.strictEquals(POSIXPath.normalize($0), needle) } ?? false
             }

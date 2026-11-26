@@ -429,17 +429,15 @@ struct WorktreesGroupLabel<Accessory: View>: View {
 
 // MARK: - Menus
 
-/// The Add menu beside the filter, as desktop's: Clone, Create, Add. Each
-/// closes the popover first.
+/// The Add menu beside the filter: Clone, Create, Add, as desktop's, and
+/// Watch Folder. Each closes the popover first.
 struct RepositoryAddMenu: View {
     @Environment(WindowContext.self) private var context: WindowContext?
 
     var body: some View {
         PullDownButton("Add") { [context] in
             if let actions = context?.actions {
-                actions.menuAction(.cloneRepository(url: nil), title: "Clone Repository…").closesPopover()
-                actions.menuAction(.newRepository(path: nil), title: "Create New Repository…").closesPopover()
-                actions.menuAction(.addLocalRepository, title: "Add Existing Repository…").closesPopover()
+                Self.content(actions)
             }
         } label: {
             MenuCapsuleLabel("Add", systemImage: "plus")
@@ -447,6 +445,14 @@ struct RepositoryAddMenu: View {
         .buttonStyle(.quiet)
         .fixedSize()
         .tooltip("Add a repository")
+    }
+
+    @MenuBuilder
+    static func content(_ actions: WindowActions) -> MenuContent {
+        actions.menuAction(.cloneRepository(url: nil), title: "Clone Repository…").closesPopover()
+        actions.menuAction(.newRepository(path: nil), title: "Create New Repository…").closesPopover()
+        actions.menuAction(.addLocalRepository, title: "Add Existing Repository…").closesPopover()
+        actions.menuAction(.watchFolder).closesPopover()
     }
 }
 

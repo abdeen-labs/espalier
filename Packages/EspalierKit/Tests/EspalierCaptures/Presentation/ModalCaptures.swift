@@ -1,7 +1,7 @@
 // Espalier's alert card in each of its layouts, Reset to Commit's question,
 // Remove Missing Worktree? (from the worktree list and before a checkout),
-// a link's questions (a branch, a pull request, one from a fork), and
-// Replace Hooks?, through the same mappings the hosts use where there's
+// a link's questions (a branch, a pull request, one from a fork), Push
+// All's (a few branches, and twelve), and Replace Hooks?, through the same mappings the hosts use where there's
 // one, and the modal layer over a window: a sheet in its card over the
 // scrim, an alert stacked over it, a card that scrolls, and a sheet that
 // fills the window. The window images are the window's content with each
@@ -78,6 +78,11 @@ struct ModalCaptures {
         "checkoutLinkedBranch", "checkoutLinkedPullRequest", "checkoutLinkedPullRequest-fork",
     ])
     func linkAlert(name: String) throws {
+        capture(card(try confirmation(name)), named: "alert-\(name)", area: area)
+    }
+
+    @Test("Push All's question, with its branches listed: a few, and twelve with the rest counted", arguments: ["pushAll-few", "pushAll"])
+    func pushAllAlert(name: String) throws {
         capture(card(try confirmation(name)), named: "alert-\(name)", area: area)
     }
 

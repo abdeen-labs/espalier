@@ -228,33 +228,40 @@ struct ToolbarSearchField: View {
 }
 
 /// The toolbar's overflow menu: the repository's places outside Espalier;
-/// on Home, adding a repository.
+/// on Home, adding a repository and watching a folder.
 struct OverflowMenu: View {
     @Environment(WindowContext.self) private var context
 
     var body: some View {
         PullDownButton("More") { [actions = context.actions, overflow = ToolbarOffer.make(context).overflow] in
-            switch overflow {
-            case .repository:
-                actions.menuAction(.openInEditor(path: nil))
-                actions.menuAction(.openInTerminal(path: nil))
-                actions.menuAction(.showInFinder(path: nil))
-                MenuDivider()
-                actions.menuAction(.viewOnGitHub)
-                actions.menuAction(.createPullRequest)
-                MenuDivider()
-                actions.menuAction(.repositorySettings)
-            case .addRepository:
-                actions.menuAction(.newRepository(path: nil))
-                actions.menuAction(.addLocalRepository)
-                actions.menuAction(.cloneRepository(url: nil))
-            }
+            Self.content(overflow, actions: actions)
         } label: {
             Label("More", systemImage: "ellipsis.circle")
         }
         .buttonStyle(.icon)
         .fixedSize()
         .tooltip("More")
+    }
+
+    /// The menu for what the overflow holds.
+    @MenuBuilder
+    static func content(_ overflow: ToolbarOffer.Overflow, actions: WindowActions) -> MenuContent {
+        switch overflow {
+        case .repository:
+            actions.menuAction(.openInEditor(path: nil))
+            actions.menuAction(.openInTerminal(path: nil))
+            actions.menuAction(.showInFinder(path: nil))
+            MenuDivider()
+            actions.menuAction(.viewOnGitHub)
+            actions.menuAction(.createPullRequest)
+            MenuDivider()
+            actions.menuAction(.repositorySettings)
+        case .addRepository:
+            actions.menuAction(.newRepository(path: nil))
+            actions.menuAction(.addLocalRepository)
+            actions.menuAction(.watchFolder)
+            actions.menuAction(.cloneRepository(url: nil))
+        }
     }
 }
 

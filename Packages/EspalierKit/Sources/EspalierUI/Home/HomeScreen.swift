@@ -20,6 +20,18 @@ final class HomeModel {
     @ObservationIgnored var fetchAll: Task<Void, Never>?
 }
 
+extension WindowContext {
+    /// What Home keeps in this window.
+    var homeModel: HomeModel {
+        state.featureState(HomeModel.self) { HomeModel() }
+    }
+
+    /// Whether the window shows Home.
+    var isOnHome: Bool {
+        DetailDestination.make(app: app, isShowingHome: state.isShowingHome, place: state.place) == .home
+    }
+}
+
 /// Home's screen.
 struct HomeScreen: View {
     @Environment(WindowContext.self) private var context
@@ -27,7 +39,7 @@ struct HomeScreen: View {
     @AppStorage("home.quiet-open") private var isQuietOpen = false
 
     var body: some View {
-        let model = context.state.featureState(HomeModel.self) { HomeModel() }
+        let model = context.homeModel
         HomeView(content: content(model), isQuietOpen: $isQuietOpen, actions: actions(model))
     }
 
@@ -41,7 +53,7 @@ struct HomeScreen: View {
             running.pieces = []
             running.batch.isPushingAll = false
         }
-        return HomeContent.make(board: board, running: running, focus: model.focus) { piece, branch in
+        return HomeContent.make(board: board, running: running, focus: model.focus, isScanningFolders: app.isScanningFolders) { piece, branch in
             guard let repository = app.repository(piece.record.id) else {
                 return Palette.accent
             }

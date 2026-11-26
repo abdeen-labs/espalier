@@ -16,6 +16,9 @@ struct HomeContent: Equatable {
     /// How many listed repositories haven't told their status yet
     /// (`WorkBoard.checkingRepositories`).
     var checkingCount = 0
+    /// Espalier is looking in the watched folders for repositories
+    /// (`AppModel.isScanningFolders`).
+    var isScanningFolders = false
     /// The pieces of work that need the user, in the board's order.
     var cards: [HomeCard] = []
     /// The pieces of work in progress, in the board's order.
@@ -166,11 +169,13 @@ extension HomeContent {
     /// - Parameters:
     ///   - focus: The card the user last moved the focus to; the first card
     ///     has it when that one isn't on the board.
+    ///   - isScanningFolders: Whether a scan of the watched folders runs.
     ///   - branchColor: A piece of work's branch's color.
     static func make(
         board: WorkBoard,
         running: HomeRunning = HomeRunning(),
         focus: WorktreeKey? = nil,
+        isScanningFolders: Bool = false,
         branchColor: (PieceOfWork, String) -> NSColor
     ) -> HomeContent {
         guard !board.isStatusOff else {
@@ -220,6 +225,7 @@ extension HomeContent {
         }
         return HomeContent(
             checkingCount: pending.count,
+            isScanningFolders: isScanningFolders,
             cards: cards,
             inProgress: inProgress,
             quiet: quiet,
@@ -341,9 +347,10 @@ extension HomeContent {
     }
 
     /// What's true under the title: how many changed since the user last
-    /// looked, how many are in progress, and how many repositories are
-    /// still being checked; with none of these and nothing that needs the
-    /// user, that everything is clean. Nil with nothing to say.
+    /// looked, how many are in progress, and that Espalier is looking in
+    /// the watched folders for repositories, or else how many repositories
+    /// are still being checked; with none of these and nothing that needs
+    /// the user, that everything is clean. Nil with nothing to say.
     func summary(_ format: NumberFormat) -> String? {
         var sentences: [String] = []
         if unseenCount > 0 {
@@ -354,7 +361,9 @@ extension HomeContent {
             let more = cards.isEmpty ? "" : " more"
             sentences.append(inProgress.count == 1 ? "1\(more) is in progress." : "\(count)\(more) are in progress.")
         }
-        if checkingCount > 0 {
+        if isScanningFolders {
+            sentences.append("Looking for repositories…")
+        } else if checkingCount > 0 {
             sentences.append(checkingCount == 1 ? "Checking 1 repository…" : "Checking \(formatCount(checkingCount, format)) repositories…")
         } else if cards.isEmpty, inProgress.isEmpty {
             sentences.append("Everything is clean and in sync.")

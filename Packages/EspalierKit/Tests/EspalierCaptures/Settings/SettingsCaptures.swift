@@ -1,6 +1,7 @@
 // Every Settings pane in the window's layout, the sidebar and the header
-// band included, as tall as its content: Prompts, Appearance (the run's
-// look chosen, and themes of its own), Advanced (and with Show Logs in
+// band included, as tall as its content: Prompts, Home (no watched
+// folders, three with two sharing a name, and a scan running), Appearance
+// (the run's look chosen, and themes of its own), Advanced (and with Show Logs in
 // Finder off after a click), Notifications with the
 // permission denied, Integrations with editors found and none, Git (an
 // account's address, nothing configured with invalid input, and a
@@ -14,6 +15,7 @@ import AIKit
 import AppKit
 @testable import EspalierCore
 import EspalierCoreTestSupport
+import EspalierSupport
 import Foundation
 import GitHubKit
 import GitKit
@@ -56,6 +58,21 @@ struct SettingsCaptures {
         let harness = try AppHarness()
         let app = app(harness)
         capture(window(.prompts) { PromptsForm(preferences: app.preferences) }, named: "prompts", area: area)
+    }
+
+    @Test("Home: no watched folders, three with two sharing a name, and a scan running")
+    func home() throws {
+        let harness = try AppHarness()
+        let app = app(harness)
+        capture(window(.home) { HomeForm(preferences: app.preferences, isScanning: false, actions: nil) }, named: "home-noFolders", area: area)
+        let home = NSHomeDirectory()
+        app.preferences.watchedFolders = [
+            POSIXPath.join(home, "Developer"),
+            POSIXPath.join(home, "Work/Developer"),
+            "/Volumes/Archive/Projects",
+        ]
+        capture(window(.home) { HomeForm(preferences: app.preferences, isScanning: false, actions: nil) }, named: "home-folders", area: area)
+        capture(window(.home) { HomeForm(preferences: app.preferences, isScanning: true, actions: nil) }, named: "home-scanning", area: area)
     }
 
     @Test("Appearance: the run's look chosen")

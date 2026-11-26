@@ -25,7 +25,7 @@ struct CommandAvailability {
         case .about: return capabilities.canShowAbout
         case .openSettings: return capabilities.canShowSettings
         case .newRepository: return capabilities.canCreateRepository
-        case .addLocalRepository, .addRepositories: return capabilities.canAddLocalRepository
+        case .addLocalRepository, .addRepositories, .watchFolder: return capabilities.canAddLocalRepository
         case .cloneRepository: return capabilities.canCloneRepository
         case .switchRepository: return capabilities.canShowRepositoryList
         case .push, .publishRepository, .publishBranch: return capabilities.canPush

@@ -4,7 +4,7 @@ import GitKit
 
 /// The settings pane a recovery opens.
 public enum SettingsPane: String, Sendable, Hashable, CaseIterable {
-    case accounts, integrations, git, appearance, notifications, prompts, advanced, ai
+    case accounts, integrations, git, home, appearance, notifications, prompts, advanced, ai
 }
 
 /// Something the user can do about an error.

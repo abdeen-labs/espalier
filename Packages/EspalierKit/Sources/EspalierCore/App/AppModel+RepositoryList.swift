@@ -242,7 +242,8 @@ extension AppModel {
     /// repositories nothing else refers to. A selected repository
     /// passes the selection to the most recently selected one, else to the
     /// first in the list. A repository in a watched folder is remembered, so
-    /// the next scan doesn't add it again (`excludeFromScans`). Removing a
+    /// the next scan doesn't add it again (`excludeFromScans`), and its
+    /// confirmation says so. Removing a
     /// repository that isn't in the list does nothing.
     public func removeRepository(
         _ id: RepositoryID,
@@ -255,7 +256,7 @@ extension AppModel {
         let trashes = moveToTrash && !record.isMissing
         if !record.isMissing, preferences.confirmRepositoryRemoval || trashes, !confirmed.contains(.removeRepository) {
             throw OperationError(
-                .confirmationRequired(.removeRepository(name: record.name, path: record.path)),
+                .confirmationRequired(.removeRepository(name: record.name, path: record.path, watchedFolder: watchedFolderScansWouldFind(record))),
                 operation: .removeRepository,
                 repositoryID: id
             )

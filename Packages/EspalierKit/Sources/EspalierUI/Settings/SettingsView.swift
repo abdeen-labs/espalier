@@ -1,5 +1,5 @@
 // The Settings scene. Not the system's settings window: a sidebar lists the
-// eight panes, as the main window's sidebar lists its places, and the pane
+// nine panes, as the main window's sidebar lists its places, and the pane
 // shows beside it under a header band with its name. Changes apply
 // immediately, and invalid values are never written. The window has its own
 // context (SettingsWindowContext.swift), so a pane's alerts and sheets
@@ -10,7 +10,7 @@ import EspalierCore
 import GitKit
 import SwiftUI
 
-/// Settings: eight panes.
+/// Settings: nine panes.
 public struct SettingsView: View {
     private let model: AppModel?
     @Environment(SettingsNavigation.self) private var navigation
@@ -70,6 +70,7 @@ struct SettingsPanes: View {
             case .accounts: AccountsPane(model: model)
             case .git: GitPane(model: model)
             case .integrations: IntegrationsPane(model: model)
+            case .home: HomePane(model: model)
             case .appearance: AppearancePane(model: model)
             case .notifications: NotificationsPane(model: model)
             case .prompts: PromptsPane(model: model)
@@ -147,7 +148,7 @@ struct SettingsHeader: View {
     }
 }
 
-/// The sidebar: the eight panes in the theme's look
+/// The sidebar: the nine panes in the theme's look
 /// (`SettingsThemeStyle.Sidebar`): tiled rows, as System Settings lists its
 /// panes, each a symbol on its colored tile beside the name; or as the main
 /// window's sidebar draws its rows, each with its plain symbol, at their
@@ -261,6 +262,7 @@ extension SettingsTab {
         case .accounts: TileColor.blueberry
         case .git: TileColor.apricot
         case .integrations: TileColor.honey
+        case .home: TileColor.leaf
         case .appearance: TileColor.plum
         case .notifications: TileColor.tomato
         case .prompts: TileColor.teal
@@ -276,6 +278,7 @@ extension SettingsTab {
         case .accounts: "person.fill"
         case .git: systemImage
         case .integrations: "hammer.fill"
+        case .home: "house.fill"
         case .appearance: "paintbrush.fill"
         case .notifications: "bell.fill"
         case .prompts: "text.bubble.fill"

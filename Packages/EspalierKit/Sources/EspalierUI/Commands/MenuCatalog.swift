@@ -48,6 +48,7 @@ nonisolated public enum MenuCatalog {
     public static let file = MenuDefinition(title: "File", entries: [
         .item(.newRepository(path: nil)),
         .item(.addLocalRepository),
+        .item(.watchFolder),
         .item(.cloneRepository(url: nil)),
     ])
 

@@ -26,7 +26,7 @@ nonisolated struct ToolbarOffer: Sendable, Equatable {
         /// The repository's places outside Espalier, on GitHub, and its
         /// settings.
         case repository
-        /// Adding a repository: New, Add, and Clone.
+        /// Adding a repository: New, Add, Watch Folder, and Clone.
         case addRepository
     }
 

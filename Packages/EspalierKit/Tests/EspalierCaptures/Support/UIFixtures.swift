@@ -78,6 +78,18 @@ enum UIFixtures {
         ("replaceCommandLineTool", .replaceCommandLineTool(path: "/usr/local/bin/espalier", existing: .link("/opt/homebrew/bin/espalier"))),
         ("replaceCommandLineTool-file", .replaceCommandLineTool(path: "/usr/local/bin/espalier", existing: .file)),
         ("replaceCommandLineTool-unexamined", .replaceCommandLineTool(path: "/usr/local/bin/espalier", existing: .unexamined)),
+        ("pushAll", .pushAll((1...12).map { index in
+            BranchPush(
+                worktree: WorktreeKey(repositoryID: repositoryID, path: "/Users/joe/Developer/app-\(index)"),
+                repository: ["espalier", "espalier-site", "dugite", "tree-sitter-swift"][index % 4],
+                branch: ["feature/login", "fix-fetch-progress", "main", "docs"][index % 4],
+                commits: index % 5 == 0 ? nil : index % 5
+            )
+        })),
+        ("pushAll-few", .pushAll([
+            BranchPush(worktree: WorktreeKey(repositoryID: repositoryID, path: "/Users/joe/Developer/espalier"), repository: "espalier", branch: "feature/login", commits: 3),
+            BranchPush(worktree: WorktreeKey(repositoryID: repositoryID, path: "/Users/joe/Developer/espalier-site"), repository: "espalier-site", branch: "main", commits: 1),
+        ])),
         ("checkoutLinkedBranch", .checkoutLinkedBranch("feature/login", repository: "espalier")),
         ("checkoutLinkedPullRequest", .checkoutLinkedPullRequest(number: 128, title: "Show fetch progress in the toolbar", repository: "espalier", forkRemote: nil)),
         ("checkoutLinkedPullRequest-fork", .checkoutLinkedPullRequest(

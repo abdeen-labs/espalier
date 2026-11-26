@@ -319,6 +319,40 @@ struct WatchedFoldersTests {
         await app.idle()
     }
 
+    @Test("removing a repository a scan would find again says which watched folder it's in; one outside, or sharing its folder with another, says nothing of it")
+    func removalNamesWatchedFolder() async throws {
+        let folder = try makeFolder()
+        let inside = try makeRepository("inside", in: folder)
+        let outside = try setupEmptyRepository().path
+        let harness = try AppHarness()
+        let app = await harness.loadedApp()
+        app.preferences.confirmRepositoryRemoval = true
+        let insideID = try #require(await app.addWatchedFolder(folder).first)
+        let outsideID = try #require(try await app.addRepositories([outside]).added.first)
+
+        func asked(_ id: RepositoryID) async -> EspalierCore.Confirmation? {
+            let error = await #expect(throws: OperationError.self) {
+                try await app.removeRepository(id, moveToTrash: false)
+            }
+            guard case .confirmationRequired(let confirmation)? = error?.reason else {
+                return nil
+            }
+            return confirmation
+        }
+        let record = try #require(app.record(insideID))
+        #expect(app.watchedFolderScansWouldFind(record) == folder)
+        #expect(await asked(insideID)?.message == EspalierCore.Confirmation.removeRepository(name: record.name, path: inside, watchedFolder: folder).message)
+        let outsideRecord = try #require(app.record(outsideID))
+        #expect(app.watchedFolderScansWouldFind(outsideRecord) == nil)
+        #expect(await asked(outsideID)?.message == EspalierCore.Confirmation.removeRepository(name: outsideRecord.name, path: outside).message)
+
+        // Another repository in the list at its main worktree keeps it
+        // from being found: nothing stays removed.
+        let duplicate = RepositoryRecord(path: inside)
+        #expect(app.watchedFolderScansWouldFind(duplicate) == nil)
+        await app.idle()
+    }
+
     @Test("a repository removed from the list that isn't in a watched folder is found once its folder is watched")
     func removedOutsideWatchedFolders() async throws {
         let folder = try makeFolder()

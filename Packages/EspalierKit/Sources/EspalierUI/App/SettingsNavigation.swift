@@ -5,9 +5,9 @@ import EspalierCore
 import GitKit
 import Observation
 
-/// The eight Settings panes, in the sidebar's order.
+/// The nine Settings panes, in the sidebar's order.
 nonisolated public enum SettingsTab: String, CaseIterable, Sendable, Hashable {
-    case accounts, git, integrations, appearance, notifications, prompts, ai, advanced
+    case accounts, git, integrations, home, appearance, notifications, prompts, ai, advanced
 
     /// The pane for one of the state layer's panes (Appearance for any pane
     /// the Settings scene doesn't have).
@@ -20,6 +20,7 @@ nonisolated public enum SettingsTab: String, CaseIterable, Sendable, Hashable {
         case .accounts: "Accounts"
         case .git: "Git"
         case .integrations: "Integrations"
+        case .home: "Home"
         case .appearance: "Appearance"
         case .notifications: "Notifications"
         case .prompts: "Prompts"
@@ -33,6 +34,7 @@ nonisolated public enum SettingsTab: String, CaseIterable, Sendable, Hashable {
         case .accounts: "person.crop.circle"
         case .git: "arrow.trianglehead.branch"
         case .integrations: "hammer"
+        case .home: "house"
         case .appearance: "paintbrush"
         case .notifications: "bell"
         case .prompts: "text.bubble"

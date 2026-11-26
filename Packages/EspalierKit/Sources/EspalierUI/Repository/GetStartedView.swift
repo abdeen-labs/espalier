@@ -1,8 +1,9 @@
-// Get Started, the window with no repositories, modelled on Xcode's welcome
-// window: a heading, three actions, the account's repositories on the right
-// when signed in (with the account picker, by host, for two or more
-// accounts), and "Clone <owner/name>", which opens Clone on URL with the
-// repository.
+// Get Started, the window with no repositories, modeled on Xcode's welcome
+// window: a heading, four actions (watching a folder first, the fastest
+// start with many repositories; then Clone, Create, and Add), the
+// account's repositories on the right when signed in (with the account
+// picker, by host, for two or more accounts), and "Clone <owner/name>",
+// which opens Clone on URL with the repository.
 // Folders dropped on the window add repositories (MainWindow).
 
 import EspalierCore
@@ -24,6 +25,7 @@ public struct GetStartedView: View {
         let account = accounts.first { $0.identity == accountIdentity } ?? accounts.first
         HStack(alignment: .top, spacing: Metrics.insetLarge * 2) {
             GetStartedActions(
+                watch: { context.actions.perform(.watchFolder) },
                 clone: { context.actions.perform(.cloneRepository(url: nil)) },
                 create: { context.actions.perform(.newRepository(path: nil)) },
                 add: { context.actions.perform(.addLocalRepository) }
@@ -80,10 +82,11 @@ public struct GetStartedView: View {
     }
 }
 
-/// Get Started's left column: the heading, the three actions with their
-/// keys, and the hint about dropping folders. It's as wide as its widest
+/// Get Started's left column: the heading, the four actions (Watch Folder,
+/// with what it does, then the three with their keys), and the hint about dropping folders. It's as wide as its widest
 /// line, so the actions' titles stay on one line.
 struct GetStartedActions: View {
+    var watch: () -> Void = {}
     var clone: () -> Void = {}
     var create: () -> Void = {}
     var add: () -> Void = {}
@@ -100,6 +103,12 @@ struct GetStartedActions: View {
                     .foregroundStyle(.text2)
             }
             ActionList([
+                ActionListItem(
+                    systemImage: "folder.badge.plus",
+                    title: "Watch a Folder of Repositories…",
+                    subtitle: "Adds every repository in it, and new ones as they appear",
+                    action: watch
+                ),
                 ActionListItem(
                     systemImage: "arrow.down.circle",
                     title: "Clone a Repository from the Internet…",

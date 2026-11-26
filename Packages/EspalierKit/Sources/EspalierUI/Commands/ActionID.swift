@@ -37,6 +37,8 @@ nonisolated public enum ActionID: Sendable {
     /// "New Repository…", optionally prefilled with a folder.
     case newRepository(path: String?)
     case addLocalRepository
+    /// "Watch Folder…": watches folders, adding the repositories in them.
+    case watchFolder
     /// "Clone Repository…", optionally prefilled with a URL.
     case cloneRepository(url: String?)
     /// Folders dropped on the window or the Dock icon.
@@ -200,6 +202,7 @@ nonisolated public enum ActionID: Sendable {
         case .openSettings: .openSettings
         case .newRepository: .newRepository
         case .addLocalRepository: .addLocalRepository
+        case .watchFolder: .watchFolder
         case .cloneRepository: .cloneRepository
         case .addRepositories: .addRepositories
         case .deleteSelection: .deleteSelection
@@ -335,7 +338,7 @@ extension ImageDiffType {
 /// registered for.
 nonisolated public enum ActionKind: String, CaseIterable, Sendable {
     case about, installCommandLineTool, reportIssue, showKeyboardShortcuts, showLogsInFinder, openSettings
-    case newRepository, addLocalRepository, cloneRepository, addRepositories
+    case newRepository, addLocalRepository, watchFolder, cloneRepository, addRepositories
     case deleteSelection, copyPath
     case showChanges, showHistory, showNextPlace, showPreviousPlace, selectPlace, toggleSidebar, filterSidebar, search, showCommandPalette
     case toggleInspector, toggleSplitDiff, toggleHideWhitespace, toggleWrapLines, setImageDiffType, setHistoryScope
@@ -370,6 +373,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .openSettings: "Settings…"
         case .newRepository: "New Repository…"
         case .addLocalRepository: "Add Local Repository…"
+        case .watchFolder: "Watch Folder…"
         case .cloneRepository: "Clone Repository…"
         case .addRepositories: "Add Repositories"
         case .deleteSelection: "Delete"
@@ -544,7 +548,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
     public var isRepositoryScoped: Bool {
         switch self {
         case .about, .installCommandLineTool, .reportIssue, .showKeyboardShortcuts, .showLogsInFinder, .openSettings,
-             .newRepository, .addLocalRepository, .cloneRepository, .addRepositories,
+             .newRepository, .addLocalRepository, .watchFolder, .cloneRepository, .addRepositories,
              .switchRepository, .toggleSidebar, .filterSidebar, .search, .showCommandPalette, .toggleSplitDiff, .toggleHideWhitespace,
              .toggleWrapLines, .setImageDiffType, .increaseCodeTextSize, .decreaseCodeTextSize,
              .resetCodeTextSize, .signIn, .runBenchmark, .checkMenuShortcuts, .showHome, .openWork:
