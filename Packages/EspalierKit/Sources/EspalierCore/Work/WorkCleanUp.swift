@@ -50,7 +50,7 @@ extension Confirmation {
                 details: .cleanUp(branch: branch, folder: plan.worktree.path),
                 title: "Delete Worktree and Branch?",
                 message: "\(merged) Cleaning up deletes the worktree's folder, \(plan.worktree.path), with any files Git ignores in it, and the local branch \(branch).\n\n\(remoteStays)",
-                confirmButton: "Clean Up"
+                confirmButton: "Delete"
             )
         case .missingLinked:
             return Confirmation(
@@ -58,7 +58,7 @@ extension Confirmation {
                 details: .cleanUp(branch: branch, folder: plan.worktree.path),
                 title: "Remove Worktree and Branch?",
                 message: "\(merged) The worktree's folder, \(plan.worktree.path), no longer exists. Cleaning up removes the worktree from Git and deletes the local branch \(branch).\n\n\(remoteStays)",
-                confirmButton: "Clean Up"
+                confirmButton: "Remove"
             )
         case .main:
             return Confirmation(
@@ -66,7 +66,7 @@ extension Confirmation {
                 details: .cleanUp(branch: branch, folder: nil),
                 title: "Delete Branch?",
                 message: "\(merged) Cleaning up checks out \(plan.defaultBranch.nameWithoutRemote) in \(plan.worktree.path) and deletes the local branch \(branch).\n\n\(remoteStays)",
-                confirmButton: "Clean Up"
+                confirmButton: "Delete"
             )
         }
     }

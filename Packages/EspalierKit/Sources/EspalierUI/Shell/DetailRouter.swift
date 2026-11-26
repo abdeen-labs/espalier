@@ -80,8 +80,8 @@ struct DetailRouter: View {
         // other destinations are one card.
         switch DetailDestination.make(app: app, isShowingHome: context.state.isShowingHome, place: context.state.place) {
         case .home:
+            // Home's cards float on the backdrop themselves.
             HomeScreen()
-                .paneCard()
         case .launching:
             DelayedProgressView()
                 .paneCard()

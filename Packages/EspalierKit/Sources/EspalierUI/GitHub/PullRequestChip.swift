@@ -25,7 +25,10 @@ nonisolated struct PullRequestChipContent: Sendable, Equatable {
 /// The current branch's pull request, when it has one.
 public struct PullRequestChip: View {
     private let repository: RepositoryModel
-    @State private var isPopoverPresented = false
+    /// Whether the checks popover shows, without a window (the window keeps
+    /// it, so Home's View Checks can open it).
+    @State private var isPopoverPresentedAlone = false
+    @Environment(WindowContext.self) private var context: WindowContext?
 
     public init(repository: RepositoryModel) {
         self.repository = repository
@@ -40,7 +43,7 @@ public struct PullRequestChip: View {
                 checksTooltip: check.map(checksTooltipText)
             )
             Button {
-                isPopoverPresented.toggle()
+                isPopoverPresented.wrappedValue.toggle()
             } label: {
                 PullRequestChipLabel(content: content)
                     // Another pull request (another branch or repository)
@@ -50,15 +53,23 @@ public struct PullRequestChip: View {
             .buttonStyle(.quiet)
             .tooltip(content.tooltip)
             .accessibilityLabel(content.tooltip)
-            .popoverCard(isPresented: $isPopoverPresented, title: "Checks for pull request \(pullRequest.pullRequestNumber)") {
+            .popoverCard(isPresented: isPopoverPresented, title: "Checks for pull request \(pullRequest.pullRequestNumber)") {
                 ChecksPopover(repository: repository, pullRequest: pullRequest) {
-                    isPopoverPresented = false
+                    isPopoverPresented.wrappedValue = false
                 }
             }
             .task(id: pullRequest.pullRequestNumber) {
                 await repository.gitHub.watchChecks(for: pullRequest)
             }
         }
+    }
+
+    /// Whether the checks popover shows: the window's, else its own.
+    private var isPopoverPresented: Binding<Bool> {
+        if let state = context?.state {
+            return Binding(get: { state.isChecksPopoverPresented }, set: { state.isChecksPopoverPresented = $0 })
+        }
+        return $isPopoverPresentedAlone
     }
 
     /// The pull request shown, in its repository: the scope of the label's

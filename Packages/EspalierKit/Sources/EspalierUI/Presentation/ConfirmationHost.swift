@@ -138,7 +138,8 @@ extension Confirmation {
         switch kind {
         case .discardChanges, .discardAllChanges, .discardLines, .discardStash, .overwriteCommitMessage,
              .removeWorktree, .removeMissingWorktree, .abortWithResolvedConflicts, .deleteBranch, .deleteRemoteBranch, .deleteTag,
-             .removeRepository, .leaveCommitsBehind, .replaceCommandLineTool:
+             .removeRepository, .leaveCommitsBehind, .replaceCommandLineTool,
+             .cleanUpWorktree, .cleanUpMissingWorktree, .cleanUpBranch:
             true
         default:
             false

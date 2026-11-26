@@ -14,6 +14,7 @@ nonisolated public struct ThemeStyle: Sendable, Equatable {
     public var history: HistoryThemeStyle
     public var controls: ControlsThemeStyle
     public var settings: SettingsThemeStyle
+    public var home: HomeThemeStyle
     /// The height of the header row atop a column and atop the diff.
     public var paneHeaderHeight: CGFloat
 
@@ -26,6 +27,7 @@ nonisolated public struct ThemeStyle: Sendable, Equatable {
         history: .default,
         controls: .default,
         settings: .default,
+        home: .default,
         paneHeaderHeight: 46
     )
 
@@ -38,6 +40,7 @@ nonisolated public struct ThemeStyle: Sendable, Equatable {
         history: .frost,
         controls: .frost,
         settings: .frost,
+        home: .frost,
         paneHeaderHeight: 40
     )
 }

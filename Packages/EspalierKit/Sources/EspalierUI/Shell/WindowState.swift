@@ -98,6 +98,9 @@ public final class WindowState {
     /// the current branch onto (Merge into Current Branch…); nil while it
     /// switches branches.
     var branchPopoverMethod: CompareMethod?
+    /// Whether the toolbar's pull request chip shows its checks popover:
+    /// Home's View Checks opens it.
+    public var isChecksPopoverPresented = false
     /// The command palette's state while it's open (⌘K).
     var commandPalette: CommandPaletteModel?
     /// The focused list's selection.

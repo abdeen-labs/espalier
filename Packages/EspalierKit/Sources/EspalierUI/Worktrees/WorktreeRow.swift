@@ -185,4 +185,41 @@ enum WorktreeContextMenu {
         MenuDivider()
         actions.menuAction(.deleteWorktree(path: worktree.path)).closesPopover()
     }
+
+    /// The same menu for a worktree of `repository`, selected or not
+    /// (Home's cards): Rename… and Delete… act on that repository's
+    /// worktree.
+    @MenuBuilder
+    static func content(_ worktree: WorktreeRowContent, of repository: RepositoryModel, context: WindowContext) -> MenuContent {
+        if context.repository === repository {
+            content(worktree, context: context)
+        } else {
+            let entry = WorktreeActions.worktree(at: worktree.path, in: repository)
+            MenuAction(ActionKind.renameWorktree.title) {
+                if let entry {
+                    RenameWorktreeSheet.present(entry, repository: repository, context: context)
+                }
+            }
+            .disabled(entry.map { !repository.worktrees.canRename($0) } ?? true)
+            MenuAction("Copy Worktree Name") {
+                WorktreeActions.copy(worktree.name)
+            }
+            MenuAction("Copy Worktree Path") {
+                WorktreeActions.copy(worktree.path)
+            }
+            context.actions.menuAction(.showInFinder(path: worktree.path), title: "Show in Finder")
+            MenuDivider()
+            MenuAction(ActionKind.deleteWorktree.title) {
+                guard let entry else {
+                    return
+                }
+                Task {
+                    await context.presenter.perform { answers throws(OperationError) in
+                        try await repository.worktrees.remove(entry, confirmed: answers.confirmed)
+                    }
+                }
+            }
+            .disabled(entry.map { !repository.worktrees.canRemove($0) } ?? true)
+        }
+    }
 }
