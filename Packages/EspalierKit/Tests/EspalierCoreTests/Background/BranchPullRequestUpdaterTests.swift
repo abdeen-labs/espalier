@@ -186,6 +186,46 @@ struct BranchPullRequestUpdaterTests {
         return Fixture(harness: harness, app: app, account: account, endpoint: endpoint, updater: updater, news: news)
     }
 
+    // MARK: At launch
+
+    @Test("a launch shows a branch's pull request as the launch before knew it, past the worktree's own status, until GitHub answers about the branch")
+    func rememberedAtLaunch() async throws {
+        let fixture = try await makeFixture([.init(name: "hello", pullRequests: [.init(7)])])
+        let model = try await fixture.add("hello")
+        await fixture.start()
+        let key = WorktreeKey(repositoryID: model.id, path: model.record.path)
+        let before = fixture.app.piecesOfWork.first { $0.id == key }?.pullRequest
+        guard case .open(let pullRequest)? = before else {
+            Issue.record("Unexpected status \(String(describing: before))")
+            return
+        }
+        fixture.updater.stop()
+        await fixture.app.idle()
+        await fixture.app.prepareForTermination()
+
+        // While quit, the pull request closed: the branch has none.
+        fixture.endpoint.setPullRequests([], name: "hello")
+        let app = await fixture.harness.loadedAppWithAccounts()
+        func shown() -> BranchPullRequestStatus? {
+            app.piecesOfWork.first { $0.id == key }?.pullRequest
+        }
+        #expect(shown() == .open(pullRequest))
+
+        // The worktree's own status doesn't replace what GitHub last said.
+        let relaunched = try #require(app.repository(model.id))
+        await relaunched.refresh(.status, reason: .fileSystem)
+        await app.idle()
+        #expect(app.indicators[model.id] != nil)
+        #expect(shown() == .open(pullRequest))
+
+        app.background.branchPullRequests.start()
+        await fixture.scheduler.waitForSleep(of: BranchPullRequestUpdaterTests.pass)
+        #expect(shown() == .noPullRequest)
+        #expect(app.worktreeActivity.rememberedPullRequests.isEmpty)
+        app.background.branchPullRequests.stop()
+        await app.idle()
+    }
+
     // MARK: What it says
 
     @Test("says how each repository's branch stands: unknown until GitHub answers, then its open pull request, none for a pushed branch without one, and nothing for the default branch, a branch that isn't pushed, or a repository that isn't on GitHub")

@@ -706,6 +706,11 @@ final class BranchPullRequestUpdater {
         if app.branchPullRequests[key] != status {
             app.branchPullRequests[key] = status
         }
+        // GitHub answered about the branch, or it isn't asked about any
+        // more: what the launch before remembered of it goes.
+        if status != .unknown {
+            app.worktreeActivity.forgetRememberedPullRequest(key)
+        }
     }
 
     // MARK: Failures

@@ -45,10 +45,15 @@ extension AppModel {
         }
     }
 
-    /// Sets or removes a repository's badge.
+    /// Sets or removes a repository's badge: what a status told of the
+    /// worktree its record points at, or that there's none to tell. What
+    /// the launch before remembered of that worktree goes.
     func setIndicator(_ indicator: RepositoryIndicator?, for id: RepositoryID) {
         if indicators[id] != indicator {
             indicators[id] = indicator
+        }
+        if let record = record(id) {
+            worktreeActivity.forgetRememberedFacts(forWorktreeAt: record.path, of: id)
         }
     }
 

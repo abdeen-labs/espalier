@@ -4,8 +4,9 @@ import os
 
 private let logger = Log.logger(category: "persistence")
 
-/// The worktrees' activity and the pinned repositories, as they're kept
-/// between launches: `worktree-activity.json`.
+/// The worktrees' activity, the pinned repositories, and what each
+/// repository's pieces of work were made of, as they're kept between
+/// launches: `worktree-activity.json`.
 ///
 /// ```json
 /// {
@@ -15,6 +16,10 @@ private let logger = Log.logger(category: "persistence")
 ///     "path": "/Users/me/src/app",
 ///     "snapshot": { "tip": "5d3a…", "branch": "main", "behind": 0, "changedFiles": "9c1e…" },
 ///     "activity": { "files": 785000000.25, "lastOpen": 785000100.5 }
+///   }],
+///   "work": [{
+///     "repositoryID": "0F4C…",
+///     "worktrees": [{ "path": "/Users/me/src/app", "isCurrent": true, "indicator": { … } }]
 ///   }]
 /// }
 /// ```
@@ -25,6 +30,10 @@ struct WorktreeActivityDocument: Codable, Sendable, Equatable {
     /// The pinned repositories, in the order they were pinned.
     var pinnedRepositoryIDs: [RepositoryID] = []
     var worktrees: [StoredWorktree] = []
+    /// What each repository's pieces of work were made of
+    /// (`WorktreeActivityModel.rememberedFacts`); nil in a document saved
+    /// without them.
+    var work: [StoredWork]?
 
     /// What's kept for one worktree of a repository.
     struct StoredWorktree: Codable, Sendable, Equatable {
@@ -35,6 +44,15 @@ struct WorktreeActivityDocument: Codable, Sendable, Equatable {
         /// When each kind of activity last happened in it, and when it was
         /// last open.
         var activity: WorktreeActivity?
+        /// The commits it had to push.
+        var unpushedCommits: UnpushedCommits?
+    }
+
+    /// What one repository's pieces of work were made of: its worktrees
+    /// that a status had told of, in their order.
+    struct StoredWork: Codable, Sendable, Equatable {
+        var repositoryID: RepositoryID
+        var worktrees: [WorktreeFacts]
     }
 }
 

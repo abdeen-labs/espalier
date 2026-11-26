@@ -11,7 +11,7 @@ private let logger = Log.logger(category: "worktree-activity")
 
 /// A few of the commits a worktree's branch has that its upstream doesn't,
 /// and what they were read for.
-public struct UnpushedCommits: Sendable, Equatable {
+public struct UnpushedCommits: Sendable, Equatable, Codable {
     /// How many subjects are kept.
     public static let limit = 3
 

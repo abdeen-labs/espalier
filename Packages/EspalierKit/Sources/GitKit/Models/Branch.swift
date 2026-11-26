@@ -11,7 +11,7 @@ public enum BranchType: Int, Hashable, Sendable {
 }
 
 /// The number of commits a revision range is ahead/behind.
-public struct AheadBehind: Hashable, Sendable {
+public struct AheadBehind: Hashable, Sendable, Codable {
     public let ahead: Int
     public let behind: Int
 

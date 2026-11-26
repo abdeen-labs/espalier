@@ -45,8 +45,9 @@ public struct AppDirectories: Sendable, Hashable {
         applicationSupport.appending(path: "repositories.json", directoryHint: .notDirectory)
     }
 
-    /// The worktrees' activity and the pinned repositories, kept between
-    /// launches (`worktree-activity.json`).
+    /// The worktrees' activity, the pinned repositories, and what the
+    /// pieces of work were made of, kept between launches
+    /// (`worktree-activity.json`).
     public var worktreeActivity: URL {
         applicationSupport.appending(path: "worktree-activity.json", directoryHint: .notDirectory)
     }

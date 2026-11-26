@@ -11,6 +11,13 @@ private let logger = Log.logger(category: "worktree-activity")
 /// the user hasn't seen, when each last changed on disk, and the pinned
 /// repositories. `AppModel.board` and `AppModel.shelf` are made of it.
 ///
+/// - **What shows at launch.** What each worktree's piece of work was made
+///   of (`WorktreeFacts`: its status, its place among the repository's
+///   worktrees, its pull request) is saved with the rest, with its changed
+///   files' names and its commits to push. The next launch shows them
+///   (`rememberedFacts`, `AppModel.worktreeFacts(of:)`) until it tells the
+///   worktree's status itself, so Home and the shelf have every repository
+///   at once and bring each up to date as its status loads.
 /// - **Activity.** Each status of a worktree arrives as a snapshot
 ///   (`recordStatus`), is compared with the worktree's previous one, and
 ///   the kinds of activity between them get the current time. The
@@ -52,14 +59,25 @@ public final class WorktreeActivityModel {
     /// (`WorktreeStatusSnapshot.lastChanged`), kept between launches.
     public private(set) var lastChanged: [WorktreeKey: Date] = [:]
 
-    /// A few of each worktree's changed files, as its last status since
-    /// launch found (`WorktreeStatusSnapshot.changedFilesSample`).
+    /// A few of each worktree's changed files, as its last status found
+    /// (`WorktreeStatusSnapshot.changedFilesSample`), kept between launches.
     public private(set) var changedFilesSamples: [WorktreeKey: [ChangedFileSample]] = [:]
 
     /// The commits each worktree that's ahead of its upstream has to push,
-    /// as its last status since launch found them
-    /// (`recordStatusForUnpushedCommits`).
+    /// as its last status found them (`recordStatusForUnpushedCommits`),
+    /// kept between launches.
     public private(set) var unpushedCommits: [WorktreeKey: UnpushedCommits] = [:]
+
+    /// What each repository's worktrees were when the state was last saved
+    /// before this launch: the ones no status has told of since. A
+    /// worktree's goes once this launch tells its status, whatever it
+    /// tells (`forgetRememberedFacts`), and with a worktree its repository
+    /// no longer lists.
+    public private(set) var rememberedFacts: [RepositoryID: [WorktreeFacts]] = [:]
+
+    /// The pull request status each branch had then, until GitHub answers
+    /// about the branch in this launch (`forgetRememberedPullRequest`).
+    public private(set) var rememberedPullRequests: [RepositoryBranch: BranchPullRequestStatus] = [:]
 
     @ObservationIgnored weak var app: AppModel?
     @ObservationIgnored let store: WorktreeActivityStore
@@ -68,6 +86,12 @@ public final class WorktreeActivityModel {
     @ObservationIgnored private let autosaves: Bool
     /// Each worktree's last status, as its snapshot.
     @ObservationIgnored private(set) var snapshots: [WorktreeKey: WorktreeStatusSnapshot] = [:]
+
+    /// What the repositories' pieces of work are made of
+    /// (`AppModel.workToRemember()`), as last taken for saving.
+    @ObservationIgnored private var work: [WorktreeActivityDocument.StoredWork] = []
+    /// Whether `work` was taken for quitting, and stays as it is.
+    @ObservationIgnored private var isWorkFinal = false
 
     /// Whether the saved state has been read: nothing is saved before.
     @ObservationIgnored private var isLoaded = false
@@ -155,6 +179,73 @@ public final class WorktreeActivityModel {
         forget { $0.repositoryID == id && !kept.contains($0) }
     }
 
+    // MARK: What shows at launch
+
+    /// This launch told the status of the worktree at `path` of repository
+    /// `id` (or that it has none): what was remembered of it goes. Its
+    /// branch's pull request stays until GitHub answers.
+    func forgetRememberedFacts(forWorktreeAt path: String, of id: RepositoryID) {
+        guard let facts = rememberedFacts[id] else {
+            return
+        }
+        let key = WorktreeKey(repositoryID: id, path: path)
+        let remaining = facts.filter { WorktreeKey(repositoryID: id, path: $0.path) != key }
+        if remaining.count != facts.count {
+            rememberedFacts[id] = remaining.isEmpty ? nil : remaining
+        }
+    }
+
+    /// GitHub answered about `branch` in this launch, or the branch stopped
+    /// being asked about: the pull request status remembered for it goes.
+    func forgetRememberedPullRequest(_ branch: RepositoryBranch) {
+        if rememberedPullRequests[branch] != nil {
+            rememberedPullRequests[branch] = nil
+        }
+    }
+
+    /// Quitting: takes what the pieces of work are made of now, for the
+    /// last save. The background services stop next and remove the
+    /// worktrees they published, which mustn't be what's saved.
+    func takeWorkForTermination() {
+        if takeWork() {
+            revision &+= 1
+        }
+        isWorkFinal = true
+    }
+
+    /// Takes what the pieces of work are made of now, and returns whether
+    /// it differs from what was last taken.
+    private func takeWork() -> Bool {
+        guard !isWorkFinal else {
+            return false
+        }
+        let current = app?.workToRemember() ?? []
+        guard current != work else {
+            return false
+        }
+        work = current
+        return true
+    }
+
+    /// Saves what the pieces of work are made of a while after it changes,
+    /// while saves happen on their own: follows what it's read from, and
+    /// counts a change when it differs from what was last taken.
+    private func observeWork() {
+        guard autosaves, isLoaded, let app else {
+            return
+        }
+        withObservationTracking {
+            _ = app.workToRemember()
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.observeWork()
+            }
+        }
+        if takeWork() {
+            didChange()
+        }
+    }
+
     private func record(_ kinds: Set<WorktreeActivityKind>, in key: WorktreeKey) {
         guard !kinds.isEmpty else {
             return
@@ -184,6 +275,7 @@ public final class WorktreeActivityModel {
         }
         if unpushedCommits[key] != commits {
             unpushedCommits[key] = commits
+            didChange()
         }
     }
 
@@ -257,6 +349,10 @@ public final class WorktreeActivityModel {
         if openWorktree?.repositoryID == id {
             openWorktree = nil
         }
+        let forgottenPullRequests = rememberedPullRequests.keys.filter { $0.repositoryID == id }
+        for key in forgottenPullRequests {
+            rememberedPullRequests[key] = nil
+        }
         if isPinned(id) {
             pinnedRepositoryIDs.removeAll { $0 == id }
             didChange(savingNow: true)
@@ -293,6 +389,12 @@ public final class WorktreeActivityModel {
             }
             changedFilesSamples = remaining
         }
+        for (id, facts) in rememberedFacts {
+            let remaining = facts.filter { !shouldForget(WorktreeKey(repositoryID: id, path: $0.path)) }
+            if remaining.count != facts.count {
+                rememberedFacts[id] = remaining.isEmpty ? nil : remaining
+            }
+        }
         guard !forgottenActivity.isEmpty || !forgottenSnapshots.isEmpty else {
             return
         }
@@ -321,16 +423,41 @@ public final class WorktreeActivityModel {
         }
         var activity: [WorktreeKey: WorktreeActivity] = [:]
         var snapshots: [WorktreeKey: WorktreeStatusSnapshot] = [:]
+        var commits: [WorktreeKey: UnpushedCommits] = [:]
         for worktree in document.worktrees where listed.contains(worktree.repositoryID) {
             let key = WorktreeKey(repositoryID: worktree.repositoryID, path: worktree.path)
             activity[key] = worktree.activity
             snapshots[key] = worktree.snapshot
+            commits[key] = worktree.unpushedCommits
+        }
+        // What the pieces of work were made of, for the repositories still
+        // in the list; a missing one shows nothing of it.
+        let missing = Set(app?.repositories.lazy.filter(\.isMissing).map(\.id) ?? [])
+        var facts: [RepositoryID: [WorktreeFacts]] = [:]
+        var pullRequests: [RepositoryBranch: BranchPullRequestStatus] = [:]
+        for stored in document.work ?? [] where listed.contains(stored.repositoryID) && !missing.contains(stored.repositoryID) {
+            let known = stored.worktrees.filter { $0.indicator != nil }
+            guard !known.isEmpty, facts[stored.repositoryID] == nil else {
+                continue
+            }
+            facts[stored.repositoryID] = known
+            for fact in known {
+                if case .branch(let name)? = fact.indicator?.head, let pullRequest = fact.pullRequest, pullRequest != .unknown {
+                    pullRequests[RepositoryBranch(repositoryID: stored.repositoryID, name: name)] = pullRequest
+                }
+            }
         }
         pinnedRepositoryIDs = pinned
         self.activity = activity
         self.snapshots = snapshots
         lastChanged = snapshots.compactMapValues(\.lastChanged)
+        changedFilesSamples = snapshots.compactMapValues { $0.changedFilesSample.isEmpty ? nil : $0.changedFilesSample }
+        unpushedCommits = commits
+        rememberedFacts = facts
+        rememberedPullRequests = pullRequests
+        work = document.work ?? []
         isLoaded = true
+        observeWork()
     }
 
     /// The state as it's saved.
@@ -338,12 +465,18 @@ public final class WorktreeActivityModel {
         var worktrees: [WorktreeActivityDocument.StoredWorktree] = []
         worktrees.reserveCapacity(max(snapshots.count, activity.count))
         for (key, snapshot) in snapshots {
-            worktrees.append(.init(repositoryID: key.repositoryID, path: key.path, snapshot: snapshot, activity: activity[key]))
+            worktrees.append(.init(
+                repositoryID: key.repositoryID,
+                path: key.path,
+                snapshot: snapshot,
+                activity: activity[key],
+                unpushedCommits: unpushedCommits[key]
+            ))
         }
         for (key, entry) in activity where snapshots[key] == nil {
             worktrees.append(.init(repositoryID: key.repositoryID, path: key.path, snapshot: nil, activity: entry))
         }
-        return WorktreeActivityDocument(pinnedRepositoryIDs: pinnedRepositoryIDs, worktrees: worktrees)
+        return WorktreeActivityDocument(pinnedRepositoryIDs: pinnedRepositoryIDs, worktrees: worktrees, work: work)
     }
 
     /// Something that's saved changed: it's written now, or, while saves
@@ -370,7 +503,14 @@ public final class WorktreeActivityModel {
 
     /// Writes the state as it is now, unless it's been written.
     private func startWrite() {
-        guard isLoaded, revision != savedRevision else {
+        guard isLoaded else {
+            return
+        }
+        // What the pieces of work are made of is taken as it's written.
+        if takeWork() {
+            revision &+= 1
+        }
+        guard revision != savedRevision else {
             return
         }
         let revision = revision

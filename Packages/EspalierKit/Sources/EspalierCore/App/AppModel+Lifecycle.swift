@@ -135,11 +135,13 @@ extension AppModel {
         }
     }
 
-    /// Prepares to quit: stops the background services and watchers,
-    /// cancels view loads and clones (removing what they cloned), and writes
-    /// the repository list and the worktrees' activity. Running operations are
-    /// left to finish.
+    /// Prepares to quit: takes what the pieces of work are made of, for
+    /// the next launch to show; stops the background services and watchers;
+    /// cancels view loads and clones (removing what they cloned); and writes
+    /// the repository list and the worktrees' activity. Running operations
+    /// are left to finish.
     public func prepareForTermination() async {
+        worktreeActivity.takeWorkForTermination()
         background.stopAll()
         workClock.stop()
         for model in models.values {

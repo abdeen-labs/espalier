@@ -2,12 +2,12 @@
 
 import EspalierSupport
 
-public enum WorktreeType: String, Hashable, Sendable {
+public enum WorktreeType: String, Hashable, Sendable, Codable {
     case main = "main"
     case linked = "linked"
 }
 
-public struct WorktreeEntry: Hashable, Sendable {
+public struct WorktreeEntry: Hashable, Sendable, Codable {
     public let path: String
     public let head: String
     /// Full ref name (e.g. `refs/heads/main`), or `nil` when HEAD is detached

@@ -39,7 +39,8 @@ enum HomeActions {
     /// - Another worktree: the record switches to it
     ///   (`WorktreesModel.switchToWorktree`), which selects the repository;
     ///   one whose folder is gone asks to remove it instead, and the window
-    ///   stays where it is.
+    ///   stays where it is. Before this launch has listed the repository's
+    ///   worktrees, it's the worktree as the piece of work remembers it.
     static func open(_ key: WorktreeKey, place: SidebarPlace?, in context: WindowContext) async {
         let app = context.app
         guard let record = app.record(key.repositoryID) else {
@@ -50,20 +51,19 @@ enum HomeActions {
             finish(showing: place, in: context)
             return
         }
-        guard let status = app.worktreeStatuses[record.id]?.first(where: {
+        let status = app.worktreeStatuses[record.id]?.first {
             WorktreeKey(repositoryID: record.id, path: $0.entry.path) == key
-        }) else {
-            return
         }
-        if let other = status.repositoryID {
+        if let other = status?.repositoryID {
             app.select(.repository(other))
             finish(showing: place, in: context)
             return
         }
-        guard let repository = app.repository(record.id) else {
+        guard let worktree = status?.entry ?? app.piecesOfWork.first(where: { $0.id == key })?.entry,
+              let repository = app.repository(record.id)
+        else {
             return
         }
-        let worktree = status.entry
         if repository.worktrees.isMissing(worktree) {
             await context.presenter.perform { answers throws(OperationError) in
                 try await repository.worktrees.remove(worktree, confirmed: answers.confirmed)

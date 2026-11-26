@@ -311,7 +311,15 @@ final class WorktreeStatusWatcher {
     }
 
     private func setIndicator(_ indicator: RepositoryIndicator?, for key: ExactString) {
-        guard let worktree = worktrees[key], worktree.indicator != indicator else {
+        guard let worktree = worktrees[key] else {
+            return
+        }
+        // A status told of the worktree, or that there's none to tell:
+        // what the launch before remembered of it goes.
+        for id in worktree.owners {
+            app?.worktreeActivity.forgetRememberedFacts(forWorktreeAt: key.value, of: id)
+        }
+        guard worktree.indicator != indicator else {
             return
         }
         worktrees[key]?.indicator = indicator

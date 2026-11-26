@@ -16,7 +16,7 @@ public enum GitStatusEntry: String, Hashable, Sendable {
 }
 
 /// The enum representation of a Git file change in the app.
-public enum AppFileStatusKind: String, Hashable, Sendable {
+public enum AppFileStatusKind: String, Hashable, Sendable, Codable {
     case new = "New"
     case modified = "Modified"
     case deleted = "Deleted"

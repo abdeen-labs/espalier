@@ -175,7 +175,7 @@ public struct PieceOfWork: Sendable, Equatable, Identifiable {
 // MARK: - What it's made of
 
 /// What's known of one worktree of a repository (`WorkInputs.worktrees`).
-public struct WorktreeFacts: Sendable, Equatable {
+public struct WorktreeFacts: Sendable, Equatable, Codable {
     /// The worktree's folder: the record's path for the worktree it points
     /// at, else as `git worktree list` has it.
     public var path: String

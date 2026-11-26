@@ -137,35 +137,65 @@ extension AppModel {
         )
     }
 
-    /// A repository's worktrees, as the pieces of work take them: as
-    /// listed (`worktreeStatuses`), without those that are other
-    /// repositories in the list (they're those repositories' own), the one
-    /// the record points at under the record's path. Until a list has the
-    /// worktree the record points at, that one alone.
-    private func worktreeFacts(of record: RepositoryRecord) -> [WorktreeFacts] {
+    /// A repository's worktrees, as the pieces of work take them: what this
+    /// launch knows of them (`listedWorktreeFacts(of:)`), with what the
+    /// last one remembered of those no status has told of yet
+    /// (`factsRemembering`), each with its branch's pull request.
+    func worktreeFacts(of record: RepositoryRecord) -> [WorktreeFacts] {
+        let remembered = record.isMissing ? [] : worktreeActivity.rememberedFacts[record.id] ?? []
+        var facts = factsRemembering(remembered, in: listedWorktreeFacts(of: record), currentPath: record.path)
+        for index in facts.indices {
+            let listed = facts[index].entry.flatMap(localBranchName)
+            facts[index].pullRequest = pullRequest(of: record, head: facts[index].indicator?.head, fallback: listed)
+        }
+        return facts
+    }
+
+    /// What the pieces of work are made of now, as it's saved for the next
+    /// launch to show: each listed repository's worktrees that a status has
+    /// told of, in this launch or (while it hasn't) the one before. A
+    /// missing repository has none.
+    func workToRemember() -> [WorktreeActivityDocument.StoredWork] {
+        repositories.compactMap { record in
+            guard !record.isMissing else {
+                return nil
+            }
+            var known = worktreeFacts(of: record).filter { $0.indicator != nil }
+            guard !known.isEmpty else {
+                return nil
+            }
+            for index in known.indices where known[index].pullRequest == .unknown {
+                known[index].pullRequest = nil
+            }
+            return WorktreeActivityDocument.StoredWork(repositoryID: record.id, worktrees: known)
+        }
+    }
+
+    /// A repository's worktrees as this launch knows them, without their
+    /// pull requests: as listed (`worktreeStatuses`), without those that
+    /// are other repositories in the list (they're those repositories'
+    /// own), the one the record points at under the record's path. Until a
+    /// list has the worktree the record points at, that one alone.
+    private func listedWorktreeFacts(of record: RepositoryRecord) -> [WorktreeFacts] {
         guard let statuses = worktreeStatuses[record.id], statuses.contains(where: \.isCurrent) else {
-            let indicator = indicators[record.id]
             return [WorktreeFacts(
                 path: record.path,
                 isCurrent: true,
-                indicator: indicator,
-                tip: currentTip(of: record.id),
-                pullRequest: pullRequest(of: record.id, head: indicator?.head, fallback: nil)
+                indicator: indicators[record.id],
+                tip: currentTip(of: record.id)
             )]
         }
         return statuses.compactMap { status in
             if !status.isCurrent, status.repositoryID != nil {
                 return nil
             }
-            let indicator = indicator(for: status, of: record.id)
             let listedTip = status.entry.head.isEmpty ? nil : status.entry.head
             return WorktreeFacts(
                 path: status.isCurrent ? record.path : status.entry.path,
                 entry: status.entry,
                 isCurrent: status.isCurrent,
-                indicator: indicator,
-                tip: status.isCurrent ? currentTip(of: record.id) ?? listedTip : listedTip,
-                pullRequest: pullRequest(of: record.id, head: indicator?.head, fallback: status.branchName)
+                indicator: indicator(for: status, of: record.id),
+                tip: status.isCurrent ? currentTip(of: record.id) ?? listedTip : listedTip
             )
         }
     }
@@ -182,12 +212,86 @@ extension AppModel {
 
     /// The pull request status of the branch at `head`, else of `fallback`
     /// (the listed branch, before a status has loaded).
-    private func pullRequest(of id: RepositoryID, head: RepositoryIndicator.Head?, fallback: String?) -> BranchPullRequestStatus? {
+    private func pullRequest(of record: RepositoryRecord, head: RepositoryIndicator.Head?, fallback: String?) -> BranchPullRequestStatus? {
         let branch: String? = switch head {
         case .branch(let name)?: name
         case .detached?, .unborn?: nil
         case nil: fallback
         }
-        return branch.flatMap { pullRequestStatus(for: id, branch: $0) }
+        return branch.flatMap { shownPullRequestStatus(of: record, branch: $0) }
     }
+
+    /// How `branch`'s pull request is doing, as a piece of work shows it:
+    /// as GitHub answered in this launch (`pullRequestStatus(for:branch:)`);
+    /// until it has, as the launch before remembered it, while the
+    /// repository is on GitHub with a signed-in account.
+    private func shownPullRequestStatus(of record: RepositoryRecord, branch: String) -> BranchPullRequestStatus? {
+        let status = pullRequestStatus(for: record.id, branch: branch)
+        switch status {
+        case .noPullRequest?, .open?, .merged?:
+            return status
+        case .unknown?, nil:
+            guard let remembered = worktreeActivity.rememberedPullRequests[RepositoryBranch(repositoryID: record.id, name: branch)],
+                  record.gitHubRepository != nil, accounts.account(for: record) != nil
+            else {
+                return status
+            }
+            return remembered
+        }
+    }
+}
+
+/// The local branch a listed worktree has checked out; nil when it's
+/// detached.
+private func localBranchName(_ entry: WorktreeEntry) -> String? {
+    let prefix = "refs/heads/"
+    guard let ref = entry.branch, JSCompat.startsWith(ref, prefix) else {
+        return nil
+    }
+    return JSCompat.dropFirst(ref, prefix.unicodeScalars.count)
+}
+
+/// `live`, a repository's worktrees as this launch knows them, with what
+/// `remembered` (the launch before's) knows that it doesn't:
+///
+/// - A worktree no status has told of takes the indicator remembered for
+///   it, and the tip and the list entry where it has none.
+/// - The remembered worktrees `live` doesn't have come after it, as they
+///   were: the repository's worktrees haven't been listed yet. One at
+///   `currentPath`, the folder the record points at, is the current one.
+///
+/// `remembered` holds only worktrees this launch hasn't told the status of
+/// and, once the repository's worktrees are listed, only listed ones
+/// (`WorktreeActivityModel.rememberedFacts`). The facts' pull requests are
+/// left as they are.
+func factsRemembering(_ remembered: [WorktreeFacts], in live: [WorktreeFacts], currentPath: String) -> [WorktreeFacts] {
+    guard !remembered.isEmpty else {
+        return live
+    }
+    func key(_ path: String) -> ExactString {
+        ExactString(standardizedAbsolutePath(path) ?? path)
+    }
+    var known: [ExactString: WorktreeFacts] = [:]
+    for fact in remembered where known[key(fact.path)] == nil {
+        known[key(fact.path)] = fact
+    }
+    var facts = live
+    var livePaths: Set<ExactString> = []
+    for index in facts.indices {
+        let path = key(facts[index].path)
+        livePaths.insert(path)
+        guard facts[index].indicator == nil, let fact = known[path] else {
+            continue
+        }
+        facts[index].indicator = fact.indicator
+        facts[index].tip = facts[index].tip ?? fact.tip
+        facts[index].entry = facts[index].entry ?? fact.entry
+    }
+    let current = key(currentPath)
+    for fact in remembered where livePaths.insert(key(fact.path)).inserted {
+        var fact = fact
+        fact.isCurrent = key(fact.path) == current
+        facts.append(fact)
+    }
+    return facts
 }

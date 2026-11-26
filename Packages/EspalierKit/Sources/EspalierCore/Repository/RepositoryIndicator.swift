@@ -7,9 +7,9 @@ import GitKit
 ///
 /// Every status a refresh pass loads makes one (`RepositoryRefresher`), for
 /// the selected repository and the others alike.
-public struct RepositoryIndicator: Sendable, Equatable {
+public struct RepositoryIndicator: Sendable, Equatable, Codable {
     /// Where a repository's HEAD is.
-    public enum Head: Sendable, Equatable {
+    public enum Head: Sendable, Equatable, Codable {
         /// On a branch, by its name.
         case branch(name: String)
         /// Detached, at a commit.
@@ -30,7 +30,7 @@ public struct RepositoryIndicator: Sendable, Equatable {
     }
 
     /// An operation git stopped in and left for the user to finish.
-    public enum StoppedOperation: Sendable, Equatable {
+    public enum StoppedOperation: Sendable, Equatable, Codable {
         case rebase
         /// A merge, or a squash merge with conflicts.
         case merge

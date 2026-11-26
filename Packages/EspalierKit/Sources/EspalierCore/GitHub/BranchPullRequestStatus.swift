@@ -30,10 +30,10 @@ public struct RepositoryBranch: Sendable, Hashable {
 }
 
 /// An open pull request as the repository list shows it.
-public struct BranchPullRequest: Sendable, Equatable {
+public struct BranchPullRequest: Sendable, Equatable, Codable {
     /// How the checks of the pull request's head commit stand, check runs
     /// and commit statuses together.
-    public enum Checks: Sendable, Equatable {
+    public enum Checks: Sendable, Equatable, Codable {
         /// The commit has no checks.
         case none
         /// Some check hasn't finished.
@@ -43,7 +43,7 @@ public struct BranchPullRequest: Sendable, Equatable {
     }
 
     /// How the pull request's reviews stand.
-    public enum Review: Sendable, Equatable {
+    public enum Review: Sendable, Equatable, Codable {
         /// Nobody approved or requested changes.
         case none
         case approved
@@ -72,7 +72,7 @@ public struct BranchPullRequest: Sendable, Equatable {
 }
 
 /// A branch's merged pull request, with the commit its head merged at.
-public struct MergedPullRequest: Sendable, Equatable {
+public struct MergedPullRequest: Sendable, Equatable, Codable {
     public var number: Int
     public var title: String
     /// The pull request's page on GitHub.
@@ -95,7 +95,7 @@ public struct MergedPullRequest: Sendable, Equatable {
 }
 
 /// How the pull request of a repository's branch is doing.
-public enum BranchPullRequestStatus: Sendable, Equatable {
+public enum BranchPullRequestStatus: Sendable, Equatable, Codable {
     /// Not known yet: GitHub hasn't answered about the branch.
     case unknown
     /// The branch is pushed, isn't the default branch, and has no open or

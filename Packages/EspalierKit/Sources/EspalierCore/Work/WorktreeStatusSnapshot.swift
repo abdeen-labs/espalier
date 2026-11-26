@@ -34,15 +34,16 @@ public struct WorktreeStatusSnapshot: Sendable, Equatable, Codable {
     /// `logs/HEAD`'s). Nil when neither is known.
     public var lastChanged: Date?
     /// A few of the changed files, those with conflicts first, then in the
-    /// status's order: at most `changedFilesSampleLimit`. Neither saved nor
-    /// compared: the fingerprint changes whenever they do.
+    /// status's order: at most `changedFilesSampleLimit`. Saved, so they
+    /// show at the next launch, and not compared: the fingerprint changes
+    /// whenever they do.
     public var changedFilesSample: [ChangedFileSample]
 
     /// How many changed files a snapshot keeps the names of.
     public static let changedFilesSampleLimit = 3
 
     private enum CodingKeys: String, CodingKey {
-        case tip, branch, upstream, behind, changedFiles, lastChanged
+        case tip, branch, upstream, behind, changedFiles, lastChanged, changedFilesSample
     }
 
     public init(
@@ -71,7 +72,7 @@ public struct WorktreeStatusSnapshot: Sendable, Equatable, Codable {
         behind = try container.decodeIfPresent(Int.self, forKey: .behind)
         changedFiles = try container.decode(String.self, forKey: .changedFiles)
         lastChanged = try container.decodeIfPresent(Date.self, forKey: .lastChanged)
-        changedFilesSample = []
+        changedFilesSample = try container.decodeIfPresent([ChangedFileSample].self, forKey: .changedFilesSample) ?? []
     }
 
     /// The snapshot of `status`, the status of the worktree at
@@ -123,7 +124,7 @@ public struct WorktreeStatusSnapshot: Sendable, Equatable, Codable {
 }
 
 /// One of a worktree's changed files, by name.
-public struct ChangedFileSample: Sendable, Equatable {
+public struct ChangedFileSample: Sendable, Equatable, Codable {
     /// The path in the worktree.
     public var path: String
     public var kind: AppFileStatusKind
