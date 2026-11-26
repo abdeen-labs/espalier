@@ -136,6 +136,10 @@ public struct PieceOfWork: Sendable, Equatable, Identifiable {
     /// A few of the changed files, those with conflicts first, from its
     /// last status since launch.
     public let changedFilesSample: [ChangedFileSample]
+    /// The subjects of a few of the commits to push, the newest first, at
+    /// most `UnpushedCommits.limit`; none unless it's ahead of an upstream.
+    /// How many there are in all is `aheadBehind.ahead`.
+    public let unpushedCommitSubjects: [String]
     /// How its branch's pull request is doing; nil when there's nothing to
     /// say (`AppModel.pullRequestStatus(for:branch:)`).
     public let pullRequest: BranchPullRequestStatus?
@@ -215,6 +219,8 @@ public struct WorkInputs: Sendable {
     public var lastChanged: [WorktreeKey: Date]
     /// `WorktreeActivityModel.changedFilesSamples`.
     public var changedFilesSamples: [WorktreeKey: [ChangedFileSample]]
+    /// `WorktreeActivityModel.unpushedCommits`.
+    public var unpushedCommits: [WorktreeKey: UnpushedCommits]
     /// `WorktreeActivityModel.openWorktree`.
     public var openWorktree: WorktreeKey?
     /// `WorktreeActivityModel.pinnedRepositoryIDs`.
@@ -229,6 +235,7 @@ public struct WorkInputs: Sendable {
         activity: [WorktreeKey: WorktreeActivity] = [:],
         lastChanged: [WorktreeKey: Date] = [:],
         changedFilesSamples: [WorktreeKey: [ChangedFileSample]] = [:],
+        unpushedCommits: [WorktreeKey: UnpushedCommits] = [:],
         openWorktree: WorktreeKey? = nil,
         pinned: [RepositoryID] = [],
         settings: WorkSettings = WorkSettings(),
@@ -239,6 +246,7 @@ public struct WorkInputs: Sendable {
         self.activity = activity
         self.lastChanged = lastChanged
         self.changedFilesSamples = changedFilesSamples
+        self.unpushedCommits = unpushedCommits
         self.openWorktree = openWorktree
         self.pinned = pinned
         self.settings = settings
@@ -310,6 +318,7 @@ public func makePiecesOfWork(_ inputs: WorkInputs) -> [PieceOfWork] {
                 conflictedFilesCount: indicator?.conflictedFilesCount ?? 0,
                 stoppedOperation: indicator?.stoppedOperation,
                 changedFilesSample: indicator.map { $0.changedFilesCount > 0 } == true ? inputs.changedFilesSamples[key] ?? [] : [],
+                unpushedCommitSubjects: (indicator?.aheadBehind?.ahead ?? 0) > 0 ? inputs.unpushedCommits[key]?.subjects ?? [] : [],
                 pullRequest: facts.pullRequest,
                 isUnseen: !isOpen && activity?.hasActivitySinceLastOpen(among: kinds) == true,
                 lastChanged: lastChanged,

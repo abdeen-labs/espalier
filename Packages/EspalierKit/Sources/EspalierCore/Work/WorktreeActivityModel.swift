@@ -56,6 +56,11 @@ public final class WorktreeActivityModel {
     /// launch found (`WorktreeStatusSnapshot.changedFilesSample`).
     public private(set) var changedFilesSamples: [WorktreeKey: [ChangedFileSample]] = [:]
 
+    /// The commits each worktree that's ahead of its upstream has to push,
+    /// as its last status since launch found them
+    /// (`recordStatusForUnpushedCommits`).
+    public private(set) var unpushedCommits: [WorktreeKey: UnpushedCommits] = [:]
+
     @ObservationIgnored weak var app: AppModel?
     @ObservationIgnored let store: WorktreeActivityStore
     @ObservationIgnored private let scheduler: any Scheduler
@@ -75,7 +80,14 @@ public final class WorktreeActivityModel {
     /// The saves being written, by revision.
     @ObservationIgnored private var writes: [UInt64: Task<Void, Never>] = [:]
 
+    @ObservationIgnored let environment: AppEnvironment
+    /// The latest read of each worktree's commits to push: an older one
+    /// that finishes later is dropped.
+    @ObservationIgnored private var unpushedCommitsRequests: [WorktreeKey: UInt64] = [:]
+    @ObservationIgnored private var nextUnpushedCommitsRequest: UInt64 = 0
+
     init(environment: AppEnvironment) {
+        self.environment = environment
         store = WorktreeActivityStore(fileURL: environment.directories.worktreeActivity)
         scheduler = environment.scheduler
         autosaves = environment.backgroundServices.contains(.worktreeActivityAutosave)
@@ -160,8 +172,29 @@ public final class WorktreeActivityModel {
         didChange()
     }
 
-    private func isListed(_ id: RepositoryID) -> Bool {
+    func isListed(_ id: RepositoryID) -> Bool {
         app?.record(id) != nil
+    }
+
+    // MARK: Commits to push
+
+    func setUnpushedCommits(_ commits: UnpushedCommits?, for key: WorktreeKey) {
+        if commits == nil {
+            unpushedCommitsRequests[key] = nil
+        }
+        if unpushedCommits[key] != commits {
+            unpushedCommits[key] = commits
+        }
+    }
+
+    func beginUnpushedCommitsRequest(for key: WorktreeKey) -> UInt64 {
+        nextUnpushedCommitsRequest &+= 1
+        unpushedCommitsRequests[key] = nextUnpushedCommitsRequest
+        return nextUnpushedCommitsRequest
+    }
+
+    func isCurrentUnpushedCommitsRequest(_ request: UInt64, for key: WorktreeKey) -> Bool {
+        unpushedCommitsRequests[key] == request
     }
 
     // MARK: The open worktree
@@ -242,6 +275,15 @@ public final class WorktreeActivityModel {
                 remaining[key] = nil
             }
             lastChanged = remaining
+        }
+        let forgottenCommits = unpushedCommits.keys.filter(shouldForget)
+        if !forgottenCommits.isEmpty {
+            var remaining = unpushedCommits
+            for key in forgottenCommits {
+                remaining[key] = nil
+                unpushedCommitsRequests[key] = nil
+            }
+            unpushedCommits = remaining
         }
         let forgottenSamples = changedFilesSamples.keys.filter(shouldForget)
         if !forgottenSamples.isEmpty {

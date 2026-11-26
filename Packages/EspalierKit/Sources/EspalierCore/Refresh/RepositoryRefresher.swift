@@ -19,7 +19,7 @@ let commitBatchSize = 100
 /// |---|---|---|
 /// | 1 | A missing record stops; a vanished path tries worktree recovery, else marks the record missing | all |
 /// | 2 | The git directory, when the record lacks it; the directories to watch | all |
-/// | 3 | Status: tip, ahead/behind, the operation in progress, changed files, the indicator, the worktree's activity (`WorktreeActivityModel`); the features hear about it at once, and waiters needing only the status go on. A tip SHA change adds `.refs` | status |
+/// | 3 | Status: tip, ahead/behind, the operation in progress, changed files, the indicator, the worktree's activity (`WorktreeActivityModel`); the features hear about it at once, and waiters needing only the status go on; then, while ahead of an upstream, the commits to push (`recordStatusForUnpushedCommits`). A tip SHA change adds `.refs` | status |
 /// | 4 | Remotes: all, default, current, upstream | remotes |
 /// | 5 | Branches and recent branches, default and upstream default branches, `pull.rebase` | refs |
 /// | 6 | `FETCH_HEAD`'s date and the author (metadata); stashes, worktrees, local commits (refs) | refs, metadata |
@@ -127,6 +127,15 @@ final class RepositoryRefresher {
             // slower steps), and waiters that need only it go on.
             notifyFeatures(model, applied: .status, options: options, status: loaded, previousTip: previousTip)
             token.didApply(.status)
+            // The commits to push, for the piece of work's peek, once the
+            // status's waiters have gone on.
+            await app.worktreeActivity.recordStatusForUnpushedCommits(
+                loaded,
+                forWorktreeAt: repository.path,
+                gitDirectory: model.watchedPaths?.gitDirectory ?? model.record.resolvedGitDir,
+                of: model.id
+            )
+            guard token.isCurrent else { return }
             // A new tip loads the refs again, and so does a tip the refs
             // weren't loaded for: a pass that applied this tip's status may
             // have been superseded before its refs loaded (the local

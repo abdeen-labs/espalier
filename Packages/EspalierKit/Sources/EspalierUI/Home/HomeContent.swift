@@ -60,6 +60,9 @@ enum HomePeek: Equatable {
     case none
     /// Up to three changed files, and how many more there are.
     case files([ChangedFileSample], more: Int)
+    /// Up to three subjects of the commits to push, the newest first, and
+    /// how many more there are.
+    case commits([String], more: Int)
     /// The pull request's title.
     case pullRequest(title: String)
     /// Merged work whose worktree and branch are still on this Mac, or only
@@ -254,8 +257,9 @@ extension HomeContent {
         }
     }
 
-    /// The changed files for changes and a stopped operation, the pull
-    /// request's title for its headlines, and what's left of merged work.
+    /// The changed files for changes and a stopped operation, the commits
+    /// to push, the pull request's title for its headlines, and what's left
+    /// of merged work.
     private static func peek(of headline: WorkHeadline, piece: PieceOfWork) -> HomePeek {
         switch headline {
         case .filesChanged, .operationStopped:
@@ -268,7 +272,13 @@ extension HomeContent {
             return .pullRequest(title: pullRequest.title)
         case .merged:
             return .merged(keepsWorktree: !isMainWorktree(piece))
-        case .commitsToPush, .commitsToPull, .pushedWithoutPullRequest:
+        case .commitsToPush(let ahead):
+            let shown = piece.unpushedCommitSubjects
+            guard !shown.isEmpty else {
+                return .none
+            }
+            return .commits(shown, more: max(ahead - shown.count, 0))
+        case .commitsToPull, .pushedWithoutPullRequest:
             return .none
         }
     }

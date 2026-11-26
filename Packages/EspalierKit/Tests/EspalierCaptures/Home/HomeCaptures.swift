@@ -1,5 +1,6 @@
 // Home: the full board (six pieces of work that need the user, each with
-// its own headline, the first focused and unseen; In Progress with work
+// its own headline and peek (the push card its commits), the first focused
+// and unseen; In Progress with work
 // changing now and work waiting on checks; Quiet closed), Quiet open, the
 // board at two columns and at one, nothing needing the user, status off, a
 // long repository and branch name, Fetch All running, and a card whose Push
@@ -85,6 +86,7 @@ struct HomeCaptureBoard {
     var activity: [WorktreeKey: WorktreeActivity] = [:]
     var lastChanged: [WorktreeKey: Date] = [:]
     var samples: [WorktreeKey: [ChangedFileSample]] = [:]
+    var commits: [WorktreeKey: UnpushedCommits] = [:]
     var pushKey: WorktreeKey!
     let now = Date()
 
@@ -99,7 +101,11 @@ struct HomeCaptureBoard {
                 ChangedFileSample(path: "Harbor/Stores/TideCache.swift", kind: .new),
                 ChangedFileSample(path: "Harbor/Charts/TideChart.swift", kind: .new),
             ])
-            board.pushKey = board.add("harbor-ios", branch: "fix/tide-zone", ahead: 3, minutesAgo: 20)
+            board.pushKey = board.add("harbor-ios", branch: "fix/tide-zone", ahead: 3, minutesAgo: 20, commits: [
+                "Parse tides in the station\u{2019}s time zone",
+                "Fix crash when a station has no tides",
+                "Cover time zones in the tide tests",
+            ])
             board.add("pier-api", branch: "agent/rate-limits", aheadBehind: AheadBehind(ahead: 0, behind: 0), minutesAgo: 30, unseen: true, pullRequest: .open(BranchPullRequest(
                 number: 142, title: "Limit requests per station", url: url, isDraft: false, checks: .failing, review: .none,
                 updatedAt: board.now.addingTimeInterval(-9 * 60)
@@ -139,7 +145,11 @@ struct HomeCaptureBoard {
         board.add("international-weather-station-dashboard-service", branch: "agent/rework-the-forecast-pipeline-for-coastal-stations", changed: 3, minutesAgo: 30, unseen: true, samples: [
             ChangedFileSample(path: "Sources/ForecastPipeline/CoastalStationForecastAggregator.swift", kind: .modified),
         ])
-        board.add("short", branch: "agent/a-very-long-branch-name-that-keeps-going-and-going", ahead: 1, minutesAgo: 90)
+        board.add("short", branch: "agent/a-very-long-branch-name-that-keeps-going-and-going", ahead: 5, minutesAgo: 90, commits: [
+            "Rework the forecast pipeline so coastal stations aggregate their readings before the tide model runs",
+            "Fix the chart",
+            "Cover the pipeline in tests",
+        ])
         board.add("another-very-long-repository-name-for-a-row", branch: "feature/long-running-agent-task-in-progress", changed: 1, minutesAgo: 1)
         return board
     }
@@ -160,6 +170,7 @@ struct HomeCaptureBoard {
         linked: Bool = false,
         tip: String? = nil,
         samples: [ChangedFileSample] = [],
+        commits: [String] = [],
         pullRequest: BranchPullRequestStatus? = nil
     ) -> WorktreeKey {
         let path = linked ? "/Users/joe/Developer/\(name)-worktree" : "/Users/joe/Developer/\(name)"
@@ -185,6 +196,15 @@ struct HomeCaptureBoard {
         lastChanged[key] = changedAt
         activity[key] = WorktreeActivity(files: changedAt, lastOpen: unseen ? changedAt.addingTimeInterval(-60) : changedAt)
         self.samples[key] = samples
+        if let ahead, !commits.isEmpty {
+            self.commits[key] = UnpushedCommits(
+                subjects: commits,
+                tip: tip ?? "",
+                upstream: "origin/\(branch)",
+                upstreamTip: nil,
+                aheadBehind: AheadBehind(ahead: ahead, behind: 0)
+            )
+        }
         return key
     }
 
@@ -195,6 +215,7 @@ struct HomeCaptureBoard {
             activity: activity,
             lastChanged: lastChanged,
             changedFilesSamples: samples,
+            unpushedCommits: commits,
             now: now
         ))
         let board = makeBoard(pieces, pinned: [], isStatusOff: false)

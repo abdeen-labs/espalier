@@ -123,5 +123,11 @@ extension AppModel {
             gitDirectory: update.gitDirectory
         )
         worktreeActivity.recordStatus(snapshot, forWorktreeAt: update.worktreePath, of: update.repositoryID)
+        await worktreeActivity.recordStatusForUnpushedCommits(
+            update.status,
+            forWorktreeAt: update.worktreePath,
+            gitDirectory: update.gitDirectory,
+            of: update.repositoryID
+        )
     }
 }

@@ -274,6 +274,26 @@ struct HomePeekView: View {
                         .padding(.leading, Metrics.Home.peekTile + Metrics.insetSmall)
                 }
             }
+        case .commits(let subjects, let more):
+            VStack(alignment: .leading, spacing: Metrics.Home.peekSpacing) {
+                ForEach(Array(subjects.enumerated()), id: \.offset) { _, subject in
+                    HStack(spacing: Metrics.insetSmall) {
+                        HomeCommitBullet()
+                        Text(subject)
+                            .font(Typography.secondary)
+                            .foregroundStyle(.text)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .tooltip(subject)
+                    }
+                }
+                if more > 0 {
+                    Text("and \(formatCount(more, numberFormat)) more")
+                        .font(Typography.secondary)
+                        .foregroundStyle(.text3)
+                        .padding(.leading, Metrics.Home.peekTile + Metrics.insetSmall)
+                }
+            }
         case .pullRequest(let title):
             Text(title)
                 .font(Typography.secondary)
@@ -287,9 +307,27 @@ struct HomePeekView: View {
     }
 }
 
+/// A commit to push's bullet: a small ring, centered in a file tile's
+/// width so the subjects line up with the files' names.
+struct HomeCommitBullet: View {
+    var body: some View {
+        Circle()
+            .strokeBorder(Color(espalier: Palette.text3), lineWidth: Metrics.Home.commitBulletLineWidth)
+            .frame(width: Metrics.Home.commitBullet, height: Metrics.Home.commitBullet)
+            .frame(width: Metrics.Home.peekTile, height: Metrics.Home.peekTile)
+            .accessibilityHidden(true)
+    }
+}
+
+nonisolated extension Metrics.Home {
+    /// A commit to push's ring, and its line.
+    public static let commitBullet: CGFloat = 7
+    public static let commitBulletLineWidth: CGFloat = 1.5
+}
+
 extension HomePeek {
-    /// The peek in one line, for a plain row: the files' names, the pull
-    /// request's title, or what's left of merged work.
+    /// The peek in one line, for a plain row: the files' names, the commits'
+    /// subjects, the pull request's title, or what's left of merged work.
     func summary(_ format: NumberFormat) -> String? {
         switch self {
         case .none:
@@ -297,6 +335,9 @@ extension HomePeek {
         case .files(let files, let more):
             let names = files.map { POSIXPath.basename($0.path) }.joined(separator: ", ")
             return more > 0 ? "\(names), and \(formatCount(more, format)) more" : names
+        case .commits(let subjects, let more):
+            let joined = subjects.joined(separator: ", ")
+            return more > 0 ? "\(joined), and \(formatCount(more, format)) more" : joined
         case .pullRequest(let title):
             return title
         case .merged(let keepsWorktree):

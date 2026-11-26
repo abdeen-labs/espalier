@@ -129,6 +129,7 @@ extension AppModel {
             activity: worktreeActivity.activity,
             lastChanged: worktreeActivity.lastChanged,
             changedFilesSamples: worktreeActivity.changedFilesSamples,
+            unpushedCommits: worktreeActivity.unpushedCommits,
             openWorktree: worktreeActivity.openWorktree,
             pinned: worktreeActivity.pinnedRepositoryIDs,
             settings: preferences.workSettings,
