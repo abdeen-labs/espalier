@@ -35,18 +35,13 @@ struct HomeScreen: View {
     /// before Push All or Clean Up), nothing shows as running yet.
     private func content(_ model: HomeModel) -> HomeContent {
         let app = context.app
-        let pieces = app.piecesOfWork
-        let board = makeBoard(
-            pieces,
-            pinned: app.worktreeActivity.pinnedRepositoryIDs,
-            isStatusOff: !app.preferences.repositoryIndicatorsEnabled
-        )
+        let board = app.board
         var running = model.running
         if context.presenter.isPresentingModal || context.modals.isPresenting {
             running.pieces = []
             running.batch.isPushingAll = false
         }
-        return HomeContent.make(board: board, pieces: pieces, running: running, focus: model.focus) { piece, branch in
+        return HomeContent.make(board: board, running: running, focus: model.focus) { piece, branch in
             guard let repository = app.repository(piece.record.id) else {
                 return Palette.accent
             }

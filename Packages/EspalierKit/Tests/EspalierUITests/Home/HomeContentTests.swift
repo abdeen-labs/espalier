@@ -48,7 +48,7 @@ private struct Board {
     func content(focus: WorktreeKey? = nil) -> HomeContent {
         let settings = WorkSettings(needsYouReasons: Set(NeedsYouReason.allCases))
         let pieces = makePiecesOfWork(WorkInputs(repositories: records, worktrees: worktrees, lastChanged: lastChanged, settings: settings, now: now))
-        return HomeContent.make(board: makeBoard(pieces, pinned: [], isStatusOff: false), pieces: pieces, focus: focus) { _, _ in Palette.accent }
+        return HomeContent.make(board: makeBoard(pieces, pinned: [], isStatusOff: false), focus: focus) { _, _ in Palette.accent }
     }
 }
 
@@ -92,7 +92,7 @@ struct HomeContentTests {
         #expect(board.content().pushAllCount == 1)
     }
 
-    @Test("a repository whose status hasn't loaded isn't quiet yet, and with nothing else the heading waits")
+    @Test("a repository whose status hasn't loaded isn't quiet yet and counts as being checked; the title waits until a card is known")
     func loading() {
         var board = Board()
         board.add("quiet")
@@ -101,10 +101,13 @@ struct HomeContentTests {
 
         #expect(content.quiet.map(\.title) == ["quiet"])
         #expect(!content.quiet.contains { $0.id == pending.repositoryID })
-        #expect(content.isLoading)
+        #expect(content.checkingCount == 1)
+        #expect(content.isTitleWaiting)
 
         board.add("changed", changed: 1)
-        #expect(!board.content().isLoading)
+        let known = board.content()
+        #expect(known.checkingCount == 1)
+        #expect(!known.isTitleWaiting)
     }
 
     @Test("status off says so and nothing else")
@@ -112,7 +115,7 @@ struct HomeContentTests {
         var board = Board()
         board.add("changed", changed: 1)
         let pieces = makePiecesOfWork(WorkInputs(repositories: board.records, worktrees: board.worktrees, now: board.now))
-        let content = HomeContent.make(board: makeBoard(pieces, pinned: [], isStatusOff: true), pieces: pieces) { _, _ in Palette.accent }
+        let content = HomeContent.make(board: makeBoard(pieces, pinned: [], isStatusOff: true)) { _, _ in Palette.accent }
         #expect(content.isStatusOff)
         #expect(content.cards.isEmpty)
     }

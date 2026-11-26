@@ -136,8 +136,10 @@ struct HomeCardRow: View {
     }
 }
 
-/// The repository's title, and its owner in tertiary text where the title
-/// is ambiguous.
+/// The repository's title, and its owner (or its folder) in tertiary text
+/// where the title is ambiguous. The owner is at most
+/// `Metrics.Home.ownerMaxWidth` wide and gives way first, cut at its head so
+/// the folder nearest the repository stays.
 struct HomeRepositoryTitle: View {
     let title: String
     let owner: String?
@@ -151,13 +153,31 @@ struct HomeRepositoryTitle: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             if let owner {
-                Text(owner)
-                    .font(Typography.secondary)
-                    .foregroundStyle(.text3)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HomeCappedWidth(maximumWidth: Metrics.Home.ownerMaxWidth) {
+                    Text(owner)
+                        .font(Typography.secondary)
+                        .foregroundStyle(.text3)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
+                .layoutPriority(-1)
+                .tooltip(owner)
             }
         }
+    }
+}
+
+/// Offers its one view at most `maximumWidth` and takes the view's own
+/// size, where `frame(maxWidth:)` would grow to `maximumWidth`.
+struct HomeCappedWidth: Layout {
+    let maximumWidth: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        subviews.first?.sizeThatFits(ProposedViewSize(width: min(proposal.width ?? maximumWidth, maximumWidth), height: proposal.height)) ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
 }
 
@@ -325,6 +345,10 @@ struct HomeCommitBullet: View {
 }
 
 nonisolated extension Metrics.Home {
+    /// The widest the text that tells two same-named repositories apart
+    /// gets.
+    public static let ownerMaxWidth: CGFloat = 160
+
     /// A commit to push's ring, and its line.
     public static let commitBullet: CGFloat = 7
     public static let commitBulletLineWidth: CGFloat = 1.5

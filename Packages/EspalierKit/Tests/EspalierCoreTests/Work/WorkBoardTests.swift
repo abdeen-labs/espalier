@@ -82,6 +82,30 @@ private struct Builder {
 
 @Suite("Work board and shelf")
 struct WorkBoardTests {
+    @Test("the repositories being checked are those with a worktree whose status hasn't loaded, missing ones aside")
+    func checking() {
+        let loaded = ModelFixtures.record(path: "/repositories/loaded")
+        let waiting = ModelFixtures.record(path: "/repositories/waiting")
+        let partly = ModelFixtures.record(path: "/repositories/partly")
+        let missing = ModelFixtures.record(path: "/repositories/missing", isMissing: true)
+        let indicator = RepositoryIndicator(head: .branch(name: "main"), aheadBehind: nil, changedFilesCount: 0)
+        let work = makePiecesOfWork(WorkInputs(
+            repositories: [loaded, waiting, partly, missing],
+            worktrees: [
+                loaded.id: [WorktreeFacts(path: loaded.path, isCurrent: true, indicator: indicator)],
+                waiting.id: [WorktreeFacts(path: waiting.path, isCurrent: true)],
+                partly.id: [
+                    WorktreeFacts(path: partly.path, isCurrent: true, indicator: indicator),
+                    WorktreeFacts(path: "/repositories/partly-feature", isCurrent: false),
+                ],
+                missing.id: [WorktreeFacts(path: missing.path, isCurrent: true)],
+            ],
+            now: now
+        ))
+
+        #expect(makeBoard(work, pinned: [], isStatusOff: false).checkingRepositories == [waiting.id, partly.id])
+    }
+
     @Test("Needs You and In Progress each have the latest activity first, those in the same minute or with none by title")
     func sections() {
         var builder = Builder()

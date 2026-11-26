@@ -38,6 +38,10 @@ public struct WorkBoard: Sendable, Equatable {
     /// Whether status is off (the setting that keeps the repositories'
     /// statuses live): Home says so.
     public var isStatusOff: Bool
+    /// The listed repositories, missing ones aside, with a piece of work
+    /// whose status hasn't loaded yet: until it has, Home can't tell what
+    /// they need.
+    public var checkingRepositories: Set<RepositoryID>
 }
 
 /// What the shelf shows (`AppModel.shelf`).
@@ -66,7 +70,8 @@ public func makeBoard(_ work: [PieceOfWork], pinned: [RepositoryID], isStatusOff
             }
             return aheadBehind.ahead > 0 && aheadBehind.behind == 0
         },
-        isStatusOff: isStatusOff
+        isStatusOff: isStatusOff,
+        checkingRepositories: Set(work.filter { !$0.hasStatus && !$0.record.isMissing }.map(\.record.id))
     )
 }
 

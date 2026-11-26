@@ -13,9 +13,9 @@ import GitKit
 struct HomeContent: Equatable {
     /// Status is off: Home can't know anything.
     var isStatusOff = false
-    /// Nothing needs the user or is in progress yet, and some repositories
-    /// haven't told their status: the heading says nothing until they have.
-    var isLoading = false
+    /// How many listed repositories haven't told their status yet
+    /// (`WorkBoard.checkingRepositories`).
+    var checkingCount = 0
     /// The pieces of work that need the user, in the board's order.
     var cards: [HomeCard] = []
     /// The pieces of work in progress, in the board's order.
@@ -30,6 +30,13 @@ struct HomeContent: Equatable {
     var pushAllCount = 0
     /// What runs across the repositories.
     var batch = HomeBatchState()
+
+    /// Nothing is known to need the user while some repositories haven't
+    /// told their status: the title says nothing until every one has, and
+    /// the line under it says how many are left.
+    var isTitleWaiting: Bool {
+        cards.isEmpty && checkingCount > 0
+    }
 
     /// The card that has the focus: its button is the prominent one.
     var focusedCard: HomeCard? {
@@ -154,7 +161,7 @@ struct HomeRunning: Equatable {
 }
 
 extension HomeContent {
-    /// The content of `board`, whose pieces of work are `pieces`.
+    /// The content of `board`.
     ///
     /// - Parameters:
     ///   - focus: The card the user last moved the focus to; the first card
@@ -162,7 +169,6 @@ extension HomeContent {
     ///   - branchColor: A piece of work's branch's color.
     static func make(
         board: WorkBoard,
-        pieces: [PieceOfWork],
         running: HomeRunning = HomeRunning(),
         focus: WorktreeKey? = nil,
         branchColor: (PieceOfWork, String) -> NSColor
@@ -172,7 +178,7 @@ extension HomeContent {
         }
         // Repositories whose status hasn't loaded would show as quiet, then
         // jump to Needs You.
-        let pending = Set(pieces.filter { !$0.hasStatus }.map(\.record.id))
+        let pending = board.checkingRepositories
         let focused = board.needsYou.contains { $0.id == focus } ? focus : board.needsYou.first?.id
         let cards = board.needsYou.compactMap { piece -> HomeCard? in
             guard let headline = piece.headline else {
@@ -213,7 +219,7 @@ extension HomeContent {
             HomeQuietRepository(id: $0.id, title: $0.title, owner: owner($0.record, $0.needsDisambiguation))
         }
         return HomeContent(
-            isLoading: cards.isEmpty && inProgress.isEmpty && !pending.isEmpty,
+            checkingCount: pending.count,
             cards: cards,
             inProgress: inProgress,
             quiet: quiet,
@@ -335,8 +341,9 @@ extension HomeContent {
     }
 
     /// What's true under the title: how many changed since the user last
-    /// looked and how many are in progress; with neither and nothing that
-    /// needs the user, that everything is clean. Nil with nothing to say.
+    /// looked, how many are in progress, and how many repositories are
+    /// still being checked; with none of these and nothing that needs the
+    /// user, that everything is clean. Nil with nothing to say.
     func summary(_ format: NumberFormat) -> String? {
         var sentences: [String] = []
         if unseenCount > 0 {
@@ -347,7 +354,9 @@ extension HomeContent {
             let more = cards.isEmpty ? "" : " more"
             sentences.append(inProgress.count == 1 ? "1\(more) is in progress." : "\(count)\(more) are in progress.")
         }
-        if cards.isEmpty, inProgress.isEmpty {
+        if checkingCount > 0 {
+            sentences.append(checkingCount == 1 ? "Checking 1 repository…" : "Checking \(formatCount(checkingCount, format)) repositories…")
+        } else if cards.isEmpty, inProgress.isEmpty {
             sentences.append("Everything is clean and in sync.")
         }
         return sentences.isEmpty ? nil : sentences.joined(separator: " ")

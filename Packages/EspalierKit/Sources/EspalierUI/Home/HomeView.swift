@@ -250,6 +250,10 @@ struct HomeHeading: View {
                     .foregroundStyle(.text)
                     .contentTransition(motion.animates ? .numericText() : .identity)
                     .motion(Motion.kindChange, value: content.cards.count)
+                    // Until every repository has told its status, the title
+                    // keeps its room and claims nothing.
+                    .opacity(content.isTitleWaiting ? 0 : 1)
+                    .accessibilityHidden(content.isTitleWaiting)
                     .accessibilityAddTraits(.isHeader)
                 Text(summary ?? " ")
                     .font(Typography.row)
@@ -258,9 +262,6 @@ struct HomeHeading: View {
                     .motion(Motion.kindChange, value: summary)
                     .accessibilityHidden(summary == nil)
             }
-            // Before the statuses load, the heading keeps its room and says
-            // nothing, so nothing flashes in and out.
-            .opacity(content.isLoading ? 0 : 1)
             .lineLimit(1)
             .layoutPriority(1)
             Spacer(minLength: Metrics.insetMedium)

@@ -44,6 +44,37 @@ struct HomeCaptures {
         draw(HomeCaptureBoard.full(needsYou: false, inProgress: false).content(), named: "all-clean", size: CGSize(width: wide.width, height: 300))
     }
 
+    @Test("some repositories still being checked: the cards known so far, and the line saying how many are left; and none known yet")
+    func checking() {
+        var board = HomeCaptureBoard()
+        board.add("harbor", branch: "feature/charts", changed: 3, minutesAgo: 30, samples: [
+            ChangedFileSample(path: "Harbor/TideStore.swift", kind: .modified),
+        ])
+        board.add("tide-kit", branch: "agent/units", changed: 2, minutesAgo: 1)
+        for name in ["pier-api", "buoy-ios", "lighthouse", "docs-site", "mooring"] {
+            board.add(name, branch: "main", minutesAgo: 60, isChecking: true)
+        }
+        draw(board.content(), named: "checking", size: CGSize(width: wide.width, height: 520))
+
+        var none = HomeCaptureBoard()
+        for name in ["pier-api", "buoy-ios", "lighthouse"] {
+            none.add(name, branch: "main", minutesAgo: 60, isChecking: true)
+        }
+        draw(none.content(), named: "checking-nothing-known", size: CGSize(width: wide.width, height: 200))
+    }
+
+    @Test("two repositories with one title, told apart by long folders, on a card and on an In Progress row")
+    func sameTitles() {
+        var board = HomeCaptureBoard()
+        let deep = "/private/tmp/claude-501/-Users-joe-Developer-espalier/d33ad52d-0c11-443b-9d51-9599d9e1e059/scratchpad/live/repos"
+        board.add("pier-api", branch: "agent/rate-limits", changed: 2, minutesAgo: 30, samples: [
+            ChangedFileSample(path: "Sources/RateLimiter.swift", kind: .modified),
+        ], folder: deep)
+        board.add("pier-api", branch: "main", changed: 1, minutesAgo: 1, folder: "/Users/joe/Developer/clients/harbor-co/backend/services")
+        draw(board.content(), named: "same-titles", size: CGSize(width: 1000, height: 460))
+        draw(board.content(), named: "same-titles-narrow", size: CGSize(width: 560, height: 560))
+    }
+
     @Test("status off")
     func statusOff() {
         draw(HomeContent(isStatusOff: true), named: "status-off", size: CGSize(width: 900, height: 560))
@@ -171,9 +202,11 @@ struct HomeCaptureBoard {
         tip: String? = nil,
         samples: [ChangedFileSample] = [],
         commits: [String] = [],
-        pullRequest: BranchPullRequestStatus? = nil
+        pullRequest: BranchPullRequestStatus? = nil,
+        folder: String = "/Users/joe/Developer",
+        isChecking: Bool = false
     ) -> WorktreeKey {
-        let path = linked ? "/Users/joe/Developer/\(name)-worktree" : "/Users/joe/Developer/\(name)"
+        let path = linked ? "\(folder)/\(name)-worktree" : "\(folder)/\(name)"
         let record = ModelFixtures.record(path: path, alias: name)
         records.append(record)
         let key = WorktreeKey(repositoryID: record.id, path: record.path)
@@ -182,7 +215,7 @@ struct HomeCaptureBoard {
             path: record.path,
             entry: entry,
             isCurrent: true,
-            indicator: RepositoryIndicator(
+            indicator: isChecking ? nil : RepositoryIndicator(
                 head: .branch(name: branch),
                 aheadBehind: aheadBehind ?? ahead.map { AheadBehind(ahead: $0, behind: 0) },
                 changedFilesCount: changed,
@@ -220,7 +253,7 @@ struct HomeCaptureBoard {
         ))
         let board = makeBoard(pieces, pinned: [], isStatusOff: false)
         let colors = BranchColors(branches: ["feature/charts", "fix/tide-zone", "agent/rate-limits", "agent/onboarding", "cache-keys", "agent/nav", "feature/widget", "agent/units", "agent/cache"], current: nil, defaultBranch: "main")
-        return HomeContent.make(board: board, pieces: pieces, running: running, focus: focus) { _, branch in
+        return HomeContent.make(board: board, running: running, focus: focus) { _, branch in
             colors.color(of: (name: branch, isRemote: false))
         }
     }
