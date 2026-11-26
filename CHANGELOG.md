@@ -16,6 +16,14 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.7.1] - 2026-11-25
+
+### Changed
+
+- On Home, Quiet opens into a card for each owner, with that owner's repositories listed inside. A repository that isn't on GitHub is listed under its folder. Each row says when the repository last changed, shows its branch when it isn't on the default one, and opens the repository when you click it.
+- Watched folders are searched all the way down instead of three levels, and inside repositories too, so a repository kept in another one's folder is found. Folders that hold dependencies, such as node_modules, DerivedData, and Pods, are skipped.
+- Fetching is faster: each remote takes one connection instead of two, and Fetch All fetches six repositories at a time instead of three.
+
 ## [1.7] - 2026-11-25
 
 ### Added
@@ -278,7 +286,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.7...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/abdeen-labs/espalier/compare/v1.7...v1.7.1
 [1.7]: https://github.com/abdeen-labs/espalier/compare/v1.6...v1.7
 [1.6]: https://github.com/abdeen-labs/espalier/compare/v1.5.6...v1.6
 [1.5.6]: https://github.com/abdeen-labs/espalier/compare/v1.5.5...v1.5.6
