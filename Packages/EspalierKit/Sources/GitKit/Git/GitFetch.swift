@@ -3,8 +3,16 @@
 import EspalierSupport
 import Foundation
 
+/// The environment variable a fetch reads `remote.<name>.followRemoteHEAD`
+/// from.
+private let followRemoteHEADVariable = "ESPALIER_FOLLOW_REMOTE_HEAD"
+
 private func getFetchArgs(_ remote: String, hasProgressCallback: Bool) -> [String] {
-    ["fetch"]
+    // `followRemoteHEAD` set to `always` has the fetch point the remote's
+    // HEAD (its default branch) at the remote's own, over the connection it
+    // has open. `--config-env` splits at its last `=`, so the remote's name
+    // may have one.
+    ["--config-env=remote.\(remote).followRemoteHEAD=\(followRemoteHEADVariable)", "fetch"]
         + (hasProgressCallback ? ["--progress"] : [])
         + [
             "--prune",
@@ -14,7 +22,9 @@ private func getFetchArgs(_ remote: String, hasProgressCallback: Bool) -> [Strin
         ]
 }
 
-/// Fetch from the given remote.
+/// Fetch from the given remote. The fetch also updates the remote's HEAD
+/// (its default branch), which it leaves as it is when the remote's HEAD
+/// names no one branch.
 ///
 /// - Parameters:
 ///   - repository: The repository to fetch into
@@ -34,8 +44,10 @@ public func fetch(
 ) async throws {
     // `isBackgroundTask` applies to every fetch, with or without a progress
     // callback.
+    var env = await envForRemoteOperation(remote.url)
+    env[followRemoteHEADVariable] = "always"
     var opts = GitExecutionOptions(
-        env: await envForRemoteOperation(remote.url),
+        env: env,
         successExitCodes: [0],
         isBackgroundTask: isBackgroundTask
     )

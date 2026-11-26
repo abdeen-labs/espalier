@@ -13,6 +13,10 @@ private let logger = Log.logger(category: "work")
 /// How many repositories a batch works in at once.
 let batchConcurrency = 3
 
+/// How many repositories Fetch All fetches at once. A fetch mostly waits on
+/// its remote, so more of them run together than of a batch that pushes.
+let fetchAllConcurrency = 6
+
 // MARK: - Values
 
 /// One branch Push All pushes, as its confirmation lists it.
@@ -304,7 +308,7 @@ extension AppModel {
     }
 
     /// Fetches every repository in the list that's usable (not missing or
-    /// untrusted), `batchConcurrency` at a time, never two at once that are
+    /// untrusted), `fetchAllConcurrency` at a time, never two at once that are
     /// worktrees of one repository. Each runs the repository's own fetch
     /// (`SyncModel.fetch()`: its remotes, fast-forwarding, the last-fetched
     /// time, its refresh), except that git asks nothing: a repository that's
@@ -323,7 +327,7 @@ extension AppModel {
         let stops = BatchStops()
         let groups = await batchGroups(ids)
         let results = await withTaskCancellationHandler {
-            await runBatch(groups.map { group in group.map { ids[$0] } }) { id -> FetchAllResult.Outcome in
+            await runBatch(groups.map { group in group.map { ids[$0] } }, atOnce: fetchAllConcurrency) { id -> FetchAllResult.Outcome in
                 let outcome = await self.fetchInBatch(id, stops: stops)
                 counter.count += 1
                 onProgress?(FetchAllProgress(completed: counter.count, total: total))
@@ -470,18 +474,19 @@ extension AppModel {
         return await environment.withRuntimes { await resolveWatchedPaths(path) }?.commonDirectory ?? id.description
     }
 
-    /// Runs `work` on each item of `groups`: at most `batchConcurrency`
-    /// groups at once, each group's items one after another, in order.
+    /// Runs `work` on each item of `groups`: at most `limit` groups at
+    /// once, each group's items one after another, in order.
     ///
     /// - Returns: Each item with what `work` returned, in no order.
     func runBatch<Item: Sendable, Output: Sendable>(
         _ groups: [[Item]],
+        atOnce limit: Int = batchConcurrency,
         _ work: @escaping @MainActor @Sendable (Item) async -> Output
     ) async -> [(Item, Output)] {
         let results = BatchResults<Item, Output>()
         await withTaskGroup(of: Void.self) { taskGroup in
             var pending = groups[...]
-            for _ in 0..<min(batchConcurrency, groups.count) {
+            for _ in 0..<min(limit, groups.count) {
                 let group = pending.removeFirst()
                 taskGroup.addTask { await results.run(group, work) }
             }

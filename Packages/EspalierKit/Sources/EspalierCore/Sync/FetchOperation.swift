@@ -299,9 +299,8 @@ func fetchAndFastForward(_ remotes: [Remote], in ctx: OperationContext) async th
 }
 
 /// Fetches `remotes` one after another, each with an equal share of
-/// `progress`. A remote that fails doesn't stop the others; after each
-/// successful fetch the remote's HEAD is updated, and a failure there is
-/// only logged.
+/// `progress`. A remote that fails doesn't stop the others. Each fetch
+/// updates its remote's HEAD too (`GitKit.fetch`).
 ///
 /// - Returns: The first remote's failure, if any.
 func fetchRemotes(
@@ -329,14 +328,7 @@ func fetchRemotes(
             if firstFailure == nil {
                 firstFailure = error
             }
-            // If the fetch failed we shouldn't try to update the remote HEAD
-            // because there's a decent chance that it failed either because
-            // we didn't have the correct credentials (which we won't this
-            // time either) or because there's a network error which likely
-            // will persist for the next operation as well.
-            continue
         }
-        await updateRemoteHEADLoggingFailures(repository, remote, isBackgroundTask: isBackgroundTask)
     }
     return firstFailure
 }

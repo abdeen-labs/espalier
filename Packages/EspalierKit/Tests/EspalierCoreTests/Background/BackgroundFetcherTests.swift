@@ -237,7 +237,7 @@ struct BackgroundFetcherTests {
         try gate.open()
         // Not busy: it waited for the lane, then fetched.
         try await userFetch.value
-        #expect(gate.invocations == 4, "a fetch and a remote HEAD update for each")
+        #expect(gate.invocations == 2, "one connection for each fetch, which updates the remote's HEAD too")
         #expect(try await fixture.fetchedTip() == pushed)
         #expect(fixture.model.networkOperation == nil)
         await fixture.scheduler.waitForSleep(of: .seconds(60 * 60 + 7))

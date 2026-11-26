@@ -109,6 +109,37 @@ struct FetchTests {
         #expect(try await getBranches(repository, "refs/remotes/origin/doomed").isEmpty)
     }
 
+    @Test(
+        "points the remote's HEAD at the remote's default branch, follows it when it changes, and leaves it when the remote's is detached",
+        arguments: ["origin", "--remote", "with=equals", "dotted.name"]
+    )
+    func updatesRemoteHEAD(_ name: String) async throws {
+        let upstream = try setupEmptyRepository("main")
+        try await makeCommit(upstream, Tree(entries: [TreeEntry(path: "README.md", contents: "one")]))
+        _ = try await Dugite.exec(["branch", "next"], upstream.path)
+        let repository = try setupEmptyRepository()
+        _ = try await Dugite.exec(["remote", "add", "--", name, upstream.path], repository.path)
+        // A setting of the user's doesn't stop it.
+        _ = try await Dugite.exec(["config", "remote.\(name).followRemoteHEAD", "never"], repository.path)
+        let remote = Remote(name: name, url: upstream.path)
+        let remoteHEAD = { () async throws -> String in
+            JSCompat.trim(try await git(["symbolic-ref", "refs/remotes/\(name)/HEAD"], repository.path, "read remote HEAD").stdout)
+        }
+
+        try await fetch(repository, remote)
+        #expect(try await remoteHEAD() == "refs/remotes/\(name)/main")
+
+        _ = try await Dugite.exec(["symbolic-ref", "HEAD", "refs/heads/next"], upstream.path)
+        try await fetch(repository, remote)
+        #expect(try await remoteHEAD() == "refs/remotes/\(name)/next")
+
+        // Two branches are at a detached HEAD's commit, so it names
+        // neither.
+        _ = try await Dugite.exec(["checkout", "--detach", "next"], upstream.path)
+        try await fetch(repository, remote)
+        #expect(try await remoteHEAD() == "refs/remotes/\(name)/next")
+    }
+
     @Test("fetches a refspec, tolerating one that doesn't exist")
     func fetchesRefspec() async throws {
         let upstream = try setupEmptyRepository()
