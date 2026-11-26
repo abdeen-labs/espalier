@@ -66,6 +66,33 @@ struct BackgroundCoordinatorTests {
         #expect(indicators.startDelay == .zero)
     }
 
+    @Test("runs the branch pull request updater while active with the indicator setting on, and forgets its statuses with the setting off")
+    func branchPullRequests() async throws {
+        let harness = try AppHarness(repositoryIndicators: true, backgroundServices: .branchPullRequests)
+        let app = await harness.loadedApp()
+        let updater = app.background.branchPullRequests
+        #expect(updater.isRunning)
+
+        app.setActive(false)
+        #expect(!updater.isRunning)
+        app.setActive(true)
+        #expect(updater.isRunning)
+
+        let branch = RepositoryBranch(repositoryID: RepositoryID(), name: "feature")
+        app.branchPullRequests[branch] = .noPullRequest
+        app.preferences.repositoryIndicatorsEnabled = false
+        await settle()
+        #expect(!updater.isRunning)
+        #expect(app.branchPullRequests.isEmpty)
+
+        app.preferences.repositoryIndicatorsEnabled = true
+        await settle()
+        #expect(updater.isRunning)
+
+        await app.prepareForTermination()
+        #expect(!updater.isRunning)
+    }
+
     @Test("an app loaded with indicators off doesn't start them")
     func indicatorsOff() async throws {
         let harness = try AppHarness()

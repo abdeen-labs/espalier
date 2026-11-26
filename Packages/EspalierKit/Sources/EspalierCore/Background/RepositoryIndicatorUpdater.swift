@@ -170,34 +170,11 @@ final class RepositoryIndicatorUpdater {
         return .seconds(remaining) + skew
     }
 
-    /// Refreshes one repository's indicator: none for a missing repository or
-    /// one whose folder is gone; else its status's, then, when warranted,
-    /// the ahead/behind a fetch finds. A repository with an operation running
-    /// is left alone: the operation's own refresh updates it.
+    /// Refreshes one repository's indicator: its status's
+    /// (`AppModel.refreshIndicatorFromStatus`), then, when warranted, the
+    /// ahead/behind a fetch finds.
     func refreshIndicator(for id: RepositoryID) async {
-        guard let app, let record = app.record(id) else {
-            return
-        }
-        if record.isMissing {
-            app.setIndicator(nil, for: id)
-            return
-        }
-
-        let exists = await pathExists(record.path)
-        guard app.isListedAndAvailable(id) else {
-            return
-        }
-        guard exists else {
-            app.setIndicator(nil, for: id)
-            return
-        }
-
-        guard let repository = app.repository(id), repository.operationsInFlight == 0 else {
-            return
-        }
-        await repository.refresh(.status, reason: .background)
-        // The status set the indicator, or the repository went missing.
-        guard app.isListedAndAvailable(id), app.indicators[id] != nil else {
+        guard let app, case .refreshed(let repository) = await app.refreshIndicatorFromStatus(for: id, reason: .background) else {
             return
         }
 
@@ -206,17 +183,16 @@ final class RepositoryIndicatorUpdater {
             return
         }
 
+        let path = repository.record.path
         if case .fetched(let aheadBehind) = await repository.sync.fetchForIndicator(lastPush: lastPush),
            app.isListedAndAvailable(id) {
-            app.setIndicator(
-                RepositoryIndicator(
-                    aheadBehind: aheadBehind,
-                    // We don't need to update changedFilesCount here since it
-                    // was already set by the status.
-                    changedFilesCount: app.indicators[id]?.changedFilesCount ?? 0
-                ),
-                for: id
-            )
+            // The status already set the rest.
+            var indicator = app.indicators[id] ?? RepositoryIndicator(aheadBehind: nil, changedFilesCount: 0)
+            indicator.aheadBehind = aheadBehind
+            app.setIndicator(indicator, for: id)
+            // A branch further behind than the status found it: the
+            // upstream gained commits.
+            app.worktreeActivity.recordAheadBehind(aheadBehind, forWorktreeAt: path, of: id)
         }
     }
 
@@ -237,10 +213,23 @@ final class RepositoryIndicatorUpdater {
     }
 }
 
+/// What `AppModel.refreshIndicatorFromStatus(for:reason:)` did.
+enum IndicatorStatusRefresh {
+    /// A status pass ran and set the indicator.
+    case refreshed(RepositoryModel)
+    /// An operation runs in the repository: it was left alone.
+    case busy(RepositoryModel)
+    /// The repository isn't in the list, is missing, or its folder is gone:
+    /// it has no indicator.
+    case unavailable
+}
+
 extension AppModel {
-    /// The repositories the indicator updater refreshes: every one but the
-    /// selected one, which the background fetcher and the activation refresh
-    /// keep current. A clone's selection excludes nothing.
+    /// The repositories whose indicators the background refreshes
+    /// (`RepositoryIndicatorUpdater`, `RepositoryIndicatorWatcher`): every
+    /// one but the selected one, which its own watcher, the background
+    /// fetcher, and the activation refresh keep current. A clone's selection
+    /// excludes nothing.
     func repositoriesForIndicatorRefresh() -> [RepositoryRecord] {
         guard case .repository(let selectedID) = selection else {
             return repositories
@@ -251,6 +240,43 @@ extension AppModel {
     /// Whether the repository is in the list and not missing.
     func isListedAndAvailable(_ id: RepositoryID) -> Bool {
         record(id).map { !$0.isMissing } ?? false
+    }
+
+    /// Refreshes one repository's indicator from its status: none for a
+    /// missing repository or one whose folder is gone (which isn't marked
+    /// missing; selecting it does that); else a status pass, which sets it.
+    /// A repository with an operation running is left alone: the
+    /// operation's own refresh updates it.
+    func refreshIndicatorFromStatus(for id: RepositoryID, reason: RefreshReason) async -> IndicatorStatusRefresh {
+        guard let record = record(id) else {
+            return .unavailable
+        }
+        if record.isMissing {
+            setIndicator(nil, for: id)
+            return .unavailable
+        }
+
+        let exists = await pathExists(record.path)
+        guard isListedAndAvailable(id) else {
+            return .unavailable
+        }
+        guard exists else {
+            setIndicator(nil, for: id)
+            return .unavailable
+        }
+
+        guard let repository = repository(id) else {
+            return .unavailable
+        }
+        guard repository.operationsInFlight == 0 else {
+            return .busy(repository)
+        }
+        await repository.refresh(.status, reason: reason)
+        // The status set the indicator, or the repository went missing.
+        guard isListedAndAvailable(id), indicators[id] != nil else {
+            return .unavailable
+        }
+        return .refreshed(repository)
     }
 }
 

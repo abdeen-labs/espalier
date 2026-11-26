@@ -17,10 +17,17 @@ protocol SelectionScopedService: AnyObject {
 /// | BranchPruner | the selected GitHub repository | on selection, or once the selection is associated | selection change, quit | — |
 /// | PullRequestUpdater | the selected GitHub repository with an account | selection while active; activation | inactive, selection change | — |
 /// | RepositoryIndicatorUpdater | every other repository | 2 min after launch if enabled; when the setting turns on | setting off, quit | while inactive |
+/// | RepositoryIndicatorWatcher | every other repository that isn't missing | at launch if enabled; when the setting turns on | setting off, quit | while the main window isn't visible (it keeps watching, and refreshes what changed when the window is visible again) |
+/// | WorktreeStatusWatcher (the indicator watcher's `worktrees`) | every repository that isn't missing: its worktree list, and each worktree no repository's indicator covers | with the indicator watcher | with the indicator watcher | with the indicator watcher |
+/// | BranchPullRequestUpdater | every repository on GitHub with an account | at launch if enabled; activation; when the setting turns on | inactive, setting off (its statuses go), quit | — |
 ///
 /// `update()` is idempotent; selection, activation, window visibility, and
-/// the indicator setting call it. The first three start only when the
-/// environment's `backgroundServices` include them (always in the app).
+/// the indicator setting call it. The first three and the last start only
+/// when the environment's `backgroundServices` include them (always in the
+/// app).
+/// The indicator watcher and the worktree watcher also follow the list
+/// (and the first the selection) on their own, so a repository added,
+/// removed, moved, or gone missing is watched or not without a call.
 @MainActor
 final class BackgroundCoordinator {
     /// How long after launch the indicators' first pass starts.
@@ -30,6 +37,8 @@ final class BackgroundCoordinator {
     let pruner: BranchPruner
     let pullRequests: PullRequestUpdater
     let indicators: RepositoryIndicatorUpdater
+    let indicatorWatcher: RepositoryIndicatorWatcher
+    let branchPullRequests: BranchPullRequestUpdater
 
     private weak var app: AppModel?
     private let scheduler: any Scheduler
@@ -58,6 +67,8 @@ final class BackgroundCoordinator {
         pruner = BranchPruner(environment: environment, app: app)
         pullRequests = PullRequestUpdater(environment: environment, app: app)
         indicators = RepositoryIndicatorUpdater(app: app, scheduler: environment.scheduler, skew: environment.skew())
+        indicatorWatcher = RepositoryIndicatorWatcher(app: app, environment: environment)
+        branchPullRequests = BranchPullRequestUpdater(app: app, environment: environment)
     }
 
     /// Starts and stops services to match the app's state.
@@ -130,6 +141,35 @@ final class BackgroundCoordinator {
         } else if indicators.isRunning {
             indicators.stop()
         }
+
+        // The other repositories' watches, and every repository's
+        // worktrees', if indicators are enabled: brought up to date with
+        // the list and the selection, and refreshing nothing while the main
+        // window isn't visible. (Visible behind another app, the list stays
+        // live.)
+        if app.preferences.repositoryIndicatorsEnabled {
+            if app.isMainWindowVisible {
+                indicatorWatcher.resume()
+            } else {
+                indicatorWatcher.pause()
+            }
+            indicatorWatcher.start()
+        } else if indicatorWatcher.isRunning {
+            indicatorWatcher.stop()
+        }
+
+        // Every repository's branch pull request, if indicators are
+        // enabled, while the app is active. With the setting off, its
+        // statuses go.
+        if services.contains(.branchPullRequests) {
+            if !app.preferences.repositoryIndicatorsEnabled {
+                branchPullRequests.reset()
+            } else if app.isActive {
+                branchPullRequests.start()
+            } else {
+                branchPullRequests.stop()
+            }
+        }
     }
 
     /// The repository list opened: when the indicators are on and their
@@ -155,6 +195,8 @@ final class BackgroundCoordinator {
         selectionRepositoryID = nil
         pullRequests.stop()
         indicators.stop()
+        indicatorWatcher.stop()
+        branchPullRequests.stop()
     }
 
     /// Calls `update()` whenever the indicator setting changes.

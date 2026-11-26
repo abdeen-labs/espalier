@@ -106,8 +106,79 @@ private let workingDirectoryRows: [(String, RefreshScope?)] = [
     ("/Users/me/src", nil),
 ]
 
+/// Paths relative to the common directory, one for each rule of what may
+/// have changed the worktree list, and whether each may have.
+private let worktreeListRows: [(String, Bool)] = [
+    // A worktree added, removed, or pruned.
+    ("worktrees", true),
+    ("worktrees/topic", true),
+    // Moved, locked, and its HEAD.
+    ("worktrees/topic/gitdir", true),
+    ("worktrees/topic/locked", true),
+    ("worktrees/topic/HEAD", true),
+    ("worktrees/topic/reftable/tables.list", true),
+    // The main worktree's HEAD, and the commits the branches are at.
+    ("HEAD", true),
+    ("refs/heads/main", true),
+    ("refs/heads/feature/nested", true),
+    ("packed-refs", true),
+    ("reftable/tables.list", true),
+    // Writes in progress.
+    ("HEAD.lock", false),
+    ("worktrees/topic/HEAD.lock", false),
+    ("refs/heads/main.lock", false),
+    // A worktree's other files.
+    ("worktrees/topic/index", false),
+    ("worktrees/topic/ORIG_HEAD", false),
+    ("worktrees/topic/logs/HEAD", false),
+    ("worktrees/topic/commondir", false),
+    // Refs no worktree is at, and the rest of the git directory.
+    ("refs/remotes/origin/main", false),
+    ("refs/tags/v1", false),
+    ("refs/stash", false),
+    ("refs", false),
+    ("index", false),
+    ("FETCH_HEAD", false),
+    ("objects/ab/cdef0123456789abcdef0123456789abcdef01", false),
+    ("logs/HEAD", false),
+    ("config", false),
+    ("", false),
+    // Names that only start like the ones above.
+    ("HEAD/x", false),
+    ("worktreesx/topic", false),
+]
+
 @Suite("WatchEventClassifier")
 struct WatchEventClassifierTests {
+    @Test("tells the changes that may have changed the worktree list", arguments: worktreeListRows)
+    func worktreeList(relativePath: String, expected: Bool) {
+        let commonDirectory = "/Users/me/src/app/.git"
+        let event = FileWatchEvent(path: commonDirectory + "/" + relativePath, flags: modifiedFile, id: 1)
+        #expect(WatchEventClassifier.changesWorktreeList(event, commonDirectory: commonDirectory) == expected)
+    }
+
+    @Test("the common directory moving, a mount, and events lost where the worktree list's files are, may have changed it")
+    func worktreeListDirectoryEvents() {
+        let commonDirectory = "/Users/me/src/app/.git"
+        func changes(_ path: String, _ flags: FileWatchEvent.Flags) -> Bool {
+            WatchEventClassifier.changesWorktreeList(FileWatchEvent(path: path, flags: flags, id: 0), commonDirectory: commonDirectory)
+        }
+        #expect(changes(commonDirectory, .rootChanged))
+        #expect(changes("/Volumes/Backup", .unmount))
+
+        let lost: FileWatchEvent.Flags = .mustScanSubDirs
+        #expect(changes(commonDirectory, lost))
+        #expect(changes("/Users/me/src", lost))
+        #expect(changes("/", [.mustScanSubDirs, .kernelDropped]))
+        #expect(changes(commonDirectory + "/worktrees", lost))
+        #expect(changes(commonDirectory + "/refs", lost))
+        #expect(!changes(commonDirectory + "/objects/pack", lost))
+        #expect(!changes(commonDirectory + "/logs", lost))
+        #expect(!changes("/Users/me/src/app/Sources", lost))
+        // A change in the working directory isn't one to the list.
+        #expect(!changes("/Users/me/src/app/README.md", modifiedFile))
+    }
+
     @Test("classifies the git directory's paths", arguments: gitDirectoryRows)
     func gitDirectory(relativePath: String, expected: RefreshScope?) {
         #expect(WatchEventClassifier.gitDirectoryScope(forRelativePath: relativePath) == expected)

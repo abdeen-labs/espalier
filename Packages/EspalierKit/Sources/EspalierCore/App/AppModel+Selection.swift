@@ -33,6 +33,7 @@ extension AppModel {
             models[previousID]?.becomeInactive()
         }
         self.selection = selection
+        worktreeActivity.openWorktreeDidChange()
 
         if case .repository(let id) = selection {
             if case .repository(let previousID) = previous {

@@ -250,13 +250,16 @@ public final class RepositoryModel: Identifiable {
         }
     }
 
-    /// The refresher resolved the directories to watch.
+    /// The refresher resolved the directories to watch: the selected
+    /// repository's watcher starts on them, and so does the indicator
+    /// watcher's for any other, if it had none yet.
     func watchedPathsDidResolve(_ paths: WatchedPaths) {
         watchedPaths = paths
         networkLaneKey = paths.commonDirectory
         if wantsWatching {
             watcher.start(paths)
         }
+        app?.background.indicatorWatcher.watchedPathsDidResolve(paths, for: id)
     }
 
     // MARK: The record
@@ -389,6 +392,15 @@ public final class RepositoryModel: Identifiable {
 
     func operationDidStart() {
         operationsInFlight += 1
+    }
+
+    /// Waits until no operation runs in the repository.
+    func operationsIdle() async {
+        while operationsInFlight > 0 {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                operationWaiters.append(continuation)
+            }
+        }
     }
 
     func operationDidEnd() {

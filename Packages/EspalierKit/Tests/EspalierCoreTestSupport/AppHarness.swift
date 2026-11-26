@@ -29,8 +29,9 @@ import TestSupport
 /// models run every git call inside it, whatever task they run in. By
 /// default any prompt fails the test, and no background service starts on
 /// its own: a test that checks the fetcher, the pruner, the pull request
-/// updater, or the notifications poller asks for it (`backgroundServices`),
-/// and the others run only when a test calls them.
+/// updater, the notifications poller, or the branch pull request updater
+/// asks for it (`backgroundServices`), and the others run only when a test
+/// calls them.
 @MainActor
 public final class AppHarness {
     public let environment: AppEnvironment
@@ -62,7 +63,10 @@ public final class AppHarness {
     ///   - repositoryIndicators: Whether the "Show status icons in the
     ///     repository list" setting is on. Off by default: the indicator
     ///     updater's loop sleeps on `scheduler` from launch, which tests
-    ///     counting its sleepers don't expect.
+    ///     counting its sleepers don't expect, and the indicator watcher
+    ///     watches every repository but the selected one, runs each one's
+    ///     first status, and lists and watches every repository's
+    ///     worktrees.
     ///   - writesCommitGraphs: Whether History and the sidebar's upstream
     ///     comparisons write git's commit-graph file for repositories
     ///     without one (off, so tests don't change their repositories'

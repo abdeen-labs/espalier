@@ -65,8 +65,24 @@ public final class AppModel {
 
     /// The repositories, in the order they were added.
     public internal(set) var repositories: [RepositoryRecord] = []
-    /// The repository list's badges.
+    /// What the repository list shows of each repository's status, once it
+    /// has loaded: its head, ahead/behind, changed files, and stopped
+    /// operation.
     public internal(set) var indicators: [RepositoryID: RepositoryIndicator] = [:]
+    /// Every listed repository's worktrees, the main one first, then the
+    /// linked ones in git's order, each with its status, once they have
+    /// loaded (`WorktreeStatusWatcher`, WorktreeStatus.swift). None while
+    /// the repository indicators are off.
+    public internal(set) var worktreeStatuses: [RepositoryID: [WorktreeStatus]] = [:]
+    /// How the pull request of each repository's branch is doing, for the
+    /// branches kept current (BranchPullRequestStatus.swift); read it with
+    /// `pullRequestStatus(for:branch:)`.
+    public internal(set) var branchPullRequests: [RepositoryBranch: BranchPullRequestStatus] = [:]
+    /// Called when a refresh finds that something happened to a branch's
+    /// pull request: it was opened, merged, or closed, its checks finished,
+    /// or a review approved it or requested changes. A branch's first load
+    /// is never news.
+    @ObservationIgnored public var onPullRequestNews: (@MainActor (PullRequestNews) -> Void)?
     /// The previously selected repositories, most recent first, at most
     /// three, without the current one.
     public internal(set) var recentRepositoryIDs: [RepositoryID] = []
@@ -74,6 +90,12 @@ public final class AppModel {
     // MARK: Selection (AppModel+Selection.swift)
 
     public internal(set) var selection: AppSelection?
+
+    // MARK: Watched folders (AppModel+WatchedFolders.swift)
+
+    /// Whether a scan of the watched folders is running, or waiting for one
+    /// that is.
+    public internal(set) var isScanningFolders = false
 
     // MARK: Feature models
 
@@ -83,6 +105,9 @@ public final class AppModel {
     @ObservationIgnored public let integrations: IntegrationsModel
     @ObservationIgnored public let clones: CloneCoordinator
     @ObservationIgnored public let ai: AIModel
+    /// The worktrees' activity, what's unseen, and the pinned repositories
+    /// (`arrangedRepositories` is the list made of them).
+    @ObservationIgnored public let worktreeActivity: WorktreeActivityModel
 
     // MARK: Unsolicited facts
 
@@ -111,6 +136,16 @@ public final class AppModel {
     /// repository (RepositoryAccounts.swift): asking again joins the one
     /// already asked.
     @ObservationIgnored var repositoryAccountPrompts: [RepositoryID: Task<Account?, Never>] = [:]
+    /// The scan of the watched folders asked for last, while it or one
+    /// before it runs: the next one waits for it.
+    @ObservationIgnored var folderScan: Task<[RepositoryID], Never>?
+    /// The scans of the watched folders asked for and not finished.
+    @ObservationIgnored var folderScansInFlight = 0
+    /// When a scan of every watched folder was last asked for.
+    @ObservationIgnored var lastWatchedFoldersScan: Date?
+    /// Called with each status that loads for a worktree other than the one
+    /// its repository's record points at (`worktreeStatusDidLoad`).
+    @ObservationIgnored var onWorktreeStatus: (@MainActor (WorktreeStatusUpdate) -> Void)?
 
     public init(environment: AppEnvironment) {
         self.environment = environment
@@ -120,10 +155,12 @@ public final class AppModel {
         integrations = IntegrationsModel(environment: environment, preferences: preferences)
         clones = CloneCoordinator()
         ai = AIModel(environment: environment)
+        worktreeActivity = WorktreeActivityModel(environment: environment)
         let scheduler = environment.scheduler
         listStore = RepositoryListStore(fileURL: environment.directories.repositoryList, now: { scheduler.now })
         background = BackgroundCoordinator(app: self, environment: environment)
         clones.app = self
+        worktreeActivity.app = self
         accounts.attach(to: self)
         ai.attach(to: self)
     }

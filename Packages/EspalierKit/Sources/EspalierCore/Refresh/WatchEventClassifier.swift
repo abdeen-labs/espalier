@@ -196,6 +196,79 @@ public enum WatchEventClassifier {
         return !components.dropFirst(2).contains { $0 == "objects" || $0 == "logs" }
     }
 
+    // MARK: The worktree list
+
+    /// Whether an event may have changed what `git worktree list` says of
+    /// the repository whose common directory is `commonDirectory`
+    /// (normalized).
+    ///
+    /// | Path (relative to the common directory) | Changes |
+    /// |---|---|
+    /// | `worktrees`, `worktrees/<name>` | a worktree added, removed, or pruned |
+    /// | `worktrees/<name>/gitdir` | a worktree moved |
+    /// | `worktrees/<name>/locked` | a worktree locked or unlocked |
+    /// | `worktrees/<name>/HEAD`, `worktrees/<name>/reftable/**` | a linked worktree's HEAD |
+    /// | `HEAD` | the main worktree's HEAD |
+    /// | `refs/heads/**`, `packed-refs`, `reftable/**` | the commit a worktree's branch is at |
+    /// | `*.lock`, a worktree's other files, everything else | nothing |
+    ///
+    /// The common directory itself moving or disappearing, a volume mounted
+    /// or unmounted, and events lost where any of those paths may be, count
+    /// too.
+    static func changesWorktreeList(_ event: FileWatchEvent, commonDirectory: String) -> Bool {
+        if !event.flags.isDisjoint(with: [.rootChanged, .mount, .unmount]) {
+            return true
+        }
+        let path = normalized(event.path)
+        let mustScan = event.flags.contains(.mustScanSubDirs)
+        guard let relative = relativePath(of: path, under: commonDirectory) else {
+            // Events lost in a directory that holds the common directory.
+            return mustScan && relativePath(of: commonDirectory, under: path) != nil
+        }
+        if mustScan {
+            switch JSCompat.split(relative, "/")[0] {
+            case "", "HEAD", "packed-refs", "refs", "reftable", "worktrees":
+                return true
+            default:
+                return false
+            }
+        }
+        return changesWorktreeList(relativePath: relative)
+    }
+
+    /// Whether a change to a path relative to the common directory may have
+    /// changed the worktree list (`changesWorktreeList(_:commonDirectory:)`).
+    static func changesWorktreeList(relativePath: String) -> Bool {
+        if JSCompat.endsWith(relativePath, ".lock") {
+            return false
+        }
+        let components = JSCompat.split(relativePath, "/")
+        switch components[0] {
+        case "HEAD", "packed-refs":
+            return components.count == 1
+        case "reftable":
+            return true
+        case "refs":
+            return components.count >= 2 && components[1] == "heads"
+        case "worktrees":
+            // `worktrees`, `worktrees/<name>`, or a file of a worktree's
+            // that the list reads.
+            if components.count <= 2 {
+                return true
+            }
+            switch components[2] {
+            case "HEAD", "gitdir", "locked":
+                return components.count == 3
+            case "reftable":
+                return true
+            default:
+                return false
+            }
+        default:
+            return false
+        }
+    }
+
     /// `path` in the form classification compares: canonically decomposed,
     /// without trailing slashes. An ASCII path is its own decomposition, so
     /// only its slashes go.

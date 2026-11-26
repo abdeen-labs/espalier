@@ -145,8 +145,8 @@ struct RepositoryIndicatorUpdaterTests {
 
         await updater.refreshNow()
 
-        #expect(app.indicators[firstModel.id] == RepositoryIndicator(aheadBehind: nil, changedFilesCount: 1))
-        #expect(app.indicators[thirdModel.id] == RepositoryIndicator(aheadBehind: nil, changedFilesCount: 2))
+        #expect(app.indicators[firstModel.id] == RepositoryIndicator(head: .unborn(branch: "master"), aheadBehind: nil, changedFilesCount: 1))
+        #expect(app.indicators[thirdModel.id] == RepositoryIndicator(head: .unborn(branch: "master"), aheadBehind: nil, changedFilesCount: 2))
         #expect(firstModel.refreshScheduler.lastPassScope == .status)
         #expect(firstModel.refreshScheduler.lastPassReasons == [.background])
         #expect(selectedModel.refreshScheduler.passCount == selectedPasses)
@@ -302,7 +302,14 @@ struct RepositoryIndicatorUpdaterTests {
         // The status still thought the branch was up to date; the fetch found
         // the commit pushed from elsewhere.
         #expect(model.gitState.aheadBehind == AheadBehind(ahead: 0, behind: 0))
-        #expect(app.indicators[model.id] == RepositoryIndicator(aheadBehind: AheadBehind(ahead: 0, behind: 1), changedFilesCount: 0))
+        // The fetch changes only the ahead/behind: the status's other values stay.
+        #expect(app.indicators[model.id] == RepositoryIndicator(
+            head: .branch(name: "main"),
+            aheadBehind: AheadBehind(ahead: 0, behind: 1),
+            changedFilesCount: 0
+        ))
+        // Further behind than the status found it: the upstream gained commits.
+        #expect(app.worktreeActivity.activity[WorktreeKey(repositoryID: model.id, path: model.record.path)] == WorktreeActivity(server: harness.scheduler.now))
         #expect(harness.gitHub.requests("GET", "/repos/octocat/app").count == 1)
         #expect(harness.gitHub.requests("GET", "/repos/octocat/app").first?.header("Authorization") == "Bearer token")
         await app.idle()
@@ -325,7 +332,11 @@ struct RepositoryIndicatorUpdaterTests {
         }
 
         await updater.refreshNow()
-        #expect(app.indicators[model.id] == RepositoryIndicator(aheadBehind: AheadBehind(ahead: 0, behind: 0), changedFilesCount: 0))
+        #expect(app.indicators[model.id] == RepositoryIndicator(
+            head: .branch(name: "main"),
+            aheadBehind: AheadBehind(ahead: 0, behind: 0),
+            changedFilesCount: 0
+        ))
         #expect(try await resolveRef("refs/remotes/origin/main", in: local) != pushed)
 
         // Pushed since, but fetched ten minutes ago.
@@ -352,14 +363,17 @@ struct RepositoryIndicatorUpdaterTests {
         let app = await harness.loadedApp()
         #expect(app.selection == .repository(ids[0]))
         await app.idle()
-        #expect(app.indicators[ids[1]] == nil)
+        // Its watch's first status; a change the watcher isn't told of
+        // waits for the updater.
+        #expect(app.indicators[ids[1]]?.changedFilesCount == 1)
+        try harness.write("newer.txt", "newer\n", in: other)
         await harness.scheduler.waitForSleepers(1)
         #expect(harness.scheduler.sleeps.last == .seconds(123))
         await harness.scheduler.advance(by: .seconds(123))
-        await waitUntilObserved { app.indicators[ids[1]] != nil }
+        await waitUntilObserved { app.indicators[ids[1]]?.changedFilesCount == 2 }
         await app.idle()
         #expect(app.background.indicators.passCount == 1)
-        #expect(app.indicators[ids[1]] == RepositoryIndicator(aheadBehind: nil, changedFilesCount: 1))
+        #expect(app.indicators[ids[1]] == RepositoryIndicator(head: .unborn(branch: "master"), aheadBehind: nil, changedFilesCount: 2))
         await app.prepareForTermination()
     }
 
@@ -372,7 +386,13 @@ struct RepositoryIndicatorUpdaterTests {
         try harness.write("new.txt", "new\n", in: other)
         let ids = try await app.addRepositories([try setupEmptyRepository().path, other.path]).added
         app.select(.repository(ids[0]))
+        // The watcher hears of the list's changes.
+        await scheduler.advance()
         await app.idle()
+        // Its watch's first status; a change the watcher isn't told of
+        // waits for the updater.
+        #expect(app.indicators[ids[1]]?.changedFilesCount == 1)
+        try harness.write("newer.txt", "newer\n", in: other)
         await scheduler.waitForSleepers(1)
         #expect(scheduler.sleeps.last == .seconds(123))
         let indicators = app.background.indicators
@@ -385,12 +405,13 @@ struct RepositoryIndicatorUpdaterTests {
         }
         #expect(scheduler.sleeps.last == .seconds(3))
         await scheduler.advance(by: .seconds(3))
-        await waitUntilObserved { app.indicators[ids[1]] != nil }
+        await waitUntilObserved { app.indicators[ids[1]]?.changedFilesCount == 2 }
         await app.idle()
         #expect(indicators.passCount == 1)
 
-        // The first pass has run: the 15-minute cadence stays.
-        await scheduler.waitForSleepers(1)
+        // The first pass has run, and the wait for the next has started:
+        // the 15-minute cadence stays.
+        await scheduler.waitForSleep(of: .seconds(903))
         let sleeps = scheduler.sleeps
         app.repositoryListDidOpen()
         await scheduler.advance()

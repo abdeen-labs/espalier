@@ -178,14 +178,15 @@ extension AppModel {
     /// Chooses the account for a repository at `remoteURL` being added or
     /// cloned: each signed-in account on its server is checked for access,
     /// and the user picks when several might see it
-    /// (`chooseAccountForRemoteRepository`).
+    /// (`chooseAccountForRemoteRepository`). Without `asking`, nobody is
+    /// asked: when several might see it, none is chosen (`.cancelled`).
     ///
     /// - Throws: When the account the user picked can't see the repository,
     ///   or its access can't be checked.
-    func chooseAccount(forRemote remoteURL: String) async throws -> RemoteAccountChoice {
+    func chooseAccount(forRemote remoteURL: String, asking: Bool = true) async throws -> RemoteAccountChoice {
         let lookup = lookupRepositoryAccess(runtime: environment.gitHub)
         return try await chooseAccountForRemoteRepository(accounts.accounts, remoteURL, lookup: lookup) { match, candidates in
-            await self.promptForRemoteAccount(match, candidates)
+            asking ? await self.promptForRemoteAccount(match, candidates) : nil
         }
     }
 

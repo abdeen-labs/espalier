@@ -45,6 +45,15 @@ enum AddedRepositoryAccount: Sendable {
     case choose
     /// The one a clone used (nil: none), without asking.
     case cloned(RemoteRepositoryAssignment?)
+    /// The only one that can see it, without asking: none when several
+    /// might. For a repository a scan of the watched folders found.
+    case withoutAsking
+
+    /// Whether the user picks when several accounts might see the
+    /// repository.
+    var asks: Bool {
+        if case .choose = self { true } else { false }
+    }
 }
 
 /// The message when moving a repository to the Trash fails.
@@ -73,12 +82,14 @@ extension AppModel {
     }
 
     /// `addRepositories(_:)`, with the account for the added repositories:
-    /// a clone's comes from cloning.
+    /// a clone's comes from cloning. The user adds these themselves, so the
+    /// scans of the watched folders stop skipping the ones they had removed.
     func addRepositories(_ paths: [String], account: AddedRepositoryAccount) async throws(OperationError) -> AddRepositoriesResult {
         var result = AddRepositoriesResult()
         for path in paths {
             _ = await addRepository(at: path, into: &result, account: account)
         }
+        includeInScans(result.repositories)
         if !result.invalidPaths.isEmpty {
             result.invalidPathsMessage = invalidRepoPathsMessage(result.invalidPaths)
         }
@@ -178,8 +189,9 @@ extension AppModel {
     /// Gives a repository just added its account and GitHub association:
     /// the account a clone used, else the only signed-in account on its
     /// remote's server that can see it, or the one the user picks when
-    /// several might (`chooseAccount(forRemote:)`). Without one, a remote on
-    /// a signed-in account's server is associated without an account.
+    /// several might (`chooseAccount(forRemote:asking:)`); nobody is asked
+    /// about a repository a scan found. Without one, a remote on a
+    /// signed-in account's server is associated without an account.
     private func associateAddedRepository(_ id: RepositoryID, account: AddedRepositoryAccount) async {
         guard let record = record(id), let remote = await defaultRemote(of: record) else {
             return
@@ -188,9 +200,9 @@ extension AppModel {
         switch account {
         case .cloned(let cloned):
             assignment = cloned
-        case .choose:
+        case .choose, .withoutAsking:
             do {
-                if case .assigned(let chosen) = try await chooseAccount(forRemote: remote.url) {
+                if case .assigned(let chosen) = try await chooseAccount(forRemote: remote.url, asking: account.asks) {
                     assignment = chosen
                 }
             } catch {
@@ -225,11 +237,13 @@ extension AppModel {
     ///   (`moveRepositoryToTrashFailedMessage`).
     ///
     /// Removing drops everything kept for the repository: its model (and its
-    /// watcher and refreshes), indicator, recent entry, queued tags, and the
-    /// GitHub repositories nothing else refers to. A selected repository
+    /// watcher and refreshes), indicator, recent entry, queued tags, pin,
+    /// its worktrees' activity (`WorktreeActivityModel`), and the GitHub
+    /// repositories nothing else refers to. A selected repository
     /// passes the selection to the most recently selected one, else to the
-    /// first in the list. Removing a repository that isn't in the list does
-    /// nothing.
+    /// first in the list. A repository in a watched folder is remembered, so
+    /// the next scan doesn't add it again (`excludeFromScans`). Removing a
+    /// repository that isn't in the list does nothing.
     public func removeRepository(
         _ id: RepositoryID,
         moveToTrash: Bool,
@@ -263,6 +277,7 @@ extension AppModel {
         }
 
         forgetRepository(id)
+        excludeFromScans(record)
     }
 
     /// Drops a repository from the list and everything kept for it.
@@ -282,6 +297,7 @@ extension AppModel {
         }
         repositories.removeAll { $0.id == id }
         setIndicator(nil, for: id)
+        worktreeActivity.forgetRepository(id)
         if recentRepositoryIDs.contains(id) {
             recentRepositoryIDs.removeAll { $0 == id }
         }
@@ -522,6 +538,7 @@ extension AppModel {
             return (id, false)
         }
         repositories[index] = record
+        worktreeActivity.openWorktreeDidChange()
         models[id]?.recordDidChange(record, keepingSharedState: true)
         persist()
         return (id, false)

@@ -118,8 +118,14 @@ public struct RepositoryListItem: Equatable, Sendable, Identifiable {
     /// Enterprise group, or, in the recent group, anywhere in the list. The
     /// UI shows the owner then.
     public let needsDisambiguation: Bool
+    /// Where the repository's HEAD is; nil until its status has loaded.
+    public let head: RepositoryIndicator.Head?
     public let aheadBehind: AheadBehind?
     public let changedFilesCount: Int
+    /// The operation git stopped in, if any.
+    public let stoppedOperation: RepositoryIndicator.StoppedOperation?
+    /// How many of the changed files have conflicts left to resolve.
+    public let conflictedFilesCount: Int
 }
 
 /// One group of the repository list, its items sorted by title.
@@ -312,8 +318,11 @@ private func listItem(
         id: repository.id,
         repository: repository,
         needsDisambiguation: needsDisambiguation,
+        head: repositoryState?.head,
         aheadBehind: repositoryState?.aheadBehind,
-        changedFilesCount: repositoryState?.changedFilesCount ?? 0
+        changedFilesCount: repositoryState?.changedFilesCount ?? 0,
+        stoppedOperation: repositoryState?.stoppedOperation,
+        conflictedFilesCount: repositoryState?.conflictedFilesCount ?? 0
     )
 }
 
@@ -338,7 +347,7 @@ private func sortedByTitle(_ items: [RepositoryListItem]) -> [RepositoryListItem
 
 /// -1, 0, or 1, as JavaScript compares strings: code unit by code unit,
 /// then by length.
-private func compareCodeUnits(_ x: [UInt16], _ y: [UInt16]) -> Int {
+func compareCodeUnits(_ x: [UInt16], _ y: [UInt16]) -> Int {
     for (a, b) in zip(x, y) where a != b {
         return a < b ? -1 : 1
     }

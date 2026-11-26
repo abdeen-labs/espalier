@@ -131,7 +131,11 @@ struct AppModelTests {
         let harness = try AppHarness()
         let app = await harness.loadedApp()
         let repository = try await harness.addAndSelect(local, to: app)
-        #expect(app.indicators[repository.id] == RepositoryIndicator(aheadBehind: AheadBehind(ahead: 1, behind: 0), changedFilesCount: 1))
+        #expect(app.indicators[repository.id] == RepositoryIndicator(
+            head: .branch(name: "main"),
+            aheadBehind: AheadBehind(ahead: 1, behind: 0),
+            changedFilesCount: 1
+        ))
         #expect(repository.gitState.aheadBehind == AheadBehind(ahead: 1, behind: 0))
         #expect(repository.gitState.localCommitSHAs.count == 1)
         await app.idle()

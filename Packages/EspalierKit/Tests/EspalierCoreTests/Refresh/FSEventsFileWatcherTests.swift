@@ -12,8 +12,9 @@ import TestSupport
 private let latency: Duration = .milliseconds(50)
 
 /// A subscription's events, collected as they arrive, so a test can wait for
-/// one without ending the stream.
-private final class EventCollector: Sendable {
+/// one without ending the stream. (SharedFileWatcherTests.swift uses it
+/// too.)
+final class EventCollector: Sendable {
     private struct State {
         var events: [FileWatchEvent] = []
         var isFinished = false

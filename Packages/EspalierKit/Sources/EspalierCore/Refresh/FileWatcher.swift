@@ -1,4 +1,7 @@
-// The selected repository is watched while its window is visible.
+// The selected repository is watched while its window is visible, on a
+// subscription of its own; the others and every repository's worktrees, for
+// their indicators, by `RepositoryIndicatorWatcher` and
+// `WorktreeStatusWatcher`, through one `SharedFileWatcher`.
 
 import CoreServices
 
@@ -17,6 +20,37 @@ public protocol FileWatcher: Sendable {
     /// The ID of the most recent file system event. Event IDs only increase,
     /// so an event with an ID at or below this one happened before the call.
     func currentEventID() -> UInt64
+
+    /// Starts a watch of no directories yet, whose directories come and go
+    /// while it runs (`FileWatch.add`, `FileWatch.remove`). Events go to
+    /// `handler` a batch at a time, one call at a time, at most every
+    /// `latency`, on a thread of the watcher's choosing.
+    ///
+    /// `SharedFileWatcher` puts many subscriptions on a few of these.
+    func watch(latency: Duration, handler: @escaping @Sendable ([FileWatchEvent]) -> Void) -> any FileWatch
+}
+
+/// A running watch whose directories come and go (`FileWatcher.watch`).
+///
+/// No event is lost for a directory while it's watched, whatever is added
+/// or removed meanwhile. Some events may come twice.
+public protocol FileWatch: Sendable {
+    /// Watches `paths` (directories, recursively) too. Each gets every
+    /// event after `eventID`, and may get some from before it. Returns at
+    /// once; the events may start a moment later.
+    func add(_ paths: [String], since eventID: UInt64)
+
+    /// Stops watching `paths`. Events for them may still arrive.
+    func remove(_ paths: [String])
+
+    /// The event ID that adding or removing directories now would resume
+    /// from: every event up to it has been delivered. Nil while nothing is
+    /// watched. The further behind `FileWatcher.currentEventID()` it is, the
+    /// longer a change of directories takes to catch up.
+    var resumeEventID: UInt64? { get }
+
+    /// Stops watching. A batch being delivered may still arrive.
+    func cancel()
 }
 
 /// A running watch.

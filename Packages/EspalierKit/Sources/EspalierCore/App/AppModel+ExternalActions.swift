@@ -453,6 +453,7 @@ extension AppModel {
                 _ = await addRepository(at: path, into: &result)
             }
         }
+        includeInScans(result.repositories)
         if !result.invalidPaths.isEmpty {
             result.invalidPathsMessage = invalidRepoPathsMessage(result.invalidPaths)
         }

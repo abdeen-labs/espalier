@@ -45,6 +45,12 @@ public struct AppDirectories: Sendable, Hashable {
         applicationSupport.appending(path: "repositories.json", directoryHint: .notDirectory)
     }
 
+    /// The worktrees' activity and the pinned repositories, kept between
+    /// launches (`worktree-activity.json`).
+    public var worktreeActivity: URL {
+        applicationSupport.appending(path: "worktree-activity.json", directoryHint: .notDirectory)
+    }
+
     /// The directory for one kind of cache, such as `pull-requests`.
     public func cacheDirectory(_ kind: String) -> URL {
         caches.appending(path: kind, directoryHint: .isDirectory)

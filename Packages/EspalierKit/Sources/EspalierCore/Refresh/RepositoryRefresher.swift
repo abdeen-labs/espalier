@@ -19,7 +19,7 @@ let commitBatchSize = 100
 /// |---|---|---|
 /// | 1 | A missing record stops; a vanished path tries worktree recovery, else marks the record missing | all |
 /// | 2 | The git directory, when the record lacks it; the directories to watch | all |
-/// | 3 | Status: tip, ahead/behind, the operation in progress, changed files, the indicator; the features hear about it at once, and waiters needing only the status go on. A tip SHA change adds `.refs` | status |
+/// | 3 | Status: tip, ahead/behind, the operation in progress, changed files, the indicator, the worktree's activity (`WorktreeActivityModel`); the features hear about it at once, and waiters needing only the status go on. A tip SHA change adds `.refs` | status |
 /// | 4 | Remotes: all, default, current, upstream | remotes |
 /// | 5 | Branches and recent branches, default and upstream default branches, `pull.rebase` | refs |
 /// | 6 | `FETCH_HEAD`'s date and the author (metadata); stashes, worktrees, local commits (refs) | refs, metadata |
@@ -93,22 +93,13 @@ final class RepositoryRefresher {
                 app.setMissing(true, for: model.id)
                 return
             }
-            // A rebase git was interrupted in leaves no REBASE_HEAD for the
-            // status to see: between commits, with HEAD detached, or while
-            // finishing, after it moved the branch and put HEAD back on it.
-            var interruptedRebase: RebaseInternalState?
-            if loaded.rebaseInternalState == nil {
-                interruptedRebase = await getInterruptedRebaseState(repository)
-                guard token.isCurrent else { return }
-            }
-            // A `git am` or a bisect, which status doesn't show and
-            // Espalier can't continue (only looked for when status shows
-            // no other operation).
-            var unsupported: GitOperationInProgress?
-            if inProgress(loaded, interruptedRebase: interruptedRebase, unsupported: nil) == nil {
-                unsupported = await unsupportedOperationInProgress(repository)
-                guard token.isCurrent else { return }
-            }
+            // What's compared with the worktree's previous status to tell
+            // activity.
+            let activitySnapshot = await WorktreeStatusSnapshot.load(loaded, workingDirectory: repository.path)
+            guard token.isCurrent else { return }
+            // The operations the status doesn't show, from git's own files.
+            let (interruptedRebase, unsupported) = await operationsBeyondStatus(loaded, in: repository)
+            guard token.isCurrent else { return }
             // Which commit a rebase or a cherry-pick of several commits
             // stopped at for the user, from git's own files (only read).
             var stoppedStep: OperationStep?
@@ -123,7 +114,10 @@ final class RepositoryRefresher {
             model.setAvailability(.available)
             model.changes.reconcile(loaded, options: options)
             model.operations.reconcile(loaded, interruptedRebase: interruptedRebase, stoppedStep: stoppedStep)
-            app.setIndicator(RepositoryIndicator(loaded), for: model.id)
+            // From the tip and the operation just applied, so the list says
+            // what the repository's own state does.
+            app.setIndicator(RepositoryIndicator(loaded, tip: state.tip, inProgress: state.inProgress), for: model.id)
+            app.worktreeActivity.recordStatus(activitySnapshot, forWorktreeAt: repository.path, of: model.id)
             applied.insert(.status)
             // The status lands at once (the changes list updates before the
             // slower steps), and waiters that need only it go on.
@@ -263,66 +257,23 @@ final class RepositoryRefresher {
 
     // MARK: Status
 
-    /// Applies a status: a branch with a tip is valid, a tip alone is
-    /// detached, a branch alone is unborn, and neither is unknown. The tip is
-    /// the status's SHA; nothing is looked up.
+    /// Applies a status: its tip (`tipFromStatus`), ahead/behind, and the
+    /// operation in progress (`operationInProgress`).
     private func applyStatus(
         _ status: StatusResult,
         interruptedRebase: RebaseInternalState?,
         unsupported: GitOperationInProgress?,
         to state: RepositoryGitState
     ) {
-        let tip: Tip
-        let currentBranch = status.currentBranch.flatMap { $0.isEmpty ? nil : $0 }
-        let currentTip = status.currentTip.flatMap { $0.isEmpty ? nil : $0 }
-        if let currentBranch, let currentTip {
-            // The remotes as last loaded tell where the upstream's remote
-            // name ends; loading the remotes resolves it again.
-            tip = .valid(branch: Branch(
-                name: currentBranch,
-                upstream: status.currentUpstreamBranch.flatMap { $0.isEmpty ? nil : $0 },
-                tip: BranchTip(sha: currentTip),
-                type: .local,
-                ref: "refs/heads/\(currentBranch)",
-                remoteNames: state.remotes.all.map(\.name)
-            ))
-        } else if let currentTip {
-            tip = .detached(currentSha: currentTip)
-        } else if let currentBranch {
-            tip = .unborn(ref: currentBranch)
-        } else {
-            tip = .unknown
-        }
-        assign(\.tip, tip, in: state)
+        // The remotes as last loaded tell where the upstream's remote name
+        // ends; loading the remotes resolves it again.
+        assign(\.tip, tipFromStatus(status, remoteNames: state.remotes.all.map(\.name)), in: state)
         assign(\.aheadBehind, status.branchAheadBehind, in: state)
-        assign(\.inProgress, inProgress(status, interruptedRebase: interruptedRebase, unsupported: unsupported), in: state)
-    }
-
-    /// The operation in progress. A squash merge writes no `MERGE_HEAD`, so a
-    /// `SQUASH_MSG` counts only while conflicted files exist. A rebase git was
-    /// interrupted in between commits is a rebase too, and `REVERT_HEAD` a
-    /// revert. Otherwise `unsupported`: a `git am` or a bisect.
-    private func inProgress(
-        _ status: StatusResult,
-        interruptedRebase: RebaseInternalState?,
-        unsupported: GitOperationInProgress?
-    ) -> GitOperationInProgress? {
-        if let rebase = status.rebaseInternalState ?? interruptedRebase {
-            return .rebase(rebase)
-        }
-        if status.isCherryPickingHeadFound {
-            return .cherryPick
-        }
-        if status.isRevertHeadFound {
-            return .revert
-        }
-        if status.mergeHeadFound {
-            return .merge(squash: false)
-        }
-        if status.squashMsgFound, status.doConflictedFilesExist {
-            return .merge(squash: true)
-        }
-        return unsupported
+        assign(
+            \.inProgress,
+            operationInProgress(status, interruptedRebase: interruptedRebase, unsupported: unsupported),
+            in: state
+        )
     }
 
     // MARK: Remotes
@@ -385,6 +336,88 @@ func assign<Value: Equatable>(
     if state[keyPath: keyPath] != value {
         state[keyPath: keyPath] = value
     }
+}
+
+// MARK: - What a status tells
+
+// A refresh pass derives these for its repository; `WorktreeStatusWatcher`
+// for the worktrees no record points at.
+
+/// The tip a status tells: a branch with a tip is valid, a tip alone is
+/// detached, a branch alone is unborn, and neither is unknown. The tip is
+/// the status's SHA; nothing is looked up. `remoteNames` tell where the
+/// upstream's remote name ends.
+func tipFromStatus(_ status: StatusResult, remoteNames: [String]) -> Tip {
+    let currentBranch = status.currentBranch.flatMap { $0.isEmpty ? nil : $0 }
+    let currentTip = status.currentTip.flatMap { $0.isEmpty ? nil : $0 }
+    if let currentBranch, let currentTip {
+        return .valid(branch: Branch(
+            name: currentBranch,
+            upstream: status.currentUpstreamBranch.flatMap { $0.isEmpty ? nil : $0 },
+            tip: BranchTip(sha: currentTip),
+            type: .local,
+            ref: "refs/heads/\(currentBranch)",
+            remoteNames: remoteNames
+        ))
+    }
+    if let currentTip {
+        return .detached(currentSha: currentTip)
+    }
+    if let currentBranch {
+        return .unborn(ref: currentBranch)
+    }
+    return .unknown
+}
+
+/// The operation in progress. A squash merge writes no `MERGE_HEAD`, so a
+/// `SQUASH_MSG` counts only while conflicted files exist. A rebase git was
+/// interrupted in between commits is a rebase too, and `REVERT_HEAD` a
+/// revert. Otherwise `unsupported`: a `git am` or a bisect.
+func operationInProgress(
+    _ status: StatusResult,
+    interruptedRebase: RebaseInternalState?,
+    unsupported: GitOperationInProgress?
+) -> GitOperationInProgress? {
+    if let rebase = status.rebaseInternalState ?? interruptedRebase {
+        return .rebase(rebase)
+    }
+    if status.isCherryPickingHeadFound {
+        return .cherryPick
+    }
+    if status.isRevertHeadFound {
+        return .revert
+    }
+    if status.mergeHeadFound {
+        return .merge(squash: false)
+    }
+    if status.squashMsgFound, status.doConflictedFilesExist {
+        return .merge(squash: true)
+    }
+    return unsupported
+}
+
+/// The operations a status doesn't show, from git's own files (only read),
+/// for `operationInProgress`:
+///
+/// - A rebase git was interrupted in, which leaves no `REBASE_HEAD` for the
+///   status to see: between commits, with HEAD detached, or while finishing,
+///   after it moved the branch and put HEAD back on it.
+/// - A `git am` or a bisect, which Espalier can't continue (only looked for
+///   when the status and the rebase show no other operation).
+@concurrent
+func operationsBeyondStatus(
+    _ status: StatusResult,
+    in repository: Repository
+) async -> (interruptedRebase: RebaseInternalState?, unsupported: GitOperationInProgress?) {
+    var interruptedRebase: RebaseInternalState?
+    if status.rebaseInternalState == nil {
+        interruptedRebase = await getInterruptedRebaseState(repository)
+    }
+    var unsupported: GitOperationInProgress?
+    if operationInProgress(status, interruptedRebase: interruptedRebase, unsupported: nil) == nil {
+        unsupported = await unsupportedOperationInProgress(repository)
+    }
+    return (interruptedRebase, unsupported)
 }
 
 // MARK: - Loaders (off the main actor)

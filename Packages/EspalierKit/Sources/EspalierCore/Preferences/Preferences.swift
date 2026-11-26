@@ -33,6 +33,12 @@ public enum PreferenceKey {
     public static let hooksEnvEnabled = "git-hooks-env-enabled"
     public static let cacheHooksEnv = "git-cache-hooks-env"
 
+    // Watched folders, Espalier's own.
+    /// The folders Espalier finds repositories in.
+    public static let watchedFolders = "watched-folders"
+    /// The repositories the scans of the watched folders skip.
+    public static let watchedFolderExclusions = "watched-folder-exclusions"
+
     // Appearance and formatting.
     /// The appearance: System, Light, or Dark (`ApplicationTheme`).
     public static let theme = "theme"
@@ -50,6 +56,21 @@ public enum PreferenceKey {
     public static let timeFormat = "timeFormat"
     /// The sidebar's form (`SidebarStyle`), Espalier's own.
     public static let sidebarStyle = "sidebar-style"
+
+    // The arrangement of the repositories, Espalier's own.
+    /// How the repositories are arranged (`RepositoryArrangement`).
+    public static let repositoryArrangement = "repository-arrangement"
+
+    /// Whether a kind of activity moves a repository up under Recent
+    /// Activity.
+    public static func recentActivity(_ kind: WorktreeActivityKind) -> String {
+        "recent-activity-\(kind.rawValue)"
+    }
+
+    /// Whether a reason puts a repository under Needs You.
+    public static func needsYou(_ reason: NeedsYouReason) -> String {
+        "needs-you-\(reason.rawValue)"
+    }
 
     // Diffs.
     public static let imageDiffType = "image-diff-type"
@@ -155,6 +176,62 @@ public enum SidebarStyle: String, Sendable, Hashable, CaseIterable {
     case icons
 }
 
+/// How the repositories that aren't pinned are arranged. The raw
+/// values are the ones stored.
+public enum RepositoryArrangement: String, Sendable, Hashable, CaseIterable {
+    /// One section, the repository with the latest activity first.
+    case recentActivity = "recent-activity"
+    /// The repositories with something for the user to do, then the rest.
+    case needsYou = "needs-you"
+}
+
+/// A reason a repository is under Needs You. The raw values are the ones
+/// stored, each in its own key (`PreferenceKey.needsYou(_:)`).
+public enum NeedsYouReason: String, Sendable, Hashable, CaseIterable {
+    /// It has uncommitted changes.
+    case uncommittedChanges = "uncommitted-changes"
+    /// It has commits to push.
+    case commitsToPush = "commits-to-push"
+    /// A rebase, merge, cherry-pick, or revert stopped in it.
+    case stoppedOperation = "stopped-operation"
+    /// Its pull request's checks are failing, or changes were requested.
+    case pullRequestAttention = "pull-request-attention"
+    /// It has commits to pull.
+    case commitsToPull = "commits-to-pull"
+    /// Its branch is pushed and has no pull request.
+    case branchWithoutPullRequest = "branch-without-pull-request"
+
+    /// Whether the reason counts until the user says otherwise.
+    public var isOnByDefault: Bool {
+        switch self {
+        case .uncommittedChanges, .commitsToPush, .stoppedOperation, .pullRequestAttention: true
+        case .commitsToPull, .branchWithoutPullRequest: false
+        }
+    }
+}
+
+/// The settings the arrangement of the repositories reads (`arrangeRepositories`).
+public struct RepositoryArrangementSettings: Sendable, Equatable {
+    public var arrangement: RepositoryArrangement
+    /// The kinds of activity that count: they move a repository up under
+    /// Recent Activity, order the repositories under Needs You, and make a
+    /// worktree unseen.
+    public var activityKinds: Set<WorktreeActivityKind>
+    /// The reasons that put a repository under Needs You.
+    public var needsYouReasons: Set<NeedsYouReason>
+
+    /// The settings; a new install's by default.
+    public init(
+        arrangement: RepositoryArrangement = .recentActivity,
+        activityKinds: Set<WorktreeActivityKind> = Set(WorktreeActivityKind.allCases.filter(\.isOnByDefault)),
+        needsYouReasons: Set<NeedsYouReason> = Set(NeedsYouReason.allCases.filter(\.isOnByDefault))
+    ) {
+        self.arrangement = arrangement
+        self.activityKinds = activityKinds
+        self.needsYouReasons = needsYouReasons
+    }
+}
+
 /// The app's settings.
 ///
 /// Each property loads from its key when the model is made and writes its
@@ -207,6 +284,9 @@ public final class Preferences {
         hooksEnvEnabled = getHooksEnvEnabled(defaults: store.defaults)
         cacheHooksEnv = getCacheHooksEnv(defaults: store.defaults)
 
+        storedWatchedFolders = standardizedAbsolutePaths(store.getStringArray(PreferenceKey.watchedFolders))
+        storedWatchedFolderExclusions = standardizedAbsolutePaths(store.getStringArray(PreferenceKey.watchedFolderExclusions))
+
         theme = Self.storedTheme(in: store)
         designTheme = Self.storedDesignTheme(in: store)
         designPalette = Self.storedDesignPalette(in: store)
@@ -220,6 +300,14 @@ public final class Preferences {
         dateFormat = store.getString(PreferenceKey.dateFormat)
         timeFormat = store.getString(PreferenceKey.timeFormat)
         sidebarStyle = store.getEnum(PreferenceKey.sidebarStyle, SidebarStyle.self) ?? .hidden
+
+        repositoryArrangement = store.getEnum(PreferenceKey.repositoryArrangement, RepositoryArrangement.self) ?? .recentActivity
+        recentActivityKinds = Set(WorktreeActivityKind.allCases.filter { kind in
+            store.getBoolean(PreferenceKey.recentActivity(kind), kind.isOnByDefault)
+        })
+        needsYouReasons = Set(NeedsYouReason.allCases.filter { reason in
+            store.getBoolean(PreferenceKey.needsYou(reason), reason.isOnByDefault)
+        })
 
         imageDiffType = store.getNumber(PreferenceKey.imageDiffType).flatMap(ImageDiffType.init(rawValue:)) ?? .twoUp
         hideWhitespaceInChangesDiff = store.getBoolean(PreferenceKey.hideWhitespaceInChangesDiff, false)
@@ -399,6 +487,36 @@ public final class Preferences {
         }
     }
 
+    // MARK: Watched folders
+
+    /// The folders Espalier finds repositories in (`watched-folders`; none
+    /// by default), in the order they were added: absolute, standardized
+    /// paths (no `.` or `..`, no repeated or trailing separators), each
+    /// once. Setting it standardizes the paths and drops the ones that
+    /// aren't absolute or that repeat an earlier one.
+    /// `AppModel.addWatchedFolder(_:)` adds a folder and scans it.
+    public var watchedFolders: [String] {
+        get { storedWatchedFolders }
+        set { storedWatchedFolders = standardizedAbsolutePaths(newValue) }
+    }
+
+    private var storedWatchedFolders: [String] {
+        didSet { write(PreferenceKey.watchedFolders, storedWatchedFolders, oldValue) }
+    }
+
+    /// The repositories the scans of the watched folders skip
+    /// (`watched-folder-exclusions`), by path, as `watchedFolders` keeps
+    /// paths: the ones in a watched folder that the user removed from the
+    /// list, until they add them again.
+    public internal(set) var watchedFolderExclusions: [String] {
+        get { storedWatchedFolderExclusions }
+        set { storedWatchedFolderExclusions = standardizedAbsolutePaths(newValue) }
+    }
+
+    private var storedWatchedFolderExclusions: [String] {
+        didSet { write(PreferenceKey.watchedFolderExclusions, storedWatchedFolderExclusions, oldValue) }
+    }
+
     // MARK: Appearance and formatting
 
     /// The app's appearance (`theme`; System, the Mac's, by default).
@@ -528,6 +646,52 @@ public final class Preferences {
         }
     }
 
+    // MARK: The arrangement of the repositories
+
+    /// How the repositories that aren't pinned are arranged
+    /// (`repository-arrangement`; Recent Activity by default).
+    public var repositoryArrangement: RepositoryArrangement {
+        didSet {
+            guard repositoryArrangement != oldValue else { return }
+            store.setEnum(PreferenceKey.repositoryArrangement, repositoryArrangement)
+        }
+    }
+
+    /// The kinds of activity that move a repository up under Recent
+    /// Activity (`recent-activity-<kind>`, one key a kind; changed files,
+    /// HEAD, and the server by default, not pull requests). They also
+    /// order the repositories under Needs You and decide what makes a
+    /// worktree unseen.
+    public var recentActivityKinds: Set<WorktreeActivityKind> {
+        didSet {
+            for kind in recentActivityKinds.symmetricDifference(oldValue) {
+                store.setBoolean(PreferenceKey.recentActivity(kind), recentActivityKinds.contains(kind))
+            }
+        }
+    }
+
+    /// The reasons that put a repository under Needs You
+    /// (`needs-you-<reason>`, one key a reason; uncommitted changes,
+    /// commits to push, a stopped operation, and pull request attention by
+    /// default, not commits to pull or a pushed branch with no pull
+    /// request).
+    public var needsYouReasons: Set<NeedsYouReason> {
+        didSet {
+            for reason in needsYouReasons.symmetricDifference(oldValue) {
+                store.setBoolean(PreferenceKey.needsYou(reason), needsYouReasons.contains(reason))
+            }
+        }
+    }
+
+    /// The three settings above, as the arrangement takes them.
+    public var repositoryArrangementSettings: RepositoryArrangementSettings {
+        RepositoryArrangementSettings(
+            arrangement: repositoryArrangement,
+            activityKinds: recentActivityKinds,
+            needsYouReasons: needsYouReasons
+        )
+    }
+
     // MARK: Diffs
 
     /// How image diffs are shown (`image-diff-type`; two-up). A stored value
@@ -643,6 +807,12 @@ public final class Preferences {
     private func write(_ key: String, _ value: Bool, _ oldValue: Bool) {
         guard value != oldValue else { return }
         store.setBoolean(key, value)
+    }
+
+    /// Writes paths when they changed, compared byte for byte.
+    private func write(_ key: String, _ value: [String], _ oldValue: [String]) {
+        guard value.map(ExactString.init) != oldValue.map(ExactString.init) else { return }
+        store.setStringArray(key, value)
     }
 
     /// Reads the code text size leniently: a stored number, or a string

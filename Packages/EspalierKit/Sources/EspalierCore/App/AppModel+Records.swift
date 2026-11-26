@@ -18,6 +18,7 @@ extension AppModel {
             return
         }
         repositories[index] = record
+        worktreeActivity.openWorktreeDidChange()
         models[id]?.recordDidChange(record)
         persist()
     }
@@ -96,7 +97,8 @@ extension AppModel {
         }
     }
 
-    /// Waits for every scheduled save to be written.
+    /// Waits for every scheduled save to be written, and writes the
+    /// worktrees' activity not saved yet.
     func flushPersistence() async {
         while !saveTasks.isEmpty {
             let tasks = saveTasks
@@ -105,5 +107,6 @@ extension AppModel {
                 await task.value
             }
         }
+        await worktreeActivity.flush()
     }
 }

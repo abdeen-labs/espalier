@@ -88,7 +88,6 @@ struct IgnoreRules: Sendable {
 @MainActor
 final class RepositoryWatcher {
     private let watcher: any FileWatcher
-    private let scheduler: any Scheduler
     private let configuration: WatcherConfiguration
     /// Asks git which working-directory paths it ignores. Without it, every
     /// working-directory path calls for the status.
@@ -103,11 +102,10 @@ final class RepositoryWatcher {
 
     private var subscription: FileWatchSubscription?
     private var consumer: Task<Void, Never>?
-    private var debounce: Task<Void, Never>?
+    /// Waits out each burst of events, then requests `pendingScope`.
+    private let debounce: BurstDebounce
 
     private var pendingScope: RefreshScope = []
-    private var burstStart: Date?
-    private var lastEvent: Date?
 
     /// The ignore check running, if any.
     private var check: Task<Void, Never>?
@@ -140,16 +138,22 @@ final class RepositoryWatcher {
         onRefresh: @escaping @MainActor (RefreshScope) -> Void
     ) {
         self.watcher = watcher
-        self.scheduler = scheduler
         self.configuration = configuration
         self.ignoreRules = ignoreRules
         self.onRefresh = onRefresh
+        debounce = BurstDebounce(
+            scheduler: scheduler,
+            quietPeriod: configuration.quietPeriod,
+            maximumDelay: configuration.maximumDelay
+        )
+        debounce.onEnd = { [weak self] in
+            self?.fire()
+        }
     }
 
     isolated deinit {
         subscription?.cancel()
         consumer?.cancel()
-        debounce?.cancel()
         check?.cancel()
     }
 
@@ -184,16 +188,13 @@ final class RepositoryWatcher {
         subscription = nil
         consumer?.cancel()
         consumer = nil
-        debounce?.cancel()
-        debounce = nil
+        debounce.cancel()
         check?.cancel()
         check = nil
         checkID &+= 1
         waiting = nil
         excludesFile = .unresolved
         pendingScope = []
-        burstStart = nil
-        lastEvent = nil
         suspensions = suspensions.mapValues { Suspension(kind: $0.kind) }
         lateCoverage = []
         paths = nil
@@ -449,58 +450,13 @@ final class RepositoryWatcher {
             return
         }
         pendingScope.formUnion(scope)
-        let now = scheduler.now
-        if burstStart == nil {
-            burstStart = now
-        }
-        lastEvent = now
-        scheduleDebounce()
+        debounce.touch()
     }
 
-    private func scheduleDebounce() {
-        guard debounce == nil else {
-            // The running wait recomputes its deadline when it wakes.
-            return
-        }
-        let scheduler = scheduler
-        debounce = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let delay = self?.remainingDelay() else {
-                    return
-                }
-                if delay <= .zero {
-                    self?.fire()
-                    return
-                }
-                do {
-                    try await scheduler.sleep(for: delay)
-                } catch {
-                    return
-                }
-            }
-        }
-    }
-
-    /// The time left until the refresh is due, in whole milliseconds; nil
-    /// when nothing is pending.
-    private func remainingDelay() -> Duration? {
-        guard let burstStart, let lastEvent else {
-            return nil
-        }
-        let quiet = lastEvent.addingTimeInterval(configuration.quietPeriod.seconds)
-        let latest = burstStart.addingTimeInterval(configuration.maximumDelay.seconds)
-        let remaining = min(quiet, latest).timeIntervalSince(scheduler.now)
-        // Whole milliseconds, so a clock's floating-point error never turns a
-        // due refresh into another tiny wait.
-        return .milliseconds(Int((remaining * 1000).rounded()))
-    }
-
+    /// The burst ended: requests what its events called for.
     private func fire() {
         let scope = pendingScope
         pendingScope = []
-        burstStart = nil
-        lastEvent = nil
-        debounce = nil
         guard !scope.isEmpty else {
             return
         }

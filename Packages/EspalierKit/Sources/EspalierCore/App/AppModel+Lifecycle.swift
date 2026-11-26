@@ -8,8 +8,8 @@ private let logger = Log.logger(category: "app")
 extension AppModel {
     /// Loads the repository list and the accounts (in parallel), restores
     /// the selection (the stored repository, else the first), and starts
-    /// the launch work: accounts, integrations, AI, and the background
-    /// services.
+    /// the launch work: accounts, integrations, AI, the background
+    /// services, and a scan of the watched folders.
     public func load() async {
         guard loadState == .notLoaded else {
             return
@@ -18,15 +18,21 @@ extension AppModel {
 
         async let loadResult = listStore.load()
         async let loadedAccounts = environment.accountsStore.getAllWithUnreadable()
-        let (result, (accounts, unreadableAccounts)) = await (loadResult, loadedAccounts)
+        async let loadedWorktreeActivity = worktreeActivity.store.load()
+        let (result, (accounts, unreadableAccounts), savedActivity) = await (loadResult, loadedAccounts, loadedWorktreeActivity)
 
+        // The worktrees' activity and the pins are for the repositories in
+        // the list: with a list that couldn't be loaded they're left alone,
+        // as the list is.
         switch result {
         case .empty:
-            break
+            worktreeActivity.apply(savedActivity)
         case .loaded(let document):
             apply(document)
+            worktreeActivity.apply(savedActivity)
         case .recovered(let document, let movedAside):
             apply(document)
+            worktreeActivity.apply(savedActivity)
             persistenceIssue = .repositoryListUnreadable(movedTo: movedAside)
         case .newerVersion(let version):
             persistenceIssue = .repositoryListFromNewerVersion(version)
@@ -48,6 +54,7 @@ extension AppModel {
         ai.applicationDidLaunch()
         background.update()
         background.observePreferences()
+        scanWatchedFoldersAtLaunch()
     }
 
     private func apply(_ document: RepositoryListDocument) {
@@ -60,7 +67,9 @@ extension AppModel {
     /// Espalier became, or stopped being, the active app. Becoming active
     /// refreshes the selected repository in full, takes GitHub Desktop's
     /// links back while the setting is on, looks up the installed editors
-    /// and shells again, and resumes the services that pause while inactive.
+    /// and shells again, scans the watched folders when their last scan was
+    /// more than five minutes ago, and resumes the services that pause while
+    /// inactive.
     public func setActive(_ active: Bool) {
         guard active != isActive else {
             return
@@ -68,6 +77,7 @@ extension AppModel {
         isActive = active
         if active {
             integrations.applicationDidBecomeActive()
+            scanWatchedFoldersIfDue()
         }
         if active, let selected = selectedRepository {
             if selected.record.isMissing {
@@ -124,7 +134,8 @@ extension AppModel {
 
     /// Prepares to quit: stops the background services and watchers,
     /// cancels view loads and clones (removing what they cloned), and writes
-    /// the repository list. Running operations are left to finish.
+    /// the repository list and the worktrees' activity. Running operations are
+    /// left to finish.
     public func prepareForTermination() async {
         background.stopAll()
         for model in models.values {
@@ -134,18 +145,26 @@ extension AppModel {
         await flushPersistence()
     }
 
-    /// Waits until every repository's refreshes and operations, and every
-    /// clone, have settled and the repository list is written.
+    /// Waits until every repository's refreshes and operations, every
+    /// clone, the scans of the watched folders, the indicator watcher's
+    /// refreshes and its worktrees' lists and statuses, and the branch pull
+    /// request updater's loads have settled, and the repository list and
+    /// the worktrees' activity are written.
     public func idle() async {
         while true {
             await integrations.launchIdle()
             await accounts.idle()
             await clones.idle()
+            await folderScansIdle()
             for model in models.values {
                 await model.idle()
             }
+            await background.indicatorWatcher.idle()
+            await background.branchPullRequests.idle()
             await flushPersistence()
-            if accounts.isIdle, clones.isIdle, models.values.allSatisfy(\.isIdle), saveTasks.isEmpty {
+            if accounts.isIdle, clones.isIdle, folderScan == nil, models.values.allSatisfy(\.isIdle),
+               background.indicatorWatcher.isIdle, background.branchPullRequests.isIdle, saveTasks.isEmpty,
+               worktreeActivity.isFlushed {
                 return
             }
         }

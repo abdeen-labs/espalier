@@ -166,18 +166,30 @@ struct RepositoryListGroupingTests {
     func clonesAndBadges() {
         let record = RepositoryRecord(path: "/r/app")
         let clone = CloneTask(url: "https://github.com/octocat/hello.git", path: "/r/hello")
-        let indicator = RepositoryIndicator(aheadBehind: AheadBehind(ahead: 1, behind: 2), changedFilesCount: 3)
+        let indicator = RepositoryIndicator(
+            head: .branch(name: "feature"),
+            aheadBehind: AheadBehind(ahead: 1, behind: 2),
+            changedFilesCount: 3,
+            stoppedOperation: .rebase,
+            conflictedFilesCount: 2
+        )
         let grouped = groupRepositories([.repository(record), .clone(clone)], [record.id: indicator], [])
 
         #expect(grouped.map(\.identifier) == [.other])
         let items = grouped[0].items
         #expect(items.map(\.text) == [["app", "app"], ["hello"]])
         #expect(items[0].id == .repository(record.id))
+        #expect(items[0].head == .branch(name: "feature"))
         #expect(items[0].aheadBehind == AheadBehind(ahead: 1, behind: 2))
         #expect(items[0].changedFilesCount == 3)
+        #expect(items[0].stoppedOperation == .rebase)
+        #expect(items[0].conflictedFilesCount == 2)
         #expect(items[1].id == .clone(clone.id))
+        #expect(items[1].head == nil)
         #expect(items[1].aheadBehind == nil)
         #expect(items[1].changedFilesCount == 0)
+        #expect(items[1].stoppedOperation == nil)
+        #expect(items[1].conflictedFilesCount == 0)
     }
 
     @Test("keeps items with equal titles in list order")
