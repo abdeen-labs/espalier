@@ -217,6 +217,20 @@ extension RepositoryModel {
         await refreshScheduler.waitForRequestedPass(covering: scope)
     }
 
+    /// Waits until the parts of `scope` that have never loaded have, when a
+    /// refresh that loads them was asked for: selecting a repository asks
+    /// for all of it. What reads the repository's state right after it's
+    /// selected (its branch, its remotes) awaits this first, so state that
+    /// hasn't loaded isn't taken for state that isn't there. Returns at
+    /// once when `scope` has loaded, or when nothing has asked for it.
+    public func awaitFirstLoad(of scope: RefreshScope) async {
+        let missing = scope.subtracting(gitState.loaded)
+        guard !missing.isEmpty else {
+            return
+        }
+        await refreshScheduler.waitForRequestedPass(covering: missing)
+    }
+
     private func release(_ lanes: [OperationLane], _ operation: ActiveOperation) {
         for lane in lanes.reversed() {
             lane.release(operation)

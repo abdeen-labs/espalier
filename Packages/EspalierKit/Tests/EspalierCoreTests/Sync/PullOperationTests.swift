@@ -315,6 +315,29 @@ struct PullOperationTests {
         await fixture.app.idle()
     }
 
+    @Test("a pull asked for as the repository is selected waits for its branch and its remotes to load")
+    func pullsAsSelected() async throws {
+        let (local, remote) = try await setupRepositoryWithRemote()
+        let theirs = try await pushCommitFromAnotherClone(remote, path: "theirs.txt", contents: "theirs\n")
+        let harness = try AppHarness(responder: PromptResponder.failing())
+        // The repository is in the list from the launch before, and another
+        // one is selected: nothing of it has loaded in this launch.
+        let first = await harness.loadedApp()
+        let id = try #require(try await first.addRepositories([local.path]).added.first)
+        _ = try await harness.addAndSelect(try await setupRepositoryWithRemote().local, to: first)
+        await first.prepareForTermination()
+        let app = await harness.loadedApp()
+        let model = try #require(app.repository(id))
+        #expect(!model.gitState.loaded.contains(.remotes))
+
+        // As a card's Pull does: selected, then pulled at once.
+        app.select(.repository(id))
+        #expect(try await model.sync.pull() == .completed)
+
+        #expect(JSCompat.trim(try await runGit(["rev-parse", "HEAD"], local)) == theirs)
+        await app.idle()
+    }
+
     @Test("needs a remote and a branch")
     func preconditions() async throws {
         let fixture = try await makeSelectedRepository()

@@ -126,7 +126,14 @@ enum HomeSteps {
         case .open(let place, let then):
             await HomeActions.open(key, place: place, in: context)
             // It stays on Home when the work couldn't be opened.
-            guard !context.state.isShowingHome, let then else {
+            guard !context.state.isShowingHome, let then, let opened = context.repository else {
+                return
+            }
+            // The repository was only just selected, and what follows reads
+            // its branch and its remotes: it waits for them to load, and
+            // does nothing when the window has gone elsewhere meanwhile.
+            await opened.awaitFirstLoad(of: [.status, .refs, .remotes])
+            guard !context.state.isShowingHome, context.repository === opened else {
                 return
             }
             follow(then, in: context)

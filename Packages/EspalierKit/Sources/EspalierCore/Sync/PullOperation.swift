@@ -56,6 +56,9 @@ extension SyncModel {
         guard let repository else {
             throw notInList(.pull)
         }
+        // A repository that was only just selected (opened from Home to
+        // pull) hasn't loaded its branch and its remotes yet.
+        await repository.awaitFirstLoad(of: [.status, .refs, .remotes])
         try repository.operations.requireCheckoutAllowed(.pull)
         await refreshGitHubRepositoryIfNeeded()
 
