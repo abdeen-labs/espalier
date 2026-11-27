@@ -16,6 +16,16 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.7.4] - 2026-11-27
+
+### Changed
+
+- Home no longer acts on the repository you last had open. The sidebar is dimmed there, with no count and nothing selected, and a repository's menu commands and shortcuts, such as ⌘1, ⌘2, and Push, are off until you open one. The jump field lists every repository and no branches.
+
+### Fixed
+
+- With the sidebar as icons, opening a repository from Home moved the icons down, out from under the pointer. They stay where they are now, with the shelf beside them.
+
 ## [1.7.3] - 2026-11-26
 
 ### Fixed
@@ -299,7 +309,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.7.3...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.7.4...HEAD
+[1.7.4]: https://github.com/abdeen-labs/espalier/compare/v1.7.3...v1.7.4
 [1.7.3]: https://github.com/abdeen-labs/espalier/compare/v1.7.2...v1.7.3
 [1.7.2]: https://github.com/abdeen-labs/espalier/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/abdeen-labs/espalier/compare/v1.7...v1.7.1
