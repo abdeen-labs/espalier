@@ -95,13 +95,16 @@ struct WatchFolderTests {
         let (_, app, context, model) = try await makeWindow()
         let id = model.id
         app.preferences.confirmRepositoryRemoval = true
-        context.actions.perform(.removeRepository(id))
+        // As a card's Remove… on Home does: the menu bar's acts on no
+        // repository there.
+        let removal = Task { await RepositoryActions.remove(id, in: context) }
         await waitUntil { context.presenter.confirmation != nil }
         #expect(!context.actions.canPerform(.watchFolder))
         #expect(!context.actions.canPerform(.addLocalRepository))
         let pending = try #require(context.presenter.confirmation)
         context.presenter.respond(to: pending.id, with: .cancelled)
         await waitUntil { context.presenter.confirmation == nil }
+        await removal.value
         #expect(context.actions.canPerform(.watchFolder))
         await context.actions.idle()
         await app.idle()
