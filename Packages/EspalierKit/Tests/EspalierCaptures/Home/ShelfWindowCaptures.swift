@@ -2,7 +2,8 @@
 // work in five repositories, with the Home button in the toolbar; the same
 // with Home off (no Home button); and the window on Home (the "Home"
 // capsule and the jump field, no repository's items, and no shelf), with
-// four cards and docs-site In Progress, the first card alone ringed.
+// four cards and docs-site In Progress, the first card alone ringed; and
+// Changes and Home beside the icons style's rail, the shelf after it.
 
 import AppKit
 @testable import EspalierCore
@@ -107,6 +108,20 @@ extension MainToolbarWindows {
                 let fixture = try await fixture()
                 fixture.app.preferences.showsHome = false
                 await captureWindow(fixture, named: "changes-home-off")
+            }
+        }
+
+        @Test(
+            "beside the icons style's rail, Changes under the shelf and Home: the rail starts under the toolbar on both",
+            arguments: [NamedCase("changes-rail", false), NamedCase("home-rail", true)]
+        )
+        func rail(_ onHome: NamedCase<Bool>) async throws {
+            try await withIsolatedGitConfig { _ in
+                let fixture = try await fixture()
+                fixture.app.preferences.showsHome = true
+                fixture.app.preferences.sidebarStyle = .icons
+                fixture.context.state.isShowingHome = onHome.value
+                await captureWindow(fixture, named: onHome.name)
             }
         }
 

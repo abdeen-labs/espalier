@@ -97,15 +97,17 @@ struct MainWindow: View {
     private var detail: some View {
         let state = context.state
         let inspector = inspectorBinding
-        return VStack(spacing: 0) {
-            // The shelf, above the detail area while it shows a repository.
-            if !state.isShowingHome {
-                WorkShelf()
+        return HStack(spacing: 0) {
+            if context.sidebarStyle == .icons, !state.isRailHidden {
+                SidebarRail()
+                    .transition(motion.animates ? AnyTransition.move(edge: .leading) : .identity)
             }
-            HStack(spacing: 0) {
-                if context.sidebarStyle == .icons, !state.isRailHidden {
-                    SidebarRail()
-                        .transition(motion.animates ? AnyTransition.move(edge: .leading) : .identity)
+            VStack(spacing: 0) {
+                // The shelf, above the detail area while it shows a
+                // repository, after the rail: the rail starts under the
+                // toolbar on Home and in a repository alike.
+                if !state.isShowingHome {
+                    WorkShelf()
                 }
                 DetailRouter()
                     // The inset card, or its part before Commit Info's.
