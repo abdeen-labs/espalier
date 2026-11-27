@@ -429,16 +429,18 @@ extension AppModel {
     }
 
     /// The menu bar's capabilities, all disabled while a sheet or alert is
-    /// open (`isModalPresented`).
-    public func capabilities(isModalPresented: Bool) -> RepositoryCapabilities {
-        RepositoryCapabilities(capabilitiesState(isModalPresented: isModalPresented))
+    /// open (`isModalPresented`), and with no repository's commands where
+    /// the window shows none (`showsRepository` false: Home).
+    public func capabilities(isModalPresented: Bool, showsRepository: Bool = true) -> RepositoryCapabilities {
+        RepositoryCapabilities(capabilitiesState(isModalPresented: isModalPresented, showsRepository: showsRepository))
     }
 
-    /// What the capability rules read, from the models.
-    func capabilitiesState(isModalPresented: Bool = false) -> RepositoryCapabilities.State {
+    /// What the capability rules read, from the models: no selection where
+    /// the window shows no repository.
+    func capabilitiesState(isModalPresented: Bool = false, showsRepository: Bool = true) -> RepositoryCapabilities.State {
         let selectionState: RepositoryCapabilities.Selection
         var alias: String?
-        switch selection {
+        switch showsRepository ? selection : nil {
         case nil:
             selectionState = .none
         case .clone?:

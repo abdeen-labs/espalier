@@ -1,8 +1,8 @@
 // Where the window goes with Home: it opens on Home while the setting is
 // on and on its repository while it's off; Go ▸ Home is offered only with
 // the setting on; switching repositories and showing a place leave Home;
-// and opening a piece of work selects its repository at its worktree, at
-// the place asked for.
+// opening a piece of work selects its repository at its worktree, at the
+// place asked for; and on Home no command acts on the selected repository.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -59,6 +59,32 @@ struct HomeRoutingTests {
         await waitUntil { context.state.isShowingHome }
         context.select(.history)
         #expect(!context.state.isShowingHome)
+        await app.idle()
+    }
+
+    @Test("on Home no command acts on the selected repository and Show Changes stays on Home; app-wide ones run, and leaving Home allows the repository's again")
+    func homeActsOnNoRepository() async throws {
+        let (_, app, context, _) = try await makeWindow(showsHome: true)
+        let actions = context.actions
+        let repositoryCommands: [ActionID] = [
+            .showChanges, .showHistory, .newBranch(startPoint: nil), .showInFinder(path: nil),
+            .openInTerminal(path: nil), .repositorySettings, .showWorktrees,
+        ]
+
+        for action in repositoryCommands {
+            #expect(!actions.canPerform(action), "\(action)")
+        }
+        for action in [ActionID.switchRepository, .cloneRepository(url: nil), .showCommandPalette] {
+            #expect(actions.canPerform(action), "\(action)")
+        }
+        actions.perform(.showChanges)
+        await actions.idle()
+        #expect(context.state.isShowingHome)
+
+        context.leaveHome()
+        for action in repositoryCommands {
+            #expect(actions.canPerform(action), "\(action)")
+        }
         await app.idle()
     }
 

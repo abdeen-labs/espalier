@@ -224,8 +224,8 @@ struct HomeLocationView: View {
 }
 
 /// The field in the list search's place while the window is on Home: it
-/// reads "Jump to a repository or branch", with the command palette's key
-/// cap, and opens the command palette.
+/// reads "Jump to a repository", with the command palette's key cap, and
+/// opens the command palette, which lists no branches on Home.
 struct JumpField: View {
     @Environment(WindowContext.self) private var context
 
@@ -240,7 +240,7 @@ struct JumpField: View {
 /// The jump field's look: a search field's capsule, its prompt, and the
 /// key cap.
 struct JumpFieldView: View {
-    static let prompt = "Jump to a repository or branch"
+    static let prompt = "Jump to a repository"
 
     let keyCap: String?
     var action: () -> Void = {}

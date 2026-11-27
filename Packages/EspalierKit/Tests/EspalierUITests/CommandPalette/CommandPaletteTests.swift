@@ -1,9 +1,9 @@
 // The command palette: how its matcher ranks (prefix, then word starts,
 // then the rest; case aside; a query's words in any order, in the title or
 // the menu), the section with the best match first, the keyboard's
-// highlight, which actions it lists as the window's state changes, and
-// that choosing a row runs it: an action, a branch's checkout, and a
-// repository switch.
+// highlight, which actions it lists as the window's state changes, what
+// it lists on Home, and that choosing a row runs it: an action, a branch's
+// checkout, and a repository switch.
 
 @testable import EspalierCore
 import EspalierCoreTestSupport
@@ -239,5 +239,31 @@ struct CommandPaletteWindowTests {
         let row = try await choose(name, in: fixture)
         #expect(row.id == .repository(otherID))
         #expect(fixture.app.selection == .repository(otherID))
+    }
+
+    @Test("on Home it lists every repository, the selected one too, and none of its branches or commands; choosing the selected one leaves Home for it")
+    func onHome() async throws {
+        let fixture = try await makeOperationsFixture()
+        let other = try setupEmptyRepository()
+        let added = try await fixture.app.addRepositories([other.path])
+        let otherID = try #require(added.added.first)
+        await fixture.settle()
+        let context = fixture.context
+        let selected = fixture.repository.id
+        try await runGit(["branch", "elsewhere"], fixture.local)
+        await fixture.refresh()
+        #expect(!CommandPaletteSources.make(context).branches.isEmpty)
+
+        context.state.isShowingHome = true
+        let sources = CommandPaletteSources.make(context)
+        #expect(Set(sources.repositories.map(\.id)) == [.repository(selected), .repository(otherID)])
+        #expect(sources.branches.isEmpty)
+        #expect(!lists(.showChanges, sources))
+
+        let name = try #require(fixture.app.record(selected)?.displayName)
+        let row = try await choose(name, in: fixture)
+        #expect(row.id == .repository(selected))
+        #expect(fixture.app.selection == .repository(selected))
+        #expect(!context.state.isShowingHome)
     }
 }

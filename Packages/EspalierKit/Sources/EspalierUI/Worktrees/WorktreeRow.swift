@@ -187,11 +187,12 @@ enum WorktreeContextMenu {
     }
 
     /// The same menu for a worktree of `repository`, selected or not
-    /// (Home's cards): Rename… and Delete… act on that repository's
-    /// worktree.
+    /// (Home's cards): Rename…, Show in Finder, and Delete… act on that
+    /// repository's worktree. On Home, which acts on no repository, they
+    /// do so for the selected one too.
     @MenuBuilder
     static func content(_ worktree: WorktreeRowContent, of repository: RepositoryModel, context: WindowContext) -> MenuContent {
-        if context.repository === repository {
+        if context.repository === repository, !context.isOnHome {
             content(worktree, context: context)
         } else {
             let entry = WorktreeActions.worktree(at: worktree.path, in: repository)
@@ -207,7 +208,9 @@ enum WorktreeContextMenu {
             MenuAction("Copy Worktree Path") {
                 WorktreeActions.copy(worktree.path)
             }
-            context.actions.menuAction(.showInFinder(path: worktree.path), title: "Show in Finder")
+            MenuAction("Show in Finder") {
+                context.app.integrations.showInFinder(worktree.path)
+            }
             MenuDivider()
             MenuAction(ActionKind.deleteWorktree.title) {
                 guard let entry else {

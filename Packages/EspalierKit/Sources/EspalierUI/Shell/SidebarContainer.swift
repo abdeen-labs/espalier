@@ -1,7 +1,8 @@
 // The sidebar's column, in the hidden style (Settings ▸ Appearance ▸
 // Sidebar; the icons style's rail is SidebarRail.swift). It shows the
 // current repository's places you select (Changes, History, branches, pull requests, tags, stashes),
-// and a filter field at the bottom, as in Xcode's navigators. Each section
+// and a filter field at the bottom, as in Xcode's navigators; on Home, which
+// isn't in a repository, only the filter field. Each section
 // after the first is a feature's view. After a switch, the repository's
 // sections keep showing the previous repository until the selected one has
 // loaded (`SidebarSectionsHold`).
@@ -45,7 +46,8 @@ struct SidebarContainer: View {
     var body: some View {
         // Read so that the hold's end draws again.
         let _ = holdEnds
-        let selected = context.app.loadState == .ready ? context.repository.flatMap { $0.isUsable ? $0 : nil } : nil
+        // Home isn't in a repository: the sidebar shows none there.
+        let selected = context.app.loadState == .ready && !context.isOnHome ? context.repository.flatMap { $0.isUsable ? $0 : nil } : nil
         let shown = hold.repository(showing: selected, in: context.app, now: .now)
         let isHolding = shown?.id != selected?.id
         let selection = placeSelection(isHolding: isHolding)
@@ -122,13 +124,13 @@ struct SidebarContainer: View {
     }
 
     /// The selected place; choosing one remembers it for the repository.
-    /// Without places (a missing or unsafe repository) nothing is selected:
-    /// a selection whose row goes away with its section would stay drawn
-    /// where the row was. While the sections still show the previous
-    /// repository, their rows can't be chosen.
+    /// Without places (on Home, or a missing or unsafe repository) nothing
+    /// is selected: a selection whose row goes away with its section would
+    /// stay drawn where the row was. While the sections still show the
+    /// previous repository, their rows can't be chosen.
     private func placeSelection(isHolding: Bool) -> Binding<SidebarPlace?> {
         Binding(
-            get: { context.repository?.isUsable == true ? context.state.place : nil },
+            get: { context.repository?.isUsable == true && !context.isOnHome ? context.state.place : nil },
             set: { place in
                 if let place, !Self.actionable([place], isHolding: isHolding).isEmpty {
                     context.select(place)

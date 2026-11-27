@@ -227,8 +227,8 @@ extension CommandPaletteSources {
     /// What the palette lists in `context`'s window now: the actions that
     /// can run (`WindowActions.canPerform(_:)`), titled and checked as
     /// their menu items are; the other repositories while Switch
-    /// Repository… can run; and the current repository's other local
-    /// branches while Switch Branch… can.
+    /// Repository… can run, every one on Home, which isn't in one; and the
+    /// current repository's other local branches while Switch Branch… can.
     @MainActor
     static func make(_ context: WindowContext) -> CommandPaletteSources {
         let actions = context.actions
@@ -249,7 +249,7 @@ extension CommandPaletteSources {
 
         let app = context.app
         if actions.canPerform(.switchRepository) {
-            let current = context.repository?.id
+            let current = context.isOnHome ? nil : context.repository?.id
             for record in app.repositories where record.id != current {
                 sources.repositories.append(CommandPaletteItem(
                     id: .repository(record.id),

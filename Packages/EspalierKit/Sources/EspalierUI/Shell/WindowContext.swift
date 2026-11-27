@@ -107,7 +107,6 @@ public final class WindowContext {
     public var repository: RepositoryModel? {
         app.selectedRepository
     }
-
     /// Whether the welcome flow fills the window, in the main window's
     /// place.
     var showsWelcome: Bool {
@@ -136,7 +135,7 @@ public final class WindowContext {
             return cachedCapabilities
         }
         let capabilities = withObservationTracking {
-            app.capabilities(isModalPresented: isModalPresented)
+            app.capabilities(isModalPresented: isModalPresented, showsRepository: !isOnHome)
         } onChange: { [weak self] in
             // The models are main-actor isolated, so their changes (and
             // this) happen on the main thread.

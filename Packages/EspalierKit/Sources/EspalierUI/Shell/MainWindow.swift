@@ -57,7 +57,7 @@ struct MainWindow: View {
         .overlay {
             CommandPaletteAnchor()
         }
-        .navigationTitle(context.repository?.record.displayName ?? "Espalier")
+        .navigationTitle(context.isOnHome ? "Espalier" : context.repository?.record.displayName ?? "Espalier")
         .toolbar(removing: .title)
         .toolbar(id: MainToolbar.identifier) {
             MainToolbar(context: context)
@@ -133,10 +133,10 @@ struct MainWindow: View {
         }
     }
 
-    /// Commit Info shows only in History-like places.
+    /// Commit Info shows only in History-like places, never on Home.
     private var inspectorBinding: Binding<Bool> {
         Binding(
-            get: { context.state.isInspectorPresented && context.state.place?.showsCommits == true },
+            get: { context.state.isInspectorPresented && !context.isOnHome && context.state.place?.showsCommits == true },
             set: { context.state.isInspectorPresented = $0 }
         )
     }
@@ -225,8 +225,10 @@ private struct FloatingStatusStack: View {
         }
     }
 
+    /// The selected repository's capsule; none on Home, which isn't in a
+    /// repository.
     private var capsuleContent: OperationCapsuleContent? {
-        guard let repository = context.repository, repository.isUsable, context.state.place != .changes else {
+        guard !context.isOnHome, let repository = context.repository, repository.isUsable, context.state.place != .changes else {
             return nil
         }
         return OperationCapsuleContent.make(repository, numberFormat: numberFormat)

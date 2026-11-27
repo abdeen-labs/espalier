@@ -20,7 +20,9 @@
 // pill, and space after History; or icons 36 square, the count on a quiet
 // capsule, and a hairline after History. Icons have the row radius, the
 // hover wash under the pointer and on the icon whose popover is open, and
-// the selected one is on the sidebar's selection.
+// the selected one is on the sidebar's selection. On Home, which isn't in a
+// repository, the rail shows none of one: Changes, History, and Branches,
+// faded and disabled, with no count and none selected.
 //
 // The hover wash fades. Changes' count rolls to a new value over 0.2 s, and
 // its capsule and the warning fade in and out. A section's icon fades in
@@ -156,10 +158,18 @@ struct SidebarRail: View {
     @Environment(WindowContext.self) private var context
 
     var body: some View {
-        let shown = repository
+        // Home isn't in a repository: the rail shows none of one, only the
+        // icons every repository has, disabled, until a repository opens.
+        let isOnHome = context.isOnHome
+        let shown = isOnHome ? nil : repository
         let sections = shown.map { RailSection.shown(in: $0, accounts: context.app.accounts) } ?? []
         VStack(spacing: Metrics.Rail.spacing) {
-            if let repository = shown {
+            if isOnHome {
+                RailButton("Changes", systemImage: PlaceIdentity.changes.systemImage, isSelected: false) {}
+                RailButton("History", systemImage: PlaceIdentity.history.systemImage, isSelected: false) {}
+                groupBreak
+                RailButton(RailSection.branches.title, systemImage: RailSection.branches.place.systemImage, isSelected: false) {}
+            } else if let repository = shown {
                 let place = context.state.place
                 ChangesRailButton(content: ChangesPlaceRowContent(repository), isSelected: place == .changes) {
                     context.select(.changes)
@@ -172,21 +182,14 @@ struct SidebarRail: View {
                 ) {
                     context.select(.history)
                 }
-                if Metrics.Rail.isRoomy {
-                    Color.clear
-                        .frame(height: Metrics.Rail.groupGap)
-                        .accessibilityHidden(true)
-                } else {
-                    Hairline()
-                        .frame(width: Metrics.Rail.dividerWidth)
-                        .padding(.vertical, Metrics.Rail.spacing)
-                }
+                groupBreak
                 ForEach(sections) { section in
                     RailSectionButton(section: section, repository: repository)
                         .barTransition()
                 }
             }
         }
+        .disabled(isOnHome)
         // A section's icon comes and goes as a bar does, the icons below
         // moving with it; Branches is always there.
         .barMotion(sections.contains(.pullRequests))
@@ -200,6 +203,21 @@ struct SidebarRail: View {
         .background(Color(espalier: InsetCard.isOn ? .clear : Palette.sidebar))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Sidebar")
+    }
+
+    /// Between History and the sections: space in the roomy rail, a
+    /// hairline in the compact one.
+    @ViewBuilder
+    private var groupBreak: some View {
+        if Metrics.Rail.isRoomy {
+            Color.clear
+                .frame(height: Metrics.Rail.groupGap)
+                .accessibilityHidden(true)
+        } else {
+            Hairline()
+                .frame(width: Metrics.Rail.dividerWidth)
+                .padding(.vertical, Metrics.Rail.spacing)
+        }
     }
 
     private var repository: RepositoryModel? {
@@ -305,7 +323,8 @@ private struct RailSectionButton: View {
 /// A rail icon: its symbol in a square (`Metrics.Rail.item`), the hover wash
 /// under the pointer and while its popover is open, the sidebar's selection
 /// while selected, and what it badges at its top trailing corner. Its
-/// tooltip is its title and shortcut.
+/// tooltip is its title and shortcut. Disabled, it fades with its badge, as
+/// every disabled control does, and takes no wash.
 struct RailButton<Badge: View>: View {
     private let title: String
     private let systemImage: String
@@ -316,6 +335,7 @@ struct RailButton<Badge: View>: View {
     private let action: () -> Void
     private let badge: Badge
     @State private var isHovered = false
+    @Environment(\.isEnabled) private var isEnabled
 
     /// - Parameters:
     ///   - accessibilityValue: What VoiceOver hears of the badge.
@@ -342,7 +362,7 @@ struct RailButton<Badge: View>: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Metrics.Radius.row, style: .continuous)
-        let isWashed = isHovered || isOpen
+        let isWashed = isEnabled && (isHovered || isOpen)
         Button(action: action) {
             iconView
                 .frame(width: Metrics.Rail.item, height: Metrics.Rail.item)
@@ -368,6 +388,9 @@ struct RailButton<Badge: View>: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
+        // One layer, so the badge's cutout stays opaque over the icon.
+        .compositingGroup()
+        .opacity(isEnabled ? 1 : Palette.disabledOpacity)
         .onHover { isHovered = $0 }
         .tooltip([title, shortcut].compactMap(\.self).joined(separator: " "))
         .accessibilityLabel(title)

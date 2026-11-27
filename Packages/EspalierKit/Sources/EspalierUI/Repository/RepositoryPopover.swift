@@ -475,6 +475,13 @@ enum RepositoryContextMenu {
         }
     }
 
+    /// Whether `action`, which runs once a repository is selected and
+    /// shown, can run: on Home, which acts on no repository, whenever no
+    /// modal is up.
+    private static func canPerformOnceShown(_ action: ActionID, in context: WindowContext) -> Bool {
+        context.isOnHome ? !context.isModalPresented : context.actions.canPerform(action)
+    }
+
     /// What Copy Repository Name copies: the GitHub repository's name, else the
     /// folder's, never the alias.
     static func copiedName(_ record: RepositoryRecord) -> String {
@@ -498,19 +505,20 @@ enum RepositoryContextMenu {
                 app.setAlias(nil, for: record.id)
             }
         }
-        // The worktree actions, for the row's repository once it's selected.
+        // The worktree actions, for the row's repository once it's selected
+        // and shown (from Home, they leave it).
         MenuAction("Show Worktrees") {
-            if app.selection != .repository(record.id) {
+            if app.selection != .repository(record.id) || context.isOnHome {
                 RepositoryActions.switchTo(.repository(record.id), in: context)
             }
             context.actions.perform(.showWorktrees)
         }
-        .disabled(isMissing || !context.actions.canPerform(.showWorktrees))
+        .disabled(isMissing || !canPerformOnceShown(.showWorktrees, in: context))
         MenuAction("New Worktree…") {
             RepositoryActions.switchTo(.repository(record.id), in: context)
             context.actions.perform(.newWorktree(branch: nil))
         }
-        .disabled(isMissing || !context.actions.canPerform(.newWorktree(branch: nil)))
+        .disabled(isMissing || !canPerformOnceShown(.newWorktree(branch: nil), in: context))
         accountMenu(for: record, in: context)
         if !isMissing {
             MenuAction("Repository Settings…") {

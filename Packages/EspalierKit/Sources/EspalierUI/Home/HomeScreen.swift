@@ -31,7 +31,9 @@ extension WindowContext {
         state.featureState(HomeModel.self) { HomeModel() }
     }
 
-    /// Whether the window shows Home.
+    /// Whether the window shows Home, which isn't in a repository: no
+    /// command acts on the selected repository there, and the window shows
+    /// none of it.
     var isOnHome: Bool {
         DetailDestination.make(app: app, isShowingHome: state.isShowingHome, place: state.place) == .home
     }
