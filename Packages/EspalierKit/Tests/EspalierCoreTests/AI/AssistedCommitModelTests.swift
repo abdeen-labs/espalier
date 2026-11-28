@@ -55,8 +55,6 @@ struct AssistedCommitModelTests {
         await fixture.refresh()
         let excluded = try #require(fixture.model.changes.workingDirectory.files.first { $0.path == "excluded.txt" })
         fixture.model.changes.setIncluded([excluded.id], false)
-        // The tests that push turn it back on.
-        fixture.model.commit.setPushesAfterCommitting(false)
         return fixture
     }
 
