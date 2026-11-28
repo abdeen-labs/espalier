@@ -75,6 +75,8 @@ public final class EspalierAppDelegate: NSObject, NSApplicationDelegate {
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Context clicks in every window open Espalier's menus.
         MenuEventRouter.shared.install()
+        // Control-P and Control-N move through every list.
+        ListNavigationKeys.install()
         // Before launch finishes, so a notification click that launched
         // Espalier reaches it.
         NotificationRouter.shared.install()
