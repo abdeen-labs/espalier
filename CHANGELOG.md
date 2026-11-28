@@ -16,6 +16,20 @@ install the update.
      below, so the entries fall under it; then repoint the [Unreleased] link
      and add a compare-link at the bottom. -->
 
+## [1.7.5] - 2026-11-28
+
+### Added
+
+- Control-P and Control-N move up and down any list, as the arrow keys do, and through a filter's results while you type in it. Text you're writing keeps the keys.
+
+### Changed
+
+- Push After Committing is off until you turn it on in a repository. A repository where you've set it keeps your choice.
+
+### Fixed
+
+- Checking out a local branch whose name starts with a dash, such as --force, passed the name to git as an option instead of switching to the branch, and --force discarded uncommitted changes. Espalier switches to the branch now.
+
 ## [1.7.4] - 2026-11-27
 
 ### Changed
@@ -309,7 +323,8 @@ install the update.
 
 The first release.
 
-[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.7.4...HEAD
+[Unreleased]: https://github.com/abdeen-labs/espalier/compare/v1.7.5...HEAD
+[1.7.5]: https://github.com/abdeen-labs/espalier/compare/v1.7.4...v1.7.5
 [1.7.4]: https://github.com/abdeen-labs/espalier/compare/v1.7.3...v1.7.4
 [1.7.3]: https://github.com/abdeen-labs/espalier/compare/v1.7.2...v1.7.3
 [1.7.2]: https://github.com/abdeen-labs/espalier/compare/v1.7.1...v1.7.2
