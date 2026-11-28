@@ -2,8 +2,8 @@
 // Merge or Continue, the operation panel's button, while an operation waits
 // on the user, and is titled as they are), Generate Commit
 // Message (⌥⌘G, gone while AI is off), Go to Commit Message (⌘J), Amend Last
-// Commit, Undo Commit…, Discard All Changes…, and All Work's Mark Viewed
-// (⌥⌘V), plus the Debug menu's Changes Apply benchmark. Each runs what the composer's controls run,
+// Commit, Undo Commit…, Discard All Changes…, Show All Work (⌥⌘A), and All
+// Work's Mark Viewed (⌥⌘V), plus the Debug menu's Changes Apply benchmark. Each runs what the composer's controls run,
 // through the window's presenter.
 
 import EspalierCore
@@ -14,7 +14,8 @@ import GitKit
 enum ChangesActions {
     static func register(into actions: WindowActions, context: WindowContext) {
         actions.register(.commitChanges, isEnabled: { [weak context] _ in
-            guard let context, context.state.place == .changes, let controller = controller(context) else {
+            // All Work has no composer to commit from.
+            guard let context, context.state.place == .changes, !isShowingAllWork(context), let controller = controller(context) else {
                 return false
             }
             // ⌘↩ in Changes: Commit Merge or Continue (the operation
@@ -58,8 +59,10 @@ enum ChangesActions {
             }
         }
 
+        // The composer is with the uncommitted changes: All Work ends.
         actions.register(.goToCommitMessage) { [weak context] _ in
             context?.select(.changes)
+            context?.repository?.allWork.choose(.uncommitted)
             context?.state.requestCommitMessageFocus()
         }
 
@@ -76,6 +79,8 @@ enum ChangesActions {
             guard let context, let controller = controller(context) else {
                 return
             }
+            // The amend banner is the composer's: All Work ends.
+            controller.repository.allWork.choose(.uncommitted)
             await controller.toggleAmend()
         }
 
@@ -93,8 +98,10 @@ enum ChangesActions {
             guard let context, let controller = controller(context) else {
                 return
             }
-            // The sparkle's popovers anchor in the composer.
+            // The sparkle's popovers anchor in the composer, which is with
+            // the uncommitted changes.
             context.select(.changes)
+            controller.repository.allWork.choose(.uncommitted)
             await controller.generate()
         }
 
@@ -108,6 +115,27 @@ enum ChangesActions {
                 return
             }
             await controller.undo()
+        }
+
+        // Changes with everything on the branch, from any place; "Hide All
+        // Work" while it shows, which goes back to the uncommitted changes.
+        actions.register(.toggleAllWork, isEnabled: { [weak context] _ in
+            context?.repository?.allWork.isAvailable == true
+        }, title: { [weak context] _ in
+            guard let context, isShowingAllWork(context) else {
+                return nil
+            }
+            return "Hide All Work"
+        }) { [weak context] _ in
+            guard let context, let allWork = context.repository?.allWork else {
+                return
+            }
+            if isShowingAllWork(context) {
+                allWork.choose(.uncommitted)
+            } else {
+                context.select(.changes)
+                allWork.choose(.allWork)
+            }
         }
 
         // All Work's selected file: viewed, then on to the next not viewed;
@@ -131,6 +159,11 @@ enum ChangesActions {
         Benchmarks.runners[.changesApply] = { context in
             ChangesApplyBenchmark.run(numberFormat: context.app.preferences.numberFormat)
         }
+    }
+
+    /// Whether the window shows Changes in its All Work scope.
+    private static func isShowingAllWork(_ context: WindowContext) -> Bool {
+        !context.isOnHome && context.state.place == .changes && context.repository?.allWork.scope == .allWork
     }
 
     /// The composer's controller for the window's repository.

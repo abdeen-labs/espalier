@@ -25,6 +25,8 @@ install the update.
 ### Changed
 
 - Push After Committing is off until you turn it on in a repository. A repository where you've set it keeps your choice.
+- All Work is something you open now. Changes always opens on your uncommitted changes, without the All Work | Uncommitted switch, and Branch ▸ Show All Work (⌥⌘A) shows everything on the branch, as Home's "files changed" step does. Done in its header, or ⌥⌘A again, goes back, and so does leaving Changes.
+- All Work is for reading only: the commit box and the Stashed Changes row show with your uncommitted changes, not in All Work.
 
 ### Fixed
 

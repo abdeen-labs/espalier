@@ -150,6 +150,7 @@ nonisolated public enum MenuCatalog {
         .item(.compareOnGitHub),
         .item(.viewBranchOnGitHub(name: nil)),
         .separator,
+        .item(.toggleAllWork),
         .item(.previewPullRequest),
         .item(.createPullRequest),
     ])

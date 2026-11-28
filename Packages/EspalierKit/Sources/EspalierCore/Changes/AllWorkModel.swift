@@ -2,8 +2,10 @@
 // commits since the merge base and the uncommitted changes as one list,
 // each file's diff running from the merge base to the working tree. Changes
 // shows it in its All Work scope, for reading: nothing here writes to the
-// repository. The files carry viewed marks, kept per worktree in
-// `ViewedMarksStore` with the content each file had when marked.
+// repository. The scope is chosen each time: it ends when the repository is
+// no longer the selected one and when its worktree changes. The files carry
+// viewed marks, kept per worktree in `ViewedMarksStore` with the content
+// each file had when marked.
 
 import EspalierSupport
 import Foundation
@@ -84,7 +86,7 @@ public final class AllWorkModel: RepositoryFeature {
     public private(set) var files: [AllWorkFile] = []
     /// The files' load failed.
     public private(set) var failure: OperationError?
-    /// The scope the user chose for this worktree; `scope` is what shows.
+    /// The scope the user chose; `scope` is what shows.
     public private(set) var chosenScope: ChangesScope = .uncommitted
     /// The selected file's ID.
     public private(set) var selectedFileID: String?
@@ -130,17 +132,12 @@ public final class AllWorkModel: RepositoryFeature {
         isAvailable && chosenScope == .allWork ? .allWork : .uncommitted
     }
 
-    /// Chooses the scope Changes shows in this worktree, remembered for it.
-    /// All Work shows once it's available.
+    /// Chooses the scope Changes shows. All Work shows once it's available.
     public func choose(_ scope: ChangesScope) {
         guard scope != chosenScope else {
             return
         }
         chosenScope = scope
-        if let repository {
-            PreferenceStore(repository.environment.defaults.defaults).defaults
-                .set(scope == .allWork, forKey: Self.scopeKey(repository.record.path))
-        }
         if scope == .allWork {
             reload()
         } else {
@@ -148,11 +145,6 @@ public final class AllWorkModel: RepositoryFeature {
             failure = nil
             select(nil)
         }
-    }
-
-    /// The `UserDefaults` key of whether a worktree shows All Work.
-    static func scopeKey(_ worktree: String) -> String {
-        "changes-all-work-\(worktree)"
     }
 
     // MARK: Files
@@ -277,6 +269,8 @@ public final class AllWorkModel: RepositoryFeature {
         if case .loading(let previous) = diff {
             diff = previous.map { .loaded($0) } ?? .idle
         }
+        // All Work ends with the repository's turn as the selected one.
+        choose(.uncommitted)
     }
 
     func repositoryPathDidChange(keepingSharedState: Bool) {
@@ -288,18 +282,17 @@ public final class AllWorkModel: RepositoryFeature {
         selectedFileID = nil
         diff = .idle
         diffFileID = nil
+        chosenScope = .uncommitted
         loadWorktreeState()
     }
 
-    /// Reads the worktree's scope and marks.
+    /// Reads the worktree's marks.
     private func loadWorktreeState() {
         guard let repository else {
             return
         }
         let worktree = repository.record.path
         loadedWorktree = worktree
-        let shows = PreferenceStore(repository.environment.defaults.defaults).getBoolean(Self.scopeKey(worktree), false)
-        chosenScope = shows ? .allWork : .uncommitted
         viewedMarks = repository.app?.viewedMarks.marks(for: worktree) ?? [:]
     }
 

@@ -71,6 +71,9 @@ nonisolated public enum ActionID: Sendable {
     /// View ▸ History: the scope.
     case setHistoryScope(HistoryScope)
     case toggleStashedChanges
+    /// Branch ▸ Show All Work: Changes with everything on the branch, or
+    /// back to the uncommitted changes.
+    case toggleAllWork
     /// Marks All Work's selected file viewed, or not, and moves to the next
     /// file not viewed.
     case markViewed
@@ -223,6 +226,7 @@ nonisolated public enum ActionID: Sendable {
         case .setImageDiffType: .setImageDiffType
         case .setHistoryScope: .setHistoryScope
         case .toggleStashedChanges: .toggleStashedChanges
+        case .toggleAllWork: .toggleAllWork
         case .markViewed: .markViewed
         case .increaseCodeTextSize: .increaseCodeTextSize
         case .decreaseCodeTextSize: .decreaseCodeTextSize
@@ -342,7 +346,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
     case deleteSelection, copyPath
     case showChanges, showHistory, showNextPlace, showPreviousPlace, selectPlace, toggleSidebar, filterSidebar, search, showCommandPalette
     case toggleInspector, toggleSplitDiff, toggleHideWhitespace, toggleWrapLines, setImageDiffType, setHistoryScope
-    case toggleStashedChanges, markViewed, increaseCodeTextSize, decreaseCodeTextSize, resetCodeTextSize
+    case toggleStashedChanges, toggleAllWork, markViewed, increaseCodeTextSize, decreaseCodeTextSize, resetCodeTextSize
     case showHome, openWork
     case goBack, goForward, goToCommit, goToFirstParent, goToSecondParent, goToChild
     case push, forcePush, pull, fetch, publishRepository, publishBranch
@@ -394,6 +398,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .setImageDiffType: "Image Diff"
         case .setHistoryScope: "History"
         case .toggleStashedChanges: "Show Stashed Changes"
+        case .toggleAllWork: "Show All Work"
         case .markViewed: "Mark Viewed"
         case .increaseCodeTextSize: "Bigger"
         case .decreaseCodeTextSize: "Smaller"
@@ -509,6 +514,7 @@ nonisolated public enum ActionKind: String, CaseIterable, Sendable {
         case .stashAllChanges: MenuShortcut("s", [.command, .shift])
         case .toggleSidebar: MenuShortcut("s")
         case .toggleStashedChanges: MenuShortcut("h", [.control])
+        case .toggleAllWork: MenuShortcut("a", [.command, .option])
         case .markViewed: MenuShortcut("v", [.command, .option])
         case .discardAllChanges: MenuShortcut(.delete, [.command, .shift])
         case .openInEditor: MenuShortcut("a", [.command, .shift])

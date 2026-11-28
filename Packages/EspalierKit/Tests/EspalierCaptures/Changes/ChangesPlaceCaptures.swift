@@ -149,8 +149,12 @@ struct ChangesPlaceCaptures {
                     allWork.setViewed(file, true)
                 }
             }
-            // Selected once the place shows, as a click selects it.
+            // Chosen once the place shows, as Show All Work chooses it
+            // (it ends as the place leaves), then selected as a click
+            // selects it.
             await capturePlace(fixture, named: "place-all-work") {
+                allWork.choose(.allWork)
+                await fixture.settle()
                 allWork.select(allWork.files.first { $0.path == "Harbor/Stores/TideStore.swift" }?.id)
             }
 
@@ -172,7 +176,7 @@ struct ChangesPlaceCaptures {
         named name: String,
         typing: String? = nil,
         sourceLocation: SourceLocation = #_sourceLocation,
-        once shown: (@MainActor () -> Void)? = nil
+        once shown: (@MainActor () async -> Void)? = nil
     ) async {
         await LoadedCapture.capture(
             ChangesScreen(repository: fixture.repository).windowEnvironment(fixture.context),
@@ -183,7 +187,7 @@ struct ChangesPlaceCaptures {
                 await fixture.settle()
                 host.layoutSubtreeIfNeeded()
                 if let shown {
-                    shown()
+                    await shown()
                     await fixture.settle()
                     host.layoutSubtreeIfNeeded()
                 }

@@ -1,81 +1,18 @@
-// Changes' All Work scope: the scope control (All Work | Uncommitted) in the
-// column's header; All Work's header ("14 files changed" with "5 of 14
-// viewed" at its row's end, "3 commits and uncommitted changes" under it,
-// and a thin bar in the accent);
+// Changes' All Work scope, shown by Branch ▸ Show All Work and Home's
+// "files changed" step: its header ("All Work" and Done, which goes back to
+// the uncommitted changes; "14 files changed" with "5 of 14 viewed" at its
+// row's end; "3 commits and uncommitted changes" under it; and a thin bar
+// in the accent);
 // its files, each led by its viewed mark, in the same AppKit table as
 // Uncommitted's; and the selected file's diff from the merge base, its
 // header with Mark Viewed. `AllWorkModel` holds the files, the marks, and
-// the diff. The list is for reading: no checkboxes, no discard, no staging.
+// the diff. The list is for reading: no checkboxes, no discard, no staging,
+// and no composer.
 
 import EspalierCore
 import EspalierSupport
 import GitKit
 import SwiftUI
-
-// MARK: - The scope control
-
-/// What the scope control shows.
-nonisolated public struct ChangesScopeContent: Sendable, Equatable {
-    public var scope: ChangesScope
-    /// The uncommitted files, counted on Uncommitted's segment.
-    public var uncommittedCount: Int
-    public var numberFormat: NumberFormat
-
-    public init(scope: ChangesScope, uncommittedCount: Int, numberFormat: NumberFormat = defaultNumberFormat) {
-        self.scope = scope
-        self.uncommittedCount = uncommittedCount
-        self.numberFormat = numberFormat
-    }
-
-    /// The control for a repository, while All Work would differ from
-    /// Uncommitted (`AllWorkModel.isAvailable`); nil otherwise.
-    @MainActor
-    public static func make(_ repository: RepositoryModel, numberFormat: NumberFormat) -> ChangesScopeContent? {
-        guard repository.allWork.isAvailable else {
-            return nil
-        }
-        return ChangesScopeContent(
-            scope: repository.allWork.scope,
-            uncommittedCount: repository.changes.workingDirectory.files.count,
-            numberFormat: numberFormat
-        )
-    }
-}
-
-/// All Work | Uncommitted, a small capsule segmented control; Uncommitted
-/// counts its files in the accent.
-struct ChangesScopeControl: View {
-    let content: ChangesScopeContent
-    /// Whether it takes the width it's offered, on a row of its own.
-    var fillsWidth = false
-    let onChange: (ChangesScope) -> Void
-
-    var body: some View {
-        CapsuleSegmentedControl(
-            "Changes Scope",
-            selection: Binding(get: { content.scope }, set: { onChange($0) }),
-            segments: [
-                CapsuleSegment("All Work", value: ChangesScope.allWork),
-                uncommittedSegment,
-            ],
-            fillsWidth: fillsWidth
-        )
-        .fixedSize(horizontal: !fillsWidth, vertical: false)
-        .tooltip(content.scope == .allWork ? "Everything on this branch, committed or not" : "Changes since the last commit")
-    }
-
-    private var uncommittedSegment: CapsuleSegment<ChangesScope> {
-        let count = content.uncommittedCount
-        let formatted = formatCount(count, content.numberFormat)
-        return CapsuleSegment("Uncommitted", value: ChangesScope.uncommitted, accessibilityTitle: count > 0 ? "Uncommitted, \(formatted)" : nil) {
-            if count > 0 {
-                Text(formatted)
-                    .font(Typography.count)
-                    .foregroundStyle(.accent)
-            }
-        }
-    }
-}
 
 // MARK: - The header
 
@@ -92,15 +29,13 @@ nonisolated public struct AllWorkHeaderContent: Sendable, Equatable {
     public var viewed: String
     /// How much has been viewed, 0 to 1.
     public var progress: Double
-    public var scope: ChangesScopeContent?
 
-    public init(title: String, summary: String, baseHelp: String? = nil, viewed: String, progress: Double, scope: ChangesScopeContent?) {
+    public init(title: String, summary: String, baseHelp: String? = nil, viewed: String, progress: Double) {
         self.title = title
         self.summary = summary
         self.baseHelp = baseHelp
         self.viewed = viewed
         self.progress = progress
-        self.scope = scope
     }
 
     /// What the work is, in plain words: "3 commits and uncommitted
@@ -135,41 +70,31 @@ nonisolated public struct AllWorkHeaderContent: Sendable, Equatable {
             ),
             baseHelp: allWork.comparison.map { "Compared with \($0.baseName)" },
             viewed: viewed(viewedCount, of: total, numberFormat: numberFormat),
-            progress: total > 0 ? Double(viewedCount) / Double(total) : 0,
-            scope: ChangesScopeContent.make(repository, numberFormat: numberFormat)
+            progress: total > 0 ? Double(viewedCount) / Double(total) : 0
         )
     }
 }
 
-/// All Work's header: the title and the scope control, the summary and how
-/// many are viewed, then the viewed share as a thin bar in the accent.
+/// All Work's header: its name and Done, the title and how many are
+/// viewed, the summary, then the viewed share as a thin bar in the accent.
 struct AllWorkHeader: View {
     let content: AllWorkHeaderContent
-    let onScopeChange: (ChangesScope) -> Void
+    /// Goes back to the uncommitted changes.
+    let onDone: () -> Void
     @Environment(\.motion) private var motion
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.AllWorkHeader.lineSpacing) {
-            if let scope = content.scope {
-                // Beside the title where both fit; else on its own row
-                // above it.
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: Metrics.insetSmall) {
-                        title
-                            .fixedSize()
-                        Spacer(minLength: Metrics.insetSmall)
-                        viewed
-                        ChangesScopeControl(content: scope, onChange: onScopeChange)
-                    }
-                    .frame(minHeight: Metrics.ControlHeight.regular)
-                    VStack(alignment: .leading, spacing: Metrics.AllWorkHeader.lineSpacing + Metrics.insetSmall) {
-                        ChangesScopeControl(content: scope, fillsWidth: true, onChange: onScopeChange)
-                        titleRow
-                    }
-                }
-            } else {
-                titleRow
+            HStack(spacing: Metrics.insetSmall) {
+                SectionLabel("All Work")
+                Spacer(minLength: Metrics.insetSmall)
+                Button("Done", action: onDone)
+                    .buttonStyle(.quiet)
+                    .controlSize(.small)
+                    .fixedSize()
+                    .tooltip("Back to the uncommitted changes")
             }
+            titleRow
             // The sentence has the row to itself.
             Text(content.summary)
                 .font(Typography.secondary)

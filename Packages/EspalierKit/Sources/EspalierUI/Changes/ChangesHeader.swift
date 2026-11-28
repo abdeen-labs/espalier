@@ -32,8 +32,6 @@ nonisolated public struct ChangesHeaderContent: Sendable, Equatable {
     /// The repository the header is for: its checkbox animates only within
     /// one (choosing another repository is instant).
     public var repository: ObjectIdentifier?
-    /// The scope control, while All Work would differ from Uncommitted.
-    public var scope: ChangesScopeContent?
 
     public init(
         title: String,
@@ -43,10 +41,8 @@ nonisolated public struct ChangesHeaderContent: Sendable, Equatable {
         isIncludeAllEnabled: Bool,
         filter: FilterMenuContent,
         fileCount: Int = 0,
-        repository: ObjectIdentifier? = nil,
-        scope: ChangesScopeContent? = nil
+        repository: ObjectIdentifier? = nil
     ) {
-        self.scope = scope
         self.title = title
         self.included = included
         self.includedCount = includedCount
@@ -116,8 +112,7 @@ extension ChangesHeaderContent {
             isIncludeAllEnabled: files.contains { !$0.isUncommittableSubmodule } && !isCommitting && !isRebaseConflicts,
             filter: FilterMenuContent(filter: changes.filter, visibleFiles: changes.visibleFiles, numberFormat: numberFormat),
             fileCount: files.count,
-            repository: ObjectIdentifier(repository),
-            scope: ChangesScopeContent.make(repository, numberFormat: numberFormat)
+            repository: ObjectIdentifier(repository)
         )
     }
 }
@@ -129,50 +124,27 @@ public struct ChangesHeader: View {
     private let onIncludeAll: (Bool) -> Void
     private let onFilterChange: (FileListFilter) -> Void
     private let onClearFilters: () -> Void
-    private let onScopeChange: (ChangesScope) -> Void
     @Environment(\.motion) private var motion
 
     /// - Parameters:
     ///   - onIncludeAll: Includes (true) or excludes every file shown.
     ///   - onFilterChange: Applies the filter options.
     ///   - onClearFilters: Clears the options and the toolbar's text.
-    ///   - onScopeChange: Chooses All Work or Uncommitted.
     public init(
         _ content: ChangesHeaderContent,
         onIncludeAll: @escaping (Bool) -> Void = { _ in },
         onFilterChange: @escaping (FileListFilter) -> Void = { _ in },
-        onClearFilters: @escaping () -> Void = {},
-        onScopeChange: @escaping (ChangesScope) -> Void = { _ in }
+        onClearFilters: @escaping () -> Void = {}
     ) {
         self.content = content
         self.onIncludeAll = onIncludeAll
         self.onFilterChange = onFilterChange
         self.onClearFilters = onClearFilters
-        self.onScopeChange = onScopeChange
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: Metrics.ChangesHeader.pillSpacing) {
-            if let scope = content.scope {
-                // Beside the title where both fit; else on its own row
-                // above it.
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: Metrics.insetSmall) {
-                        includeAll
-                            .fixedSize()
-                        Spacer(minLength: Metrics.insetSmall)
-                        ChangesScopeControl(content: scope, onChange: onScopeChange)
-                        FilterMenu(content.filter, onChange: onFilterChange, onClear: onClearFilters)
-                    }
-                    VStack(alignment: .leading, spacing: Metrics.insetSmall) {
-                        ChangesScopeControl(content: scope, fillsWidth: true, onChange: onScopeChange)
-                            .padding(.trailing, Metrics.insetSmall)
-                        titleRow
-                    }
-                }
-            } else {
-                titleRow
-            }
+            titleRow
             if !content.included.isEmpty {
                 // Under the title, as its line: the pill shows in full, its
                 // text giving way at its end in the narrowest column.

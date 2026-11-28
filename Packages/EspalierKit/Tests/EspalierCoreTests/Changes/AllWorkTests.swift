@@ -2,8 +2,8 @@
 // it lists (renames, deletions, untracked and binary files, a file changed
 // again uncommitted, one reverted uncommitted), their diffs from the merge
 // base to the working tree, when it's available (an operation waiting on
-// conflicts, a detached HEAD, an unborn branch, no base), the scope a
-// worktree remembers, and the viewed marks (clearing as a file changes,
+// conflicts, a detached HEAD, an unborn branch, no base), the scope ending
+// with the worktree and the repository's selection, and the viewed marks (clearing as a file changes,
 // persisting, pruning). Against real git.
 
 @testable import EspalierCore
@@ -230,23 +230,30 @@ struct AllWorkTests {
 
     // MARK: The scope
 
-    @Test("a worktree starts in Uncommitted and remembers All Work")
-    func scopeIsRemembered() async throws {
+    @Test("Changes starts in Uncommitted, and All Work ends when the worktree changes or another repository is selected")
+    func scopeEnds() async throws {
         let fixture = try await featureBranch(commits: [("a.txt", "a\n")])
         let allWork = fixture.model.allWork
         #expect(allWork.chosenScope == .uncommitted)
         #expect(allWork.scope == .uncommitted)
         #expect(allWork.files.isEmpty)
 
-        allWork.choose(.allWork)
-        await fixture.settle()
-        // Read again, as when the worktree opens.
-        allWork.repositoryPathDidChange(keepingSharedState: true)
-        #expect(allWork.chosenScope == .allWork)
-
-        allWork.choose(.uncommitted)
+        await showAllWork(fixture)
+        #expect(allWork.scope == .allWork)
+        allWork.select(try file(fixture, "a.txt").id)
+        // As when the repository opens at another worktree.
         allWork.repositoryPathDidChange(keepingSharedState: true)
         #expect(allWork.chosenScope == .uncommitted)
+        #expect(allWork.files.isEmpty)
+        #expect(allWork.selectedFileID == nil)
+
+        await showAllWork(fixture)
+        #expect(allWork.scope == .allWork)
+        allWork.select(try file(fixture, "a.txt").id)
+        allWork.repositoryDidBecomeInactive()
+        #expect(allWork.chosenScope == .uncommitted)
+        #expect(allWork.files.isEmpty)
+        #expect(allWork.selectedFileID == nil)
     }
 
     // MARK: Viewed marks

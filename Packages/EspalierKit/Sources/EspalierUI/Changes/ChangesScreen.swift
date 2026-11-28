@@ -7,8 +7,9 @@
 // conflicted file's conflicts as blocks), several files' actions, or "No
 // Local Changes" and Suggestions when there are no changes. The toolbar's
 // search field is the list's filter text. In All Work (AllWork.swift), the
-// column lists the branch's whole work over the same composer, and the
-// right side shows the selected file's diff from the merge base.
+// column lists the branch's whole work, without the composer, and the
+// right side shows the selected file's diff from the merge base; leaving
+// the place ends it.
 
 import EspalierCore
 import EspalierSupport
@@ -64,6 +65,11 @@ public struct ChangesScreen: View {
             // directory.
             repository.stash.hide()
         }
+        .onDisappear {
+            // All Work ends with the place: Changes opens on the
+            // uncommitted changes.
+            repository.allWork.choose(.uncommitted)
+        }
         // Choosing another repository shows its Changes at once: the place
         // is kept, so its bars and counts would otherwise animate.
         .motionScope(AnyHashable(ObjectIdentifier(repository)))
@@ -99,9 +105,6 @@ struct ChangesColumn: View {
             showsHookLine: hookLine.line != nil
         )
         let showsAllWork = repository.allWork.scope == .allWork
-        let chooseScope = { (scope: ChangesScope) in
-            repository.allWork.choose(scope)
-        }
         Group {
             if showsAllWork {
                 AllWorkList(repository: repository)
@@ -116,7 +119,7 @@ struct ChangesColumn: View {
                 if showsAllWork {
                     AllWorkHeader(
                         content: AllWorkHeaderContent.make(repository, numberFormat: context.app.preferences.numberFormat),
-                        onScopeChange: chooseScope
+                        onDone: { repository.allWork.choose(.uncommitted) }
                     )
                 } else {
                     ChangesHeader(
@@ -127,8 +130,7 @@ struct ChangesColumn: View {
                         onFilterChange: { filter in
                             repository.changes.filter = filter
                         },
-                        onClearFilters: controller.clearFilters,
-                        onScopeChange: chooseScope
+                        onClearFilters: controller.clearFilters
                     )
                     .contextMenuCard { [context] in
                         ChangesHeaderMenu.content(repository: repository, context: context)
@@ -197,13 +199,14 @@ struct ChangesFooterLayout: Equatable {
         case merge
         /// Nothing: an operation runs, a rebase, cherry-pick, or revert
         /// waits on the user (the operation panel continues it), a stash
-        /// restore conflicted, or only git can finish what's in progress.
+        /// restore conflicted, only git can finish what's in progress, or
+        /// Changes shows All Work.
         case none
     }
 
     var showsHiddenNote: Bool
     /// How many stashes the current branch has: the "Stashed Changes" row
-    /// shows when it has any.
+    /// shows when it has any. None in All Work.
     var stashCount: Int
     var bottom: Bottom
     var isAmending: Bool
@@ -236,6 +239,7 @@ struct ChangesFooterLayout: Equatable {
         aiFailure: OperationError? = nil,
         showsHookLine: Bool = false
     ) -> ChangesFooterLayout {
+        let showsAllWork = repository.allWork.scope == .allWork
         let bottom: Bottom
         switch OperationSlotContent.make(repository)?.kind {
         case .merge?:
@@ -244,7 +248,9 @@ struct ChangesFooterLayout: Equatable {
             bottom = .none
         case nil:
             let hasOperation = OperationCapsuleContent.make(repository) != nil && showsOperationPanel != false
-            bottom = hasOperation ? .none : .composer
+            // All Work is for reading: the composer is with the
+            // uncommitted changes.
+            bottom = hasOperation || showsAllWork ? .none : .composer
         }
         // `LastCommitContent.make`'s rule, without reading what the row
         // shows.
@@ -260,8 +266,10 @@ struct ChangesFooterLayout: Equatable {
         let showsLastCommit = bottom == .composer && hasLastCommit
         return ChangesFooterLayout(
             // All Work has no checkboxes for the note to be about.
-            showsHiddenNote: repository.allWork.scope == .uncommitted && !repository.changes.includedFilesHiddenByFilter.isEmpty,
-            stashCount: repository.stash.currentEntries.count,
+            showsHiddenNote: !showsAllWork && !repository.changes.includedFilesHiddenByFilter.isEmpty,
+            // The stash is beside the uncommitted changes, not in All Work's
+            // list.
+            stashCount: showsAllWork ? 0 : repository.stash.currentEntries.count,
             bottom: bottom,
             isAmending: bottom == .composer && commit.amending != nil,
             showsLastCommit: showsLastCommit,
