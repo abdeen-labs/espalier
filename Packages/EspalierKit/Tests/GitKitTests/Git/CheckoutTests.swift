@@ -78,6 +78,40 @@ struct CheckoutTests {
         #expect(validBranch.name == "commit-with-long-description")
     }
 
+    @Test(
+        "checks out a local branch named like an option as that branch",
+        arguments: ["--force", "--orphan=unexpected", "--detach"].flatMap { name in
+            [
+                NamedCase(name, (name: name, withProgress: false)),
+                NamedCase("\(name) with progress", (name: name, withProgress: true)),
+            ]
+        }
+    )
+    func optionLikeBranchName(_ testCase: NamedCase<(name: String, withProgress: Bool)>) async throws {
+        let name = testCase.value.name
+        let ref = "refs/heads/\(name)"
+        let repository = try setupEmptyRepository()
+        try write(repository, "tracked.txt", "first\n")
+        try await git(["add", "tracked.txt"], repository.path, "add")
+        try await git(["commit", "-m", "first"], repository.path, "commit")
+        try await git(["update-ref", ref, "HEAD"], repository.path, "createTestRef")
+        try write(repository, "other.txt", "second\n")
+        try await git(["add", "other.txt"], repository.path, "add")
+        try await git(["commit", "-m", "second"], repository.path, "commit")
+        try write(repository, "tracked.txt", "uncommitted\n")
+
+        let branch = try #require(try await getBranches(repository, ref).first)
+        let progress = ProgressLog()
+        try await checkoutBranch(repository, branch, nil, testCase.value.withProgress ? progress.callback : nil)
+
+        #expect(try read(repository, "tracked.txt") == "uncommitted\n")
+        let head = try await git(["symbolic-ref", "HEAD"], repository.path, "readHead").stdout
+        #expect(head == "\(ref)\n")
+        #expect(try await loadTip(repository).kind == .valid)
+        #expect(try await git(["rev-parse", "HEAD"], repository.path, "readHead").stdout == "\(branch.tip.sha)\n")
+        #expect(!FileManager.default.fileExists(atPath: POSIXPath.join(repository.path, "other.txt")))
+    }
+
     @Test("can checkout a branch when it exists on multiple remotes")
     func multipleRemotes() async throws {
         let path = try setupFixtureRepository("checkout-test-cases")

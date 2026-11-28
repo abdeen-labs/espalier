@@ -11,10 +11,12 @@ private func getCheckoutArgs(_ progressCallback: CheckoutProgressCallback?) -> [
 }
 
 private func getBranchCheckoutArgs(_ branch: Branch) -> [String] {
-    // Remote refs are starting points for -b: use the canonical ref so a leading
-    // dash isn't parsed as an option. Local branches need their short name to
-    // avoid detaching HEAD. The trailing -- separates paths, not branch targets.
-    (branch.type == .remote ? ["-b", branch.nameWithoutRemote, branch.ref] : [branch.name]) + ["--"]
+    // Keep -b and its value before --end-of-options, which has git read the
+    // target as a branch even when its name starts with a dash. Remote
+    // starting points use canonical refs; local branches need short names to
+    // avoid detaching HEAD. The trailing -- separates paths.
+    (branch.type == .remote ? ["-b", branch.nameWithoutRemote] : [])
+        + ["--end-of-options", branch.type == .remote ? branch.ref : branch.name, "--"]
 }
 
 private func getCheckoutOpts(
